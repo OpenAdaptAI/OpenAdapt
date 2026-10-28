@@ -84,12 +84,15 @@ class DatabaseReader:
     max_rows: int = 2000
     profile: Any = None
     connect: Optional[Callable[[], Any]] = None
+    #: The acting user's sign-in names, for the profile's own-row rules (the
+    #: bot's own sign-in bookkeeping); read with the snapshot.
+    actor_names: Sequence[str] = ()
     key: bytes = field(default_factory=_new_key, repr=False)
     scope: str = "database"
 
     @classmethod
     def from_frame_database(
-        cls, database: Any, *, profile: Any = None
+        cls, database: Any, *, profile: Any = None, actor_names: Sequence[str] = ()
     ) -> "DatabaseReader":
         return cls(
             dialect=str(database.dialect),
@@ -100,6 +103,7 @@ class DatabaseReader:
             ],
             max_rows=int(database.max_rows),
             profile=profile,
+            actor_names=tuple(actor_names),
         )
 
     def _profile(self) -> Any:
@@ -115,22 +119,38 @@ class DatabaseReader:
         return None if p is None else f"{p.app}/{p.version}"
 
     def read(self, before: Optional[Snapshot] = None) -> Snapshot:
-        from openadapt_flow.runtime.effects.db_snapshot import take_snapshot
+        """Every table, through the verifier's ``capture_database`` (one
+        read-only transaction, the app profile's rules, ``before`` for the
+        values of rows that changed)."""
+        connect: Any = self.connect
+        if connect is None:
+            from openadapt_flow.verify_run import _db_connect
 
-        profile = self._profile()
-        kwargs: dict[str, Any] = {}
-        if profile is not None:
-            kwargs["optional_modes"] = {
-                t["table"]: t["mode"] for t in profile.allow_tables()
-            }
-            kwargs["ignore"] = profile.ignore_columns()
+            connect = _db_connect(self.read_config)
         try:
-            if self.connect is not None:
-                connect = self.connect
-            else:
-                from openadapt_flow.verify_run import _db_connect
+            if self.profile is None or isinstance(self.profile, str):
+                from openadapt_flow.verifier import capture_database
 
-                connect = _db_connect(self.read_config)
+                snapshot: Snapshot = capture_database(
+                    connect,
+                    self.dialect,
+                    allow_tables=list(self.allow_tables),
+                    max_rows=self.max_rows,
+                    key=self.key,
+                    profile=self.profile,
+                    before=before,
+                    actor_names=list(self.actor_names),
+                )
+                return snapshot
+            # A profile object (not shipped by name): the same arguments
+            # capture_database builds from a named profile.
+            from openadapt_flow.runtime.effects.db_snapshot import take_snapshot
+
+            p = self.profile
+            extra: dict[str, str] = {}
+            query = p.actor_ids_query(list(self.actor_names), self.dialect)
+            if query:
+                extra["actor_ids"] = query
             return take_snapshot(
                 connect,
                 self.dialect,  # type: ignore[arg-type]
@@ -138,12 +158,37 @@ class DatabaseReader:
                 modes=dict.fromkeys(self.allow_tables, "append_only"),
                 max_rows=self.max_rows,
                 before=before,
-                **kwargs,
+                extra_queries=extra,
+                optional_modes={t["table"]: t["mode"] for t in p.allow_tables()},
+                ignore=p.ignore_columns(),
+                ref_columns=p.ref_columns(),
             )
         except Exception as exc:  # noqa: BLE001 - an unreadable store decides nothing
             raise StateUnreadable(
                 f"the database could not be read ({type(exc).__name__})"
             ) from exc
+
+    def excuser(
+        self, after: Snapshot
+    ) -> Optional[Callable[[str, Any, Any, list[str]], bool]]:
+        """The profile's per-row test (``AppProfile.excuse``) for this read,
+        exactly as ``diff_database`` applies it; None without a profile."""
+        p = self._profile()
+        if p is None:
+            return None
+        from openadapt_flow.runtime.effects.db_snapshot import cell_hash
+
+        names = set(self.actor_names)
+        ids = {str(r.get("id")) for r in after.extra.get("actor_ids", [])}
+        key = self.key
+
+        def excused(table: str, was: Any, now: Any, fields: list[str]) -> bool:
+            def hasher(col: str, value: Any) -> str:
+                return cell_hash(key, value, table, col)
+
+            return bool(p.excuse(table, was, now, fields, hasher, names, ids))
+
+        return excused
 
     def verifier_diff(
         self, before: Snapshot, after: Snapshot
@@ -155,7 +200,12 @@ class DatabaseReader:
         except ImportError:
             return None
         moved = diff_database(
-            before, after, allow_tables=list(self.allow_tables), key=self.key
+            before,
+            after,
+            allow_tables=list(self.allow_tables),
+            key=self.key,
+            profile=self.profile if isinstance(self.profile, str) else None,
+            actor_names=list(self.actor_names),
         )
         return {str(k): v for k, v in dict(moved).items()}
 
@@ -362,7 +412,12 @@ def _changed_columns(a: Table, b: Table, k: str) -> list[str]:
     return ["(row)"]
 
 
-def diff_states(before: Snapshot, after: Snapshot) -> StateDiff:
+def diff_states(
+    before: Snapshot,
+    after: Snapshot,
+    *,
+    excuse: Optional[Callable[[str, Any, Any, list[str]], bool]] = None,
+) -> StateDiff:
     """Compare two reads table by table, row by row (by key MAC).
 
     Bookkeeping the app profile names never appears: the reads left it out
@@ -383,14 +438,38 @@ def diff_states(before: Snapshot, after: Snapshot) -> StateDiff:
         if reasons:
             diff.unread = "; ".join(reasons)
         if a is not None and b is not None and a.mode == "compare" == b.mode:
+
+            def keep(k: str) -> bool:
+                # The profile's per-row rules (the acting user's sign-in
+                # bookkeeping, a uuid backfill), exactly as diff_database
+                # applies them. A row with no plain values is never excused.
+                if excuse is None or a.cell_columns != b.cell_columns:
+                    return True
+                old, new = a.rows.get(k), b.rows.get(k)
+                was = None if old is None else unpack(a.cell_columns, old[1])
+                now = None if new is None else b.values.get(k)
+                if new is not None and now is None:
+                    return True
+                fields: list[str] = []
+                if was is not None and new is not None:
+                    cells = unpack(b.cell_columns, new[1])
+                    fields = sorted(
+                        c for c in a.cell_columns if was[c] != cells[c]
+                    ) or ["(columns not compared)"]
+                return not excuse(name, was, now, fields)
+
             diff.added = [
-                (k, dict(b.values.get(k, {}))) for k in b.rows if k not in a.rows
+                (k, dict(b.values.get(k, {})))
+                for k in b.rows
+                if k not in a.rows and keep(k)
             ]
             diff.removed = [
-                (k, dict(a.values.get(k, {}))) for k in a.rows if k not in b.rows
+                (k, dict(a.values.get(k, {})))
+                for k in a.rows
+                if k not in b.rows and keep(k)
             ]
             for k in sorted(set(a.rows) & set(b.rows)):
-                if a.rows[k][0] != b.rows[k][0]:
+                if a.rows[k][0] != b.rows[k][0] and keep(k):
                     diff.changed.append(
                         (
                             k,

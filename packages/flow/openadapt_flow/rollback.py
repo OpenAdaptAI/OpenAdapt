@@ -277,6 +277,12 @@ def saves_without_undo(workflow: Workflow, *, allow_delete: bool) -> list[str]:
     ]
 
 
+def _excuser(reader: Any, after: Any) -> Any:
+    """The reader's app-profile row rules for this read, if it has any."""
+    make = getattr(reader, "excuser", None)
+    return make(after) if make is not None else None
+
+
 def roll_back(
     report: RunReport,
     workflow: Workflow,
@@ -349,7 +355,7 @@ def roll_back(
     except StateUnreadable as exc:
         return finish("not_rolled_back", f"after the stop, {exc}; nothing ran")
     record.after_stop_sha256 = snapshot_sha256(after_stop)
-    landed = diff_states(before, after_stop)
+    landed = diff_states(before, after_stop, excuse=_excuser(reader, after_stop))
     params = dict(report.params)
     selectors = _run_selectors(report, workflow, params)
     window = attributor.window() if attributor is not None else None
@@ -480,7 +486,9 @@ def roll_back(
                 break
             moved = [
                 c
-                for c in changes(diff_states(after_stop, now))
+                for c in changes(
+                    diff_states(after_stop, now, excuse=_excuser(reader, now))
+                )
                 if (c[0], c[1]) in run_keys
             ]
             if moved:
@@ -536,7 +544,7 @@ def roll_back(
             keep_rows(landed, run_changes),
         )
     record.final_sha256 = snapshot_sha256(final)
-    remaining = diff_states(before, final)
+    remaining = diff_states(before, final, excuse=_excuser(reader, final))
     final_window = attributor.window() if attributor is not None else None
     residue: list[Change] = []
     kept = 0
@@ -786,7 +794,9 @@ def plan_from_deployment(cfg: Any, effect_verifier: Any) -> Optional[RollbackPla
     reader: StateReader
     if section.database is not None:
         reader = DatabaseReader.from_frame_database(
-            section.database, profile=section.profile
+            section.database,
+            profile=section.profile,
+            actor_names=section.actor_names,
         )
     elif effect_verifier is not None:
         reader = VerifierReader(effect_verifier)

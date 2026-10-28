@@ -384,7 +384,9 @@ def reader_for(cfg: Any, target: Any) -> StateReader:
     section = getattr(cfg, "rollback", None)
     if section is not None and section.database is not None:
         return DatabaseReader.from_frame_database(
-            section.database, profile=section.profile
+            section.database,
+            profile=section.profile,
+            actor_names=section.actor_names,
         )
     return CopyReader(target)
 

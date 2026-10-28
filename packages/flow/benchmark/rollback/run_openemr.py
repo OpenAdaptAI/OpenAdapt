@@ -274,7 +274,16 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 plan = RollbackPlan(
                     DatabaseReader(
-                        dialect="mysql", connect=session, profile=case_profile
+                        dialect="mysql",
+                        connect=session,
+                        profile=case_profile,
+                        # The browser signs in as the fixture's actor user:
+                        # the profile's own-row rules are about that user.
+                        actor_names=(
+                            (fx._runtime_values()["OPENEMR_ACTOR_USER"],)
+                            if case_profile
+                            else ()
+                        ),
                     ),
                     read_records=records_reader(verifier),
                 )

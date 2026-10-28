@@ -1031,6 +1031,9 @@ class RollbackSection(BaseModel):
     #: session state, named columns). Never patient data. Applies to
     #: ``database`` reads; without it, every changed row counts.
     profile: Optional[str] = None
+    #: The sign-in names the run acts as, for the profile's own-row rules
+    #: (its own session and login rows). Another user's rows still count.
+    actor_names: list[str] = Field(default_factory=list)
     #: Who changed a row (``frame.attribution`` in ``verify.yaml``). Rows
     #: another actor changed during the run are set aside; rows nothing
     #: attributes count as the run's.

@@ -138,6 +138,7 @@ rollback:
     allow_tables: [log, sessions]   # tables the app writes on its own
   allow_delete: false               # the default: no hard deletes
   profile: openemr                  # the app's own bookkeeping (app_profiles)
+  actor_names: [openadapt_bot]      # who the run signs in as, for the profile
   attribution:                      # optional: who changed a row
     kind: record_field
     actor_field: modified_by
@@ -214,16 +215,22 @@ session state, ids. A rollback must not count those as the run's, and must not
 excuse anything else. `rollback.profile` names the app's versioned profile in
 `openadapt_flow.app_profiles` (`openemr`), the same profile the verifier's
 frame and the RL grader load, so all three agree on what "the app's own"
-means. The read applies it:
+means. Every table it names is still read and compared; a rule only says which
+changes in that table are the app's own:
 
-| Rule | What the read does |
+| Rule | Which changes are the app's own |
 | --- | --- |
-| `append_only` | Reads the table; new rows are fine, and an existing row that changes or goes shows as a difference. |
-| `session` | Doesn't compare the table (per-user or per-session state), with the rule's reason recorded. |
-| `columns` | Leaves the named columns out of each row's comparison; any other change shows. |
+| `append_only` | New rows. An existing row that changes or goes shows as a difference. |
+| `columns` | Changes in the named columns of an existing row, narrowed to a backfill from empty, or to the acting user's own row, where the rule says so. |
+| `own_rows` | The acting user's own rows (per-user UI state); everyone else's count. |
 
-A profile can't excuse patient data: a rule on a patient-data table may name
-only system columns, and loading refuses anything else. The report records the
+The read applies the rules row by row, exactly as the verifier's
+`diff_database` does. Rules about "the acting user" need
+`rollback.actor_names`, the sign-in names the run acts as; without them,
+those rules excuse nothing.
+
+A profile can't excuse patient data: a rule may name only a reviewed
+bookkeeping table, and loading refuses anything else. The report records the
 profile as `app/version` (`profile_id`).
 
 ## What this doesn't do

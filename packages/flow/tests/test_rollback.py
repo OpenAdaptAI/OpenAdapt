@@ -49,6 +49,7 @@ from openadapt_flow.rollback_state import (
     DatabaseReader,
     StateUnreadable,
     VerifierReader,
+    changes,
     diff_states,
     records_snapshot,
 )
@@ -945,10 +946,10 @@ def _profile(**extra_rules):
 
     return AppProfile.model_validate(
         {
-            "schema_version": "openadapt.app-profile/v1",
+            "schema_version": "openadapt.app-profile/v2",
             "app": "clinic",
             "version": "test.1",
-            "patient_table_prefixes": ["patient", "history"],
+            "bookkeeping_tables": ["log"],
             "rules": [
                 {
                     "id": "log",
@@ -965,7 +966,9 @@ def _profile(**extra_rules):
 def test_a_profile_cannot_excuse_patient_data():
     with pytest.raises(ValueError, match="patient data"):
         _profile(
-            rules=[{"id": "p", "table": "patients", "mode": "session", "reason": "no"}]
+            rules=[
+                {"id": "p", "table": "patients", "mode": "append_only", "reason": "no"}
+            ]
         )
 
 
@@ -1003,3 +1006,51 @@ def test_an_edited_row_in_an_append_only_table_is_never_excused(tmp_path):
     conn.close()
     diff = diff_states(before, reader.read(before=before))
     assert diff.summary()["log"]["unread"]
+
+
+def test_the_profile_excuses_only_the_acting_users_own_sign_in(tmp_path):
+    # The same per-row rules diff_database applies: the acting user's own
+    # sign-in counters are the app's bookkeeping; another user's are not.
+    from openadapt_flow.rollback_state import DatabaseReader
+
+    db = tmp_path / "emr.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT,
+          authorized INTEGER, uuid TEXT, last_updated TEXT);
+        CREATE TABLE users_secure (id INTEGER PRIMARY KEY, username TEXT,
+          password TEXT, last_update_password TEXT,
+          login_fail_counter INTEGER DEFAULT 0, last_update TEXT);
+        INSERT INTO users VALUES (1, 'clinic2', 1, 'uu-1', '2026-01-01');
+        INSERT INTO users VALUES (2, 'bot', 1, 'uu-2', '2026-01-01');
+        INSERT INTO users_secure VALUES (1, 'clinic2', 'h1', '2026-01-01', 0, '2026-01-01');
+        INSERT INTO users_secure VALUES (2, 'bot', 'h2', '2026-01-01', 0, '2026-01-01');
+        """
+    )
+    conn.commit()
+    reader = DatabaseReader(
+        dialect="sqlite",
+        read_config={"sqlite_database": str(db)},
+        profile="openemr",
+        actor_names=("bot",),
+    )
+    before = reader.read()
+    conn.execute(
+        "UPDATE users_secure SET login_fail_counter = 0, last_update = '2026-10-29' "
+        "WHERE username = 'bot'"
+    )
+    conn.commit()
+    after = reader.read(before=before)
+    assert not changes(diff_states(before, after, excuse=reader.excuser(after)))
+    # Without the rules the row counts.
+    assert changes(diff_states(before, after))
+
+    conn.execute(
+        "UPDATE users_secure SET login_fail_counter = 5 WHERE username = 'clinic2'"
+    )
+    conn.commit()
+    conn.close()
+    after = reader.read(before=before)
+    left = changes(diff_states(before, after, excuse=reader.excuser(after)))
+    assert [c[0] for c in left] == ["users_secure"]
