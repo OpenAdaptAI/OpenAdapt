@@ -604,7 +604,7 @@ def test_bridge_sends_no_answer_without_an_approver_key(monkeypatch, tmp_path: P
 
 
 def test_a_key_made_with_flow_keygen_signs_with_desktops_passphrase(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, fake_keyring
 ) -> None:
     """A key a person made at a terminal with jit keygen, not with Desktop."""
 
