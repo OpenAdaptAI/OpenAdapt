@@ -321,7 +321,7 @@ def capture_database(
     dialect: str,
     *,
     allow_tables: Sequence[str] = (),
-    max_rows: int = 20000,
+    max_rows: int = 2000,
     key: Optional[bytes] = None,
 ) -> DatabaseSnapshot:
     """Snapshot every table of a database, in one read-only transaction.
