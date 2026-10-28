@@ -158,7 +158,9 @@ class VerifiedWrite:
     authorized: ``declared_by`` says who declared the values, and
     ``authorization`` is ``unbound`` unless the caller passed an operator's
     authorization reference. A Seal (``seal_path``), signed with this
-    computer's Seal key, lets someone else check the receipt was issued here.
+    computer's Seal key, lets someone else check the receipt was issued here;
+    ``seal`` says ``sealed``, ``off`` (Seals turned off), or ``unsealed: ...``
+    with why the key couldn't be used.
     """
 
     write_id: str
@@ -168,6 +170,7 @@ class VerifiedWrite:
     declared_by: str = "agent"
     authorization: str = "unbound"
     seal_path: Optional[str] = None
+    seal: str = "off"
     verified: Literal[True] = True
     verdict: Literal["VERIFIED"] = "VERIFIED"
 
@@ -181,6 +184,7 @@ class VerifiedWrite:
             "values_declared_by": self.declared_by,
             "authorization": self.authorization,
             "seal_path": self.seal_path,
+            "seal": self.seal,
         }
 
 
@@ -317,6 +321,9 @@ def verify_write(
     receipt = doc["receipt"]
     digest = receipt_sha256(receipt)
     if receipt["outcome"] == "verified":
+        seal_path, seal_state = (
+            _seal(path, pending.write_id) if seal and path else (None, "off")
+        )
         return VerifiedWrite(
             write_id=pending.write_id,
             receipt=receipt,
@@ -324,7 +331,8 @@ def verify_write(
             receipt_path=path,
             declared_by=declared_by,
             authorization="operator" if pending.authorized else "unbound",
-            seal_path=_seal(path, pending.write_id) if seal and path else None,
+            seal_path=seal_path,
+            seal=seal_state,
         )
     rows = doc["evidence"]["readback"]["effects"]
     refuted = receipt.get("effect_verdict") == "REFUTED" and any(
@@ -340,23 +348,28 @@ def verify_write(
     )
 
 
-def _seal(receipt_path: str, write_id: str) -> Optional[str]:
-    """Sign the receipt file with this computer's Seal key; None when Seals
-    are off or the key can't be used (the result then has no Seal)."""
+def _seal(receipt_path: str, write_id: str) -> tuple[Optional[str], str]:
+    """Sign the receipt file with this computer's Seal key. Returns the Seal's
+    path and ``sealed``; or no path and ``off`` (Seals turned off) or
+    ``unsealed: <why>`` (the key couldn't be used). The write stays verified
+    either way: the Seal attests who issued the receipt, not the write."""
 
     from openadapt_flow import offline_seal
 
     if not offline_seal.mode_enabled():
-        return None
+        return None, "off"
     try:
         sealed = offline_seal.sign_file(
             Path(receipt_path), subject_kind="record", run_id=write_id
         )
-    except Exception:  # noqa: BLE001 - no usable key: no Seal
-        return None
-    out = Path(receipt_path).with_name("receipt.seal.json")
-    out.write_text(json.dumps(sealed.model_dump(mode="json"), indent=2) + "\n")
-    return str(out)
+        out = Path(receipt_path).with_name("receipt.seal.json")
+        out.write_text(json.dumps(sealed.model_dump(mode="json"), indent=2) + "\n")
+    except Exception as exc:  # noqa: BLE001 - say why, never fail the write
+        return (
+            None,
+            f"unsealed: this computer's Seal key couldn't be used ({type(exc).__name__})",
+        )
+    return str(out), "sealed"
 
 
 def _why(rows: Any, refuted: bool) -> str:

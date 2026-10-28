@@ -281,7 +281,9 @@ _FOCUSED_JS = r"""
 """
 
 
-def _render(raw: Mapping[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+def _render(
+    raw: Mapping[str, Any], *, writes: bool = False
+) -> tuple[str, list[dict[str, Any]]]:
     out = [f"page: {raw.get('title', '')} ({raw.get('url', '')})"]
     controls = list(raw.get("controls") or [])
     for item in raw.get("lines") or []:
@@ -297,7 +299,12 @@ def _render(raw: Mapping[str, Any]) -> tuple[str, list[dict[str, Any]]]:
             if c.get("options"):
                 line += " options: " + ", ".join(c["options"])
             if c.get("method") == "POST" and c["role"] == "button":
-                line += " (sends a POST: refused here)"
+                # The write lane sends only the contract's writes.
+                line += (
+                    " (sends a POST: only the contract's writes go)"
+                    if writes
+                    else " (sends a POST: refused here)"
+                )
             out.append(line)
         else:
             out.append(item["text"])
@@ -1426,7 +1433,7 @@ class BrowserTeachBridge:
         if run.secret_typed:
             # Once a sign-in value is typed, no address is shown with its query.
             raw["url"] = str(raw.get("url", "")).split("?", 1)[0]
-        text, run.controls = _render(raw)
+        text, run.controls = _render(raw, writes=run.contract is not None)
         # A sign-in value never reaches the agent, in any encoding.
         secrets = list(run.secret_values.values())
         text = _mask(text, secrets)

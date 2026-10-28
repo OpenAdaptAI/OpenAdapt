@@ -277,6 +277,7 @@ def test_a_taught_write_sends_only_what_it_was_taught(
     assert good["values_declared_by"].startswith("agent")
     assert good["authorization"] == "unbound"
     assert good["seal_path"] and Path(good["seal_path"]).exists()
+    assert good["seal"] == "sealed"
 
     app.mode = mode
     bad = bridge.dispatch("taught_add_order", {"inputs": {"customer": "Cedar"}})
