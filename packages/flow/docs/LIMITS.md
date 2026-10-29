@@ -14,6 +14,23 @@ For the current evidence behind each capability claim, see
 [`VERIFICATION.md`](VERIFICATION.md). For the package-wide evidence map, see
 [`PRODUCT_STATUS.md`](PRODUCT_STATUS.md).
 
+## Validated on
+
+Every published result used synthetic patients, claims and records.
+
+| System | What ran |
+| --- | --- |
+| OpenEMR 8.0.0.3, local test copies (open-source EHR; its 7.0 release is ONC-certified) | Referral entry by agent, screen program and API step; injected database faults; repair of a relabeled save button; duplicate check |
+| openIMIS, local test copy (open-source insurance and claims system) | Claim entry over a worklist; a relabeled Save sent to repair with no wrong save |
+| Windows 11 over RDP, real network | 3 of 3 effect-confirmed trials, plus a FreeRDP batch |
+| Citrix stand-in, no DOM | 3 healthy runs and 3 drift stops through the Citrix backend |
+| WinForms, TextEdit, a GTK3 app | 3 of 3 effects on each native backend |
+| MockMed, MockLoan and fixtures (OpenAdapt's own test apps) | Fault suites, approvals, repair and the agent comparisons |
+
+Each workflow is qualified on the customer's own system before it touches a
+real record. Windows installers are unsigned and macOS builds are ad-hoc
+signed; the Python packages are published from the reviewed release workflow.
+
 ## Product boundary
 
 | Capability | Evidence basis | What the claim means | What it does not mean |
@@ -415,6 +432,32 @@ fixture's own IDs (`MRN A1001`) halted at the identity check at every render
 other than the recorded one, before and after the extra identity looks: that
 workflow always opens the recorded record, whose ID the recording read as
 `MRN Alo01`, and the kiosk has no selectable text.
+
+**Icons on the pixel path, and the local grounding model.** A template match
+compares the recorded crop with the live frame pixel for pixel, so an icon is
+not found at another display scale, zoom, font size or theme, or through a
+lossy codec. The optional local grounding model (`--local-grounding`, off by
+default) finds it again: a small open vision model (DINOv2-small, Apache-2.0,
+run in process) scores every place that looks like the recorded crop, and the
+step continues only when one place qualifies, alone or singled out by every
+landmark that OCR can locate. Two qualifying places stop the step. On a
+Chromium-drawn clinic screen
+([`benchmark/pixel_grounding`](../benchmark/pixel_grounding/README.md)) it
+found the two toolbar and form icons under 21 of 26 conditions where the
+template matcher found 8, abstained on the other 5, and picked no wrong
+target among 65 click targets. A query takes 133 ms (p95 139 ms) on a 1080p
+frame and about 310 ms (p95 up to 374 ms) at 4K on an M2 Max CPU; Apple's
+Neural Engine, through onnxruntime's CoreML provider, is slower. It does not change what a whole run
+does there: the same 4 of 39 runs saved in both arms, because other checks
+stop the run first. The layout check stops a zoomed or larger-font screen at
+its first step. The identity template of a banner does not match a dark
+theme. On a scaled screen the look-alike census counts the record's name in
+both the banner and the worklist row, and stops. The model only locates: a
+target with a text label is left to OCR, a crop of blank input field (whose
+look-alikes overlap) is left to the rest of the ladder, and identity, census,
+risk gate and postconditions apply to its point as to any other. The fixture
+is not a live Citrix ICA/HDX or RDP session, and the rung's thresholds were set
+on it.
 
 ### 2. A postcondition verifies only what it observes
 

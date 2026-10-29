@@ -15,6 +15,21 @@
 
 <!-- version list -->
 
+## v2.4.1 (2026-10-28)
+
+Flow runs without its benchmark package, a pinned config with Windows line endings is accepted, and several checks halt where 2.4.0 could act on the wrong row or pass a weaker check.
+
+### Fixes
+
+- On Windows, `--config-sha256` now hashes the config file's exact bytes. A config with CRLF line endings used to be read in text mode, so its hash never matched and the run was refused with `deployment_config_changed` ([#1593](https://github.com/OpenAdaptAI/OpenAdapt/pull/1593)).
+- Product code no longer imports `openadapt_flow.benchmark`. An install or frozen build without the benchmark package, such as Desktop's engine, can now load the JIT adapters, annotation, narration rules and the qualification proposer. The default model, scroll step and API key loader moved to `openadapt_flow.anthropic_defaults`; `openadapt_flow.benchmark.agent_baseline` still exports them ([#1594](https://github.com/OpenAdaptAI/OpenAdapt/pull/1594)).
+- Worklists built from plain `div` rows, CSS grid rows or cards are treated as rows. Teach records each row's identity, and replay halts when rows move or look alike, instead of clicking a button by its position (`#open-0`) on another record. A twin row seen at teach time marks the identity ambiguous, and a row nothing can read halts before a write (`identity_uncounted`) ([#1569](https://github.com/OpenAdaptAI/OpenAdapt/pull/1569)).
+- The fault gate admits a record check only when it catches every fault class it claims. Two new classes write outside the table the check reads (`other_table`, `side_write`), and a check must claim both `delta` and `frame`. A check that reads one table of a larger store is no longer admitted, so VERIFIED is issued less often, never more. The receipt lists each class as killed, missed, untestable, not applicable or missing ([#1539](https://github.com/OpenAdaptAI/OpenAdapt/pull/1539)).
+
+### Features
+
+- A key that changes nothing visible, such as a Tab onto an icon button or an ArrowDown that highlights an option, can now be checked: the new `focus_on` postcondition requires the focused element to have the recorded identity and to be the only element with it. The compiler adds it only for an element with a role and a non-empty accessible name; an element without them gets no check and stays unverified ([#1579](https://github.com/OpenAdaptAI/OpenAdapt/pull/1579), [#1595](https://github.com/OpenAdaptAI/OpenAdapt/pull/1595)).
+
 ## v2.4.0 (2026-10-25)
 
 A person's approval counts only when a registered approver key signed it, and the verification, identity and recovery paths below fail closed where they used to pass.
