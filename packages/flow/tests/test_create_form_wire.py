@@ -1004,3 +1004,78 @@ def test_a_page_that_hears_every_call_cannot_end_the_hold(server: _Server) -> No
     assert opened == "refused"
     assert refusal is not None and "WebSocket" in refusal, refusal
     assert _leaked(server, before, "forged") == []
+
+
+_SWAP_JS = """([mode, mine]) => {
+  // Wraps eval (Playwright evaluates through it) to tamper with the hold
+  // call: swap Python's commitment for one of its own, or take the hold id
+  // first under its own commitment.
+  const real = window.eval;
+  const k = Object.getOwnPropertyNames(window).find(
+    (n) => n.startsWith('__oaflow_ws_'));
+  window.__k = k;
+  window.eval = function (src) {
+    if (typeof src === 'string' && src.includes(k)) {
+      const m = src.match(
+        /"(hold)", "([0-9a-f]+)", "([0-9a-f]{64})", "([0-9a-f]+)"\\)/);
+      if (m) {
+        window.__hold = m[2];
+        if (mode === 'rewrite') src = src.split(m[3]).join(mine);
+        if (mode === 'preempt') {
+          try { window[k]('hold', m[2], mine, 'n'); } catch (e) {}
+        }
+      }
+    }
+    return real(src);
+  };
+}"""
+
+
+@pytest.mark.parametrize("mode", ["rewrite", "preempt"])
+def test_a_page_cannot_bind_the_hold_to_its_own_secret(
+    server: _Server, mode: str
+) -> None:
+    """A page that sees the hold call's source swaps Python's commitment
+    for the hash of a secret of its own, or takes the hold id first under
+    it, so it could end the hold itself: the guard signs the commitment the
+    hold is bound to, so the save is refused and the browser holds no more
+    (the #1647 review's probe7)."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    mine = "attackersecret"
+    commitment = hashlib.sha256(mine.encode()).hexdigest()
+    before = len(server.received)
+    with sync_api.sync_playwright() as playwright:
+        browser, page = _browser_page(playwright)
+        try:
+            page.goto(f"{server.url}?v=fetch")
+            backend = PlaywrightBackend(page)
+            page.evaluate(_SWAP_JS, [mode, commitment])
+            refusal = backend._arm_wire_check(_expected(server))
+            armed = backend.form_submit_guard_armed
+            seen = page.evaluate("() => !!window.__hold")
+            opened = page.evaluate(
+                """([U, M, mine]) => {
+                  try {
+                    if (window.__hold) {
+                      window[window.__k]('release', window.__hold, mine, 'n2');
+                    }
+                    const s = new WebSocket(U);
+                    s.onopen = () => s.send(M);
+                    return 'constructed';
+                  } catch (e) { return 'refused'; }
+                }""",
+                [_ws_url(server), f"swap-{mode}", mine],
+            )
+            page.wait_for_timeout(800)
+            backend.form_submit_guard_refusal(disarm=True)
+        finally:
+            browser.close()
+    assert seen
+    assert not armed
+    assert refusal is not None and "answered for the WebSocket guard" in refusal
+    # Not held (the save was refused), so this socket may connect; what
+    # matters is that no save went out while the page held the hold.
+    assert opened in ("constructed", "refused")
+    assert [r for r in server.received[before:] if r["path"] == "/ticket"] == []

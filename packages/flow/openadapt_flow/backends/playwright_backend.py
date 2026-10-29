@@ -1812,6 +1812,7 @@ class PlaywrightBackend:
         # to the page with the hold; the secret only when the hold ends).
         self._ws_hold: Optional[str] = None
         self._ws_release = ""
+        self._ws_commitment = ""
         self._ws_hold_script: Any = None
         self._held_pages: list[tuple[Any, Callable[[Any], None]]] = []
         try:
@@ -2675,6 +2676,7 @@ class PlaywrightBackend:
         self._ws_hold = hold
         self._ws_release = uuid.uuid4().hex + uuid.uuid4().hex
         commitment = hashlib.sha256(self._ws_release.encode()).hexdigest()
+        self._ws_commitment = commitment
         try:
             self._ws_hold_script = context.add_init_script(
                 _ws_guard_call(
@@ -2791,9 +2793,12 @@ class PlaywrightBackend:
                     continue
                 c0, c1, c2, early, doc, is_on, mac = answer
                 secret = self._ws_guard_proof if early else self._ws_guard_late
+                # The hold must be bound to Python's commitment, not one the
+                # page swapped in or took first.
+                commitment = self._ws_commitment if is_on else ""
                 signed = (
                     f"{secret}|{nonce}|{doc}|{op}|{hold}|{int(is_on)}|"
-                    f"{c0},{c1},{c2}|{int(early)}"
+                    f"{commitment}|{c0},{c1},{c2}|{int(early)}"
                 )
                 relayed = doc in docs
                 docs.add(doc)
@@ -2860,7 +2865,7 @@ class PlaywrightBackend:
             pass
         self._ws_hold = hold  # the release names it
         self._ws_guard_frames("release", self._ws_release, on=False)
-        self._ws_hold, self._ws_release = None, ""
+        self._ws_hold, self._ws_release, self._ws_commitment = None, "", ""
 
     def _watch_websocket(self, ws: Any) -> None:
         def on_frame(_payload: Any) -> None:
@@ -4875,12 +4880,15 @@ from openadapt_flow.backends._browser_process import (  # noqa: E402
 #   installs nothing (-1), so holding refuses.
 # * A hold comes with the SHA-256 of a secret, and only that secret ends it;
 #   Python sends the secret only to end the hold.
+# * A hold taken again under a different commitment answers -1.
 # * Every answer is signed (SHA-256 over a secret, the call's nonce, the
-#   document's name, the operation and the result) with the secret the guard
-#   was installed with and never receives again: the init script's for a
-#   document guarded from its start, another for one guarded late. An answer
-#   Python can't verify, or one that names a document twice in a pass (passed
-#   on from another document's guard), stops all holds on that browser.
+#   document's name, the operation, the hold's commitment and the result)
+#   with the secret the guard was installed with and never receives again:
+#   the init script's for a document guarded from its start, another for
+#   one guarded late. An answer Python can't verify (a commitment the page
+#   swapped in included), or one that names a document twice in a pass
+#   (passed on from another document's guard), stops all holds on that
+#   browser.
 #
 # An answer is ``[sockets, workers, sends, early, document, on, signature]``
 # for the hold, or -1 when the guard can't be kept here.
@@ -5058,6 +5066,9 @@ _WS_GUARD_JS = r"""(key, secret, start, op, x, extra, nonce) => {
     if (typeof op !== 'string' || typeof x !== 'string' ||
         typeof extra !== 'string' || typeof n !== 'string') return -1;
     if (op === 'hold' || op === 'armed') {
+      // A hold already taken under another commitment was taken by
+      // something else: refuse, and Python stops holding on this browser.
+      if (x in holds && holds[x] !== extra) return -1;
       if (!(x in holds)) { holds[x] = extra; held += 1; }
       if (op === 'hold') counts[x] = new I32(3);
     } else if (op === 'release' || op === 'released') {
@@ -5068,10 +5079,12 @@ _WS_GUARD_JS = r"""(key, secret, start, op, x, extra, nonce) => {
     const c = counts[x] || zero;
     const on = x in holds;
     const c0 = c[0], c1 = c[1], c2 = c[2];
+    const commitment = on ? holds[x] : '';
     if (op === 'release' && !on) delete counts[x];
+    // Signs everything the answer says and what the hold is bound to.
     const mac = sha(secret + '|' + n + '|' + doc + '|' + op + '|' + x + '|' +
-      (on ? '1' : '0') + '|' + c0 + ',' + c1 + ',' + c2 + '|' +
-      (early ? '1' : '0'));
+      (on ? '1' : '0') + '|' + commitment + '|' + c0 + ',' + c1 + ',' + c2 +
+      '|' + (early ? '1' : '0'));
     return [c0, c1, c2, early, doc, on, mac];
   };
   try {
