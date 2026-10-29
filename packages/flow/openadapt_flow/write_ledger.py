@@ -324,6 +324,12 @@ class Attempt:
         return "uncertain"
 
     @property
+    def review(self) -> bool:
+        """Landed, but a person should look at the store; until released."""
+
+        return bool(self.resolved and self.resolved.get("review")) and not self.released
+
+    @property
     def folder(self) -> Path:
         return Path(str(self.begun.get("folder", "")))
 
@@ -464,12 +470,26 @@ class Ledger:
 
     def begun(self, key: str, attempt_id: str, **fields: Any) -> None:
         self.backend.append(
-            key, {"event": "begun", "attempt": attempt_id, "at": _now(), **fields}
+            key,
+            {
+                "event": "begun",
+                "attempt": attempt_id,
+                "at": _now(),
+                "t": time.time(),
+                **fields,
+            },
         )
 
     def resolved(self, key: str, attempt_id: str, **fields: Any) -> None:
         self.backend.append(
-            key, {"event": "resolved", "attempt": attempt_id, "at": _now(), **fields}
+            key,
+            {
+                "event": "resolved",
+                "attempt": attempt_id,
+                "at": _now(),
+                "t": time.time(),
+                **fields,
+            },
         )
 
     def delivered(self, key: str, attempt_id: str) -> None:
@@ -491,7 +511,10 @@ class Ledger:
             raise LedgerError("the write is in flight in another worker")
         try:
             attempt = self.latest(key)
-            if attempt is None or attempt.state not in ("held", "uncertain", "open"):
+            if attempt is None or (
+                attempt.state not in ("held", "uncertain", "open")
+                and not attempt.review
+            ):
                 raise LedgerError("nothing to release for that key")
             self.backend.append(
                 key,
@@ -510,12 +533,15 @@ class Ledger:
             lease.release()
 
     def unresolved(self) -> list[tuple[str, Attempt]]:
-        """Every key whose latest attempt is open, uncertain or held."""
+        """Every key whose latest attempt is open, uncertain or held, or
+        landed with something a person should look at (``review``)."""
 
         out = []
         for key in self.backend.keys():
             attempt = self.latest(key)
-            if attempt is not None and attempt.state in ("open", "uncertain", "held"):
+            if attempt is None:
+                continue
+            if attempt.state in ("open", "uncertain", "held") or attempt.review:
                 out.append((key, attempt))
         return out
 

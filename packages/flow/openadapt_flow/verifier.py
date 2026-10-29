@@ -33,6 +33,7 @@ import hashlib
 import json
 import re
 import secrets
+import time
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -255,30 +256,35 @@ class Contract:
         return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
     @property
-    def identity(self) -> str:
-        """SHA-256 of what the write is: each effect's kind, target and
-        values, unbound. Read settings (where the store is, timeouts, the
-        window, the frame) are left out, so editing them between a crash and
-        a restart can't make the same write look new."""
+    def store(self) -> str:
+        """SHA-256 of which system of record the contract writes to: the
+        verifier's kind and location and the ``environment_id``. Timings and
+        credentials are left out, and a loopback host is one host."""
 
-        def strip(value: Any) -> Any:
-            if isinstance(value, Mapping):
-                return {
-                    str(k): strip(v)
-                    for k, v in value.items()
-                    if not str(k).endswith("_s")
-                }
-            if isinstance(value, (list, tuple)):
-                return [strip(v) for v in value]
-            return value
-
-        body = json.dumps(
-            [strip(e.model_dump(mode="json")) for e in self.config.effects],
-            sort_keys=True,
-            separators=(",", ":"),
-            default=str,
+        return _digest(
+            {
+                "environment": self.config.environment_id,
+                "verifier": _strip(
+                    self.config.verifier.model_dump(mode="json"), drop_secrets=True
+                ),
+            }
         )
-        return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+    @property
+    def identity(self) -> str:
+        """SHA-256 of what the write is and where: each effect's kind, target
+        and values, unbound, and :attr:`store`. Timings, the window and the
+        frame are left out, so editing them between a crash and a restart
+        can't make the same write look new."""
+
+        return _digest(
+            {
+                "effects": [
+                    _strip(e.model_dump(mode="json")) for e in self.config.effects
+                ],
+                "store": self.store,
+            }
+        )
 
     @property
     def params(self) -> list[str]:
@@ -299,6 +305,33 @@ class Contract:
 
         walk(self.config.model_dump(mode="json"))
         return sorted(found)
+
+
+#: Settings that change how long a read waits, never what is written.
+_TIMINGS = frozenset(
+    {"timeout_s", "poll_interval_s", "approval_wait_s", "max_execution_window_s"}
+)
+_SECRET = re.compile(r"password|secret|token|auth|header|cookie|credential", re.I)
+_LOOPBACK = re.compile(r"(?<=//)(localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)", re.I)
+
+
+def _strip(value: Any, *, drop_secrets: bool = False) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(k): _strip(v, drop_secrets=drop_secrets)
+            for k, v in value.items()
+            if str(k) not in _TIMINGS and not (drop_secrets and _SECRET.search(str(k)))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_strip(v, drop_secrets=drop_secrets) for v in value]
+    if isinstance(value, str):
+        return _LOOPBACK.sub("loopback", value)
+    return value
+
+
+def _digest(value: Any) -> str:
+    body = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def _parse_write(text: str) -> str:
@@ -403,6 +436,9 @@ class WriteResult:
     #: Not confirmed, but the store holds the declared records: the write is
     #: never sent again, and it isn't held for a person.
     landed: bool = False
+    #: A person should look at the store: shown by ``openadapt verify ledger
+    #: list`` until released, though it doesn't stop a retry being handed back.
+    review: bool = False
 
     @property
     def verified(self) -> bool:
@@ -443,6 +479,7 @@ class WriteResult:
             "seal": self.seal,
             "seal_path": self.seal_path,
             "landed": self.landed,
+            "review": self.review,
         }
 
 
@@ -464,6 +501,9 @@ class PendingWrite:
     authorized: bool = False
     declared_by: DeclaredBy = "agent"
     write_key: str = ""
+    values_key: str = field(default="", repr=False)
+    #: When the baseline read began (epoch seconds): the window's start.
+    started: float = field(default=0.0, repr=False)
     ledger: Optional[Ledger] = field(default=None, repr=False)
     write_key_bound: bool = False
     used: bool = False
@@ -569,9 +609,11 @@ def begin_write(
             if workdir is not None
             else led.backend.attempt_dir(write_id)
         )
+        started = time.time()  # before the baseline: this attempt's window opens
         pending = _capture(
             contract, params, actor, write_id, folder, authorization_ref, declared_by
         )
+        pending.started = started
         _write_private(
             folder / "attempt.json",
             {"values": values, "authorization_ref": pending.authorization_ref},
@@ -582,6 +624,8 @@ def begin_write(
             folder=str(folder),
             contract=contract.identity,
             values_key=values_key,
+            store=contract.store,
+            t0=started,
             records=sum(int(e.expected_count or 1) for e in contract.config.effects),
             actor_kind=actor.kind,
             actor_id=actor.id,
@@ -599,6 +643,7 @@ def begin_write(
         raise
     pending.ledger = led
     pending.write_key = key
+    pending.values_key = values_key
     pending.write_key_bound = write_key is not None
     pending._lease = lease
     return pending
@@ -750,15 +795,15 @@ def _reconcile(
         seal=True,
         remediates=f"sha256:{previous}" if previous else None,
     )
-    result = _excuse_overlap(led, attempt.attempt_id, result)
-    if result.outcome is Outcome.CONFIRMED and _same_values_after(led, attempt):
-        # Another attempt with the same values began after this one's
-        # baseline: the record may be its write, not this one's.
-        result = _downgrade(
-            result,
-            "another attempt with the same values began after this one, so "
-            "the record may be that write; a person checks which one landed",
-        )
+    result = _check_overlap(
+        led,
+        key,
+        attempt.attempt_id,
+        str(attempt.begun.get("values_key") or ""),
+        str(attempt.begun.get("store") or ""),
+        float(attempt.begun.get("t0") or 0.0),
+        result,
+    )
     if (
         result.outcome is not Outcome.UNCERTAIN
         or attempt.resolved is None
@@ -793,7 +838,6 @@ def _reconcile(
 
 def _age_s(attempt: Attempt) -> float:
     import calendar
-    import time
 
     try:
         began = calendar.timegm(
@@ -842,7 +886,15 @@ def verify_write(
             pending, write_attempted=write_attempted, source=source, seal=seal
         )
         if holds_lease and pending.ledger is not None:
-            result = _excuse_overlap(pending.ledger, pending.write_id, result)
+            result = _check_overlap(
+                pending.ledger,
+                pending.write_key,
+                pending.write_id,
+                pending.values_key,
+                pending.contract.store,
+                pending.started,
+                result,
+            )
             _record(
                 pending.ledger,
                 pending.write_key,
@@ -875,6 +927,7 @@ def _record(
         outcome=result.outcome.value,
         retry_safe=result.retry_safe,
         landed=result.landed,
+        review=result.review,
         delivered=delivered,
         via=via,
         write_key_bound=write_key_bound,
@@ -892,7 +945,7 @@ def _landed(result: WriteResult) -> bool:
 
 
 def _downgrade(
-    result: WriteResult, reason: str, *, landed: bool = False
+    result: WriteResult, reason: str, *, landed: bool = False, review: bool = False
 ) -> WriteResult:
     import dataclasses
 
@@ -902,19 +955,73 @@ def _downgrade(
         reasons=[*result.reasons, reason],
         retry_safe=False,
         landed=landed,
+        review=review,
     )
 
 
-def _excuse_overlap(led: Ledger, attempt_id: str, result: WriteResult) -> WriteResult:
-    """A refuted frame that other attempts in the ledger explain.
+def _overlapping(
+    led: Ledger, own_key: str, since: float, until: float
+) -> list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]]:
+    """Attempts of other keys whose write could have landed between
+    ``since`` (this attempt's baseline read began) and ``until`` (its
+    read-back ended). The same key's earlier attempts resolved before this
+    one began: its lease orders them."""
 
-    The declared records landed exactly (``delta`` held); the only breach is
-    records added outside them, no more than other attempts in the ledger
-    could have added while this one's window was open. Then this write
-    landed, and the extra records are most likely theirs: it is never sent
-    again, and it isn't held. It isn't confirmed either.
+    return [
+        (key, begun, resolved)
+        for key, begun, resolved in led.attempts()
+        if key != own_key
+        and float(begun.get("t0") or begun.get("t") or 0.0) <= until
+        and (resolved is None or float(resolved.get("t") or until) >= since)
+    ]
+
+
+def _live(led: Ledger, key: str) -> bool:
+    """Another caller holds ``key``'s lease right now."""
+
+    try:
+        lease = led.backend.lease(key)
+    except LedgerError:
+        return True
+    if lease is None:
+        return True
+    lease.release()
+    return False
+
+
+def _check_overlap(
+    led: Ledger,
+    key: str,
+    attempt_id: str,
+    values_key: str,
+    store: str,
+    since: float,
+    result: WriteResult,
+) -> WriteResult:
+    """Judge a result against the other attempts open during its window.
+
+    - Same values: one record can't prove two writes, so a ``CONFIRMED`` is
+      ``UNCERTAIN`` for a person (it may be the other attempt's record, or
+      this attempt's send may have stored nothing).
+    - A frame breach of only added records, no more than other attempts on
+      the same store wrote in the window (read back as landed, or live
+      now): the declared write landed and the extras are most likely
+      theirs. ``UNCERTAIN`` with ``landed`` (never resent, not held) and
+      ``review`` (a person looks, since a count can't name the records).
     """
 
+    others = _overlapping(led, key, since, time.time())
+    if result.outcome is Outcome.CONFIRMED:
+        if values_key and any(
+            b.get("values_key") == values_key for _k, b, _r in others
+        ):
+            return _downgrade(
+                result,
+                "another attempt with the same values was open during this "
+                "write, so the record may be that write; a person checks "
+                "which one landed",
+            )
+        return result
     if result.outcome is not Outcome.REFUTED or result.checked.get("delta") != "held":
         return result
     if result.checked.get("source") == "refuted":
@@ -923,35 +1030,24 @@ def _excuse_overlap(led: Ledger, attempt_id: str, result: WriteResult) -> WriteR
     kinds = set(frame.get("collateral_kinds") or [])
     if frame.get("status") != "refuted" or not kinds or kinds - {"added"}:
         return result
-    since, until = result.scope.window.baseline_read_at, result.scope.window.read_at
-    if not since or not until:
-        return result
-    others = 0
-    for _key, begun, resolved in led.attempts():
-        if begun.get("attempt") == attempt_id or str(begun.get("at", "")) > until:
-            continue
-        if resolved is not None and str(resolved.get("at", "")) < since:
-            continue  # its write was in this attempt's baseline
-        others += int(begun.get("records") or 1)
-    if int(frame.get("collateral_count") or 0) > others:
+    written = 0
+    for key, begun, resolved in others:
+        if not store or begun.get("store") != store:
+            continue  # another system of record can't explain this one's rows
+        if resolved is not None:
+            if resolved.get("outcome") == "CONFIRMED" or resolved.get("landed"):
+                written += int(begun.get("records") or 1)
+        elif _live(led, key):
+            written += int(begun.get("records") or 1)
+    if not written or int(frame.get("collateral_count") or 0) > written:
         return result
     return _downgrade(
         result,
-        "the declared records landed; the records added beside them match "
-        "other writes made in the same window, so this write isn't confirmed, "
-        "and it isn't sent again",
+        "the declared records landed; the records added beside them could be "
+        "other writes made on the same store in the same window, so this "
+        "write isn't confirmed or sent again, and a person checks the extras",
         landed=True,
-    )
-
-
-def _same_values_after(led: Ledger, attempt: Attempt) -> bool:
-    values_key = attempt.begun.get("values_key")
-    since = str(attempt.begun.get("at", ""))
-    return any(
-        begun.get("values_key") == values_key
-        and begun.get("attempt") != attempt.attempt_id
-        and str(begun.get("at", "")) >= since
-        for _key, begun, _resolved in led.attempts()
+        review=True,
     )
 
 

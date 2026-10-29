@@ -138,14 +138,15 @@ outcome isn't known.
 **Identity.** A write's key is an HMAC-SHA256 over three things:
 
 - the contract's identity (`Contract.identity`): each effect's kind, target
-  and values, unbound;
+  and values, unbound, and the store (`Contract.store`: the verifier's kind
+  and location and `environment_id`, without credentials; a loopback host
+  is one host);
 - the bound values, normalized so that `7` and `"7"` are the same write;
 - an optional caller `write_key`.
 
-Read settings are left out of the identity: where the store is, timeouts,
-the window, and the frame. Editing them between a crash and a restart can't
-make the same write look new. If the store's address changes, the old
-baseline can't be judged, so the attempt stays held.
+Timeouts, the window and the frame are left out of the identity, so editing
+them between a crash and a restart can't make the same write look new. The
+same write to another store is its own write.
 
 The HMAC key is a secret in the ledger folder (mode 0600), so the ledger
 never holds values or plain digests of them. A landed write without a
@@ -207,18 +208,28 @@ an operator's job.
   one that died just after: it stays held until a person, or `settle_s`,
   releases it.
 
-**Other writes in the window.** A correct write can see records that other
-workers added in the same window. Then its declared records landed exactly
-(`delta` held), and the only frame breach is added records, no more than
-other ledger attempts that were open during its window could have made. In
-that case the result is `UNCERTAIN` with `landed: true`. It isn't confirmed,
-it isn't held, and it's never sent again. A breach that ledger attempts
-don't explain stays `REFUTED`.
+**Other writes in the window.** `verify_write` and reconciliation both check
+the result against attempts of other keys that were open during its window,
+from just before its baseline read to the end of its read-back.
 
-**Another task's identical write.** Reconciliation doesn't record
-`CONFIRMED` if another attempt with the same values began after this one.
-The record may be that other attempt's write, so the attempt stays held for
-a person.
+- **Same values.** One record can't prove two writes. If another attempt
+  with the same values was open during the window, a `CONFIRMED` result
+  becomes `UNCERTAIN` and is held for a person. That other attempt may have
+  written the record, or this attempt's send may have stored nothing.
+- **Added records from other writes.** A correct write can see records that
+  other workers added in the same window. The excuse applies only when all
+  of these hold:
+  - its declared records landed exactly (`delta` held);
+  - the only frame breach is added records;
+  - there are no more of them than other attempts on the same store wrote
+    in the window, counting attempts read back as landed or still holding
+    a live lease.
+
+  Then the result is `UNCERTAIN` with `landed: true` and `review: true`. It
+  isn't confirmed, and it's never sent again. It stays listed in `openadapt
+  verify ledger list` until a person releases it, since a count can't name
+  the records. A stale or abandoned attempt, or one on another store, never
+  excuses anything, and a breach nothing explains stays `REFUTED`.
 
 **What's kept on disk.** While an attempt may still need a read-back, its
 baseline and values stay in its private folder (mode 0700, files 0600) next

@@ -468,10 +468,11 @@ def test_another_tasks_identical_write_is_never_taken_for_this_one(
     # task-1 reads its baseline and dies before sending.
     dead = _worker(base, "die_before_send", ledger_dir, key="task-1")
     dead.communicate(timeout=120)
-    # task-2 makes the same write and it lands.
+    # task-2 makes the same write and it lands. task-1 may have sent too, so
+    # one record can't confirm task-2 either: both wait for a person.
     pending = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-2")
     FakeAgent(base).click_save("p1", NOTE)
-    assert verify_write(pending).verified
+    assert verify_write(pending).outcome is Outcome.UNCERTAIN
     # task-1 restarts: the one record may be task-2's, so it isn't confirmed.
     with pytest.raises(WriteHeld, match="may still land"):
         begin_write(_contract(base), VALUES, actor=BOT, write_key="task-1")
@@ -491,9 +492,11 @@ def test_other_workers_records_dont_hold_a_correct_write(sor, ledger_dir: Path) 
         # Each sees the other's record beside its own: landed, not confirmed,
         # never held and never resent.
         assert result.outcome is Outcome.UNCERTAIN and result.landed
+        assert result.review  # a person looks at the extra record
     with pytest.raises(AlreadyWritten):
         begin_write(contract, VALUES, actor=BOT)
-    assert Ledger(FileLedger(ledger_dir)).unresolved() == []
+    listed = Ledger(FileLedger(ledger_dir)).unresolved()
+    assert len(listed) == 2 and all(a.review for _k, a in listed)
 
 
 def test_a_stray_record_no_attempt_explains_stays_refuted(
@@ -554,3 +557,74 @@ def test_a_resolved_attempt_keeps_no_values(sor, ledger_dir: Path) -> None:
     assert not (pending.workdir / "attempt.json").exists()
     assert not (pending.workdir / "baseline.json").exists()
     assert (pending.workdir / "effect-receipt.json").exists()
+
+
+# -- second review round ---------------------------------------------------------
+
+
+def test_the_same_write_to_another_store_is_its_own_write(ledger_dir: Path) -> None:
+    url_a, db_a, stop_a = fault_serve()
+    url_b, db_b, stop_b = fault_serve()
+    try:
+        a, b = _contract(url_a.rstrip("/")), _contract(url_b.rstrip("/"))
+        assert a.identity != b.identity
+        for key in ("ticket-42", None):
+            pending = begin_write(a, VALUES, actor=BOT, write_key=key)
+            FakeAgent(url_a.rstrip("/")).click_save("p1", NOTE)
+            assert verify_write(pending).verified
+            pending = begin_write(b, VALUES, actor=BOT, write_key=key)
+            FakeAgent(url_b.rstrip("/")).click_save("p1", NOTE)
+            assert verify_write(pending).verified
+        assert _landed(db_a) == 2 and _landed(db_b) == 2
+    finally:
+        stop_a()
+        stop_b()
+
+
+def test_a_loopback_alias_is_the_same_store(sor, ledger_dir: Path) -> None:
+    base, _db = sor
+    alias = Contract.from_dict(
+        verify_yaml(base.replace("127.0.0.1", "localhost")), name="referral"
+    )
+    assert alias.identity == _contract(base).identity
+
+
+def test_an_earlier_tasks_record_never_confirms_a_later_unsent_one(
+    sor, ledger_dir: Path
+) -> None:
+    base, db = sor
+    first = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-1")
+    time.sleep(1.1)  # the second task begins a second later
+    dead = _worker(base, "die_before_send", ledger_dir, key="task-2")
+    dead.communicate(timeout=120)
+    FakeAgent(base).click_save("p1", NOTE)
+    assert verify_write(first).outcome is Outcome.UNCERTAIN  # task-2 was open
+    with pytest.raises(WriteHeld):
+        begin_write(_contract(base), VALUES, actor=BOT, write_key="task-2")
+    assert _landed(db) == 1
+
+
+def test_a_phantom_save_beside_an_identical_write_is_not_confirmed(
+    sor, ledger_dir: Path
+) -> None:
+    base, db = sor
+    one = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-1")
+    two = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-2")
+    FakeAgent(base).click_save("p1", NOTE)
+    FakeAgent(base).click_save("p1", NOTE, fault="no_persist")
+    results = [verify_write(one), verify_write(two)]
+    assert not any(r.verified for r in results)
+    assert _landed(db) == 1
+
+
+def test_a_stale_attempt_never_excuses_a_stray_write(sor, ledger_dir: Path) -> None:
+    base, _db = sor
+    # An attempt for another patient, begun and abandoned (never sent).
+    dead = _worker(base, "die_before_send", ledger_dir)
+    dead.communicate(timeout=120)
+    other = {"patient_id": "p9", "note": NOTE}
+    pending = begin_write(_contract(base), other, actor=BOT)
+    FakeAgent(base).click_save("p9", NOTE)
+    FakeAgent(base).click_save("p3", "a stray note")
+    result = verify_write(pending)
+    assert result.outcome is Outcome.REFUTED and not result.landed
