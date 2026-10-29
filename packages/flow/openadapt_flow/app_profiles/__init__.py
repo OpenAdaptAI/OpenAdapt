@@ -7,16 +7,23 @@ profile names is compared; a rule only says which changes in it are the
 app's own:
 
 - ``append_only``: rows may be added; an existing row may change only in the
-  rule's ``columns`` (none, by default) and may never go.
+  rule's ``columns`` (none, by default) and may never go. With
+  ``insert_entry_names_no_record``, the table is an id map or link row the
+  app inserts with a save: the acting user's own insert entry for it that
+  names no record is the app's bookkeeping, not a write the run hid.
 - ``columns``: an existing row may change in the named columns, and no row
   may be added or removed. Narrowed by ``fill_only`` (only from NULL or empty
   to a value: a backfill, never a swap, overwrite or clear), ``with_fill``
   (only when that column was backfilled in the same row) or ``owner`` (only
   on the acting user's own row).
 - ``own_rows``: per-user UI state. The acting user's own rows may be added,
-  changed or removed, and so may those of another user who wrote in the
-  window (their own work); everyone else's are compared. Credentials never
-  use this: their column rules stay on the acting user's row.
+  changed or removed; everyone else's are compared. ``owner.default`` names
+  the app's global default rows in the table; the frame explains one only
+  when it was added beside an explained row with the same ``same`` columns. Another user's change to
+  their own row is not excused here: the frame attributes it to them only
+  when their own write entry in the audit window names the table
+  (owner-scoped attribution, ``FrameSpec.owners``). Credentials never use
+  this: their column rules stay on the acting user's row.
 
 A rule may name only a table in the profile's reviewed ``bookkeeping_tables``
 (lower-cased, unqualified), so anything else, patient data included, is
@@ -46,6 +53,19 @@ def table_name(name: str) -> str:
     return name.rsplit(".", 1)[-1].lower()
 
 
+class OwnerDefault(BaseModel):
+    """The owner value of the app's global default rows, written beside a
+    user's own row (OpenEMR's ``user_settings`` row for ``setting_user = 0``,
+    added the first time anyone saves a label)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The owner column's value on a default row.
+    value: str = Field(min_length=1)
+    #: Columns a default row shares with the user's row it was added beside.
+    same: list[str] = Field(min_length=1)
+
+
 class Owner(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -53,6 +73,11 @@ class Owner(BaseModel):
     column: str
     #: What it holds: the user's sign-in name, or their id in the users table.
     by: Literal["username", "user_id"]
+    #: ``own_rows`` only: the app's default rows in this table. A default row
+    #: is explained only when it was added in the window beside a user's row
+    #: that is itself explained and shares its ``same`` columns; a changed or
+    #: removed default row, or one with no such partner, never is.
+    default: Optional[OwnerDefault] = None
 
 
 class ProfileRule(BaseModel):
@@ -66,6 +91,8 @@ class ProfileRule(BaseModel):
     fill_only: bool = False
     with_fill: Optional[str] = None
     owner: Optional[Owner] = None
+    #: ``append_only`` with no ``columns`` only: see the module docstring.
+    insert_entry_names_no_record: bool = False
     reason: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -74,10 +101,22 @@ class ProfileRule(BaseModel):
             raise ValueError(f"rule {self.id}: a column rule names its columns")
         if self.mode == "own_rows" and (self.owner is None or self.columns):
             raise ValueError(f"rule {self.id}: own_rows names an owner, not columns")
+        if self.insert_entry_names_no_record and (
+            self.mode != "append_only" or self.columns or self.table == "*"
+        ):
+            raise ValueError(
+                f"rule {self.id}: only an append-only table whose rows never "
+                "change can excuse the acting user's insert entries"
+            )
         if self.mode != "columns" and (self.fill_only or self.with_fill):
             raise ValueError(f"rule {self.id}: fill conditions go with column rules")
         if self.table == "*" and not (self.mode == "columns" and self.fill_only):
             raise ValueError(f"rule {self.id}: every table only for a backfill")
+        if self.owner is not None and self.owner.default is not None:
+            if self.mode != "own_rows":
+                raise ValueError(f"rule {self.id}: a default owner is for own_rows")
+            if self.owner.column in self.owner.default.same:
+                raise ValueError(f"rule {self.id}: same can't name the owner column")
         return self
 
     @property
@@ -150,6 +189,14 @@ class AppProfile(BaseModel):
             if r.mode == "append_only" and (present is None or r.table in present)
         ]
 
+    def no_record_insert_tables(self) -> set[str]:
+        """Tables whose acting-user insert entries naming no record are the
+        app's bookkeeping (``insert_entry_names_no_record``)."""
+
+        return {
+            table_name(r.table) for r in self.rules if r.insert_entry_names_no_record
+        }
+
     def ignore_columns(self) -> dict[str, list[str]]:
         """Columns left out of each row's contents MAC: unconditional column
         rules, and the columns an append-only table's rows may change in."""
@@ -170,6 +217,8 @@ class AppProfile(BaseModel):
                 cols |= set(r.columns)
                 cols |= {r.with_fill} if r.with_fill else set()
                 cols |= {r.owner.column} if r.owner else set()
+                if r.owner is not None and r.owner.default is not None:
+                    cols |= set(r.owner.default.same)
         return sorted(cols)
 
     def actor_ids_query(self, names: Sequence[str], dialect: str) -> Optional[str]:
@@ -207,7 +256,6 @@ class AppProfile(BaseModel):
         hasher: Callable[[str, Any], str],
         names: set[str],
         ids: set[str],
-        colleagues: tuple[set[str], set[str]] = (set(), set()),
     ) -> Optional[list[str]]:
         """The rules that make this row change the app's own, or None.
 
@@ -215,8 +263,7 @@ class AppProfile(BaseModel):
         for a column of this table); ``after`` holds plain values. A row
         added has no ``before``, a row removed no ``after``; ``fields`` are
         the columns that changed. ``names`` and ``ids`` are the acting
-        user's; ``colleagues`` the names and ids of other users who wrote in
-        the window (for ``own_rows`` only).
+        user's.
         """
 
         name = table_name(table)
@@ -225,10 +272,6 @@ class AppProfile(BaseModel):
         def owned(rule: ProfileRule) -> bool:
             assert rule.owner is not None
             who = names if rule.owner.by == "username" else ids
-            if rule.mode == "own_rows":
-                who = who | (
-                    colleagues[0] if rule.owner.by == "username" else colleagues[1]
-                )
             col = rule.owner.column
             if after is not None:
                 return str(after.get(col)) in who

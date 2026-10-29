@@ -41,7 +41,17 @@ With ``frame.database``, another actor's entry explains a row only when it
 is a write of the matching kind (insert for an added row, delete for a
 removed one, update for a changed one) on the same table, naming the record
 as it was before the change; each entry explains at most one row, and a row
-whose record key changed is never explained. What the log can't show stays a
+whose record key changed is never explained.
+
+A row of a per-user table names no record (OpenEMR's ``user_settings``,
+owned by ``setting_user``). Owner-scoped attribution covers it: for a table
+whose rows carry an owner (``attribution.owners``, and the app profile's
+``own_rows`` tables), another user's write entry of the matching kind that
+names the table explains one changed row they own, when the row names no
+record (its record key is empty). It never explains a row
+of anyone else, a row whose owner changed, or any row of a table the bot also
+wrote in the window: its entry names no row, so any of them may be its own
+change. An owner that can't be read or resolved explains nothing. What the log can't show stays a
 limit: an entry the app files under the wrong record (a write logged against
 the chart the bot has open), or one colleague insert whose own row never
 landed, still reads as that colleague's. List every app account the bot
@@ -56,12 +66,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
+from openadapt_flow.app_profiles import Owner, table_name
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
@@ -139,6 +150,17 @@ class FrameAttribution(BaseModel):
     #: an entry attributes a change only to a row of that table. Required
     #: with ``frame.database``.
     table_field: Optional[str] = None
+    #: ``audit_read`` only, with ``frame.database``: table -> the column
+    #: naming the user each row belongs to (the app profile's ``owner``
+    #: shape). A change to such a row that no entry names by record is
+    #: another user's when one of their write entries in the window names
+    #: the table and the row is theirs (``owner.by`` resolves the entry's
+    #: actor to the column's value). The app profile's ``own_rows`` tables
+    #: are added to these. Only a row with no record (its ``record_key`` or
+    #: ``record_keys`` value empty) is judged this way, and a contract may
+    #: name only a per-user table the profile reviewed: a bookkeeping table
+    #: no column or append-only rule names (credentials never).
+    owners: dict[str, Owner] = Field(default_factory=dict)
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
     #: ``record_field`` only: the record fields this app sets on the server
@@ -175,9 +197,14 @@ class FrameAttribution(BaseModel):
                 self.write_events
             ):
                 raise ValueError("insert_events and delete_events must be write_events")
-        elif self.record_keys or self.write_events or self.table_field:
+            if self.owners and not (self.table_field and self.write_events):
+                raise ValueError(
+                    "owners need table_field and write_events: only a write "
+                    "entry that names the table can say whose row changed"
+                )
+        elif self.record_keys or self.write_events or self.table_field or self.owners:
             raise ValueError(
-                "record_keys, write_events and table_field apply to audit_read"
+                "record_keys, write_events, table_field and owners apply to audit_read"
             )
         else:
             if self.read is not None or self.record_field is not None:
@@ -291,7 +318,41 @@ class FrameDatabase(BaseModel):
     #: Seconds between the two reads after the save. They must match: a
     #: write the app makes a moment later (a background job) shows as a
     #: difference, and the frame is not checked until the database settles.
+    #: A write later than the second read is not seen: see
+    #: ``recheck_after_s``.
     settle_s: float = Field(default=1.0, ge=0)
+    #: How many reads after the first one, each ``settle_s`` after the last,
+    #: may be taken to find two in a row that match, after the save and at a
+    #: recheck. A live app moves on its own (a screen polling, a scheduler
+    #: tick), so one pair often differs. Two reads match when they are the
+    #: same, or differ only by rows added to append-only tables (the app's
+    #: logs, which the frame excuses anyway). The rows judged are the earlier
+    #: read of the matching pair. The budget is ``settle_attempts *
+    #: settle_s`` seconds; when no pair matches within it, the frame is not
+    #: checked. Default 1: one pair, as before.
+    settle_attempts: int = Field(default=1, ge=1, le=60)
+    #: Seconds after the settled read at which the database is read once
+    #: more (``openadapt_flow.verifier.recheck``). A write that lands later
+    #: than ``settle_s`` (a background job, a trigger-driven integration, a
+    #: delayed side record) lands after the verdict; the recheck judges every
+    #: change since that read with the same rules, and an unexplained one
+    #: turns the verdict into REFUTED (late). Unset: no recheck is scheduled,
+    #: and a write that lands after the verdict goes unseen. No default: the
+    #: right wait depends on the app's own jobs, so the contract's author
+    #: picks it.
+    recheck_after_s: Optional[float] = Field(default=None, gt=0)
+
+    @model_serializer(mode="wrap")
+    def _compact(self, handler: Any) -> dict[str, Any]:
+        # Unset (or at its default), a field added later is left out, so a
+        # contract that doesn't use it keeps the digests (``frame_sha256``,
+        # the check digest) it had.
+        data: dict[str, Any] = handler(self)
+        if data.get("recheck_after_s") is None:
+            data.pop("recheck_after_s", None)
+        if data.get("settle_attempts") == 1:
+            data.pop("settle_attempts", None)
+        return data
 
     @model_validator(mode="after")
     def _pinned_profile(self) -> "FrameDatabase":
@@ -322,6 +383,20 @@ class FrameDatabase(BaseModel):
         from openadapt_flow.app_profiles import load_profile
 
         return None if self.profile is None else load_profile(self.profile)
+
+    def profile_owners(self) -> dict[str, Owner]:
+        """The profile's per-user UI tables (``own_rows``) and their owner
+        columns. Never a column rule's owner: credentials stay on the acting
+        user's row."""
+
+        profile = self.loaded_profile()
+        if profile is None:
+            return {}
+        return {
+            table_name(r.table): r.owner
+            for r in profile.rules
+            if r.mode == "own_rows" and r.owner is not None
+        }
 
     def profile_modes(self) -> dict[str, str]:
         """The profile's tables: append-only, or skipped (session state)."""
@@ -393,6 +468,54 @@ class FrameSpec(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _owners(self) -> "FrameSpec":
+        a = self.attribution
+        if a is None or not a.owners:
+            return self
+        if self.database is None:
+            raise ValueError(
+                "attribution.owners name tables: they apply with frame.database"
+            )
+        profile = self.database.loaded_profile()
+        if profile is None:
+            raise ValueError(
+                "attribution.owners need frame.database.profile: only a reviewed "
+                "bookkeeping table may name its rows' owner"
+            )
+        reviewed = {table_name(t) for t in profile.bookkeeping_tables}
+        # Credentials and other column rules stay on the acting user's row:
+        # a table any non-own_rows rule names never gets an owner here.
+        ruled = {table_name(r.table) for r in profile.rules if r.mode != "own_rows"}
+        theirs = self.database.profile_owners()
+        for table, owner in a.owners.items():
+            name = table_name(table)
+            if name not in reviewed or name in ruled:
+                raise ValueError(
+                    f"attribution.owners[{table!r}]: only a reviewed per-user "
+                    "table of the app profile (an own_rows table, or a "
+                    "bookkeeping table no column or append-only rule names) "
+                    "may name an owner; credentials never do"
+                )
+            known = theirs.get(name)
+            if known is not None and known != owner:
+                raise ValueError(
+                    f"attribution.owners[{table!r}] differs from the app "
+                    f"profile's owner for that table ({known.column}, {known.by})"
+                )
+        return self
+
+    def owners(self) -> dict[str, Owner]:
+        """Table (as :func:`table_name` names it) -> its rows' owner column,
+        for owner-scoped attribution: the profile's ``own_rows`` tables and
+        the contract's ``attribution.owners``."""
+
+        if self.attribution is None or self.attribution.kind != "audit_read":
+            return {}
+        out = self.database.profile_owners() if self.database is not None else {}
+        out.update({table_name(t): o for t, o in self.attribution.owners.items()})
+        return out
+
+    @model_validator(mode="after")
     def _identity_for_audit(self) -> "FrameSpec":
         if (
             self.attribution is not None
@@ -448,6 +571,8 @@ class FrameChange:
     other_on_target: bool = False
     #: In memory only, for the operator's console; never put in a receipt.
     key: Any = None
+    #: In memory only: the audit entry behind an ``audit_only`` change.
+    entry: Any = None
 
 
 @dataclass
@@ -466,6 +591,12 @@ class FrameVerdict:
     added_by_others: set[tuple[str, str]] = field(default_factory=set)
     #: In memory only: app profile rules that excused a row change.
     excused_by: set[str] = field(default_factory=set)
+    #: In memory only, set when the frame held and ``recheck_after_s`` is
+    #: set: what a later recheck compares with (the settled post-save
+    #: snapshot as keyed MACs, the audit entries seen then as keyed hashes,
+    #: and when it was read). Never put in a receipt; only its salted digest
+    #: is.
+    post_state: Optional[dict[str, Any]] = None
 
     @property
     def held(self) -> bool:
@@ -534,8 +665,12 @@ def declared_selectors(effect: Effect) -> list[dict[str, str]]:
     """
 
     def plain(selector: Mapping[str, Any]) -> dict[str, str]:
-        out = {k: str(v) for k, v in selector.items()}
-        out.update({k: str(v) for k, v in effect.key_selector().items()})
+        # A value with a declared kind stays an expression, so the record
+        # is matched in canonical form (``record_matches``).
+        out = {
+            k: (v if getattr(v, "kind", None) else str(v))  # type: ignore[misc]
+            for k, v in [*selector.items(), *effect.key_selector().items()]
+        }
         return out
 
     if effect.kind is EffectKind.EXACT_NEW_SET:
@@ -600,6 +735,7 @@ def judge_frame(
     identities: Optional[Mapping[str, str]] = None,
     new_row_defaults: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     unread_changes: Sequence[tuple[str, str]] = (),
+    no_record_inserts: Collection[str] = (),
     hashers: Optional[Mapping[str, Callable[[str, Any], str]]] = None,
     clock: tuple[str, str] = ("", ""),
     database_evidence: Optional[dict[str, Any]] = None,
@@ -609,6 +745,7 @@ def judge_frame(
             Optional[list[str]],
         ]
     ] = None,
+    user_ids: Optional[Mapping[str, str]] = None,
 ) -> FrameVerdict:
     """Judge the frame of ``effects`` over ``slices``.
 
@@ -633,6 +770,9 @@ def judge_frame(
             ``CLOCK_DEFAULT`` a column the database fills with the time.
         unread_changes: (table, why) for tables that moved in a way no row
             comparison explains. Each is collateral.
+        no_record_inserts: Tables both database reads read as append-only
+            whose profile rule marks the acting user's insert entry naming no
+            record as the app's bookkeeping (an id map, a link row).
         hashers: Slice -> (column, value) -> the keyed MAC its baseline records hold instead of
             values (database tables). A post-save record is plain; it is
             hashed to compare with the baseline.
@@ -641,6 +781,8 @@ def judge_frame(
         excuse: (table, before, after, changed fields) -> the app profile
             rules that make this row change the app's own bookkeeping, or
             None. Applied to rows no effect declares.
+        user_ids: Sign-in name -> user id, for owner columns that hold a
+            user id (``owner.by: user_id``). An actor not in it owns no row.
     """
 
     from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW, is_default
@@ -906,26 +1048,162 @@ def judge_frame(
         )
 
     excused_by: set[str] = set()
+    #: Profile ``own_rows`` rule ids, by the table they name.
+    app_profile = database.loaded_profile() if database is not None else None
+    own_rules: dict[str, set[str]] = {}
+    for rule in app_profile.rules if app_profile is not None else []:
+        if rule.mode == "own_rows":
+            own_rules.setdefault(table_name(rule.table), set()).add(rule.id)
+    #: Tables in which a row was excused as the acting user's own per-user
+    #: state (an ``own_rows`` rule, or a default row beside such a row).
+    own_written: set[str] = set()
+
+    def same_table(entry_table: Any, table: str) -> bool:
+        """Does an entry's table name this snapshot table, exactly? Case
+        aside, an unqualified name means the frame's own schema; a qualified
+        one must name the table as the snapshot does, so a table in a schema
+        the frame doesn't read is never this one."""
+
+        named = str(entry_table).lower()
+        mine = table.lower()
+        if named == mine:
+            return True
+        return "." not in named and "." in mine and mine.rsplit(".", 1)[1] == named
 
     def bookkeeping(
         name: str,
         before: Optional[Mapping[str, Any]],
         after: Optional[Mapping[str, Any]],
         fields: list[str],
-    ) -> bool:
-        """Is this row change the app's own bookkeeping (its profile)?"""
+    ) -> Optional[list[str]]:
+        """The app profile rules that make this row change the app's own
+        bookkeeping, or None."""
 
         if excuse is None or name not in hashers:
-            return False
+            return None
         rules = excuse(name, before, after, fields)
         if rules:
             excused_by.update(rules)
-            return True
-        return False
+            here = table_name(name)
+            if set(rules) & own_rules.get(here, set()):
+                own_written.add(name)
+            return list(rules)
+        return None
 
     # Each other actor's entry explains at most one row: a colleague's one
     # insert can't cover two stray rows.
     used: set[int] = set()
+    owners = spec.owners()
+
+    def default_owner(name: str) -> Optional[Owner]:
+        """The table's owner, when it declares the app's default rows."""
+
+        table = table_of(name)
+        owner = owners.get(table_name(table)) if table else None
+        return owner if owner is not None and owner.default is not None else None
+
+    def default_row(name: str, record: Mapping[str, Any], hashed: bool) -> bool:
+        """Is this row one of the app's default rows (its owner value)?"""
+
+        owner = default_owner(name)
+        if owner is None or owner.default is None:
+            return False
+        held = record.get(owner.column)
+        hasher = hashers.get(name)
+        if hashed and hasher is not None:
+            return held == hasher(owner.column, owner.default.value)
+        return held is not None and str(held) == owner.default.value
+
+    def owner_scoped(
+        name: str,
+        before: Optional[Mapping[str, Any]],
+        after: Optional[Mapping[str, Any]],
+    ) -> Attribution:
+        """A row no entry names by record, in a table whose rows carry an
+        owner: another user's when their write entry in the window names the
+        table and the row is theirs. Fail closed: no declared owner, an owner
+        that can't be read or resolved, a row whose owner moved, or any entry
+        by the bot for the table leaves it unexplained (or the bot's)."""
+
+        table = table_of(name)
+        if table is None:
+            return "unattributed"
+        here = table_name(table)
+        owner = owners.get(here)
+        if (
+            owner is None
+            or window_entries is None
+            or attribution is None
+            or not attribution.table_field
+            or not attribution.write_events
+        ):
+            return "unattributed"
+        col = owner.column
+        hasher = hashers.get(name)
+        record = before if before is not None else after
+        if record is None or col not in record:
+            return "unattributed"
+        if before is not None and after is not None:
+            # The row moved to another user: no entry by either explains it.
+            moved = (
+                before.get(col) != hasher(col, after.get(col))
+                if hasher is not None
+                else not _same(before.get(col), after.get(col))
+            )
+            if moved:
+                return "unattributed"
+        hashed = hasher is not None and before is not None
+        held = record.get(col)
+        if held in (None, "") or (hashed and held == hasher(col, None)):  # type: ignore[misc]
+            return "unattributed"
+        if default_row(name, record, hashed):
+            # The app's default row: no user owns it. Only an addition beside
+            # an explained row of the same label is explained (see below).
+            return "unattributed"
+
+        def owns(value: str) -> bool:
+            if hashed:
+                return held == hasher(col, value)  # type: ignore[misc]
+            return str(held) == value
+
+        # Compared as the profile names tables (lower-cased, no schema), on
+        # both sides: an entry naming ``USER_SETTINGS`` names this table.
+        entries = [
+            e
+            for e in window_entries
+            if get_path(e, attribution.table_field) not in (None, "")
+            and table_name(str(get_path(e, attribution.table_field))) == here
+            and get_path(e, attribution.actor_field) not in (None, "")
+        ]
+        if any(str(get_path(e, attribution.actor_field)) in self_ids for e in entries):
+            # The bot wrote this table in the window, and its entry names no
+            # row: any row of the table may be its change. (Matched loosely,
+            # by unqualified name: the stricter the match, the more it misses.)
+            return "self"
+        # Only an entry that names this very table explains a row of it.
+        entries = [
+            e
+            for e in entries
+            if same_table(get_path(e, attribution.table_field), table)
+        ]
+        change = (
+            "added" if before is None else "removed" if after is None else "changed"
+        )
+        kinds = event_kinds(change)
+        for e in entries:
+            if id(e) in used:
+                continue
+            if kinds is not None and (
+                str(get_path(e, attribution.event_field or "")) not in kinds
+            ):
+                continue
+            actor = str(get_path(e, attribution.actor_field))
+            value = actor if owner.by == "username" else (user_ids or {}).get(actor)
+            if value in (None, "") or not owns(str(value)):
+                continue
+            used.add(id(e))
+            return "other"
+        return "unattributed"
 
     def attribute(
         name: str,
@@ -937,7 +1215,7 @@ def judge_frame(
             return "unattributed"
         if attribution.kind == "audit_read":
             ref, field = ref_of(name, key, before, after)
-            if window_entries is None or ref is None:
+            if window_entries is None:
                 return "unattributed"
             if (
                 before is not None
@@ -945,6 +1223,8 @@ def judge_frame(
                 and key_moved(name, before, after)
             ):
                 return "unattributed"  # the row moved between charts
+            if ref is None:
+                return owner_scoped(name, before, after)
             if actors(name, ref, field) & self_ids:
                 return "self"
             change = (
@@ -960,6 +1240,20 @@ def judge_frame(
                 if attribution.write_events:
                     used.add(id(e))
                 return "other"
+            # The row names a record and no entry names it: an entry for
+            # another record of the same owner never explains it. A baseline
+            # MAC of an empty record key names no record.
+            hasher = hashers.get(name) if field else None
+            if (
+                hasher is not None
+                and field
+                and ref
+                in (
+                    hasher(field, None),
+                    hasher(field, ""),
+                )
+            ):
+                return owner_scoped(name, before, after)
             return "unattributed"
         # record_field: the record says who last changed it.
         if after is None:
@@ -1126,6 +1420,31 @@ def judge_frame(
                     )
                 into[key] = dict(record)
         compared += len(set(before_map) | set(after_map))
+        #: Explained rows of a table with default rows: their ``same``
+        #: columns, how they were explained, and the profile rules that did.
+        partners: list[tuple[dict[str, str], str, list[str]]] = []
+        #: Default rows added in the window, judged once their partners are.
+        deferred: list[tuple[Any, dict[str, Any]]] = []
+
+        def partner(
+            before: Optional[Mapping[str, Any]],
+            after: Mapping[str, Any],
+            how: str,
+            rules: Sequence[str] = (),
+        ) -> None:
+            owner = default_owner(name)
+            if (
+                owner is None
+                or owner.default is None
+                or default_row(name, after, False)
+            ):
+                return
+            same = owner.default.same
+            if any(c not in after or after.get(c) is None for c in same):
+                return
+            # The partner's ``same`` columns as they are now: the default row
+            # was written with them (OpenEMR copies the label and the value).
+            partners.append(({c: str(after.get(c)) for c in same}, how, list(rules)))
 
         for key in set(before_map) | set(after_map):
             before = before_map.get(key)
@@ -1237,7 +1556,12 @@ def judge_frame(
                         declared_keys.add(str(side_ref))
                     new_row(name, key, after, (side.link_field,))
                     continue
-                if bookkeeping(name, None, after, []):
+                if default_row(name, after, False):
+                    deferred.append((key, after))
+                    continue
+                rules = bookkeeping(name, None, after, [])
+                if rules:
+                    partner(None, after, "bookkeeping", rules)
                     continue
                 theirs_side = False
                 extra_side = False
@@ -1262,6 +1586,8 @@ def judge_frame(
                     key=key,
                 )
                 note(change)
+                if change.attribution == "other":
+                    partner(None, after, "other")
                 view = views_of.get(name)
                 if change.attribution == "other" and view and spec.identity_field:
                     # The same record as its surface names it, for checks
@@ -1277,18 +1603,56 @@ def judge_frame(
                 )
             elif before is not None and after is not None:
                 fields = changed(name, before, after)
-                if fields and bookkeeping(name, before, after, fields):
+                rules = bookkeeping(name, before, after, fields) if fields else None
+                if rules:
+                    partner(before, after, "bookkeeping", rules)
                     continue
                 if fields:
-                    note(
-                        FrameChange(
-                            name,
-                            "changed",
-                            attribute(name, key, before, after),
-                            fields,
-                            key=key,
-                        )
+                    change = FrameChange(
+                        name,
+                        "changed",
+                        attribute(name, key, before, after),
+                        fields,
+                        key=key,
                     )
+                    note(change)
+                    if change.attribution == "other":
+                        partner(before, after, "other")
+
+        # A default row added in the window is the app's, written beside one
+        # explained row with the same ``same`` columns: another user's (then
+        # it is theirs too) or the bot's own bookkeeping. One partner each;
+        # with none it is unexplained.
+        for key, after in deferred:
+            owner = default_owner(name)
+            same = owner.default.same if owner and owner.default else []
+            found = next(
+                (
+                    i
+                    for i, (values, _how, _rules) in enumerate(partners)
+                    if all(str(after.get(c)) == values[c] for c in same)
+                ),
+                None,
+            )
+            fields = sorted(_without(after, ignore_for(name)))
+            if found is None:
+                note(
+                    FrameChange(
+                        name,
+                        "added",
+                        attribute(name, key, None, after),
+                        fields,
+                        key=key,
+                    )
+                )
+                continue
+            _values, how, rules = partners.pop(found)
+            if how == "bookkeeping":
+                excused_by.update(rules)
+                if table_of(name):
+                    own_written.add(str(table_of(name)))
+                continue
+            note(FrameChange(name, "added", "other", fields, key=key))
 
     for table, why in unread_changes:
         # Moved in a way no row comparison explains: nothing can say which
@@ -1348,9 +1712,44 @@ def judge_frame(
                     continue
                 if str(ref) in declared_keys or str(ref) in logged or names_moved(ref):
                     continue
+                entry_table = (
+                    get_path(entry, attribution.table_field)  # type: ignore[union-attr]
+                    if attribution is not None and attribution.table_field
+                    else None
+                )
+                if entry_table not in (None, "") and any(
+                    same_table(entry_table, t) for t in own_written
+                ):
+                    # The bot's write to its own per-user state (its UI
+                    # settings, its recent charts): the whole-database diff
+                    # judged that table row by row, and the profile excused
+                    # the bot's own rows. Any other row of it the bot moved
+                    # is collateral there. Without such a row, the entry
+                    # still refutes.
+                    continue
+                event = (
+                    str(get_path(entry, attribution.event_field))  # type: ignore[union-attr]
+                    if attribution is not None and attribution.event_field
+                    else ""
+                )
+                if (
+                    ref in (None, "", "0", 0)
+                    and attribution is not None
+                    and event in attribution.insert_events
+                    and entry_table not in (None, "")
+                    and any(same_table(entry_table, t) for t in no_record_inserts)
+                ):
+                    # The bot's insert into an id map or link row a save
+                    # makes (OpenEMR's uuid_registry), filed under no chart:
+                    # both reads read the table, which allows the row and
+                    # judges every existing row. An update or delete, an
+                    # entry naming a record, or any other table still counts.
+                    continue
                 logged.add(str(ref))
                 collateral.append(
-                    FrameChange("", "changed", "self", audit_only=True, key=ref)
+                    FrameChange(
+                        "", "changed", "self", audit_only=True, key=ref, entry=entry
+                    )
                 )
 
     verdict = FrameVerdict(

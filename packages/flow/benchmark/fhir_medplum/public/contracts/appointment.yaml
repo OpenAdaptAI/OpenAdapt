@@ -1,0 +1,29 @@
+# Book an appointment exactly once, checked through FHIR only.
+schema_version: openadapt.ensure-record/v1
+resource_type: Appointment
+base_url: ${BENCH_FHIR_URL}
+access_token_env: BENCH_RECORD_TOKEN
+self: ["${BENCH_AGENT_REF}"]
+
+fields:
+  status: {path: status}
+  start: {path: start, compare: instant}
+  end: {path: end, compare: instant}
+  patient: {path: "participant[actor.reference^=Patient/].actor.reference"}
+  practitioner: {path: "participant[actor.reference^=Practitioner/].actor.reference"}
+
+identity:
+  - [patient, start]
+search: {patient: patient}
+
+closed: true
+allow:
+  - participant.status="accepted"
+  - participant.actor.display
+
+change_feed:
+  audit: {heartbeat: true}
+  history: true
+  history_author: false
+  sweep_types: [Patient, AllergyIntolerance, Appointment, Observation, Condition, Encounter]
+settle_s: 1

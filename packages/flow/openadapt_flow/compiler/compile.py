@@ -752,7 +752,9 @@ def _squash(text: str) -> str:
     return "".join(normalize_text(text).split())
 
 
-def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
+def _contains_excluded(
+    text: str, excluded: tuple[str, ...], *, fragments: bool = True
+) -> bool:
     """True if ``text`` fuzzily contains (or is contained by) an excluded value.
 
     OCR mangles whitespace and the odd character, so exact substring checks
@@ -764,6 +766,7 @@ def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
     Args:
         text: A TEXT_PRESENT candidate (raw OCR line text).
         excluded: Excluded (parameterized) values, raw.
+        fragments: Also count ``text`` that is contained by a value.
 
     Returns:
         True when the candidate must not be asserted.
@@ -775,7 +778,7 @@ def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
         ex = _squash(raw)
         if len(ex) < MIN_EXCLUDE_CHARS:
             continue
-        if ex in hay or hay in ex:
+        if ex in hay or (fragments and hay in ex):
             return True
         matcher = difflib.SequenceMatcher(None, ex, hay)
         matched = sum(block.size for block in matcher.get_matching_blocks())
@@ -1244,6 +1247,42 @@ def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
             **common,
         )
     return None
+
+
+def _label_shows_param_value(
+    text: str, values: tuple[str, ...], *, typed_here: tuple[str, ...]
+) -> bool:
+    """True if a click target's label shows a parameter value.
+
+    A label shows a value when it (fuzzily) contains one. A label that is
+    only a fragment of a value counts when that value is ``typed_here``: OCR
+    can split a typed value across lines. Anywhere else such a fragment is a
+    label that shares a word with a value, like the "Triage" button and a
+    note "E2E triage booking ...". Dropping that label left the click with no
+    text to find, and when the buttons swapped places the geometry rung
+    clicked the one now at the recorded spot. A kept label that does vary
+    per run only fails to match; ``lint_param_leakage`` allows the slot.
+
+    Args:
+        text: The OCR label under the click.
+        values: Every parameter (and secret) value in the recording.
+        typed_here: Values that can be the text under this click: those typed
+            earlier into the field the click lands in, and every secret.
+    """
+
+    return _contains_excluded(text, typed_here) or _contains_excluded(
+        text, values, fragments=False
+    )
+
+
+def _point_in_rect(point: Point, rect: object) -> bool:
+    if not isinstance(rect, (list, tuple)) or len(rect) != 4:
+        return False
+    try:
+        x, y, w, h = (int(v) for v in rect)
+    except (TypeError, ValueError):
+        return False
+    return x <= point[0] < x + w and y <= point[1] < y + h
 
 
 def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> list[str]:
@@ -2254,6 +2293,13 @@ def _compile_recording(
     # postconditions too, even though it never lands in workflow.params.
     param_values.extend(secret_exclude_values)
     exclude_texts: tuple[str, ...] = tuple(dict.fromkeys(param_values))
+    # Where and when each parameter value is typed, for the click labels
+    # that can show it (_label_shows_param_value).
+    typed_param_at: list[tuple[int, str, object]] = [
+        (int(event["i"]), str(event["text"]), event.get("field_rect"))
+        for event in events
+        if event.get("kind") == "type" and event.get("param") and event.get("text")
+    ]
 
     # The recording date arms the near/far date split in the volatility
     # classifier (a DOB is identity data; "last updated" is chronology).
@@ -2365,7 +2411,18 @@ def _compile_recording(
                 frame_lines,
                 click,
             )
-            if ocr_text and _contains_excluded(ocr_text, exclude_texts):
+            if ocr_text and _label_shows_param_value(
+                ocr_text,
+                exclude_texts,
+                typed_here=(
+                    *(
+                        text
+                        for at, text, rect in typed_param_at
+                        if at < i and _point_in_rect(click, rect)
+                    ),
+                    *secret_exclude_values,
+                ),
+            ):
                 # The text under the click is (part of) a value typed from a
                 # parameter, so it changes every run: never anchor on it.
                 ocr_text = None
@@ -2994,6 +3051,7 @@ def _compile_recording(
     # Submit-binding observations recorded on click events (unlabeled
     # controls only), attached once every risk decision is final.
     binding_observations: dict[str, object] = {}
+    form_values: dict[str, object] = {}
     for j, (step, step_before, step_after, event) in enumerate(pending):
         steps.append(step)
         if isinstance(event.get("dialog"), dict):
@@ -3003,6 +3061,8 @@ def _compile_recording(
             step.dialog = _dialog_identity(event["dialog"], exclude_texts)
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
+            if event.get("form_values") is not None:
+                form_values[step.id] = event["form_values"]
         if step.action in (ActionKind.SCROLL, ActionKind.READ):
             continue  # see the scroll and read branches in pass 1
         if step.action is ActionKind.SWITCH_SURFACE:
@@ -3108,6 +3168,16 @@ def _compile_recording(
         presumed.risk = "irreversible"
         presumed.risk_explanation = PRESUMED_COMMIT_EXPLANATION
         presumed.risk_review_required = False
+
+    # The submit button of the form the demonstration typed into saves that
+    # form, whatever the screen did after the click (a slow recording can
+    # capture the page before it changes). Explicit risk_overrides below
+    # still win.
+    for step in _form_submit_steps(steps, binding_observations):
+        if step.risk != "irreversible":
+            step.risk = "irreversible"
+            step.risk_explanation = "it submits the form the run typed into"
+            step.risk_review_required = False
 
     # A click that only opens a confirmation dialog is not the save: the
     # dialog's Confirm click is. Explicit risk_overrides below still win.
@@ -3629,7 +3699,7 @@ def _compile_recording(
     # fields the demonstration filled, or record why it cannot be bound (the
     # replayer refuses that click). Runs after every risk decision, model
     # annotation included, so the binding covers exactly the final writes.
-    _attach_submit_bindings(workflow.steps, binding_observations)
+    _attach_submit_bindings(workflow.steps, binding_observations, form_values)
 
     # PHI-at-rest remediation (audit REM-2): replace the plaintext identity
     # band (``anchor.context_text``) and structured identity on every anchor
@@ -3689,7 +3759,50 @@ def _compile_recording(
     return workflow
 
 
-def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) -> None:
+def _form_submit_steps(
+    steps: list[Step], observations: dict[str, object]
+) -> list[Step]:
+    """Clicks on the labelled submit button of the one form owning every
+    field typed into since the previous such click."""
+
+    found: list[Step] = []
+    typed = False
+    for step in steps:
+        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
+            typed = True
+            continue
+        raw = observations.get(step.id)
+        if (
+            typed
+            and raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and _is_form_save(raw)
+        ):
+            found.append(step)
+            typed = False
+    return found
+
+
+def _is_form_save(raw: object) -> bool:
+    """The observation shows the labelled submit button of the typed form."""
+
+    from openadapt_flow.submit_binding import (
+        _no_form_identity_reason,
+        observation_from_page,
+    )
+
+    try:
+        observation = observation_from_page(raw)
+    except ValueError:
+        return False
+    return observation.labelled and _no_form_identity_reason(observation) is None
+
+
+def _attach_submit_bindings(
+    steps: list[Step],
+    observations: dict[str, object],
+    form_values: Optional[dict[str, object]] = None,
+) -> None:
     """Attach :class:`~openadapt_flow.ir.SubmitBinding` evidence in place.
 
     A binding applies to a consequential CLICK/DOUBLE_CLICK whose target has
@@ -3697,12 +3810,20 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
     carried a submit-binding observation. Each such step gets either a
     binding (every condition in :mod:`openadapt_flow.submit_binding` held in
     the demonstration) or a plain-language reason it could not be bound.
-    Steps without an observation (pixel recordings, labelled controls,
-    recordings made before this capability) are left unchanged.
+
+    A consequential click on a labelled control that compiled with no
+    identity evidence, after fields were typed, and whose observation shows
+    it is a button of the one form owning those fields, gets a
+    :class:`~openadapt_flow.ir.FormIdentity` instead: a create-new form's
+    save. Steps without an observation (pixel recordings, recordings made
+    before this capability) are left unchanged.
     """
 
+    from openadapt_flow.policy import is_identity_armed
     from openadapt_flow.submit_binding import (
+        decide_form_identity,
         decide_submit_binding,
+        form_values_from_record,
         observation_from_page,
     )
 
@@ -3732,6 +3853,32 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
                 )
                 step.submit_binding = binding
                 step.submit_binding_unbound_reason = reason
+        elif (
+            raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and step.risk == "irreversible"
+            and step.anchor is not None
+            and typed_since_commit
+            and not is_identity_armed(step)
+        ):
+            # A labelled save with no record on screen to check: a create-new
+            # form. The record is the one the run typed into the form.
+            try:
+                form_identity, why = decide_form_identity(
+                    observation_from_page(raw),
+                    form_values_from_record((form_values or {}).get(step.id)),
+                )
+            except ValueError:
+                form_identity, why = None, "the recorded form evidence is malformed"
+            if form_identity is not None:
+                step.anchor.form_identity = form_identity
+                step.identity_armed = True
+                step.identity_unarmed_reason = None
+            elif _is_form_save(raw):
+                # The form's own save, but the check can't be armed: say why,
+                # so the refusal names it instead of a generic gap.
+                step.identity_unarmed_reason = f"create-form save not checked: {why}"
+                logger.warning("%s: %s", step.id, step.identity_unarmed_reason)
         if step.risk == "irreversible":
             # A consequential step closes the entry it committed.
             typed_since_commit = []

@@ -378,6 +378,49 @@ class IdentityTemplate(BaseModel):
         return data
 
 
+class FormIdentity(BaseModel):
+    """Record identity of a save on a create-new form: the form it submits is
+    the demonstrated form, holding exactly what this run typed.
+
+    A form that creates a record shows no existing record next to its save
+    button: the record is the one the run is entering. So the save's identity
+    is the form itself, all of it. The recorder observes, right before the
+    demonstrated click on a labelled submit button, that the button submits
+    the one HTML form owning every field typed into since the last save (not
+    in a table row or a single field's own widget), and fingerprints that
+    form. Before the click at run time, the replayer requires:
+
+    - the button is still that form's submit button, and the form owns
+      exactly ``filled_fields`` fields this run typed into, each holding
+      exactly what the run typed;
+    - the form submits to the same origin and path (``action_sha256``) with
+      the same ``method``, and would send the same set of control names and
+      types (``controls_sha256``), hidden ones included;
+    - every control the run did not type into (a hidden record or parent id,
+      a select left on its default, a checked box) holds the demonstrated
+      value: salted digests in ``value_digests``, under ``value_salt`` (the
+      identity-template scheme). Hidden tokens are not compared (``exempt``):
+      ones named like a token, and ones that changed while the demonstration
+      was typed.
+
+    Anything else halts before the click. A submit event from any other form
+    or control during the click is cancelled and halts the run.
+
+    Counts, tokens, names and digests only; no field text or value.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    filled_fields: int = Field(ge=1, le=10_000)
+    submit_role: Literal["form_submit"]
+    action_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    method: Literal["get", "post", "dialog"]
+    controls_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    value_salt: str = Field(default="", max_length=128)
+    value_digests: dict[str, str] = Field(default_factory=dict)
+    exempt: tuple[str, ...] = ()
+
+
 class Anchor(BaseModel):
     """Redundant evidence for locating a step's target on screen.
 
@@ -500,6 +543,14 @@ class Anchor(BaseModel):
             " by the recorded region's offset from the recorded click point,"
             " exactly as the OCR band's exclude region is) so the pixel/VLM"
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
+        ),
+    )
+    form_identity: Optional[FormIdentity] = Field(
+        default=None,
+        description=(
+            "A labelled save on a create-new form: before the click, its form"
+            " must hold exactly the fields this run typed, with the values"
+            " typed. See FormIdentity. None everywhere else."
         ),
     )
     landmarks: list[Landmark] = Field(default_factory=list)
@@ -1123,6 +1174,80 @@ def predicate_contract_sha256(predicate: Optional[Predicate]) -> str:
         "utf-8"
     )
     return hashlib.sha256(canonical).hexdigest()
+
+
+class HaltCleanupQualification(BaseModel):
+    """The test-copy evidence that a halt cleanup reaches the start screen."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    test_copy: str = Field(min_length=1)
+    #: Halt points tried (one fresh session each) and how many reached the
+    #: start screen after the cleanup.
+    halt_points: int = Field(ge=1)
+    passed: int = Field(ge=0)
+    qualified_at: str
+    #: SHA-256 of the cleanup it qualified (steps and start state).
+    cleanup_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class HaltCleanup(BaseModel):
+    """What a stopped item does to the app's screen before the next item.
+
+    A halted item can leave a dialog open, a form half filled or another page
+    in front. Before the next item runs on the same session, the cleanup's
+    ``steps`` run (each one only when its control is on screen), and then the
+    ``start_state`` must hold. If it doesn't, the session is dirty and takes
+    no more items (docs/HALT_CLEANUP.md).
+
+    Navigation only: no step may save, declare an effect, call an API or type
+    text. A record the item saved is rollback's job, not this one's.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Close, cancel and discard actions, in order. Each click is guarded to
+    #: run only when its control is on screen.
+    steps: list[Step] = Field(default_factory=list)
+    #: The screen each item starts on.
+    start_state: Predicate
+    #: ``recording``: derived from the recordings. ``declared``: written by an
+    #: author.
+    source: Literal["recording", "declared"] = "recording"
+    qualification: Optional[HaltCleanupQualification] = None
+
+    @model_validator(mode="after")
+    def _navigation_only(self) -> "HaltCleanup":
+        allowed = {
+            ActionKind.CLICK,
+            ActionKind.DOUBLE_CLICK,
+            ActionKind.KEY,
+            ActionKind.HOTKEY,
+            ActionKind.WAIT,
+            ActionKind.SCROLL,
+        }
+        for step in self.steps:
+            if step.action not in allowed:
+                raise ValueError(
+                    f"cleanup step {step.id!r} {step.action.value}s; a cleanup only "
+                    "closes, cancels, discards and navigates"
+                )
+            if (
+                step.effects
+                or step.api_binding is not None
+                or step.risk == "irreversible"
+            ):
+                raise ValueError(
+                    f"cleanup step {step.id!r} could save; a cleanup only navigates"
+                )
+            if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK) and (
+                step.guard is None or step.guard.on_unmet != "skip"
+            ):
+                raise ValueError(
+                    f"cleanup click {step.id!r} needs a guard that skips it when "
+                    "its control isn't on screen"
+                )
+        return self
 
 
 class Interstitial(BaseModel):
@@ -3113,6 +3238,9 @@ class Workflow(BaseModel):
     # content digest when present; omitted from the serialized bytes when
     # empty, so a bundle that declares none keeps its digest.
     undo_steps: list[UndoStep] = Field(default_factory=list)
+    #: What a halted item does to the screen before the next item on the same
+    #: session (docs/HALT_CLEANUP.md). None (and omitted) otherwise.
+    halt_cleanup: Optional[HaltCleanup] = None
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -3163,6 +3291,8 @@ class Workflow(BaseModel):
             data.pop("guard_sources", None)
         if not self.undo_steps:
             data.pop("undo_steps", None)
+        if self.halt_cleanup is None:
+            data.pop("halt_cleanup", None)
         return data
 
     @model_validator(mode="after")
@@ -3296,13 +3426,16 @@ class Workflow(BaseModel):
             _seal_template_assets(bundle, key, self._decrypted_templates)
             path = encrypted_path
         else:
-            plaintext_path.write_text(serialized)
+            # Bytes, not write_text: the platform default codec (cp1252 on
+            # Windows) cannot encode every character OCR records, and text
+            # mode would turn newlines into CRLF and change the bundle digest.
+            plaintext_path.write_bytes(serialized.encode("utf-8"))
             if encrypted_path.exists():
                 encrypted_path.unlink()
             path = plaintext_path
         if self.manifest is not None:
-            (bundle / "manifest.json").write_text(
-                self.manifest.model_dump_json(indent=2)
+            (bundle / "manifest.json").write_bytes(
+                self.manifest.model_dump_json(indent=2).encode("utf-8")
             )
         return path
 
@@ -3409,7 +3542,7 @@ class Workflow(BaseModel):
             )
             raw = json.loads(decrypted)
         else:
-            raw = json.loads(plaintext_path.read_text())
+            raw = json.loads(plaintext_path.read_bytes())
         raw = _bv.migrate_bundle_dict(raw)
         # A manifest may be embedded in workflow.json OR sit in a sidecar; the
         # embedded one wins, else the sidecar, else it is computed fresh.
@@ -3869,6 +4002,7 @@ class IdentityCheck(BaseModel):
         "vlm",
         "signal_quorum",
         "hover",
+        "form",
     ] = "context"
     coverage: float = 0.0
     expected: str = ""

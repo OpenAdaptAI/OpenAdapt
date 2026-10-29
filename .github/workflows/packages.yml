@@ -568,6 +568,8 @@ jobs:
             tests/e2e/test_code_action_e2e.py \
             tests/e2e/test_mcp_teach_e2e.py \
             tests/e2e/test_browser_teach_e2e.py \
+            tests/e2e/test_browser_teach_write_e2e.py \
+            tests/e2e/test_browser_teach_write_guard_e2e.py \
             tests/e2e/test_agent_guard_e2e.py \
             --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Read-back and zero-model-call tests, by name
@@ -596,6 +598,68 @@ jobs:
               if tests == 0 or skipped:
                   bad = True
           sys.exit(1 if bad else 0)
+          PY
+
+  # The agent-framework adapters (openadapt_flow.integrations.agents): each
+  # framework's own agent loop with a scripted model, writing through a real
+  # HTTP app, from the lock with every framework extra (CrewAI pinned beside
+  # it); and the skill cache (a LangGraph agent's run 1 compiled, run 2
+  # through the compiled skill's MCP server) in headless Chromium. No API
+  # key; the real-model tests are deselected.
+  flow-agent-frameworks:
+    name: flow agent frameworks (scripted models)
+    needs: scope
+    if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "packages/flow/uv.lock"
+      - name: Install
+        run: >-
+          uv sync --locked --python 3.12 --extra dev --extra agent
+          --extra claude-agent-sdk --extra openai-agents --extra langgraph
+      - name: Install CrewAI (pinned, outside the lock)
+        # CrewAI is no extra of Flow: every release pins a chromadb with open
+        # critical advisories and no patched release (GHSA-f4j7-r4q5-qw2c,
+        # GHSA-36p7-vc44-83pf; revisit when one ships), and current releases
+        # need mcp<2 and openai<3. The adapter is tested against this one
+        # version, in this job only.
+        run: uv pip install --require-hashes -r ci/crewai-1.6.1.txt
+      - name: Install and launch Playwright browser
+        timeout-minutes: 12
+        run: >-
+          uv run --no-sync python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+      - name: Test
+        env:
+          CREWAI_DISABLE_TELEMETRY: "true"
+          OTEL_SDK_DISABLED: "true"
+        run: |
+          mkdir -p runs
+          uv run --no-sync pytest -v --timeout=120 -k "not real_model" \
+            tests/test_agent_write_guard.py tests/test_agent_framework_*.py \
+            tests/e2e/test_skill_cache_e2e.py \
+            --junitxml=runs/frameworks-junit.xml
+      - name: Fail if any test was skipped or none ran
+        run: |
+          python3 - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse("runs/frameworks-junit.xml").getroot()
+          suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+          tests = sum(int(s.get("tests", 0)) for s in suites)
+          skipped = sum(int(s.get("skipped", 0)) for s in suites)
+          print(f"{tests} tests, {skipped} skipped")
+          sys.exit(1 if tests == 0 or skipped else 0)
           PY
 
   # Real native list apps read through the row census (identical rows halt,
@@ -1188,6 +1252,7 @@ jobs:
       - flow-lint
       - flow-unit
       - flow-critical
+      - flow-agent-frameworks
       - flow-native-census
       - capture-linux
       - capture-macos
@@ -1238,6 +1303,7 @@ jobs:
               "flow-lint": "flow",
               "flow-unit": "flow",
               "flow-critical": "flow",
+              "flow-agent-frameworks": "flow",
               "flow-native-census": "flow",
               "capture-linux": "capture",
               "capture-macos": "capture",

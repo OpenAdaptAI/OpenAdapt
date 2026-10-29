@@ -135,6 +135,102 @@ Only evidence the bot can't write counts:
   `reconciliation_required` (`evidence.frame.target_changed_by_other`). Only
   changes outside the declared delta can be concurrent edits.
 
+Some rows belong to a user rather than a record, such as a user's own UI
+settings, so no log entry names them by record. With `frame.database` and
+an audit log that names the table each entry wrote (`table_field`), such a
+change is another user's when their own write entry in the window names the
+table and the row is theirs. The tables are the app profile's `own_rows`
+tables (OpenEMR's `user_settings` and `recent_patients`), each with its
+`owner` (`{column, by}`). `by: username` compares the entry's actor with the
+column; `by: user_id` looks the actor's id up in the profile's `users`
+table. Table names compare lower-cased and without a schema, so an entry
+naming `USER_SETTINGS` or `openemr.user_settings` names `user_settings`.
+
+Some apps write a global default row beside a user's row. The first time
+anyone saves a label, OpenEMR's `setUserSetting` also inserts the label's
+default, a `user_settings` row with `setting_user = 0` and the same label
+and value. The profile declares it on the owner
+(`default: {value: "0", same: [setting_label, setting_value]}`), so a
+default row with a value nobody saved is never explained. A default
+row added in the window is explained only beside one explained row of the
+same table with equal `same` columns: another user's row (then the default
+is theirs too) or the bot's own row (then it is the bot's bookkeeping). Each
+explained row explains one default row. A default row changed or removed,
+added beside a row of another label, or added beside a row nothing
+explains, stays unexplained.
+
+`attribution.owners` can restate a profile table's owner in a contract, in
+the same shape. It can't add one: a table outside the profile's reviewed
+bookkeeping tables, or one that an append-only or column rule names (such
+as `users_secure`, whose owner is only for the acting user's sign-in
+counters), is refused, and so is a different owner for a profile table.
+Credentials never get an owner here.
+
+Fail closed:
+
+- Only a row that names no record is judged by its owner: a row whose
+  `record_key` (or `record_keys`) value is empty, or a table without that
+  column. A row that names a chart is judged by its chart, and another
+  entry by the same user doesn't explain it. Without `record_key`, every
+  row names itself, and no row is judged by its owner.
+- Each entry explains one row, of the kind it wrote (insert, update or
+  delete), owned by that entry's actor. A row of another user, or a row whose
+  owner changed, is collateral.
+- If the bot's own entry names the table in the window, every changed row of
+  that table is collateral: the entry names no row, so any of them may be the
+  bot's change.
+- The bot's own per-user rows stay the profile's bookkeeping when its entry
+  names the table, and that entry is not counted as a write the contract
+  doesn't cover, because the whole-database diff judged the table row by row. A bot
+  entry for such a table with none of its own rows excused still refutes, and
+  so does one that names the table in a schema the frame doesn't read. An
+  entry's table matches a snapshot table only by its exact name (case
+  aside), or by its unqualified name when the entry names no schema.
+- That leaves a limit: in such a table, a change the bot makes and reverts
+  within the window, such as setting another user's row and setting it
+  back, leaves the same table before and after. Its entry is passed over,
+  so nothing refutes it, as with any comparison of two snapshots.
+- A table with no declared owner, an actor the users table doesn't know, a
+  row with no owner, or an audit log that can't be read leaves the change
+  unexplained.
+- What the log can't show stays a limit: a change the app writes without
+  logging it can't be told from another user's.
+
+OpenEMR's `log` table has no table column, so the audit read takes the table
+from the statement OpenEMR logs in `comments`, and the write kind from the
+end of `event` (`patient-record-update`, `other-insert`). OpenEMR logs a
+`user_settings` or `recent_patients` write as an `other` event, which it
+records only when the `audit_events_other` global is on; with it off, such a
+change has no entry and stays unexplained. An encrypted comment
+(`log_comment_encrypt.encrypt = 'Yes'`) yields no table, so its entry
+explains nothing. On MariaDB:
+
+```yaml
+  attribution:
+    kind: audit_read
+    actor_field: user
+    self: [{param: bot_user}]
+    record_field: patient_id
+    record_key: pid
+    event_field: kind
+    write_events: [insert, update, delete]
+    insert_events: [insert]
+    delete_events: [delete]
+    table_field: tbl
+    read:
+      kind: sql
+      sql_driver: pymysql
+      sql_query: >-
+        SELECT l.id, l.user, l.patient_id,
+          SUBSTRING_INDEX(l.event, '-', -1) AS kind,
+          CASE WHEN IFNULL(e.encrypt, 'No') = 'Yes' THEN NULL ELSE
+            LOWER(REPLACE(REGEXP_SUBSTR(l.comments,
+              '(?i)(?<=insert into |update |delete from |replace into )[`a-z0-9_.]+'),
+              '`', ''))
+          END AS tbl
+        FROM log l LEFT JOIN log_comment_encrypt e ON e.log_id = l.id
+```
+
 Without `attribution`, every change outside the delta is collateral. A
 change is not proof that the executor made it: another user may have edited
 the record during the run. A person checks the record before anything is
@@ -218,6 +314,104 @@ Without `--fault-gate` it writes the coverage of its recorded-state test,
 which can't test a wrong value written over the right record or a late
 write, so that record is incomplete and refused by default.
 
+## Writes that land later
+
+With `frame.database`, the database is read twice after the save,
+`frame.database.settle_s` seconds apart (default 1). When the two reads
+differ, the frame is not checked. A write the app makes later than the
+second read, such as a background job, a trigger-driven integration or a
+delayed duplicate side record, lands after the verdict, and that check
+doesn't see it.
+
+A live app moves on its own: a screen that polls, a scheduler tick. Set
+`frame.database.settle_attempts` (default 1) to take up to that many more
+reads, each `settle_s` after the last, until two in a row match. Two reads
+also match when they differ only by rows added to append-only tables, which
+the frame excuses anyway. Any other difference, including an edited row of
+an append-only table, keeps it waiting. The earlier read of the matching
+pair is judged. The budget is `settle_attempts * settle_s` seconds; when no
+pair matches within it, the frame is not checked.
+`evidence.frame.database.settle_attempts` says how many reads it took. The
+same budget applies after the save and at a recheck.
+
+Set `frame.database.recheck_after_s` to read the database once more after a
+verified save:
+
+```yaml
+frame:
+  database:
+    dialect: mysql
+    read: {...}
+    settle_s: 1
+    recheck_after_s: 300   # pick it for the app's own jobs; there is no default
+```
+
+When it is set and the run is verified:
+
+- The receipt has `recheck_due_at` (whole-second UTC): `recheck_after_s`
+  after the second read, never early (the read time is truncated to the
+  second, so one second is added before rounding up). A caller can schedule
+  the recheck without waiting on it.
+- A verified receipt that carries `recheck_due_at` is provisional until the
+  recheck runs: a write that lands in the window can still refute it.
+- `evidence.frame.recheck` says what the recheck compares
+  (`database_since_post_save`), when the post-save read was taken, and a
+  salted digest of the state it compares with.
+- The caller keeps that state privately (`WriteResult.recheck`). Through
+  `begin_write` and `verify_write`, it is saved as `recheck.json` in the
+  write's folder, beside `baseline.json` (mode 0600); `RecheckState.save`
+  writes it elsewhere. It holds the run's baseline and its
+  post-save snapshot as keyed MACs (no values, as the baseline does), the
+  audit entries seen then as keyed hashes, what the run's frame reported as
+  collateral (row key MACs and entry hashes), and the run's salt.
+- `verify_write` records each state it issues under the verifier's state
+  directory (`OPENADAPT_VERIFIER_STATE_DIR`, in `rechecks/`, named by the
+  state's digest). A state's salt and digests can be recomputed by whoever
+  can write the file, so a state without that record is never used: as the
+  write being rechecked it gives `UNCERTAIN`, and as an excuse it is
+  refused. As with snapshots, the writer being judged must not be able to
+  write the state directory.
+
+`openadapt_flow.verifier.recheck` reads the whole database at or after the
+due time (twice, `settle_s` apart) and judges every change since the
+post-save read with the frame's own rules: the profile's bookkeeping, and a
+write that the audit log attributes to another actor.
+
+Later writes under the same contract by the same actor can be passed as
+`excused_by`, with any outcome, so the caller can keep working on the next
+item while the window runs. A later write accounts only for its own window,
+the time between its baseline and its post-save read, where its own frame
+judged every change:
+
+- A row that changed in that window, and still holds what that write's
+  post-save read saw, is the later write's. A row that matches its
+  selector but lands after its window (a delayed duplicate, or a save that
+  landed late), or a row changed again since, is judged like any other.
+- A removal counts when that window recorded it, matched by the row's link
+  MAC: a per-host keyed hash of the row key, kept only when
+  `recheck_after_s` is set.
+- An audit entry logged in that window is the later write's.
+- When the later write was not verified and the change is one its frame
+  reported as collateral, or its delta failed, the change may be what
+  refuted it, and the harm may be the earlier write's. It doesn't refute
+  the earlier write, but the recheck gives `UNCERTAIN`: reconcile both.
+
+| Since the post-save read | Recheck `outcome` |
+|---|---|
+| Nothing moved that these rules don't explain | `CONFIRMED`: the verdict stands |
+| A row moved that nothing explains | `REFUTED`: the earlier `verified` no longer stands (late) |
+| A change lies in a later write's window and may be what refuted it | `UNCERTAIN` |
+| The database couldn't be read or was still moving, or the state wasn't issued here or doesn't match its receipt, the contract, the actor or the params | `UNCERTAIN`: never a pass |
+
+A recheck before the due time raises `RecheckNotDue`; `wait=True` sleeps
+until then instead. Limits:
+
+- A row of a table without a primary key (its rows are keyed by a content
+  fingerprint) is never excused by a later write's window.
+- A later write under another contract doesn't excuse anything.
+- A later write whose database never settled after its save has no state,
+  so it can't be passed as `excused_by`. Reconcile it first.
+
 ## Verdicts
 
 | What the store shows | `effect_verdict` | `outcome` |
@@ -258,7 +452,8 @@ and still checks.
 every field of the Execute receipt (`openadapt.execute-evidence-receipt/v1`)
 plus `executor_kind`, `executor_ref_sha256`, `effect_verdict`, and
 `verification_tier`, and `checked_how` (and `remediates` and
-`correlation_id` when given),
+`correlation_id` when given, and `recheck_due_at` when a verified run
+schedules a recheck),
 under the schema `openadapt.effect-receipt/v1`. `evidence.readback` lists
 each effect's contract hash, verdict, and counts. `receipt.evidence_digest`
 is the SHA-256 of `evidence`. Neither part holds record values, URLs, or the

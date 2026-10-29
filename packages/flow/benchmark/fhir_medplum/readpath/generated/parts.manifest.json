@@ -1,0 +1,12 @@
+{
+  "schema_version": "openadapt.generated-parts/v1",
+  "parts": {
+    "channel.json": "sha256:a4c6e849fa9da0c22564ba89dfd82190516ed7cc9884a511f0a932cbea0a9fa7",
+    "verify.yaml": "sha256:06c164221f2d2ae1642afbaed7f5f022bb930ae8b62d406cd213055e68595565",
+    "identity_mapping.json": "sha256:cdba1814f39656147e10867de898b333099338c1362530b0b18d096e0997c013",
+    "duplicate_rule.json": "sha256:33b6ad0e07e7fb2b24455a528c910eadc9c1759f53591ae641ca7465ca187c6a",
+    "inputs.json": "sha256:cda3b1baba93510f397386ed03968f4be1351dbfc7afe0ec588f9eb7b1af8d4f",
+    "parts.review.md": "sha256:4be3ea508386a7386d17fd86ce6046adac983bde779c9889cbedded2073afe12"
+  },
+  "manifest_sha256": "sha256:8037705fa0d6f6317176ebc5759d41296aa679a7e894eae967e82806b6f93b41"
+}

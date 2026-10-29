@@ -1,0 +1,12 @@
+{
+ "fname": "Tobias",
+ "lname": "Okonkwo-Reyes",
+ "DOB": "1991-02-05",
+ "sex": "male",
+ "street": "7 Harbor View Rd",
+ "city": "Gloucester",
+ "state_label": "MA",
+ "postal_code": "01930",
+ "phone_home": "978-555-0163",
+ "email": "t.okonkwo-reyes@example.invalid"
+}

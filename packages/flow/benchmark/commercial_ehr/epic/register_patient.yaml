@@ -1,0 +1,61 @@
+# Register one new patient in Epic's public FHIR sandbox (open.epic, R4),
+# checked through FHIR search and read only. Epic's sandbox has no AuditEvent
+# search and no _history (FINDINGS.md), so the frame here is the search set:
+# every patient with the task's family name and birth date.
+#
+# The task's family name is unique per run; suite.py sets EPIC_TASK_FAMILY
+# and EPIC_TASK_BIRTHDATE before loading this file. Credentials come from
+# .env and are never written here.
+schema_version: openadapt.verify/v1
+environment_id: epic-open-sandbox-r4
+verifier:
+  kind: fhir
+  base_url: https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4
+  resource_type: Patient
+  # Epic refuses a patient search on one value alone; family and birth date
+  # together are the narrowest search it accepts that the task fixes.
+  search_params:
+    family: ${EPIC_TASK_FAMILY}
+    birthdate: ${EPIC_TASK_BIRTHDATE}
+  smart_backend:
+    client_id: ${EPIC_SANDBOX_CLIENT_ID}
+    scope: system/Patient.read
+    token_url: https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token
+    kid: ${EPIC_SANDBOX_KID}
+    alg: RS384
+    private_key_file: ${EPIC_SANDBOX_PRIVATE_KEY}
+  field_paths:
+    id: id
+    name.family: name.family
+    name.given: name.given
+    birthDate: birthDate
+    gender: gender
+    address.line: address.line
+    address.city: address.city
+    address.state: address.state
+    address.postalCode: address.postalCode
+    email: telecom[system=email].value
+effects:
+# The whole read set is the scope: every patient with the task's family name
+# and birth date. Exactly one record may be new, and it holds every value.
+# Records that were there before (a sibling with the same family name and
+# birth date) are not judged, but losing one refutes.
+- kind: exact_new_set
+  match: {}
+  new_records:
+    - name.family: {param: family}
+      name.given: {param: given}
+      birthDate: {param: birth_date}
+      gender: {param: gender}
+      address.line: {param: street}
+      address.city: {param: city}
+      address.state: {param: state}
+      address.postalCode: {param: postal_code}
+      email: {param: email}
+  expected_count: 1
+  identity_field: id
+  probe: exactly one new patient, holding every value the task gave
+  timeout_s: 10.0
+frame:
+  identity_field: id
+  ignore_fields: []

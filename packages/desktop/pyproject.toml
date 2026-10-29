@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-desktop"
-version = "0.24.1"
+version = "0.25.0"
 description = "The OpenAdapt desktop app and local engine: record a data-entry task, run it on a list, and check each saved record"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -99,7 +99,7 @@ build = [
     # purpose (see the pin below and the embedded ``-m playwright`` process
     # mode). Without it the driver becomes build-only and the artifact gate
     # correctly refuses the archive.
-    "openadapt-flow[browser,console]==2.4.0",
+    "openadapt-flow[browser,console]==2.4.1",
     # Desktop deliberately embeds the optional browser driver so selecting a
     # web workflow is one click. It does NOT bundle Chromium: that larger
     # runtime is fetched only after the operator chooses the browser surface.

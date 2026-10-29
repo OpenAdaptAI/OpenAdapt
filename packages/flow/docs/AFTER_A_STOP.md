@@ -199,7 +199,9 @@ from openadapt_flow.after_stop import approve_undo, offer_undos, run_undo
 
 offers = offer_undos(run_dir, workflow)
 approve_undo(run_dir, workflow, "undo-triage", approver="nurse-a")
-result = run_undo(run_dir, workflow, "undo-triage", replayer=replayer, bundle_dir=bundle)
+result = run_undo(
+    run_dir, workflow, "undo-triage", replayer=replayer, bundle_dir=bundle
+)
 assert result.status == "verified"
 ```
 

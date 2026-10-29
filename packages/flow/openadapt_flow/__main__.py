@@ -2450,6 +2450,11 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
     task's first screen before starting it; any other screen fails step 1's
     checks before input. Leaving the context only drops the DevTools
     connection. Every refusal raises :class:`SystemExit` before any input.
+
+    The tab was opened before this run attached, so its page loaded before
+    the WebSocket guard (:func:`~openadapt_flow.backends.playwright_backend.prepare_ws_guard`)
+    and a create-form save on it refuses to hold. The guard is installed on
+    attach: a document the tab loads after that (reload it) can hold one.
     """
 
     from openadapt_flow.interactive_recorder import (
@@ -2493,6 +2498,10 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
             )
         except BrowserAttachError as exc:
             raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Documents the tab loads from now on are guarded from their start.
+        prepare_ws_guard(page)
         recorded = getattr(workflow, "viewport", None)
         if recorded:
             try:
@@ -2619,6 +2628,10 @@ def _build_surface_backends(surface_cfgs, *, page) -> dict:
                 if browser is None:
                     raise
                 opened = browser.new_page(viewport=page.viewport_size)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(opened)
             opened.goto(url)
             try:
                 opened.wait_for_load_state("load")
@@ -2886,10 +2899,15 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                     viewport=_VIEWPORT,
                     record_video_dir=video_dir,
                     record_video_size=_VIEWPORT,
+                    service_workers="block",
                 )
                 page = context.new_page()
             else:
-                page = browser.new_page(viewport=_VIEWPORT)
+                page = browser.new_page(viewport=_VIEWPORT, service_workers="block")
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(url)
             try:
                 report = run_on_page(page, entry_url=url)
@@ -3081,6 +3099,60 @@ def _replay_worklist_pool(
     wirings = [_deployment_runtime(args, params=params) for _ in accounts]
     salt = getattr(getattr(workflow, "manifest", None), "content_digest", "") or ""
 
+    # After an item that halted before any write, when the session takes the
+    # next one, clean the screen, confirm the start screen and read the
+    # records back (docs/HALT_CLEANUP.md). Without a qualified halt_cleanup,
+    # the default only re-enters and checks.
+    from openadapt_flow import halt_cleanup as _hc
+    from openadapt_flow.after_stop import records_reader as _records_reader
+    from openadapt_flow.runtime import Replayer as _Replayer
+
+    item_cleanup = _hc.runnable_cleanup(workflow)
+
+    def _reenter(source, open_entry):
+        def reenter() -> None:
+            if open_entry is not None:
+                open_entry(source)
+            else:
+                source.goto(entry_url)
+
+        return reenter
+
+    def clean_session(source, cleanup_dir, *, wiring, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        read_records = _records_reader(wiring[1])
+        if read_records is None:
+            # Without a read-back, a cleanup that saves (autosave on leave)
+            # would go unseen and the item would count as unwritten.
+            return _hc.CleanupResult(
+                dirty="the deployment's effect verifier can't read the records "
+                "back, so a cleanup can't be shown to save nothing"
+            )
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.run_cleanup(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=cleanup_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+            read_records=read_records,
+        )
+
+    def start_check(source, check_dir, *, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.check_start(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=check_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+        )
+
     if kind == "web":
         workers = []
         for i, account in enumerate(accounts):
@@ -3114,6 +3186,15 @@ def _replay_worklist_pool(
                     run_item_on_page=partial(run_item, wirings[i], page_mode=True),
                     sign_in=sign_in,
                     open_entry=open_entry,
+                    clean=partial(
+                        clean_session,
+                        wiring=wirings[i],
+                        page_mode=True,
+                        open_entry=open_entry,
+                    ),
+                    start_check=partial(
+                        start_check, page_mode=True, open_entry=open_entry
+                    ),
                     cdp_endpoint=account.browser_cdp_endpoint if account else None,
                     headed=bool(args.headed or cfg.backend.headed),
                     readback_window=policy.readback_window,
@@ -3148,6 +3229,8 @@ def _replay_worklist_pool(
                     backend_cfg, rdp_transport=session, rdp_connect=False
                 ),
                 run_item_on_backend=partial(run_item, wirings[i], page_mode=False),
+                clean=partial(clean_session, wiring=wirings[i], page_mode=False),
+                start_check=partial(start_check, page_mode=False),
                 fingerprint=hashlib.sha256(
                     f"{backend_cfg.rdp_host}|{account.rdp_username}".encode()
                 ).hexdigest(),
@@ -4611,6 +4694,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=not headed)
                     page = browser.new_page(viewport=_VIEWPORT)
+                    from openadapt_flow.backends.playwright_backend import (
+                        prepare_ws_guard,
+                    )
+
+                    # Guard the page's WebSockets from its first document (wire check).
+                    prepare_ws_guard(page)
                     page.goto(url)
                     try:
                         report = _resume_with(build_backend(backend_cfg, page=page))
@@ -5127,6 +5216,10 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         with sync_playwright() as p:
             browser = launch_chromium(p.chromium, headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(target_url)
             try:
                 yield PlaywrightBackend(page)
@@ -11929,6 +12022,10 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.cli_rollback import register as _register_rollback
 
     _register_rollback(sub)
+
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+
+    _register_cleanup(sub)
 
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 

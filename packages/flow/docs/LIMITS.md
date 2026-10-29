@@ -23,6 +23,7 @@ Every published result used synthetic patients, claims and records.
 | OpenEMR 8.0.0.3, local test copies (open-source EHR; its 7.0 release is ONC-certified) | Referral entry by agent, screen program and API step; injected database faults; repair of a relabeled save button; duplicate check |
 | openIMIS, local test copy (open-source insurance and claims system) | Claim entry over a worklist; a relabeled Save sent to repair with no wrong save |
 | Windows 11 over RDP, real network | 3 of 3 effect-confirmed trials, plus a FreeRDP batch |
+| Windows Server 2022 over RDP with H.264/AVC444, stock Remote Desktop client | 105 runs on two apps: 55 database-confirmed saves, 0 wrong-record saves, 40 false stops ([benchmark/rdp_avc_real](../benchmark/rdp_avc_real/README.md)) |
 | Citrix stand-in, no DOM | 3 healthy runs and 3 drift stops through the Citrix backend |
 | WinForms, TextEdit, a GTK3 app | 3 of 3 effects on each native backend |
 | MockMed, MockLoan and fixtures (OpenAdapt's own test apps) | Fault suites, approvals, repair and the agent comparisons |
@@ -43,7 +44,7 @@ signed; the Python packages are published from the reviewed release workflow.
 | Windows UI Automation | **Counted task acceptance** | The native UIA backend completed 3/3 exact WinForms effects and 3/3 refusals for both stale and ambiguous targets. | Acceptance is bound to the tested workflow and Windows environment; each application retains its own identity, effect, and version qualification. |
 | Native macOS automation | **Counted task acceptance** | The AX/AppKit backend completed 3/3 exact TextEdit file effects and refused an ambiguous two-window target; structural record/locate/refuse behavior is covered separately. Known AX-only ` - Google Chrome` and ` - Google Chrome for Testing` window-title suffixes are accepted only for the corresponding exact CoreGraphics application owner; PID, unique-candidate, focused/main, and topmost-window checks remain mandatory. | Acceptance is bound to the tested host and application. Accessibility exposure and supported native actions vary by application. |
 | Native Linux automation | **Counted task acceptance plus required CI** | Required current-main CI exercises AT-SPI against GTK3 with 3 exact effects, 3 ambiguity refusals, and 3 stale-target refusals. | The built-in path is X11. Wayland needs an operator-approved portal session, and each application retains its own qualification. |
-| RDP automation | **Counted task acceptance plus required CI** | A real-network Aardwolf/Windows batch passed 3/3 with an independent guest-tools oracle; a separate real-FreeRDP batch covers record, compile, governed replay, and drift refusal. | The two records do not by themselves cover arbitrary applications, WAN conditions, display policy, or Citrix ICA/HDX. |
+| RDP automation | **Counted task acceptance plus required CI** | A real-network Aardwolf/Windows batch passed 3/3 with an independent guest-tools oracle; a separate real-FreeRDP batch covers record, compile, governed replay, and drift refusal. | The records do not cover arbitrary applications, WAN conditions, or Citrix ICA/HDX. A real AVC444 session (same virtual network, software encoding) stops on 12 of 20 healthy OpenEMR runs; the causes are ranked in benchmark/rdp_avc_real. |
 | Citrix / VDI pixel-window automation | **Required CI plus counted no-DOM stand-in** | The dedicated exact-Workspace-window backend, readiness gate, governed run, and durable resume passed 3 healthy effect-confirmed no-DOM trials plus 3 drift safe-halts. | The retained record explicitly has `ica_hdx_accepted=false`; live ICA/HDX acceptance stays bound to the exact deployment instead of being inferred from a stand-in or RDP. |
 | Managed browser execution | **Separate product target and workflow admissions** | The hosted lane admits attested browser bundles; production mode requires a configured real runner and refuses silent mock fallback. | It does not extend the supported claim to Windows, RDP, Citrix, PHI-bearing shared-cloud execution, an SLA, or a regulated certification. |
 | On-premises / customer-managed deployment | **Release and clean-machine evidence; site acceptance required** | Deployment configuration, local run gates, egress checks, and audit primitives are supplied. | OpenAdapt does not configure the customer's firewall, KMS, storage, identity provider, backups, retention, incident response, or legal compliance program. |
@@ -391,6 +392,99 @@ the page structure refuses a bound click.
 The binding ties the click to the entry the run made. It doesn't check that
 the entry is right: the values typed come from the run's parameters, and only
 a record check can confirm what the application saved.
+
+A labelled save on a create-new form (Trac's **Create ticket**, NetBox's
+**Create**) has the same problem: no existing record is on screen next to it,
+so it compiled with no identity check, and a policy that refuses unarmed saves
+refused it. Its record is the one the run is typing into the form. When the
+recording shows the save is the submit button of the one form that owns every
+field typed since the last save, the compiler gives it a **form identity**
+(`Anchor.form_identity`). Before the click, a run requires (identity mode
+`form`):
+
+- the button is still that form's submit button, and the form owns exactly the
+  fields this run typed into, each holding exactly what the run typed;
+- the form submits to the same origin, path and query parameter names with the
+  same method, and would send the same set of field names and types, hidden
+  and file ones included, so an edit form that looks like the create form, or
+  an address, method or record id a script changed or added, halts;
+- every field the run did not type into (a hidden parent or record id, a
+  select left on its default, a checked box, a query parameter's value) holds
+  its demonstrated value, stored as a salted digest. Only a per-page token is
+  not compared: a hidden field or query value named like one (`csrf`, `token`,
+  `nonce` and the like) whose value is shaped like one (16 characters or more,
+  not all digits) and is not shaped like a record id (hex groups joined by `-`
+  or `_`, as a UUID is) unless it changed while the demonstration was filled
+  in. A short, numeric or record-shaped value under such a name, and a value a
+  script set while the form was filled in, are compared. A program that
+  should create under a different parent on each run therefore halts until
+  that parent is checked another way.
+
+The checks above read the page before the click; they are pre-checks. The
+safety layer is the wire check (`openadapt_flow/wire_check.py`, shared with
+taught browser writes): from the check until the next step, a Playwright route
+on the browser context holds every write request from any of its pages (a
+popup or new tab the click opens included), and a GET navigation to the
+form's address, at the network, where page scripts can't reach it. A request
+leaves only when its method, address, query and fields equal what the checked
+button would send (form fields or a flat JSON object, every value except the
+exempt tokens), and only once; anything else is aborted before it is sent. So
+a page listener that runs after the check (a submit, capture or `formdata`
+listener, a click handler that fills in or enables a field, a timer), a save
+sent by script (`form.submit()`, `fetch`), a write from a popup, a submit from
+another form and a second submit can't send anything the check didn't see. A
+save sent in another shape (nested JSON, JSON with a repeated key, a custom
+encoding) can't be compared, so it is held too. The run watches the wire check
+for two seconds after the click, then again at the start of the next step and
+at the end of the run, and halts on any held request.
+
+What the wire check doesn't see:
+
+- **Service workers.** Their requests skip routes. The runner's browsers block
+  service workers; on a page one controls anyway, the save is refused before
+  the click, and one that starts while the save is held halts the run.
+- **WebSockets.** One opened while the save is held is never connected to the
+  server. A message sent on one opened earlier can't be stopped: the run
+  halts on it, after it was sent. A socket that a save opens just as the page
+  navigates away closes with the page; it isn't connected, and the run may
+  not report it.
+- **Redirects.** A 307 or 308 answer to the checked save makes the browser send
+  the same request again to the address the server names, possibly another
+  site. The server that accepted the save chooses that.
+- **GET requests.** Reads pass. An app whose GET addresses change records
+  (some do, OpenEMR among them) is outside the wire check; its record check
+  still applies.
+- **Late requests.** A submission a script delays past the end of the run is
+  still held until the page closes, but the run, already over, doesn't
+  report it.
+
+A page whose own listener changes a field as the form is sent changes what is
+sent after the check, so its save halts even when the demonstration did the
+same: a false halt, in the safe direction. The compiler treats a click on the
+submit button of the form the demonstration typed into as a save, whatever
+the screen did afterwards, so a slow recording still arms the check. When the
+check can't be armed on such a save, the step names why, and the save is
+refused.
+
+The digests of untouched values are salted; with the per-bundle salt stored in
+the bundle (the default, unless `OPENADAPT_FLOW_IDENTITY_SALT` is set), a
+low-entropy value such as a numeric id or a select option can be recovered by
+trying candidates. The recording itself holds those values in plain text, as
+it holds the typed ones.
+
+A backend that can't read the page leaves the identity unreadable, which halts
+too. Each field must hold exactly what the run typed, so a controlled input
+that reformats the value halts: one that reformats on every keystroke stops at
+the typed-value read-back, and one that reformats when it loses focus (a
+phone-number mask, for example) stops at the form check. A field that a React
+keyed remount replaces with a new element, even with the same value, also
+halts: the new element isn't one the run typed into. A submit button outside
+the `<form>` element counts when its `form=` attribute names that form. One
+with no form owner at all (a React portal that submits from script) gets no
+form identity, so its save stays unarmed.
+
+The form identity ties the click to the entry the run made in the demonstrated
+form. It doesn't prove the app saved it correctly: only a record check does.
 
 For consequential or entity-sensitive workflows, require a policy that refuses
 unarmed actions, review the inferred risk and tags, and test identity against
@@ -742,6 +836,17 @@ The limits of that:
   never in a workflow with a loop.
 - Duplicate-write compensation (`effects.compensation`) repairs a duplicate
   on its own, only where a deployment has implemented and verified it.
+
+A halted item can also leave the screen dirty (a dialog open, a form half
+filled). Under `on_halt: skip_unwritten`, a worklist pool worker cleans up,
+confirms the start screen and reads the records back before it takes another
+item, and stops when it can't ([`HALT_CLEANUP.md`](HALT_CLEANUP.md)). The
+start check confirms the start screen's first control shows, not that every
+field on it is empty. Cleanup qualification halts only after steps that
+succeeded, so it doesn't try the screens a failed step leaves (a validation
+banner, an error dialog). A cleanup that changed the records makes the item's
+write uncertain, and the run stops; the read-back can't tell that apart from
+another user's change at the same moment.
 
 Before resuming or teaching a halted consequential workflow, reconcile prior
 effects, confirm the current entity and application state, and ensure the bundle
