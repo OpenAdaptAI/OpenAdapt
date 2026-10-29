@@ -79,3 +79,9 @@ suite.
    same-fact rule) before writing these fixes, but not the files. None of
    the fixes is specific to Immunization. The identity proposal rule is
    unchanged except for the floor that finding 3 asked for.
+2. **2026-10-29, during the run: where the clock stopped.** The generator
+   proposed an identity that left out the date the task's same-fact rule
+   needs. The person declined it. The frozen generator takes no other rule,
+   so the person edited the contract (2 lines) and the clock stopped at the
+   generator's self-check of the edit, not at an admission. The contract was
+   not admitted by the generator. `results/PERSON_LOG.md` has the log.
