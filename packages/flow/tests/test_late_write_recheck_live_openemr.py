@@ -200,9 +200,19 @@ def _contract(fx: Any, lname: str) -> Any:
                 ),
                 "records_path": f"/apis/default/api/patient?lname={lname}&_limit=100",
                 "records_key": "data",
-                "session": os.environ.get(
-                    "OPENEMR_LATE_WRITE_SESSION",
-                    "benchmark.openemr_local.qualify_hooks:oracle_session",
+                **(
+                    {
+                        "auth": {
+                            "bearer_env": os.environ["OPENEMR_LATE_WRITE_BEARER_ENV"]
+                        }
+                    }
+                    if os.environ.get("OPENEMR_LATE_WRITE_BEARER_ENV")
+                    else {
+                        "session": os.environ.get(
+                            "OPENEMR_LATE_WRITE_SESSION",
+                            "benchmark.openemr_local.qualify_hooks:oracle_session",
+                        )
+                    }
                 ),
             },
             "record": {
