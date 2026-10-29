@@ -66,7 +66,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
@@ -693,6 +693,7 @@ def judge_frame(
     identities: Optional[Mapping[str, str]] = None,
     new_row_defaults: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     unread_changes: Sequence[tuple[str, str]] = (),
+    append_only_read: Collection[str] = (),
     hashers: Optional[Mapping[str, Callable[[str, Any], str]]] = None,
     clock: tuple[str, str] = ("", ""),
     database_evidence: Optional[dict[str, Any]] = None,
@@ -727,6 +728,9 @@ def judge_frame(
             ``CLOCK_DEFAULT`` a column the database fills with the time.
         unread_changes: (table, why) for tables that moved in a way no row
             comparison explains. Each is collateral.
+        append_only_read: Tables both database reads read as append-only:
+            any actor may add a row there, and a changed or removed row is
+            in ``unread_changes``.
         hashers: Slice -> (column, value) -> the keyed MAC its baseline records hold instead of
             values (database tables). A post-save record is plain; it is
             hashed to compare with the baseline.
@@ -1680,6 +1684,14 @@ def judge_frame(
                     # the bot's own rows. Any other row of it the bot moved
                     # is collateral there. Without such a row, the entry
                     # still refutes.
+                    continue
+                if entry_table not in (None, "") and any(
+                    same_table(entry_table, t) for t in append_only_read
+                ):
+                    # The bot's insert into an id map or a log that every
+                    # save writes (OpenEMR's uuid_registry): both reads read
+                    # the table, which allows the row and judges every
+                    # existing row. A table the reads skip is not one.
                     continue
                 logged.add(str(ref))
                 collateral.append(

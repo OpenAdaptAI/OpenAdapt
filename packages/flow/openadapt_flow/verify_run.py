@@ -593,6 +593,8 @@ class _DatabaseFrame:
     #: Every user's id by sign-in name (in memory only), to resolve an
     #: audit entry's actor to an owner column (owner-scoped attribution).
     users_map: dict[str, str] = field(default_factory=dict)
+    #: Tables both reads read as append-only.
+    append_only: list[str] = field(default_factory=list)
 
 
 def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
@@ -709,6 +711,8 @@ def _database_frame(
         out.unread.extend((name, why) for why in reasons)
         if b is not None:
             counts[b.mode] = counts.get(b.mode, 0) + 1
+        if a is not None and b is not None and a.mode == b.mode == "append_only":
+            out.append_only.append(name)
         if (
             a is None
             or b is None
@@ -911,6 +915,7 @@ def judge_run_frame(
         identities=identities,
         new_row_defaults=None if db is None else db.defaults,
         unread_changes=() if db is None else db.unread,
+        append_only_read=() if db is None else db.append_only,
         hashers=None if db is None else db.hashers,
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,

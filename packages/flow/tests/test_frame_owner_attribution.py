@@ -35,6 +35,7 @@ CREATE TABLE recent_patients (id INTEGER PRIMARY KEY, user_id INTEGER, pid INTEG
 CREATE TABLE user_prefs (owner_name TEXT, pref TEXT, value TEXT,
   PRIMARY KEY (owner_name, pref));
 CREATE TABLE keys (id INTEGER PRIMARY KEY, name TEXT, value TEXT);
+CREATE TABLE uuid_registry (id INTEGER PRIMARY KEY, uuid TEXT, table_name TEXT);
 CREATE TABLE log (id INTEGER PRIMARY KEY, user TEXT, patient_id INTEGER,
   event TEXT, tbl TEXT);
 INSERT INTO patient_data VALUES (1, 1, 'Wendell', 'Prior', 'w@example.test', 'u-1');
@@ -49,6 +50,7 @@ INSERT INTO recent_patients VALUES (1, 1, NULL, '1');
 INSERT INTO recent_patients VALUES (2, 1, 9, '9');
 INSERT INTO user_prefs VALUES ('clinic2', 'theme', 'light');
 INSERT INTO keys VALUES (1, 'oauth2key', 'k1');
+INSERT INTO uuid_registry VALUES (1, 'u-1', 'patient_data');
 """
 NEW = {"fname": "Ada", "lname": "Quill", "email": "ada@example.test"}
 
@@ -604,3 +606,48 @@ def test_a_profile_default_owner_is_for_own_rows_and_another_column(
             rule["owner"]["default"] = owner["default"]
     with pytest.raises(ValueError, match="default owner|same"):
         AppProfile.model_validate(base)
+
+
+ADD_UUID = "INSERT INTO uuid_registry (uuid, table_name) VALUES ('u-2', 'patient_data')"
+
+
+@pytest.mark.parametrize("pid", ["NULL", "0"])
+def test_the_bots_entry_for_an_append_only_table_is_its_bookkeeping(
+    tmp_path: Path, pid: str
+) -> None:
+    # Calibration of run 2 on OpenEMR 8.0.0.3: with the audit read covering
+    # entries that name no chart, every clean UI save refuted on the bot's
+    # insert into uuid_registry, an id map the profile reads as append-only.
+    result = _run(tmp_path, _entry("bot", "insert", "uuid_registry", pid=pid), ADD_UUID)
+    assert _why(result) == ("held", 0, 0), result["evidence"]["frame"]
+    assert (
+        "uuid-registry"
+        in result["evidence"]["frame"]["database"]["profile"]["rules_used"]
+    )
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # An existing row of the append-only table changed: the snapshot
+        # refutes it, whoever's entry names the table.
+        (
+            _entry("bot", "update", "uuid_registry"),
+            "UPDATE uuid_registry SET table_name = 'users' WHERE id = 1",
+        ),
+        # Removed.
+        (
+            _entry("bot", "delete", "uuid_registry"),
+            "DELETE FROM uuid_registry WHERE id = 1",
+        ),
+        # The same name in a schema the frame doesn't read: not this table.
+        (_entry("bot", "insert", "other.uuid_registry"), ADD_UUID),
+        # A table the profile compares row by row is not append-only.
+        (_entry("bot", "update", "keys"),),
+    ],
+)
+def test_an_append_only_table_covers_only_added_rows(
+    tmp_path: Path, sql: tuple[str, ...]
+) -> None:
+    status, refuting, _ = _why(_run(tmp_path, *sql))
+    assert (status, refuting > 0) == ("refuted", True), sql

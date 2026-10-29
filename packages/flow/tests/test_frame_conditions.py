@@ -276,6 +276,35 @@ def test_a_bot_log_entry_on_an_undeclared_record_is_collateral() -> None:
     assert [c.audit_only for c in verdict.collateral] == [True]
 
 
+@pytest.mark.parametrize(
+    ("read", "status"),
+    [
+        # Both reads read uuid_registry as append-only: the bot's insert
+        # there is the row they allow.
+        (["openemr.uuid_registry"], "held"),
+        # No read of it (or one that skipped it): the entry still refutes.
+        ([], "refuted"),
+        (["openemr.log"], "refuted"),
+    ],
+)
+def test_a_bot_entry_on_an_append_only_table_needs_that_table_read(
+    read: list[str], status: str
+) -> None:
+    spec = _audit_spec()
+    assert spec.attribution is not None
+    spec.attribution.table_field = "tbl"
+    entry = {"id": 101, "user": "bot", "record": 0, "tbl": "uuid_registry"}
+    verdict = _judge(
+        _state(OTHER),
+        [dict(OTHER), dict(TARGET)],
+        spec=spec,
+        audit_before=[],
+        audit_after=[entry],
+        append_only_read=read,
+    )
+    assert verdict.status == status, verdict.reason
+
+
 def test_an_unreadable_log_attributes_nothing() -> None:
     edited = {**OTHER, "phone_home": "555-0199"}
     verdict = _judge(
