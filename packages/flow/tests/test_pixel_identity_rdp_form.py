@@ -148,8 +148,8 @@ def test_a_label_that_shares_a_word_with_a_later_value_is_kept():
     from openadapt_flow.compiler.compile import _label_shows_param_value
 
     note = ("E2E triage booking three months",)
-    assert not _label_shows_param_value("Triage", note, typed=())
-    # Once the note is typed, a fragment of it may be the typed value itself.
-    assert _label_shows_param_value("Triage", note, typed=note)
-    # A label that contains a value shows it whether or not it was typed.
-    assert _label_shows_param_value("Jane Sample", ("Jane Sample",), typed=())
+    assert not _label_shows_param_value("Triage", note, typed_here=())
+    # In the field the note was typed into, a fragment may be the note itself.
+    assert _label_shows_param_value("Triage", note, typed_here=note)
+    # A label that contains a value shows it wherever it is.
+    assert _label_shows_param_value("Jane Sample", ("Jane Sample",), typed_here=())

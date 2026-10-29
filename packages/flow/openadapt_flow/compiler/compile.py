@@ -1250,27 +1250,39 @@ def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
 
 
 def _label_shows_param_value(
-    text: str, values: tuple[str, ...], *, typed: tuple[str, ...]
+    text: str, values: tuple[str, ...], *, typed_here: tuple[str, ...]
 ) -> bool:
     """True if a click target's label shows a parameter value.
 
-    A label shows a value when it (fuzzily) contains one. It is also taken
-    for one when it is a fragment of a value typed before this click, since
-    OCR can split a typed value across lines. A fragment of a value not typed
-    yet is a label that shares a word with it: the "Triage" button and a note
-    parameter "E2E triage booking ...". Dropping that label left the click
-    with no text to find, and when the buttons swapped places the geometry
-    rung clicked the one now at the recorded spot.
+    A label shows a value when it (fuzzily) contains one. A label that is
+    only a fragment of a value counts when that value is ``typed_here``: OCR
+    can split a typed value across lines. Anywhere else such a fragment is a
+    label that shares a word with a value, like the "Triage" button and a
+    note "E2E triage booking ...". Dropping that label left the click with no
+    text to find, and when the buttons swapped places the geometry rung
+    clicked the one now at the recorded spot. A kept label that does vary
+    per run only fails to match; ``lint_param_leakage`` allows the slot.
 
     Args:
         text: The OCR label under the click.
         values: Every parameter (and secret) value in the recording.
-        typed: The values that can already be on screen as typed input.
+        typed_here: Values that can be the text under this click: those typed
+            earlier into the field the click lands in, and every secret.
     """
 
-    return _contains_excluded(text, typed) or _contains_excluded(
+    return _contains_excluded(text, typed_here) or _contains_excluded(
         text, values, fragments=False
     )
+
+
+def _point_in_rect(point: Point, rect: object) -> bool:
+    if not isinstance(rect, (list, tuple)) or len(rect) != 4:
+        return False
+    try:
+        x, y, w, h = (int(v) for v in rect)
+    except (TypeError, ValueError):
+        return False
+    return x <= point[0] < x + w and y <= point[1] < y + h
 
 
 def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> list[str]:
@@ -2281,10 +2293,10 @@ def _compile_recording(
     # postconditions too, even though it never lands in workflow.params.
     param_values.extend(secret_exclude_values)
     exclude_texts: tuple[str, ...] = tuple(dict.fromkeys(param_values))
-    # Where each parameter value is typed: before then it can't be on screen
-    # as typed input (_label_shows_param_value).
-    typed_param_at: list[tuple[int, str]] = [
-        (int(event["i"]), str(event["text"]))
+    # Where and when each parameter value is typed, for the click labels
+    # that can show it (_label_shows_param_value).
+    typed_param_at: list[tuple[int, str, object]] = [
+        (int(event["i"]), str(event["text"]), event.get("field_rect"))
         for event in events
         if event.get("kind") == "type" and event.get("param") and event.get("text")
     ]
@@ -2402,8 +2414,12 @@ def _compile_recording(
             if ocr_text and _label_shows_param_value(
                 ocr_text,
                 exclude_texts,
-                typed=(
-                    *(text for at, text in typed_param_at if at < i),
+                typed_here=(
+                    *(
+                        text
+                        for at, text, rect in typed_param_at
+                        if at < i and _point_in_rect(click, rect)
+                    ),
                     *secret_exclude_values,
                 ),
             ):
