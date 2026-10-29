@@ -159,3 +159,9 @@ def test_an_attribution_path_through_a_changed_field_is_unattributed() -> None:
         {"id": 9, "note": "new", "meta": {"lastUpdatedBy": "bot", "lastUpdated": "t1"}},
     ]
     assert _frame(before, after, spec) == "refuted"
+
+
+def test_bytes_and_other_types_never_seal_like_their_text() -> None:
+    new = {"id": 9, "v": None}
+    for value, text in ((b"x", "b'x'"), (("a", 1), "('a', 1)")):
+        assert _frame([{"id": 1, "v": value}], [{"id": 1, "v": text}, new]) == "refuted"

@@ -56,8 +56,14 @@ def _typed(value: Any) -> str:
         tag = "d"
     elif isinstance(value, (dict, list)):
         tag = "j"
-    else:
+    elif isinstance(value, str):
         tag = "s"
+    elif isinstance(value, (bytes, bytearray)):
+        return "x:" + bytes(value).hex()
+    else:
+        # Anything else (a tuple, a date) carries its type name, so it never
+        # seals like its text.
+        return f"o:{type(value).__name__}:{canonical(value)}"
     return f"{tag}:{canonical(value)}"
 
 
