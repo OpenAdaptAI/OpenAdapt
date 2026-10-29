@@ -476,6 +476,8 @@ def _deployment_runtime(
         cfg.runtime.allow_model_grounding
         or getattr(args, "allow_model_grounding", False)
     )
+    if getattr(args, "local_grounding", False):
+        cfg.runtime = cfg.runtime.model_copy(update={"local_grounding": True})
     return cfg, effect_verifier, api_actuator, durable, allow_egress
 
 
@@ -9075,6 +9077,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
         "--allow-model-grounding",
         action="store_true",
         help=(
@@ -9161,6 +9173,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "JSON object of parameter bindings; keeps values out of process "
             "arguments for managed execution"
+        ),
+    )
+    p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
         ),
     )
     p.add_argument(
@@ -11575,6 +11597,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
         "--allow-model-grounding",
         action="store_true",
         help=(
@@ -11880,7 +11912,13 @@ def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
             "effects": effects_cfg,
             "actuation": actuation_cfg,
             "runtime": cfg.runtime.model_copy(
-                update={"allow_model_grounding": allow_egress}
+                update={
+                    "allow_model_grounding": allow_egress,
+                    "local_grounding": bool(
+                        cfg.runtime.local_grounding
+                        or getattr(args, "local_grounding", False)
+                    ),
+                }
             ),
         }
     )

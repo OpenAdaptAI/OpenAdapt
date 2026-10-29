@@ -27,8 +27,6 @@ def test_release_versions_are_synchronized() -> None:
     assert len(set(versions.values())) == 1, versions
 
 
-
-
 def _copy_release_inputs(destination: Path) -> None:
     (destination / "src/openadapt_tray").mkdir(parents=True)
     shutil.copy(ROOT / "pyproject.toml", destination / "pyproject.toml")
@@ -109,5 +107,10 @@ def test_monorepo_release_workflow_publishes_this_package() -> None:
     if not RELEASE_WORKFLOW.is_file():
         pytest.skip("not running from the OpenAdapt monorepo checkout")
     workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
-    assert '"tray": "openadapt-tray"' in workflow
+    # The workflow's plan job decides releases from this package map.
+    plan = (RELEASE_WORKFLOW.parents[2] / "scripts/ci/release_plan.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"tray": "openadapt-tray"' in plan
+    assert "release_plan.py" in workflow
     assert re.search(r"options: \[[^\]]*\btray\b", workflow)

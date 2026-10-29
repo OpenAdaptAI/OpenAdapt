@@ -2414,6 +2414,9 @@ class Replayer:
                 report.model_calls,
                 sum(self._result_model_calls(result) for result in resumed_results),
             )
+            report.local_model_calls = sum(
+                self._result_local_model_calls(result) for result in resumed_results
+            )
 
         if workflow.program is not None:
             # Workflow-program IR, Phase 2: interpret the STATE MACHINE (loops /
@@ -3915,6 +3918,7 @@ class Replayer:
         # accounting).
         if account_model_calls:
             report.model_calls += Replayer._result_model_calls(result)
+            report.local_model_calls += Replayer._result_local_model_calls(result)
         if result.heal is not None:
             report.heal_count += 1
 
@@ -3928,9 +3932,19 @@ class Replayer:
                     result.ok
                     and result.resolution is not None
                     and result.resolution.rung == "grounder"
+                    and result.resolution.grounder_model != "local"
                 )
                 else 0
             )
+        )
+
+    @staticmethod
+    def _result_local_model_calls(result: StepResult) -> int:
+        return int(
+            result.ok
+            and result.resolution is not None
+            and result.resolution.rung == "grounder"
+            and result.resolution.grounder_model == "local"
         )
 
     def _initial_external_network_calls(
@@ -4120,6 +4134,9 @@ class Replayer:
                 report.model_calls = max(
                     report.model_calls,
                     sum(self._result_model_calls(result) for result in resumed_results),
+                )
+                report.local_model_calls = sum(
+                    self._result_local_model_calls(result) for result in resumed_results
                 )
             else:
                 # A fresh program run must not import state from its output
@@ -5920,7 +5937,11 @@ class Replayer:
             condition
             for condition in conditions
             if condition.kind
-            not in {PostconditionKind.LOCAL_EDIT, PostconditionKind.FIELD_VALUE}
+            not in {
+                PostconditionKind.LOCAL_EDIT,
+                PostconditionKind.FIELD_VALUE,
+                PostconditionKind.FOCUS_ON,
+            }
         ]
         if not conditions:
             return
@@ -18211,6 +18232,52 @@ class Replayer:
                 return False
         return True
 
+    def _focus_on_held(self, pc: Any) -> bool:
+        """The focused element has the recorded identity, and only it does.
+
+        Fail closed: a postcondition with no specific identity, a backend
+        that can't read the focus, nothing focused, a different element, or
+        a second element with the same identity all fail. With
+        ``focus_active_option`` an option of the focused control must also
+        be active.
+        """
+
+        from openadapt_flow.ir import focus_identity_is_specific
+
+        if not focus_identity_is_specific(pc):
+            return False
+        reader = getattr(self.backend, "focus_identity", None)
+        if not callable(reader):
+            return False
+        try:
+            seen = reader()
+        except Exception:  # noqa: BLE001 - unobservable is a failure
+            return False
+        if not isinstance(seen, dict) or seen.get("none") is not False:
+            return False
+        if tuple(seen.get("frame_path") or ()) != tuple(pc.focus_frame_path or ()):
+            return False
+        if pc.focus_by in ("testid", "id"):
+            held = (
+                seen.get(pc.focus_by) == pc.focus_value
+                and seen.get(f"{pc.focus_by}_count") == 1
+            )
+            if held and pc.focus_role and pc.focus_name:
+                # Recorded with a role and name too: both must still hold.
+                held = (
+                    seen.get("role") == pc.focus_role
+                    and seen.get("name") == pc.focus_name
+                )
+        else:
+            held = (
+                seen.get("role") == pc.focus_role
+                and seen.get("name") == pc.focus_name
+                and seen.get("role_name_count") == 1
+            )
+        if held and pc.focus_active_option:
+            held = seen.get("active_option") is True
+        return bool(held)
+
     @staticmethod
     def _malformed_date_params(workflow: Workflow, params: dict[str, Any]) -> list[str]:
         """Why each supplied ``date`` parameter is not a canonical ISO date.
@@ -18326,6 +18393,14 @@ class Replayer:
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
         if kind == "local_edit":
             return "local_edit (URL, title, page count and focus unchanged)"
+        if kind == "focus_on":
+            who = (
+                f"{pc.focus_role} {pc.focus_name!r}"
+                if pc.focus_by == "role_name"
+                else f"{pc.focus_by} {pc.focus_value!r}"
+            )
+            option = " with an option active" if pc.focus_active_option else ""
+            return f"focus_on (the focus is on {who}{option})"
         if kind == "field_value":
             return f"field_value (the focused field shows {{{pc.param}}})"
         if kind == "no_duplicate_candidate":
@@ -18379,6 +18454,8 @@ class Replayer:
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
         if kind == "local_edit":
             return self._local_edit_held(pc, start_state or {})
+        if kind == "focus_on":
+            return self._focus_on_held(pc)
         if kind == "field_value":
             return self._field_value_shown(pc)
         if kind == "no_duplicate_candidate":

@@ -553,6 +553,16 @@ class PostconditionKind(str, Enum):
     # shown, so a list that has not loaded yet never passes. Unreadable rows
     # fail the check.
     NO_DUPLICATE_CANDIDATE = "no_duplicate_candidate"
+    # A key press that moves the focus and changes nothing visible (a Tab
+    # onto an icon button, an ArrowDown that highlights an option): after the
+    # step the focused element has a specific identity, ``focus_by`` (a
+    # ``testid``, an ``id``, or a ``role_name``: a role and a non-empty
+    # accessible name), and no other element on the page has it. With
+    # ``focus_active_option`` an option of the focused control is active
+    # (``aria-activedescendant``, or ``aria-selected`` in the listbox it
+    # controls). Unobservable focus, or no specific identity, fails the check
+    # (:func:`focus_identity_is_specific`).
+    FOCUS_ON = "focus_on"
 
 
 class Postcondition(BaseModel):
@@ -580,6 +590,20 @@ class Postcondition(BaseModel):
     candidate_rows: Optional[str] = Field(default=None, min_length=1, max_length=256)
     #: NO_DUPLICATE_CANDIDATE: the frame chain the list is in (outermost first).
     candidate_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
+    #: FOCUS_ON: how the focused element is identified.
+    focus_by: Optional[Literal["testid", "id", "role_name"]] = None
+    #: FOCUS_ON: the ``data-testid`` or ``id`` (``focus_by`` testid / id).
+    focus_value: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    #: FOCUS_ON: the ARIA role and accessible name (``focus_by`` role_name;
+    #: with a testid or id too, when the element had them, and then both must
+    #: hold at replay).
+    focus_role: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    focus_name: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    #: FOCUS_ON: an option of the focused control must be active.
+    focus_active_option: bool = False
+    #: FOCUS_ON: the frame chain the focused element is in (outermost first;
+    #: empty in the top document). A testid or id is unique within its frame.
+    focus_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
     #: NO_DUPLICATE_CANDIDATE: parameters whose value in any row makes it a
     #: real candidate.
     candidate_params: Optional[tuple[str, ...]] = Field(
@@ -596,10 +620,53 @@ class Postcondition(BaseModel):
             data.pop("field_selector", None)
         if self.param is None:
             data.pop("param", None)
-        for name in ("candidate_rows", "candidate_frame_path", "candidate_params"):
+        for name in (
+            "candidate_rows",
+            "candidate_frame_path",
+            "candidate_params",
+            "focus_by",
+            "focus_value",
+            "focus_role",
+            "focus_name",
+            "focus_frame_path",
+        ):
             if getattr(self, name) is None:
                 data.pop(name, None)
+        if not self.focus_active_option:
+            data.pop("focus_active_option", None)
         return data
+
+
+def focus_identity_is_specific(pc: "Postcondition") -> bool:
+    """Whether a FOCUS_ON postcondition names one element, not a kind of element.
+
+    A role with a non-empty accessible name, alone or with a ``testid`` or an
+    ``id``. A tag, a role with no name, or an id or testid without a role and
+    name names no element: such a postcondition asserts nothing and never
+    passes.
+    """
+
+    if pc.kind is not PostconditionKind.FOCUS_ON:
+        return False
+    if pc.focus_by in ("testid", "id"):
+        # An id or testid names one element only together with its role and
+        # name: an id alone can move to another element between renders.
+        return bool(
+            pc.focus_value
+            and pc.focus_value.strip()
+            and pc.focus_role
+            and pc.focus_role.strip()
+            and pc.focus_name
+            and pc.focus_name.strip()
+        )
+    if pc.focus_by == "role_name":
+        return bool(
+            pc.focus_role
+            and pc.focus_role.strip()
+            and pc.focus_name
+            and pc.focus_name.strip()
+        )
+    return False
 
 
 IdentitySignalKeyValue = Literal[
@@ -3469,6 +3536,9 @@ class Resolution(BaseModel):
     elapsed_ms: float
     structural_handle: Optional[StructuralHandle] = None
     visual_evidence: Optional["VisualResolutionEvidence"] = None
+    # "local" when the grounder rung was resolved by the in-process local
+    # grounding model, which sends nothing off the box. Absent otherwise.
+    grounder_model: Optional[Literal["local"]] = None
     resolution_evidence_regions: tuple[Region, ...] = Field(
         default_factory=tuple,
         exclude=True,
@@ -3484,6 +3554,8 @@ class Resolution(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.visual_evidence is None:
             data.pop("visual_evidence", None)
+        if self.grounder_model is None:
+            data.pop("grounder_model", None)
         return data
 
 
@@ -5702,6 +5774,10 @@ class RunReport(BaseModel):
     render_scale: Optional[dict[str, Any]] = None
     heal_count: int = 0
     model_calls: int = 0
+    # Steps resolved by the in-process local grounding model. Counted apart
+    # from ``model_calls`` because they make no outbound call and cost
+    # nothing per query; written only when nonzero.
+    local_model_calls: int = Field(default=0, ge=0, exclude_if=lambda value: value == 0)
     external_network_calls: Literal["none", "observed", "unknown"] = "unknown"
     est_model_cost_usd: float = 0.0
     total_ms: float = 0.0
