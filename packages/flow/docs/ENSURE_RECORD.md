@@ -8,8 +8,8 @@ never its database:
 - searches, to find every record that is the person, before and after;
 - `AuditEvent`, searched by date, for every write in the run window and who
   made it;
-- each written resource's `_history`, for its versions in the window and
-  their `meta.author`, which the server sets;
+- each written resource's `_history`, for its versions in the window, its
+  deletes, and their `meta.author` where the server returns it;
 - optionally a sweep: a `_lastUpdated` search over named resource types, a
   second source for creates and updates the audit trail didn't log.
 
@@ -32,10 +32,11 @@ reported a timeout is judged like any other save.
 | Section | What it says | Who writes it |
 | --- | --- | --- |
 | `fields` | where each task value is stored, and how it compares | generated (`generate-parts`, #1520), then reviewed |
-| `identity` | which sets of values mean "the same person" | a person |
+| `identity` | which sets of values mean "the same person" | generated (the calibrated rule), plus a person's rules |
 | `search` | the FHIR search parameter for each identity value | a person (one line each) |
 | `self` | the agent's own actor references | setup |
-| `change_feed` | the audit read, `_history`, and sweep types | a person, once per server |
+| `closed` | the created record holds nothing the task didn't give | a person |
+| `change_feed` | the audit read, `_history`, whether the server returns `meta.author`, sweep types | a person, once per server |
 
 ## What this read path sees, and what it doesn't
 
@@ -49,16 +50,30 @@ and after the run:
 | Was a duplicate created, by the agent or someone else? | yes | yes, by search on every identity rule |
 | Did the agent write any other resource of any type? | yes, any table | yes, when the server logs the write as an AuditEvent; the sweep adds the types it names |
 | Did the agent delete something? | yes | yes from the audit trail; a sweep alone can't see a delete |
-| Who made a change? | the app's `log` table, when attributable | `meta.author` (server-set) and the AuditEvent agent, which must agree |
+| Who made a change? | the app's `log` table, when attributable | the AuditEvent agent; on Medplum 5.2 nothing else, because `meta.author` is never returned |
 | Bookkeeping the app writes on its own | excused by a reviewed profile (#1604) | not seen at all: FHIR exposes resources, not tables |
 | A change to data that FHIR doesn't expose (an app setting, an internal table, a column outside the resource) | yes | **no** |
-| A write that bypasses the FHIR layer (a database script, a bulk loader) | yes | **no**, unless it also writes an AuditEvent |
-| A server that doesn't keep AuditEvents | n/a | the audit read fails, so every run is `needs_review` (fail closed); a sweep-only feed misses deletes and is stated as such |
+| A write that bypasses the FHIR layer (a database script, a bulk loader, a server admin operation) | yes | **no**, unless it also writes an AuditEvent |
+| Writes in a batch, a transaction or a GraphQL mutation | yes | yes: one AuditEvent per resource (probed) |
+| A write logged late | n/a | the window closes at a server instant and the feed is read until two reads agree; Medplum logged every write within 0.1 s |
+| The agent erasing or forging the audit trail | the agent has no database access | yes, **if the agent can't write AuditEvents.** A plain Medplum member can create, change and delete them, unlogged; the deployment must give the agent an access policy that makes AuditEvent read-only (probed: then refused with 403) |
+| A server that isn't keeping AuditEvents | n/a | Medplum answers an empty search, not an error, so an empty window proves nothing. A created record must show the agent's own create event. A found record counts only when the verifier's read of it shows up in the trail (`heartbeat`); otherwise `needs_review` |
 
 So a coverage claim must name its read path: "no other write **through the
 FHIR API**, as logged by AuditEvent", not "nothing else changed".
 
-Medplum keeps AuditEvents as resources only when the server sets
-`saveAuditEvents` (`MEDPLUM_SAVE_AUDIT_EVENTS=true`); the fixture does.
-`meta.author` is evidence only while the agent can't write it: on Medplum a
-project administrator can, so the agent's user must not be an administrator.
+## What a deployment must set up on Medplum
+
+Measured on Medplum 5.2.8 (`benchmark/fhir_medplum/readpath/probe.json`):
+
+- `saveAuditEvents` on (`MEDPLUM_SAVE_AUDIT_EVENTS=true`). Without it there
+  are no AuditEvent resources to read.
+- The agent's user is a plain member of an ordinary project. Members of
+  Medplum's seeded "Super Admin" project can call `/admin/super`
+  operations, which change data outside the FHIR API.
+- The agent's membership has an access policy that makes AuditEvent
+  read-only. Medplum lets any entry that allows a write win, so the policy
+  can't say "everything except AuditEvent" with `*`; it names each type the
+  server serves (`MedplumFixture.restrict_agent`).
+- The verifier's own client reads Patient and AuditEvent, and writes
+  nothing.

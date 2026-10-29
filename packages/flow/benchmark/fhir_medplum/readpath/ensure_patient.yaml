@@ -39,10 +39,11 @@ search: {fname: given, lname: family, DOB: birthdate, email: email}
 closed: true
 
 # HAND, once per server: Medplum keeps AuditEvents (saveAuditEvents) and
-# never returns meta.author, so the audit trail alone says who wrote; the
-# Patient sweep is a second source for creates and updates.
+# never returns meta.author, so the audit trail alone says who wrote; it logs
+# reads by id, so a found record must show the verifier's own read
+# (heartbeat). The Patient sweep is a second source for creates and updates.
 change_feed:
-  audit: {}
+  audit: {heartbeat: true}
   history: true
   history_author: false
   sweep_types: [Patient]

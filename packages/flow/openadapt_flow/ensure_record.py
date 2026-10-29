@@ -89,6 +89,11 @@ class AuditRead(BaseModel):
     actor_path: str = "agent.who.reference"
     entity_path: str = "entity.what.reference"
     action_path: str = "action"
+    #: An empty window proves nothing when the server isn't logging (Medplum
+    #: answers an empty search, not an error, with ``saveAuditEvents`` off).
+    #: With ``heartbeat``, a found record counts only when the verifier's own
+    #: read of it shows up in the trail; set it where reads by id are logged.
+    heartbeat: bool = False
 
 
 class ChangeFeed(BaseModel):
@@ -189,11 +194,16 @@ def extract(resource: Mapping[str, Any], path: str) -> Any:
     return extract_path(dict(resource), path)
 
 
-def normalize(value: Any, rule: FieldRule) -> Optional[str]:
+def normalize(value: Any, rule: FieldRule, *, task: bool = False) -> Optional[str]:
+    """``value`` as the rule compares it. ``map`` turns a task's value into
+    the stored form (Massachusetts to MA), so it applies to the task's side
+    only: a record that holds "Massachusetts" holds the wrong value."""
+
     if value is None:
         return None
     text = str(value).strip()
-    text = rule.map.get(text, text)
+    if task:
+        text = rule.map.get(text, text)
     if rule.compare == "casefold":
         return text.casefold()
     if rule.compare == "digits":
@@ -205,7 +215,7 @@ def normalize(value: Any, rule: FieldRule) -> Optional[str]:
 
 def same(contract: EnsureContract, name: str, stored: Any, wanted: Any) -> bool:
     rule = contract.fields[name]
-    a, b = normalize(stored, rule), normalize(wanted, rule)
+    a, b = normalize(stored, rule), normalize(wanted, rule, task=True)
     return a is not None and b is not None and a == b
 
 
@@ -675,6 +685,31 @@ def judge(
     return _review(reasons, evidence)
 
 
+def _hear_own_read(
+    contract: EnsureContract,
+    reader: FhirReader,
+    ref: str,
+    until: datetime,
+    sleep: Callable[[float], None],
+) -> None:
+    """Raise Unreadable unless the trail logged the read of ``ref`` just made."""
+
+    audit = contract.change_feed.audit
+    assert audit is not None
+    query = {
+        audit.since_param: f"ge{_instant(until - timedelta(seconds=2))}",
+        "entity": ref,
+        "action": "R",
+    }
+    for _ in range(contract.stable_reads + 1):
+        if reader.resources(audit.resource_type, query):
+            return
+        sleep(contract.settle_s)
+    raise Unreadable(
+        "the audit trail logged no read of the found record; it may not be recording"
+    )
+
+
 def _fingerprint(changes: Mapping[str, Change]) -> dict[str, tuple[Any, ...]]:
     return {
         ref: (sorted(c.actions), sorted(c.authors), c.attributed, c.unlogged)
@@ -732,6 +767,11 @@ def verify_ensure(
                 )
             except Unreadable:
                 existing_now = None  # gone or unreadable: not found
+            audit = contract.change_feed.audit
+            if existing_now is not None and audit is not None and audit.heartbeat:
+                _hear_own_read(
+                    contract, reader, f"{contract.resource_type}/{rid}", until, sleep
+                )
     except Unreadable as exc:
         return _review([f"unreadable: {exc}"], {"unreadable": True})
     return judge(

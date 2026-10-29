@@ -426,3 +426,51 @@ def test_a_change_feed_that_never_settles_is_unreadable():
     )
     assert r.outcome == "needs_review" and r.evidence.get("unreadable")
     assert "still changing" in r.reasons[0]
+
+
+def _found_reader(audit_trail_logs_reads: bool):
+    e = patient("e")
+
+    def get(url, params):
+        key = url.split("/fhir/R4/", 1)[-1]
+        if key == "metadata":
+            return (
+                200,
+                {"Date": "Wed, 28 Oct 2026 12:00:10 GMT"},
+                {"resourceType": "CapabilityStatement"},
+            )
+        if key == "AuditEvent":
+            if (params or {}).get("action") == "R" and audit_trail_logs_reads:
+                return 200, {}, bundle(audit("R", "Patient/e"))
+            return 200, {}, bundle()
+        if key == "Patient/e":
+            return 200, {}, e
+        return 200, {}, bundle(e)
+
+    return FhirReader(contract(), get)
+
+
+@pytest.mark.parametrize(
+    "logging,outcome", [(True, "found_existing"), (False, "needs_review")]
+)
+def test_found_needs_the_trail_to_log_the_verifiers_own_read(logging, outcome):
+    from openadapt_flow.ensure_record import verify_ensure
+
+    c = contract(change_feed={"audit": {"heartbeat": True}})
+    r = verify_ensure(
+        c,
+        PARAMS,
+        base(patient("e")),
+        reader=_found_reader(logging),
+        sleep=lambda s: None,
+    )
+    assert r.outcome == outcome
+
+
+def test_a_record_holding_the_printed_state_instead_of_the_code_is_wrong():
+    # The map turns the task's value into the stored form; it must not also
+    # turn a wrongly stored "Massachusetts" into "MA" (blind round 1 miss).
+    x = patient("x", address=[{"state": "Massachusetts"}])
+    r = judge(contract(), PARAMS, base(), ch("Patient/x", "C"), {"x": x}, x)
+    assert r.outcome == "needs_review"
+    assert any("state" in reason for reason in r.reasons)
