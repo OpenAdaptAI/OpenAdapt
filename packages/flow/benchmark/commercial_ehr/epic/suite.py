@@ -2,6 +2,8 @@
 
     set -a; source /path/to/.env; set +a
     PYTHONPATH=. python -m benchmark.commercial_ehr.epic.suite --out results.json
+    PYTHONPATH=. python -m benchmark.commercial_ehr.epic.suite \\
+        --suite SUITE.yaml --sha256 DIGEST --out results.json
 
 Each case registers one synthetic patient with a family name unique to the
 run, the way an agent would: ``begin_write`` reads the sandbox, the "agent"
@@ -168,7 +170,8 @@ def ground_truth(c: EpicClient, v: dict[str, str], state: dict[str, Any]) -> dic
     counts.
     """
 
-    locs = [state[k] for k in ("loc", "loc2") if state.get(k)]
+    locs = [state[k] for k in ("loc", "loc2") if state.get(k)] + list(state.get("locs", []))
+    seeds = [state["seed"]] if state.get("seed") else list(state.get("seeds", []))
     _, _, bundle = c.get("Patient", {"family": v["family"], "birthdate": v["birth_date"]})
     found = sorted(
         e["resource"]["id"]
@@ -178,10 +181,101 @@ def ground_truth(c: EpicClient, v: dict[str, str], state: dict[str, Any]) -> dic
     return {
         "creates_answered": len(locs),
         "distinct_locations": len(set(locs)),
-        "location_is_seed": bool(state.get("seed")) and state.get("loc") == state.get("seed"),
+        "location_is_seed": any(x in seeds for x in locs),
+        "seed_creates": len(seeds),
         "search_matches": len(found),
         "locations_in_search": sum(1 for x in set(locs) if x.split("/")[-1] in found),
     }
+
+
+# -- frozen suite files -----------------------------------------------------------
+
+#: What a case may change from the task's values in one create.
+OVERRIDES = {
+    "given", "gender", "street", "city", "state", "postal_code", "email",
+    "phone", "family_suffix", "birth_date_shift_days", "omit", "ssn",
+}
+RIGHT_ANSWERS = {"CONFIRMED", "REFUTED", "UNCERTAIN", "not CONFIRMED"}
+
+
+def _apply(v: dict[str, str], o: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
+    """One create's body: the task's values with the case's changes."""
+
+    bad = set(o) - OVERRIDES
+    if bad:
+        raise ValueError(f"unknown override(s): {sorted(bad)}")
+    values = {**v}
+    for key in ("given", "gender", "street", "city", "state", "postal_code", "email", "phone"):
+        if key in o:
+            values[key] = str(o[key])
+    if "family_suffix" in o:
+        values["family"] = v["family"] + str(o["family_suffix"]).lower()
+    if "birth_date_shift_days" in o:
+        values["birth_date"] = (
+            date.fromisoformat(v["birth_date"]) + timedelta(days=int(o["birth_date_shift_days"]))
+        ).isoformat()
+    ssn = o.get("ssn", "new")
+    if ssn == "same_as_seed":
+        values["ssn"] = state.setdefault("ssn", _ssn())
+    elif ssn == "seed":
+        values["ssn"] = state["ssn"] = state.get("ssn") or _ssn()
+    elif ssn != "new":
+        raise ValueError("ssn is new, seed or same_as_seed")
+    body = patient(values)
+    for name in o.get("omit") or []:
+        if name == "email":
+            body["telecom"] = [x for x in body["telecom"] if x["system"] != "email"]
+        elif name == "phone":
+            body["telecom"] = [x for x in body["telecom"] if x["system"] != "phone"]
+        elif name in ("street", "city", "state", "postal_code"):
+            key = {"street": "line", "postal_code": "postalCode"}.get(name, name)
+            body["address"][0].pop(key, None)
+        elif name in ("gender", "birth_date"):
+            body.pop({"birth_date": "birthDate"}.get(name, name), None)
+        elif name == "given":
+            body["name"][0].pop("given", None)
+        else:
+            raise ValueError(f"can't omit {name}")
+    return body
+
+
+def case_from_spec(spec: dict[str, Any]) -> tuple:
+    """A suite-file case as the tuple ``run_case`` takes."""
+
+    right = spec["right_answer"]
+    if right not in RIGHT_ANSWERS:
+        raise ValueError(f"{spec.get('id')}: right_answer {right!r}")
+    seeds = list(spec.get("seed") or [])
+    agent = list(spec.get("agent") or [])
+    if len(seeds) + len(agent) > 4:
+        raise ValueError(f"{spec['id']}: at most four creates a case")
+
+    def seed(c: EpicClient, v: dict[str, str], s: dict[str, Any]) -> None:
+        for o in seeds:
+            s.setdefault("seeds", []).append(_create(c, _apply(v, o or {}, s)))
+
+    def act(c: EpicClient, v: dict[str, str], s: dict[str, Any]) -> None:
+        for o in agent:
+            s.setdefault("locs", []).append(_create(c, _apply(v, o or {}, s)))
+
+    contract = "register_patient_phone.yaml" if spec.get("task_phone") else "register_patient.yaml"
+    return (str(spec["id"]), str(spec.get("class", "")), contract,
+            bool(spec.get("task_phone")), seed, act, right)
+
+
+def load_suite(path: Path, sha256: str) -> list[tuple]:
+    import hashlib
+
+    import yaml
+
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != sha256:
+        raise SystemExit(f"suite digest {digest} is not the frozen {sha256}")
+    data = yaml.safe_load(raw)
+    if data.get("schema") != "openadapt.epic-fault-suite/v1":
+        raise SystemExit("not an openadapt.epic-fault-suite/v1 file")
+    return [case_from_spec(case) for case in data["cases"]]
 
 
 def run_case(c: EpicClient, case: tuple, workdir: Path) -> dict[str, Any]:
@@ -222,11 +316,18 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--only", nargs="*")
+    ap.add_argument("--suite", type=Path, help="a frozen openadapt.epic-fault-suite/v1 file")
+    ap.add_argument("--sha256", help="the suite file's frozen digest")
     args = ap.parse_args(argv)
+    cases = CASES
+    if args.suite is not None:
+        if not args.sha256:
+            raise SystemExit("--suite needs --sha256")
+        cases = load_suite(args.suite, args.sha256)
     c = EpicClient()
     rows = []
     with tempfile.TemporaryDirectory() as tmp:
-        for case in CASES:
+        for case in cases:
             if args.only and case[0] not in args.only:
                 continue
             try:
@@ -242,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
         "harness_errors": sum(1 for r in rows if "error" in r),
         "sandbox_calls": c.calls,
         "date": time.strftime("%Y-%m-%d", time.gmtime()),
+        "suite_sha256": args.sha256 or "built-in",
     }
     Path(args.out).write_text(json.dumps({"summary": summary, "cases": rows}, indent=1) + "\n")
     print(json.dumps(summary))
