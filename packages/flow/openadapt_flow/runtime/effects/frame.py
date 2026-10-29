@@ -97,6 +97,16 @@ class FrameAttribution(BaseModel):
     #: ``audit_read`` only: the read-only read of the log, as an ``effects:``
     #: verifier section. Built by the caller (``verify-run``).
     read: Optional[dict[str, Any]] = None
+    #: ``audit_read`` only: the record field the audit entry's
+    #: ``record_field`` refers to, when it isn't the frame's identity field.
+    #: OpenEMR's log names a patient (``pid``) while ``lists`` or ``pnotes``
+    #: rows are told apart by their own ``id``. Such a log names a patient,
+    #: not a table: any entry for a patient covers every row of that
+    #: patient. So the bot's write to a table the frame doesn't read, logged
+    #: under a declared patient, is excused, and another user's entry for the
+    #: patient being saved refutes the save even when they wrote elsewhere.
+    #: The whole-database frame (``frame.database``) closes the first.
+    record_key: Optional[str] = None
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
     #: ``record_field`` only: the record fields this app sets on the server
@@ -145,6 +155,27 @@ class FrameAttribution(BaseModel):
         return self
 
 
+class FrameSideRecord(BaseModel):
+    """Rows the save adds beside each new declared record (a side record).
+
+    OpenEMR's New Patient path writes one ``history_data`` row for the new
+    chart, linked by ``pid``. Declared here, such rows are part of the save,
+    not collateral, and a missing or extra one refutes the frame.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The surface the side rows are read from.
+    surface: str
+    #: The side row's field that names its record (``pid``).
+    link_field: str
+    #: The surface of the declared record, and the field the link names.
+    of_surface: str
+    of_field: str
+    #: How many side rows each new declared record gets.
+    count: int = Field(default=1, ge=1)
+
+
 class FrameSpec(BaseModel):
     """``frame:`` in ``verify.yaml``: the slice that must otherwise not move."""
 
@@ -159,6 +190,8 @@ class FrameSpec(BaseModel):
     #: the fields the effects name.
     target_fields: Optional[list[str]] = None
     attribution: Optional[FrameAttribution] = None
+    #: Rows the save adds beside each new declared record (``FrameSideRecord``).
+    side_records: list[FrameSideRecord] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _identity_for_audit(self) -> "FrameSpec":
@@ -171,6 +204,15 @@ class FrameSpec(BaseModel):
                 "audit_read attribution compares log entries with records by "
                 "identity_field; set it"
             )
+        key = self.attribution.record_key if self.attribution is not None else None
+        for side in self.side_records if key else ():
+            if side.link_field != key or side.of_field != key:
+                # Otherwise a side row's record_key and its link can name
+                # different records, and either can excuse the other's entries.
+                raise ValueError(
+                    f"with record_key {key!r}, a side record links by it: set "
+                    f"link_field and of_field to {key!r}"
+                )
         return self
 
     def digest(self) -> str:
@@ -261,8 +303,7 @@ def declared_selectors(effect: Effect) -> list[dict[str, str]]:
 
     def plain(selector: Mapping[str, Any]) -> dict[str, str]:
         out = {k: str(v) for k, v in selector.items()}
-        if effect.idempotency_key is not None:
-            out[effect.key_field] = str(effect.idempotency_key)
+        out.update({k: str(v) for k, v in effect.key_selector().items()})
         return out
 
     if effect.kind is EffectKind.EXACT_NEW_SET:
@@ -383,6 +424,25 @@ def judge_frame(
             seen = {stable_id(e) for e in audit_before}
             window_entries = [e for e in audit_after if stable_id(e) not in seen]
 
+    def ref_of(
+        key: Any,
+        before: Optional[Mapping[str, Any]],
+        after: Optional[Mapping[str, Any]],
+    ) -> Any:
+        """What an audit entry names for this record (``record_key``)."""
+
+        if attribution is None or not attribution.record_key:
+            return key
+        values = {
+            None if v in (None, "") else str(v)
+            for v in (
+                r.get(attribution.record_key) for r in (before, after) if r is not None
+            )
+        }
+        # A record moved to another ``record_key`` (a note refiled to another
+        # patient) names neither: no entry can explain it.
+        return values.pop() if len(values) == 1 else None
+
     def other_on_target(
         key: Any,
         before: Optional[Mapping[str, Any]],
@@ -392,6 +452,7 @@ def judge_frame(
 
         if attribution is None:
             return False
+        key = ref_of(key, before, after)
         if attribution.kind == "audit_read":
             return window_entries is not None and any(
                 str(get_path(e, attribution.record_field or "")) == str(key)
@@ -414,7 +475,8 @@ def judge_frame(
         if attribution is None:
             return "unattributed"
         if attribution.kind == "audit_read":
-            if window_entries is None:
+            key = ref_of(key, before, after)
+            if window_entries is None or key is None:
                 return "unattributed"
             actors = {
                 str(get_path(e, attribution.actor_field))
@@ -453,6 +515,8 @@ def judge_frame(
     collateral: list[FrameChange] = []
     concurrent: list[FrameChange] = []
     declared_keys: set[str] = set()
+    #: ``record_key`` only: what an audit entry names for each compared record.
+    refs: dict[tuple[str, str], Optional[str]] = {}
     compared = 0
 
     def note(change: FrameChange) -> None:
@@ -460,6 +524,40 @@ def judge_frame(
             concurrent.append(change)
         else:
             collateral.append(change)
+
+    def selectors_for(name: str) -> list[Any]:
+        mine = [
+            effect
+            for index, effect in enumerate(effects)
+            if routes is None or name in routes.get(str(index), (name,))
+        ]
+        return [s for effect in mine for s in declared_selectors(effect)]
+
+    # Side records: the links each new declared record gives its side rows.
+    side_links: list[set[str]] = []
+    side_found: list[dict[str, int]] = []
+    for side in spec.side_records:
+        links: set[str] = set()
+        before_state, after_records = slices.get(side.of_surface, (None, None))
+        if before_state is not None and after_records is not None:
+            sels = selectors_for(side.of_surface)
+            old = {key_of(r) for r in before_state.records}
+            # A link an existing record already has is not a new record's: a
+            # side row for it belongs to that record's chart.
+            taken = {
+                str(r.get(side.of_field))
+                for r in before_state.records
+                if r.get(side.of_field) not in (None, "")
+            }
+            for record in after_records:
+                if key_of(record) in old:
+                    continue
+                if any(record_matches(dict(record), s) for s in sels):
+                    value = record.get(side.of_field)
+                    if value not in (None, "") and str(value) not in taken:
+                        links.add(str(value))
+        side_links.append(links)
+        side_found.append({link: 0 for link in links})
 
     for name, (before_state, after_records) in slices.items():
         if not before_state.reachable:
@@ -507,8 +605,16 @@ def judge_frame(
             is_declared = (before is not None and declared(before)) or (
                 after is not None and declared(after)
             )
+            ref = ref_of(key, before, after)
+            refs[(name, str(key))] = None if ref is None else str(ref)
             if is_declared:
-                declared_keys.add(str(key))
+                if ref is None:
+                    return _not_checked(
+                        "a declared record carries no record_key value (or it "
+                        "changed), so its log entries can't be matched",
+                        mode,
+                    )
+                declared_keys.add(str(ref))
                 if other_on_target(key, before, after):
                     # The saved value may not stand: never excused.
                     collateral.append(
@@ -543,6 +649,22 @@ def judge_frame(
                     )
                 continue
             if before is None and after is not None:
+                side_index = next(
+                    (
+                        i
+                        for i, side in enumerate(spec.side_records)
+                        if side.surface == name
+                        and str(after.get(side.link_field)) in side_links[i]
+                    ),
+                    None,
+                )
+                if side_index is not None:
+                    # A side record of a new declared record: part of the save.
+                    link = str(after.get(spec.side_records[side_index].link_field))
+                    side_found[side_index][link] += 1
+                    if ref is not None:
+                        declared_keys.add(str(ref))
+                    continue
                 note(
                     FrameChange(
                         name,
@@ -569,13 +691,37 @@ def judge_frame(
                         )
                     )
 
+    for i, side in enumerate(spec.side_records):
+        for link, found in side_found[i].items():
+            if found != side.count:
+                # Missing (or doubled) side record: the chart is not whole.
+                collateral.append(
+                    FrameChange(
+                        side.surface,
+                        "removed" if found < side.count else "added",
+                        "unattributed",
+                        [f"{found} of {side.count} side record(s)"],
+                        key=link,
+                    )
+                )
+
     if mode == "audit_read":
         if window_entries is None:
             # The log could not be read. Every change stays unattributed, and
             # the bot's own log entries can't be checked: say so.
             mode = "audit_read_unavailable"
         else:
-            moved = {str(c.key) for c in collateral + concurrent}
+            if attribution.record_key:  # type: ignore[union-attr]
+                # Compare like with like: entries name ``record_key`` values.
+                # Only records that already refute: another user's concurrent
+                # change to a patient never excuses the bot's own entry for it.
+                moved = {
+                    r
+                    for c in collateral
+                    if (r := refs.get((c.surface, str(c.key)))) is not None
+                }
+            else:
+                moved = {str(c.key) for c in collateral + concurrent}
             for entry in window_entries:
                 actor = get_path(entry, attribution.actor_field)  # type: ignore[union-attr]
                 ref = get_path(entry, attribution.record_field or "")  # type: ignore[union-attr]
