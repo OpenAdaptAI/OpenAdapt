@@ -923,6 +923,14 @@ def _build_and_run_replayer(
     if rollback_plan is not None:
         _require_undo_or_person(workflow, rollback_plan, approval_gate)
     before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
+    if rollback_plan is not None and before is None:
+        # Without the first read nothing after a stop can be proven, and the
+        # undo-or-person rule let undoable saves run without a person.
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, but the system of record "
+            "couldn't be read before the run, so a stop couldn't be rolled "
+            "back. Nothing ran."
+        )
     report = replayer.run(
         workflow,
         params=params,
@@ -944,7 +952,17 @@ def _build_and_run_replayer(
     if rollback_plan is not None and not report.success:
         from openadapt_flow.rollback import ReplayerRunner
 
+        run_item = getattr(approval_gate, "_item", None)
+        if approval_gate is not None:
+            # A compensation is the undo a person approved: it doesn't need
+            # an undo of its own.
+            approval_gate.undo_or_person = False
+
         def make_compensation_replayer():
+            if approval_gate is not None and run_item is not None:
+                # It acts on the run's own item, so the save gate checks the
+                # same record the run's save did.
+                approval_gate.next_item(run_item)
             # The run's backend, verifier, API actuator and approval gate. No
             # governed authorization or qualification guard: those bind the
             # run's own workflow, and a compensation is its own approved undo.
@@ -970,6 +988,17 @@ def _build_and_run_replayer(
             runner=ReplayerRunner(make_compensation_replayer, fresh_session),
         )
     return report
+
+
+def _refuse_rollback_unwired(cfg, where: str) -> None:
+    """Rollback runs only on a single web run; refuse rather than run without it."""
+    section = getattr(cfg, "rollback", None)
+    if section is not None and section.enabled:
+        raise SystemExit(
+            f"REFUSED before the run: rollback is on, and it doesn't run on {where} "
+            "yet. Turn rollback off for this deployment, or run a single web "
+            "item. Nothing ran."
+        )
 
 
 def _require_undo_or_person(workflow, rollback_plan, approval_gate) -> None:
@@ -2733,6 +2762,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     pool_policy = requested_pool(args, cfg)
     if pool_policy is not None:
+        _refuse_rollback_unwired(cfg, "a worklist pool")
         return _replay_worklist_pool(
             args,
             cfg,
@@ -2749,6 +2779,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             surface_cfgs=surface_cfgs,
         )
     if _normalize_kind(backend_cfg.kind) != "web":
+        _refuse_rollback_unwired(cfg, "a desktop or remote-display backend")
         return _replay_desktop(
             args,
             backend_cfg,

@@ -104,9 +104,16 @@ def approved_undo(workflow: Workflow, step_id: str) -> Optional[UndoStep]:
 
 
 def _write_private(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
     staging = path.with_name(f".{path.name}.{os.getpid()}")
-    fd = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # A leftover staging file would keep its own mode: start from nothing.
+    staging.unlink(missing_ok=True)
+    fd = os.open(
+        staging,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True, default=str)
     os.replace(staging, path)
@@ -277,6 +284,51 @@ def saves_without_undo(workflow: Workflow, *, allow_delete: bool) -> list[str]:
     ]
 
 
+def _certain(entry: ChangeLedgerEntry) -> bool:
+    return entry.status == "confirmed" and entry.attempt_state != "delivery_uncertain"
+
+
+def _unseen_writes(
+    pending: list[ChangeLedgerEntry],
+    workflow: Workflow,
+    *,
+    run_dir: Path,
+    params: dict[str, Any],
+    read_records: Optional[RecordsReader],
+) -> Optional[str]:
+    """When the read shows nothing landed: a ledger write it contradicts. A
+    confirmed write did land; an uncertain one counts as absent only when a
+    fresh read of its own record says so."""
+    for entry in pending:
+        if _certain(entry):
+            return f"step {entry.step_id} confirmed a write"
+        undo = approved_undo(workflow, entry.step_id)
+        if undo is None:
+            return f"step {entry.step_id} may have written (no compensation to read it back)"
+        presence, why = fresh_presence(
+            entry,
+            undo,
+            workflow,
+            run_dir=run_dir,
+            params=params,
+            read_records=read_records,
+        )
+        if presence != "absent":
+            return f"step {entry.step_id} may have written ({why})"
+    return None
+
+
+def _unsettled(
+    pending: list[ChangeLedgerEntry], steps: list[RollbackStepRecord]
+) -> Optional[str]:
+    """A ledger write no compensation settled (compensated, or shown absent)."""
+    done = {s.step_id for s in steps if s.decision in ("compensated", "not_needed")}
+    left = [e.step_id for e in pending if e.step_id not in done]
+    if not left:
+        return None
+    return "step(s) " + ", ".join(left) + " weren't compensated"
+
+
 def _excuser(reader: Any, after: Any) -> Any:
     """The reader's app-profile row rules for this read, if it has any."""
     make = getattr(reader, "excuser", None)
@@ -296,6 +348,7 @@ def roll_back(
     assume_stopped: bool = False,
     attributor: Optional[Attributor] = None,
     allow_delete: bool = False,
+    exclusive: bool = False,
 ) -> Optional[RollbackRecord]:
     """Undo what a stopped run left, then prove the run's changes are gone.
 
@@ -305,11 +358,19 @@ def roll_back(
     uncertain writes and finds created records.
 
     With an ``attributor``, rows another actor changed during the run are set
-    aside; rows nothing attributes count as the run's. The run's own rows
-    must be back as they were and nothing else may differ. A row the run
-    touched that another actor also changed is a conflict: nothing is
-    compensated and a person decides. A ``delete`` compensation (or one that
-    declares no kind) runs only with ``allow_delete``.
+    aside; rows nothing attributes count as the run's. A row added or removed
+    is set aside only when another actor's insert or delete is on record. The
+    run's own rows must be back as they were and nothing else may differ. A
+    row the run could have written that another actor also changed is a
+    conflict: nothing is compensated and a person decides. Without an
+    attributor nothing is compensated (a colleague's edit can't be told from
+    the run's), unless the store is ``exclusive`` to the run (a test copy).
+    A ``delete`` compensation (or one that declares no kind) runs only with
+    ``allow_delete``.
+
+    The change ledger and the reads must agree: a confirmed write the read
+    doesn't show, or a write left uncompensated, is never called rolled back
+    or nothing landed.
 
     Returns None for a run that finished. Never raises for a failed read or
     compensation; those end as ``not_rolled_back`` with the reason.
@@ -368,21 +429,32 @@ def roll_back(
     others = 0
     for change in changes(landed):
         who = whose(change)
-        runs_record = _is_runs_record(change, selectors)
-        if who == "other" and not runs_record:
+        if who == "other" and not _is_runs_record(change, selectors):
             others += 1
             continue
-        if (
-            runs_record
-            and attributor is not None
-            and (who == "other" or attributor.others_touched(change, window))
+        # A row the run could have written, in any table: another actor's
+        # hand on it is a conflict, so their change is never compensated away.
+        if attributor is not None and (
+            who == "other" or attributor.others_touched(change, window)
         ):
             conflicts.append(change)
         run_changes.append(change)
     record.other_actor_rows = others
     record.after_stop_diff = keep_rows(landed, run_changes).summary()
     run_keys = {(t, k) for t, k, *_rest in run_changes}
+    pending = [e for e in report.change_ledger if e.may_need_undo]
     if not run_changes:
+        unseen = _unseen_writes(
+            pending, workflow, run_dir=run_dir, params=params, read_records=read_records
+        )
+        if unseen:
+            return finish(
+                "not_rolled_back",
+                "the read shows nothing the run did, but the change ledger "
+                f"says {unseen}; the read can't see that write (an allow-listed "
+                "table, a column the app profile leaves out, or a read of one "
+                "collection), so a person checks",
+            )
         record.final_sha256 = record.after_stop_sha256
         return finish(
             "nothing_landed",
@@ -404,6 +476,16 @@ def roll_back(
             keep_rows(landed, run_changes),
         )
 
+    if attributor is None and not exclusive:
+        return finish(
+            "not_rolled_back",
+            "rollback.attribution isn't set (or the run's own user couldn't be "
+            "resolved), so another user's edit to these rows can't be told from "
+            "the run's; nothing was compensated. Different now: "
+            + keep_rows(landed, run_changes).describe(),
+            keep_rows(landed, run_changes),
+        )
+
     from openadapt_flow.after_stop import _has_loop
 
     entries = sorted(
@@ -421,6 +503,8 @@ def roll_back(
         )
     #: ``(table, field, value)``: a voided record a ``void`` compensation keeps.
     retained: set[tuple[str, str, str]] = set()
+    #: Each run row as the stop left it: a kept void row must have changed.
+    at_stop = {(t, k): new for t, k, _old, new in run_changes}
     checked_since_stop = False
     for entry in entries if stop_reason is None else []:
         step_record = RollbackStepRecord(
@@ -548,12 +632,20 @@ def roll_back(
     final_window = attributor.window() if attributor is not None else None
     residue: list[Change] = []
     kept = 0
+    #: Tables where a row is left on purpose (another actor's, or a void).
+    explained: set[str] = set()
     for change in changes(remaining):
         table, key, _old, new = change
-        if new is not None and any(
-            table == t and str(new.get(f)) == v for t, f, v in retained
+        stop = at_stop.get((table, key))
+        if (
+            new is not None
+            and stop is not None
+            and stop != new
+            and any(table == t and str(new.get(f)) == v for t, f, v in retained)
         ):
+            # The run's record, kept and changed by its void compensation.
             kept += 1
+            explained.add(table)
             continue
         mine = (table, key) in run_keys or _is_runs_record(change, selectors)
         if (
@@ -561,21 +653,42 @@ def roll_back(
             and attributor is not None
             and (attributor.attribute(change, final_window) == "other")
         ):
+            explained.add(table)
             continue
         residue.append(change)
     record.retained_rows = kept
     left = keep_rows(remaining, residue)
-    if not residue and attributor is None and not kept:
-        # With nothing set aside, the verifier's own whole-database diff must
-        # agree that the store is back. It decides when the two differ.
+    unsettled = _unsettled(pending, record.steps)
+    if not residue and unsettled:
+        return finish(
+            "not_rolled_back",
+            "the read shows nothing left, but "
+            + unsettled
+            + (f" ({stop_reason})" if stop_reason else "")
+            + "; the read may not see that write, so a person checks",
+        )
+    if not residue:
+        # The verifier's own whole-database diff must agree: it may see a
+        # change only where a row is left on purpose. It decides when the
+        # two differ.
         cross = getattr(reader, "verifier_diff", None)
-        verdict = cross(before, final) if callable(cross) else None
+        try:
+            verdict = cross(before, final) if callable(cross) else None
+        except Exception as exc:  # noqa: BLE001 - a failed check proves nothing
+            record.cross_checked = False
+            return finish(
+                "not_rolled_back",
+                f"the verifier's database diff failed ({type(exc).__name__}); "
+                "what was undone can't be proven",
+                remaining,
+            )
         record.cross_checked = verdict is not None
-        if verdict:
+        unexplained = sorted(set(verdict or ()) - explained)
+        if unexplained:
             return finish(
                 "not_rolled_back",
                 "the verifier's database diff still sees changes in "
-                + ", ".join(sorted(verdict))
+                + ", ".join(unexplained)
                 + "; a person checks the record",
                 remaining,
             )
@@ -593,8 +706,7 @@ def roll_back(
                 f"; {others} row(s) another actor changed were set aside"
                 if others
                 else ""
-            )
-            + (f" (a step was left: {stop_reason})" if stop_reason else ""),
+            ),
         )
     reason = (
         stop_reason
@@ -732,7 +844,11 @@ class RollbackPlan:
         attribution: Any = None,
         audit_read: Optional[RecordsReader] = None,
         allow_delete: bool = False,
+        exclusive: bool = False,
     ) -> None:
+        #: The store is a test copy only this run writes (a harness on a
+        #: declared test copy); a deployment never sets it.
+        self.exclusive = exclusive
         self.reader = reader
         self.read_records = read_records
         self.attribution = attribution
@@ -779,6 +895,7 @@ class RollbackPlan:
             read_records=self.read_records,
             attributor=self.attributor,
             allow_delete=self.allow_delete,
+            exclusive=self.exclusive,
         )
         return apply_rollback(report, workflow, record, run_dir)
 
@@ -786,6 +903,7 @@ class RollbackPlan:
 def plan_from_deployment(cfg: Any, effect_verifier: Any) -> Optional[RollbackPlan]:
     """The deployment's rollback plan, or None when ``rollback`` is off."""
     from openadapt_flow.after_stop import records_reader
+    from openadapt_flow.compiler.probing import probe_target_refusals
     from openadapt_flow.rollback_state import DatabaseReader, VerifierReader
 
     section = getattr(cfg, "rollback", None)
@@ -820,6 +938,9 @@ def plan_from_deployment(cfg: Any, effect_verifier: Any) -> Optional[RollbackPla
         attribution=section.attribution,
         audit_read=audit_read,
         allow_delete=section.allow_delete,
+        # A declared test copy (the gate rollback qualify uses) is written
+        # only by the run; anywhere else, other users may write.
+        exclusive=not probe_target_refusals(cfg),
     )
 
 

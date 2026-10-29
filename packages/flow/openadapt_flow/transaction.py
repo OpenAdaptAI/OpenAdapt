@@ -372,6 +372,7 @@ def _store_proven_unchanged(report: RunReport) -> bool:
         rollback is not None
         and not report.success
         and rollback.status == "nothing_landed"
+        and rollback.scope == "database"
     )
 
 

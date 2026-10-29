@@ -525,6 +525,15 @@ class Attributor:
     modifier, a field only the server sets). A row nothing attributes is
     ``unattributed`` and counts as the run's: a rollback never sets aside a
     change it can't explain.
+
+    Audit entries are read as the frame reads them: only write events
+    (``event_field``/``write_events``), only for the row's table
+    (``table_field``), and by kind: an added row is another actor's only
+    through their insert (``insert_events``), a removed one only through
+    their delete. With ``record_field``, a field holding the last writer, an
+    added row is never another actor's (the last writer isn't the creator),
+    and a row the run changed that another actor changed after it reads as
+    theirs: only an audit log tells the two writes apart.
     """
 
     def __init__(
@@ -567,7 +576,32 @@ class Attributor:
         from openadapt_flow.runtime.effects.effect import stable_id
 
         seen = {stable_id(e) for e in self._before}
-        return [e for e in after if stable_id(e) not in seen]
+        entries = [e for e in after if stable_id(e) not in seen]
+        if self.spec.write_events:
+            # A view of a record never explains a write to it.
+            writes = set(self.spec.write_events)
+            entries = [e for e in entries if self._event(e) in writes]
+        return entries
+
+    def _event(self, entry: Mapping[str, Any]) -> str:
+        from openadapt_flow.runtime.effects.frame import get_path
+
+        return str(get_path(entry, self.spec.event_field or ""))
+
+    def _kinds(self, change: Change) -> Optional[set[str]]:
+        """The write events that can explain this change, as the frame
+        decides: an insert for an added row, a delete for a removed one,
+        another write otherwise. None: any write (no events declared)."""
+        if not self.spec.write_events:
+            return None
+        inserts = set(self.spec.insert_events)
+        deletes = set(self.spec.delete_events)
+        _t, _k, before, after = change
+        if before is None:
+            return inserts
+        if after is None:
+            return deletes
+        return set(self.spec.write_events) - inserts - deletes
 
     def _ref(
         self,
@@ -584,18 +618,30 @@ class Attributor:
         return None if value in (None, "") else str(value)
 
     def _actors(
-        self, ref: Optional[str], window: Optional[list[dict[str, Any]]]
+        self,
+        ref: Optional[str],
+        window: Optional[list[dict[str, Any]]],
+        table: Optional[str] = None,
+        kinds: Optional[set[str]] = None,
     ) -> set[str]:
         from openadapt_flow.runtime.effects.frame import get_path
 
         if ref is None or window is None:
             return set()
-        return {
-            str(get_path(e, self.spec.actor_field))
-            for e in window
-            if str(get_path(e, self.spec.record_field or "")) == ref
-            and get_path(e, self.spec.actor_field) not in (None, "")
-        }
+        out = set()
+        for e in window:
+            if str(get_path(e, self.spec.record_field or "")) != ref:
+                continue
+            if get_path(e, self.spec.actor_field) in (None, ""):
+                continue
+            if self.spec.table_field and not _same_table(
+                get_path(e, self.spec.table_field), table
+            ):
+                continue
+            if kinds is not None and self._event(e) not in kinds:
+                continue
+            out.add(str(get_path(e, self.spec.actor_field)))
+        return out
 
     def attribute(self, change: Change, window: Optional[list[dict[str, Any]]]) -> str:
         """``self``, ``other`` or ``unattributed`` for one changed row."""
@@ -603,11 +649,25 @@ class Attributor:
 
         table, key, before, after = change
         if self.spec.kind == "audit_read":
-            actors = self._actors(self._ref(table, key, before, after), window)
-            if actors & self.self_actors:
+            ref = self._ref(table, key, before, after)
+            anyone = self._actors(ref, window, table)
+            if anyone & self.self_actors:
                 return "self"
+            if before is None or after is None:
+                # Added or removed: another actor's only through their own
+                # insert or delete, never a later edit.
+                if not self.spec.write_events or (
+                    not (
+                        self.spec.insert_events
+                        if before is None
+                        else self.spec.delete_events
+                    )
+                ):
+                    return "unattributed"
+            actors = self._actors(ref, window, table, self._kinds(change))
             return "other" if actors else "unattributed"
-        if after is None:
+        if before is None or after is None:
+            # The last writer isn't the creator, and a removed row has none.
             return "unattributed"
         actor = get_path(after, self.spec.actor_field)
         if actor in (None, ""):
@@ -634,13 +694,24 @@ class Attributor:
         table, key, before, after = change
         if self.spec.kind == "audit_read":
             return bool(
-                self._actors(self._ref(table, key, before, after), window)
+                self._actors(self._ref(table, key, before, after), window, table)
                 - self.self_actors
             )
         if after is None:
             return False
         actor = get_path(after, self.spec.actor_field)
         return actor not in (None, "") and str(actor) not in self.self_actors
+
+
+def _same_table(entry_table: Any, table: Optional[str]) -> bool:
+    """Does an audit entry's table name this snapshot table? Case aside, an
+    unqualified name means the read's own schema (as the frame decides)."""
+    if table is None or entry_table in (None, ""):
+        return False
+    named, mine = str(entry_table).lower(), table.lower()
+    if named == mine:
+        return True
+    return "." not in named and "." in mine and mine.rsplit(".", 1)[1] == named
 
 
 __all__ = [

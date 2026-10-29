@@ -42,15 +42,21 @@ Flow reads the whole system of record:
   The report says `scope: collection`, because rows in other places aren't
   seen.
 
-If that read fails, the rollback isn't armed. The run goes ahead unchanged,
-and the report says so.
+If that read fails, the run is refused before it starts: nothing after a stop
+could be proven.
 
 ### After a stop
 
 1. **Fresh read.** Flow reads the store again and compares it with the first
    read. Each row that changed is the run's, another user's, or nobody's
    (see [Other users](#other-users)). If no row is the run's, nothing
-   landed, and the read itself proves it.
+   landed, but only if the [change ledger](AFTER_A_STOP.md#the-change-ledger)
+   agrees: a confirmed write the read doesn't show (in an allow-listed
+   table, a column the profile leaves out, or outside the one collection
+   read) ends `RECONCILIATION_REQUIRED`, and an uncertain write counts as
+   absent only when a fresh read of its own record says so. Only a
+   whole-database read proves the run's effects absent; a collection read
+   never overrides the run's own uncertainty.
 2. **Compensate, latest change first.** For each change in the run's
    [change ledger](AFTER_A_STOP.md#the-change-ledger), Flow uses the
    compensation a person approved for that step. That is either a declared
@@ -74,11 +80,14 @@ and the report says so.
    `rollback.allow_delete: true`. `rollback qualify` tries the least
    destructive kind first and never tries a delete the deployment doesn't
    allow.
-5. **Conflicts.** If another user changed a record the run wrote, after the
-   run wrote it, Flow compensates nothing and ends `RECONCILIATION_REQUIRED`
-   with the diff, so their change isn't overwritten. The same happens if a
-   record the run touched changes between the stop and the first
-   compensation.
+5. **Conflicts.** If another user changed any row the run could have
+   written, in any table, Flow compensates nothing and ends
+   `RECONCILIATION_REQUIRED` with the diff, so their change isn't
+   overwritten. The same happens if a row the run touched changes between
+   the stop and the first compensation. Without `rollback.attribution`,
+   another user's edit can't be told from the run's, so Flow compensates
+   nothing at all (except on a declared test copy, which only the run
+   writes).
 6. **Each compensation runs in a fresh session** through the normal replayer.
    Identity checks, the risk gate, the deployment's save-approval gate and the
    compensation's own effect check all apply. In the default approval mode, a
@@ -92,10 +101,12 @@ and the report says so.
    declares (`retains`), and nowhere else. Every other row must match too,
    apart from rows another user changed and the app's own bookkeeping
    (`rollback.profile`):
-   - Nothing else differs: `ROLLED_BACK`. For a whole-database read with
-     nothing set aside, the verifier's own `diff_database`
-     (`openadapt_flow.verifier`) must agree, or the run isn't called rolled
-     back.
+   - Nothing else differs, and every write in the change ledger was
+     compensated or shown absent: `ROLLED_BACK`. For a whole-database read,
+     the verifier's own `diff_database` (`openadapt_flow.verifier`) must
+     agree: it may see changes only in tables where a row was set aside or
+     kept by a void, or the run isn't called rolled back. A kept void row
+     must have changed since the stop.
    - Anything else: `RECONCILIATION_REQUIRED`. `report.json` holds a summary
      with counts and column names only. `<run-dir>/rollback/diff.json`
      (owner-only) holds every added, removed and changed row, with the values
@@ -117,12 +128,23 @@ in `verify.yaml`), Flow learns who changed each row, from the app's audit log
 or a modified-by field only the server sets:
 
 - A row another user changed, that the run didn't touch, is set aside. The
-  report counts it (`other_actor_rows`).
+  report counts it (`other_actor_rows`). A row added or removed is set aside
+  only when the audit log holds that user's insert or delete
+  (`insert_events`, `delete_events`): a later edit never makes a row the run
+  created theirs.
+- Audit entries count only as the frame counts them: write events
+  (`event_field`, `write_events`), for the row's own table (`table_field`).
+  A colleague viewing a record never explains a change to it.
 - A row nothing attributes counts as the run's. A rollback never sets aside a
-  change it can't explain, so without attribution, any other write in the
-  window makes the run `RECONCILIATION_REQUIRED`.
-- A record the run wrote that another user also changed is a conflict
-  (`conflicts`). Nothing is compensated.
+  change it can't explain.
+- A row the run could have written that another user also changed is a
+  conflict (`conflicts`). Nothing is compensated.
+- A modified-by field (`record_field`) knows only the last writer. A row
+  added during the run is then never set aside: if another user changed
+  it, that is a conflict. And a row the run changed that another user then
+  changed reads as theirs. Use the app's audit log (`audit_read`) where it
+  has one.
+- Without attribution, nothing is compensated (see step 5).
 
 ## Turn it on
 
@@ -139,11 +161,21 @@ rollback:
   allow_delete: false               # the default: no hard deletes
   profile: openemr                  # the app's own bookkeeping (app_profiles)
   actor_names: [openadapt_bot]      # who the run signs in as, for the profile
-  attribution:                      # optional: who changed a row
-    kind: record_field
-    actor_field: modified_by
+  attribution:                      # who changed a row (needed to compensate)
+    kind: audit_read                # the app's audit log; record_field: last writer
+    read:                           # a second read-only read, as in verify.yaml
+      kind: sql
+      sql_driver: pymysql
+      sql_query: SELECT id, user, event, tbl, pid FROM log
+    actor_field: user
     self: [openadapt_bot]
-    server_set: [modified_by]
+    record_field: pid
+    record_key: pid
+    event_field: event
+    write_events: [insert, update, delete]
+    insert_events: [insert]
+    delete_events: [delete]
+    table_field: tbl
 ```
 
 Both lists are a person's reviewed decision for one app. The report records
@@ -237,10 +269,9 @@ profile as `app/version` (`profile_id`).
 
 - **It undoes only what a person approved.** A step without an approved
   compensation stops the rollback, and the store is reported as it is.
-- **It isn't a transaction.** Without attribution, another user's write
-  between the first and final reads ends the run `RECONCILIATION_REQUIRED`.
-  With it, their writes are set aside, but a record both of you changed is
-  left for a person.
+- **It isn't a transaction.** Without attribution nothing is compensated.
+  With it, other users' writes are set aside, but a row both of you changed
+  is left for a person.
 - **No hard delete by default.** A `delete` compensation runs only with
   `rollback.allow_delete: true`. A `void` keeps the run's record, voided,
   only in the tables its compensation declares.
@@ -251,6 +282,7 @@ profile as `app/version` (`profile_id`).
   table moved, but not which rows.
 - **No rollback in a workflow with a loop,** or when a step ran more than
   once. A compensation runs with the run's base parameters.
-- **Web runs only, for now.** Desktop and RDP runs don't arm a rollback.
+- **Single web runs only, for now.** A desktop, RDP or worklist-pool run
+  with rollback on is refused before it starts.
 - **The idempotency key stays used.** A rolled-back run doesn't free its key
   for a retry; a person starts the next run.

@@ -185,6 +185,8 @@ def halt_point(
         read_records=getattr(target, "read_records", None),
         assume_stopped=True,
         allow_delete=allow_delete,
+        # A declared test copy, reset for this halt point: no one else writes.
+        exclusive=True,
     )
     assert record is not None
     try:

@@ -42,8 +42,10 @@ from openadapt_flow.rollback import (
     CompensationRefused,
     ReplayerRunner,
     RollbackPlan,
-    roll_back,
     rollback_lines,
+)
+from openadapt_flow.rollback import (
+    roll_back as _roll_back,
 )
 from openadapt_flow.rollback_state import (
     DatabaseReader,
@@ -65,6 +67,13 @@ from tests.test_replayer import FakeBackend, FakeVision, Match
 # ---------------------------------------------------------------------------
 # Shared pieces
 # ---------------------------------------------------------------------------
+
+
+def roll_back(*args: Any, **kwargs: Any) -> Any:
+    """The unit tests' store is one only the run writes (a test copy); the
+    tests of attribution and its absence pass ``exclusive`` themselves."""
+    kwargs.setdefault("exclusive", True)
+    return _roll_back(*args, **kwargs)
 
 
 def _vision() -> FakeVision:
@@ -217,6 +226,7 @@ def _run_with_rollback(
         VerifierReader(verifier),
         read_records=records_reader(verifier),
         allow_delete=allow_delete,
+        exclusive=True,  # MockMed in-process: only this run writes
     )
     before = plan.arm()
     run_dir = tmp_path / "run"
@@ -321,13 +331,21 @@ class ClinicBackend(FakeBackend):
         mode: str = "delete",
         history: bool = True,
         colleague: Optional[str] = None,
+        audit: Optional[list[dict[str, str]]] = None,
     ):
         super().__init__(viewport=(300, 200))
+        self.audit = audit if audit is not None else []
         self.path = path
         self.thorough = thorough
         self.mode = mode
         self.history = history
         self.colleague = colleague
+
+    def _log(self, actor: str, event: str, table: str, record: Any) -> None:
+        # The app's audit log: who did what to which row.
+        self.audit.append(
+            {"actor": actor, "event": event, "tbl": table, "record": str(record)}
+        )
 
     def press(self, key):
         super().press(key)
@@ -337,22 +355,43 @@ class ClinicBackend(FakeBackend):
                 "INSERT INTO patients (name, dob, modified_by) "
                 "VALUES ('Ada Synthetic', '1980-02-03', 'bot')"
             )
+            self._log("bot", "insert", "patients", cur.lastrowid)
             if self.history:
-                conn.execute(
+                hist = conn.execute(
                     "INSERT INTO history (patient_id, smoker, modified_by) "
                     "VALUES (?, 'no', 'bot')",
                     (cur.lastrowid,),
                 )
+                self._log("bot", "insert", "history", hist.lastrowid)
             conn.execute("INSERT INTO log (event) VALUES ('patient created')")
         elif key == "F2" and self.colleague == "note":
-            conn.execute(
+            note = conn.execute(
                 "INSERT INTO notes (body, modified_by) VALUES ('call back', 'nurse')"
             )
+            self._log("nurse", "insert", "notes", note.lastrowid)
+        elif key == "F2" and self.colleague == "view":
+            # The nurse only looks at the run's patient: not a write.
+            (pid,) = conn.execute(
+                "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
+            ).fetchone()
+            self._log("nurse", "view", "patients", pid)
         elif key == "F2" and self.colleague == "edit":
             conn.execute(
                 "UPDATE patients SET dob = '1980-02-04', modified_by = 'nurse' "
                 "WHERE name = 'Ada Synthetic'"
             )
+            (pid,) = conn.execute(
+                "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
+            ).fetchone()
+            self._log("nurse", "update", "patients", pid)
+        elif key == "F2" and self.colleague == "edit_history":
+            # The nurse edits the side row the run created.
+            (hid,) = conn.execute("SELECT MAX(id) FROM history").fetchone()
+            conn.execute(
+                "UPDATE history SET smoker = 'yes', modified_by = 'nurse' WHERE id = ?",
+                (hid,),
+            )
+            self._log("nurse", "update", "history", hid)
         elif key == "Delete":
             row = conn.execute(
                 "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
@@ -469,10 +508,11 @@ def _run_clinic(
     retains=(),
     history: bool = True,
     colleague: Optional[str] = None,
-    attribution: bool = False,
+    attribution: Any = False,
     allow_delete: bool = True,
     profile=None,
     allow_tables=("log",),
+    exclusive: Optional[bool] = None,
 ) -> RunReport:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
@@ -490,20 +530,38 @@ def _run_clinic(
         allow_tables=list(allow_tables),
         profile=profile,
     )
+    audit: list[dict[str, str]] = []
+    spec = None
+    if attribution == "audit":
+        spec = FrameAttribution(
+            kind="audit_read",
+            actor_field="actor",
+            self=["bot"],
+            record_field="record",
+            record_key="id",
+            event_field="event",
+            write_events=["insert", "update", "delete"],
+            insert_events=["insert"],
+            delete_events=["delete"],
+            table_field="tbl",
+            read={"kind": "in_memory"},  # the plan reads ``audit`` below
+        )
+    elif attribution:
+        spec = FrameAttribution(
+            kind="record_field",
+            actor_field="modified_by",
+            self=["bot"],
+            server_set=["modified_by"],
+        )
     plan = RollbackPlan(
         reader,
         read_records=records_reader(_sql_verifier(db)),
-        attribution=(
-            FrameAttribution(
-                kind="record_field",
-                actor_field="modified_by",
-                self=["bot"],
-                server_set=["modified_by"],
-            )
-            if attribution
-            else None
-        ),
+        attribution=spec,
+        audit_read=lambda: [dict(e) for e in audit],
         allow_delete=allow_delete,
+        # Without attribution the clinic stands for a test copy only the run
+        # writes; with it, other users may write.
+        exclusive=(not attribution) if exclusive is None else exclusive,
     )
     params = {"name": "Ada Synthetic"}
     before = plan.arm(params)
@@ -511,7 +569,12 @@ def _run_clinic(
     def replayer() -> Replayer:
         return Replayer(
             ClinicBackend(
-                db, thorough=thorough, mode=mode, history=history, colleague=colleague
+                db,
+                thorough=thorough,
+                mode=mode,
+                history=history,
+                colleague=colleague,
+                audit=audit,
             ),
             vision=_vision(),
             effect_verifier=_sql_verifier(db),
@@ -695,21 +758,43 @@ def test_an_unreadable_store_before_the_run_leaves_the_rollback_unarmed(tmp_path
     assert classify_transaction_outcome(report) == without
 
 
+class DatabaseListReader(ListReader):
+    scope = "database"
+
+
 def test_nothing_landed_is_proof_of_absence(tmp_path):
-    record = roll_back(
-        _stopped([_entry(attempt="delivery_uncertain", status="unknown")]),
-        _single_save_workflow(),
-        run_dir=tmp_path,
-        bundle_dir=tmp_path,
-        reader=ListReader([{"id": 1, "x": "y"}]),
-        before=records_snapshot([{"id": 1, "x": "y"}]),
-        runner=RecordingRunner(),
-    )
-    assert record.status == "nothing_landed"
+    rows = [{"id": 1, "x": "y"}]
+
+    def settle(reader):
+        workflow = _single_save_workflow()
+        keep_prior_state(
+            workflow, workflow.steps[0], [dict(r) for r in rows], {}, tmp_path
+        )
+        return roll_back(
+            _stopped([_entry(attempt="delivery_uncertain", status="unknown")]),
+            workflow,
+            run_dir=tmp_path,
+            bundle_dir=tmp_path,
+            reader=reader,
+            before=records_snapshot(rows),
+            runner=RecordingRunner(),
+            read_records=lambda: rows,
+        )
+
+    record = settle(DatabaseListReader(rows))
+    assert record.status == "nothing_landed", record.reason
     report = _stopped([_entry(attempt="delivery_uncertain", status="unknown")])
     report.execution_outcome = "HALTED"
     report.rollback = record
     assert classify_transaction_outcome(report).value == "HALTED_BEFORE_EFFECT"
+    # A read of one collection isn't proof the run wrote nowhere else: it
+    # never overrides the run's own uncertainty.
+    from openadapt_flow.transaction import _store_proven_unchanged
+
+    assert _store_proven_unchanged(report)
+    report.rollback = settle(ListReader(rows))
+    assert report.rollback.status == "nothing_landed"
+    assert not _store_proven_unchanged(report)
 
 
 def test_an_unreadable_store_after_the_stop_runs_nothing(tmp_path):
@@ -792,10 +877,19 @@ def test_a_void_that_leaves_a_side_record_is_not_a_rollback(tmp_path):
 
 
 def test_another_actors_write_is_set_aside_only_with_attribution(tmp_path):
-    attributed = _run_clinic(tmp_path / "a", colleague="note", attribution=True)
+    attributed = _run_clinic(tmp_path / "a", colleague="note", attribution="audit")
     assert attributed.rollback.status == "rolled_back", attributed.rollback.reason
     assert attributed.rollback.other_actor_rows == 1
     assert "another actor changed were set aside" in attributed.rollback.reason
+    assert attributed.rollback.cross_checked
+
+    # A last-modifier field can't say who created a row: the nurse's note
+    # could be a row the run created and the nurse then edited. Not set
+    # aside, and not compensated.
+    last_writer = _run_clinic(tmp_path / "c", colleague="note", attribution=True)
+    assert last_writer.rollback.status == "not_rolled_back"
+    assert last_writer.rollback.conflicts == 1
+    assert last_writer.rollback.steps == []
 
     plain = _run_clinic(tmp_path / "b", colleague="note", attribution=False)
     assert plain.rollback.status == "not_rolled_back"
@@ -1054,3 +1148,90 @@ def test_the_profile_excuses_only_the_acting_users_own_sign_in(tmp_path):
     after = reader.read(before=before)
     left = changes(diff_states(before, after, excuse=reader.excuser(after)))
     assert [c[0] for c in left] == ["users_secure"]
+
+
+@pytest.mark.parametrize("attribution", ["audit", True])
+def test_a_colleagues_edit_to_a_side_row_the_run_created_is_a_conflict(
+    tmp_path, attribution
+):
+    # Review of #1634: the run creates a patient and its history row; a
+    # nurse edits the history row before the stop. Never set aside, never
+    # deleted with the patient.
+    report = _run_clinic(tmp_path, colleague="edit_history", attribution=attribution)
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert rollback.conflicts == 1
+    assert rollback.steps == []
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute("SELECT smoker, modified_by FROM history").fetchall() == [
+        ("yes", "nurse")
+    ]
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_colleagues_view_is_not_a_write(tmp_path):
+    report = _run_clinic(tmp_path, colleague="view", attribution="audit")
+    assert report.rollback.status == "rolled_back", report.rollback.reason
+    assert report.rollback.conflicts == 0
+
+
+def test_without_attribution_nothing_is_compensated(tmp_path):
+    # Review of #1634: a colleague's edit to the run's record can't be told
+    # from the run's without attribution, so it is never deleted with it.
+    report = _run_clinic(tmp_path, colleague="edit", exclusive=False)
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back"
+    assert "rollback.attribution isn't set" in rollback.reason
+    assert rollback.steps == []
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute(
+        "SELECT dob, modified_by FROM patients WHERE name = 'Ada Synthetic'"
+    ).fetchall() == [("1980-02-04", "nurse")]
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_confirmed_write_the_read_cant_see_is_never_nothing_landed(tmp_path):
+    # Review of #1634: the patient tables allow-listed, so the read sees no
+    # change while the ledger holds a confirmed create.
+    report = _run_clinic(
+        tmp_path, allow_tables=("log", "patients", "history"), allow_delete=False
+    )
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert "confirmed a write" in rollback.reason
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_step_left_uncompensated_is_never_rolled_back(tmp_path):
+    # The compensation is refused (deletes not allowed) and the read can't
+    # see the write: a clean read isn't proof the write was undone.
+    report = _run_clinic(tmp_path, allow_tables=("log", "patients", "history"))
+    assert report.rollback.status != "rolled_back"
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_the_diff_file_is_owner_only_even_over_a_leftover(tmp_path):
+    import os
+    import stat
+
+    from openadapt_flow.rollback import _write_private
+
+    path = tmp_path / "rollback" / "diff.json"
+    path.parent.mkdir()
+    leftover = path.with_name(f".{path.name}.{os.getpid()}")
+    leftover.write_text("old")
+    leftover.chmod(0o644)
+    _write_private(path, {"a": 1})
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+
+
+def test_rollback_refuses_where_it_isnt_wired():
+    from types import SimpleNamespace
+
+    from openadapt_flow.__main__ import _refuse_rollback_unwired
+
+    on = SimpleNamespace(rollback=SimpleNamespace(enabled=True))
+    with pytest.raises(SystemExit, match="Nothing ran"):
+        _refuse_rollback_unwired(on, "a worklist pool")
+    _refuse_rollback_unwired(SimpleNamespace(rollback=None), "a worklist pool")

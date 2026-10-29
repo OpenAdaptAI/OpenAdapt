@@ -829,11 +829,14 @@ The limits of that:
   tell whether a later check depends on an earlier write.
 - A rollback undoes only what a person approved, and only proves what it
   reads: without `rollback.database` it reads one collection. Without
-  `rollback.attribution`, another user's write between the first and final
-  reads makes the run `RECONCILIATION_REQUIRED`; with it, their writes are set
-  aside, and a record both changed is left for a person. A hard delete runs
-  only with `rollback.allow_delete`. Rollback is armed on web runs only, and
-  never in a workflow with a loop.
+  `rollback.attribution` it compensates nothing outside a declared test
+  copy; with it, other users' writes are set aside, and a row both changed
+  is left for a person. A modified-by field knows only the last writer, so
+  a row the run changed that another user then changed reads as theirs; an
+  audit log tells the two apart. A hard delete runs only with
+  `rollback.allow_delete`. Rollback runs on single web runs only (a desktop,
+  RDP or pool run with it on is refused), and never in a workflow with a
+  loop.
 - Duplicate-write compensation (`effects.compensation`) repairs a duplicate
   on its own, only where a deployment has implemented and verified it.
 
