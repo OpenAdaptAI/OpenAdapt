@@ -260,7 +260,17 @@ def apply_verify_config(
                 effect.idempotency_key = ValueExpr(param=key)
                 effect.key_field = key
             else:
-                effect.composite_key = {name: ValueExpr(param=name) for name in key}
+                # The compiled check names its fields in ``match``; a key
+                # field it does not name is a typo or a field it cannot read.
+                missing = [name for name in key if name not in effect.match]
+                if missing:
+                    raise QualifyConfigError(
+                        f"record.duplicate_key names {missing}, which the record "
+                        f"check on {save.id} does not select by "
+                        f"({sorted(effect.match)}); give record.fields, or name "
+                        "fields the check selects by"
+                    )
+                effect.composite_key = {name: effect.match[name] for name in key}
             notes.append({"change": "duplicate_key", "step": save.id})
     if (
         config.minimum_readback is not None

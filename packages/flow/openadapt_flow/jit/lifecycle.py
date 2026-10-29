@@ -881,7 +881,10 @@ def confirm_params(
     name a key the record is unique by only together. Each must be one the
     record check selects by; they become its
     :attr:`Effect.composite_key`, and a run refuses when more than one record
-    carries all of them. A one-item list is the single-parameter key.
+    carries all of them, counting records that were already there. A
+    one-item list is a one-field composite key, which also counts those; a
+    plain string is the single-field key, which under ``count_new_only``
+    counts only new records.
 
     ``accept_params`` must be exactly the task's parameters. They are applied
     by recompiling the recording
@@ -943,7 +946,12 @@ def confirm_params(
             f"the task's {task_params}"
         )
     key_params = _key_params(idempotency_key)
-    if key_params and _set_idempotency_key(bundle, workflow, key_params):
+    if key_params and _set_idempotency_key(
+        bundle,
+        workflow,
+        key_params,
+        composite=not isinstance(idempotency_key, str),
+    ):
         # The key is part of the digest; the recorder is unchanged.
         workflow = _load_workflow(bundle)
         candidate = sign_recorder(program, candidate, key_dir=key_dir)
@@ -1028,9 +1036,12 @@ def _key_params(idempotency_key: Optional[str | Sequence[str]]) -> list[str]:
     return params
 
 
-def _set_idempotency_key(bundle: Path, workflow: Any, params: list[str]) -> bool:
+def _set_idempotency_key(
+    bundle: Path, workflow: Any, params: list[str], *, composite: bool = False
+) -> bool:
     """Key every record check that selects by all of ``params``. True if it
-    changed. One parameter keys one field; several make a composite key."""
+    changed. A single parameter named as a string keys one field; a list
+    makes a composite key."""
 
     from openadapt_flow.runtime.effects import ValueExpr
 
@@ -1058,7 +1069,7 @@ def _set_idempotency_key(bundle: Path, workflow: Any, params: list[str]) -> bool
             field: getattr(expr, "param", None)
             for field, expr in effect.key_selector().items()
         }
-        if current and current != want:
+        if current and (current != want or bool(effect.composite_key) != composite):
             shown = ", ".join(f"{f}={p}" for f, p in current.items())
             raise AdmissionError(
                 f"the record check on {step.id} already has the key {shown}; "
@@ -1075,7 +1086,7 @@ def _set_idempotency_key(bundle: Path, workflow: Any, params: list[str]) -> bool
     if all(effect.key_selector() for effect, _ in bound):
         return False
     for effect, want in bound:
-        if len(want) == 1:
+        if not composite:
             ((field, param),) = want.items()
             effect.idempotency_key = ValueExpr(param=param)
             effect.key_field = field

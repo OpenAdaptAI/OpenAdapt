@@ -658,7 +658,13 @@ class Effect(BaseModel):
     #: whose key fields all match, and the check also REFUTES when more than
     #: one record in the read set carries the key, counting records that
     #: existed before the action as well as new ones (so ``count_new_only``
-    #: cannot hide a second chart for the same person). Use either this or
+    #: cannot hide a second chart for the same person). Those other records
+    #: are compared loosely (case, spacing, a date read back as a datetime),
+    #: the save's own record exactly. The read must therefore cover the key:
+    #: filtered by key fields only, or complete (no row limit, or a paged
+    #: read with a total). A one-field composite key is allowed and differs
+    #: from :attr:`idempotency_key` in counting pre-existing records.
+    #: ``expected_count`` must be 0 or 1. Use either this or
     #: :attr:`idempotency_key`, not both. Bound into the contract hash and
     #: serialized only when set, so existing digests hold.
     composite_key: dict[str, ValueExpr] = Field(default_factory=dict)
@@ -828,8 +834,15 @@ class Effect(BaseModel):
                 "give the duplicate key as idempotency_key (one field) or "
                 "composite_key (several fields), not both"
             )
-        if any(not name for name in self.composite_key):
-            raise ValueError("composite_key field names must not be empty")
+        if any(not name.strip() for name in self.composite_key):
+            raise ValueError("composite_key field names must not be blank")
+        if self.expected_count > 1:
+            # Every one of the expected records would carry the key, so the
+            # duplicate rule would refute each correct save.
+            raise ValueError(
+                "composite_key identifies one record; it cannot be combined "
+                f"with expected_count {self.expected_count}"
+            )
         return self
 
     def key_selector(self) -> dict[str, ValueExpr]:

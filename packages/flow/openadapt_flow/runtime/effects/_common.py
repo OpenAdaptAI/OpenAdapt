@@ -11,6 +11,7 @@ fault-model study uses for ``classify``).
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Optional
@@ -105,11 +106,15 @@ def judge_records(
     key_holders: list[dict[str, Any]] = []
     if effect.composite_key:
         # Several fields together are the key (OpenEMR: lname + fname + DOB).
-        # Records sharing the key are counted across the WHOLE read set,
-        # pre-existing ones included, before any newness filter below.
+        # The save's own record is counted by exact text, so a correct save
+        # is never held. Records that carry the key are then counted across
+        # the WHOLE read set, pre-existing ones included and before any
+        # newness filter below, in the loose form a person would call the
+        # same (case, spacing, a date read back as a datetime). Loose
+        # matching only ever adds holders.
         key = _key_text(effect.composite_key)
         matched = [r for r in matched if record_matches(r, key)]
-        key_holders = [r for r in current if record_matches(r, key)]
+        key_holders = [r for r in current if carries_composite_key(r, effect)]
 
     # Duplicate-write guard (count_new_only): judge only the records that
     # APPEARED since the pre-state -- "exactly expected_count NEW record(s)".
@@ -144,6 +149,56 @@ def _key_text(selector: dict[str, Any]) -> dict[str, Any]:
     """
 
     return {k: (v if getattr(v, "kind", None) else str(v)) for k, v in selector.items()}
+
+
+_WHITESPACE = re.compile(r"\s+")
+_MIDNIGHT = re.compile(r"^(\d{4}-\d{2}-\d{2})[T ]00:00(:00(\.0+)?)?$")
+
+
+def loose_key_form(value: Any) -> Optional[str]:
+    """``value`` in the form two key values are called the same in.
+
+    Text is trimmed, its inner whitespace collapsed to one space and case
+    folded (``"SMITH "`` and ``"Smith"`` agree, as under a case-insensitive
+    database collation). A date or datetime is its ISO date, and so is a
+    date-shaped string at midnight (``1984-03-07 00:00:00``), because a
+    driver may read a DATE column back as a datetime. ``None`` stays
+    ``None`` and agrees with nothing.
+    """
+
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    text = _WHITESPACE.sub(" ", str(value)).strip()
+    midnight = _MIDNIGHT.match(text)
+    if midnight:
+        return midnight.group(1)
+    return text.casefold()
+
+
+def carries_composite_key(record: dict[str, Any], effect: Effect) -> bool:
+    """Whether ``record`` carries ``effect``'s composite key, loosely.
+
+    Used to count the records that share the key, never to count the
+    save's own record (that stays exact). A value with a declared value kind
+    compares in that kind's canonical form instead.
+    """
+
+    if not effect.composite_key:
+        return False
+    for name, want in effect.composite_key.items():
+        observed = record.get(name, None)
+        if getattr(want, "kind", None):
+            if not want.matches(observed):  # type: ignore[attr-defined]
+                return False
+            continue
+        expected = loose_key_form(str(want))
+        if expected is None or loose_key_form(observed) != expected:
+            return False
+    return True
 
 
 def _refute_duplicate_key(

@@ -204,6 +204,86 @@ class SystemOfRecordConfig(BaseModel):
 
 FieldValue = Union[str, ValueExpr]
 
+#: REST query parameters that page or order a read rather than filter it.
+_REST_PAGING = {
+    "_limit",
+    "limit",
+    "_offset",
+    "offset",
+    "page",
+    "_page",
+    "per_page",
+    "page_size",
+    "pagesize",
+    "_count",
+    "count",
+    "_sort",
+    "sort",
+    "order",
+}
+#: Of those, the ones that cap how many records one response returns.
+_REST_LIMITS = {"_limit", "limit", "per_page", "page_size", "pagesize", "_count"}
+_PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_SQL_BINDS = re.compile(r"(?<![:\w]):([A-Za-z_]\w*)|%\(([A-Za-z_]\w*)\)s")
+_SQL_LIMIT = re.compile(r"\b(LIMIT|TOP|FETCH\s+FIRST|ROWNUM)\b", re.IGNORECASE)
+
+
+def composite_key_read_problems(fields: list[str], verifier: Any) -> list[str]:
+    """Why the verifier's read may miss a record that carries the key.
+
+    A composite duplicate key counts records that were already there, so the
+    read must contain every record that could carry it. That holds when the
+    read is filtered by key fields only and is complete. This refuses a REST
+    path or SQL query that filters on another field (a pre-existing chart
+    with another email would be dropped), and a row limit without a way to
+    read every page (REST ``records_total_path`` or ``records_next_path``;
+    SQL has none, so no ``LIMIT``). A literal condition inside a SQL
+    ``WHERE`` cannot be told apart here and is the author's responsibility;
+    other verifier kinds are not checked.
+    """
+
+    from urllib.parse import parse_qsl, urlsplit
+
+    keys = set(fields)
+    problems: list[str] = []
+    kind = getattr(verifier, "kind", None)
+    if kind == "rest":
+        parts = urlsplit(verifier.records_path)
+        names = [name for name, _ in parse_qsl(parts.query, keep_blank_values=True)]
+        filters = sorted(
+            {n for n in names if n not in keys and n.lower() not in _REST_PAGING}
+            | {p for p in _PLACEHOLDER.findall(parts.path) if p not in keys}
+        )
+        if filters:
+            problems.append(
+                "a list record.duplicate_key needs a read filtered by key fields "
+                f"only; verifier.records_path also filters by {filters}, which "
+                "drops an existing record with the same key"
+            )
+        limited = sorted(n for n in names if n.lower() in _REST_LIMITS)
+        if limited and not (verifier.records_total_path or verifier.records_next_path):
+            problems.append(
+                "a list record.duplicate_key needs the whole read; "
+                f"verifier.records_path sets {limited} without "
+                "records_total_path or records_next_path"
+            )
+    elif kind == "sql" and verifier.sql_query:
+        binds = {a or b for a, b in _SQL_BINDS.findall(verifier.sql_query)}
+        binds |= set(verifier.sql_query_params)
+        filters = sorted(binds - keys)
+        if filters:
+            problems.append(
+                "a list record.duplicate_key needs a read filtered by key fields "
+                f"only; verifier.sql_query also filters by {filters}, which "
+                "drops an existing record with the same key"
+            )
+        if _SQL_LIMIT.search(verifier.sql_query):
+            problems.append(
+                "a list record.duplicate_key needs the whole read; "
+                "verifier.sql_query limits its rows"
+            )
+    return problems
+
 
 class RecordConfig(BaseModel):
     """What the save writes, mapped onto the run's inputs.
@@ -221,7 +301,9 @@ class RecordConfig(BaseModel):
     fields: dict[str, FieldValue] = Field(default_factory=dict)
     #: The record field that must be unique per write (idempotency key), or a
     #: list of fields that are unique together, such as OpenEMR's
-    #: ``[lname, fname, DOB]``. A one-item list reads as the single field.
+    #: ``[lname, fname, DOB]``. A list (even of one field) is a composite key:
+    #: it also counts records that were already there, so the verifier's read
+    #: must cover the key (see :func:`composite_key_read_problems`).
     duplicate_key: Optional[Union[str, list[str]]] = None
     expected_count: int = Field(default=1, ge=1)
     timeout_s: float = Field(default=5.0, gt=0)
@@ -241,12 +323,20 @@ class RecordConfig(BaseModel):
     ) -> Optional[Union[str, list[str]]]:
         if not isinstance(value, list):
             return value
-        if not value or any(not name for name in value):
+        if not value or any(not name.strip() for name in value):
             raise ValueError("record.duplicate_key must name at least one field")
         if len(set(value)) != len(value):
             raise ValueError("record.duplicate_key names a field twice")
-        # One field is the single-field key, so its contract is unchanged.
-        return value[0] if len(value) == 1 else list(value)
+        return list(value)
+
+    @model_validator(mode="after")
+    def _composite_key_count(self) -> "RecordConfig":
+        if isinstance(self.duplicate_key, list) and self.expected_count > 1:
+            raise ValueError(
+                "a list record.duplicate_key identifies one record; it cannot "
+                f"be combined with expected_count {self.expected_count}"
+            )
+        return self
 
     @property
     def duplicate_key_fields(self) -> list[str]:
@@ -396,6 +486,12 @@ class VerifyConfig(BaseModel):
             name not in record.fields for name in record.duplicate_key_fields
         ):
             raise ValueError("record.duplicate_key must name fields in record.fields")
+        if isinstance(record.duplicate_key, list):
+            problems = composite_key_read_problems(
+                record.duplicate_key, self.verifier.verifier
+            )
+            if problems:
+                raise ValueError("; ".join(problems))
         return self
 
     def resolve_path(self, value: str) -> Path:

@@ -811,6 +811,17 @@ def test_several_named_parameters_become_a_composite_key(tmp_path: Path) -> None
     assert dup.verdict.value == "refuted"
 
 
+def test_a_one_item_list_is_a_one_field_composite_key(tmp_path: Path) -> None:
+    jit = _claim_jit(tmp_path)
+    record = _confirm(jit, ["claim_no"])
+    assert record["idempotency_key"] == [
+        {"step_id": "step_001", "fields": ["claim_no"], "params": ["claim_no"]}
+    ]
+    effect = Workflow.load(jit.bundle_dir).steps[1].effects[0]
+    assert effect.idempotency_key is None
+    assert set(effect.composite_key) == {"claim_no"}
+
+
 def test_a_composite_key_needs_every_parameter_selected(tmp_path: Path) -> None:
     from openadapt_flow.runtime.effects import ValueExpr
 

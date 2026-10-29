@@ -132,6 +132,58 @@ def test_a_missing_write_still_refutes_and_a_driver_date_matches() -> None:
     assert found.verdict is Verdict.CONFIRMED, found.reason
 
 
+@pytest.mark.parametrize(
+    "prior",
+    [
+        {"lname": "SMITH", "fname": "ADA"},
+        {"lname": "Smith ", "fname": "Ada"},
+        {"lname": "Smith", "fname": " Ada"},
+        {"lname": "Smith", "fname": "Ada  Mae", "_want_fname": "Ada Mae"},
+    ],
+    ids=["upper-case", "trailing-space", "leading-space", "doubled-space"],
+)
+def test_a_duplicate_differing_only_in_case_or_spacing_refutes(prior: dict) -> None:
+    want_fname = prior.pop("_want_fname", "Ada")
+    existing = _patient(1, DOB="1984-03-07", email="", **prior)
+    saved = _patient(2, lname="Smith", fname=want_fname, email="new@example.test")
+    effect = _key_effect(count_new_only=True).resolve(
+        _params(lname="Smith", fname=want_fname, email="new@example.test")
+    )
+    verdict = judge_records(
+        effect, _state([existing]), [existing, saved], substrate="sql"
+    )
+    assert verdict.verdict is Verdict.REFUTED, verdict.reason
+    assert "2 records share the duplicate key" in verdict.reason
+
+
+def test_a_driver_datetime_birth_date_counts_as_the_same_date() -> None:
+    from datetime import datetime
+
+    existing = {**_patient(1, email=""), "DOB": datetime(1984, 3, 7, 0, 0)}
+    saved = _patient(2, email="new@example.test")
+    effect = _key_effect(count_new_only=True).resolve(_params(email="new@example.test"))
+    verdict = judge_records(
+        effect, _state([existing]), [existing, saved], substrate="sql"
+    )
+    assert verdict.verdict is Verdict.REFUTED, verdict.reason
+    # Read back as text, the same datetime is also the same date.
+    text = {**existing, "DOB": "1984-03-07 00:00:00"}
+    verdict = judge_records(effect, _state([text]), [text, saved], substrate="sql")
+    assert verdict.verdict is Verdict.REFUTED, verdict.reason
+
+
+def test_the_saved_record_itself_is_still_compared_exactly() -> None:
+    # Loose matching never makes a save's own record count: a save whose
+    # stored name differs in case from the run's value is not confirmed.
+    saved = _patient(2, lname="SMITH", fname="Ada", email="new@example.test")
+    effect = _key_effect(count_new_only=True).resolve(
+        _params(lname="Smith", email="new@example.test")
+    )
+    verdict = judge_records(effect, _state([]), [saved], substrate="sql")
+    assert verdict.verdict is Verdict.REFUTED
+    assert verdict.observed_count == 0
+
+
 def test_sql_verifier_refutes_a_second_chart(tmp_path: Path) -> None:
     path = tmp_path / "openemr.db"
     conn = sqlite3.connect(path)
@@ -243,6 +295,8 @@ def test_composite_key_is_bound_into_the_contract() -> None:
             {"idempotency_key": ValueExpr(param="email"), "key_field": "email"},
             "not both",
         ),
+        ({"expected_count": 2}, "expected_count 2"),
+        ({"composite_key": {" ": ValueExpr(param="lname")}}, "blank"),
     ],
 )
 def test_composite_key_refuses_unclear_contracts(change: dict, message: str) -> None:
@@ -271,6 +325,18 @@ def test_policy_accepts_a_composite_key() -> None:
     )
     assert effect_has_idempotency_key(step)
     step.effects = [_key_effect(composite_key={})]
+    assert not effect_has_idempotency_key(step)
+    # A key with an empty value is a key in name only.
+    step.effects = [_key_effect(composite_key={"lname": "", "fname": "Ada"})]
+    assert not effect_has_idempotency_key(step)
+    step.effects = [
+        Effect(
+            kind=EffectKind.RECORD_WRITTEN,
+            match={"email": ValueExpr(param="email")},
+            idempotency_key=ValueExpr(literal="  "),
+            key_field="email",
+        )
+    ]
     assert not effect_has_idempotency_key(step)
 
 
@@ -309,11 +375,29 @@ def test_verify_yaml_list_key_expands_to_a_composite_key() -> None:
     assert written.composite_key == {name: ValueExpr(param=name) for name in KEY}
 
 
-def test_verify_yaml_one_item_list_is_the_single_field_key() -> None:
+def test_verify_yaml_one_item_list_is_a_one_field_composite_key() -> None:
     listed = record_effects(parse_verify_config(_verify_yaml(["lname"]), env={}))
     plain = record_effects(parse_verify_config(_verify_yaml("lname"), env={}))
-    assert [e.contract_hash() for e in listed] == [e.contract_hash() for e in plain]
-    assert listed[0].composite_key == {}
+    assert listed[0].composite_key == {"lname": ValueExpr(param="lname")}
+    assert listed[0].idempotency_key is None
+    assert plain[0].idempotency_key == ValueExpr(param="lname")
+    assert listed[0].contract_hash() != plain[0].contract_hash()
+
+    # Unlike the single-field key, it counts a record that was already there.
+    existing = _patient(1, lname="Quill", email="")
+    saved = _patient(2, lname="Quill", fname="Bo", email="")
+    params = _params(fname="Bo", email="")
+    one = listed[0].model_copy(update={"count_new_only": True}).resolve(params)
+    single = plain[0].model_copy(update={"count_new_only": True}).resolve(params)
+    rows = [existing, saved]
+    assert (
+        judge_records(one, _state([existing]), rows, substrate="sql").verdict
+        is Verdict.REFUTED
+    )
+    assert (
+        judge_records(single, _state([existing]), rows, substrate="sql").verdict
+        is Verdict.CONFIRMED
+    )
 
 
 @pytest.mark.parametrize(
@@ -327,6 +411,69 @@ def test_verify_yaml_one_item_list_is_the_single_field_key() -> None:
 def test_verify_yaml_refuses_a_bad_list_key(key: list, message: str) -> None:
     with pytest.raises(QualifyConfigError, match=message):
         parse_verify_config(_verify_yaml(key), env={})
+
+
+def test_verify_yaml_refuses_a_list_key_with_more_than_one_record() -> None:
+    with pytest.raises(QualifyConfigError, match="expected_count 2"):
+        parse_verify_config(_verify_yaml(KEY, expected_count=2), env={})
+    # The single-field key is unchanged.
+    parse_verify_config(_verify_yaml("lname", expected_count=2), env={})
+
+
+@pytest.mark.parametrize(
+    ("verifier", "message"),
+    [
+        ({"records_path": "/apis/default/api/patient?email={email}"}, "email"),
+        ({"records_path": "/apis/default/api/patient?_limit=1000"}, "_limit"),
+        (
+            {
+                "kind": "sql",
+                "sql_query": "SELECT * FROM patient_data WHERE email = :email",
+            },
+            "email",
+        ),
+        (
+            {"kind": "sql", "sql_query": "SELECT * FROM patient_data LIMIT 1000"},
+            "limits its rows",
+        ),
+    ],
+)
+def test_verify_yaml_refuses_a_read_that_may_miss_the_key(
+    verifier: dict, message: str
+) -> None:
+    data = _verify_yaml(KEY)
+    data["verifier"] = {**data["verifier"], **verifier}
+    with pytest.raises(QualifyConfigError, match=message):
+        parse_verify_config(data, env={})
+    # The single-field key keeps its old rules.
+    data["record"]["duplicate_key"] = "lname"
+    parse_verify_config(data, env={})
+
+
+@pytest.mark.parametrize(
+    "verifier",
+    [
+        {"records_path": "/apis/default/api/patient?lname={lname}"},
+        {
+            "records_path": "/apis/default/api/patient?lname={lname}&_limit=100",
+            "records_total_path": "meta.total",
+        },
+        {
+            "records_path": "/apis/default/api/patient?_limit=100",
+            "records_next_path": "links.next",
+        },
+        {
+            "kind": "sql",
+            "sql_query": (
+                "SELECT * FROM patient_data WHERE lname = :lname AND DOB = :DOB"
+            ),
+        },
+    ],
+)
+def test_verify_yaml_accepts_a_read_that_covers_the_key(verifier: dict) -> None:
+    data = _verify_yaml(KEY)
+    data["verifier"] = {**data["verifier"], **verifier}
+    parse_verify_config(data, env={})
 
 
 def test_verify_yaml_key_on_compiled_checks() -> None:
@@ -343,7 +490,7 @@ def test_verify_yaml_key_on_compiled_checks() -> None:
         effects=[
             Effect(
                 kind=EffectKind.RECORD_WRITTEN,
-                match={"lname": ValueExpr(param="lname")},
+                match={name: ValueExpr(param=name) for name in KEY},
             )
         ],
     )
@@ -364,6 +511,15 @@ def test_verify_yaml_key_on_compiled_checks() -> None:
         name: ValueExpr(param=name) for name in KEY
     }
     assert {"change": "duplicate_key", "step": "s2"} in notes
+
+    # A key field the compiled check does not select by is named, not bound.
+    save.effects = [
+        Effect(
+            kind=EffectKind.RECORD_WRITTEN, match={"lname": ValueExpr(param="lname")}
+        )
+    ]
+    with pytest.raises(QualifyConfigError, match=r"\['fname', 'DOB'\]"):
+        apply_verify_config(workflow, config)
 
 
 def _openemr_db(path: Path) -> sqlite3.Connection:
@@ -439,3 +595,33 @@ def test_verify_run_judges_an_agent_save_by_the_composite_key(
     assert receipt["outcome"] == outcome, receipt
     if outcome != "verified":
         assert receipt["checked"]["delta"] == "refuted"
+
+
+def test_verify_run_refuses_a_read_that_may_miss_the_key(tmp_path: Path) -> None:
+    from openadapt_flow.verify_run import VerifyRunError
+    from openadapt_flow.verify_run import (
+        parse_verify_config as parse_verify_run_config,
+    )
+
+    with pytest.raises(VerifyRunError, match="email"):
+        parse_verify_run_config(
+            {
+                "schema_version": "openadapt.verify/v1",
+                "verifier": {
+                    "kind": "sql",
+                    "sqlite_database": str(tmp_path / "openemr.db"),
+                    "sql_query": "SELECT * FROM patient_data WHERE email = :email",
+                },
+                "record": {
+                    "name": "patient",
+                    "match": ["email"],
+                    "duplicate_key": KEY,
+                    "fields": {
+                        "email": "email",
+                        "lname": "lname",
+                        "fname": "fname",
+                        "DOB": "DOB",
+                    },
+                },
+            }
+        )
