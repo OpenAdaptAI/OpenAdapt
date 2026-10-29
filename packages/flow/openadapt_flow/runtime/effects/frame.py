@@ -199,6 +199,15 @@ class FrameSpec(BaseModel):
                 "audit_read attribution compares log entries with records by "
                 "identity_field; set it"
             )
+        key = self.attribution.record_key if self.attribution is not None else None
+        for side in self.side_records if key else ():
+            if side.link_field != key or side.of_field != key:
+                # Otherwise a side row's record_key and its link can name
+                # different records, and either can excuse the other's entries.
+                raise ValueError(
+                    f"with record_key {key!r}, a side record links by it: set "
+                    f"link_field and of_field to {key!r}"
+                )
         return self
 
     def digest(self) -> str:
@@ -523,11 +532,8 @@ def judge_frame(
     # Side records: the links each new declared record gives its side rows.
     side_links: list[set[str]] = []
     side_found: list[dict[str, int]] = []
-    #: Each link's parent ``ref_of`` value: a side row must name the same.
-    side_parent: list[dict[str, Any]] = []
     for side in spec.side_records:
         links: set[str] = set()
-        parents: dict[str, Any] = {}
         before_state, after_records = slices.get(side.of_surface, (None, None))
         if before_state is not None and after_records is not None:
             sels = selectors_for(side.of_surface)
@@ -546,9 +552,7 @@ def judge_frame(
                     value = record.get(side.of_field)
                     if value not in (None, "") and str(value) not in taken:
                         links.add(str(value))
-                        parents[str(value)] = ref_of(key_of(record), None, record)
         side_links.append(links)
-        side_parent.append(parents)
         side_found.append({link: 0 for link in links})
 
     for name, (before_state, after_records) in slices.items():
@@ -647,13 +651,6 @@ def judge_frame(
                         for i, side in enumerate(spec.side_records)
                         if side.surface == name
                         and str(after.get(side.link_field)) in side_links[i]
-                        # Filed under its parent's record_key (or none), not another's.
-                        and (
-                            attribution is None
-                            or not attribution.record_key
-                            or ref
-                            in (None, side_parent[i][str(after.get(side.link_field))])
-                        )
                     ),
                     None,
                 )
@@ -712,9 +709,11 @@ def judge_frame(
         else:
             if attribution.record_key:  # type: ignore[union-attr]
                 # Compare like with like: entries name ``record_key`` values.
+                # Only records that already refute: another user's concurrent
+                # change to a patient never excuses the bot's own entry for it.
                 moved = {
                     r
-                    for c in collateral + concurrent
+                    for c in collateral
                     if (r := refs.get((c.surface, str(c.key)))) is not None
                 }
             else:
