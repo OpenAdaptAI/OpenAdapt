@@ -282,6 +282,9 @@ class ArmA(AgentToolsArm):
 
         return None
 
+    def _on_restart(self) -> None:
+        """A keeps nothing across the restart but the agent's own reading."""
+
     def _on_finish(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
         """A trusts its own read-back: the claim stands."""
 
@@ -315,6 +318,7 @@ class ArmA(AgentToolsArm):
                 except Restart:
                     restarts += 1
                     self._restarted = True
+                    self._on_restart()
                     trace.append({"restart": True, "t": round(time.time(), 2)})
                     self.session.close()
                     self._new_session(env)
@@ -390,6 +394,9 @@ class ArmB(ArmA):
         self._contract: Any = None
         self._before: Any = None
         self._params: dict[str, str] = {}
+        self._pending: Any = None
+        self.recheck_queue: list[dict[str, Any]] = []
+        self.late_path = Path(options.get("late_path", "late.jsonl"))
 
     def describe(self) -> dict[str, Any]:
         import hashlib
@@ -418,15 +425,48 @@ class ArmB(ArmA):
             self._contract = Contract.load(str(self.contract_path))
         return self._contract
 
+    # -- run 2: begin_write / verify_write with the durable ledger (#1643),
+    # and the late recheck (#1639) -------------------------------------------
+
+    def _run2(self) -> bool:
+        return bool(getattr(self.contract().frame, "database", None)
+                    and getattr(self.contract().frame.database, "recheck_after_s", None))
+
+    def _ledger(self) -> Any:
+        import os
+
+        from openadapt_flow.write_ledger import FileLedger
+
+        return FileLedger(Path(os.environ["INCREMENTAL_VALUE_LEDGER_DIR"]))
+
+    def _actor(self) -> Any:
+        from openadapt_flow.verifier import Actor
+
+        return Actor("agent", "openadapt_actor")
+
     def _before_item(self, item: WorkItem, evidence: Path) -> Optional[str]:
         from openadapt_flow.verifier import BaselineUnreadable, capture
 
         self._warm_tokens()
         self._params = normalise(item.params)
+        self._item_id = item.item_id
         t0 = time.time()
         self._fresh_token()
         # OpenEMR writes its OAuth bookkeeping after the token response.
         time.sleep(2.0)
+        if self._run2():
+            from openadapt_flow.verifier import WriteBlocked, begin_write
+
+            try:
+                self._pending = begin_write(
+                    self.contract(), self._params, actor=self._actor(),
+                    ledger=self._ledger(), write_key=item.item_id, workdir=evidence,
+                )
+            except WriteBlocked as exc:
+                self._pending = None
+                return f"OpenAdapt: the write can't start ({exc}); nothing was written"
+            self._capture_s = round(time.time() - t0, 2)
+            return None
         try:
             self._before = capture(self.contract(), self._params)
         except BaselineUnreadable as exc:
@@ -437,7 +477,109 @@ class ArmB(ArmA):
         self._capture_s = round(time.time() - t0, 2)
         return None
 
+    def _on_restart(self) -> None:
+        """The adapter process died: everything it held in memory is gone,
+        including whether its save request was sent. Only the ledger
+        remembers the open attempt."""
+
+        if self._run2() and getattr(self, "_pending", None) is not None:
+            self._pending.release()
+            self._pending = None
+            self.saves_sent = 0
+            self._restart_lost = True
+
     def _on_finish(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
+        if self._run2():
+            return self._on_finish_2(claim, item, evidence)
+        return self._on_finish_1(claim, item, evidence)
+
+    def _on_finish_2(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
+        from openadapt_flow.verifier import (
+            AlreadyWritten,
+            WriteBlocked,
+            begin_write,
+            verify_write,
+        )
+
+        said_saved = claim is not None and claim.get("result") == "SAVED"
+        self._fresh_token()
+        result = None
+        if getattr(self, "_pending", None) is None:
+            # After a restart: a fresh adapter asks the ledger, which
+            # reconciles the open attempt against its own baseline.
+            try:
+                p = begin_write(self.contract(), self._params, actor=self._actor(),
+                                ledger=self._ledger(), write_key=item.item_id, workdir=evidence / "after-restart")
+            except AlreadyWritten as exc:
+                return self._verdict_2(dict(exc.result), said_saved, evidence, via="ledger")
+            except WriteBlocked as exc:
+                return {"claimed": "stopped", "status": f"OpenAdapt: held by the ledger ({exc})",
+                        "verifier": {"ledger": str(exc)[:300]}}
+            # Nothing open: this begin is a fresh attempt the agent never used.
+            result = verify_write(p, write_attempted=False)
+        else:
+            attempted = said_saved or self.saves_sent > 0
+            result = verify_write(self._pending, write_attempted=attempted)
+            self._pending = None
+        out = self._verdict_2(result.to_dict(), said_saved, evidence, via="verify_write")
+        if result.verified and result.recheck is not None:
+            self.recheck_queue.append({"item_id": item.item_id, "state_path": str(result.recheck.path),
+                                       "due_at": result.recheck_due_at, "params": dict(self._params)})
+        return out
+
+    def _verdict_2(self, r: dict[str, Any], said_saved: bool, evidence: Path, *, via: str) -> dict[str, Any]:
+        (evidence / "result.json").write_text(json.dumps(r, indent=1, default=str)[:400_000])
+        outcome = str(r.get("outcome") or "")
+        v = {"outcome": outcome, "via": via, "reasons": list(r.get("reasons") or [])[:6],
+             "capture_s": getattr(self, "_capture_s", None), "recheck_due_at": r.get("recheck_due_at")}
+        if outcome == "CONFIRMED":
+            return {"claimed": "done", "status": f"OpenAdapt: confirmed ({via})", "verifier": v}
+        if outcome == "REFUTED" and r.get("retry_safe") and not said_saved:
+            reason = "nothing moved"
+            return {"claimed": "stopped", "status": f"RESULT: NOT SAVED (OpenAdapt: {reason})", "verifier": v}
+        return {"claimed": "stopped", "status": f"OpenAdapt: {outcome}: {'; '.join(v['reasons'])[:300]}", "verifier": v}
+
+    def after_item(self, ctx: Ctx, result: ItemResult) -> Optional[dict[str, Any]]:
+        """Run every recheck that is due, at this item boundary, when the
+        harness has let the item's background writes finish. In blocking
+        mode, wait for this item's own recheck first."""
+
+        import os
+
+        if not self._run2():
+            return None
+        if os.environ.get("INCREMENTAL_VALUE_RECHECK_MODE", "blocking") == "blocking":
+            self.run_rechecks(wait=True)
+        else:
+            self.run_rechecks(wait=False)
+        return None
+
+    def run_rechecks(self, *, wait: bool) -> None:
+        from openadapt_flow.verifier import RecheckNotDue, RecheckState, recheck
+
+        self._fresh_token()
+        remaining = []
+        states = [(q, RecheckState.load(Path(q["state_path"]), params=q["params"])) for q in self.recheck_queue]
+        for i, (q, state) in enumerate(states):
+            later = [s for _, s in states[i + 1 :]]
+            try:
+                late = recheck(self.contract(), state, params=q["params"], actor=self._actor(),
+                               excused_by=later, wait=wait)
+            except RecheckNotDue:
+                remaining.append(q)
+                continue
+            row = {"item_id": q["item_id"], "outcome": late.outcome, "reasons": list(late.reasons)[:6],
+                   "due_at": late.due_at, "read_at": late.read_at, "excused": late.excused}
+            with self.late_path.open("a") as fh:
+                fh.write(json.dumps(row, default=str) + "\n")
+        self.recheck_queue = remaining
+
+    def close(self) -> None:
+        if getattr(self, "recheck_queue", None):
+            self.run_rechecks(wait=True)
+        super().close()
+
+    def _on_finish_1(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
         from openadapt_flow.verifier import Actor, VerifierError, verify_write
 
         said_saved = claim is not None and claim.get("result") == "SAVED"

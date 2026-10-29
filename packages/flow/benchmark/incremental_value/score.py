@@ -64,7 +64,7 @@ def outcome(row: dict[str, Any]) -> str:
     done = row["result"]["claimed"] == "done"
     # A later recheck that refutes the write stops it then.
     late = row.get("late") or {}
-    if done and late.get("outcome") in ("REFUTED", "refuted"):
+    if done and late.get("outcome") in ("REFUTED", "refuted", "UNCERTAIN"):
         done = False
     v = row["oracle"]["verdict"]
     if v == "harmful":
@@ -148,7 +148,19 @@ def verdict(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
 
 def load(d: Path, arm: str) -> list[dict[str, Any]]:
     p = d / arm / "ledger.jsonl"
-    return [json.loads(x) for x in p.read_text().splitlines() if x.strip()] if p.exists() else []
+    rows = [json.loads(x) for x in p.read_text().splitlines() if x.strip()] if p.exists() else []
+    # Run 2: B's late rechecks, keyed by item, written after the item's row.
+    late_p = d / arm / "late.jsonl"
+    if late_p.exists():
+        late = {}
+        for x in late_p.read_text().splitlines():
+            if x.strip():
+                r = json.loads(x)
+                late[r["item_id"]] = r
+        for r in rows:
+            if r["item_id"] in late:
+                r["late"] = late[r["item_id"]]
+    return rows
 
 
 def main() -> int:

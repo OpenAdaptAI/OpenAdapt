@@ -27,8 +27,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
-from lifecycle.arm import Env, OperatorDecision, OperatorRequest
 from lifecycle.apps import OpenEMRApp
+from lifecycle.arm import Env, OperatorDecision, OperatorRequest
 
 from . import faults, workload
 from .oracle import DbOracle, judge, load_form_defaults, root_sql
@@ -229,6 +229,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     out = a.out / arm.name
     out.mkdir(parents=True, exist_ok=True)
     ledger = out / "ledger.jsonl"
+    # B's late rechecks land after their item's row: one line per recheck.
+    arm.late_path = out / "late.jsonl"
     done = set()
     if ledger.exists():
         done = {json.loads(ln)["item_id"] for ln in ledger.read_text().splitlines() if ln.strip()}
@@ -304,7 +306,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             quiet = ctx.wait_background(ctx.max_delay(hooks) + 120)
             # B's later recheck runs at the time its contract declares, not
             # when the harness knows the background writes are done.
-            late = arm.after_item(ctx, res) if res is not None and infra is None else None
+            arm.after_item(ctx, res) if res is not None and infra is None else None
             time.sleep(3)
             diffs = oracle.advance()
             verdict = judge(oracle, diffs, intended=ctx.intended, person=item.person, legit=ctx.legit,
@@ -323,7 +325,6 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "background_done": quiet,
                 "legit_rows": len(ctx.legit.keys),
                 "faults_landed": ctx.faults_landed,
-                "late": late,
                 "infra_error": infra,
                 "result": asdict(res) if res is not None else None,
                 "operator_requests": list(rec.requests),
