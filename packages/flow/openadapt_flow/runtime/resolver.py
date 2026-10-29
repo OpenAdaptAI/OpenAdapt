@@ -22,6 +22,12 @@ implemented here are:
    font-tolerant match compares the label under OCR's glyph-confusion classes
    (``1``/``l``, ``0``/``O``, ``rn``/``m``), and only inside the padded local
    region, where it must be the single candidate.
+   On a pixel surface with the local grounding model installed
+   (:mod:`openadapt_flow.runtime.local_grounder`), the model runs here, under
+   the ``grounder`` rung name: it lists every place that looks like the
+   recorded crop at any scale or theme, and the resolver keeps one only when
+   it is the sole look-alike or the retained landmarks single it out. Any
+   other count is a typed refusal.
 4. ``geometry``         — locate landmark text and offset by
    relation/distance to estimate the target point.
 5. ``grounder``         — optional injected model-backed grounding.
@@ -43,6 +49,7 @@ import difflib
 import hashlib
 import json
 import math
+import re
 import struct
 import time
 from typing import Any, Optional
@@ -62,6 +69,7 @@ from openadapt_flow.vision.match import Match
 from openadapt_flow.vision.ocr import (
     AmbiguousOcrMatchError,
     ContradictoryOcrEvidenceError,
+    OcrResolutionRefused,
 )
 
 RUNG_ORDER: tuple[Rung, ...] = (
@@ -158,6 +166,7 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         "ocr_candidates": "full-frame-enumeration-then-local-region-filter",
         "identity_armed_template_landmark_binding": "corroborate-and-snap",
         "ocr_font_tolerant": "glyph-confusion-canonical-unique-in-local-region",
+        "ocr_click_point": "row-locator-offset-scaled-by-text-width",
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -475,6 +484,35 @@ def _select_ocr_candidate(
     )
 
 
+def _ocr_click_point(anchor: Anchor, match: Any) -> Point:
+    """Where to act after OCR found the anchor's text.
+
+    Usually the text is the control's own label and the click lands on it.
+    A marked-row anchor is different: the compiler keeps a unique line of the
+    row (the record key) as the locator and records the click elsewhere in
+    the row, outside the locator's region (an edit icon at the row's end).
+    The template rungs apply that offset; OCR must too, or it clicks the key
+    text instead of the control. The offset scales with the text's width,
+    which OCR measures within about 1% between renders of the same text.
+    """
+    point = (int(match.point[0]), int(match.point[1]))
+    if _point_in_region(anchor.click_point, anchor.region):
+        return point
+    ax, ay, aw, ah = anchor.region
+    region = tuple(getattr(match, "region", ()) or ())
+    scale = 1.0
+    if len(region) == 4 and aw > _LOCATOR_PAD * 2:
+        scale = float(region[2]) / float(aw - _LOCATOR_PAD * 2)
+        scale = min(max(scale, 0.5), 2.5)
+    dx = anchor.click_point[0] - (ax + aw / 2.0)
+    dy = anchor.click_point[1] - (ay + ah / 2.0)
+    return (int(round(point[0] + dx * scale)), int(round(point[1] + dy * scale)))
+
+
+# The compiler pads a marked-row locator's OCR box by this much on each side.
+_LOCATOR_PAD = 4
+
+
 def _font_tolerant_ocr_match(
     anchor: Anchor,
     screen_png: bytes,
@@ -633,6 +671,132 @@ def _landmark_target_evidence(
     if not estimates:
         return None, ambiguous
     return _select_geometry_estimates(anchor, estimates, confidences), ambiguous
+
+
+class LookAlikeTargetsRefused(OcrResolutionRefused):
+    """The grounding model saw several look-alikes of the target and the
+    retained landmarks did not single one out. A halt, never a pick."""
+
+
+_LATIN_ALNUM = re.compile(r"[A-Za-z0-9]")
+
+
+def _is_text_label(text: Optional[str]) -> bool:
+    """Whether the recorded OCR text reads like a label rather than OCR's
+    rendering of an icon glyph (``"日 日"`` for two floppy-disk icons)."""
+    return bool(text) and len(_LATIN_ALNUM.findall(text or "")) >= 2
+
+
+def _overlap(a: Region, b: Region) -> float:
+    """Intersection area over the smaller box's area."""
+    ix = max(0, min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]))
+    iy = max(0, min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]))
+    smaller = min(a[2] * a[3], b[2] * b[3])
+    return (ix * iy) / smaller if smaller > 0 else 0.0
+
+
+#: Look-alikes that overlap each other by more than this share the same
+#: pixels: the crop is self-similar (a stretch of blank input box) and
+#: cannot be located by its look.
+_SELF_SIMILAR_OVERLAP = 0.25
+#: A landmark supports a candidate when it puts the click within this share
+#: of the candidate's short side (8 px at least).
+_LANDMARK_TOLERANCE_SHARE = 0.3
+
+
+def _model_grounded(
+    anchor: Anchor,
+    screen_png: bytes,
+    vision: Any,
+    locate_anchor: Any,
+    template_png: bytes,
+) -> Optional[tuple[Point, Region, float]]:
+    """Resolve a pixel target with the local grounding model, or refuse.
+
+    The model returns every look-alike of the recorded crop. The rung
+    abstains (returns None, and the ladder goes on as without it) when:
+
+    - the target has a text label: the OCR rungs above already looked for it
+      and missed, so a model candidate could not be corroborated;
+    - nothing looks like the crop;
+    - the look-alikes overlap each other: the crop is self-similar (most of
+      it is blank input box) and its look cannot say where it is.
+
+    Otherwise each landmark the compiler kept is located by OCR and predicts
+    the click, with its recorded offset scaled by the candidate's size. A
+    landmark supports a candidate when the prediction is within 30% of the
+    candidate's short side.
+
+    - One look-alike: kept unless a located landmark disagrees with it
+      (:class:`ContradictoryOcrEvidenceError`).
+    - Several: kept only when exactly one is supported by every located
+      landmark (at least one located); else :class:`LookAlikeTargetsRefused`.
+
+    Returns ``(click_point, matched_region, score)`` or None (abstain).
+    """
+    if _is_text_label(anchor.ocr_text):
+        return None
+    candidates = list(locate_anchor(screen_png, template_png))
+    if not candidates:
+        return None
+    for index, first in enumerate(candidates):
+        for second in candidates[index + 1 :]:
+            if (
+                _overlap(tuple(first.region), tuple(second.region))
+                > _SELF_SIMILAR_OVERLAP
+            ):
+                return None
+
+    located: list[tuple[Point, Landmark]] = []
+    for landmark in anchor.landmarks:
+        if landmark.dx_px is None or landmark.dy_px is None:
+            continue
+        try:
+            match = _find_landmark_text(vision, screen_png, landmark)
+        except AmbiguousOcrMatchError:
+            continue
+        if match is not None:
+            located.append(((int(match.point[0]), int(match.point[1])), landmark))
+
+    def click(candidate: Any) -> Point:
+        return _scaled_click_point(anchor, tuple(candidate.region))
+
+    def supported_by(candidate: Any, landmark_point: Point, landmark: Landmark) -> bool:
+        assert landmark.dx_px is not None and landmark.dy_px is not None
+        scale = float(candidate.scale)
+        cx, cy = click(candidate)
+        ex = landmark_point[0] + landmark.dx_px * scale
+        ey = landmark_point[1] + landmark.dy_px * scale
+        _x, _y, width, height = candidate.region
+        tolerance = max(8.0, _LANDMARK_TOLERANCE_SHARE * min(width, height))
+        return math.hypot(ex - cx, ey - cy) <= tolerance
+
+    if len(candidates) == 1:
+        only = candidates[0]
+        if not all(supported_by(only, point, landmark) for point, landmark in located):
+            raise ContradictoryOcrEvidenceError(
+                "a located landmark places the model-grounded target elsewhere"
+            )
+        return click(only), tuple(only.region), float(only.score)
+
+    supported = (
+        [
+            candidate
+            for candidate in candidates
+            if all(
+                supported_by(candidate, point, landmark) for point, landmark in located
+            )
+        ]
+        if located
+        else []
+    )
+    if len(supported) == 1:
+        chosen = supported[0]
+        return click(chosen), tuple(chosen.region), float(chosen.score)
+    raise LookAlikeTargetsRefused(
+        f"the grounding model found {len(candidates)} look-alikes of the target "
+        f"and retained landmarks single out {len(supported)}"
+    )
 
 
 def resolve(
@@ -903,7 +1067,7 @@ def resolve(
                     screen_png,
                     vision,
                 )
-                point = (int(match.point[0]), int(match.point[1]))
+                point = _ocr_click_point(anchor, match)
                 resolution = Resolution(
                     rung="ocr",
                     point=point,
@@ -929,7 +1093,7 @@ def resolve(
                 raise
             if match is None:
                 continue
-            point = (int(match.point[0]), int(match.point[1]))
+            point = _ocr_click_point(anchor, match)
             resolution = Resolution(
                 rung="ocr",
                 point=point,
@@ -953,12 +1117,36 @@ def resolve(
         if tolerant is not None:
             resolution = Resolution(
                 rung="ocr",
-                point=(int(tolerant.point[0]), int(tolerant.point[1])),
+                point=_ocr_click_point(anchor, tolerant),
                 confidence=float(tolerant.confidence),
                 elapsed_ms=elapsed_ms(),
                 resolution_evidence_regions=(full_frame_region,),
             )
             return resolution, tolerant.region
+
+    # Rung 3b: the local grounding model, on pixel surfaces only. It runs
+    # before the landmark geometry estimate, which assumes the recorded
+    # scale and so lands short or long of the target when the session draws
+    # larger or smaller. It keeps the ``grounder`` rung name: below OCR, so
+    # an irreversible step it resolves still stops at the risk gate.
+    locate_anchor = (
+        getattr(grounder, "locate_anchor", None) if grounder is not None else None
+    )
+    if locate_anchor is not None and structural is None and template_png is not None:
+        grounded = _model_grounded(
+            anchor, screen_png, vision, locate_anchor, template_png
+        )
+        if grounded is not None:
+            point, region, score = grounded
+            resolution = Resolution(
+                rung="grounder",
+                point=point,
+                confidence=score,
+                elapsed_ms=elapsed_ms(),
+                resolution_evidence_regions=(full_frame_region,),
+                grounder_model="local",
+            )
+            return resolution, region
 
     # Rung 4: geometry from landmarks.
     evidence = identity_landmark_evidence()
