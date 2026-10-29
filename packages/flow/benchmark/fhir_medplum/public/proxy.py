@@ -1,8 +1,9 @@
 """The agent's way to Medplum: a local FHIR proxy that injects the case's faults.
 
 The agent talks to ``http://127.0.0.1:<port>/fhir/R4`` with its own bearer
-token. Reads pass through unchanged. The case's faults apply once, to the
-agent's first write of the task's resource type, and model what goes wrong
+token. Reads pass through unchanged. Each of the case's faults applies once,
+to one write of the task's resource type by the agent (the first, or the
+one its ``at_write`` names), and model what goes wrong
 between an agent and a system of record: a tool that changes a value, a
 retry that sends twice, a reply lost after the save, a refused save, or a
 tool with a side effect. Side writes use the agent's own token, so the

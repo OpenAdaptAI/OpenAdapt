@@ -70,6 +70,7 @@ class Bench:
         #: Per case: what another user read, and the values they wrote.
         self.seen: list[tuple[str, dict[str, Any]]] = []
         self.other_sets: list[tuple[str, dict[str, Any]]] = []
+        self.excused_updates: dict[str, str] = {}
 
     # -- setup -------------------------------------------------------------------
 
@@ -168,6 +169,8 @@ class Bench:
             ref = f"{made['resourceType']}/{made['id']}"
             version = str(made["meta"]["versionId"])
             self.other_sets.append((ref, dict(op["set"])))
+            self.excused_updates[ref] = version
+            return
         else:
             ref, version = self.create("other", spec, refs)
         excused[ref] = version
@@ -328,7 +331,7 @@ class Bench:
             "note": case.get("note", ""),
         }
         refs = dict(self.practitioners)
-        self.seen, self.other_sets = [], []
+        self.seen, self.other_sets, self.excused_updates = [], [], {}
         self.wipe()
         for spec in case.get("seed") or []:
             self.create("setup", spec, refs)
@@ -400,8 +403,11 @@ class Bench:
         proxy.run_after_check()
         time.sleep(1.0)
         after = self.snapshot()
-        row["oracle"] = judge(kind, case["expect"], want, before, after, excused)
-        harmed = others_harmed(kind, want, after, self.seen, self.other_sets)
+        row["oracle"] = judge(
+            kind, case["expect"], want, before, after, excused, self.excused_updates
+        )
+        made = {r for r, c in row["oracle"]["changes"].items() if c == "created"}
+        harmed = others_harmed(kind, want, after, self.seen, self.other_sets, made)
         if harmed:
             row["oracle"]["verdict"] = "harmful"
             row["oracle"]["reasons"] += harmed
