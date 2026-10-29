@@ -272,10 +272,37 @@ class Contract:
 
     @property
     def shape(self) -> str:
-        """SHA-256 of the effects alone, without the store: the same write,
-        wherever it is sent. Used only to hold, never to hand back."""
+        """SHA-256 of the effects, the verifier kind, the ``environment_id``
+        and the hosts (or database files) the verifier reads: the same write
+        to the same named environment and host, however the address is
+        split or spelled. Used only to hold, never to hand back."""
 
-        return _digest([_strip(e.model_dump(mode="json")) for e in self.config.effects])
+        hosts: set[str] = set()
+
+        def walk(value: Any, name: str = "") -> None:
+            if isinstance(value, Mapping):
+                for k, v in value.items():
+                    walk(v, str(k))
+            elif isinstance(value, (list, tuple)):
+                for v in value:
+                    walk(v, name)
+            elif isinstance(value, str) and _URL.match(value):
+                hosts.add(_location(value).split("://", 1)[1].split("/", 1)[0])
+            elif isinstance(value, str) and name.endswith("database"):
+                hosts.add(value)
+
+        verifier = self.config.verifier.model_dump(mode="json")
+        walk(verifier)
+        return _digest(
+            {
+                "effects": [
+                    _strip(e.model_dump(mode="json")) for e in self.config.effects
+                ],
+                "kind": verifier.get("kind"),
+                "environment": self.config.environment_id,
+                "hosts": sorted(hosts),
+            }
+        )
 
     @property
     def identity(self) -> str:
@@ -800,11 +827,11 @@ def _hold_elsewhere(led: Ledger, key: str, shape_key: str) -> None:
         attempt = led.latest(other)
         if attempt is None or attempt.attempt_id != begun.get("attempt"):
             continue
-        if led.state(attempt) in ("open", "uncertain", "held"):
+        if led.state(attempt) != "free":
             raise WriteHeld(
                 "the same write, under another address for the store, is in "
-                "flight or unresolved; a person checks which store it went to "
-                "(openadapt verify ledger list)",
+                "flight, unresolved or already made; a person checks which "
+                "store it went to (openadapt verify ledger list)",
                 key=key,
             )
 
@@ -1038,6 +1065,8 @@ def _overlapping(
         began = float(begun.get("t0") or begun.get("t") or 0.0)
         if key == own_key or began > until:
             continue
+        if resolved is not None and resolved.get("event") == "released":
+            continue  # released before any outcome: a person found nothing sent
         if resolved is not None:
             if float(resolved.get("t") or until) >= since:
                 out.append((key, begun, resolved))

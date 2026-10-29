@@ -155,9 +155,17 @@ address is spelled one way:
 
 Environment variable names (`*_env`, for example the token that picks a
 tenant) stay in the identity; secret values don't. The same write to another
-store is its own write. But if the same effects and values are open or
-unresolved under another store address, `begin_write` holds the write: a
-hold beats a resend.
+store is its own write. But the same effects and values might also be
+recorded under another address for the same store: the same verifier kind,
+`environment_id` and host, with the address split or spelled differently.
+If that other attempt isn't free (it's in flight, unresolved, or already
+made), `begin_write` holds the write: a hold beats a resend. Give each
+store its own `environment_id`, so two stores on one host never hold each
+other.
+
+If the store's address is edited between a crash and the restart, the old
+baseline was read by a different verifier and can't be judged. The attempt
+stays held until a person checks the record.
 
 The HMAC key is a secret in the ledger folder (mode 0600), so the ledger
 never holds values or plain digests of them. A landed write without a
@@ -261,8 +269,7 @@ good (landed, refuted, retry-safe or released), they're removed. Receipts
 stay; they hold no record values.
 
 **People.** `openadapt verify ledger list` shows open and held keys (no
-values). `release KEY --by NAME --reason TEXT` appends a `released` event after a
-person checked the record. `reconcile [KEY]` reads back.
+values). `release KEY --by NAME --reason TEXT --found absent|landed` records what a person found after they checked the record. `absent` frees the key, so the write may be sent again. `landed` resolves the attempt as landed, so it's handed back and never sent again. `reconcile [KEY]` reads back.
 
 ## Modules
 

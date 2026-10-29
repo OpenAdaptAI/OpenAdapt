@@ -731,3 +731,80 @@ def test_tenants_chosen_by_credential_are_different_stores(sor) -> None:
     except Exception as exc:  # noqa: BLE001 - auth needs the env set
         pytest.skip(f"auth shape not accepted here: {exc}")
     assert a.store != b.store
+
+
+# -- fourth review round ---------------------------------------------------------
+
+
+def _split(base: str) -> Contract:
+    """The same store, its address split differently."""
+
+    doc = verify_yaml(base)
+    doc["verifier"]["base_url"] = base + "/api"
+    doc["verifier"]["records_path"] = "/db"
+    return Contract.from_dict(doc, name="referral")
+
+
+@pytest.mark.parametrize("key", ["ticket-7", None])
+def test_a_made_write_is_never_resent_under_another_spelling(
+    sor, ledger_dir: Path, key
+) -> None:
+    base, db = sor
+    pending = begin_write(_contract(base), VALUES, actor=BOT, write_key=key)
+    FakeAgent(base).click_save("p1", NOTE)
+    assert verify_write(pending).verified
+    assert _split(base).store != _contract(base).store
+    with pytest.raises(WriteHeld, match="another address"):
+        begin_write(_split(base), VALUES, actor=BOT, write_key=key)
+    assert _landed(db) == 1
+
+
+def test_a_hold_on_one_environment_never_holds_another(ledger_dir: Path) -> None:
+    url, db, stop = fault_serve()
+    try:
+        base = url.rstrip("/")
+        docs = []
+        for env in ("clinic-north-prod", "clinic-south-prod"):
+            doc = verify_yaml(base)
+            doc["environment_id"] = env
+            docs.append(Contract.from_dict(doc, name="referral"))
+        north, south = docs
+        held = begin_write(north, VALUES, actor=BOT)  # in flight on north
+        pending = begin_write(south, VALUES, actor=BOT)
+        pending.release()
+        held.release()
+    finally:
+        stop()
+
+
+def test_releasing_a_stale_attempt_unblocks_the_write_it_held(
+    sor, ledger_dir: Path
+) -> None:
+    base, db = sor
+    dead = _worker(base, "die_before_send", ledger_dir, key="task-old")
+    dead.communicate(timeout=120)
+    pending = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-new")
+    FakeAgent(base).click_save("p1", NOTE)
+    assert verify_write(pending).outcome is Outcome.UNCERTAIN  # task-old was open
+    ledger = Ledger(FileLedger(ledger_dir))
+    old = next(k for k, a in ledger.unresolved() if a.state == "open")
+    ledger.release(old, by="nurse-lead", reason="task-old never sent", found="absent")
+    # task-new's retry reconciles: confirmed now, handed back, never resent.
+    with pytest.raises(AlreadyWritten) as caught:
+        begin_write(_contract(base), VALUES, actor=BOT, write_key="task-new")
+    assert caught.value.result["outcome"] == "CONFIRMED"
+    assert _landed(db) == 1
+
+
+def test_a_release_that_found_the_write_never_frees_it(sor, ledger_dir: Path) -> None:
+    base, db = sor
+    pending = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-9")
+    assert verify_write(pending).outcome is Outcome.UNCERTAIN  # read too early
+    FakeAgent(base).click_save("p1", NOTE)
+    ledger = Ledger(FileLedger(ledger_dir), settle_s=None)
+    [(key, _)] = ledger.unresolved()
+    ledger.release(key, by="nurse-lead", reason="the note is there", found="landed")
+    for _ in range(2):
+        with pytest.raises(AlreadyWritten):
+            begin_write(_contract(base), VALUES, actor=BOT, write_key="task-9")
+    assert _landed(db) == 1

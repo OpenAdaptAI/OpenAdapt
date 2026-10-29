@@ -1357,20 +1357,28 @@ def verify_ledger_reconcile(
 @click.argument("key")
 @click.option("--by", "by", required=True, help="Who checked the record.")
 @click.option("--reason", "reason", required=True, help="What they found.")
+@click.option(
+    "--found",
+    "found",
+    required=True,
+    type=click.Choice(["absent", "landed"]),
+    help="absent: the write isn't in the store, so it may be sent again. "
+    "landed: it is, so it is never sent again.",
+)
 @_LEDGER_OPTION
 def verify_ledger_release(
-    key: str, by: str, reason: str, ledger_dir: Optional[str]
+    key: str, by: str, reason: str, found: str, ledger_dir: Optional[str]
 ) -> None:
     """Release a held write after a person checked the record."""
     from openadapt_flow.write_ledger import LedgerError
 
     ledger = _write_ledger(ledger_dir)
     try:
-        ledger.release(key, by=by, reason=reason)
+        ledger.release(key, by=by, reason=reason, found=found)
     except LedgerError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(2)
-    click.echo(f"{key}  released by {by}")
+    click.echo(f"{key}  released by {by} (found {found})")
 
 
 @main.command(

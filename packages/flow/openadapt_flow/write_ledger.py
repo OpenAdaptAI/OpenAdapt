@@ -504,15 +504,24 @@ class Ledger:
             key, {"event": "delivered", "attempt": attempt_id, "at": _now()}
         )
 
-    def release(self, key: str, *, by: str, reason: str) -> Attempt:
+    def release(
+        self, key: str, *, by: str, reason: str, found: str = "absent"
+    ) -> Attempt:
         """A person checked the record: release the key's held attempt.
 
+        ``found`` is what they saw in the store. ``absent``: the write isn't
+        there, so the key is free and it may be sent again. ``landed``: it
+        is there, so the attempt resolves as landed and an identical call is
+        handed back, never resent.
+
         Raises :class:`LedgerError` when another caller holds the key, or
-        its latest attempt isn't held, uncertain or open.
+        its latest attempt isn't held, uncertain, open or under review.
         """
 
         if not by.strip() or not reason.strip():
             raise LedgerError("a release names who checked the record, and why")
+        if found not in ("absent", "landed"):
+            raise LedgerError("found is absent or landed")
         lease = self.backend.lease(_check_key(key))
         if lease is None:
             raise LedgerError("the write is in flight in another worker")
@@ -523,6 +532,31 @@ class Ledger:
                 and not attempt.review
             ):
                 raise LedgerError("nothing to release for that key")
+            if found == "landed":
+                self.backend.append(
+                    key,
+                    {
+                        "event": "resolved",
+                        "attempt": attempt.attempt_id,
+                        "at": _now(),
+                        "t": time.time(),
+                        "outcome": "UNCERTAIN",
+                        "landed": True,
+                        "delivered": False,
+                        "via": "person",
+                        "by": by.strip()[:128],
+                        "reason": reason.strip()[:500],
+                        "write_key_bound": bool(attempt.begun.get("write_key_bound")),
+                        "result": {
+                            "verified": False,
+                            "outcome": "UNCERTAIN",
+                            "landed": True,
+                            "reason": "a person found the write in the store",
+                        },
+                    },
+                )
+                prune(attempt.folder)
+                return attempt
             self.backend.append(
                 key,
                 {
