@@ -490,7 +490,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 break
             try:
                 row = bench.run_case(case, agent, proxy)
-            except FixtureError as exc:
+            except Exception as exc:  # noqa: BLE001 - one case's crash is its own error
                 row = {
                     "id": case["id"],
                     "class": case["class"],

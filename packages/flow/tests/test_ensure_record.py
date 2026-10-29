@@ -693,3 +693,44 @@ def test_a_prefix_filter_is_one_leaf_in_a_closed_record():
     assert extra_elements(c, res, params) == []
     res["participant"].append({"actor": {"reference": "Patient/p2"}})
     assert extra_elements(c, res, params) == ["participant.actor.reference"]
+
+
+def test_an_identity_value_without_a_search_parameter_is_compared_not_searched():
+    from openadapt_flow.ensure_record import EnsureContract, find_matches
+
+    c = EnsureContract.model_validate(
+        {
+            "resource_type": "AllergyIntolerance",
+            "base_url": "http://127.0.0.1:1/fhir",
+            "self": ["Practitioner/bot"],
+            "fields": {
+                "patient": {"path": "patient.reference"},
+                "code": {"path": "code.coding.code"},
+            },
+            "identity": [["patient", "code"]],
+            "search": {"patient": "patient"},
+        }
+    )
+    asked = []
+
+    class Reader:
+        def resources(self, rtype, query):
+            asked.append(dict(query))
+            return [
+                {
+                    "id": "a1",
+                    "patient": {"reference": "Patient/p1"},
+                    "code": {"coding": [{"code": "91936005"}]},
+                },
+                {
+                    "id": "a2",
+                    "patient": {"reference": "Patient/p1"},
+                    "code": {"coding": [{"code": "300916003"}]},
+                },
+            ]
+
+    matches, _ = find_matches(
+        c, Reader(), {"patient": "Patient/p1", "code": "91936005"}
+    )
+    assert set(matches) == {"a1"}
+    assert all(set(q) == {"patient", "_count"} for q in asked)

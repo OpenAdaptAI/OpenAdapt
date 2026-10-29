@@ -571,10 +571,15 @@ def find_matches(
             continue  # the task doesn't give every value this rule needs
         # The whole rule, and each value alone: a server's search may compare
         # differently from the contract, so the candidates are wide and the
-        # contract's own comparison decides.
-        queries.append({contract.search[p]: str(params[p]).strip() for p in rule})
-        if len(rule) > 1:
-            queries += [{contract.search[p]: str(params[p]).strip()} for p in rule]
+        # contract's own comparison decides. A value with no search parameter
+        # (an allergy's substance code) only narrows nothing: the search uses
+        # the rule's other values, and the contract compares it after.
+        searchable = [p for p in rule if p in contract.search]
+        queries.append({contract.search[p]: str(params[p]).strip() for p in searchable})
+        if len(searchable) > 1:
+            queries += [
+                {contract.search[p]: str(params[p]).strip()} for p in searchable
+            ]
     if not queries:
         raise Unreadable("the task gives the values of no identity rule")
     for query in queries:
