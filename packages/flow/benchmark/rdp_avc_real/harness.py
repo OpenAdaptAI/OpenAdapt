@@ -29,7 +29,9 @@ APPS = {
     "emr": {"target": "10.30.1.7"},
     "pn": {"target": "vm-rdhost"},
     # The read-back session: its own RDP logon (pnreader), own mstsc window.
-    "pnread": {"target": "vm-rdhost.x3hkkcl3scte1kfhx4qhkg0tta.bx.internal.cloudapp.net"},
+    "pnread": {
+        "target": "vm-rdhost.x3hkkcl3scte1kfhx4qhkg0tta.bx.internal.cloudapp.net"
+    },
 }
 DESKTOP = (1280, 800)
 
@@ -98,7 +100,11 @@ def save_frame(png: bytes, out: Path, name: str) -> dict:
     path = out / f"{name}.png"
     path.write_bytes(png)
     w, h = Image.open(io.BytesIO(png)).size
-    return {"file": path.name, "sha256": hashlib.sha256(png).hexdigest(), "size": [w, h]}
+    return {
+        "file": path.name,
+        "sha256": hashlib.sha256(png).hexdigest(),
+        "size": [w, h],
+    }
 
 
 def probe(job: dict, out: Path) -> dict:
@@ -114,7 +120,12 @@ def probe(job: dict, out: Path) -> dict:
         {"title": w.title, "bounds": list(w.bounds), "pid": w.pid}
         for w in backend._client.find_windows("mstsc", window_title(app))  # noqa: SLF001
     ]
-    return {"app": app, "viewport": list(backend.viewport), "windows": windows, "frames": frames}
+    return {
+        "app": app,
+        "viewport": list(backend.viewport),
+        "windows": windows,
+        "frames": frames,
+    }
 
 
 def diagnose(job: dict, out: Path) -> dict:
@@ -155,6 +166,7 @@ def diagnose(job: dict, out: Path) -> dict:
         user32.GetWindowRect(hwnd, ctypes.byref(rect))
         texts: list[str] = []
         if cls.value == "#32770":
+
             @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
             def child(ch, _lp):
                 t = ctypes.create_unicode_buffer(1024)
@@ -164,9 +176,15 @@ def diagnose(job: dict, out: Path) -> dict:
                 return True
 
             user32.EnumChildWindows(hwnd, child, 0)
-        rows.append({"title": title.value, "class": cls.value, "exe": exe.value,
-                     "rect": [rect.left, rect.top, rect.right, rect.bottom],
-                     "texts": texts})
+        rows.append(
+            {
+                "title": title.value,
+                "class": cls.value,
+                "exe": exe.value,
+                "rect": [rect.left, rect.top, rect.right, rect.bottom],
+                "texts": texts,
+            }
+        )
         return True
 
     user32.EnumWindows(visit, 0)
@@ -213,8 +231,11 @@ def pn_record(app: str, rec_dir: Path) -> None:
     from openadapt_flow.recorder import Recorder
 
     rec = Recorder(
-        backend_for(app), rec_dir,
-        settle_interval_s=0.3, settle_stable_frames=2, settle_timeout_s=6.0,
+        backend_for(app),
+        rec_dir,
+        settle_interval_s=0.3,
+        settle_stable_frames=2,
+        settle_timeout_s=6.0,
     )
     rec.click(*PN_STEPS["search_box"])
     rec.type_text("Neil")
@@ -229,7 +250,10 @@ def pn_record(app: str, rec_dir: Path) -> None:
 def step_summary(r) -> dict:
     res = r.resolution
     return {
-        "step_id": r.step_id, "intent": r.intent, "ok": r.ok, "skipped": r.skipped,
+        "step_id": r.step_id,
+        "intent": r.intent,
+        "ok": r.ok,
+        "skipped": r.skipped,
         "rung": getattr(res.rung, "value", str(res.rung)) if res else None,
         "confidence": round(res.confidence, 3) if res else None,
         "point": list(res.point) if res else None,
@@ -265,16 +289,22 @@ def record_check_config(spec: dict):
     return parse_verify_config(spec["verify"], source=f"{spec['name']} verify")
 
 
-def record_check(cfg, params: dict, run_dir: Path, report_path: Path, baseline: Path) -> dict:
+def record_check(
+    cfg, params: dict, run_dir: Path, report_path: Path, baseline: Path
+) -> dict:
     """Judge the trial's write from the system of record, as verify-run does."""
     from openadapt_flow.verify_run import verify_run
 
     run_record = {"executor_kind": "flow_replay"}
     if report_path.exists():
-        run_record["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        run_record["report_sha256"] = hashlib.sha256(
+            report_path.read_bytes()
+        ).hexdigest()
     try:
         result = verify_run(
-            cfg, params=params, run_record=run_record,
+            cfg,
+            params=params,
+            run_record=run_record,
             authorization_ref=f"lab-{run_dir.name}",
             baseline_path=baseline if baseline.exists() else None,
             private_dir=run_dir / "record_check",
@@ -338,17 +368,22 @@ def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
             error, extra = None, {}
             try:
                 report = Replayer(backend_for(app), poll_interval_s=0.3).run(
-                    workflow, params=params, bundle_dir=work / "bundle",
+                    workflow,
+                    params=params,
+                    bundle_dir=work / "bundle",
                     run_dir=run_dir,
                 )
                 success, model_calls = bool(report.success), report.model_calls
                 rungs, terminal = dict(report.rung_counts), report.terminal_outcome
                 steps = [step_summary(r) for r in report.results]
                 extra = {
-                    "execution_outcome": getattr(report.execution_outcome, "value",
-                                                 report.execution_outcome),
+                    "execution_outcome": getattr(
+                        report.execution_outcome, "value", report.execution_outcome
+                    ),
                     "heal_count": report.heal_count,
-                    "halt": report.halt.model_dump(mode="json") if report.halt else None,
+                    "halt": report.halt.model_dump(mode="json")
+                    if report.halt
+                    else None,
                     "render_scale": report.render_scale,
                 }
             except Exception as exc:  # noqa: BLE001 -- a crash is a stop, recorded
@@ -363,19 +398,34 @@ def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
             must_save = name in spec["must_save"]
             frames = sorted(run_dir.rglob("*.png"))
             trial = {
-                "trial": len(trials) + 1, "condition": name, "drift": drift,
-                "bpp": want[0], "desktop": list(want[1]), "token": token,
-                "success": success, "terminal_outcome": terminal, "error": error,
-                "model_calls": model_calls, "rung_counts": rungs,
-                "steps": steps, **extra, "db_outcome": db_outcome, "record_detail": detail,
-                "class": classify(db_outcome, success, must_save), "must_save": must_save,
+                "trial": len(trials) + 1,
+                "condition": name,
+                "drift": drift,
+                "bpp": want[0],
+                "desktop": list(want[1]),
+                "token": token,
+                "success": success,
+                "terminal_outcome": terminal,
+                "error": error,
+                "model_calls": model_calls,
+                "rung_counts": rungs,
+                "steps": steps,
+                **extra,
+                "db_outcome": db_outcome,
+                "record_detail": detail,
+                "class": classify(db_outcome, success, must_save),
+                "must_save": must_save,
                 "elapsed_s": round(elapsed, 2),
                 "first_frame_sha256": hashlib.sha256(first).hexdigest(),
-                "frame_sha256": [hashlib.sha256(f.read_bytes()).hexdigest() for f in frames],
+                "frame_sha256": [
+                    hashlib.sha256(f.read_bytes()).hexdigest() for f in frames
+                ],
             }
             report_path = run_dir / "report.json"
             if report_path.exists():
-                (out / f"report_{len(trials):03d}.json").write_bytes(report_path.read_bytes())
+                (out / f"report_{len(trials):03d}.json").write_bytes(
+                    report_path.read_bytes()
+                )
             if i == 0:
                 trial["first_frame"] = save_frame(first, out, f"{app}_{name}_first")
                 zip_dir(run_dir, out / f"{app}_run_{name}.zip")
@@ -384,7 +434,9 @@ def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
             ):
                 zip_dir(run_dir, out / f"{app}_run_{name}_{trial['class']}.zip")
             trials.append(trial)
-            (out / "trials.json").write_text(json.dumps(trials, indent=2), encoding="utf-8")
+            (out / "trials.json").write_text(
+                json.dumps(trials, indent=2), encoding="utf-8"
+            )
     return {"app": app, "record_s": round(record_s, 2), "trials": trials}
 
 
@@ -392,27 +444,47 @@ def pn_campaign(job: dict, out: Path) -> dict:
     def judge(token: str):
         holders = [r["id"] for r in oracle(PN_ORACLE, "/all") if r["note"] == token]
         outcome = (
-            "correct" if holders == [PN_TARGET_ID]
-            else "wrong_target" if holders else "no_write"
+            "correct"
+            if holders == [PN_TARGET_ID]
+            else "wrong_target"
+            if holders
+            else "no_write"
         )
         return outcome, {"note_holders": holders}
 
-    return run_campaign(job, out, "pn", {
-        "name": "avc444-patient-notes",
-        "record": lambda rec_dir: pn_record("pn", rec_dir),
-        "reset": lambda drift: oracle(PN_ORACLE, f"/reset?drift={drift}"),
-        "params": lambda token: {"note": token},
-        "judge": judge,
-        "must_save": PN_MUST_SAVE,
-        "verify": {
-            "environment_id": "rdp-avc444-lab-patient-notes",
-            "verifier": {"kind": "rest", "base_url": PN_ORACLE, "records_path": "/all",
-                         "records_key": None},
-            "effects": [{"kind": "field_equals", "match": {"first": {"literal": "Neil"},
-                                                       "last": {"literal": "Sorenson"}},
-                         "field": "note", "value": {"param": "note"}}],
+    return run_campaign(
+        job,
+        out,
+        "pn",
+        {
+            "name": "avc444-patient-notes",
+            "record": lambda rec_dir: pn_record("pn", rec_dir),
+            "reset": lambda drift: oracle(PN_ORACLE, f"/reset?drift={drift}"),
+            "params": lambda token: {"note": token},
+            "judge": judge,
+            "must_save": PN_MUST_SAVE,
+            "verify": {
+                "environment_id": "rdp-avc444-lab-patient-notes",
+                "verifier": {
+                    "kind": "rest",
+                    "base_url": PN_ORACLE,
+                    "records_path": "/all",
+                    "records_key": None,
+                },
+                "effects": [
+                    {
+                        "kind": "field_equals",
+                        "match": {
+                            "first": {"literal": "Neil"},
+                            "last": {"literal": "Sorenson"},
+                        },
+                        "field": "note",
+                        "value": {"param": "note"},
+                    }
+                ],
+            },
         },
-    })
+    )
 
 
 # --- OpenEMR campaign ----------------------------------------------------------
@@ -422,11 +494,18 @@ EMR_LAST = "Avclab"
 EMR_DOB = "2001-01-01"
 # Window-pixel points on the 1280x800 session, read off drive frames.
 EMR_STEPS = {
-    "username": (705, 396), "password": (684, 450), "login": (640, 558),
-    "patient_menu": (361, 43), "new_search": (378, 71),
-    "first_name": (445, 311), "last_name": (706, 311),
-    "dob": (429, 423), "sex": (965, 423), "billing_label": (146, 599),
-    "create": (272, 733), "confirm": (600, 261),
+    "username": (705, 396),
+    "password": (684, 450),
+    "login": (640, 558),
+    "patient_menu": (361, 43),
+    "new_search": (378, 71),
+    "first_name": (445, 311),
+    "last_name": (706, 311),
+    "dob": (429, 423),
+    "sex": (965, 423),
+    "billing_label": (146, 599),
+    "create": (272, 733),
+    "confirm": (600, 261),
 }
 EMR_MUST_SAVE = {"healthy", "bpp16", "desktop1440"}
 
@@ -435,8 +514,11 @@ def emr_record(rec_dir: Path, order: str = "last_first") -> None:
     from openadapt_flow.recorder import Recorder
 
     rec = Recorder(
-        backend_for("emr"), rec_dir,
-        settle_interval_s=0.4, settle_stable_frames=2, settle_timeout_s=10.0,
+        backend_for("emr"),
+        rec_dir,
+        settle_interval_s=0.4,
+        settle_stable_frames=2,
+        settle_timeout_s=10.0,
     )
     st = EMR_STEPS
     # Lab fixture account from benchmark/openemr_live/docker-compose.yml;
@@ -480,8 +562,14 @@ def emr_record(rec_dir: Path, order: str = "last_first") -> None:
 
 def emr_judge(token: str):
     rows = oracle(EMR_ORACLE, f"/patients?token={token}")
-    exact = [r for r in rows if r["fname"] == token and r["lname"] == EMR_LAST
-             and r["DOB"] == EMR_DOB and r["sex"] == "Female"]
+    exact = [
+        r
+        for r in rows
+        if r["fname"] == token
+        and r["lname"] == EMR_LAST
+        and r["DOB"] == EMR_DOB
+        and r["sex"] == "Female"
+    ]
     if len(exact) == 1 and len(rows) == 1:
         outcome = "correct"
     elif rows:
@@ -503,30 +591,59 @@ def emr_campaign(job: dict, out: Path) -> dict:
         time.sleep(4)
 
     try:
-        return run_campaign(job, out, "emr", {
-            "name": "avc444-openemr-new-patient",
-            "record": lambda rec_dir: emr_record(rec_dir, job.get("order", "last_first")),
-            "reset": reset,
-            "params": lambda token: {"username": "admin", "password": "pass",
-                                     "first_name": token},
-            "judge": emr_judge,
-            "must_save": EMR_MUST_SAVE,
-            "verify": {
-                "environment_id": "rdp-avc444-lab-openemr",
-                "verifier": {"kind": "rest", "base_url": EMR_ORACLE, "records_path": "/all",
-                             "records_key": None},
-                "effects": [
-                    {"kind": "record_written", "match": {"fname": {"param": "first_name"}}},
-                    {"kind": "field_equals", "match": {"fname": {"param": "first_name"}},
-                     "field": "lname", "value": {"literal": EMR_LAST}},
-                    {"kind": "field_equals", "match": {"fname": {"param": "first_name"}},
-                     "field": "DOB", "value": {"literal": EMR_DOB}},
-                    {"kind": "field_equals", "match": {"fname": {"param": "first_name"}},
-                     "field": "sex", "value": {"literal": "Female"}},
-                ],
-                "frame": {"identity_field": "pid"},
+        return run_campaign(
+            job,
+            out,
+            "emr",
+            {
+                "name": "avc444-openemr-new-patient",
+                "record": lambda rec_dir: emr_record(
+                    rec_dir, job.get("order", "last_first")
+                ),
+                "reset": reset,
+                "params": lambda token: {
+                    "username": "admin",
+                    "password": "pass",
+                    "first_name": token,
+                },
+                "judge": emr_judge,
+                "must_save": EMR_MUST_SAVE,
+                "verify": {
+                    "environment_id": "rdp-avc444-lab-openemr",
+                    "verifier": {
+                        "kind": "rest",
+                        "base_url": EMR_ORACLE,
+                        "records_path": "/all",
+                        "records_key": None,
+                    },
+                    "effects": [
+                        {
+                            "kind": "record_written",
+                            "match": {"fname": {"param": "first_name"}},
+                        },
+                        {
+                            "kind": "field_equals",
+                            "match": {"fname": {"param": "first_name"}},
+                            "field": "lname",
+                            "value": {"literal": EMR_LAST},
+                        },
+                        {
+                            "kind": "field_equals",
+                            "match": {"fname": {"param": "first_name"}},
+                            "field": "DOB",
+                            "value": {"literal": EMR_DOB},
+                        },
+                        {
+                            "kind": "field_equals",
+                            "match": {"fname": {"param": "first_name"}},
+                            "field": "sex",
+                            "value": {"literal": "Female"},
+                        },
+                    ],
+                    "frame": {"identity_field": "pid"},
+                },
             },
-        })
+        )
     finally:
         oracle(EMR_ORACLE, "/cleanup?prefix=Oa" + job["id"][-4:].replace("-", ""))
         oracle(EMR_ORACLE, "/cleanup?prefix=Recorded")
@@ -535,14 +652,23 @@ def emr_campaign(job: dict, out: Path) -> dict:
 # --- Separate-session read-back (desktop_readback) --------------------------------
 
 PN_READBACK_SPEC = {
-    "session": {"kind": "rdp", "rdp_window": "mstsc",
-                "rdp_window_title": window_title("pnread")},
-    "search": {"box": {"region": [20, 43, 480, 24]}, "query": {"literal": "Neil"},
-               "submit": {"text": "Search"}},
+    "session": {
+        "kind": "rdp",
+        "rdp_window": "mstsc",
+        "rdp_window_title": window_title("pnread"),
+    },
+    "search": {
+        "box": {"region": [20, 43, 480, 24]},
+        "query": {"literal": "Neil"},
+        "submit": {"text": "Search"},
+    },
     "open": {"results": {"region": [20, 125, 590, 175]}},
     "ready": {"text": "Clinical note:"},
-    "identity": {"reader": {"text": "Patient:", "at": "right"},
-                 "value": {"literal": "Neil Sorenson"}, "field": "patient"},
+    "identity": {
+        "reader": {"text": "Patient:", "at": "right"},
+        "value": {"literal": "Neil Sorenson"},
+        "field": "patient",
+    },
     "fields": {"note": {"control": {"text": "Clinical note:", "at": "below"}}},
     "navigation_timeout_s": 20.0,
     "settle_s": 1.0,
@@ -573,10 +699,14 @@ def pn_readback(job: dict, out: Path) -> dict:
     spec = DesktopReadbackSpec.model_validate(PN_READBACK_SPEC)
 
     def open_backend(_user: str, _password: str):
+        # Each look-up starts the reader's app afresh, so no look-up can read
+        # a record view an earlier one left on screen.
         open_session("pnread")
+        oracle(PN_ORACLE, "/reader_restart")
         wait_steady("pnread")
-        facts = DesktopSessionFacts(own_session=True, fresh_session=False,
-                                    signed_in=False, path="ocr")
+        facts = DesktopSessionFacts(
+            own_session=True, fresh_session=True, signed_in=False, path="ocr"
+        )
         return backend_for("pnread"), facts
 
     driver = BackendSessionDriver(open_backend, settle_s=spec.settle_s)
@@ -591,7 +721,9 @@ def pn_readback(job: dict, out: Path) -> dict:
         effect = Effect(
             kind=EffectKind.FIELD_EQUALS,
             match={"patient": ValueExpr(literal="Neil Sorenson")},
-            field="note", value=ValueExpr(literal=expected), timeout_s=0.0,
+            field="note",
+            value=ValueExpr(literal=expected),
+            timeout_s=0.0,
         )
         t = time.monotonic()
         before = verifier.capture_pre_state()
@@ -599,16 +731,25 @@ def pn_readback(job: dict, out: Path) -> dict:
         elapsed = time.monotonic() - t
         got = getattr(verdict.verdict, "value", str(verdict.verdict))
         truth = "confirmed" if match else "refuted"
-        cases.append({
-            "case": i + 1, "stored": stored, "expected": expected, "truth": truth,
-            "verdict": got, "correct": got.lower() == truth,
-            "false_confirm": (not match) and got.lower() == "confirmed",
-            "reason": verdict.reason, "assurance": verdict.assurance,
-            "elapsed_s": round(elapsed, 2),
-        })
+        cases.append(
+            {
+                "case": i + 1,
+                "stored": stored,
+                "expected": expected,
+                "truth": truth,
+                "verdict": got,
+                "correct": got.lower() == truth,
+                "false_confirm": (not match) and got.lower() == "confirmed",
+                "reason": verdict.reason,
+                "assurance": verdict.assurance,
+                "elapsed_s": round(elapsed, 2),
+            }
+        )
         if i < 2:
             save_frame(backend_for("pnread").screenshot(), out, f"pnread_case{i + 1}")
-        (out / "readback.json").write_text(json.dumps(cases, indent=2), encoding="utf-8")
+        (out / "readback.json").write_text(
+            json.dumps(cases, indent=2), encoding="utf-8"
+        )
     from openadapt_flow.verification import verifier_effect_tier
 
     return {"tier": str(verifier_effect_tier(verifier)), "cases": cases}
@@ -651,7 +792,14 @@ def main(job_path: str, out_dir: str) -> int:
     if job.get("fresh"):
         close_sessions()
         time.sleep(3)
-    kinds = {"probe": probe, "diagnose": diagnose, "pn_campaign": pn_campaign, "emr_campaign": emr_campaign, "pn_readback": pn_readback, "drive": drive}
+    kinds = {
+        "probe": probe,
+        "diagnose": diagnose,
+        "pn_campaign": pn_campaign,
+        "emr_campaign": emr_campaign,
+        "pn_readback": pn_readback,
+        "drive": drive,
+    }
     try:
         result = kinds[job["kind"]](job, out)
         (out / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")

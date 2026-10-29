@@ -89,9 +89,14 @@ def store_credentials() -> None:
             if user not in creds:
                 continue
             subprocess.run(
-                ["cmdkey", f"/generic:TERMSRV/{target}", f"/user:vm-rdhost\\{user}",
-                 f"/pass:{creds[user]}"],
-                check=True, capture_output=True,
+                [
+                    "cmdkey",
+                    f"/generic:TERMSRV/{target}",
+                    f"/user:vm-rdhost\\{user}",
+                    f"/pass:{creds[user]}",
+                ],
+                check=True,
+                capture_output=True,
             )
         CREDS.unlink()
 
@@ -124,7 +129,8 @@ def main() -> int:
             try:
                 proc = subprocess.run(
                     [sys.executable, str(HERE / "harness.py"), str(running), str(out)],
-                    stdout=log, stderr=subprocess.STDOUT,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
                     timeout=job.get("timeout_s", 7200),
                 )
                 status = {"exit": proc.returncode}

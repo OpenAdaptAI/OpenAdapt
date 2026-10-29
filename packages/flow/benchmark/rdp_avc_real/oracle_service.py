@@ -29,24 +29,46 @@ PY = r"C:\Program Files\Python312\python.exe"
 PN_DB = r"C:\oa\pn_db.py"
 CLIENT_IP = "10.30.1.5"
 TOKEN_RE = re.compile(r"^[A-Za-z0-9 _-]{1,64}$")
-EMR_SQL = ["docker", "exec", "-i", "openemr-live-mysql-1", "mariadb", "-uroot", "-proot",
-           "openemr", "--batch", "--raw", "-e"]
+EMR_SQL = [
+    "docker",
+    "exec",
+    "-i",
+    "openemr-live-mysql-1",
+    "mariadb",
+    "-uroot",
+    "-proot",
+    "openemr",
+    "--batch",
+    "--raw",
+    "-e",
+]
 
 
 def pn_reset(drift: str) -> dict:
     if drift not in ("none", "siblings", "decoy", "reorder"):
         raise ValueError(f"unknown drift {drift!r}")
     subprocess.run(
-        ["powershell", "-NoProfile", "-Command",
-         "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
-         "Where-Object { $_.ProcessId -ne $PID -and "
-         "$_.CommandLine -like '*patient_notes.ps1*' } | "
-         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"],
-        check=True, capture_output=True,
+        [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
+            "Where-Object { $_.ProcessId -ne $PID -and "
+            "$_.CommandLine -like '*patient_notes.ps1*' } | "
+            "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+        ],
+        check=True,
+        capture_output=True,
     )
-    seeded = subprocess.run([PY, PN_DB, "seed", "--drift", drift], check=True,
-                            capture_output=True, text=True).stdout
-    subprocess.run(["schtasks", "/run", "/tn", "oa-app-pnuser"], check=True, capture_output=True)
+    seeded = subprocess.run(
+        [PY, PN_DB, "seed", "--drift", drift],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    subprocess.run(
+        ["schtasks", "/run", "/tn", "oa-app-pnuser"], check=True, capture_output=True
+    )
     time.sleep(6)
     return {"seeded": json.loads(seeded), "restarted": True}
 
@@ -54,13 +76,20 @@ def pn_reset(drift: str) -> dict:
 def edge_restart() -> dict:
     """Restart OpenEMR's Edge window in emruser's session (cookies kept)."""
     subprocess.run(
-        ["powershell", "-NoProfile", "-Command",
-         "Get-Process msedge -IncludeUserName -ErrorAction SilentlyContinue | "
-         "Where-Object { $_.UserName -like '*emruser' } | Stop-Process -Force"],
-        check=True, capture_output=True,
+        [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Get-Process msedge -IncludeUserName -ErrorAction SilentlyContinue | "
+            "Where-Object { $_.UserName -like '*emruser' } | Stop-Process -Force",
+        ],
+        check=True,
+        capture_output=True,
     )
     time.sleep(2)
-    subprocess.run(["schtasks", "/run", "/tn", "oa-app-emruser"], check=True, capture_output=True)
+    subprocess.run(
+        ["schtasks", "/run", "/tn", "oa-app-emruser"], check=True, capture_output=True
+    )
     time.sleep(8)
     return {"restarted": True}
 
@@ -72,18 +101,46 @@ def pn_set_note(pid: str, note: str) -> dict:
     if not pid.isdigit() or not TOKEN_RE.match(note):
         raise ValueError("bad note")
     b64 = base64.b64encode(note.encode()).decode()
-    out = subprocess.run([PY, PN_DB, "save", pid, b64], check=True,
-                         capture_output=True, text=True).stdout
+    out = subprocess.run(
+        [PY, PN_DB, "save", pid, b64], check=True, capture_output=True, text=True
+    ).stdout
     return json.loads(out)
 
 
+def reader_restart() -> dict:
+    """Restart Patient Notes in the read-back session, so each look-up starts fresh."""
+    subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
+            "Where-Object { $_.ProcessId -ne $PID -and "
+            "$_.CommandLine -like '*patient_notes.ps1*' -and "
+            "(Invoke-CimMethod -InputObject $_ -MethodName GetOwner).User -eq 'pnreader' } | "
+            "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
+        ],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["schtasks", "/run", "/tn", "oa-app-pnreader"], check=True, capture_output=True
+    )
+    time.sleep(6)
+    return {"restarted": True}
+
+
 def pn_all() -> list:
-    out = subprocess.run([PY, PN_DB, "all"], check=True, capture_output=True, text=True).stdout
+    out = subprocess.run(
+        [PY, PN_DB, "all"], check=True, capture_output=True, text=True
+    ).stdout
     return json.loads(out)
 
 
 def emr_query(sql: str) -> list[dict]:
-    out = subprocess.run(EMR_SQL + [sql], check=True, capture_output=True, text=True).stdout
+    out = subprocess.run(
+        EMR_SQL + [sql], check=True, capture_output=True, text=True
+    ).stdout
     lines = out.splitlines()
     if not lines:
         return []
@@ -102,14 +159,18 @@ def emr_patients(token: str) -> list[dict]:
 
 def emr_all() -> list[dict]:
     """Every patient row: the record check's whole read set."""
-    return emr_query("SELECT pid, fname, lname, DOB, sex FROM patient_data ORDER BY pid")
+    return emr_query(
+        "SELECT pid, fname, lname, DOB, sex FROM patient_data ORDER BY pid"
+    )
 
 
 def emr_cleanup(prefix: str) -> dict:
     if not TOKEN_RE.match(prefix) or len(prefix) < 4:
         raise ValueError("bad prefix")
     rows = emr_patients(prefix)
-    emr_query(f"DELETE FROM patient_data WHERE fname LIKE '{prefix}%' OR lname LIKE '{prefix}%'")
+    emr_query(
+        f"DELETE FROM patient_data WHERE fname LIKE '{prefix}%' OR lname LIKE '{prefix}%'"
+    )
     return {"deleted": len(rows)}
 
 
@@ -133,6 +194,7 @@ class Handler(BaseHTTPRequestHandler):
             ("pn", "/reset"): lambda: pn_reset(q.get("drift", "none")),
             ("pn", "/all"): pn_all,
             ("pn", "/edge_restart"): edge_restart,
+            ("pn", "/reader_restart"): reader_restart,
             ("pn", "/set_note"): lambda: pn_set_note(q["id"], q["note"]),
             ("emr", "/patients"): lambda: emr_patients(q["token"]),
             ("emr", "/all"): emr_all,

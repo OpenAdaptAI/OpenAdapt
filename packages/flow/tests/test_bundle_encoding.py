@@ -17,8 +17,13 @@ def test_save_and_load_ignore_the_platform_codec(tmp_path, monkeypatch):
 
     def cp1252_write_text(self, data, encoding=None, errors=None, newline=None):
         # What text mode does on Windows when no encoding is given.
-        return original(self, data, encoding=encoding or "cp1252", errors=errors,
-                        newline=newline if newline is not None else "\r\n")
+        return original(
+            self,
+            data,
+            encoding=encoding or "cp1252",
+            errors=errors,
+            newline=newline if newline is not None else "\r\n",
+        )
 
     monkeypatch.setattr(pathlib.Path, "write_text", cp1252_write_text)
     workflow = Workflow(name="remote ε — screen", steps=[])

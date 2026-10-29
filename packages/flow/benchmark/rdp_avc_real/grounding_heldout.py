@@ -27,7 +27,6 @@ A point is on target within ``TOL_X`` x ``TOL_Y`` pixels of the truth.
 from __future__ import annotations
 
 import argparse
-import io
 import json
 import platform
 import statistics
@@ -60,7 +59,9 @@ def _verified_points(campaign: Path, trials: list[dict], condition: str) -> dict
     first = next((i for i, t in enumerate(trials) if t["condition"] == condition), None)
     if first is None or trials[first]["class"] != "verified_save":
         return {}
-    return {s["step_id"]: tuple(s["point"]) for s in trials[first]["steps"] if s["point"]}
+    return {
+        s["step_id"]: tuple(s["point"]) for s in trials[first]["steps"] if s["point"]
+    }
 
 
 def main() -> int:
@@ -70,8 +71,16 @@ def main() -> int:
     args = parser.parse_args()
 
     from openadapt_flow import vision
-    from openadapt_flow.runtime.local_grounder import ACCEPT_SCORE, LOOKALIKE_MARGIN, LocalGroundingModel
-    from openadapt_flow.runtime.resolver import TEMPLATE_THRESHOLD, _model_grounded, _scaled_click_point
+    from openadapt_flow.runtime.local_grounder import (
+        ACCEPT_SCORE,
+        LOOKALIKE_MARGIN,
+        LocalGroundingModel,
+    )
+    from openadapt_flow.runtime.resolver import (
+        TEMPLATE_THRESHOLD,
+        _model_grounded,
+        _scaled_click_point,
+    )
     from openadapt_flow.vision.ocr import OcrResolutionRefused
 
     model = LocalGroundingModel.load()
@@ -84,7 +93,14 @@ def main() -> int:
             workflow, bundle_dir = _load_bundle(campaign, app, tmp)
             clicks = {s.id: s for s in workflow.steps if s.anchor is not None}
             for run_zip in sorted(campaign.glob(f"{app}_run_*.zip")):
+                # <app>_run_<condition>[_<class>].zip (a stopped trial's frames)
                 condition = run_zip.stem.split("_run_", 1)[1]
+                for suffix in (
+                    "_false_stop",
+                    "_stop_on_lookalike",
+                    "_stopped_after_save",
+                ):
+                    condition = condition.removesuffix(suffix)
                 verified = _verified_points(campaign, trials, condition)
                 with zipfile.ZipFile(run_zip) as zf:
                     names = set(zf.namelist())
@@ -106,8 +122,11 @@ def main() -> int:
                         template = (bundle_dir / anchor.template).read_bytes()
 
                         def on_target(pt, truth=truth):
-                            return (truth is not None and abs(pt[0] - truth[0]) <= TOL_X
-                                    and abs(pt[1] - truth[1]) <= TOL_Y)
+                            return (
+                                truth is not None
+                                and abs(pt[0] - truth[0]) <= TOL_X
+                                and abs(pt[1] - truth[1]) <= TOL_Y
+                            )
 
                         timings, found = [], []
                         for _ in range(REPEATS):
@@ -116,59 +135,117 @@ def main() -> int:
                             found = model.locate_anchor(png, template)
                             timings.append((time.monotonic() - started) * 1000.0)
                         try:
-                            grounded = _model_grounded(anchor, png, vision, model.locate_anchor, template)
+                            grounded = _model_grounded(
+                                anchor, png, vision, model.locate_anchor, template
+                            )
                             if grounded is None:
                                 rung = "abstain"
                             elif truth is None:
                                 rung = "picked_unscored"
                             else:
-                                rung = "target" if on_target(grounded[0]) else "wrong_target"
+                                rung = (
+                                    "target"
+                                    if on_target(grounded[0])
+                                    else "wrong_target"
+                                )
                         except OcrResolutionRefused as exc:
                             rung = "halt:" + type(exc).__name__
                         scored = model.candidates(png, template)
-                        point_of = lambda c, a=anchor: _scaled_click_point(a, tuple(c.region))  # noqa: E731
-                        true_scores = [c.score for c in scored if on_target(point_of(c))]
-                        other_scores = [c.score for c in scored if not on_target(point_of(c))]
+
+                        def point_of(c, a=anchor):
+                            return _scaled_click_point(a, tuple(c.region))
+
+                        true_scores = [
+                            c.score for c in scored if on_target(point_of(c))
+                        ]
+                        other_scores = [
+                            c.score for c in scored if not on_target(point_of(c))
+                        ]
                         started = time.monotonic()
-                        tmatch = vision.find_template(png, template, threshold=TEMPLATE_THRESHOLD)
+                        tmatch = vision.find_template(
+                            png, template, threshold=TEMPLATE_THRESHOLD
+                        )
                         template_ms = (time.monotonic() - started) * 1000.0
-                        tpoint = _scaled_click_point(anchor, tuple(tmatch.region)) if tmatch else None
-                        rows.append({
-                            "app": app, "campaign": campaign.name, "condition": condition,
-                            "step_id": step_id, "text_label": anchor.ocr_text,
-                            "truth": list(truth) if truth else None, "truth_source": source,
-                            "rung_outcome": rung, "lookalikes": len(found),
-                            "true_found": any(on_target(point_of(c)) for c in found),
-                            "true_score": round(max(true_scores), 3) if true_scores else None,
-                            "best_other_score": round(max(other_scores), 3) if other_scores else None,
-                            "ms": round(statistics.median(timings), 1),
-                            "template_found": bool(tpoint and on_target(tpoint)),
-                            "template_wrong": bool(tpoint and truth and not on_target(tpoint)),
-                            "template_ms": round(template_ms, 1),
-                        })
+                        tpoint = (
+                            _scaled_click_point(anchor, tuple(tmatch.region))
+                            if tmatch
+                            else None
+                        )
+                        rows.append(
+                            {
+                                "app": app,
+                                "campaign": campaign.name,
+                                "condition": condition,
+                                "archive": run_zip.name,
+                                "step_id": step_id,
+                                "text_label": anchor.ocr_text,
+                                "truth": list(truth) if truth else None,
+                                "truth_source": source,
+                                "rung_outcome": rung,
+                                "lookalikes": len(found),
+                                "true_found": any(
+                                    on_target(point_of(c)) for c in found
+                                ),
+                                "true_score": round(max(true_scores), 3)
+                                if true_scores
+                                else None,
+                                "best_other_score": round(max(other_scores), 3)
+                                if other_scores
+                                else None,
+                                "ms": round(statistics.median(timings), 1),
+                                "template_found": bool(tpoint and on_target(tpoint)),
+                                "template_wrong": bool(
+                                    tpoint and truth and not on_target(tpoint)
+                                ),
+                                "template_ms": round(template_ms, 1),
+                            }
+                        )
                         print(json.dumps(rows[-1]), flush=True)
 
     scored = [r for r in rows if r["truth"] is not None]
     summary = {
-        "frames_steps": len(rows), "scored": len(scored),
-        "rung_outcomes": {k: sum(1 for r in scored if r["rung_outcome"] == k)
-                          for k in sorted({r["rung_outcome"] for r in scored})},
+        "frames_steps": len(rows),
+        "scored": len(scored),
+        "rung_outcomes": {
+            k: sum(1 for r in scored if r["rung_outcome"] == k)
+            for k in sorted({r["rung_outcome"] for r in scored})
+        },
         "wrong_target": sum(1 for r in scored if r["rung_outcome"] == "wrong_target"),
         "abstain": sum(1 for r in scored if r["rung_outcome"] == "abstain"),
-        "abstain_text_label": sum(1 for r in scored if r["rung_outcome"] == "abstain" and r["text_label"]),
+        "abstain_text_label": sum(
+            1 for r in scored if r["rung_outcome"] == "abstain" and r["text_label"]
+        ),
         "template_found": sum(1 for r in scored if r["template_found"]),
         "template_wrong": sum(1 for r in scored if r["template_wrong"]),
-        "median_ms": round(statistics.median(r["ms"] for r in rows), 1) if rows else None,
+        "median_ms": round(statistics.median(r["ms"] for r in rows), 1)
+        if rows
+        else None,
         "max_ms": max((r["ms"] for r in rows), default=None),
     }
-    args.output.write_text(json.dumps({
-        "schema": "openadapt.rdp-avc444-grounding-heldout.v1",
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "host": {"machine": platform.machine(), "system": platform.system(), "python": sys.version.split()[0]},
-        "thresholds": {"accept_score": ACCEPT_SCORE, "lookalike_margin": LOOKALIKE_MARGIN,
-                       "template_threshold": TEMPLATE_THRESHOLD, "tolerance_px": [TOL_X, TOL_Y]},
-        "summary": summary, "rows": rows,
-    }, indent=2))
+    args.output.write_text(
+        json.dumps(
+            {
+                "schema": "openadapt.rdp-avc444-grounding-heldout.v1",
+                "generated_at": datetime.now(timezone.utc).isoformat(
+                    timespec="seconds"
+                ),
+                "host": {
+                    "machine": platform.machine(),
+                    "system": platform.system(),
+                    "python": sys.version.split()[0],
+                },
+                "thresholds": {
+                    "accept_score": ACCEPT_SCORE,
+                    "lookalike_margin": LOOKALIKE_MARGIN,
+                    "template_threshold": TEMPLATE_THRESHOLD,
+                    "tolerance_px": [TOL_X, TOL_Y],
+                },
+                "summary": summary,
+                "rows": rows,
+            },
+            indent=2,
+        )
+    )
     print(json.dumps(summary, indent=2))
     return 0
 
