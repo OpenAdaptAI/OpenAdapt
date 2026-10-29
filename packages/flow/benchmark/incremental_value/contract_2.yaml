@@ -62,7 +62,7 @@ frame:
     read:
       kind: sql
       sql_driver: incremental_value.exec_mariadb
-      sql_connect_args: {container: openadapt-openemr-incremental-db-1, user: oa_iv_reader, database: openemr}
+      sql_connect_args: {container: openadapt-openemr-iv2-db-1, user: oa_iv_reader, database: openemr}
       sql_password_env: INCREMENTAL_VALUE_READER_PASSWORD
       # The query lives in a view (audit_query.sql, created at seed time):
       # the read-only guard refuses the word INSERT even inside literals.
@@ -72,7 +72,7 @@ frame:
     dialect: mysql
     read:
       sql_driver: incremental_value.exec_mariadb
-      sql_connect_args: {container: openadapt-openemr-incremental-db-1, user: oa_iv_reader, database: openemr}
+      sql_connect_args: {container: openadapt-openemr-iv2-db-1, user: oa_iv_reader, database: openemr}
       sql_password_env: INCREMENTAL_VALUE_READER_PASSWORD
     profile: openemr
     profile_sha256: "sha256:a3daefcf7b7f96e0c68a7d5c1829c3e358dc1ce9366e3098d18bc80441685bed"
