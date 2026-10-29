@@ -34,7 +34,9 @@ To keep pull requests fast, CI runs in three tiers:
 - **Nightly** (`nightly.yml`, daily at 07:23 UTC and on dispatch): calls
   Packages (with the Desktop test and build workflows) and the launcher CI as
   a scheduled run, so every package's full suite runs against main on every
-  platform its CI covers, whatever changed. The merge queue's push and a pull
+  platform its CI covers, whatever changed. Flow's unit shards also run all
+  of `tests/e2e` there; pull requests and main run the end-to-end tests
+  `flow-critical` names. The merge queue's push and a pull
   request run only the packages a change touches; this catches a package
   nobody touched breaking on main. When a job fails, the run opens the
   `main is red` issue (label `main-is-red`), or updates it if one is open. A
@@ -98,7 +100,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
 | ci.yml | `smoke`, `ci` | yes | yes | no |
-| packages.yml | `flow-unit` | 2 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
+| packages.yml | `flow-unit` | 4 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
@@ -186,15 +188,17 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
-Three kinds of workflow keep their own groups:
+The release workflows, `desktop-release.yml` among them, keep a fixed group
+and never cancel, so releases run one at a time.
 
-- The release workflows use a fixed group and never cancel, so releases run
-  one at a time.
-- `desktop-release.yml` follows the same pattern.
-- `packages.yml` has its own rule (#1398). A push to main that doesn't touch
-  Desktop may cancel an older one, because `desktop-release.yml` waits only
-  for runs on commits that touch Desktop. Queue groups and dispatches are never
-  cancelled.
+`packages.yml` follows the same rule as the others (its group is named
+`packages-…`). It used to let a push to main without a Desktop change cancel
+an older one, judging the change from the push payload's file lists. Those
+lists missed Desktop files on PR merge pushes, so Desktop-changing runs were
+cancelled and Desktop 0.23.0 and 0.24.1 never released. Now no push to main is
+cancelled. `desktop-release.yml` also no longer depends on one particular run:
+each time Packages completes on main, and every three hours, it releases from
+the newest Desktop-changing commit's latest successful Packages push run.
 
 ## Caches
 

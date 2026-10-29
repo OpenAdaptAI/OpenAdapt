@@ -9,7 +9,25 @@
       "certification": null,
       "evidence": "On 2026-10-11 this bundle ran over 8 made-up referrals on a local OpenEMR test copy. 7 saved and a separate REST and SQL read matched 12 of 12 fields; the duplicate-name case stopped at OpenEMR's duplicate check. Engine certification was off for those runs.",
       "usage": "Start signed in to OpenEMR on Patient > New (/interface/new/new_comprehensive.php) at 1280x800. benchmark/openemr_local in this repository brings up a matching synthetic copy.",
-      "params": ["title", "fname", "lname", "DOB", "sex", "street", "city", "state_label", "postal_code", "phone_home", "email", "country_code"]
+      "params": [
+        "title",
+        "fname",
+        "lname",
+        "DOB",
+        "sex",
+        "street",
+        "city",
+        "state_label",
+        "postal_code",
+        "phone_home",
+        "email",
+        "country_code"
+      ],
+      "app_license": "GPL-3.0",
+      "screens": {
+        "data": "synthetic",
+        "source": "benchmark/openemr_local (made-up patients)"
+      }
     },
     {
       "id": "openimis/claim-intake",

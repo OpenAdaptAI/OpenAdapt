@@ -372,10 +372,10 @@ class AnthropicStepAnnotator:
             # invoked (keeps the module import-light and key-free). The default
             # model reuses the repo's single Anthropic-model constant so a bump
             # there follows here too.
-            from openadapt_flow.benchmark.agent_baseline import (
+            from openadapt_flow.anthropic_defaults import (
                 MODEL as DEFAULT_MODEL,
             )
-            from openadapt_flow.benchmark.agent_baseline import (
+            from openadapt_flow.anthropic_defaults import (
                 load_api_key,
             )
 
