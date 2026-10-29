@@ -1666,13 +1666,13 @@ def judge_frame(
                     continue
                 if str(ref) in declared_keys or str(ref) in logged or names_moved(ref):
                     continue
-                table = (
+                entry_table = (
                     get_path(entry, attribution.table_field)  # type: ignore[union-attr]
                     if attribution is not None and attribution.table_field
                     else None
                 )
-                if table not in (None, "") and any(
-                    same_table(table, t) for t in own_written
+                if entry_table not in (None, "") and any(
+                    same_table(entry_table, t) for t in own_written
                 ):
                     # The bot's write to its own per-user state (its UI
                     # settings, its recent charts): the whole-database diff
