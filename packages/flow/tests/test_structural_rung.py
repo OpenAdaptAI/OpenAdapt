@@ -833,6 +833,31 @@ def test_playwright_structural_locator_and_locate_roundtrip() -> None:
         close()
 
 
+def test_playwright_input_submit_is_a_button_named_by_its_value() -> None:
+    PlaywrightBackend = _pw_backend()
+    backend, close = PlaywrightBackend.launch("about:blank", headless=True)
+    try:
+        backend.page.set_content(
+            '<form><label for="s">Summary:</label><input id="s" name="summary">'
+            '<input type="submit" name="preview" value="Preview">'
+            '<input type="submit" name="submit" value="Create ticket"></form>'
+        )
+        box = backend.page.locator('input[name="submit"]').bounding_box()
+        cx, cy = int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
+        loc = backend.structural_locator_at(cx, cy)
+        assert loc is not None and loc.selector is None
+        assert (loc.role, loc.name) == ("button", "Create ticket")
+        handle = backend.locate_structural(loc)
+        assert handle is not None
+        px, py = handle.point
+        assert box["x"] <= px <= box["x"] + box["width"]
+        field = backend.page.locator("#s").bounding_box()
+        loc = backend.structural_locator_at(int(field["x"]) + 5, int(field["y"]) + 5)
+        assert loc is not None and (loc.role, loc.name) == ("textbox", "Summary:")
+    finally:
+        close()
+
+
 def test_playwright_structural_survives_drift_where_visual_fails() -> None:
     from openadapt_flow.validation.structural_action import run_probe
 

@@ -4097,6 +4097,12 @@ class InteractiveRecorder:
                 structural_after=structural_after,
             )
         elif field and field in self._param_fields:
+            # The rect also tells the compiler where this value shows: a
+            # click inside it may land on the typed value, which varies per
+            # run and must not become the click's label.
+            rect = pt.get("rect") or None
+            if rect and rect[2] and rect[3]:
+                label_evidence["field_rect"] = [int(v) for v in rect]
             self.recorder.record_observed(
                 {"kind": "type", "text": pt["value"], **label_evidence},
                 before_png=self._last_frame,

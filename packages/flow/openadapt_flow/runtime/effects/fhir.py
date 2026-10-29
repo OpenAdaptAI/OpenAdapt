@@ -104,6 +104,52 @@ class AccessTokenSource(Protocol):
     def invalidate(self) -> None: ...
 
 
+def split_path(dotted: str) -> list[str]:
+    """Path segments, keeping a filter's dotted key in its segment."""
+
+    segs: list[str] = []
+    depth = 0
+    cur = ""
+    for ch in dotted:
+        if ch == "." and depth == 0:
+            segs.append(cur)
+            cur = ""
+            continue
+        depth += {"[": 1, "]": -1}.get(ch, 0)
+        cur += ch
+    segs.append(cur)
+    return segs
+
+
+def parse_filter(cond: str) -> Optional[tuple[str, str, bool]]:
+    """``key=value`` or ``key^=value`` as (key, value, prefix); None if neither."""
+
+    key, eq, value = cond.partition("=")
+    if not eq or not key:
+        return None
+    prefix = key.endswith("^")
+    key = key[:-1] if prefix else key
+    return (key, value, prefix) if key else None
+
+
+def filter_matches(item: Any, want: tuple[str, str, bool]) -> bool:
+    """True when ``item`` is an element the filter keeps."""
+
+    if not isinstance(item, dict):
+        return False
+    node: Any = item
+    for part in want[0].split("."):
+        if isinstance(node, list):
+            node = node[0] if node else None
+        if not isinstance(node, dict) or part not in node:
+            return False
+        node = node[part]
+    if node is None or isinstance(node, (dict, list)):
+        return False
+    text = str(node)
+    return text.startswith(want[1]) if want[2] else text == want[1]
+
+
 def extract_path(resource: dict[str, Any], dotted: str) -> Any:
     """Extract ``dotted`` (``a.b.c``) from a nested FHIR resource.
 
@@ -111,18 +157,20 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
     ``component[0]`` / single-coding case), so ``code.coding.code`` reads the
     first coding's code. A segment may filter a list first:
     ``telecom[system=email].value`` reads the first telecom whose ``system``
-    is ``email`` (a Patient keeps its phone and its email in one list).
+    is ``email`` (a Patient keeps its phone and its email in one list). The
+    filter's key may be dotted, and ``^=`` keeps the elements whose value
+    starts with the text: ``participant[actor.reference^=Patient/]`` reads
+    an Appointment's patient participant.
     Returns ``None`` when any segment is missing or no element matches.
     """
     node: Any = resource
-    for seg in dotted.split("."):
+    for seg in split_path(dotted):
         name, want = seg, None
         if seg.endswith("]") and "[" in seg:
             name, _, cond = seg[:-1].partition("[")
-            key, eq, value = cond.partition("=")
-            if not eq or not key:
+            want = parse_filter(cond)
+            if want is None:
                 return None
-            want = (key, value)
         if isinstance(node, list):
             node = node[0] if node else None
         if not isinstance(node, dict):
@@ -131,11 +179,7 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
         if want is not None:
             items = node if isinstance(node, list) else [node]
             node = next(
-                (
-                    item
-                    for item in items
-                    if isinstance(item, dict) and str(item.get(want[0])) == want[1]
-                ),
+                (item for item in items if filter_matches(item, want)),
                 None,
             )
     if isinstance(node, list):
@@ -336,7 +380,22 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     self.read_problem = "a Bundle entry has no resource"
                     return None
                 mode = (entry.get("search") or {}).get("mode")
-                if mode not in ("include", "outcome"):
+                if mode == "outcome" or (
+                    mode is None and resource.get("resourceType") == "OperationOutcome"
+                ):
+                    # A message about the search, not a record (Epic sends a
+                    # warning "returns no results" on an empty search). An
+                    # error in it means the set may be partial.
+                    issues = resource.get("issue") or []
+                    if not isinstance(issues, list) or any(
+                        not isinstance(i, dict)
+                        or i.get("severity") not in ("warning", "information")
+                        for i in issues
+                    ):
+                        self.read_problem = "the search returned an error outcome"
+                        return None
+                    continue
+                if mode != "include":
                     matches += 1
                 out.append(self._flatten(resource))
             next_url = _next_link(bundle)

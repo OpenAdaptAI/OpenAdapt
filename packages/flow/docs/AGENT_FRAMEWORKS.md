@@ -174,3 +174,72 @@ reply = guard.run(order, lambda: my_api.create(**order))
 
 From an MCP client, use `openadapt verify serve` instead
 ([VERIFY_WRITES.md](VERIFY_WRITES.md)).
+
+## Skill cache: run a browser task once with the agent, then as a program
+
+When your agent does a browser task and the write is verified, the run can
+become a program. The next time the same task comes in, the program runs
+through MCP instead of the agent, with no model calls.
+
+```python
+from openadapt_flow.integrations.agents.skills import FrameworkAgent, SkillCache
+
+def run_agent(task, tools):
+    # tools.functions(): observe, click, type_text, press_key, scroll, finish.
+    # Wrap them for your framework (function_tool, @tool, StructuredTool) and
+    # run your agent on `task`. Return its token usage, or None.
+    ...
+
+cache = SkillCache(
+    url="https://clinic.example/referrals",
+    verify="verify.yaml",                     # reads the system of record
+    expect={"patient_id": "p1"},              # the record the task writes
+    on_screen=["Jane Sample", "MRN P1"],      # checked before every save
+    offer=ask_the_operator,                   # sees the proposed checks
+    admitter=operator_key,                    # a registered admitter key
+    canary_params=[{"note": "Canary note"}],
+)
+agent = FrameworkAgent(run_agent, principal_id="agent:intake")
+
+first = cache.run("Save this note for Jane Sample: {note}", {"note": "..."}, agent)
+later = cache.run("Save this note for Jane Sample: {note}", {"note": "..."}, agent)
+# first.path == "agent"; later.path == "skill", later.model_calls == 0
+```
+
+The first run goes through [compile-agent](COMPILE_AGENT.md):
+
+1. The agent works through the tools. They show the page as a structural
+   listing and check that the right record is on screen before every save.
+2. The system of record must show exactly the record the task names. If it
+   doesn't, nothing is compiled.
+3. `offer` gets the proposed record checks and returns the name of the
+   person who confirmed them, or None to leave the run as a draft.
+4. Canary runs with new values, then admission by your admitter key.
+5. The program is written out as an MCP server with one tool.
+
+Every later call of the same task runs that tool over MCP. "The same task"
+means the same instruction, parameter names, `expect`, `on_screen`, `url`,
+`verify.yaml` contents, policy and `environment`. Pass `environment=` (the
+app's version or deployment) so a changed app compiles again. A task for
+another record is another task, and it goes to the agent.
+
+What each skill run has:
+
+- **The record check, twice.** The program's own confirmed checks give the
+  run its receipt. Then the cache reads the system of record again against
+  this task: exactly one new record of this task's record (one that matches
+  `expect`), with this task's values, and no other change to that record.
+  Other users' writes to other records during the run don't fail it; they
+  are counted in `record_check["outside_run"]`.
+- **No wire check.** A skill run's writes are not checked before they leave
+  (`wire_checked` is false). Run 1 has one only when you pass
+  `write_adapter=`.
+- **A person.** A failed run is never handed back to the agent. When the
+  program stops, the run goes to the exception inbox. When only this task's
+  record check fails, the result is `RECORD_CHECK_FAILED` with the check's
+  reasons, for a person to look at the record.
+
+A skill that fails a run is evicted: it moves to `<cache_dir>/evicted/`, and
+the next run of the task goes to the agent and compiles afresh.
+`cache.evict(prompt, params)` does the same by hand. Skills live in
+`~/.openadapt/skills` unless you pass `cache_dir=`.

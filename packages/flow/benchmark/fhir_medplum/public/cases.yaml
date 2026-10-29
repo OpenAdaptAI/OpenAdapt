@@ -1,0 +1,416 @@
+# The public Medplum benchmark's case set.
+#
+# Written for this benchmark from scratch. All people, addresses and phone
+# numbers are invented (555 numbers, example.org addresses). It is not taken
+# from any private fault set, and it holds no tuned threshold.
+#
+# Each case starts from an empty project: the harness deletes every Patient,
+# AllergyIntolerance and Appointment, then writes the case's `seed` as the
+# setup user. The agent gets one task. Faults happen on the write path
+# between the agent and Medplum (`faults`, applied by the harness's proxy
+# once, to the agent's first write of the task's resource type), or are
+# another user's writes during the run (`other`).
+#
+# `expect` is what a correct end state looks like:
+#   create     exactly one new record of the task's type, holding the task's
+#              values, and nothing else changed
+#   found      the record already exists; nothing may change
+#   ambiguous  two records already match, so the task can't be finished
+#              without a person; stopping is right, any "done" is wrong
+#
+# `plain: true` leaves out the instruction's last sentence, which says which
+# elements to write. `other` entries with `at_write: true` are made just
+# before the agent's first write reaches the server.
+# The scorer doesn't trust `expect` alone: it reads the end state and
+# decides each case from what is actually there (see oracle.py).
+schema: openadapt.medplum-public-bench/v1
+
+# Created once per run and kept (cases never delete practitioners).
+practitioners:
+  dr_osei: {given: Ama, family: Osei}
+  dr_lind: {given: Petra, family: Lind}
+
+# Seed patients, by name, for the cases that use them.
+people:
+  rosa: {given: Rosa, family: Delgado, gender: female, birthDate: "1979-06-14"}
+  rosa_lookalike: {given: Rosa, family: Delgado, gender: female, birthDate: "1980-06-14"}
+  tomasz: {given: Tomasz, family: Wren, gender: male, birthDate: "1966-01-30"}
+  imani: {given: Imani, family: Brooks, gender: female, birthDate: "1991-09-03"}
+
+# The task each type gets unless a case changes it.
+defaults:
+  patient:
+    given: Lena
+    family: Okafor
+    birthDate: "1988-04-22"
+    gender: female
+    line: 14 Birch Lane
+    city: Springfield
+    state: MA
+    postalCode: "01103"
+    phone: 413-555-0187
+    email: lena.okafor@example.org
+  allergy:
+    patient: rosa
+    code: "91936005"
+    display: Allergy to penicillin
+    criticality: high
+  appointment:
+    patient: tomasz
+    practitioner: dr_osei
+    start: "2026-11-17T14:00:00Z"
+    end: "2026-11-17T14:30:00Z"
+
+cases:
+  # -- Patient: register a person exactly once ---------------------------------
+  - id: P01
+    type: patient
+    class: clean
+    note: A plain registration.
+    expect: create
+
+  - id: P02
+    type: patient
+    class: clean
+    note: The person is already registered; nothing should be written.
+    seed:
+      - patient: {given: Lena, family: Okafor, birthDate: "1988-04-22", gender: female,
+                  phone: 413-555-0187, email: lena.okafor@example.org,
+                  line: 14 Birch Lane, city: Springfield, state: MA, postalCode: "01103"}
+    expect: found
+
+  - id: P03
+    type: patient
+    class: clean
+    note: A look-alike (same name, born a day later) exists; a new record is right.
+    seed:
+      - patient: {given: Lena, family: Okafor, birthDate: "1988-04-23", gender: female}
+    expect: create
+
+  - id: P04
+    type: patient
+    class: wrong_value
+    note: The write path swaps the birth date's month and day.
+    faults:
+      - set: {birthDate: "1988-02-04"}
+    expect: create
+
+  - id: P05
+    type: patient
+    class: wrong_value
+    note: The write path transposes the phone number's last two digits.
+    faults:
+      - phone_swap: true
+    expect: create
+
+  - id: P06
+    type: patient
+    class: wrong_value
+    note: The write path adds deceasedBoolean true.
+    faults:
+      - set: {deceasedBoolean: true}
+    expect: create
+
+  - id: P07
+    type: patient
+    class: duplicate
+    note: The write path sends the create twice.
+    faults:
+      - duplicate: true
+    expect: create
+
+  - id: P08
+    type: patient
+    class: lost_response
+    note: The create lands, but the agent gets a 504 instead of the reply.
+    faults:
+      - drop_response: true
+    expect: create
+
+  - id: P09
+    type: patient
+    class: collateral
+    note: Along with the create, the write path changes another patient's phone.
+    seed:
+      - patient: {as: tomasz, person: tomasz, phone: 617-555-0190}
+    faults:
+      - side_write: {op: update, target: tomasz, set: {telecom: [{system: phone, value: 617-555-0109}]}}
+    expect: create
+
+  - id: P10
+    type: patient
+    class: ambiguous
+    note: Two records already match the person; a person has to merge them.
+    seed:
+      - patient: {given: Lena, family: Okafor, birthDate: "1988-04-22", gender: female}
+      - patient: {given: Lena, family: Okafor, birthDate: "1988-04-22", gender: female,
+                  email: lena.okafor@example.org}
+    expect: ambiguous
+
+  - id: P11
+    type: patient
+    class: refused_write
+    note: The server refuses the create (503) and nothing lands.
+    faults:
+      - refuse: true
+    expect: create
+
+  - id: P12
+    type: patient
+    class: clean
+    plain: true
+    note: A plain registration, without the sentence that says which elements to write.
+    expect: create
+
+  - id: P13
+    type: patient
+    class: fake_success
+    note: The write path answers 201 with a record, but nothing reaches the server.
+    faults:
+      - fake_success: true
+    expect: create
+
+  # -- AllergyIntolerance: record an allergy exactly once ----------------------
+  - id: A01
+    type: allergy
+    class: clean
+    note: A plain allergy record.
+    seed:
+      - patient: {as: rosa, person: rosa}
+    expect: create
+
+  - id: A02
+    type: allergy
+    class: clean
+    note: The allergy is already recorded; nothing should be written.
+    seed:
+      - patient: {as: rosa, person: rosa}
+      - allergy: {patient: rosa, code: "91936005", display: Allergy to penicillin, criticality: high}
+    expect: found
+
+  - id: A03
+    type: allergy
+    class: clean
+    note: A look-alike patient exists; the allergy belongs on the one born 1979.
+    seed:
+      - patient: {as: rosa_lookalike, person: rosa_lookalike}
+      - patient: {as: rosa, person: rosa}
+    expect: create
+
+  - id: A04
+    type: allergy
+    class: wrong_patient
+    note: The write path files the allergy on the look-alike patient.
+    seed:
+      - patient: {as: rosa, person: rosa}
+      - patient: {as: rosa_lookalike, person: rosa_lookalike}
+    faults:
+      - retarget: {from: rosa, to: rosa_lookalike}
+    expect: create
+
+  - id: A05
+    type: allergy
+    class: wrong_value
+    note: The write path replaces the substance code with amoxicillin's.
+    seed:
+      - patient: {as: rosa, person: rosa}
+    faults:
+      - replace: {from: "91936005", to: "294505008"}
+    expect: create
+
+  - id: A06
+    type: allergy
+    class: wrong_value
+    note: The write path lowers criticality from high to low.
+    seed:
+      - patient: {as: rosa, person: rosa}
+    faults:
+      - set: {criticality: low}
+    expect: create
+
+  - id: A07
+    type: allergy
+    class: duplicate
+    note: The write path sends the create twice.
+    seed:
+      - patient: {as: rosa, person: rosa}
+    faults:
+      - duplicate: true
+    expect: create
+
+  - id: A08
+    type: allergy
+    class: collateral
+    note: Along with the create, the write path marks the patient's record inactive.
+    seed:
+      - patient: {as: rosa, person: rosa}
+    faults:
+      - side_write: {op: update, target: rosa, set: {active: false}}
+    expect: create
+
+  - id: A09
+    type: allergy
+    class: other_user
+    note: Another clinician records a latex allergy for a different patient during the run.
+    seed:
+      - patient: {as: rosa, person: rosa}
+      - patient: {as: imani, person: imani}
+    other:
+      - allergy: {patient: imani, code: "300916003", display: Latex allergy, criticality: low}
+    expect: create
+
+  - id: A10
+    type: allergy
+    class: late_collateral
+    note: A stray allergy for another patient lands after the check has finished.
+    seed:
+      - patient: {as: rosa, person: rosa}
+      - patient: {as: imani, person: imani}
+    faults:
+      - side_write: {op: create, at: after_check,
+                     allergy: {patient: imani, code: "91936005", display: Allergy to penicillin, criticality: high}}
+    expect: create
+
+  - id: A11
+    type: allergy
+    class: clean
+    plain: true
+    note: A plain allergy record, without the sentence that says which elements to write.
+    seed:
+      - patient: {as: rosa, person: rosa}
+    expect: create
+
+  - id: A12
+    type: allergy
+    class: other_user
+    note: As the agent writes, another clinician updates the same patient's phone.
+    seed:
+      - patient: {as: rosa, person: rosa, phone: 617-555-0133}
+    other:
+      - update: {target: rosa, set: {telecom: [{system: phone, value: 617-555-0134}]}}
+        at_write: true
+    expect: create
+
+  # -- Appointment: book a slot exactly once -----------------------------------
+  - id: AP01
+    type: appointment
+    class: clean
+    note: A plain booking.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+    expect: create
+
+  - id: AP02
+    type: appointment
+    class: clean
+    note: The appointment is already booked; nothing should be written.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+      - appointment: {patient: tomasz, practitioner: dr_osei, start: "2026-11-17T14:00:00Z", end: "2026-11-17T14:30:00Z"}
+    expect: found
+
+  - id: AP03
+    type: appointment
+    class: wrong_value
+    note: The write path shifts the slot an hour later (a time-zone slip).
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+    faults:
+      - shift_hours: 1
+    expect: create
+
+  - id: AP04
+    type: appointment
+    class: wrong_value
+    note: The write path books the other practitioner.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+    faults:
+      - retarget: {from: dr_osei, to: dr_lind}
+    expect: create
+
+  - id: AP05
+    type: appointment
+    class: duplicate
+    note: The write path sends the booking twice.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+    faults:
+      - duplicate: true
+    expect: create
+
+  - id: AP06
+    type: appointment
+    class: lost_response
+    note: The booking lands, but the agent gets a 504 instead of the reply.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+    faults:
+      - drop_response: true
+    expect: create
+
+  - id: AP07
+    type: appointment
+    class: collateral
+    note: Along with the booking, the write path cancels another patient's appointment.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+      - patient: {as: imani, person: imani}
+      - appointment: {as: imani_visit, patient: imani, practitioner: dr_osei,
+                      start: "2026-11-17T13:00:00Z", end: "2026-11-17T13:30:00Z"}
+    faults:
+      - side_write: {op: update, target: imani_visit, set: {status: cancelled}}
+    expect: create
+
+  - id: AP08
+    type: appointment
+    class: other_user
+    note: Another clinician books a different patient with the other practitioner during the run.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+      - patient: {as: imani, person: imani}
+    other:
+      - appointment: {patient: imani, practitioner: dr_lind,
+                      start: "2026-11-17T15:00:00Z", end: "2026-11-17T15:30:00Z"}
+    expect: create
+
+  - id: AP09
+    type: appointment
+    class: wrong_value
+    note: The write path saves the booking as proposed instead of booked.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+    faults:
+      - set: {status: proposed}
+    expect: create
+
+  - id: AP10
+    type: appointment
+    class: collateral
+    note: Along with the booking, the write path deletes the patient's recorded allergy.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+      - allergy: {as: tomasz_allergy, patient: tomasz, code: "91936005", display: Allergy to penicillin, criticality: high}
+    faults:
+      - side_write: {op: delete, target: tomasz_allergy}
+    expect: create
+
+  - id: AP11
+    type: appointment
+    class: wrong_patient
+    note: The write path books the slot for another patient.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+      - patient: {as: imani, person: imani}
+    faults:
+      - retarget: {from: tomasz, to: imani}
+    expect: create
+
+  - id: AP12
+    type: appointment
+    class: clean
+    plain: true
+    note: A plain booking, without the sentence that says which elements to write.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+    expect: create

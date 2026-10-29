@@ -1,0 +1,371 @@
+{
+ "summary": {
+  "cases": 10,
+  "right": 10,
+  "faults_passed_as_verified": 0,
+  "harness_errors": 0,
+  "sandbox_calls": 23,
+  "date": "2026-10-29",
+  "suite_sha256": "built-in"
+ },
+ "cases": [
+  {
+   "id": "clean-1",
+   "class": "clean",
+   "contract": "register_patient.yaml",
+   "right_answer": "CONFIRMED",
+   "outcome": "CONFIRMED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "present",
+   "reasons": [],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 2.3
+  },
+  {
+   "id": "clean-2",
+   "class": "clean",
+   "contract": "register_patient.yaml",
+   "right_answer": "CONFIRMED",
+   "outcome": "CONFIRMED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "present",
+   "reasons": [],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 1.7
+  },
+  {
+   "id": "phone-dropped",
+   "class": "silent_drop",
+   "contract": "register_patient_phone.yaml",
+   "right_answer": "REFUTED",
+   "outcome": "REFUTED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "exact_new_set was refuted: observed conflicting, 1 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 11.8
+  },
+  {
+   "id": "wrong-birth-date",
+   "class": "wrong_field",
+   "contract": "register_patient.yaml",
+   "right_answer": "not CONFIRMED",
+   "outcome": "UNCERTAIN",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "absent",
+   "reasons": [
+    "exact_new_set was refuted: observed absent, 0 of 1 expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 0,
+    "locations_in_search": 0
+   },
+   "seconds": 11.7
+  },
+  {
+   "id": "wrong-city",
+   "class": "wrong_field",
+   "contract": "register_patient.yaml",
+   "right_answer": "REFUTED",
+   "outcome": "REFUTED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "exact_new_set was refuted: observed conflicting, 1 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 11.6
+  },
+  {
+   "id": "wrong-given",
+   "class": "wrong_field",
+   "contract": "register_patient.yaml",
+   "right_answer": "REFUTED",
+   "outcome": "REFUTED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "exact_new_set was refuted: observed conflicting, 1 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 11.9
+  },
+  {
+   "id": "no-write",
+   "class": "no_write",
+   "contract": "register_patient.yaml",
+   "right_answer": "not CONFIRMED",
+   "outcome": "UNCERTAIN",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "absent",
+   "reasons": [
+    "exact_new_set was refuted: observed absent, 0 of 1 expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 0,
+    "distinct_locations": 0,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 0,
+    "locations_in_search": 0
+   },
+   "seconds": 12.4
+  },
+  {
+   "id": "existing-returned-201",
+   "class": "no_new_record",
+   "contract": "register_patient.yaml",
+   "right_answer": "not CONFIRMED",
+   "outcome": "UNCERTAIN",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "absent",
+   "reasons": [
+    "exact_new_set was refuted: observed absent, 0 of 1 expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": true,
+    "seed_creates": 1,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 15.5
+  },
+  {
+   "id": "repeat-create-merged",
+   "class": "no_new_record",
+   "contract": "register_patient.yaml",
+   "right_answer": "CONFIRMED",
+   "outcome": "CONFIRMED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "present",
+   "reasons": [],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 2,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 4.6
+  },
+  {
+   "id": "extra-record",
+   "class": "duplicate",
+   "contract": "register_patient.yaml",
+   "right_answer": "REFUTED",
+   "outcome": "REFUTED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "refuted",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "exact_new_set was refuted: observed conflicting, 2 of 1 expected record(s)",
+    "1 record(s) outside the declared write moved (added); 1 of them no actor explains"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 2,
+    "distinct_locations": 2,
+    "location_is_seed": false,
+    "seed_creates": 0,
+    "search_matches": 2,
+    "locations_in_search": 2
+   },
+   "seconds": 14.0
+  }
+ ]
+}
