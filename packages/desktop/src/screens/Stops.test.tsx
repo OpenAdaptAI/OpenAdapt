@@ -194,3 +194,17 @@ it("puts the item next to each possible match, field by field", async () => {
   expect(screen.getByText("Different").closest("td")?.className).toBe("stop-differs");
   expect(screen.getByText("Same").closest("td")?.className).toBe("stop-same");
 });
+
+it("says answers won't count while no approver root is pinned", async () => {
+  vi.mocked(engineTry).mockImplementation(async (cmd) =>
+    cmd === CMD.LIST_STOP_CARDS
+      ? {
+          ok: true,
+          cards: [card("a", "Fairwick")],
+          approver_key: { ready: true, in_app: true, touch_id: true, pinned: false },
+        }
+      : null,
+  );
+  render(<Stops />);
+  expect(await screen.findByText("No approver root is pinned on this computer")).toBeTruthy();
+});
