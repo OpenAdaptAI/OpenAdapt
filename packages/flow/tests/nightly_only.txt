@@ -37,14 +37,12 @@ tests/test_behavioral_generalization.py::test_held_out_rows_on_an_in_memory_app 
 tests/test_browser_attach.py::test_launched_browser_refuses_static_unbound_closed_shadow_password  # 9s
 tests/test_browser_attach.py::test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trials  # 134s
 tests/test_business_decision.py::test_signed_decision_selects_one_branch_then_normal_action_gates_run  # 6s
-tests/test_cli_hints.py::test_printed_hints_never_hard_code_the_engine_spelling  # 6s
 tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says  # 13s
 tests/test_compatibility_matrix.py::test_workers_run_governed_durable_api_items  # 8s
 tests/test_competitor_drift_instrument.py::test_honest_stub_has_zero_silent_everywhere  # 8s
 tests/test_competitor_drift_instrument.py::test_screen_blind_headline_rate_is_nonzero  # 8s
 tests/test_dense_surface.py::test_end_to_end_record_and_replay_faithful  # 11s
 tests/test_durable_pipelined_readback.py::test_a_check_that_fails_on_resume_leaves_a_reconciliation_pause  # 5s
-tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends  # 6s
 tests/test_durable_program.py::test_delivery_callback_cannot_remove_a_required_postcondition  # 5s
 tests/test_durable_program.py::test_program_settling_mutation_cannot_create_a_verified_checkpoint  # 5s
 tests/test_durable_program.py::test_settling_callback_cannot_remove_a_required_postcondition  # 5s
@@ -65,7 +63,6 @@ tests/test_governed_authorization.py::test_durable_resume_restores_governed_auth
 tests/test_governed_authorization.py::test_program_transition_cannot_hide_governed_asset_mutation  # 6s
 tests/test_governed_authorization.py::test_transition_halt_checkpoints_already_performed_write  # 8s
 tests/test_halt_detail.py::test_a_record_row_label_is_withheld_even_when_it_is_the_click_target  # 10s
-tests/test_halt_detail.py::test_a_typed_value_degrades_to_the_field_shape_and_never_appears  # 10s
 tests/test_halt_detail.py::test_resolution_halt_says_what_broke_and_what_continue_will_recheck  # 10s
 tests/test_halt_detail.py::test_the_cloud_safe_task_is_unchanged_by_the_local_enrichment  # 10s
 tests/test_halt_detail.py::test_the_local_detail_carries_only_closed_values  # 10s
@@ -81,7 +78,6 @@ tests/test_heal_fuzz.py::test_heal_produces_valid_bundle_and_is_idempotent  # 9s
 tests/test_identity_ladder.py::test_harness_zero_false_accept_bounded_configs  # 230s
 tests/test_identity_ocr_conservative_9th.py::test_alphanumeric_regression_ac50061_still_abstains  # 5s
 tests/test_identity_ocr_conservative_9th.py::test_numeric_417063_l1_collapse_abstains  # 5s
-tests/test_identity_ocr_conservative_9th.py::test_numeric_mrn_homonym_never_verifies_real_stack  # 53s
 tests/test_induction.py::test_c_branch_program_dismisses_when_present_skips_when_absent  # 12s
 tests/test_interactive_recorder.py::test_recording_shape_matches_the_demonstration  # 17s
 tests/test_interactive_recorder.py::test_replay_succeeds_with_secret_and_new_param  # 6s
@@ -114,13 +110,11 @@ tests/test_record_check_synthesis.py::test_frozen_demo_value_fails_the_live_clea
 tests/test_record_sor.py::test_recorded_change_yields_a_contract_that_verify_run_grades_independent  # 6s
 tests/test_recorder.py::test_record_triage_demo_produces_valid_recording  # 6s
 tests/test_run_authorization.py::test_cli_run_verify_authorize_and_profile  # 6s
-tests/test_safety_gallery.py::test_generator_end_to_end_every_dangerous_case_is_safe  # 8s
 tests/test_seal_anchor.py::test_cli_anchor_and_verify_require_anchor  # 6s
 tests/test_seal_keys.py::test_cli_pin_revoke_and_verify_with_keys  # 10s
 tests/test_sealed_at_rest.py::test_record_compile_and_governed_run_write_no_plaintext  # 16s
 tests/test_sealed_at_rest.py::test_sealed_run_pauses_and_resumes_without_plaintext  # 6s
 tests/test_self_repair.py::test_a_proposal_steered_off_the_app_by_page_text_is_refused  # 5s
-tests/test_self_repair.py::test_healthy_run_never_calls_the_agent  # 12s
 tests/test_self_repair.py::test_nothing_is_written_without_a_person  # 18s
 tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified  # 15s
 tests/test_self_repair.py::test_wrong_proposals_are_refused_and_nothing_is_written  # 10s
