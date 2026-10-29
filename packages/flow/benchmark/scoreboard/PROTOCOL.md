@@ -350,3 +350,31 @@ read the receipt an earlier run left behind. Every claims script now uses a
 fresh directory per item and reads a receipt only after verify-run exits 0
 or 1. Every row of the earlier claims runs has exit 0 or 1 and a fresh
 directory, so those runs were not affected.
+
+## Amendment 10 (2026-10-20, before any figure was quoted): lifecycle economics
+
+A separate table, not an arm: total lifecycle cost per 1,000 verified items
+on OpenEMR, from the lifecycle harness (`benchmark/lifecycle`, the soak's
+workload, oracle, scripted operator and cost model) and the competing arms in
+`benchmark/lifecycle/arms`:
+- `openadapt`: the certified referral program under the production
+  configuration the soak uses. Its API tier is not a separate arm: on main
+  9e4801b7f the compiler refuses the referral's API step
+  (`lifecycle/results/api_tier/`), so a gated run uses the GUI path.
+- `cua_alone`: computer use alone, screenshots only, fixed per-item budget.
+- `agent_tools`: the same model with the DOM/accessibility view, ref-based
+  actions and a read-only REST search, the read-back OpenAdapt uses.
+- `agent_script`: an agent writes a Playwright + REST script with a read-back
+  from the same demonstration, dry-runs it with the save request blocked, and
+  fixes it when it breaks; a person reviews the script once and each fix.
+- `human_script`: a hand-written script, authoring time logged, not
+  maintained during the run.
+
+Every arm runs the same seeded stream (seed 7, 40 items, 10 days, UI changes
+at items 9, 17, 25 and 33). Model spend is capped at $30 across all arms in
+`lifecycle/results/spend.json`, separate from `raw/spend.json`. Prices come
+from `lifecycle/arms/prices.json` (dated). People's time is priced at an
+assumed hourly rate, with bands at half and double. Each silent wrong is
+charged a lower-bound cleanup (one reconcile and one manual entry); its other
+harm is not priced. `build.py` lists every run under `lifecycle/results/`
+that has a REPORT.md.

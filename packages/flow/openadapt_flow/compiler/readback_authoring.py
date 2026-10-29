@@ -87,7 +87,10 @@ from openadapt_flow.runtime.effects.effect import (
     ValueExpr,
     is_agent_identity,
 )
-from openadapt_flow.runtime.effects.readback_values import ValueKind, infer_value_kind
+from openadapt_flow.runtime.effects.readback_values import (
+    ReadbackKind,
+    infer_value_kind,
+)
 
 __all__ = [
     "CHECK_FILE",
@@ -163,7 +166,7 @@ class MarkedField(BaseModel):
     structure_matched: bool = False
     #: How to compare the field: ``text``, ``code``, ``date`` or ``currency``.
     #: Unset, the compiler infers it from the typed value.
-    value_kind: Optional[ValueKind] = None
+    value_kind: Optional[ReadbackKind] = None
     #: ``date`` only: ``dmy`` or ``mdy`` for a numeric date.
     date_order: Optional[Literal["dmy", "mdy"]] = None
 

@@ -60,6 +60,10 @@ jobs:
             packages/*/uv.lock
           cache-suffix: smoke
       - run: uv python install 3.12
+      - name: Every lock installs on its oldest Python, on each platform
+        # The lane runs Python 3.12 on Linux; this catches a lock whose pins
+        # have no file for 3.10 or for macOS or Windows before main does.
+        run: python3 scripts/ci/check_lock_wheels.py
       - name: Install, import and start each package from its lock
         env:
           UV_PYTHON: "3.12"
