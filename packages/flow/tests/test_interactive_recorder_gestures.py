@@ -4,11 +4,13 @@ contenteditable).
 A double-click gesture compiles to ONE ``DOUBLE_CLICK`` step: the in-page
 listener marks the second click (``e.detail === 2``) and Python absorbs the
 held first click, so replay delivers exactly the two demonstrated clicks. A
-native ``<select>`` selection refuses the recording loudly: its option commit
-happens in browser-native dropdown UI that produces no recordable action
-events, so the choice would otherwise be silently absent from the compiled
-workflow. A checkbox records only its click. ``contenteditable`` text entry
-records the typed text.
+native ``<select>`` selection is recorded as the option's label typed into the
+select, which replay types and reads back; the compiled steps replay a
+different option. No Enter is recorded for it: Enter on a select inside a form
+submits the form. A change the page's own script dispatches on a
+hidden select (a TomSelect-style widget) is not recorded: the clicks on the
+visible widget are. A checkbox records only its click. ``contenteditable``
+text entry records the typed text.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from typing import Callable, Iterator
 import pytest
 
 from openadapt_flow.compiler import compile_recording
-from openadapt_flow.interactive_recorder import BrowserAttachError, record_interactive
+from openadapt_flow.interactive_recorder import record_interactive
 
 pytestmark = pytest.mark.timeout(600)
 
@@ -44,6 +46,37 @@ width:200px">
 <option value="v-alpha">Label Alpha</option>
 <option value="v-beta">Label Beta</option>
 </select>
+<select id="site" name="site" tabindex="-1" aria-hidden="true"
+  class="tomselected ts-hidden-accessible"
+  style="position:absolute;width:1px;height:1px;overflow:hidden;
+  clip:rect(0 0 0 0);left:0;top:0">
+<option value="">-</option>
+<option value="1">Site One</option>
+<option value="2">Site Two</option>
+</select>
+<div class="ts-wrapper" style="position:absolute;left:20px;top:290px;width:200px">
+<div id="site-control" class="ts-control" role="combobox" tabindex="0"
+  style="border:1px solid #999;height:24px">Choose a site</div>
+<div id="site-dropdown" class="ts-dropdown" role="listbox" style="display:none">
+<div class="option" role="option" data-value="1" style="height:24px">Site One</div>
+<div class="option" role="option" data-value="2" style="height:24px">Site Two</div>
+</div></div>
+<script>
+// The shape of a TomSelect widget: a hidden native select, a visible control,
+// and a script that updates the select and dispatches change on it.
+const siteSelect = document.getElementById('site');
+const siteControl = document.getElementById('site-control');
+const siteDropdown = document.getElementById('site-dropdown');
+siteControl.addEventListener('click', () => { siteDropdown.style.display = 'block'; });
+for (const opt of siteDropdown.querySelectorAll('.option')) {
+  opt.addEventListener('click', () => {
+    siteSelect.value = opt.dataset.value;
+    siteControl.textContent = opt.textContent;
+    siteDropdown.style.display = 'none';
+    siteSelect.dispatchEvent(new Event('change', {bubbles: true}));
+  });
+}
+</script>
 </body>"""
 
 
@@ -152,11 +185,96 @@ def test_contenteditable_records_typed_text(fixture_url: str, tmp_path: Path) ->
     assert type_event["text"] == "hello notes"
 
 
-def test_native_select_refuses_the_recording(fixture_url: str, tmp_path: Path) -> None:
+def _record_native_select(
+    fixture_url: str, out: Path, param_fields: tuple[str, ...] = ()
+) -> Path:
+    def drive(page, pump) -> None:
+        page.wait_for_selector("#sel", state="visible", timeout=20000)
+        page.locator("#sel").click()
+        _settle(pump)
+        # Real key events, so the browser's own change event is trusted, as
+        # a person's selection is.
+        page.keyboard.type("Label Beta")
+        _settle(pump)
+        page.locator("#single").click()
+        _settle(pump)
+
+    return record_interactive(
+        fixture_url, out, headless=True, script=drive, param_fields=param_fields
+    )
+
+
+def test_native_select_records_its_label(fixture_url: str, tmp_path: Path) -> None:
+    rec = _record_native_select(fixture_url, tmp_path / "rec")
+    events = _events(rec)
+    assert [e["kind"] for e in events] == ["click", "type", "click"]
+    assert events[1]["text"] == "Label Beta"
+
+    workflow = compile_recording(rec, tmp_path / "bundle", name="select")
+    assert [step.action.value for step in workflow.steps] == ["click", "type", "click"]
+
+
+def test_native_select_replays_another_option(fixture_url: str, tmp_path: Path) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime import Replayer
+
+    sync_api = pytest.importorskip("playwright.sync_api")
+    rec = _record_native_select(fixture_url, tmp_path / "rec", ("sel",))
+    bundle = tmp_path / "bundle"
+    workflow = compile_recording(rec, bundle, name="select")
+    typed = next(step for step in workflow.steps if step.action.value == "type")
+    assert typed.param == "sel"
+    params = {"sel": "Label Alpha"}
+    with sync_api.sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.goto(fixture_url)
+            page.wait_for_selector("#sel", state="visible")
+            report = Replayer(PlaywrightBackend(page)).run(
+                Workflow.load(bundle),
+                params=params,
+                bundle_dir=bundle,
+                run_dir=tmp_path / "run",
+            )
+            chosen = page.evaluate("document.getElementById('sel').value")
+        finally:
+            browser.close()
+    assert report.success, [(r.step_id, r.ok, r.error) for r in report.results]
+    # Recorded as Label Beta; replayed with another option.
+    assert chosen == "v-alpha"
+
+
+def test_widget_over_a_hidden_select_records_its_clicks(
+    fixture_url: str, tmp_path: Path
+) -> None:
+    def drive(page, pump) -> None:
+        page.wait_for_selector("#site-control", state="visible", timeout=20000)
+        page.locator("#site-control").click()
+        _settle(pump)
+        page.get_by_role("option", name="Site Two").click()
+        _settle(pump)
+        assert page.evaluate("document.getElementById('site').value") == "2"
+
+    rec = record_interactive(fixture_url, tmp_path / "rec", headless=True, script=drive)
+    events = _events(rec)
+    assert [e["kind"] for e in events] == ["click", "click"]
+    assert events[1]["structural"]["name"] == "Site Two"
+
+
+def test_script_set_select_value_is_not_recorded(
+    fixture_url: str, tmp_path: Path
+) -> None:
+    """Playwright's select_option sets the value from script, as a widget
+    does: nothing is recorded for it, and the recording is not refused."""
+
     def drive(page, pump) -> None:
         page.wait_for_selector("#sel", state="visible", timeout=20000)
         page.locator("#sel").select_option(label="Label Alpha")
         _settle(pump)
+        page.locator("#single").click()
+        _settle(pump)
 
-    with pytest.raises(BrowserAttachError, match="select"):
-        record_interactive(fixture_url, tmp_path / "rec", headless=True, script=drive)
+    rec = record_interactive(fixture_url, tmp_path / "rec", headless=True, script=drive)
+    assert [e["kind"] for e in _events(rec)] == ["click"]
