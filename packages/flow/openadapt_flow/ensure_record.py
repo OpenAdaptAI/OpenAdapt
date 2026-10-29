@@ -458,6 +458,21 @@ class FhirReader:
             if not isinstance(page, list):
                 raise Unreadable(f"{path}: entry is not a list")
             entries += [e for e in page if isinstance(e, dict)]
+            for e in page:
+                res = e.get("resource") if isinstance(e, dict) else None
+                if (e.get("search") or {}).get("mode") != "outcome" or not isinstance(
+                    res, dict
+                ):
+                    continue
+                # A warning ("no results") is a message; an error means the
+                # search may be partial, and a missed match is a duplicate.
+                issues = res.get("issue") or []
+                if not isinstance(issues, list) or any(
+                    not isinstance(i, dict)
+                    or i.get("severity") not in ("warning", "information")
+                    for i in issues
+                ):
+                    raise Unreadable(f"{path}: the search returned an error outcome")
             nxt = next(
                 (
                     link.get("url")

@@ -12,6 +12,53 @@ what was read are at the end.
 | Oracle Health (code console; secure sandbox `fhir-ehr-code.cerner.com`, R4) | All four: Patient create and patch; Observation, AllergyIntolerance create and update; Appointment create and patch. The open sandbox is read-only | No AuditEvent, no `_history`. Provenance read, search and create | **No.** Benchmarking needs Oracle's prior written approval, test results belong to Oracle, and any public announcement about using the APIs is a material breach | **No-go** without Oracle's written approval |
 | athenahealth | not assessed | not assessed | not assessed: the developer portal and docs return 403 to automated reads | **Not assessed**; read the terms after signing in, if wanted |
 
+## Phase 2 on Epic: done, on a narrower read path
+
+The founder registered the app on 2026-10-29, and the sandbox accepted its
+token at once. What came of it is in [epic/](epic/README.md):
+
+- **Read path, probed** (`epic/probe.json`): search and read work, and the
+  server's `Date` header gives the window. There is no AuditEvent endpoint
+  (404), no `_history` (404) and no `meta` on records. `_lastUpdated` is
+  refused on Patient and silently ignored on Observation: a filter in 2099
+  still returned 266 rows, so a sweep there would be wrong, not just
+  incomplete. `_revinclude=Provenance:target` returns the latest author
+  and time; `_revinclude=AuditEvent:entity` returns nothing. A patient
+  search on one value alone matches nothing.
+- **What Epic does with a write:** a Patient create needs an SSN. Epic
+  answers `201` and **silently drops the phone number** in every format
+  tried, while keeping the email. It adds about ten elements of its own
+  (a second `official` name, race and ethnicity extensions,
+  `meta.security` PATRPT and UNCERTREL). A create of a person who already
+  exists, even under a new SSN or at another street, answers `201` with the
+  existing record's Location: `201 Created` doesn't mean created. An
+  allergy create needs `verificationStatus: unconfirmed`, lands (readable
+  by its Location), and **doesn't appear in the patient's allergy search**,
+  which still answers "Not on File". An Observation create needs an
+  Encounter, which the app has no scope to find.
+- **Verifier:** `openadapt_flow.verifier` with the `fhir` record check and
+  its existing `smart_backend` auth, contract `epic/register_patient.yaml`.
+  The sandbox exposed one verifier bug: the OperationOutcome Epic puts in an
+  empty search counted as a record, so a clean create read as a removed
+  record. It is fixed in `runtime/effects/fhir.py`, with tests.
+- **Fault suites** (`epic/RESULTS.md`): a **blind round** of 13 cases from
+  a separate author, frozen by sha256 before its one run, got 12 right with
+  no fault passed as verified. The miss was a false refusal of a clean save
+  beside a pre-existing look-alike, caused by the contract; the contract was
+  fixed to one `exact_new_set` effect, and both suites were rerun fully
+  right (not blind). The earlier non-blind rounds got 7 of 9 and 10 of 10.
+  The fix to the record check passed an adversarial review
+  (`epic/REVIEW.md`).
+
+What a claim from this may say: "a patient registration in Epic's public
+FHIR sandbox, read back through FHIR search and read". It can't say that
+nothing else changed: the frame is the task's search set, and who wrote the
+record isn't checked. `ensure_record` (found or created, with the audit
+trail) doesn't run on this sandbox, because its change feed needs AuditEvent
+or a working `_lastUpdated` sweep. Allergy writes can't be checked by
+search at all; a check would have to read by the Location the create
+returns, which trusts the agent's report of the write.
+
 ## Epic
 
 ### (a) Writes
@@ -54,13 +101,11 @@ every run that needs the feed ends `needs_review`. The record-level checks
 still work through search and read: the record exists once, holds every
 value, has no extra fields, and no duplicate exists.
 
-Phase 2 therefore has to qualify a narrower read path and name it:
-"the record and its duplicates, read through Epic's FHIR search; other writes
-through the agent's own client are seen only through `_revInclude` audit or
-provenance, where the sandbox returns it". That needs a contract
-`change_feed` mode the verifier doesn't have yet (per-resource `_revInclude`
-instead of a by-date AuditEvent search). Probe first, then decide whether to
-build it.
+Phase 2 confirmed this and checked the narrower path instead (see "Phase 2
+on Epic" above): the `fhir` record check of `openadapt_flow.verifier`,
+whose frame is the search set. A per-resource `_revinclude` change feed for
+`ensure_record` wasn't built: AuditEvent through `_revinclude` came back
+empty, and Provenance names only the latest author.
 
 The sandbox is shared with every Epic developer and Epic may wipe it at any
 time, so a run must use names and identifiers unique to the run, and a sweep
@@ -98,6 +143,12 @@ first is optional but cheap.
 
 ### (d) Registration (the founder does this; no agent creates accounts)
 
+Done on 2026-10-29. Two differences from the steps below: Epic checks a
+backend app's key against a JWK Set URL, not an uploaded certificate, so
+the public key is served as a JWKS from a secret gist; and Epic offers no
+Observation Update for vital signs or labs, and no AuditEvent API to backend
+apps, so neither was granted.
+
 1. Go to https://fhir.epic.com, choose **Sign Up**, and create an Epic on
    FHIR account with a work email. Confirm the email. Accept the Terms of
    Use when asked.
@@ -116,8 +167,8 @@ first is optional but cheap.
      AllergyIntolerance Read, Search, Create; Appointment Read, Search;
      Provenance Read. Add AuditEvent if the list offers it.
    - Default FHIR version: R4.
-   - Non-production JWT signing: upload `public_cert.pem` (or a JWK Set URL
-     if the form requires one; tell me and I'll set one up).
+   - Non-production JWT signing: a JWK Set URL serving the public key
+     (Epic requires one for backend apps).
    - Accept the terms checkbox, **Save**, then **Mark Ready for Sandbox**
      if that button is offered.
 4. Copy the **Non-Production Client ID** from the app's page.
@@ -128,10 +179,9 @@ first is optional but cheap.
    ```
    EPIC_SANDBOX_CLIENT_ID=<Non-Production Client ID>
    EPIC_SANDBOX_PRIVATE_KEY=/Users/abrichr/.config/openadapt/epic/private.pem
+   EPIC_SANDBOX_KID=<the kid in the JWKS>
+   EPIC_SANDBOX_ALG=RS384
    ```
-
-Then tell this session. Phase 2 starts with a read-only probe
-(`probe.py` like Medplum's), then the write probe, then the contract.
 
 ## Oracle Health
 
