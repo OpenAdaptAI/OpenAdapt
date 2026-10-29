@@ -51,6 +51,7 @@ SCHEMA = "openadapt.network-capture/1"
 MAX_REQUEST_BYTES = 256 * 1024
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 _SKIP_TYPES = frozenset(
     {"image", "font", "stylesheet", "script", "media", "manifest", "texttrack"}
 )
@@ -97,9 +98,13 @@ class NetworkCapture:
         self._lines: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._attached = False
+        # Writes the browser has sent and not seen finish or fail. A save the
+        # agent guard holds stays here until the guard sends or refuses it.
+        self._pending_writes: set[Any] = set()
 
     def start(self) -> "NetworkCapture":
         if not self._attached:
+            self._context.on("request", self._on_request)
             self._context.on("requestfinished", self._on_finished)
             self._context.on("requestfailed", self._on_failed)
             self._attached = True
@@ -108,6 +113,7 @@ class NetworkCapture:
     def stop(self) -> None:
         if self._attached:
             for event, handler in (
+                ("request", self._on_request),
                 ("requestfinished", self._on_finished),
                 ("requestfailed", self._on_failed),
             ):
@@ -122,14 +128,34 @@ class NetworkCapture:
         with self._lock:
             return len(self._lines)
 
+    @property
+    def pending_writes(self) -> int:
+        """Writes (any method but GET, HEAD or OPTIONS) still in flight."""
+
+        with self._lock:
+            return len(self._pending_writes)
+
     # -- Playwright callbacks ------------------------------------------------
 
+    def _on_request(self, request: Any) -> None:
+        if request.resource_type in _SKIP_TYPES:
+            return
+        if str(request.method).upper() not in _READ_METHODS:
+            with self._lock:
+                self._pending_writes.add(request)
+
+    def _settled(self, request: Any) -> None:
+        with self._lock:
+            self._pending_writes.discard(request)
+
     def _on_failed(self, request: Any) -> None:
+        self._settled(request)
         if request.resource_type in _SKIP_TYPES:
             return
         self._append(self._request_line(request) | {"status": None, "failed": True})
 
     def _on_finished(self, request: Any) -> None:
+        self._settled(request)
         if request.resource_type in _SKIP_TYPES:
             return
         line = self._request_line(request)
