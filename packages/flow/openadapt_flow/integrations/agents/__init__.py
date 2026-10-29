@@ -168,8 +168,10 @@ class WriteGuard:
             except _Cancelled as stop:
                 pending, refusal = stop.value
                 if refusal is None:
-                    # The store was read, nothing was written.
-                    pending[0].baseline_path.unlink(missing_ok=True)
+                    # The store was read and nothing was sent: close the
+                    # attempt as never sent, so the write ledger doesn't hold
+                    # an identical retry as possibly still landing.
+                    verify_write(pending[0], write_attempted=False)
                 raise asyncio.CancelledError from None
             if refusal is not None:
                 return refusal
