@@ -288,9 +288,10 @@ class FrameDatabase(BaseModel):
     #: The profile's digest, pinned: a package upgrade that changes what is
     #: excused can't change it under a contract (``frame_sha256`` binds it).
     profile_sha256: Optional[str] = None
-    #: Seconds to wait after the save before the read, so writes the app
-    #: makes a moment later (background jobs) fall inside the window.
-    settle_s: float = Field(default=0.0, ge=0)
+    #: Seconds between the two reads after the save. They must match: a
+    #: write the app makes a moment later (a background job) shows as a
+    #: difference, and the frame is not checked until the database settles.
+    settle_s: float = Field(default=1.0, ge=0)
 
     @model_validator(mode="after")
     def _pinned_profile(self) -> "FrameDatabase":
