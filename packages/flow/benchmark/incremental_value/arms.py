@@ -508,7 +508,8 @@ class ArmB(ArmA):
         self._pending = None
         # The fresh adapter asks the ledger before its next send, so the hold
         # stays on: a resend is refused while the earlier attempt is open.
-        self._fresh_token()
+        # (No new OAuth token here: minting one inside the write's window adds
+        # token rows the frame rightly reports.)
         try:
             self._pending = begin_write(
                 self.contract(), self._params, actor=self._actor(), ledger=self._ledger(),
@@ -531,7 +532,8 @@ class ArmB(ArmA):
         from openadapt_flow.verifier import verify_write
 
         said_saved = claim is not None and claim.get("result") == "SAVED"
-        self._fresh_token()
+        # The item's token, minted before the baseline, is still valid: a new
+        # one now would write OAuth rows inside the window.
         if self._ledger_block is not None:
             return {"claimed": "stopped", "status": f"OpenAdapt: held by the ledger ({self._ledger_block})",
                     "verifier": {"ledger": self._ledger_block[:300]}}
@@ -588,9 +590,8 @@ class ArmB(ArmA):
     def run_rechecks(self, *, wait: bool) -> None:
         from openadapt_flow.verifier import RecheckNotDue, RecheckState, recheck
 
-        self._fresh_token()
-        # OpenEMR writes its OAuth bookkeeping after the token response.
-        time.sleep(2.0)
+        # The item's token is reused: a new one would write OAuth rows after
+        # the post-save read, inside every recheck's window.
         remaining = []
         states = []
         for q in self.recheck_queue:
