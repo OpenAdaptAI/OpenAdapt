@@ -108,6 +108,10 @@ def main() -> int:
             ctx = faults.Ctx(item, app, oracle, targets, fx.api_for)
             arm.begin(ctx, faults.Hooks())
             res = arm.run_item(w, env, rec)
+            # Run 2: B's late recheck on this clean save, as in the stream.
+            if hasattr(arm, "after_item"):
+                arm.late_path = a.out / a.arm / "late.jsonl"
+                arm.after_item(ctx, res)
             print("claimed", res.claimed, res.product_status, res.wall_s, res.cost_usd, json.dumps(res.detail.get("verifier"), default=str)[:1500], flush=True)
             entry = step(f"agent save {w.item_id}", intended=t.intended, person=t.person)
             pids = (entry.get("oracle") or {}).get("new_pids") or []
