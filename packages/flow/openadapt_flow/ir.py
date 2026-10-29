@@ -609,6 +609,12 @@ class Postcondition(BaseModel):
     candidate_params: Optional[tuple[str, ...]] = Field(
         default=None, min_length=1, max_length=8
     )
+    #: TEXT_PRESENT: ``text`` must be read exactly once, as a whole line or
+    #: wrapped lines equal to it after case, spaces and punctuation drop; never
+    #: the fuzzy OCR match. Set on the empty-result checks the compiler mines
+    #: (``compiler.empty_result_guard``), where "2 matches were found" must
+    #: not pass for "No matches were found.".
+    exact: bool = False
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
@@ -616,6 +622,8 @@ class Postcondition(BaseModel):
         postcondition (and bundle digest) serializes exactly as before."""
 
         data: dict[str, Any] = handler(self)
+        if not self.exact:
+            data.pop("exact", None)
         if self.field_selector is None:
             data.pop("field_selector", None)
         if self.param is None:
@@ -1059,6 +1067,19 @@ class Predicate(BaseModel):
         description="wait_until bound: how long the replayer polls this "
         "predicate before HALTing (fail-safe; never proceed-anyway).",
     )
+    #: TEXT_PRESENT: ``text`` must be read exactly once (see
+    #: ``Postcondition.exact``), never by the fuzzy OCR match.
+    exact: bool = False
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave ``exact`` out when unset, so every existing predicate (and its
+        contract digest) serializes exactly as before."""
+
+        data: dict[str, Any] = handler(self)
+        if not self.exact:
+            data.pop("exact", None)
+        return data
 
 
 class Guard(BaseModel):

@@ -86,3 +86,7 @@ business_rules:
       country_code: USA
     expect: HALTED_BEFORE_EFFECT
     readback: no_mutation
+    # Stop at the duplicate dialog's "No matches were found." check (after
+    # #create, or again before #confirmCreate); a halt anywhere else fails.
+    halt_at: empty_result_guard
+    halt_reason: No matches were found.

@@ -156,9 +156,9 @@ What each part does:
   `command`, `http` or `python`, like `reset`) creates the record the rule
   protects, and the run uses `params` that trigger the rule (they replace the
   matching inputs). The run must stop before the save (`expect:
-  HALTED_BEFORE_EFFECT`, the only value) and the read-back must show no new
-  or changed record (`readback: no_mutation`, the only value). Each rule is
-  case `rule-<id>`:
+  HALTED_BEFORE_EFFECT`, the only value), at the place the rule names
+  (`halt_at`), and the read-back must show no new or changed record
+  (`readback: no_mutation`, the only value). Each rule is case `rule-<id>`:
 
   ```yaml
   business_rules:
@@ -170,15 +170,31 @@ What each part does:
       params: {fname: Rosa, lname: Delgado, DOB: "1958-03-22"}
       expect: HALTED_BEFORE_EFFECT
       readback: no_mutation
+      halt_at: empty_result_guard
+      halt_reason: No matches were found.
   ```
 
-  The rules run only with `--certify`, after the six cases pass, on the
-  certified bundle through the ordinary run gate, `trials` times each. One
-  failed trial withdraws the certification and fails `qualify`. Their trials
-  are in `result.json` `cases` (`fault_class: business_rule`), which the
-  admission envelope binds. They are not signed case results in the
-  qualification project: a certification made outside `qualify` does not
-  run them.
+  `halt_at` is `empty_result_guard` (the default: a step that checks the
+  empty search result the compiler mined from a confirmation dialog, see
+  `compile_notes.json`), `before_save` (any step up to the save, before its
+  action; needs `halt_reason`), or a step id. `halt_reason`, when given, must
+  be in the halt's reason. A halt anywhere else fails the trial: the run did
+  not stop for the application's rule.
+
+  Each trial reads the records before and after the seed and fails unless
+  the seed created at least one; a verifier that cannot read the records
+  cannot run a rule. Inputs a rule names that the workflow does not take,
+  and a `halt_at` that names no step, are refused before any run.
+
+  The rules run only with `--certify`, after the six cases pass, `trials`
+  times each, on a certified copy of the bundle through the ordinary run gate.
+  The bundle itself is saved certified only after every rule passes; a failed
+  trial, or anything that raises (a seed or reset error, a run-gate refusal,
+  a crash, Ctrl-C), withdraws the certification and fails `qualify`. With
+  `--certify`, name all the `rule-*` cases or none. Their trials are in
+  `result.json` `cases` (`fault_class: business_rule`), which the admission
+  envelope binds. They are not signed case results in the qualification
+  project: a certification made outside `qualify` does not run them.
 
 `${NAME}` and `${NAME:-default}` read environment variables. A missing
 variable without a default is an error.

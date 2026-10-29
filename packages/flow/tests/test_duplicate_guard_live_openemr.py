@@ -99,10 +99,13 @@ def test_the_compiler_mines_the_duplicate_guard_from_a_live_recording(
         for p in opener[0].expect
         if p.kind is PostconditionKind.TEXT_PRESENT and p.text == NO_MATCH
     ]
-    assert len(guards) == 1 and guards[0].timeout_s == 10.0
+    assert len(guards) == 1 and guards[0].timeout_s == 10.0 and guards[0].exact
     confirm = workflow.steps[workflow.steps.index(opener[0]) + 1]
     assert confirm.anchor is not None and confirm.anchor.structural is not None
     assert confirm.anchor.structural.selector == "#confirmCreate"
+    # Re-checked on the screen right before the Confirm click.
+    assert confirm.guard is not None and confirm.guard.predicate.exact
+    assert confirm.guard.predicate.text == NO_MATCH
 
 
 def test_a_possible_duplicate_halts_before_the_save(

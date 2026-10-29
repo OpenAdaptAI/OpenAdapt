@@ -20,10 +20,10 @@ the existing chart Rosa Delgado (born 1958-03-27) is seeded, and the certified
 bundle runs on Rosa Delgado born 1958-03-22. OpenEMR's duplicate dialog lists
 the existing chart, and the program must halt before saving: transaction
 outcome ``HALTED_BEFORE_EFFECT``, with no new or changed chart, on every
-trial; ``openadapt-flow qualify`` withdraws the certification otherwise. With
-the SQL oracle on, this script also requires each of those runs to halt at the
-dialog's "No matches were found." check. It never calls a model. Keys are
-local test keys generated per campaign, never a production trust root.
+trial, and must halt at the dialog's "No matches were found." check;
+``openadapt-flow qualify`` withdraws the certification otherwise. It never
+calls a model. Keys are local test keys generated per campaign, never a
+production trust root.
 
 Usage (fixture already up; see benchmark/openemr_local/README.md)::
 
@@ -169,9 +169,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         sql = SqlOracle()
         hooks.before_trial = sql.before_trial
         hooks.extra_checks.append(sql.check)
-        hooks.extra_checks.append(
-            lambda ctx, report: duplicate_guard_check(ctx, report, args.out / "bundle")
-        )
     try:
         config = load_verify_config(VERIFY_YAML)
         result = qualify(
@@ -202,43 +199,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         f" under {result.policy or 'no policy'}: {args.out}"
     )
     return 0 if result.passed else 1
-
-
-#: The business rule in verify.yaml whose runs must stop at the duplicate check.
-DUPLICATE_RULE_CASE = "rule-existing-duplicate"
-
-
-def duplicate_guard_check(
-    ctx: TrialContext, report: RunReport, bundle: Path
-) -> tuple[str, dict[str, Any]]:
-    """The existing-duplicate runs halt at the dialog's no-matches check.
-
-    The generic case requires ``HALTED_BEFORE_EFFECT`` and no new or changed
-    record; this adds where: the step whose check is "No matches were found."
-    (the duplicate dialog), not some other step. Other cases pass untouched.
-    """
-
-    from openadapt_flow.ir import Workflow
-    from scripts.openemr_local_demo import NO_MATCH_TEXT
-
-    if ctx.case_id != DUPLICATE_RULE_CASE:
-        return "duplicate-guard", {"applies": False, "passed": True}
-    guard_steps = [
-        step.id
-        for step in Workflow.load(bundle).steps
-        if any(p.text == NO_MATCH_TEXT for p in step.expect)
-    ]
-    failed = [r.step_id for r in report.results if not r.ok]
-    halted_at = failed[0] if failed else None
-    return "duplicate-guard", {
-        "applies": True,
-        "guard_steps": guard_steps,
-        "halted_at": halted_at,
-        "transaction_outcome": report.transaction_outcome,
-        "passed": len(guard_steps) == 1
-        and halted_at == guard_steps[0]
-        and report.transaction_outcome == "HALTED_BEFORE_EFFECT",
-    }
 
 
 if __name__ == "__main__":

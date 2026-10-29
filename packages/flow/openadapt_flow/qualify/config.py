@@ -297,6 +297,24 @@ class BusinessRuleCase(BaseModel):
     expect: Literal["HALTED_BEFORE_EFFECT"]
     #: The only read-back a rule case accepts: no new or changed record.
     readback: Literal["no_mutation"] = "no_mutation"
+    #: Where the run must stop. ``empty_result_guard`` (the default): at a
+    #: step that checks a dialog's empty search result the compiler mined
+    #: (the opener's check or the Confirm click's guard). ``before_save``: at
+    #: any step before the save, with ``halt_reason`` in the halt. Or a step
+    #: id. A halt anywhere else fails the trial: the run did not stop for the
+    #: application's rule.
+    halt_at: str = Field(
+        default="empty_result_guard",
+        pattern=r"^(empty_result_guard|before_save|[A-Za-z0-9_.-]{1,128})$",
+    )
+    #: Text the halt reason must contain (required with ``before_save``).
+    halt_reason: Optional[str] = Field(default=None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def _halt(self) -> "BusinessRuleCase":
+        if self.halt_at == "before_save" and not self.halt_reason:
+            raise ValueError("halt_at: before_save needs the halt_reason it names")
+        return self
 
     @property
     def case_id(self) -> str:

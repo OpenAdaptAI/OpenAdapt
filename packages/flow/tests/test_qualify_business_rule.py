@@ -105,6 +105,8 @@ def test_the_openemr_verify_yaml_declares_the_existing_duplicate_rule() -> None:
     assert set(rule.params) == set(SyntheticPatientSpec().params())
     assert (rule.params["fname"], rule.params["lname"]) == ("Rosa", "Delgado")
     assert rule.params["DOB"] == "1958-03-22"
+    assert rule.halt_at == "empty_result_guard"
+    assert rule.halt_reason == "No matches were found."
 
 
 def test_verify_run_ignores_business_rules() -> None:
@@ -196,13 +198,22 @@ def test_a_rule_trial_that_saves_the_duplicate_fails(tmp_path: Path) -> None:
 
 # -- certification requires every trial ---------------------------------------------
 class _Recorder:
-    def __init__(self, fail_at: tuple[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        fail_at: tuple[str, int] | None = None,
+        raise_at: tuple[tuple[str, int], BaseException] | None = None,
+    ) -> None:
         self.calls: list[tuple[str, int, dict[str, str]]] = []
         self.fail_at = fail_at
+        self.raise_at = raise_at
+        self.bundle_dirs: list[Path] = []
 
     def __call__(self, **kwargs: Any) -> Any:
         rule, trial = kwargs["rule"], kwargs["trial"]
         self.calls.append((rule.case_id, trial, kwargs["params"]))
+        self.bundle_dirs.append(kwargs["bundle_dir"])
+        if self.raise_at is not None and self.raise_at[0] == (rule.case_id, trial):
+            raise self.raise_at[1]
         failed = self.fail_at == (rule.case_id, trial)
         row = {"case_id": rule.case_id, "trial": trial}
         entry = {"case_id": rule.case_id, "trial": trial, "passed": not failed}
@@ -214,16 +225,22 @@ def _run_rules(
     tmp_path: Path,
     trial_fn: _Recorder,
     config: Any,
-) -> dict[str, Any]:
+    state: dict[str, Any],
+) -> None:
     import openadapt_flow.qualification as qualification
 
-    state: dict[str, Any] = {"saved": 0, "invalidated": 0}
+    state.update(saves=[], invalidated=0, rows=[], entries=[])
+    bundle = tmp_path / "bundle"
+    bundle.mkdir(exist_ok=True)
+    (bundle / "workflow.json").write_text("{}")
     workflow = SimpleNamespace(name="certified")
     monkeypatch.setattr(campaign_mod, "business_rule_trial", trial_fn)
     monkeypatch.setattr(
         qualification,
         "save_qualified_workflow",
-        lambda wf, _dir: state.__setitem__("saved", state["saved"] + 1),
+        lambda wf, path: state["saves"].append(
+            (Path(path).name, state["invalidated"] == 0)
+        ),
     )
     monkeypatch.setattr(
         qualification,
@@ -233,12 +250,9 @@ def _run_rules(
     monkeypatch.setattr(
         campaign_mod, "Workflow", SimpleNamespace(load=lambda _dir: workflow)
     )
-    rows: list[dict[str, Any]] = []
-    entries: list[dict[str, Any]] = []
-    state["rows"], state["entries"] = rows, entries
     campaign_mod._run_business_rules(
         workflow=workflow,  # type: ignore[arg-type]
-        bundle_dir=tmp_path / "bundle",
+        bundle_dir=bundle,
         config=config,
         hooks=campaign_mod.QualifyHooks(),
         setup=SimpleNamespace(),  # type: ignore[arg-type]
@@ -251,21 +265,21 @@ def _run_rules(
         lookup={},
         verifier_tier=VerificationTier.INDEPENDENT_SYSTEM,
         verifier_substrate=None,
-        rows=rows,
-        case_entries=entries,
+        rows=state["rows"],
+        case_entries=state["entries"],
         write_campaign_files=False,
         log=lambda _line: None,
-        fail_result=lambda: {"passed": False},
+        fail_result=lambda: {"passed": True},
     )
-    return state
 
 
-def test_every_rule_runs_on_every_trial(
+def test_every_rule_runs_on_every_trial_on_a_certified_copy(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     second = {**RULE, "id": "second-rule"}
     trial_fn = _Recorder()
-    state = _run_rules(monkeypatch, tmp_path, trial_fn, _config(rules=[RULE, second]))
+    state: dict[str, Any] = {}
+    _run_rules(monkeypatch, tmp_path, trial_fn, _config(rules=[RULE, second]), state)
     assert [(case, trial) for case, trial, _ in trial_fn.calls] == [
         ("rule-existing-duplicate", 1),
         ("rule-existing-duplicate", 2),
@@ -276,64 +290,273 @@ def test_every_rule_runs_on_every_trial(
     ]
     assert trial_fn.calls[0][2]["lname"] == "Delgado"
     assert len(state["entries"]) == 6 and all(e["passed"] for e in state["entries"])
-    # The certified bundle is saved once, before the runs, and kept.
-    assert state["saved"] == 1 and state["invalidated"] == 0
+    # The trials ran a certified copy; the bundle itself was not written (the
+    # caller saves the certification once every rule passed), and the copy
+    # is gone.
+    assert {d.name for d in trial_fn.bundle_dirs} == {campaign_mod.RULE_BUNDLE_DIR}
+    assert state["saves"] == [(campaign_mod.RULE_BUNDLE_DIR, True)]
+    assert state["invalidated"] == 0
+    assert not (tmp_path / campaign_mod.RULE_BUNDLE_DIR).exists()
+
+
+def _assert_withdrawn(tmp_path: Path, state: dict[str, Any]) -> None:
+    # Certified only in the copy; the bundle itself saved after withdrawal.
+    assert state["invalidated"] == 1
+    assert state["saves"] == [
+        (campaign_mod.RULE_BUNDLE_DIR, True),
+        ("bundle", False),
+    ]
+    assert not (tmp_path / campaign_mod.RULE_BUNDLE_DIR).exists()
+    result = (tmp_path / "qualification" / "result.json").read_text()
+    assert '"passed": false' in result
 
 
 def test_one_failed_trial_withdraws_certification(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     trial_fn = _Recorder(fail_at=("rule-existing-duplicate", 2))
+    state: dict[str, Any] = {}
     with pytest.raises(QualifyError, match="certification withdrawn"):
-        _run_rules(monkeypatch, tmp_path, trial_fn, _config())
+        _run_rules(monkeypatch, tmp_path, trial_fn, _config(), state)
     assert len(trial_fn.calls) == 2
-    result = (tmp_path / "qualification" / "result.json").read_text()
-    assert '"passed": false' in result
+    _assert_withdrawn(tmp_path, state)
 
 
-def test_withdrawal_saves_an_uncertified_bundle(
+@pytest.mark.parametrize(
+    "error",
+    [
+        RuntimeError("business rule 'existing-duplicate' seed HTTP 500"),  # seed
+        RuntimeError("app.reset command exited 1"),  # reset
+        QualifyError("run gate refused: bundle not certified"),  # run gate
+        QualifyError("rule-existing-duplicate trial 1: the seed created no record"),
+        OSError("browser crashed"),  # a crash
+        KeyboardInterrupt(),  # Ctrl-C
+    ],
+)
+def test_anything_that_raises_withdraws_certification(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: BaseException
+) -> None:
+    trial_fn = _Recorder(raise_at=(("rule-existing-duplicate", 2), error))
+    state: dict[str, Any] = {}
+    with pytest.raises(type(error)):
+        _run_rules(monkeypatch, tmp_path, trial_fn, _config(), state)
+    _assert_withdrawn(tmp_path, state)
+
+
+def test_an_unknown_rule_input_raises_before_anything_is_certified(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    import openadapt_flow.qualification as qualification
+    bad = {**RULE, "params": {"no_such_input": "x"}}
+    trial_fn = _Recorder()
+    state: dict[str, Any] = {}
+    with pytest.raises(QualifyConfigError, match="does not take"):
+        _run_rules(monkeypatch, tmp_path, trial_fn, _config(rules=[bad]), state)
+    assert trial_fn.calls == []
+    _assert_withdrawn(tmp_path, state)
 
-    events: list[str] = []
+
+# -- what qualify checks before any run ---------------------------------------------
+def _workflow(*, guard: bool = True) -> Any:
+    from openadapt_flow.ir import (
+        ActionKind,
+        Postcondition,
+        PostconditionKind,
+        Step,
+        Workflow,
+    )
+    from openadapt_flow.runtime.effects import Effect, EffectKind
+
+    opener = Step(id="s2", intent="click 'Create'", action=ActionKind.CLICK)
+    if guard:
+        opener.expect = [
+            Postcondition(
+                kind=PostconditionKind.TEXT_PRESENT,
+                text="No matches were found.",
+                exact=True,
+            )
+        ]
+    save = Step(
+        id="s3",
+        intent="click 'Confirm'",
+        action=ActionKind.CLICK,
+        risk="irreversible",
+        effects=[
+            Effect(kind=EffectKind.RECORD_WRITTEN, match={"email": "a@example.test"})
+        ],
+    )
+    return Workflow(
+        name="register",
+        steps=[
+            Step(id="s1", intent="email", action=ActionKind.TYPE, param="email"),
+            opener,
+            save,
+        ],
+        params={"email": "a@example.test", "lname": "Doe"},
+    )
+
+
+def test_rule_problems_are_found_before_any_run() -> None:
+    from openadapt_flow.qualify.campaign import business_rule_problems
+
+    workflow = _workflow()
+    save = workflow.steps[-1]
+    params = {"email": "a@example.test", "lname": "Doe"}
+    assert business_rule_problems(workflow, _config(), save, params) == []
+    bad = _config(rules=[{**RULE, "params": {"mrn": "1"}}])
+    assert "does not take" in business_rule_problems(workflow, bad, save, params)[0]
+    # No mined empty-result check to halt at.
+    (problem,) = business_rule_problems(_workflow(guard=False), _config(), save, params)
+    assert "halt_at 'empty_result_guard'" in problem
+    missing = _config(rules=[{**RULE, "halt_at": "s9"}])
+    assert "names no step" in business_rule_problems(workflow, missing, save, params)[0]
+
+
+def test_halt_steps_follow_halt_at() -> None:
+    from openadapt_flow.qualify.campaign import rule_halt_steps
+
+    workflow = _workflow()
+    (rule,) = _config().business_rules
+    assert rule_halt_steps(workflow, rule, "s3") == {"s2"}
+    (before,) = _config(
+        rules=[{**RULE, "halt_at": "before_save", "halt_reason": "x"}]
+    ).business_rules
+    assert rule_halt_steps(workflow, before, "s3") == {"s1", "s2", "s3"}
+    with pytest.raises(QualifyConfigError, match="halt_reason"):
+        _config(rules=[{**RULE, "halt_at": "before_save"}])
+
+
+def test_certify_refuses_a_partial_rule_list(tmp_path: Path) -> None:
+    second = {**RULE, "id": "second-rule"}
+    with pytest.raises(QualifyConfigError, match="every business rule"):
+        qualify(
+            tmp_path / "bundle",
+            _config(rules=[RULE, second]),
+            out=tmp_path / "out",
+            cases=[*campaign_mod.CASE_IDS, "rule-existing-duplicate"],
+            certify="clinical-write",
+        )
+
+
+# -- one rule trial ----------------------------------------------------------------
+class _Verifier:
+    def __init__(self, store: list[dict[str, Any]]) -> None:
+        self.store = store
+
+    def _fetch_records(self) -> list[dict[str, Any]]:
+        return [dict(rec) for rec in self.store]
+
+
+def _trial(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    seed_writes: bool = True,
+    halted_at: str = "s2",
+    reason: str = "Postconditions failed for step 's2': text_present (exact) "
+    "'No matches were found.'",
+    rule: dict[str, Any] = RULE,
+) -> tuple[dict[str, Any], dict[str, Any], Any]:
+    import openadapt_flow.qualify.session as session_mod
+
+    store: list[dict[str, Any]] = [{"id": "1", "email": "other@example.test"}]
+
+    def seed() -> None:
+        if seed_writes:
+            store.append({"id": "2", "email": "r.delgado.prior@example.invalid"})
+
+    monkeypatch.setattr(session_mod, "step_runner", lambda _spec, _where: seed)
+    results = [
+        SimpleNamespace(step_id="s1", ok=True, error=None),
+        SimpleNamespace(step_id=halted_at, ok=False, error=reason),
+    ]
+    report = SimpleNamespace(
+        execution_outcome="HALTED",
+        transaction_outcome="HALTED_BEFORE_EFFECT",
+        success=False,
+        model_calls=0,
+        screenshots_may_leave_box=False,
+        results=results,
+        halt=SimpleNamespace(reason=reason),
+        execution_profile="standard",
+        production_eligible=False,
+        total_ms=1.0,
+    )
+
+    def fake_run(**kwargs: Any) -> Any:
+        run_dir = kwargs["ctx"].run_dir
+        run_dir.mkdir(parents=True)
+        (run_dir / "report.json").write_text("{}")
+        return report, None
+
+    monkeypatch.setattr(campaign_mod, "_run", fake_run)
     monkeypatch.setattr(
         campaign_mod,
-        "business_rule_trial",
-        lambda **_kw: ({}, {"passed": False}, "read-back unexpected_mutation"),
+        "_judge_trial",
+        lambda **_kw: {
+            "oracle": {
+                "independent": True,
+                "passed": True,
+                "observed": "no_mutation",
+                "effect_verdict": "REFUTED",
+                "landed": "none",
+                "silent_incorrect_success": False,
+            },
+            "extra": {},
+        },
     )
-    monkeypatch.setattr(
-        qualification,
-        "save_qualified_workflow",
-        lambda wf, _dir: events.append("save"),
+    hooks = campaign_mod.QualifyHooks(
+        reset=lambda: None, make_verifier=lambda _params: _Verifier(store)
     )
-    monkeypatch.setattr(
-        qualification, "_invalidate_certification", lambda wf: events.append("void")
+    (parsed,) = _config(rules=[rule]).business_rules
+    row, entry, failure = campaign_mod.business_rule_trial(
+        workflow=_workflow(),
+        bundle_dir=tmp_path / "bundle",
+        config=_config(rules=[rule]),
+        hooks=hooks,
+        setup=SimpleNamespace(),  # type: ignore[arg-type]
+        rule=parsed,
+        params={"email": "rosa@example.invalid", "lname": "Delgado"},
+        trial=1,
+        trial_dir=tmp_path / "trial",
+        run_id="run-1",
+        policy="clinical-write",
+        verifier_tier=VerificationTier.INDEPENDENT_SYSTEM,
     )
-    monkeypatch.setattr(
-        campaign_mod, "Workflow", SimpleNamespace(load=lambda _dir: object())
+    return row, entry, failure
+
+
+def test_a_rule_trial_that_halts_at_the_guard_passes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    row, entry, failure = _trial(monkeypatch, tmp_path)
+    assert failure is None and entry["passed"] is True
+    assert row["halted_at"] == "s2"
+
+
+def test_a_halt_anywhere_else_fails_the_trial(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # An unrelated early halt (a typed field's check on the rule's inputs).
+    _row, entry, failure = _trial(monkeypatch, tmp_path, halted_at="s1")
+    assert failure is not None and "halted at s1" in failure
+    assert entry["passed"] is False
+
+
+def test_the_halt_must_name_the_rules_reason(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    rule = {**RULE, "halt_reason": "No matches were found."}
+    _row, _entry, failure = _trial(monkeypatch, tmp_path, rule=rule)
+    assert failure is None
+    _row, entry, failure = _trial(
+        monkeypatch, tmp_path / "b", rule=rule, reason="Identity check failed"
     )
-    with pytest.raises(QualifyError, match="rule-existing-duplicate trial 1"):
-        campaign_mod._run_business_rules(
-            workflow=object(),  # type: ignore[arg-type]
-            bundle_dir=tmp_path / "bundle",
-            config=_config(),
-            hooks=campaign_mod.QualifyHooks(),
-            setup=SimpleNamespace(),  # type: ignore[arg-type]
-            out=tmp_path,
-            n_trials=3,
-            params={"email": "a@example.test", "lname": "Doe"},
-            save_id="s3",
-            policy="clinical-write",
-            run_id_prefix="camp",
-            lookup={},
-            verifier_tier=None,
-            verifier_substrate=None,
-            rows=[],
-            case_entries=[],
-            write_campaign_files=False,
-            log=lambda _line: None,
-            fail_result=lambda: {"passed": False},
-        )
-    # Certified copy saved for the runs, then voided and saved again.
-    assert events == ["save", "void", "save"]
+    assert failure is not None and "does not name" in failure
+    assert entry["passed"] is False
+
+
+def test_a_seed_that_creates_nothing_fails_the_trial(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    with pytest.raises(QualifyError, match="seed created no record"):
+        _trial(monkeypatch, tmp_path, seed_writes=False)

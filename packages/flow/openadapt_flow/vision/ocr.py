@@ -15,7 +15,7 @@ import hashlib
 import os
 import threading
 from collections import OrderedDict
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Sequence
 
 import numpy as np
 from pydantic import BaseModel
@@ -385,6 +385,79 @@ def text_present(
         if longest >= min_ratio * len(squashed_target):
             return True
     return False
+
+
+def text_key(text: str) -> str:
+    """Letters and digits only, lowercased: case, spaces and punctuation drop."""
+
+    return "".join(ch for ch in text.lower() if ch.isalnum())
+
+
+def _continues(upper: OcrLine, lower: OcrLine) -> bool:
+    """Whether ``lower`` is the wrapped continuation of ``upper``."""
+
+    ux, uy, _uw, uh = upper.region
+    lx, ly, _lw, _lh = lower.region
+    gap = ly - (uy + uh)
+    return abs(lx - ux) <= max(6, uh // 2) and -2 <= gap <= max(4, (uh * 4) // 5)
+
+
+def wrapped_readings(
+    lines: Sequence[OcrLine], *, max_lines: int = 3, min_confidence: float = 0.0
+) -> list[list[str]]:
+    """For each OCR line, its text and its wrapped continuations, joined.
+
+    ``result[i]`` holds the readings that start at the i-th confident line:
+    the line alone, then joined with the line wrapped under it (same left
+    edge, directly below), up to ``max_lines`` lines.
+    """
+
+    confident = [line for line in lines if line.confidence >= min_confidence]
+    out: list[list[str]] = []
+    for start in confident:
+        chain = [start]
+        readings = [start.text.strip()]
+        while len(chain) < max_lines:
+            following = [
+                line
+                for line in confident
+                if line is not chain[-1] and _continues(chain[-1], line)
+            ]
+            if len(following) != 1:
+                break
+            chain.append(following[0])
+            readings.append(" ".join(line.text.strip() for line in chain))
+        out.append(readings)
+    return out
+
+
+def exact_text_count(
+    screen_png: bytes,
+    text: str,
+    *,
+    min_confidence: float = 0.8,
+) -> int:
+    """How many times ``text`` is read exactly, as a whole line or wrapped lines.
+
+    Exact means equal after case, spaces and punctuation drop
+    (:func:`text_key`), with no fuzzy ratio: "2 matches were found" is not
+    "No matches were found.". Retried once at 2x when the raw frame reads
+    none (rapidocr drops dense lines at common screen resolutions).
+    """
+
+    key = text_key(text)
+    if not key:
+        return 0
+    for factor in (1, 2):
+        png = screen_png if factor == 1 else upscale_png(screen_png, factor)
+        count = sum(
+            1
+            for readings in wrapped_readings(ocr(png), min_confidence=min_confidence)
+            if any(text_key(reading) == key for reading in readings)
+        )
+        if count:
+            return count
+    return 0
 
 
 def find_text(
