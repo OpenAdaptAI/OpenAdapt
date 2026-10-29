@@ -57,6 +57,10 @@ Compare = Literal["exact", "casefold", "digits", "date"]
 MAX_PAGES = 50
 #: FHIR AuditEvent ``action`` codes that write (create, update, delete).
 WRITE_ACTIONS = ("C", "U", "D")
+#: AuditEvent action codes: create, read, update, delete, execute. An
+#: execute (an operation, such as starting a Bot) may write, so it counts as
+#: a write; a missing or unknown code makes the window unreadable.
+AUDIT_ACTIONS = ("C", "R", "U", "D", "E")
 
 
 class EnsureRecordError(ValueError):
@@ -94,7 +98,7 @@ class AuditRead(BaseModel):
     #: answers an empty search, not an error, with ``saveAuditEvents`` off).
     #: With ``heartbeat``, a found record counts only when the verifier's own
     #: read of it shows up in the trail; set it where reads by id are logged.
-    heartbeat: bool = False
+    heartbeat: bool = True
 
 
 class ChangeFeed(BaseModel):
@@ -221,17 +225,49 @@ def same(contract: EnsureContract, name: str, stored: Any, wanted: Any) -> bool:
     return a is not None and b is not None and a == b
 
 
+def extract_all(node: Any, path: str) -> list[Any]:
+    """Every value at ``path``, across every list element (``name.given``
+    reads each given name of each name; a filter keeps the matching ones)."""
+
+    if not path:
+        return (
+            [node]
+            if not isinstance(node, list)
+            else [x for x in node if not isinstance(x, (dict, list))]
+        )
+    if isinstance(node, list):
+        return [v for item in node for v in extract_all(item, path)]
+    if not isinstance(node, dict):
+        return []
+    seg, _, rest = path.partition(".")
+    name, _, cond = seg.partition("[")
+    child = node.get(name)
+    if cond:
+        key, _, want = cond[:-1].partition("=")
+        items = child if isinstance(child, list) else [child]
+        child = [i for i in items if isinstance(i, dict) and str(i.get(key)) == want]
+    return extract_all(child, rest) if child is not None else []
+
+
 def is_person(
     contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
 ) -> bool:
-    """True when the resource meets any identity rule for these values."""
+    """True when the resource meets any identity rule for these values.
+
+    Every element counts: a record whose second name, or second email, is
+    the person's is the person (a maiden name kept first doesn't hide it).
+    """
 
     return any(
         all(
-            same(contract, p, extract(resource, contract.fields[p].path), params.get(p))
+            any(
+                same(contract, p, value, params.get(p))
+                for value in extract_all(resource, contract.fields[p].path)
+            )
             for p in rule
         )
         for rule in contract.identity
+        if all(params.get(p) not in (None, "") for p in rule)
     )
 
 
@@ -261,14 +297,18 @@ def _allowed(contract: EnsureContract, path: str, value: Any) -> bool:
         name, eq, want = entry.partition("=")
         # The value is compared as JSON: ``active=true`` is the boolean, and a
         # string is quoted (``address.use="home"``).
-        if name == path and (not eq or json.dumps(value) == want):
+        if name == path and (not eq or json.dumps(value, ensure_ascii=False) == want):
             return True
     return False
 
 
-def _expected_leaves(contract: EnsureContract) -> Counter[str]:
+def _expected_leaves(
+    contract: EnsureContract, params: Optional[Mapping[str, Any]] = None
+) -> Counter[str]:
     want: Counter[str] = Counter()
-    for rule in contract.fields.values():
+    for name, rule in contract.fields.items():
+        if params is not None and params.get(name) in (None, ""):
+            continue  # the task didn't give it, so the record mustn't hold it
         parts = []
         for seg in rule.path.split("."):
             name, _, cond = seg.partition("[")
@@ -279,16 +319,29 @@ def _expected_leaves(contract: EnsureContract) -> Counter[str]:
     return want
 
 
-def extra_elements(contract: EnsureContract, resource: Mapping[str, Any]) -> list[str]:
-    """Leaf paths the record holds beyond what the contract's fields describe."""
+def extra_elements(
+    contract: EnsureContract,
+    resource: Mapping[str, Any],
+    params: Optional[Mapping[str, Any]] = None,
+) -> list[str]:
+    """Leaf paths the record holds beyond the fields the task gave.
 
-    always = ("id", "resourceType", "meta")
+    The server's own ``meta`` is exempt, except ``meta.security`` and
+    ``meta.tag``: a security label can hide the record from other users.
+    """
+
+    def exempt(path: str) -> bool:
+        top = path.split(".")[0]
+        if top == "meta":
+            return not path.startswith(("meta.security", "meta.tag"))
+        return top in ("id", "resourceType")
+
     have = Counter(
         p
         for p, value in leaves(dict(resource))
-        if p.split(".")[0] not in always and not _allowed(contract, p, value)
+        if not exempt(p) and not _allowed(contract, p, value)
     )
-    return sorted((have - _expected_leaves(contract)).elements())
+    return sorted((have - _expected_leaves(contract, params)).elements())
 
 
 # -- the read path ---------------------------------------------------------------
@@ -296,6 +349,13 @@ def extra_elements(contract: EnsureContract, resource: Mapping[str, Any]) -> lis
 Getter = Callable[
     [str, Optional[Mapping[str, Any]]], tuple[int, Mapping[str, str], Any]
 ]
+
+
+def _ref(value: str) -> str:
+    """``Type/id``, whether the server wrote it relative or absolute."""
+
+    parts = value.rstrip("/").split("/")
+    return "/".join(parts[-2:]) if len(parts) >= 2 else value
 
 
 def _origin(url: str) -> str:
@@ -378,10 +438,17 @@ class FhirReader:
             if not nxt:
                 total = body.get("total")
                 if isinstance(total, int) and body.get("type") == "searchset":
-                    found = sum(
-                        1
-                        for e in entries
-                        if (e.get("search") or {}).get("mode", "match") == "match"
+                    found = len(
+                        {
+                            json.dumps(
+                                [
+                                    (e.get("resource") or {}).get("resourceType"),
+                                    (e.get("resource") or {}).get("id"),
+                                ]
+                            )
+                            for e in entries
+                            if (e.get("search") or {}).get("mode", "match") == "match"
+                        }
                     )
                     if total > found:
                         raise Unreadable(f"{path}: total {total} but read {found}")
@@ -425,9 +492,12 @@ def _when(value: Any) -> Optional[datetime]:
     if not isinstance(value, str):
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        when = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if when.tzinfo is None:
+        raise Unreadable(f"a timestamp with no time zone: {value}")
+    return when
 
 
 # -- snapshots -------------------------------------------------------------------
@@ -463,16 +533,21 @@ def find_matches(
     """Every live record that is the person, by each identity rule's search."""
 
     seen: dict[str, dict[str, Any]] = {}
+    queries: list[dict[str, str]] = []
     for rule in contract.identity:
-        query = {
-            contract.search[p]: str(params[p])
-            for p in rule
-            if p in contract.search and params.get(p) not in (None, "")
-        }
-        if not query:
-            raise Unreadable(f"identity rule {rule} has no value to search by")
-        query["_count"] = "200"
-        for res in reader.resources(contract.resource_type, query):
+        given = [p for p in rule if params.get(p) not in (None, "")]
+        if len(given) < len(rule):
+            continue  # the task doesn't give every value this rule needs
+        # The whole rule, and each value alone: a server's search may compare
+        # differently from the contract, so the candidates are wide and the
+        # contract's own comparison decides.
+        queries.append({contract.search[p]: str(params[p]).strip() for p in rule})
+        if len(rule) > 1:
+            queries += [{contract.search[p]: str(params[p]).strip()} for p in rule]
+    if not queries:
+        raise Unreadable("the task gives the values of no identity rule")
+    for query in queries:
+        for res in reader.resources(contract.resource_type, {**query, "_count": "200"}):
             seen[str(res["id"])] = res
     matches = {i: r for i, r in seen.items() if is_person(contract, r, params)}
     return matches, len(seen)
@@ -505,24 +580,33 @@ def read_changes(
         return {param: bounds, "_count": "200"}
 
     feed = contract.change_feed
+    selves = {_ref(x) for x in contract.self_actors}
     changes: dict[str, Change] = {}
     if feed.audit is not None:
         a = feed.audit
         for event in reader.resources(a.resource_type, window(a.since_param)):
             action = extract(event, a.action_path)
-            if action not in WRITE_ACTIONS:
+            if action not in AUDIT_ACTIONS:
+                raise Unreadable(f"an audit event has action {action!r}")
+            if action == "R":
                 continue
+            actors = [
+                _ref(x)
+                for x in extract_all(event, a.actor_path)
+                if isinstance(x, str) and x
+            ]
             ref = extract(event, a.entity_path)
             if not isinstance(ref, str) or "/" not in ref:
+                if action == "E" and actors and not set(actors) & selves:
+                    continue  # another user's operation on no resource
                 # A write the log can't tie to a resource: the window can't be
                 # read completely.
                 raise Unreadable("an audit write names no resource")
-            ref = "/".join(ref.split("/")[-2:])
+            ref = _ref(ref)
             change = changes.setdefault(ref, Change(ref=ref))
             change.actions.add(str(action))
-            actor = extract(event, a.actor_path)
-            if isinstance(actor, str) and actor:
-                change.authors.add(actor)
+            if actors:
+                change.authors.update(actors)
             else:
                 change.attributed = False
     for rtype in feed.sweep_types:
@@ -545,7 +629,7 @@ def read_changes(
                         continue
                     who = (meta.get("author") or {}).get("reference")
                     if isinstance(who, str) and who:
-                        authors.add(who)
+                        authors.add(_ref(who))
                     else:
                         change.attributed = False
                 elif str(req.get("method", "")).upper() == "DELETE":
@@ -602,7 +686,7 @@ def judge(
     it during the run, which doesn't change what the agent found.
     """
 
-    selfs = set(contract.self_actors)
+    selfs = {_ref(a) for a in contract.self_actors}
     mine = {
         ref: c
         for ref, c in changes.items()
@@ -624,6 +708,11 @@ def judge(
     if not mine:
         if len(baseline.matches) == 1:
             (rid,) = baseline.matches
+            dupes = sorted(set(after_matches) - {rid})
+            if dupes:
+                return _review(
+                    [f"{len(dupes)} other record(s) are now also the person"], evidence
+                )
             if rid in after_matches or (
                 existing_now is not None and str(existing_now.get("id")) == rid
             ):
@@ -679,7 +768,7 @@ def judge(
             if not is_person(contract, created, params):
                 reasons.append("the created record is not the person")
             if contract.closed:
-                extra_paths = extra_elements(contract, created)
+                extra_paths = extra_elements(contract, created, params)
                 if extra_paths:
                     reasons.append("not given by the task: " + ", ".join(extra_paths))
         dupes = sorted(set(after_matches) - {tid})
@@ -722,6 +811,20 @@ def _hear_own_read(
     )
 
 
+def _agents_part(
+    changes: Mapping[str, Change], selfs: set[str]
+) -> dict[str, tuple[Any, ...]]:
+    """The fingerprint of the writes ``judge`` counts as the agent's."""
+
+    return _fingerprint(
+        {
+            r: c
+            for r, c in changes.items()
+            if not c.attributed or not c.authors or c.authors & selfs
+        }
+    )
+
+
 def _fingerprint(changes: Mapping[str, Change]) -> dict[str, tuple[Any, ...]]:
     return {
         ref: (sorted(c.actions), sorted(c.authors), c.attributed, c.unlogged)
@@ -756,7 +859,7 @@ def verify_ensure(
                 f"the change feed was still changing after {contract.stable_reads} reads"
             )
         after_matches, _ = find_matches(contract, reader, params)
-        selfs = set(contract.self_actors)
+        selfs = {_ref(a) for a in contract.self_actors}
         own = [
             r
             for r, c in changes.items()
@@ -784,6 +887,11 @@ def verify_ensure(
                 _hear_own_read(
                     contract, reader, f"{contract.resource_type}/{rid}", until, sleep
                 )
+        # Last, with no upper bound: a save of the agent's still in flight
+        # when the window closed (a lost response) lands outside it.
+        late = _agents_part(read_changes(contract, reader, baseline.started), selfs)
+        if late != _agents_part(changes, selfs):
+            raise Unreadable("the agent wrote after the window closed")
     except Unreadable as exc:
         return _review([f"unreadable: {exc}"], {"unreadable": True})
     return judge(

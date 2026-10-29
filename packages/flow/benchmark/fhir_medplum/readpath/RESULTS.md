@@ -79,6 +79,12 @@ judged right; the 4 others were sent to review because the record carried
 an element the task didn't give (`active`, `use`). The closed record errs
 toward review, and each such element is one line of contract.
 
+## After the adversarial review
+
+A review of the branch after these rounds found fail-open paths the suites
+didn't exercise (REVIEW.md). The fixes change the verifier, so the numbers
+above are for the verifier before them.
+
 ## What the rounds cover, and what they don't
 
 The suites exercise what the brief describes: existing and duplicate

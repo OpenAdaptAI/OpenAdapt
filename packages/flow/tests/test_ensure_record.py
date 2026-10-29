@@ -491,3 +491,150 @@ def test_an_allowed_element_must_hold_the_allowed_value(active, outcome):
         x,
     )
     assert r.outcome == outcome
+
+
+# -- adversarial review of #1640 -------------------------------------------------
+
+
+def test_found_with_a_new_duplicate_now_needs_review():
+    e, d = patient("e"), patient("d")
+    r = judge(
+        contract(),
+        PARAMS,
+        base(e),
+        ch("Patient/d", "C", by=OTHER),
+        {"e": e, "d": d},
+        None,
+        existing_now=e,
+    )
+    assert r.outcome == "needs_review"
+
+
+def test_the_person_under_a_second_name_or_email_is_found():
+    from openadapt_flow.ensure_record import is_person
+
+    maiden = patient(
+        "m",
+        name=[
+            {"use": "old", "given": ["Ada"], "family": "Byron"},
+            {"given": ["Ada"], "family": "Quill"},
+        ],
+    )
+    second_email = patient(
+        "s",
+        name=[{"given": ["Augusta"], "family": "King"}],
+        telecom=[
+            {"system": "email", "value": "work@example.test"},
+            {"system": "email", "value": "ada.quill@example.test"},
+        ],
+    )
+    assert is_person(contract(), maiden, PARAMS) and is_person(
+        contract(), second_email, PARAMS
+    )
+
+
+def test_a_rule_whose_values_the_task_lacks_is_skipped():
+    from openadapt_flow.ensure_record import is_person
+
+    params = {k: v for k, v in PARAMS.items() if k != "email"}
+    assert is_person(contract(), patient("x"), params)
+
+
+def test_an_audit_event_with_no_action_is_unreadable():
+    event = audit("C", "Patient/x")
+    del event["action"]
+    r = reader_for({"AuditEvent": bundle(event), "Observation": bundle()})
+    with pytest.raises(Unreadable):
+        read_changes(
+            contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+        )
+
+
+def test_an_operation_the_agent_runs_counts_as_its_write():
+    r = reader_for(
+        {
+            "AuditEvent": bundle(audit("C", "Patient/x"), audit("E", "Bot/b")),
+            "Observation": bundle(),
+            "Patient/x/_history": bundle(kind="history"),
+            "Bot/b/_history": bundle(kind="history"),
+        }
+    )
+    feed = {"audit": {}, "sweep_types": ["Observation"], "history_author": False}
+    changes = read_changes(contract(change_feed=feed), r, T0)
+    x = patient("x")
+    assert (
+        judge(contract(), PARAMS, base(), changes, {"x": x}, x).outcome
+        == "needs_review"
+    )
+
+
+def test_an_absolute_actor_reference_is_still_the_agent():
+    changes = ch("Patient/x", "C", by="http://fhir.test/fhir/R4/" + BOT)
+    x = patient("x")
+    from openadapt_flow.ensure_record import _ref
+
+    changes["Patient/x"].authors = {_ref(a) for a in changes["Patient/x"].authors}
+    assert (
+        judge(contract(), PARAMS, base(), changes, {"x": x}, x).outcome
+        == "created_verified"
+    )
+
+
+def test_a_closed_record_refuses_a_value_the_task_did_not_give_and_a_security_label():
+    params = {k: v for k, v in PARAMS.items() if k != "phone"}
+    x = patient("x")  # still holds a phone
+    r = judge(contract(closed=True), params, base(), ch("Patient/x", "C"), {"x": x}, x)
+    assert r.outcome == "needs_review"
+    y = patient("y", meta={"security": [{"code": "R"}], "versionId": "1"})
+    r = judge(contract(closed=True), PARAMS, base(), ch("Patient/y", "C"), {"y": y}, y)
+    assert r.outcome == "needs_review" and any("meta.security" in m for m in r.reasons)
+
+
+def test_a_timestamp_with_no_zone_is_unreadable_not_a_crash():
+    r = reader_for(
+        {
+            "AuditEvent": bundle(audit("C", "Patient/x")),
+            "Observation": bundle(),
+            "Patient/x/_history": bundle(
+                {**patient("x"), "meta": {"lastUpdated": "2026-10-28T12:00:05"}},
+                kind="history",
+            ),
+        }
+    )
+    with pytest.raises(Unreadable):
+        read_changes(
+            contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+        )
+
+
+def test_a_write_that_lands_after_the_window_needs_review():
+    from openadapt_flow.ensure_record import verify_ensure
+
+    x = patient("x")
+    inside = bundle(audit("C", "Patient/x"))
+    after = bundle(audit("C", "Patient/x"), audit("C", "Observation/late"))
+
+    def get(url, params):
+        key = url.split("/fhir/R4/", 1)[-1]
+        if key == "metadata":
+            return (
+                200,
+                {"Date": "Wed, 28 Oct 2026 12:00:10 GMT"},
+                {"resourceType": "CapabilityStatement"},
+            )
+        if key == "AuditEvent":
+            bounded = any(
+                str(v).startswith("le") for v in (params or {}).get("date", [])
+            )
+            return 200, {}, inside if bounded else after
+        if key.endswith("/_history"):
+            return 200, {}, bundle(kind="history")
+        if key == "Patient/x":
+            return 200, {}, x
+        return 200, {}, bundle(x)
+
+    c = contract(change_feed={"audit": {}})
+    r = verify_ensure(
+        c, PARAMS, base(), reader=FhirReader(c, get), sleep=lambda s: None
+    )
+    assert r.outcome == "needs_review" and "after the window" in r.reasons[0]
