@@ -281,7 +281,13 @@ input identifies a record; the person confirming names it:
 parameter that the mined record check already selects the saved record by.
 That check then counts the records that carry the run's value and refuses
 more than one. Name it only when the app keeps that value unique, such as a
-claim number. `status()` lists the keys the program carries.
+claim number. When a record is unique only by several values together, name
+them all: `idempotency_key=["lname", "fname", "DOB"]`, or repeat
+`--idempotency-key`. The check then refuses when more than one record carries
+all of them, counting records that were already there. A one-item list,
+`idempotency_key=["mrn"]`, also counts records that were already there; the
+plain string form counts only the records the run added. `status()` lists the
+keys the program carries.
 
 ## A declared scope for the agent's run
 

@@ -359,6 +359,7 @@
     "openadapt_flow/mockmed/static/widgets.js",
     "openadapt_flow/policies/clinical-write.yaml",
     "openadapt_flow/policies/permissive.yaml",
+    "openadapt_flow/registry_trusted_root.json",
     "openadapt_flow/visualize/static/program_graph.css",
     "openadapt_flow/visualize/static/program_graph.js",
     "public-demo/mockmed-verify.yaml",
