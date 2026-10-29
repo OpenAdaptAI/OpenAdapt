@@ -1240,6 +1240,11 @@ def _downgrade(
 ) -> WriteResult:
     import dataclasses
 
+    if result.recheck is not None and result.outcome is Outcome.CONFIRMED:
+        # Its receipt says verified, but the write is no longer CONFIRMED: a
+        # recheck of it must not say "the earlier verdict still stands". It
+        # still excuses its own window for later writes (its frame held).
+        _withdraw_recheck(result.recheck.payload)
     return dataclasses.replace(
         result,
         outcome=Outcome.UNCERTAIN,
@@ -1247,6 +1252,7 @@ def _downgrade(
         retry_safe=False,
         landed=landed,
         review=review,
+        recheck_due_at=None,
     )
 
 
@@ -1740,6 +1746,27 @@ def _issue_recheck(payload: Mapping[str, Any]) -> None:
     os.close(fd)
 
 
+def _withdraw_recheck(payload: Mapping[str, Any]) -> None:
+    """Mark an issued recheck state as not to be rechecked: the result it
+    came with was downgraded from CONFIRMED."""
+
+    path = _issued_dir("rechecks") / f"{_state_digest(payload)}.withdrawn"
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
+    except OSError as exc:
+        raise VerifierError(f"can't withdraw the recheck state: {exc}") from exc
+    os.close(fd)
+
+
+def _recheck_withdrawn(payload: Any) -> bool:
+    try:
+        return (
+            _issued_dir("rechecks") / f"{_state_digest(payload)}.withdrawn"
+        ).exists()
+    except (VerifierError, TypeError, ValueError):
+        return True
+
+
 def _recheck_issued(payload: Any) -> bool:
     try:
         return (_issued_dir("rechecks") / _state_digest(payload)).is_file()
@@ -1965,9 +1992,11 @@ def recheck(
         else "",
     )
     problem = (
-        None
-        if _recheck_issued(state.payload)
-        else "the recheck state was not issued under this state directory"
+        "the recheck state was not issued under this state directory"
+        if not _recheck_issued(state.payload)
+        else "the write's result was downgraded from CONFIRMED to UNCERTAIN"
+        if _recheck_withdrawn(state.payload)
+        else None
     ) or recheck_problem(cfg, state.payload, params=params, run_record=run_record)
     if problem is not None:
         return _replace(base, reasons=[f"{problem}, so the write can't be rechecked"])

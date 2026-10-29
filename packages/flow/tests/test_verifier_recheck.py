@@ -656,3 +656,29 @@ def test_the_deprecated_capture_form_schedules_a_recheck_too(
     assert result.verified and result.recheck is not None
     _sql(db, "UPDATE patient_data SET email = 'x@example.test' WHERE pid = 1")
     assert _recheck(contract, result).outcome == "REFUTED"
+
+
+def test_a_confirmed_write_downgraded_to_uncertain_cannot_be_rechecked_as_verified(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    assert first.recheck is not None and first.recheck_due_at
+    # As when another attempt with the same values was open (_check_overlap).
+    down = verifier._downgrade(first, "another attempt with these values was open")
+    assert down.outcome.value == "UNCERTAIN" and down.recheck_due_at is None
+    for state in (down, first, first.recheck):
+        late = _recheck(contract, state)
+        assert late.outcome == "UNCERTAIN", late.reasons
+        assert "downgraded" in late.reasons[0]
+
+
+def test_a_downgraded_later_write_still_excuses_its_own_window(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert second.verified and second.recheck is not None
+    down = verifier._downgrade(second, "another attempt with these values was open")
+    # Its frame held, so its own rows still don't refute the earlier write.
+    assert _recheck(contract, first, excused_by=[down]).outcome == "CONFIRMED"
+    assert _recheck(contract, first).outcome == "REFUTED"
