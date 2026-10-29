@@ -814,6 +814,11 @@ def _excuse_attributed_additions(
     record the frame's attribution names another actor for (a colleague's
     new patient in the same window) is not this save's addition. Only such
     attributed additions are set aside; an unattributed one still refutes.
+
+    Only an insert event proves who created a record: the frame must read the
+    log with ``insert_events``. A colleague's later entry or last-modifier
+    stamp on a record says who touched it, not who added it, so under any
+    other attribution nothing is set aside.
     """
 
     from openadapt_flow.runtime.effects._common import judge_records
@@ -821,6 +826,13 @@ def _excuse_attributed_additions(
     from openadapt_flow.runtime.effects.surfaces import surface_of
 
     spec = cfg.frame or FrameSpec()
+    attribution = spec.attribution
+    if (
+        attribution is None
+        or attribution.kind != "audit_read"
+        or not attribution.insert_events
+    ):
+        return
     excused = {
         (c.surface, str(c.key))
         for c in frame.concurrent
@@ -872,6 +884,7 @@ def _excuse_attributed_additions(
         if again.verdict is Verdict.CONFIRMED:
             verdicts[i] = again
             rows[i]["verdict"] = _label(again.verdict)
+            rows[i]["observed_effect"] = again.observed_effect
             rows[i]["observed_count"] = again.observed_count
 
 
