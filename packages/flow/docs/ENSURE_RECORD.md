@@ -36,6 +36,7 @@ reported a timeout is judged like any other save.
 | `search` | the FHIR search parameter for each identity value | a person (one line each) |
 | `self` | the agent's own actor references | setup |
 | `closed` | the created record holds nothing the task didn't give (a field the task left out must be absent; `meta.security` and `meta.tag` count), except what `allow` names | a person |
+| `void` | values that make a record assert nothing (`status="entered-in-error"` on an Immunization). A record holding one is never the person: it is not found, it is not a duplicate, and a created record holding one needs review. It names values to leave out, never values to keep, so a status it misses still matches and stops for review. A void value can't sit on an identity field's path | a person, from the resource's FHIR definition |
 | `change_feed` | the audit read, `_history`, whether the server returns `meta.author`, sweep types | a person, once per server |
 
 ## What this read path sees, and what it doesn't
