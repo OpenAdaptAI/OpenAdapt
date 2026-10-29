@@ -440,7 +440,10 @@ class ArmB(ArmA):
 
         from openadapt_flow.write_ledger import FileLedger
 
-        return FileLedger(Path(os.environ["INCREMENTAL_VALUE_LEDGER_DIR"]))
+        ldir = os.environ.get("INCREMENTAL_VALUE_LEDGER_DIR")
+        if not ldir:
+            raise SystemExit("run 2: set INCREMENTAL_VALUE_LEDGER_DIR to a fresh directory")
+        return FileLedger(Path(ldir))
 
     def _actor(self) -> Any:
         from openadapt_flow.verifier import Actor
@@ -540,15 +543,19 @@ class ArmB(ArmA):
         if self._ledger_result is not None:
             r = self._ledger_result
             out = self._verdict_2(r, said_saved, evidence, via="ledger")
-            # The reconciled attempt's own recheck state, if its result had one.
-            self._queue_recheck(item.item_id, r, evidence / "recheck.json")
+            # The reconciled attempt's own recheck state, beside its receipt
+            # (verify_write's <workdir>/<write_id>/recheck.json).
+            receipt = r.get("receipt_path")
+            state = Path(receipt).parent / "recheck.json" if receipt else evidence / "recheck.json"
+            self._queue_recheck(item.item_id, r, state)
             return out
         attempted = said_saved or self.saves_sent > 0
         result = verify_write(self._pending, write_attempted=attempted)
         self._pending = None
-        out = self._verdict_2(result.to_dict(), said_saved, evidence, via="verify_write")
-        if result.recheck is not None and result.recheck.path is not None:
-            self._queue_recheck(item.item_id, result.to_dict(), Path(result.recheck.path))
+        r = result.to_dict()
+        out = self._verdict_2(r, said_saved, evidence, via="verify_write")
+        path = result.recheck.path if result.recheck is not None else None
+        self._queue_recheck(item.item_id, r, Path(path) if path is not None else evidence / "no-recheck-state")
         return out
 
     def _queue_recheck(self, item_id: str, r: dict[str, Any], state_path: Path) -> None:
@@ -557,6 +564,11 @@ class ArmB(ArmA):
         earlier writes' rechecks (any outcome, #1639)."""
 
         if not state_path.is_file():
+            if r.get("outcome") == "CONFIRMED":
+                # A confirmed write in run 2 always has a recheck due; with no
+                # state to recheck, it never passes (a late UNCERTAIN).
+                q = {"item_id": item_id, "verdict_at": time.time()}
+                self._late_row(q, {"outcome": "UNCERTAIN", "reasons": [f"no recheck state at {state_path.name}"]}, 0.0, 0.0)
             return
         self.recheck_queue.append({
             "item_id": item_id, "state_path": str(state_path), "params": dict(self._params),
@@ -651,6 +663,7 @@ class ArmB(ArmA):
     def _mode() -> str:
         import os
 
+        # run.py sets it from --run: blocking for run 2, boundary for the slice.
         return os.environ.get("INCREMENTAL_VALUE_RECHECK_MODE", "blocking")
 
     def close(self) -> None:

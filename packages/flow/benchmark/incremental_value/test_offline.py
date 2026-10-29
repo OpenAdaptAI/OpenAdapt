@@ -157,3 +157,85 @@ def test_slice_mix():
     kinds = [i.kind for i in s.items]
     assert (kinds.count("ordinary"), kinds.count("fault"), kinds.count("perturbation")) == (17, 8, 5)
     assert s.items[0].item_id == "sl-001" and len({i.item_id for i in s.items}) == 30
+
+
+def _ok(item_id, **over):
+    r = {"item_id": item_id, "kind": "ordinary", "intended": True, "hooks": {}, "result": {"claimed": "done", "wall_s": 10.0,
+         "cost_usd": 0.05, "detail": {}}, "oracle": {"verdict": "correct"}, "load1_at_start": 5, "load1_at_end": 5}
+    r.update(over)
+    return r
+
+
+def test_pairing_excludes_a_harness_failure_and_a_missing_item_from_both_arms():
+    from incremental_value.score import pair_not_run
+
+    rows = {
+        "A": [_ok("iv-001"), _ok("iv-002"), _ok("iv-003")],
+        "B": [_ok("iv-001"), _ok("iv-002", infra_error="VerifierError: x", result=None)],
+    }
+    pair_not_run(rows)
+    assert [outcome(r) for r in rows["A"]] == ["correct", "not_run", "not_run"]
+    assert [outcome(r) for r in rows["B"]] == ["correct", "infra"]
+
+
+def test_an_items_last_try_counts(tmp_path):
+    import json
+
+    from incremental_value.score import load
+
+    (tmp_path / "B").mkdir()
+    rows = [_ok("iv-001", infra_error="boom", result=None), _ok("iv-001"), _ok("iv-002")]
+    (tmp_path / "B" / "ledger.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    got = load(tmp_path, "B")
+    assert [(r["item_id"], r["tries"], outcome(r)) for r in got] == [("iv-001", 2, "correct"), ("iv-002", 1, "correct")]
+
+
+def test_a_harmful_case_with_nothing_to_do_is_not_run():
+    assert outcome(_ok("iv-001", kind="fault", expect="harmful", hooks={"prepare": 0, "form_mutators": 0})) == "not_run"
+    assert outcome(_ok("iv-001", kind="fault", expect="harmful", hooks={"form_mutators": 1})) == "correct"
+    assert outcome(_ok("iv-001", kind="fault", expect="clean", hooks={})) == "correct"
+
+
+def test_run2_settings_come_from_the_run_and_the_frozen_files(monkeypatch):
+    import pytest
+
+    from incremental_value import run
+
+    for k in ("INCREMENTAL_VALUE_CONTRACT", "INCREMENTAL_VALUE_AUDIT_SQL", "INCREMENTAL_VALUE_FORM_DEFAULTS",
+              "INCREMENTAL_VALUE_RECHECK_MODE"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("INCREMENTAL_VALUE_LEDGER_DIR", "/nonexistent-fresh")
+    shas = run.run2_settings("slice", "B")
+    assert set(shas) == {"contract_2.yaml", "audit_query_2.sql", "form_defaults_2.json"}
+    import os
+
+    assert os.environ["INCREMENTAL_VALUE_RECHECK_MODE"] == "boundary"
+    assert os.environ["INCREMENTAL_VALUE_AUDIT_SQL"] == "audit_query_2.sql"
+    monkeypatch.setenv("INCREMENTAL_VALUE_CONTRACT", str(run.HERE / "contract.yaml"))
+    with pytest.raises(SystemExit):
+        run.run2_settings("2", "B")
+    monkeypatch.delenv("INCREMENTAL_VALUE_CONTRACT")
+    monkeypatch.delenv("INCREMENTAL_VALUE_LEDGER_DIR")
+    with pytest.raises(SystemExit):
+        run.run2_settings("2", "B")
+    monkeypatch.setattr(run, "RUN2_FILES", {**run.RUN2_FILES, "contract": ("contract_2.yaml", "0" * 64)})
+    with pytest.raises(SystemExit):
+        run.run2_settings("2", "A")
+
+
+def test_a_confirmed_write_with_no_recheck_state_never_passes(tmp_path):
+    import json
+
+    from incremental_value.arms import ArmB
+
+    arm = ArmB.__new__(ArmB)
+    arm.recheck_queue, arm._params, arm.late_path = [], {}, tmp_path / "late.jsonl"
+    arm._queue_recheck("iv-007", {"outcome": "CONFIRMED", "recheck_due_at": "2026-10-29T12:00:00Z"}, tmp_path / "missing.json")
+    arm._queue_recheck("iv-008", {"outcome": "REFUTED"}, tmp_path / "missing.json")
+    late = [json.loads(x) for x in arm.late_path.read_text().splitlines()]
+    assert [(x["item_id"], x["outcome"]) for x in late] == [("iv-007", "UNCERTAIN")]
+    assert arm.recheck_queue == []
+    state = tmp_path / "recheck.json"
+    state.write_text("{}")
+    arm._queue_recheck("iv-009", {"outcome": "CONFIRMED"}, state)
+    assert [q["item_id"] for q in arm.recheck_queue] == ["iv-009"] and arm.recheck_queue[0]["verified"]

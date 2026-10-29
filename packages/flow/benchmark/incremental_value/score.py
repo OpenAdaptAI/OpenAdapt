@@ -66,6 +66,13 @@ def outcome(row: dict[str, Any]) -> str:
         return "not_run"
     if row.get("paired_not_run"):
         return "not_run"
+    # A harmful case whose ops gave the item nothing to do tests nothing.
+    h = row.get("hooks") or {}
+    if row.get("expect") == "harmful" and not (
+        h.get("prepare") or h.get("form_mutators") or h.get("before_save") or h.get("after_save_delays")
+        or h.get("save_timeout") or h.get("restart_after_save")
+    ):
+        return "not_run"
     done = row["result"]["claimed"] == "done"
     # A later recheck that refutes the write stops it then.
     late = row.get("late") or {}
@@ -115,6 +122,7 @@ def arm_summary(
         "items": n,
         "infra_excluded": sum(1 for o in outs if o == "infra"),
         "not_run_excluded": sum(1 for o in outs if o == "not_run"),
+        "retried": sum(1 for r in rows if r.get("tries", 1) > 1),
         "correct_completions": count["correct"] + count["correct_stop"],
         "missed_harmful_changes": count["missed_harm"],
         "caught_harmful_changes": count["caught_harm"],
@@ -142,35 +150,54 @@ def _pct(xs: list[float], q: float) -> Optional[float]:
 
 
 def _late_timing(counted: list[tuple[dict[str, Any], str]]) -> dict[str, Any]:
-    """PREREGISTRATION_2's three ways of counting B's recheck wait (none
-    applies to A): the recheck latency, the wall time per item without the
-    wait (the item plus the recheck's own read), and the raw wall time with it."""
+    """PREREGISTRATION_2's three ways of counting B's recheck wait: the
+    recheck latency (B only), the wall time per item without the wait (both
+    arms: the item, plus B's recheck read where it had one), and B's raw wall
+    time with it. The wall-time figures are also given for items that started
+    and ended under load 40."""
 
-    late = [r["late"] for r, _ in counted if r.get("late")]
+    late = {r["item_id"]: r["late"] for r, _ in counted if r.get("late")}
+    lat = [x["latency_s"] for x in late.values() if x.get("latency_s") is not None]
+
+    def without(r: dict[str, Any]) -> float:
+        return r["result"]["wall_s"] + (late.get(r["item_id"]) or {}).get("recheck_s", 0)
+
+    def raw(r: dict[str, Any]) -> float:
+        return without(r) + (late.get(r["item_id"]) or {}).get("wait_s", 0)
+
+    rows = [r for r, _ in counted]
+    calm = [r for r in rows if max(r.get("load1_at_start") or 0, r.get("load1_at_end") or 0) < 40]
+    out: dict[str, Any] = {
+        "wall_s_without_wait_median": _pct([without(r) for r in rows], 0.5),
+        "wall_s_without_wait_p90": _pct([without(r) for r in rows], 0.9),
+        "items_under_load_40": len(calm),
+        "wall_s_without_wait_under_load_40_median": _pct([without(r) for r in calm], 0.5),
+        "wall_s_without_wait_under_load_40_p90": _pct([without(r) for r in calm], 0.9),
+    }
     if not late:
-        return {}
-    walls = {r["item_id"]: r["result"]["wall_s"] for r, _ in counted}
-    lat = [x["latency_s"] for x in late if x.get("latency_s") is not None]
-    without = [walls[x["item_id"]] + x.get("recheck_s", 0) for x in late if x["item_id"] in walls]
-    raw = [walls[x["item_id"]] + x.get("recheck_s", 0) + x.get("wait_s", 0) for x in late if x["item_id"] in walls]
+        return out
     disputed = sum(
-        1 for x in late if x.get("outcome") == "UNCERTAIN" and any("reconcile both" in s for s in x.get("reasons") or [])
+        1 for x in late.values() if x.get("outcome") == "UNCERTAIN" and any("reconcile both" in s for s in x.get("reasons") or [])
     )
     return {
+        **out,
         "rechecks": len(late),
-        "rechecks_by_outcome": {o: sum(1 for x in late if x.get("outcome") == o) for o in {x.get("outcome") for x in late}},
+        "rechecks_by_outcome": {o: sum(1 for x in late.values() if x.get("outcome") == o) for o in {x.get("outcome") for x in late.values()}},
         "rechecks_disputed": disputed,
         "recheck_latency_s_median": _pct(lat, 0.5), "recheck_latency_s_p90": _pct(lat, 0.9),
-        "wall_s_without_wait_median": _pct(without, 0.5), "wall_s_without_wait_p90": _pct(without, 0.9),
-        "wall_s_with_wait_median": _pct(raw, 0.5), "wall_s_with_wait_p90": _pct(raw, 0.9),
+        "wall_s_with_wait_median": _pct([raw(r) for r in rows], 0.5), "wall_s_with_wait_p90": _pct([raw(r) for r in rows], 0.9),
+        "wall_s_with_wait_under_load_40_median": _pct([raw(r) for r in calm], 0.5),
     }
 
 
 def pair_not_run(rows: dict[str, list[dict[str, Any]]]) -> None:
-    """An item that is not run in either arm is not run in both, so the two
-    arms are scored on the same items (PREREGISTRATION_2)."""
+    """An item excluded in either arm (not run, or a harness failure), or
+    missing from one arm's ledger, is not run in both, so the two arms are
+    scored on the same items (PREREGISTRATION_2)."""
 
-    ids = {r["item_id"] for rs in rows.values() for r in rs if outcome(r) == "not_run"}
+    present = [{r["item_id"] for r in rs} for rs in rows.values()]
+    ids = {r["item_id"] for rs in rows.values() for r in rs if outcome(r) in EXCLUDED}
+    ids |= set().union(*present) - set.intersection(*present) if present else set()
     for rs in rows.values():
         for r in rs:
             if r["item_id"] in ids:
@@ -194,7 +221,14 @@ def verdict(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
 
 def load(d: Path, arm: str) -> list[dict[str, Any]]:
     p = d / arm / "ledger.jsonl"
-    rows = [json.loads(x) for x in p.read_text().splitlines() if x.strip()] if p.exists() else []
+    every = [json.loads(x) for x in p.read_text().splitlines() if x.strip()] if p.exists() else []
+    # An item's last try counts; a retry (at most one, for an infrastructure
+    # error) is reported.
+    last: dict[str, dict[str, Any]] = {}
+    for r in every:
+        r["tries"] = last[r["item_id"]]["tries"] + 1 if r["item_id"] in last else 1
+        last[r["item_id"]] = r
+    rows = list(last.values())
     # Run 2: B's late rechecks, keyed by item, written after the item's row.
     late_p = d / arm / "late.jsonl"
     if late_p.exists():

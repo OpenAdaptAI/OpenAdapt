@@ -34,6 +34,48 @@ from . import faults, workload
 from .oracle import DbOracle, judge, load_form_defaults, root_sql
 
 HERE = Path(__file__).resolve().parent
+
+#: Run 2's frozen inputs (PREREGISTRATION_2; openadapt-internal
+#: qualification/incremental-value-2/CONTRACT_FREEZE.md). A run 2 or slice
+#: item never starts on anything else.
+RUN2_FILES = {
+    "contract": ("contract_2.yaml", "8460b719b2e7862cf8fd94391fcf790dca49668bdac80db01b4d27a5d0a997ca"),
+    "audit_sql": ("audit_query_2.sql", "bd1156e85f104fdf2fd5b3729d0d9f6837f5387941499f88e765f9ecaa325a00"),
+    "form_defaults": ("form_defaults_2.json", "b53a409f2ad995a9156c27ef6a5e779492520125604aa7262807e9d0cc68d3b7"),
+}
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def run2_settings(run: str, arm: str) -> dict[str, str]:
+    """Set run 2's (or its slice's) contract, audit view, form defaults and
+    recheck mode from ``--run``, and check each frozen file's sha256. An
+    environment value that names another file, or another mode, stops."""
+
+    want = {
+        "INCREMENTAL_VALUE_CONTRACT": str(HERE / RUN2_FILES["contract"][0]),
+        "INCREMENTAL_VALUE_AUDIT_SQL": RUN2_FILES["audit_sql"][0],
+        "INCREMENTAL_VALUE_FORM_DEFAULTS": str(HERE / RUN2_FILES["form_defaults"][0]),
+        "INCREMENTAL_VALUE_RECHECK_MODE": "boundary" if run == "slice" else "blocking",
+    }
+    for k, v in want.items():
+        have = os.environ.get(k)
+        if have and have != v and not (Path(have).name == Path(v).name and Path(have).resolve() == Path(v).resolve()):
+            raise SystemExit(f"run {run}: {k} is {have!r}, not {v!r}")
+        os.environ[k] = v
+    shas = {}
+    for name, pinned in RUN2_FILES.values():
+        got = _sha256(HERE / name)
+        if got != pinned:
+            raise SystemExit(f"run {run}: {name} sha256 {got} is not the frozen {pinned}")
+        shas[name] = got
+    if arm == "B" and not os.environ.get("INCREMENTAL_VALUE_LEDGER_DIR"):
+        raise SystemExit(f"run {run}: set INCREMENTAL_VALUE_LEDGER_DIR to a fresh directory for B")
+    return shas
 BOT = "openadapt_actor"
 OTHER = "clinician2"
 READER = "oa_iv_reader"
@@ -213,18 +255,28 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--chunk", type=int, default=0,
                     help="run 2: run only items iv-(50k-49)..iv-50k (PREREGISTRATION_2's fixed chunks)")
     a = ap.parse_args(argv)
+    if a.chunk and not (a.run == "2" and 1 <= a.chunk <= 6):
+        raise SystemExit("--chunk is 1 to 6, for --run 2 only")
+    frozen = run2_settings(a.run, a.arm) if a.run in ("2", "slice") else {}
+    defaults_path = os.environ.get("INCREMENTAL_VALUE_FORM_DEFAULTS", "")
+    form_defaults = load_form_defaults(defaults_path) if defaults_path else None
+    if form_defaults is None and frozen:
+        raise SystemExit(f"run {a.run} needs the oracle's form defaults ({defaults_path})")
 
     cases_list, sha, ops = faults.load_cases()
     cases = {c["id"]: c for c in cases_list}
     stream_path = a.stream or (a.out / "stream.json")
+    ids = [c["id"] for c in cases_list]
+    if a.run == "slice":
+        built = workload.build_slice(ids, sha)
+    else:
+        built = workload.build(ids, sha, **(workload.RUN2 if a.run == "2" else {}))
     if stream_path.exists():
         stream = workload.load(stream_path)
+        if frozen and stream.sha256() != built.sha256():
+            raise SystemExit(f"{stream_path} is not run {a.run}'s pre-registered stream")
     else:
-        ids = [c["id"] for c in cases_list]
-        if a.run == "slice":
-            stream = workload.build_slice(ids, sha)
-        else:
-            stream = workload.build(ids, sha, **(workload.RUN2 if a.run == "2" else {}))
+        stream = built
         a.out.mkdir(parents=True, exist_ok=True)
         workload.save(stream, stream_path)
     if stream.faultset_sha256 != sha:
@@ -241,9 +293,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         raise SystemExit(f"{ldir} holds another run's write ledger; use a fresh INCREMENTAL_VALUE_LEDGER_DIR")
     # B's late rechecks land after their item's row: one line per recheck.
     arm.late_path = out / "late.jsonl"
+    # An item is done once it has a row that isn't an infrastructure error,
+    # or (runs 2 and slice) two rows: the pre-registered single retry.
     done = set()
     if ledger.exists():
-        done = {json.loads(ln)["item_id"] for ln in ledger.read_text().splitlines() if ln.strip()}
+        tries: dict[str, list[bool]] = {}
+        for ln in ledger.read_text().splitlines():
+            if ln.strip():
+                r = json.loads(ln)
+                tries.setdefault(r["item_id"], []).append(bool(r.get("infra_error") or r.get("result") is None))
+        done = {i for i, t in tries.items() if not all(t) or len(t) >= (2 if frozen else 1)}
 
     fx = Fixture()
     app = fx.app
@@ -266,14 +325,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     rec = Recorder()
     with (out / "arm.json").open("w") as fh:
         json.dump({"describe": arm.describe(), "stream_sha256": stream.sha256(), "faultset_sha256": sha, "targets": targets,
-                   "engine_commit": os.popen("git rev-parse HEAD").read().strip()}, fh, indent=1)
-    # Run 2 and its slice compare unnamed new-chart columns with the defaults
-    # recorded before the freeze (PREREGISTRATION_2); a missing file stops.
-    default_file = "form_defaults_2.json" if a.run in ("2", "slice") else ""
-    defaults_path = os.environ.get("INCREMENTAL_VALUE_FORM_DEFAULTS", "") or (str(HERE / default_file) if default_file else "")
-    form_defaults = load_form_defaults(defaults_path) if defaults_path else None
-    if form_defaults is None and default_file:
-        raise SystemExit(f"run {a.run} needs the oracle's form defaults ({defaults_path})")
+                   "engine_commit": os.popen("git rev-parse HEAD").read().strip(), "run": a.run,
+                   "frozen_sha256": frozen, "recheck_mode": os.environ.get("INCREMENTAL_VALUE_RECHECK_MODE")}, fh, indent=1)
     if form_defaults is None:
         print("warning: no INCREMENTAL_VALUE_FORM_DEFAULTS; the oracle checks only the referral's fields", flush=True)
     setup = arm.setup(env, rec)
@@ -342,6 +395,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "label": item.label,
                 "variant": item.variant,
                 "intended": ctx.intended is not None,
+                "expect": cases[item.label].get("expect") if item.kind == "fault" else None,
                 "hooks": faults.describe(hooks),
                 "prepare_error": prep_err,
                 "prepare_tables": sorted(pre),
