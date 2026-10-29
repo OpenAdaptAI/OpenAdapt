@@ -638,3 +638,99 @@ def test_a_write_that_lands_after_the_window_needs_review():
         c, PARAMS, base(), reader=FhirReader(c, get), sleep=lambda s: None
     )
     assert r.outcome == "needs_review" and "after the window" in r.reasons[0]
+
+
+def test_instant_compare_is_one_moment_to_the_second():
+    from openadapt_flow.ensure_record import FieldRule, normalize
+
+    rule = FieldRule(path="start", compare="instant")
+    assert normalize("2026-11-17T09:00:00-05:00", rule) == normalize(
+        "2026-11-17T14:00:00.000Z", rule
+    )
+    assert normalize("2026-11-17T14:00:00Z", rule) != normalize(
+        "2026-11-17T15:00:00Z", rule
+    )
+    # A time with no zone names no moment: it never matches.
+    assert normalize("2026-11-17T14:00:00", rule) is None
+    assert normalize("not a time", rule) is None
+
+
+def test_a_prefix_filter_is_one_leaf_in_a_closed_record():
+    from openadapt_flow.ensure_record import (
+        EnsureContract,
+        extra_elements,
+        wrong_fields,
+    )
+
+    c = EnsureContract.model_validate(
+        {
+            "resource_type": "Appointment",
+            "base_url": "http://127.0.0.1:1/fhir",
+            "self": ["Practitioner/bot"],
+            "fields": {
+                "patient": {
+                    "path": "participant[actor.reference^=Patient/].actor.reference"
+                },
+                "doctor": {
+                    "path": "participant[actor.reference^=Practitioner/].actor.reference"
+                },
+            },
+            "identity": [["patient"]],
+            "search": {"patient": "patient"},
+            "closed": True,
+        }
+    )
+    params = {"patient": "Patient/p1", "doctor": "Practitioner/d1"}
+    res = {
+        "resourceType": "Appointment",
+        "id": "a",
+        "participant": [
+            {"actor": {"reference": "Practitioner/d1"}},
+            {"actor": {"reference": "Patient/p1"}},
+        ],
+    }
+    assert wrong_fields(c, res, params) == []
+    assert extra_elements(c, res, params) == []
+    res["participant"].append({"actor": {"reference": "Patient/p2"}})
+    assert extra_elements(c, res, params) == ["participant.actor.reference"]
+
+
+def test_an_identity_value_without_a_search_parameter_is_compared_not_searched():
+    from openadapt_flow.ensure_record import EnsureContract, find_matches
+
+    c = EnsureContract.model_validate(
+        {
+            "resource_type": "AllergyIntolerance",
+            "base_url": "http://127.0.0.1:1/fhir",
+            "self": ["Practitioner/bot"],
+            "fields": {
+                "patient": {"path": "patient.reference"},
+                "code": {"path": "code.coding.code"},
+            },
+            "identity": [["patient", "code"]],
+            "search": {"patient": "patient"},
+        }
+    )
+    asked = []
+
+    class Reader:
+        def resources(self, rtype, query):
+            asked.append(dict(query))
+            return [
+                {
+                    "id": "a1",
+                    "patient": {"reference": "Patient/p1"},
+                    "code": {"coding": [{"code": "91936005"}]},
+                },
+                {
+                    "id": "a2",
+                    "patient": {"reference": "Patient/p1"},
+                    "code": {"coding": [{"code": "300916003"}]},
+                },
+            ]
+
+    matches, _ = find_matches(
+        c, Reader(), {"patient": "Patient/p1", "code": "91936005"}
+    )
+    assert set(matches) == {"a1"}
+    assert all(set(q) == {"patient", "_count"} for q in asked)
