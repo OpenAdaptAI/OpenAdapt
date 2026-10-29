@@ -41,12 +41,14 @@ token at once. What came of it is in [epic/](epic/README.md):
   The sandbox exposed one verifier bug: the OperationOutcome Epic puts in an
   empty search counted as a record, so a clean create read as a removed
   record. It is fixed in `runtime/effects/fhir.py`, with tests.
-- **Fault suite, two rounds** (`epic/RESULTS.md`): round 2 got 10 of 10
-  right, with no fault passed as verified: two clean creates confirmed; the
-  dropped phone, three wrong fields and an extra record refuted; no write,
-  a pre-existing record answered as "created", and a wrong birth date
-  `UNCERTAIN`. Round 1 got 7 of 9 because two right answers assumed
-  Epic didn't merge repeat creates. The rounds are not blind.
+- **Fault suites** (`epic/RESULTS.md`): a **blind round** of 13 cases from
+  a separate author, frozen by sha256 before its one run, got 12 right with
+  no fault passed as verified. The miss was a false refusal of a clean save
+  beside a pre-existing look-alike, caused by the contract; the contract was
+  fixed to one `exact_new_set` effect, and both suites were rerun fully
+  right (not blind). The earlier non-blind rounds got 7 of 9 and 10 of 10.
+  The fix to the record check passed an adversarial review
+  (`epic/REVIEW.md`).
 
 What a claim from this may say: "a patient registration in Epic's public
 FHIR sandbox, read back through FHIR search and read". It can't say that

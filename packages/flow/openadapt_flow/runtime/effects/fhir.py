@@ -336,7 +336,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
                     self.read_problem = "a Bundle entry has no resource"
                     return None
                 mode = (entry.get("search") or {}).get("mode")
-                if mode == "outcome":
+                if mode == "outcome" or (
+                    mode is None and resource.get("resourceType") == "OperationOutcome"
+                ):
                     # A message about the search, not a record (Epic sends a
                     # warning "returns no results" on an empty search). An
                     # error in it means the set may be partial.

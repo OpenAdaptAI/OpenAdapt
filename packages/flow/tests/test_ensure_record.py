@@ -183,6 +183,19 @@ def bundle(*resources, total=None, next_url=None, kind="searchset"):
     return body
 
 
+def with_outcome(body, severity):
+    body["entry"] = list(body.get("entry") or []) + [
+        {
+            "resource": {
+                "resourceType": "OperationOutcome",
+                "issue": [{"severity": severity, "code": "processing"}],
+            },
+            "search": {"mode": "outcome"},
+        }
+    ]
+    return body
+
+
 def reader_for(routes):
     def get(url, params):
         key = url.split("/fhir/R4/", 1)[-1]
@@ -262,6 +275,7 @@ def test_log_and_record_disagreeing_on_the_author_is_unattributed():
         {"AuditEvent": bundle(next_url="http://elsewhere.test/fhir/R4/AuditEvent?p=2")},
         {"AuditEvent": bundle({"resourceType": "AuditEvent"})},
         {"AuditEvent": bundle(audit("C", None))},
+        {"AuditEvent": with_outcome(bundle(), "error")},
     ],
     ids=[
         "http-500",
@@ -270,6 +284,7 @@ def test_log_and_record_disagreeing_on_the_author_is_unattributed():
         "other-origin",
         "no-id",
         "no-entity",
+        "error-outcome",
     ],
 )
 def test_every_incomplete_read_is_unreadable(routes):
@@ -278,6 +293,18 @@ def test_every_incomplete_read_is_unreadable(routes):
         read_changes(
             contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
         )
+
+
+def test_a_warning_outcome_is_a_message_not_an_unreadable_search():
+    """Epic answers an empty search with a warning outcome entry."""
+
+    r = reader_for(
+        {"Observation": bundle(), "AuditEvent": with_outcome(bundle(), "warning")}
+    )
+    changes = read_changes(
+        contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+    )
+    assert changes == {}
 
 
 def test_a_server_without_history_authors_relies_on_the_audit_trail():

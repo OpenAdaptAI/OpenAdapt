@@ -14,8 +14,9 @@ birth date. [FINDINGS.md](../FINDINGS.md) has the terms and the read path.
 | `register_patient.yaml`, `register_patient_phone.yaml` | the contracts, without and with the task's phone number |
 | `client.py` | the backend OAuth client (an RS384-signed JWT for a token) |
 | `probe.py`, `probe.json` | the live checks of what Epic's read path shows and what it does with a write, and their results on 2026-10-29 |
-| `suite.py` | the write-fault suite: ten cases, each a run-unique synthetic patient |
-| [RESULTS.md](RESULTS.md), `round1.json`, `round1_followups.json`, `round2.json` | the two rounds, and the reruns between them |
+| `suite.py` | the write-fault suite: ten built-in cases, or a frozen suite file checked by its sha256; each case a run-unique synthetic patient |
+| [RESULTS.md](RESULTS.md), `round1.json`, `round1_followups.json`, `round2.json`, `round3.json`, `blind_summary.json` | the rounds, the reruns between them, and the blind round's counts |
+| [REVIEW.md](REVIEW.md) | the adversarial review of the verifier fix |
 | [MINUTES.md](MINUTES.md) | who wrote what, and how long it took |
 
 ## Running it
