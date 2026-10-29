@@ -49,6 +49,7 @@ As in run 1, except where stated.
   - A separate agent wrote it from [`FAULT_BRIEF_2.md`](FAULT_BRIEF_2.md): run 1's brief with the earlier set, its results and this harness put out of bounds, and 80 cases asked for. That agent read nothing else.
   - The set stays private. Only its hash, its class counts and its results by class are published.
   - It is never reused as a held-out set, and neither are sets 1 to 6.
+  - **Fault ops:** 77 of the 80 cases are implemented, 58 harmful and 19 clean. 3 are reported not run before the first item: two clean cases the oracle can't excuse (a legitimate write to the person's own rows) and one whose effect would outlast its item. These counts were set from the ops, which were written after the contract was frozen.
 - **Fault ops.** These are the implementations of the cases. They are written only after B's run-2 contract sha256 is committed. Each case is implemented as written, or reported "not run" with the reason.
 
 - **The non-blocking slice (secondary, reported apart).** 30 items, built with seed 2030 at run 1's density:
@@ -125,7 +126,7 @@ Otherwise the result is "B does not win", and it is published as such.
 
 ## Pins and run rules
 
-- **Engine:** the `main` commit ENGINE_COMMIT, with every fix above merged. Both arms run on it.
+- **Engine:** the `main` commit that merges this file's PR (#1648), with #1637, #1639 and #1649 already on `main`. Both arms run on it. Each arm's `arm.json` records it as `engine_commit`, and openadapt-internal `qualification/incremental-value-2/CONTRACT_FREEZE.md` adds it before the first item.
 - **Fixture:** OpenEMR 8.0.0.3 (`openemr/openemr:8.0.0.3@sha256:0aa4d3d5…`) with MariaDB 11.8, from the pinned lock in `benchmark/openemr_local`. Two copies run, one per arm, with A and B interleaved in time. The lease is taken through `~/oa/scratch/fixture-lease/QUEUE`.
 - **Host load:** the between-item gate is 60. The load is recorded per item at its start and end. Timings are reported both raw and for items run under load 40.
 - **Model spend:** under $150 in all, calibration included.
