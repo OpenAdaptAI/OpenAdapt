@@ -86,7 +86,14 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
         assert ok["verdict"] == "VERIFIED"
         assert ok["guard_exit"] == 0
         handoff = ok["handoff"]
-        assert handoff["status"] == "draft", handoff
+        # When run 1 was not recorded, the guard's notes say why (a refused
+        # recording names its reason there).
+        assert handoff["status"] == "draft", {
+            "handoff": handoff,
+            "guard_notes": ok.get("guard_notes"),
+            "guard_error": ok.get("guard_error"),
+            "load_avg_1m": ok.get("load_avg_1m"),
+        }
         assert handoff["inputs"] == ["note"]
         assert handoff["expect"] == {"patient_id": "p1", "type": "Triage"}
 

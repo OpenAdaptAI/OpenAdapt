@@ -1204,10 +1204,15 @@ def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
         and isinstance(name, str)
         and name.strip()
     )
-    # An id or testid check also binds the element's role and name when it had
-    # them, so an id that moved to another element can't pass: the generated-id
-    # patterns are only a hint, and no list keeps up with every framework.
-    pair: dict[str, Any] = {"focus_role": role, "focus_name": name} if named else {}
+    # Every check needs a role and a non-empty name. An id or testid check
+    # binds them too, so an id that moved to another element can't pass: the
+    # generated-id patterns are only a hint, and no list keeps up with every
+    # framework. An element with no name (a bare tabindex div, a host whose
+    # closed shadow root holds the real focus) gets no check, and the step
+    # stays vacuous.
+    if not named:
+        return None
+    pair: dict[str, Any] = {"focus_role": role, "focus_name": name}
     if isinstance(testid, str) and testid.strip() and after.get("testid_count") == 1:
         return Postcondition(
             kind=PostconditionKind.FOCUS_ON,
@@ -3211,16 +3216,45 @@ def _compile_recording(
                 if pvalue:
                     by_value.setdefault(pvalue, []).append(pname)
             bindings = {v: names[0] for v, names in by_value.items() if len(names) == 1}
+        from openadapt_flow.compiler.effect_mining import store_unchanged_through_next
+        from openadapt_flow.compiler.local_edit import _no_write
+
+        events_by_i = {e.get("i"): e for e in events}
+        positions = {e.get("i"): k for k, e in enumerate(events)}
         for step, _sb, _sa, event in pending:
+            # The step wrote nothing when the record store stayed the same
+            # across it and until the next action (a real gap later), and the
+            # network capture, when there is one, shows no write request in
+            # its window (#1377). Effect mining uses it for dismiss-shaped
+            # steps only.
+            unchanged = store_unchanged_through_next(events_by_i, int(event["i"]))
+            write_requests: Optional[bool] = None
+            if unchanged is True and network_lines is not None:
+                position = positions.get(event["i"])
+                no_write = (
+                    None
+                    if position is None
+                    else _no_write(events, position, network_lines)
+                )
+                if no_write is True:
+                    write_requests = False
+                else:
+                    unchanged = None
             mined = mine_step_effects(
                 event,
                 step,
                 exclude_texts=exclude_texts,
                 param_bindings=bindings or None,
+                store_unchanged=unchanged,
+                write_requests=write_requests,
             )
             if mined.effects:
                 step.effects = mined.effects
-            log = logger.info if mined.disposition != "none" else logger.debug
+            log = (
+                logger.info
+                if mined.disposition != "none" or unchanged is True
+                else logger.debug
+            )
             log("effect-mining %s: %s", step.id, mined.reason)
             i_event = int(event["i"])
             if _sa is not None:

@@ -14,6 +14,24 @@ For the current evidence behind each capability claim, see
 [`VERIFICATION.md`](VERIFICATION.md). For the package-wide evidence map, see
 [`PRODUCT_STATUS.md`](PRODUCT_STATUS.md).
 
+## Validated on
+
+Every published result used synthetic patients, claims and records.
+
+| System | What ran |
+| --- | --- |
+| OpenEMR 8.0.0.3, local test copies (open-source EHR; its 7.0 release is ONC-certified) | Referral entry by agent, screen program and API step; injected database faults; repair of a relabeled save button; duplicate check |
+| openIMIS, local test copy (open-source insurance and claims system) | Claim entry over a worklist; a relabeled Save sent to repair with no wrong save |
+| Windows 11 over RDP, real network | 3 of 3 effect-confirmed trials, plus a FreeRDP batch |
+| Windows Server 2022 over RDP with H.264/AVC444, stock Remote Desktop client | 105 runs on two apps: 55 database-confirmed saves, 0 wrong-record saves, 40 false stops ([benchmark/rdp_avc_real](../benchmark/rdp_avc_real/README.md)) |
+| Citrix stand-in, no DOM | 3 healthy runs and 3 drift stops through the Citrix backend |
+| WinForms, TextEdit, a GTK3 app | 3 of 3 effects on each native backend |
+| MockMed, MockLoan and fixtures (OpenAdapt's own test apps) | Fault suites, approvals, repair and the agent comparisons |
+
+Each workflow is qualified on the customer's own system before it touches a
+real record. Windows installers are unsigned and macOS builds are ad-hoc
+signed; the Python packages are published from the reviewed release workflow.
+
 ## Product boundary
 
 | Capability | Evidence basis | What the claim means | What it does not mean |
@@ -26,7 +44,7 @@ For the current evidence behind each capability claim, see
 | Windows UI Automation | **Counted task acceptance** | The native UIA backend completed 3/3 exact WinForms effects and 3/3 refusals for both stale and ambiguous targets. | Acceptance is bound to the tested workflow and Windows environment; each application retains its own identity, effect, and version qualification. |
 | Native macOS automation | **Counted task acceptance** | The AX/AppKit backend completed 3/3 exact TextEdit file effects and refused an ambiguous two-window target; structural record/locate/refuse behavior is covered separately. Known AX-only ` - Google Chrome` and ` - Google Chrome for Testing` window-title suffixes are accepted only for the corresponding exact CoreGraphics application owner; PID, unique-candidate, focused/main, and topmost-window checks remain mandatory. | Acceptance is bound to the tested host and application. Accessibility exposure and supported native actions vary by application. |
 | Native Linux automation | **Counted task acceptance plus required CI** | Required current-main CI exercises AT-SPI against GTK3 with 3 exact effects, 3 ambiguity refusals, and 3 stale-target refusals. | The built-in path is X11. Wayland needs an operator-approved portal session, and each application retains its own qualification. |
-| RDP automation | **Counted task acceptance plus required CI** | A real-network Aardwolf/Windows batch passed 3/3 with an independent guest-tools oracle; a separate real-FreeRDP batch covers record, compile, governed replay, and drift refusal. | The two records do not by themselves cover arbitrary applications, WAN conditions, display policy, or Citrix ICA/HDX. |
+| RDP automation | **Counted task acceptance plus required CI** | A real-network Aardwolf/Windows batch passed 3/3 with an independent guest-tools oracle; a separate real-FreeRDP batch covers record, compile, governed replay, and drift refusal. | The records do not cover arbitrary applications, WAN conditions, or Citrix ICA/HDX. A real AVC444 session (same virtual network, software encoding) stops on 12 of 20 healthy OpenEMR runs; the causes are ranked in benchmark/rdp_avc_real. |
 | Citrix / VDI pixel-window automation | **Required CI plus counted no-DOM stand-in** | The dedicated exact-Workspace-window backend, readiness gate, governed run, and durable resume passed 3 healthy effect-confirmed no-DOM trials plus 3 drift safe-halts. | The retained record explicitly has `ica_hdx_accepted=false`; live ICA/HDX acceptance stays bound to the exact deployment instead of being inferred from a stand-in or RDP. |
 | Managed browser execution | **Separate product target and workflow admissions** | The hosted lane admits attested browser bundles; production mode requires a configured real runner and refuses silent mock fallback. | It does not extend the supported claim to Windows, RDP, Citrix, PHI-bearing shared-cloud execution, an SLA, or a regulated certification. |
 | On-premises / customer-managed deployment | **Release and clean-machine evidence; site acceptance required** | Deployment configuration, local run gates, egress checks, and audit primitives are supplied. | OpenAdapt does not configure the customer's firewall, KMS, storage, identity provider, backups, retention, incident response, or legal compliance program. |
@@ -508,6 +526,32 @@ fixture's own IDs (`MRN A1001`) halted at the identity check at every render
 other than the recorded one, before and after the extra identity looks: that
 workflow always opens the recorded record, whose ID the recording read as
 `MRN Alo01`, and the kiosk has no selectable text.
+
+**Icons on the pixel path, and the local grounding model.** A template match
+compares the recorded crop with the live frame pixel for pixel, so an icon is
+not found at another display scale, zoom, font size or theme, or through a
+lossy codec. The optional local grounding model (`--local-grounding`, off by
+default) finds it again: a small open vision model (DINOv2-small, Apache-2.0,
+run in process) scores every place that looks like the recorded crop, and the
+step continues only when one place qualifies, alone or singled out by every
+landmark that OCR can locate. Two qualifying places stop the step. On a
+Chromium-drawn clinic screen
+([`benchmark/pixel_grounding`](../benchmark/pixel_grounding/README.md)) it
+found the two toolbar and form icons under 21 of 26 conditions where the
+template matcher found 8, abstained on the other 5, and picked no wrong
+target among 65 click targets. A query takes 133 ms (p95 139 ms) on a 1080p
+frame and about 310 ms (p95 up to 374 ms) at 4K on an M2 Max CPU; Apple's
+Neural Engine, through onnxruntime's CoreML provider, is slower. It does not change what a whole run
+does there: the same 4 of 39 runs saved in both arms, because other checks
+stop the run first. The layout check stops a zoomed or larger-font screen at
+its first step. The identity template of a banner does not match a dark
+theme. On a scaled screen the look-alike census counts the record's name in
+both the banner and the worklist row, and stops. The model only locates: a
+target with a text label is left to OCR, a crop of blank input field (whose
+look-alikes overlap) is left to the rest of the ladder, and identity, census,
+risk gate and postconditions apply to its point as to any other. The fixture
+is not a live Citrix ICA/HDX or RDP session, and the rung's thresholds were set
+on it.
 
 ### 2. A postcondition verifies only what it observes
 
