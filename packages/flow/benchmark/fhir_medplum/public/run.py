@@ -47,7 +47,7 @@ from benchmark.fhir_medplum.public.model import (
     task_text,
     wrong_values,
 )
-from benchmark.fhir_medplum.public.oracle import judge
+from benchmark.fhir_medplum.public.oracle import judge, others_harmed
 from benchmark.fhir_medplum.public.proxy import FaultProxy
 from benchmark.fhir_medplum.public.score import render, scorecard
 from benchmark.fhir_medplum.readpath.suite import Actors, audit_is_read_only
@@ -67,6 +67,9 @@ class Bench:
         self.suite = suite
         self.actors = Actors(fx)
         self.practitioners: dict[str, str] = {}
+        #: Per case: what another user read, and the values they wrote.
+        self.seen: list[tuple[str, dict[str, Any]]] = []
+        self.other_sets: list[tuple[str, dict[str, Any]]] = []
 
     # -- setup -------------------------------------------------------------------
 
@@ -148,8 +151,11 @@ class Bench:
         """
 
         if "read" in spec:
-            url = f"{self.fx.fhir_url}/{refs[spec['read']['target']]}"
-            _http("GET", url, token=self.actors.token("other"))
+            ref = refs[spec["read"]["target"]]
+            res = _http(
+                "GET", f"{self.fx.fhir_url}/{ref}", token=self.actors.token("other")
+            )
+            self.seen.append((ref, res))
             return
         if "update" in spec:
             op = spec["update"]
@@ -161,6 +167,7 @@ class Bench:
             made = _http("PUT", url, body=current, token=token)
             ref = f"{made['resourceType']}/{made['id']}"
             version = str(made["meta"]["versionId"])
+            self.other_sets.append((ref, dict(op["set"])))
         else:
             ref, version = self.create("other", spec, refs)
         excused[ref] = version
@@ -321,6 +328,7 @@ class Bench:
             "note": case.get("note", ""),
         }
         refs = dict(self.practitioners)
+        self.seen, self.other_sets = [], []
         self.wipe()
         for spec in case.get("seed") or []:
             self.create("setup", spec, refs)
@@ -393,6 +401,10 @@ class Bench:
         time.sleep(1.0)
         after = self.snapshot()
         row["oracle"] = judge(kind, case["expect"], want, before, after, excused)
+        harmed = others_harmed(kind, want, after, self.seen, self.other_sets)
+        if harmed:
+            row["oracle"]["verdict"] = "harmful"
+            row["oracle"]["reasons"] += harmed
         row["proxy"] = list(proxy.log)
         row["fault_delivered"] = proxy.delivered if case.get("faults") else True
         reached = {e.get("other_at_write") for e in proxy.log}

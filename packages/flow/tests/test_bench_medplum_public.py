@@ -683,3 +683,21 @@ def test_the_strict_scorecard_uses_the_strict_verdicts():
 
 def test_agent_specs_include_the_fixing_agent():
     assert agents.load("scripted-fix", model="m")[0] == "scripted-fix"
+
+
+def test_harm_to_another_user_the_end_state_hides():
+    good = _with(allergy_resource(ALLERGY, PAT), "a1")
+    wrong = {**good, "criticality": "low"}
+    after = _snap(good, _with(patient_resource(SUITE["people"]["rosa"]), "p1", "3"))
+    assert oracle.others_harmed("allergy", ALLERGY, after, [], []) == []
+    read = oracle.others_harmed(
+        "allergy", ALLERGY, after, [("AllergyIntolerance/a1", wrong)], []
+    )
+    assert read and "criticality" in read[0]
+    assert not oracle.others_harmed(
+        "allergy", ALLERGY, after, [("AllergyIntolerance/a1", good)], []
+    )
+    lost = oracle.others_harmed(
+        "allergy", ALLERGY, after, [], [("Patient/p1", {"active": False})]
+    )
+    assert lost and "lost" in lost[0]
