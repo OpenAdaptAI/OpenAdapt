@@ -192,7 +192,10 @@ def _contract(fx: Any, lname: str) -> Any:
             "minimum_effect_strength": "independent_system_of_record",
             "verifier": {
                 "kind": "rest",
-                "base_url": fx.api_base_url,
+                # The fixture's HTTPS port has a self-signed certificate,
+                # which the verifier rightly refuses: OPENEMR_LATE_WRITE_API_URL
+                # can point at its plain-HTTP port instead.
+                "base_url": os.environ.get("OPENEMR_LATE_WRITE_API_URL", fx.api_base_url),
                 "records_path": f"/apis/default/api/patient?lname={lname}&_limit=100",
                 "records_key": "data",
                 "session": "benchmark.openemr_local.qualify_hooks:oracle_session",
