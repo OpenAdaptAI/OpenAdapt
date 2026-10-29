@@ -33,6 +33,19 @@ Set-ItemProperty $edge HideFirstRunExperience 1 -Type DWord
 Set-ItemProperty $edge DefaultBrowserSettingEnabled 0 -Type DWord
 Set-ItemProperty $edge PasswordManagerEnabled 0 -Type DWord
 Set-ItemProperty $edge TranslateEnabled 0 -Type DWord
+# Open OpenEMR at start, with no news feed, sidebar or startup boost: Edge
+# otherwise ignores --app on its first launch and shows a news tab.
+Set-ItemProperty $edge RestoreOnStartup 4 -Type DWord
+New-Item -Path "$edge\RestoreOnStartupURLs" -Force | Out-Null
+Set-ItemProperty "$edge\RestoreOnStartupURLs" 1 $EmrUrl
+foreach ($p in "NewTabPageContentEnabled", "NewTabPageQuickLinksEnabled", "StartupBoostEnabled",
+                "BackgroundModeEnabled", "HubsSidebarEnabled", "FavoritesBarEnabled",
+                "PromotionalTabsEnabled", "ShowRecommendationsEnabled",
+                # Autofill pops a "Manage..." list over the next field.
+                "AutofillAddressEnabled", "AutofillCreditCardEnabled",
+                "AutofillMembershipsEnabled", "SearchSuggestEnabled") {
+  Set-ItemProperty $edge $p 0 -Type DWord
+}
 
 # --- Users ------------------------------------------------------------------
 foreach ($u in @(@("emruser", $EmrPassword), @("pnuser", $PnPassword))) {

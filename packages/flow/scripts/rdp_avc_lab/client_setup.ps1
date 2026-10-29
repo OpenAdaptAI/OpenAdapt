@@ -21,6 +21,9 @@ $py = "C:\Program Files\Python312\python.exe"
 New-Item -ItemType Directory -Force C:\oa, C:\oa\jobs, C:\oa\results, C:\oa\secret | Out-Null
 
 Install-WindowsFeature Server-Media-Foundation | Out-Null
+# onnxruntime (RapidOCR) needs the Visual C++ runtime, absent on Server images.
+Invoke-WebRequest "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile C:\oa\vc_redist.exe -UseBasicParsing
+Start-Process C:\oa\vc_redist.exe -Wait -ArgumentList "/install /quiet /norestart"
 
 if (-not (Test-Path $py)) {
   Invoke-WebRequest "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe" -OutFile C:\oa\py.exe -UseBasicParsing
