@@ -75,6 +75,9 @@ Code = Literal[
     "approver_key_unusable",
     "approver_keychain_unsupported",
     "approver_payload_refused",
+    "approver_root_conflict",
+    "approver_anchor_untrusted",
+    "approver_needs_adding",
 ]
 
 
@@ -200,20 +203,53 @@ class FlowRoster:
     Mac recorded after its own last change.
     """
 
-    def root(self) -> str | None:
-        """The pin in the login Keychain, or ``None``.
+    #: Only a Mac's login Keychain counts as a pin; elsewhere (Windows
+    #: Credential Manager, Secret Service) any process of this user writes
+    #: it freely, so only the administrator's anchor counts.
+    keychain_pins: bool = sys.platform == "darwin"
 
-        Nothing else counts: not the environment (whoever starts a process
-        sets it) and not a file this user can write. A same-user process can
-        delete the Keychain items; then there is no pin and no person's
-        answer counts until someone sets the key up again behind Touch ID.
+    def root(self) -> str | None:
+        """The pinned approver root, or ``None``.
+
+        The administrator's anchor (:mod:`openadapt_desktop.approver_anchor`,
+        a file this user can't write) comes first. Without one, a Mac uses
+        the root it set up itself behind Touch ID, kept in the login
+        Keychain and read without letting the Keychain ask (so an item
+        another program planted or rewrote reads as no pin, never as a
+        prompt someone might allow). Both present and different: refused.
+        Nothing else counts: not the environment, not a file this user can
+        write.
         """
 
-        stored = _store._kr_get(_store._keyring(), ROOT_ACCOUNT)
-        return stored.strip().lower() if stored else None
+        try:
+            from openadapt_desktop import approver_anchor
+
+            anchor = approver_anchor.read_anchor()
+        except Exception as exc:
+            # An anchor that can't be loaded or read is never "no anchor":
+            # no person's answer counts until it reads.
+            raise ApproverKeychainError(
+                "approver_anchor_untrusted",
+                f"The administrator's approver pin can't be checked: {exc}",
+            ) from exc
+        stored = self._read_pin(ROOT_ACCOUNT)
+        keychain = stored.strip().lower() if stored else None
+        if anchor and keychain and anchor != keychain:
+            raise ApproverKeychainError(
+                "approver_root_conflict",
+                "The administrator pinned a different approver root than this "
+                "Mac's Keychain. No person's answer counts until they agree.",
+            )
+        return anchor or keychain
+
+    def _read_pin(self, account: str) -> str | None:
+        if not self.keychain_pins:
+            return None
+        with _no_keychain_ui():
+            return _store._kr_get(_store._keyring(), account)
 
     def _head(self) -> tuple[int, str] | None:
-        raw = _store._kr_get(_store._keyring(), HEAD_ACCOUNT)
+        raw = self._read_pin(HEAD_ACCOUNT)
         try:
             seq, digest = json.loads(raw) if raw else (None, None)
         except (ValueError, TypeError):
@@ -294,12 +330,57 @@ class FlowRoster:
         self._record_head()
 
 
-def pinned_root() -> str | None:
-    """The approver root this Mac pins for its Flow runs, or ``None``.
+_UI_LOCK = threading.Lock()
 
-    Only the Keychain's pin counts (see :meth:`FlowRoster.root`). With none,
-    Desktop removes any root or head from the config it hands Flow, so Flow
-    refuses every person's answer.
+
+class _no_keychain_ui:
+    """Turn off Keychain prompts for this process while a pin is read.
+
+    An item this app didn't write (a program deleted Desktop's and planted
+    its own, or rewrote it) then fails to read instead of asking the
+    person, who might click Allow. If prompts can't be turned off, the pin
+    reads as missing.
+    """
+
+    def __enter__(self) -> None:
+        _UI_LOCK.acquire()
+        self._previous: bool | None = None
+        try:
+            import ctypes
+
+            sec = ctypes.CDLL("/System/Library/Frameworks/Security.framework/Security")
+            allowed = ctypes.c_ubyte()
+            sec.SecKeychainGetUserInteractionAllowed.argtypes = [ctypes.POINTER(ctypes.c_ubyte)]
+            sec.SecKeychainSetUserInteractionAllowed.argtypes = [ctypes.c_ubyte]
+            if sec.SecKeychainGetUserInteractionAllowed(ctypes.byref(allowed)) != 0:
+                raise OSError("can't read the Keychain prompt setting")
+            if sec.SecKeychainSetUserInteractionAllowed(0) != 0:
+                raise OSError("can't turn off Keychain prompts")
+            self._sec = sec
+            self._previous = bool(allowed.value)
+        except Exception as exc:
+            _UI_LOCK.release()
+            raise ApproverKeychainError(
+                "approver_keychain_unsupported",
+                f"Desktop can't read its approver pin without a Keychain prompt ({exc}).",
+            ) from exc
+
+    def __exit__(self, *_exc: object) -> None:
+        try:
+            if self._previous is not None:
+                self._sec.SecKeychainSetUserInteractionAllowed(1 if self._previous else 0)
+        finally:
+            _UI_LOCK.release()
+
+
+def pinned_root() -> str | None:
+    """The approver root this computer pins for its Flow runs, or ``None``.
+
+    See :meth:`FlowRoster.root`: the administrator's anchor, else (on a
+    Mac) the Keychain pin set up behind Touch ID. With none, Desktop removes
+    any root or head from the config it hands Flow, so Flow refuses every
+    person's answer. Raises :class:`ApproverKeychainError` when the anchor
+    can't be trusted or disagrees with the Keychain.
     """
 
     return FlowRoster().root()

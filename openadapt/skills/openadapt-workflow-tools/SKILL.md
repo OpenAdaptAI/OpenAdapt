@@ -1,13 +1,15 @@
 ---
 name: openadapt-workflow-tools
-description: "Turn a browser task the person repeats (an export, a report download) into a tool you call again with new values. Use when the person asks to automate, repeat, or schedule a browser task that ends in a downloaded file."
+description: "Turn a browser task the person repeats (an export, a report download, or a save checked against a write contract) into a tool you call again with new values. Use when the person asks to automate, repeat, or schedule a browser task."
 ---
 
 # Turn a browser task into a tool
 
 OpenAdapt's MCP server (`openadapt`) records a browser task you do once and turns it into a tool named `taught_<name>`. Calling the tool repeats the task with new values and no model calls, then returns the downloaded file's path after checking it.
 
-This version only reads. The browser sends no POST, PUT, PATCH or DELETE request, and it stays on the site you start on. Teach tasks that end in a download, such as a CSV export. Don't teach saves, sends or deletes.
+By default it only reads: the browser sends no POST, PUT, PATCH or DELETE request, and it stays on the site you start on. Teach tasks that end in a download, such as a CSV export.
+
+When `teach_start` lists `contract` values, the operator has set up write contracts and you can also teach a save. Pass the contract that describes the save. Run 1 is a real write, so use a test record. `teach_finish` checks run 1's write in the system of record before it adds the tool, and every call of the tool returns a verified receipt or a refusal. Sign-in values are held by the server: type them with `input: "<name>"` from `sign_in_inputs`; you never see them. Don't teach sends or deletes.
 
 ## Before you start, ask the person four things
 
@@ -34,8 +36,8 @@ Call `taught_<name>` with `inputs`. Act on `outcome`:
 
 | outcome | What happened | What to do |
 | --- | --- | --- |
-| `done` | The file downloaded and passed its checks. | Give the person the `file` path. |
-| `needs_review` | The file downloaded but failed a check (`checks_failed`). | Don't use the file. Tell the person what failed. |
+| `done` | The file downloaded and passed its checks, or the write is verified in the system of record (`verified: true`, `receipt_sha256`). | Give the person the `file` path or the receipt. |
+| `needs_review` | The file downloaded but failed a check (`checks_failed`), or the write was not verified (`REFUTED` or `RECONCILIATION_REQUIRED`). | Don't use the file, and never retry the write. Tell the person `what_happened`. |
 | `stopped` | A step could not be done safely, for example a control is missing or matches more than one element. Nothing was downloaded. | Tell the person `what_happened`. If the page changed, teach the task again with `replace: true`. |
 | `did_not_run` | The inputs were wrong, or the browser could not start. | Fix the inputs and call again. |
 

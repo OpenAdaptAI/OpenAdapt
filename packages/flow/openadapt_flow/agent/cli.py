@@ -221,6 +221,22 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--verify",
+        default=None,
+        metavar="CONTRACTS_DIR",
+        help=(
+            "Serve only the verify tools (verify_contracts, verify_begin, "
+            "verify_check): any agent calls them around its own writes, and gets "
+            "a verified receipt or a refusal. CONTRACTS_DIR holds the write "
+            "contracts (<name>.yaml, openadapt.verify/v1)."
+        ),
+    )
+    p.add_argument(
+        "--verify-state",
+        default=None,
+        help="With --verify: where baselines and receipts go (default ~/.openadapt/verify)",
+    )
+    p.add_argument(
         "--teach-browser",
         action="store_true",
         help=(
@@ -228,6 +244,27 @@ def build_parser() -> argparse.ArgumentParser:
             "once at a URL the person gives, the task ends in a download, and "
             "it becomes a taught_<name> tool that runs with no model calls. "
             "The browser sends no POST, PUT, PATCH or DELETE."
+        ),
+    )
+    p.add_argument(
+        "--contracts",
+        default=None,
+        metavar="DIR",
+        help=(
+            "With --teach-browser: folder of write contracts (<name>.yaml, "
+            "openadapt.verify/v1). A taught task that names one may save, and "
+            "every run of it is verified against it."
+        ),
+    )
+    p.add_argument(
+        "--sign-in",
+        action="append",
+        default=[],
+        metavar="NAME=ENV",
+        help=(
+            "With --teach-browser: an input the server types for the agent, "
+            "from environment variable ENV (a username or password). The value "
+            "never reaches the agent or the taught program. Repeat for more."
         ),
     )
     p.add_argument(
@@ -724,11 +761,15 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     if args.guard:
         return _serve_guard(args, serve)
+    if args.verify:
+        return _serve_verify(args, serve)
     if args.teach_browser:
         return _serve_teach_browser(args, serve)
-    if args.tools_dir or args.files_dir:
+    if args.tools_dir or args.files_dir or args.contracts or args.sign_in:
         print(
-            "serve: --tools-dir and --files-dir need --teach-browser", file=sys.stderr
+            "serve: --tools-dir, --files-dir, --contracts and --sign-in need "
+            "--teach-browser",
+            file=sys.stderr,
         )
         return 2
     if args.teach:
@@ -1109,6 +1150,36 @@ def _teach_write_adapter(ref: Optional[str]) -> Any:
     return load_write_adapter(ref)
 
 
+def _serve_verify(args: argparse.Namespace, serve) -> int:
+    """Serve only the verify tools over local stdio."""
+    from openadapt_flow.agent.verify_tools import VerifyBridge
+
+    if args.teach or args.teach_browser or args.authoring or args.bundles or args.guard:
+        print(
+            "serve: --verify serves only the verify tools; it can't be combined "
+            "with --teach, --teach-browser, --authoring, --bundles or --guard",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        bridge = VerifyBridge(
+            Path(args.verify),
+            Path(args.verify_state)
+            if args.verify_state
+            else Path.home() / ".openadapt" / "verify",
+        )
+    except (OSError, ValueError) as exc:
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"openadapt-agent {__version__}: verify tools over local stdio; "
+        f"{len(bridge.contracts)} contract(s): {', '.join(sorted(bridge.contracts))}",
+        file=sys.stderr,
+    )
+    serve(None, None, None, bridge)
+    return 0
+
+
 def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
     """Serve only the read-only browser teach tools over local stdio."""
     from openadapt_flow.agent.browser_teach import BrowserTeachBridge
@@ -1130,11 +1201,38 @@ def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
             file=sys.stderr,
         )
         return 2
-    bridge = BrowserTeachBridge(
-        Path(args.tools_dir) if args.tools_dir else None,
-        Path(args.files_dir) if args.files_dir else None,
-        headless=not args.headed,
-    )
+    contracts = {}
+    if args.contracts:
+        from openadapt_flow.verify import WriteContract
+
+        folder = Path(args.contracts)
+        for path in sorted(folder.glob("*.y*ml")):
+            try:
+                contracts[path.stem] = WriteContract.load(path)
+            except Exception as exc:  # noqa: BLE001 - reported, nothing served
+                print(f"serve: contract {path.name}: {exc}", file=sys.stderr)
+                return 2
+        if not contracts:
+            print(f"serve: no write contracts (*.yaml) in {folder}", file=sys.stderr)
+            return 2
+    sign_in = {}
+    for item in args.sign_in:
+        name, sep, env = item.partition("=")
+        if not sep or not name or not env:
+            print("serve: --sign-in takes NAME=ENV", file=sys.stderr)
+            return 2
+        sign_in[name] = env
+    try:
+        bridge = BrowserTeachBridge(
+            Path(args.tools_dir) if args.tools_dir else None,
+            Path(args.files_dir) if args.files_dir else None,
+            headless=not args.headed,
+            contracts=contracts,
+            secrets=sign_in,
+        )
+    except ValueError as exc:
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
     print(
         f"openadapt-agent {__version__}: read-only browser teach tools over local "
         f"stdio; {len(bridge.programs)} taught tool(s) in {bridge.tools_dir}; "

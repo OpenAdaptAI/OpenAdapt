@@ -43,10 +43,17 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
-from urllib.parse import urlsplit
+from typing import Any, Callable, Mapping, Optional, Sequence
+from urllib.parse import urljoin, urlsplit
 
 from openadapt_flow.agent.bridge import BridgeError, ToolSpec
+from openadapt_flow.wire_check import (
+    READ_METHODS,
+    PinnedWrite,
+    WireCheck,
+    carries_secret,
+    mask_secrets,
+)
 
 __all__ = [
     "BROWSER_TEACH_TOOLS",
@@ -77,7 +84,6 @@ _WRITE_LABEL = re.compile(
     r"submit payment|book|reserve|cancel|unsubscribe|deactivate|reset)\b",
     re.IGNORECASE,
 )
-_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 _STEP_TIMEOUT_MS = 15_000
 #: How long a compiled run waits for a control to appear after the page
 #: loaded, before it stops.
@@ -97,6 +103,16 @@ INSTRUCTIONS = (
     "reproduce the file, adds a taught_<name> tool. Call it with new values "
     "and tell the person the file path it returns. Outcome done is the only "
     "success; stopped means nothing was downloaded, so tell the person why."
+)
+
+WRITE_INSTRUCTIONS = (
+    " This server can also teach writes, checked against the operator's write "
+    "contracts (" + "teach_start's contract" + "). A taught write's run 1 is a "
+    "real save: use a test record. teach_finish verifies run 1 in the system of "
+    "record before it adds the tool, and every call of the tool returns a "
+    "verified receipt (outcome done) or a refusal (needs_review). Never retry a "
+    "refused write; tell the person. Sign-in values are held by the server: type "
+    "them with input: <name> from sign_in_inputs; you never see them."
 )
 
 _READ_ONLY = {
@@ -203,6 +219,8 @@ _OBSERVE_JS = r"""
           tag: el.tagName.toLowerCase(), type: (el.type || '').toLowerCase(),
           id: el.id || '', name_attr: el.getAttribute('name') || '',
           label: label(el), role: role(el), method: method(el),
+          sign_in: Boolean((el.form || el.closest('form')) &&
+            (el.form || el.closest('form')).querySelector('input[type=password]')),
           value: el.tagName === 'SELECT'
             ? clean(el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : '')
             : (['INPUT', 'TEXTAREA'].includes(el.tagName) && !/^(button|submit|reset|password)$/i.test(el.type) ? clean(el.value) : ''),
@@ -263,7 +281,9 @@ _FOCUSED_JS = r"""
 """
 
 
-def _render(raw: Mapping[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+def _render(
+    raw: Mapping[str, Any], *, writes: bool = False
+) -> tuple[str, list[dict[str, Any]]]:
     out = [f"page: {raw.get('title', '')} ({raw.get('url', '')})"]
     controls = list(raw.get("controls") or [])
     for item in raw.get("lines") or []:
@@ -279,11 +299,104 @@ def _render(raw: Mapping[str, Any]) -> tuple[str, list[dict[str, Any]]]:
             if c.get("options"):
                 line += " options: " + ", ".join(c["options"])
             if c.get("method") == "POST" and c["role"] == "button":
-                line += " (sends a POST: refused here)"
+                # The write lane sends only the contract's writes.
+                line += (
+                    " (sends a POST: only the contract's writes go)"
+                    if writes
+                    else " (sends a POST: refused here)"
+                )
             out.append(line)
         else:
             out.append(item["text"])
     return "\n".join(out), controls
+
+
+# -- sign-in values -------------------------------------------------------------------
+
+_MASK = "\u2022\u2022\u2022\u2022"
+
+
+def _mask(text: str, secrets: Sequence[str]) -> str:
+    return mask_secrets(text, secrets, _MASK)
+
+
+def _mask_all(value: Any, secrets: Sequence[str]) -> Any:
+    if not secrets:
+        return value
+    if isinstance(value, str):
+        return _mask(value, secrets)
+    if isinstance(value, dict):
+        return {k: _mask_all(v, secrets) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_mask_all(v, secrets) for v in value]
+    return value
+
+
+# -- frames ---------------------------------------------------------------------------
+
+#: The selector of a frame's own element in its parent, when it has a name or id.
+_FRAME_SELECTOR_JS = r"""
+e => {
+  const tag = e.localName;
+  if (e.getAttribute('name')) return tag + '[name=' + JSON.stringify(e.getAttribute('name')) + ']';
+  if (e.id) return tag + '[id=' + JSON.stringify(e.id) + ']';
+  return null;
+}
+"""
+
+
+def _frame_chain(frame: Any) -> Optional[list[str]]:
+    """Selectors from the top page down to ``frame``, or None when a frame on
+    the way has no name or id to find it by again."""
+
+    chain: list[str] = []
+    while frame.parent_frame is not None:
+        selector = frame.frame_element().evaluate(_FRAME_SELECTOR_JS)
+        if not selector:
+            return None
+        chain.insert(0, selector)
+        frame = frame.parent_frame
+    return chain
+
+
+def _observe_page(page: Any, origin: str) -> dict[str, Any]:
+    """The page and its same-site frames, as one listing. Each control keeps
+    the frame chain it lives in."""
+
+    merged: dict[str, Any] = {"url": page.url, "title": "", "lines": [], "controls": []}
+    for frame in page.frames:
+        if frame is page.main_frame:
+            chain: Optional[list[str]] = []
+        else:
+            # about:srcdoc and about:blank frames share their parent's site.
+            if not frame.url.startswith("about:") and _origin(frame.url) != origin:
+                continue
+            try:
+                chain = _frame_chain(frame)
+            except Exception:  # noqa: BLE001 - a frame that went away
+                continue
+            if chain is None:
+                merged["lines"].append({"text": "(a frame with no name is not listed)"})
+                continue
+        try:
+            raw = frame.evaluate(_OBSERVE_JS)
+        except Exception:  # noqa: BLE001 - a frame mid-navigation
+            continue
+        if frame is page.main_frame:
+            merged["title"] = raw.get("title", "")
+        offset = len(merged["controls"])
+        controls = raw.get("controls") or []
+        if chain and controls:
+            merged["lines"].append({"text": f"frame {' > '.join(chain)}:"})
+        for control in controls:
+            control["frames"] = list(chain or [])
+            merged["controls"].append(control)
+        for item in raw.get("lines") or []:
+            if "control" in item:
+                merged["lines"].append({"control": item["control"] + offset})
+            else:
+                merged["lines"].append(item)
+    return merged
 
 
 # -- targets -------------------------------------------------------------------------
@@ -293,12 +406,22 @@ def _css_str(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _scope(page: Any, target: Mapping[str, Any]) -> Any:
+    """The page, or the iframe chain the control was taught in."""
+
+    scope = page
+    for selector in target.get("frames") or ():
+        scope = scope.frame_locator(selector)
+    return scope
+
+
 def _locator(page: Any, target: Mapping[str, Any]) -> Any:
+    scope = _scope(page, target)
     if "css" in target:
-        return page.locator(target["css"])
+        return scope.locator(target["css"])
     if "role" in target:
-        return page.get_by_role(target["role"], name=target["name"], exact=True)
-    return page.get_by_label(target["label_for"], exact=True)
+        return scope.get_by_role(target["role"], name=target["name"], exact=True)
+    return scope.get_by_label(target["label_for"], exact=True)
 
 
 def _candidates(c: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -319,7 +442,10 @@ def _unique_target(page: Any, c: Mapping[str, Any]) -> Optional[dict[str, Any]]:
     """The first selector that finds exactly this one control, with the label
     a compiled run checks before acting."""
 
+    frames = list(c.get("frames") or [])
     for cand in _candidates(c):
+        if frames:
+            cand = {**cand, "frames": frames}
         try:
             if _locator(page, cand).count() == 1:
                 return {**cand, "label": c["label"], "role": c["role"]}
@@ -329,6 +455,8 @@ def _unique_target(page: Any, c: Mapping[str, Any]) -> Optional[dict[str, Any]]:
         # Links with the same label and the same address go to the same
         # place (a menu and a body link): any of them will do.
         cand = {"role": "link", "name": c["label"]}
+        if frames:
+            cand["frames"] = frames
         hrefs = _locator(page, cand).evaluate_all(_HREFS_JS)
         if len(hrefs) > 1 and len(set(hrefs)) == 1 and hrefs[0]:
             return {**cand, "same_href": hrefs[0], "label": c["label"], "role": "link"}
@@ -419,12 +547,43 @@ class _BrowserThread:
 class _Browser:
     """One headless Chromium context that only reads and stays on one origin."""
 
-    def __init__(self, origin: str, downloads_dir: Path, headless: bool) -> None:
+    def __init__(
+        self,
+        origin: str,
+        downloads_dir: Path,
+        headless: bool,
+        *,
+        allow_writes: bool = False,
+        allowed_writes: Sequence[str] = (),
+        pinned: Optional[Sequence[Mapping[str, str]]] = None,
+        secrets: Sequence[str] = (),
+    ) -> None:
         from playwright.sync_api import sync_playwright
 
         self.origin = origin
+        self.allow_writes = allow_writes
+        self.secrets = [v for v in secrets if v]
         self.blocked: list[str] = []
         self.downloads: list[Any] = []
+        #: What may leave the browser (the shared wire check): no writes on the
+        #: read lane; on the write lane only the contract's writes, and on a
+        #: compiled run exactly the taught ones, in order and shape. Sign-in
+        #: values never travel in an address.
+        self.wire = WireCheck(
+            origin=origin,
+            secrets=self.secrets,
+            allowed=frozenset(allowed_writes) if allow_writes else None,
+            pinned=(
+                [PinnedWrite(str(p.get("write")), str(p.get("shape"))) for p in pinned]
+                if pinned is not None
+                else None
+            ),
+            refused=self.blocked,
+        )
+        #: Write requests sent to the origin, and their shapes (write lane).
+        self.writes_sent = self.wire.sent
+        self.write_shapes = self.wire.shapes
+        self.dialogs: list[str] = []
         self._pw = sync_playwright().start()
         try:
             self._browser = self._pw.chromium.launch(headless=headless)
@@ -434,29 +593,39 @@ class _Browser:
                 "could not start Chromium; run `python -m playwright install "
                 f"chromium` and try again ({type(exc).__name__})"
             ) from None
-        self.context = self._browser.new_context(accept_downloads=True)
+        # No service workers: their requests would skip the wire check.
+        self.context = self._browser.new_context(
+            accept_downloads=True, service_workers="block"
+        )
         self.context.route("**/*", self._guard)
         self.page = self.context.new_page()
         self.page.set_default_timeout(_STEP_TIMEOUT_MS)
         self.page.on("download", lambda d: self.downloads.append(d))
+        self.page.on("dialog", self._dialog)
         downloads_dir.mkdir(parents=True, exist_ok=True)
+
+    def _dialog(self, dialog: Any) -> None:
+        # A confirm() in a taught write is part of the write: accept it, and
+        # keep its text with the step. The read lane never confirms.
+        self.dialogs.append(f"{dialog.type}: {dialog.message[:200]}")
+        try:
+            dialog.accept() if self.allow_writes else dialog.dismiss()
+        except Exception:  # noqa: BLE001 - already handled
+            pass
 
     def _guard(self, route: Any) -> None:
         request = route.request
-        method = request.method.upper()
-        if method not in _READ_METHODS:
-            self.blocked.append(f"{method} {urlsplit(request.url).path or '/'}")
-            route.abort()
-            return
         if (
-            request.is_navigation_request()
+            request.method.upper() in READ_METHODS
+            and request.is_navigation_request()
             and request.frame == self.page.main_frame
             and _origin(request.url) != self.origin
+            and not carries_secret(request.url, self.secrets)
         ):
             self.blocked.append(f"leaving {self.origin} for {_origin(request.url)}")
             route.abort()
             return
-        route.continue_()
+        self.wire.handle(route)
 
     def settle(self) -> None:
         try:
@@ -588,6 +757,11 @@ class _Teaching:
     inputs: dict[str, str]
     files_dir: Path
     thread: _BrowserThread
+    #: The write contract a taught write is verified against, by name.
+    contract: Optional[str] = None
+    pending: Any = None
+    secret_values: dict[str, str] = field(default_factory=dict)
+    secret_typed: bool = False
     browser: Optional[_Browser] = None
     steps: list[dict[str, Any]] = field(default_factory=list)
     controls: list[dict[str, Any]] = field(default_factory=list)
@@ -615,18 +789,46 @@ def _save_download(download: Any, folder: Path) -> Path:
     return path
 
 
-def _replay(
+@dataclass
+class _StepsRun:
+    """What running compiled steps did."""
+
+    file: Optional[Path] = None
+    stopped: Optional[str] = None
+    writes_sent: list[str] = field(default_factory=list)
+    blocked: list[str] = field(default_factory=list)
+    dialogs: list[str] = field(default_factory=list)
+    seconds: float = 0.0
+
+
+def _run_steps(
     program: Mapping[str, Any],
     inputs: Mapping[str, str],
     files_dir: Path,
     headless: bool,
-) -> dict[str, Any]:
-    """Run compiled steps in a fresh browser. No model is called."""
+    *,
+    allow_writes: bool = False,
+    allowed_writes: Sequence[str] = (),
+    pinned: Optional[Sequence[Mapping[str, str]]] = None,
+    secrets: Sequence[str] = (),
+) -> _StepsRun:
+    """Run compiled steps in a fresh browser. No model is called.
+
+    ``inputs`` holds every value the steps type, sign-in values included.
+    """
 
     started = time.monotonic()
-    browser = _Browser(program["origin"], files_dir, headless)
+    out = _StepsRun()
+    browser = _Browser(
+        program["origin"],
+        files_dir,
+        headless,
+        allow_writes=allow_writes,
+        allowed_writes=allowed_writes,
+        pinned=pinned,
+        secrets=secrets,
+    )
     page = browser.page
-    file: Optional[Path] = None
     try:
         from openadapt_flow.backends.playwright_backend import prepare_ws_guard
 
@@ -642,7 +844,11 @@ def _replay(
             value = step.get("value") or {}
             text = inputs[value["input"]] if "input" in value else value.get("text", "")
             try:
-                if step["op"] == "fill":
+                if step["op"] == "goto":
+                    page.goto(
+                        program["origin"] + step["url"], wait_until="domcontentloaded"
+                    )
+                elif step["op"] == "fill":
                     _resolve(page, target, _APPEAR_MS).fill(text)
                 elif step["op"] == "select":
                     el = _resolve(page, target, _APPEAR_MS)
@@ -660,7 +866,7 @@ def _replay(
                     if step.get("download"):
                         with page.expect_download(timeout=_STEP_TIMEOUT_MS) as info:
                             el.click()
-                        file = _save_download(info.value, files_dir)
+                        out.file = _save_download(info.value, files_dir)
                     else:
                         el.click()
                 else:
@@ -676,22 +882,41 @@ def _replay(
         if browser.blocked:
             raise StepStopped(f"the page tried {browser.blocked[0]}; it was blocked")
     except StepStopped as exc:
+        out.stopped = str(exc)
+    finally:
+        out.writes_sent = list(browser.writes_sent)
+        out.blocked = list(browser.blocked)
+        out.dialogs = list(browser.dialogs)
+        browser.close()
+        out.seconds = round(time.monotonic() - started, 2)
+    return out
+
+
+def _replay(
+    program: Mapping[str, Any],
+    inputs: Mapping[str, str],
+    files_dir: Path,
+    headless: bool,
+) -> dict[str, Any]:
+    """Run a read task's compiled steps and check the file it downloads."""
+
+    run = _run_steps(program, inputs, files_dir, headless)
+    file = run.file
+    if run.stopped is not None:
         return {
             "outcome": "stopped",
-            "what_happened": f"Stopped before finishing: {exc}. Nothing was downloaded."
+            "what_happened": f"Stopped before finishing: {run.stopped}. Nothing was downloaded."
             if file is None
-            else f"Stopped after the download: {exc}.",
+            else f"Stopped after the download: {run.stopped}.",
             "model_calls": 0,
-            "seconds": round(time.monotonic() - started, 2),
+            "seconds": run.seconds,
         }
-    finally:
-        browser.close()
     if file is None:
         return {
             "outcome": "stopped",
             "what_happened": "The steps ran but no file downloaded.",
             "model_calls": 0,
-            "seconds": round(time.monotonic() - started, 2),
+            "seconds": run.seconds,
         }
     passed, failed, facts = _check_file(file, program, inputs)
     result = {
@@ -700,7 +925,7 @@ def _replay(
         **facts,
         "checks_passed": passed,
         "model_calls": 0,
-        "seconds": round(time.monotonic() - started, 2),
+        "seconds": run.seconds,
     }
     if failed:
         result["checks_failed"] = failed
@@ -724,7 +949,11 @@ class BrowserTeachBridge:
     No action here needs a person's approval, because none can change data.
     """
 
-    instructions = INSTRUCTIONS
+    @property
+    def instructions(self) -> str:
+        if not self.contracts:
+            return INSTRUCTIONS
+        return INSTRUCTIONS + WRITE_INSTRUCTIONS
 
     def __init__(
         self,
@@ -732,10 +961,29 @@ class BrowserTeachBridge:
         files_dir: Optional[Path] = None,
         *,
         headless: bool = True,
+        contracts: Optional[Mapping[str, Any]] = None,
+        secrets: Optional[Mapping[str, str]] = None,
+        verify_dir: Optional[Path] = None,
     ) -> None:
+        """``contracts`` (name -> :class:`~openadapt_flow.verify.WriteContract`)
+        turns on taught writes: a task that names one may write to the app,
+        and every run of it is verified against it. ``secrets`` maps an input
+        name to the environment variable that holds its value (a sign-in), so
+        the value never reaches the agent, the program or a result."""
+
         self.tools_dir = Path(tools_dir or default_tools_dir()).expanduser().resolve()
         self.files_dir = Path(files_dir or default_files_dir()).expanduser().resolve()
         self.headless = headless
+        self.contracts = dict(contracts or {})
+        self.secrets = dict(secrets or {})
+        for key in self.secrets:
+            if not _NAME.fullmatch(key):
+                raise ValueError(f"secret input names are a-z, 0-9 and _ ({key!r})")
+        self.verify_dir = (
+            Path(verify_dir or (self.tools_dir.parent / "verify"))
+            .expanduser()
+            .resolve()
+        )
         self.tools_dir.mkdir(parents=True, exist_ok=True)
         self._teaching: Optional[_Teaching] = None
         self._lock = threading.Lock()
@@ -806,6 +1054,21 @@ class BrowserTeachBridge:
                             "type": "boolean",
                             "description": "Teach again over an existing tool of this name.",
                         },
+                        **(
+                            {
+                                "contract": {
+                                    "type": "string",
+                                    "enum": sorted(self.contracts),
+                                    "description": (
+                                        "For a task that saves something: the write "
+                                        "contract the save is verified against. Run 1 "
+                                        "is a real write; use test records."
+                                    ),
+                                }
+                            }
+                            if self.contracts
+                            else {}
+                        ),
                     },
                     ["name", "url", "task", "inputs"],
                 ),
@@ -836,12 +1099,17 @@ class BrowserTeachBridge:
                     {
                         "action": {
                             "type": "string",
-                            "enum": ["click", "type", "select", "press"],
+                            "enum": ["click", "type", "select", "press", "goto"],
                         },
                         "ref": {"type": "string", "pattern": "^e[0-9]{1,4}$"},
                         "text": {"type": "string", "maxLength": 2000},
                         "input": {"type": "string", "pattern": _NAME.pattern},
                         "key": {"type": "string", "maxLength": 32},
+                        "url": {
+                            "type": "string",
+                            "maxLength": 2000,
+                            "description": "goto: a page on the same site.",
+                        },
                     },
                     ["action"],
                 ),
@@ -933,9 +1201,16 @@ class BrowserTeachBridge:
         return ToolSpec(
             name=tool,
             description=(
-                f"Taught task: {program['task']} Downloads a file from "
-                f"{program['origin']} and returns its path after checking it. "
-                "Runs the recorded steps in a browser with no model calls; it "
+                (
+                    f"Taught write: {program['task']} Makes the write on "
+                    f"{program['origin']}, then reads the system of record and "
+                    "returns outcome done with a verified receipt, or a refusal "
+                    "(needs_review): never retry a refused write. "
+                    if (program.get("result") or {}).get("kind") == "write"
+                    else f"Taught task: {program['task']} Downloads a file from "
+                    f"{program['origin']} and returns its path after checking it. "
+                )
+                + "Runs the recorded steps in a browser with no model calls; it "
                 "stops instead of guessing when the page changed."
             ),
             input_schema=_obj(
@@ -976,6 +1251,24 @@ class BrowserTeachBridge:
         *,
         held_by_person: Optional[str] = None,
         person: Optional[str] = None,
+    ) -> dict[str, Any]:
+        secrets = self._known_secrets()
+        try:
+            return _mask_all(self._dispatch(name, arguments), secrets)
+        except BridgeError as exc:
+            raise BridgeError(_mask(str(exc), secrets)) from None
+
+    def _known_secrets(self) -> list[str]:
+        import os
+
+        values = [os.environ.get(env, "") for env in self.secrets.values()]
+        run = getattr(self, "_teaching", None)
+        if run is not None:
+            values.extend(run.secret_values.values())
+        return [v for v in values if v]
+
+    def _dispatch(
+        self, name: str, arguments: Optional[Mapping[str, Any]]
     ) -> dict[str, Any]:
         args = dict(arguments or {})
         if name in self.programs:
@@ -1025,6 +1318,37 @@ class BrowserTeachBridge:
             raise BridgeError(
                 f"{tool} already exists; call it, or pass replace: true to teach it again"
             )
+        contract_name = args.get("contract")
+        contract = None
+        if contract_name is not None:
+            contract = self.contracts.get(str(contract_name))
+            if contract is None:
+                raise BridgeError(f"no write contract named {contract_name!r}")
+        clash = sorted(set(inputs) & set(self.secrets))
+        if clash:
+            raise BridgeError(
+                f"{clash[0]!r} is a sign-in value the server holds; leave it out of inputs"
+            )
+        secret_values = self._secret_values()
+        if contract is not None and not contract.writes:
+            raise BridgeError(
+                f"the {contract_name} contract lists no writes, so a taught write "
+                'can\'t be bounded: the operator adds writes: ["POST /path", ...] '
+                "to it"
+            )
+        if contract is not None:
+            from openadapt_flow.agent.verify_tools import contract_params
+
+            missing = [
+                p
+                for p in contract_params(contract)
+                if p not in inputs and p not in secret_values
+            ]
+            if missing:
+                raise BridgeError(
+                    f"the {contract_name} contract checks {', '.join(missing)}: "
+                    "give each a value in inputs"
+                )
         with self._lock:
             if self._teaching is not None and not self._teaching.ended:
                 raise BridgeError(
@@ -1038,10 +1362,31 @@ class BrowserTeachBridge:
                 inputs=inputs,
                 files_dir=self.files_dir / name,
                 thread=thread,
+                contract=str(contract_name) if contract is not None else None,
+                secret_values=secret_values,
             )
+            if contract is not None:
+                # Run 1 is a real write: read the store first, so it can be
+                # verified like every later run.
+                from openadapt_flow.verify import BaselineUnreadable, begin_write
+
+                try:
+                    run.pending = begin_write(
+                        contract, {**inputs, **secret_values}, self.verify_dir
+                    )
+                except BaselineUnreadable as exc:
+                    thread.stop()
+                    raise BridgeError(f"{exc}; nothing was done") from None
 
             def open_page() -> str:
-                run.browser = _Browser(_origin(url), run.files_dir, self.headless)
+                run.browser = _Browser(
+                    _origin(url),
+                    run.files_dir,
+                    self.headless,
+                    allow_writes=run.contract is not None,
+                    allowed_writes=contract.writes if contract is not None else (),
+                    secrets=list(secret_values.values()),
+                )
                 from openadapt_flow.backends.playwright_backend import prepare_ws_guard
 
                 # Guard the page's WebSockets from its first document (wire check).
@@ -1067,15 +1412,45 @@ class BrowserTeachBridge:
             "page": listing,
             "next": (
                 "Do the task with teach_act on refs from page. Type each "
-                "changing value with input: <name>. Call teach_finish once "
-                "the file has downloaded."
+                "changing value with input: <name>. "
+                + (
+                    "This is a real write, checked against the "
+                    f"{run.contract} contract: call teach_finish after the save."
+                    if run.contract
+                    else "Call teach_finish once the file has downloaded."
+                )
             ),
+            **({"sign_in_inputs": sorted(secret_values)} if secret_values else {}),
         }
+
+    def _secret_values(self) -> dict[str, str]:
+        """The sign-in values the server holds, read from the environment."""
+
+        import os
+
+        values = {}
+        for key, env in self.secrets.items():
+            value = os.environ.get(env, "")
+            if not value:
+                raise BridgeError(
+                    f"the sign-in value {key!r} is not set (environment variable {env})"
+                )
+            values[key] = value
+        return values
 
     def _listing(self, run: _Teaching) -> str:
         assert run.browser is not None
-        raw = run.browser.page.evaluate(_OBSERVE_JS)
-        text, run.controls = _render(raw)
+        raw = _observe_page(run.browser.page, run.browser.origin)
+        if run.secret_typed:
+            # Once a sign-in value is typed, no address is shown with its query.
+            raw["url"] = str(raw.get("url", "")).split("?", 1)[0]
+        text, run.controls = _render(raw, writes=run.contract is not None)
+        # A sign-in value never reaches the agent, in any encoding.
+        secrets = list(run.secret_values.values())
+        text = _mask(text, secrets)
+        for c in run.controls:
+            if c.get("value") and carries_secret(str(c["value"]), secrets):
+                c["value"] = _MASK
         return text
 
     def _observe(self) -> dict[str, Any]:
@@ -1092,10 +1467,17 @@ class BrowserTeachBridge:
         self, run: _Teaching, args: Mapping[str, Any]
     ) -> tuple[str, dict[str, str]]:
         key = args.get("input")
+        if key and key in run.secret_values:
+            return run.secret_values[key], {"input": key, "secret": "true"}
         if key:
             if key not in run.inputs:
                 raise BridgeError(
                     f"no input named {key!r}; inputs: {sorted(run.inputs)}"
+                    + (
+                        f", sign-in: {sorted(run.secret_values)}"
+                        if run.secret_values
+                        else ""
+                    )
                 )
             return run.inputs[key], {"input": key}
         if "text" not in args:
@@ -1115,6 +1497,9 @@ class BrowserTeachBridge:
         return run.controls[i]
 
     def _refuse_write(self, c: Mapping[str, Any], how: str) -> None:
+        run = getattr(self, "_teaching", None)
+        if run is not None and run.contract is not None:
+            return  # a taught write: its save is the point, and it is verified
         if c.get("method") == "POST":
             raise BridgeError(
                 f"refused: {how} {c['label']!r} would send a form by POST, which "
@@ -1136,6 +1521,23 @@ class BrowserTeachBridge:
             raise BridgeError("the file has downloaded; call teach_finish")
         step: dict[str, Any] = {"op": "fill" if action == "type" else action}
         c: Optional[dict[str, Any]] = None
+        if action == "goto":
+            url = str(args.get("url") or "")
+            target_url = urljoin(page.url, url)
+            if _origin(target_url) != browser.origin:
+                raise BridgeError(
+                    f"goto stays on {browser.origin}; {url!r} is another site"
+                )
+            parts = urlsplit(target_url)
+            step["url"] = parts.path + (f"?{parts.query}" if parts.query else "")
+            try:
+                page.goto(target_url, wait_until="domcontentloaded")
+            except Exception as exc:  # noqa: BLE001 - reported to the agent
+                raise BridgeError(
+                    f"could not open {url!r} ({type(exc).__name__})"
+                ) from None
+            run.steps.append(step)
+            return {"page": self._listing(run)}
         if action == "press":
             key = str(args.get("key") or "")
             if not key:
@@ -1153,7 +1555,12 @@ class BrowserTeachBridge:
                         and x["name_attr"] == focused["name_attr"]
                     ]
                     c = match[0] if len(match) == 1 else None
-                    if c is None and key == "Enter" and focused["method"] == "POST":
+                    if (
+                        c is None
+                        and key == "Enter"
+                        and focused["method"] == "POST"
+                        and run.contract is None
+                    ):
                         raise BridgeError(
                             "refused: Enter here would send a form by POST. This "
                             "lane only reads; nothing was done."
@@ -1174,6 +1581,18 @@ class BrowserTeachBridge:
                         f"{args['ref']} is a {c['role']}, not a text field"
                     )
                 text, step["value"] = self._value(run, args)
+                if step["value"].get("secret") and not (
+                    c.get("type") == "password"
+                    or (c.get("method") == "POST" and c.get("sign_in"))
+                ):
+                    raise BridgeError(
+                        "refused: a sign-in value goes only into a password field "
+                        "or another field of a sign-in form that posts; anywhere "
+                        "else it could reach an address, a record or the page. "
+                        "Nothing was typed."
+                    )
+                if step["value"].get("secret"):
+                    run.secret_typed = True
             elif action == "select":
                 if c["tag"] != "select":
                     raise BridgeError(f"{args['ref']} is not a drop-down")
@@ -1225,10 +1644,14 @@ class BrowserTeachBridge:
                 page.wait_for_timeout(100)
         if browser.blocked:
             what = browser.blocked[0]
-            self._end("blocked")
+            # On the browser thread already: close here, not through _end,
+            # which would wait on this same thread.
+            run.ended = "blocked"
+            browser.close()
+            run.thread.stop()
             raise BridgeError(
-                f"run 1 ended: the page tried {what}, which this lane blocks. "
-                "Nothing was compiled. Start again and avoid that control."
+                f"run 1 ended: the page tried {what}; it was not sent. Nothing "
+                "was compiled. Start again and avoid that control."
             )
         run.steps.append(step)
         result: dict[str, Any] = {}
@@ -1282,7 +1705,95 @@ class BrowserTeachBridge:
             ),
         }
 
+    def _finish_write(self) -> dict[str, Any]:
+        """End a taught write: verify run 1's write, then add the tool."""
+
+        from openadapt_flow.verify import verify_write
+
+        with self._lock:
+            run = self._active()
+            assert run.browser is not None
+            writes = list(run.browser.writes_sent)
+            shapes = list(run.browser.write_shapes)
+            if not writes:
+                raise BridgeError(
+                    "run 1 has sent no write yet; finish the task (save), or teach_abort"
+                )
+            used = {
+                st["value"]["input"]
+                for st in run.steps
+                if "input" in (st.get("value") or {})
+            }
+            unused = sorted(set(run.inputs) - used)
+            if unused:
+                raise BridgeError(
+                    f"input {unused[0]!r} was never typed or selected, so a new "
+                    "value would change nothing. Type it with input, or "
+                    "teach_abort and start without it."
+                )
+            steps = list(run.steps)
+            self._end("finished")
+        result = verify_write(
+            run.pending, executor={"kind": "agent", "id": "teach-run-1"}
+        )
+        if not result.verified:
+            return {
+                "status": "not_added",
+                "what_happened": (
+                    f"Run 1's write was not verified ({result.verdict}: "
+                    f"{getattr(result, 'reason', '')}). No tool was added. A person "
+                    "checks the record before anything else is written; don't "
+                    "teach it again until they have."
+                ),
+                "verification": result.to_dict(),
+            }
+        program = {
+            "schema": PROGRAM_SCHEMA,
+            "name": run.name,
+            "task": run.task,
+            "url": run.url,
+            "origin": _origin(run.url),
+            "inputs": sorted(run.inputs),
+            "examples": dict(run.inputs),
+            "sign_in": sorted(
+                st["value"]["input"]
+                for st in steps
+                if (st.get("value") or {}).get("secret")
+            ),
+            "steps": steps,
+            # Exactly the writes run 1 sent, in order, by method, path and the
+            # names of the fields each carried. A compiled run sends these and
+            # nothing else.
+            "writes": [
+                {"write": write, "shape": shape} for write, shape in zip(writes, shapes)
+            ],
+            "result": {"kind": "write", "contract": run.contract},
+            "taught_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        folder = self.tools_dir / run.name
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / PROGRAM_FILE).write_text(json.dumps(program, indent=2) + "\n")
+        tool = TAUGHT_PREFIX + run.name
+        self.programs[tool] = program
+        return {
+            "status": "ready",
+            "new_tool": tool,
+            "inputs": program["inputs"],
+            "steps": len(steps),
+            "run_1": result.to_dict(),
+            "writes_sent": writes,
+            "program": str(folder / PROGRAM_FILE),
+            "next": (
+                f"Call {tool} with new inputs. Each call makes the write and "
+                f"returns a verified receipt from the {run.contract} contract, or a "
+                "refusal: never retry a refused write."
+            ),
+        }
+
     def _finish(self, args: Mapping[str, Any]) -> dict[str, Any]:
+        run = self._active()
+        if run.contract is not None:
+            return self._finish_write()
         with self._lock:
             run = self._active()
             if run.file is None or run.download_step is None:
@@ -1397,6 +1908,114 @@ class BrowserTeachBridge:
         finally:
             thread.stop()
 
+    def _run_write(
+        self, tool: str, program: Mapping[str, Any], inputs: Mapping[str, str]
+    ) -> dict[str, Any]:
+        """Make a taught write and verify it. Only a verified write is done."""
+
+        from openadapt_flow.verify import BaselineUnreadable, begin_write, verify_write
+
+        name = program["result"]["contract"]
+        contract = self.contracts.get(name)
+        if contract is None:
+            return {
+                "outcome": "did_not_run",
+                "what_happened": f"this server doesn't check the {name} contract; nothing was written",
+                "model_calls": 0,
+            }
+        try:
+            secret_values = self._secret_values()
+        except BridgeError as exc:
+            return {
+                "outcome": "did_not_run",
+                "what_happened": f"{exc}; nothing was written",
+                "model_calls": 0,
+            }
+        values = {**inputs, **secret_values}
+        try:
+            pending = begin_write(contract, values, self.verify_dir)
+        except BaselineUnreadable as exc:
+            return {
+                "outcome": "did_not_run",
+                "what_happened": f"{exc}; nothing was written",
+                "model_calls": 0,
+            }
+        thread = _BrowserThread()
+        try:
+            with self._run_lock:
+                run = thread.call(
+                    lambda: _run_steps(
+                        program,
+                        values,
+                        self.files_dir / program["name"],
+                        self.headless,
+                        allow_writes=True,
+                        allowed_writes=contract.writes,
+                        pinned=program.get("writes") or [],
+                        secrets=list(secret_values.values()),
+                    ),
+                    timeout=600,
+                )
+        except BridgeError as exc:
+            return {
+                "outcome": "did_not_run",
+                "what_happened": str(exc),
+                "model_calls": 0,
+            }
+        finally:
+            thread.stop()
+        base = {
+            "model_calls": 0,
+            "seconds": run.seconds,
+            "writes_sent": len(run.writes_sent),
+        }
+        if run.stopped is not None and not run.writes_sent:
+            return {
+                **base,
+                "outcome": "stopped",
+                "what_happened": f"Stopped before any write was sent: {run.stopped}.",
+            }
+        result = verify_write(
+            pending,
+            executor={"kind": "program", "id": tool},
+            write_attempted=bool(run.writes_sent),
+            declared_by="agent (tool inputs)",
+        )
+        stopped = f" The steps stopped: {run.stopped}." if run.stopped else ""
+        if run.blocked:
+            # A write outside the taught set was stopped before it was sent:
+            # never a success, whatever the record shows.
+            return {
+                **base,
+                **result.to_dict(),
+                "verified": False,
+                "outcome": "needs_review",
+                "what_happened": (
+                    f"The page tried {run.blocked[0]}; it was not sent. The taught "
+                    "write's own check is in verdict. A person checks the record "
+                    "and the app; don't retry."
+                ),
+            }
+        if result.verified:
+            return {
+                **base,
+                **result.to_dict(),
+                "outcome": "done",
+                "what_happened": (
+                    f"The write is in the system of record as the {name} contract "
+                    f"declares; receipt {result.receipt_sha256[:12]}.{stopped}"
+                ),
+            }
+        return {
+            **base,
+            **result.to_dict(),
+            "outcome": "needs_review",
+            "what_happened": (
+                f"The write was not verified ({result.verdict}: {result.reason}).{stopped} "
+                "Don't retry it: a person checks the record."
+            ),
+        }
+
     def _run_taught(self, tool: str, args: Mapping[str, Any]) -> dict[str, Any]:
         program = self.programs[tool]
         inputs = {str(k): str(v) for k, v in (args.get("inputs") or {}).items()}
@@ -1406,4 +2025,6 @@ class BrowserTeachBridge:
                 "what_happened": f"{tool} takes exactly these inputs: {program['inputs']}",
                 "model_calls": 0,
             }
+        if (program.get("result") or {}).get("kind") == "write":
+            return self._run_write(tool, program, inputs)
         return self._replay(program, inputs)
