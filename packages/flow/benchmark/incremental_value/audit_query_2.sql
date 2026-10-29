@@ -16,7 +16,9 @@ SELECT x.id, x.user, x.patient_id, x.ev, x.tbl FROM (
   WHERE a.method IN ('POST', 'PUT', 'PATCH', 'DELETE')
   UNION ALL
   SELECT CONCAT('l', l.id), l.user, l.patient_id, SUBSTRING_INDEX(l.event, '-', -1),
-    REPLACE(REGEXP_SUBSTR(CONVERT(FROM_BASE64(l.comments) USING utf8mb4), '(?i)(?<=insert into |replace into |update |delete from )`?[a-z_]+'), '`', '')
+    -- The table the statement itself writes, read from its start only: text
+    -- later in the statement (a value the agent typed) can't name a table.
+    REGEXP_SUBSTR(CONVERT(FROM_BASE64(l.comments) USING utf8mb4), '(?i)^\\s*(?:insert\\s+(?:ignore\\s+)?into|replace\\s+into|update|delete\\s+from)\\s+`?\\K[a-z_]+')
   FROM openemr.log l
   -- Run 2: entries that name no patient too (a user's own settings), so the
   -- frame can attribute them by owner; REPLACE INTO is parsed like INSERT.
