@@ -28,7 +28,14 @@ from typing import TYPE_CHECKING, Iterable, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openadapt_flow.ir import ActionKind, Step, Workflow
+from openadapt_flow.ir import (
+    ActionKind,
+    Postcondition,
+    PostconditionKind,
+    Step,
+    Workflow,
+    focus_identity_is_specific,
+)
 from openadapt_flow.risk import classify_step_risk, is_local_edit, step_text
 from openadapt_flow.traversal import iter_workflow_steps
 from openadapt_flow.verification import declared_effect_is_independent_read
@@ -85,7 +92,7 @@ def is_identity_armed(step: Step) -> bool:
     The compiler-written ``identity_armed`` field is an audit flag, not the
     identity evidence. An explicit false remains a refusal. Otherwise require
     the ground truth the replayer uses: structured/context identity, an
-    identity template, or an identifier crop.
+    identity template, an identifier crop, or a create-new form's identity.
     """
     if step.identity_armed is False:
         return False
@@ -95,6 +102,7 @@ def is_identity_armed(step: Step) -> bool:
         or a.structured_identity
         or a.identity_template
         or a.identifier_crop
+        or a.form_identity
     )
 
 
@@ -139,7 +147,15 @@ def is_vacuous(step: Step) -> bool:
         return False
     if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
         return False
-    return expects_effect(step) and not step.expect
+    return expects_effect(step) and not any(_asserts(pc) for pc in step.expect)
+
+
+def _asserts(pc: Postcondition) -> bool:
+    """Whether a postcondition can fail: a FOCUS_ON must name one element."""
+
+    if pc.kind is PostconditionKind.FOCUS_ON:
+        return focus_identity_is_specific(pc)
+    return True
 
 
 def has_screen_postcondition(step: Step) -> bool:

@@ -1125,7 +1125,120 @@ def _structural_postconditions(event: dict) -> list[Postcondition]:
         pcs.append(Postcondition(kind=PostconditionKind.URL_CHANGED))
     elif title_before and title_after and title_before != title_after:
         pcs.append(Postcondition(kind=PostconditionKind.TITLE_CHANGED))
+    if not pcs and event.get("kind") in ("key", "hotkey"):
+        focus = _focus_postcondition(
+            event.get("focus_before"), event.get("focus_after")
+        )
+        if focus is not None:
+            pcs.append(focus)
     return pcs
+
+
+#: Ids a UI framework generates per render: React's useId (``:r2:``,
+#: ``«r2»``), Radix, Headless UI, MUI, Ember, react-select, downshift, Reach,
+#: Mantine, and bare UUIDs or long numeric suffixes.
+_GENERATED_ID = re.compile(
+    # React useId, anywhere in the id: ``:r2:``, ``«r2»``, and React 19.2+'s
+    # ``_r_2_`` / ``_R_2_`` (react-aria's ``react-aria-:r1:`` contains one).
+    r":r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_"
+    r"|^(?:radix-|headlessui-|mui-|ember|react-select-|downshift-|reach-|mantine-"
+    r"|mat-|cdk-|rc_select_)"
+    r"|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    r"|\d{4,}$",
+    re.IGNORECASE,
+)
+
+
+def _generated_id(value: str) -> bool:
+    return bool(_GENERATED_ID.search(value))
+
+
+def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
+    """A ``focus_on`` check for a key that moved the focus, or None.
+
+    Only when the element focused after the key has a specific identity that
+    no other element on the page shared at teach time: a ``data-testid``,
+    then an ``id``, then a role with a non-empty accessible name. A tag, or
+    a role with no name, is not specific, and the step keeps no check. The
+    key must have moved the focus or made an option active; a key that
+    changed neither proves nothing about it.
+    """
+
+    if not isinstance(after, dict) or after.get("none") is not False:
+        return None
+    before = before if isinstance(before, dict) else {}
+
+    def ident(o: dict) -> tuple:
+        return (
+            o.get("tag"),
+            o.get("testid"),
+            o.get("id"),
+            o.get("role"),
+            o.get("name"),
+        )
+
+    moved = ident(before) != ident(after)
+    activated = after.get("active_option") is True and not (
+        not moved and before.get("active_option") is True
+    )
+    if not (moved or activated):
+        return None
+    frame_path = after.get("frame_path")
+    if not isinstance(frame_path, list) or not all(
+        isinstance(f, str) for f in frame_path
+    ):
+        return None
+    common: dict[str, Any] = {
+        "focus_active_option": activated,
+        "focus_frame_path": tuple(frame_path),
+    }
+    testid, ident_id = after.get("testid"), after.get("id")
+    if isinstance(ident_id, str) and _generated_id(ident_id):
+        # A framework-generated id (React useId, Radix, MUI ...) shifts from
+        # run to run, so it names no element; fall back to role and name.
+        ident_id = None
+    role, name = after.get("role"), after.get("name")
+    named = (
+        isinstance(role, str)
+        and role.strip()
+        and isinstance(name, str)
+        and name.strip()
+    )
+    # An id or testid check also binds the element's role and name when it had
+    # them, so an id that moved to another element can't pass: the generated-id
+    # patterns are only a hint, and no list keeps up with every framework.
+    pair: dict[str, Any] = {"focus_role": role, "focus_name": name} if named else {}
+    if isinstance(testid, str) and testid.strip() and after.get("testid_count") == 1:
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="testid",
+            focus_value=testid,
+            **pair,
+            **common,
+        )
+    if isinstance(ident_id, str) and ident_id.strip() and after.get("id_count") == 1:
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="id",
+            focus_value=ident_id,
+            **pair,
+            **common,
+        )
+    if (
+        isinstance(role, str)
+        and role.strip()
+        and isinstance(name, str)
+        and name.strip()
+        and after.get("role_name_count") == 1
+    ):
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="role_name",
+            focus_role=role,
+            focus_name=name,
+            **common,
+        )
+    return None
 
 
 def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> list[str]:
@@ -1164,6 +1277,12 @@ def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> lis
     violations: list[str] = []
     for step in workflow.steps:
         for pc in step.expect:
+            for focus in (pc.focus_name, pc.focus_value):
+                if focus and _contains_excluded(focus, values):
+                    violations.append(
+                        f"{step.id}: focus_on postcondition {focus!r} embeds a "
+                        "demo parameter value"
+                    )
             if pc.text and _contains_excluded(pc.text, values):
                 violations.append(
                     f"{step.id}: {pc.kind.value} postcondition "
@@ -2870,6 +2989,7 @@ def _compile_recording(
     # Submit-binding observations recorded on click events (unlabeled
     # controls only), attached once every risk decision is final.
     binding_observations: dict[str, object] = {}
+    form_values: dict[str, object] = {}
     for j, (step, step_before, step_after, event) in enumerate(pending):
         steps.append(step)
         if isinstance(event.get("dialog"), dict):
@@ -2879,6 +2999,8 @@ def _compile_recording(
             step.dialog = _dialog_identity(event["dialog"], exclude_texts)
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
+            if event.get("form_values") is not None:
+                form_values[step.id] = event["form_values"]
         if step.action in (ActionKind.SCROLL, ActionKind.READ):
             continue  # see the scroll and read branches in pass 1
         if step.action is ActionKind.SWITCH_SURFACE:
@@ -2984,6 +3106,16 @@ def _compile_recording(
         presumed.risk = "irreversible"
         presumed.risk_explanation = PRESUMED_COMMIT_EXPLANATION
         presumed.risk_review_required = False
+
+    # The submit button of the form the demonstration typed into saves that
+    # form, whatever the screen did after the click (a slow recording can
+    # capture the page before it changes). Explicit risk_overrides below
+    # still win.
+    for step in _form_submit_steps(steps, binding_observations):
+        if step.risk != "irreversible":
+            step.risk = "irreversible"
+            step.risk_explanation = "it submits the form the run typed into"
+            step.risk_review_required = False
 
     # A click that only opens a confirmation dialog is not the save: the
     # dialog's Confirm click is. Explicit risk_overrides below still win.
@@ -3476,7 +3608,7 @@ def _compile_recording(
     # fields the demonstration filled, or record why it cannot be bound (the
     # replayer refuses that click). Runs after every risk decision, model
     # annotation included, so the binding covers exactly the final writes.
-    _attach_submit_bindings(workflow.steps, binding_observations)
+    _attach_submit_bindings(workflow.steps, binding_observations, form_values)
 
     # PHI-at-rest remediation (audit REM-2): replace the plaintext identity
     # band (``anchor.context_text``) and structured identity on every anchor
@@ -3536,7 +3668,50 @@ def _compile_recording(
     return workflow
 
 
-def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) -> None:
+def _form_submit_steps(
+    steps: list[Step], observations: dict[str, object]
+) -> list[Step]:
+    """Clicks on the labelled submit button of the one form owning every
+    field typed into since the previous such click."""
+
+    found: list[Step] = []
+    typed = False
+    for step in steps:
+        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
+            typed = True
+            continue
+        raw = observations.get(step.id)
+        if (
+            typed
+            and raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and _is_form_save(raw)
+        ):
+            found.append(step)
+            typed = False
+    return found
+
+
+def _is_form_save(raw: object) -> bool:
+    """The observation shows the labelled submit button of the typed form."""
+
+    from openadapt_flow.submit_binding import (
+        _no_form_identity_reason,
+        observation_from_page,
+    )
+
+    try:
+        observation = observation_from_page(raw)
+    except ValueError:
+        return False
+    return observation.labelled and _no_form_identity_reason(observation) is None
+
+
+def _attach_submit_bindings(
+    steps: list[Step],
+    observations: dict[str, object],
+    form_values: Optional[dict[str, object]] = None,
+) -> None:
     """Attach :class:`~openadapt_flow.ir.SubmitBinding` evidence in place.
 
     A binding applies to a consequential CLICK/DOUBLE_CLICK whose target has
@@ -3544,12 +3719,20 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
     carried a submit-binding observation. Each such step gets either a
     binding (every condition in :mod:`openadapt_flow.submit_binding` held in
     the demonstration) or a plain-language reason it could not be bound.
-    Steps without an observation (pixel recordings, labelled controls,
-    recordings made before this capability) are left unchanged.
+
+    A consequential click on a labelled control that compiled with no
+    identity evidence, after fields were typed, and whose observation shows
+    it is a button of the one form owning those fields, gets a
+    :class:`~openadapt_flow.ir.FormIdentity` instead: a create-new form's
+    save. Steps without an observation (pixel recordings, recordings made
+    before this capability) are left unchanged.
     """
 
+    from openadapt_flow.policy import is_identity_armed
     from openadapt_flow.submit_binding import (
+        decide_form_identity,
         decide_submit_binding,
+        form_values_from_record,
         observation_from_page,
     )
 
@@ -3579,6 +3762,32 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
                 )
                 step.submit_binding = binding
                 step.submit_binding_unbound_reason = reason
+        elif (
+            raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and step.risk == "irreversible"
+            and step.anchor is not None
+            and typed_since_commit
+            and not is_identity_armed(step)
+        ):
+            # A labelled save with no record on screen to check: a create-new
+            # form. The record is the one the run typed into the form.
+            try:
+                form_identity, why = decide_form_identity(
+                    observation_from_page(raw),
+                    form_values_from_record((form_values or {}).get(step.id)),
+                )
+            except ValueError:
+                form_identity, why = None, "the recorded form evidence is malformed"
+            if form_identity is not None:
+                step.anchor.form_identity = form_identity
+                step.identity_armed = True
+                step.identity_unarmed_reason = None
+            elif _is_form_save(raw):
+                # The form's own save, but the check can't be armed: say why,
+                # so the refusal names it instead of a generic gap.
+                step.identity_unarmed_reason = f"create-form save not checked: {why}"
+                logger.warning("%s: %s", step.id, step.identity_unarmed_reason)
         if step.risk == "irreversible":
             # A consequential step closes the entry it committed.
             typed_since_commit = []
