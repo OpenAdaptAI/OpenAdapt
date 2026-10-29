@@ -345,7 +345,7 @@ def main(argv: list[str] | None = None) -> int:
                     "after_stop_diff": rollback.after_stop_diff if rollback else None,
                     "remaining_diff": rollback.remaining_diff if rollback else None,
                     "profile_id": rollback.profile_id if rollback else None,
-                    "profile_rows": rollback.profile_rows if rollback else None,
+                    "cross_checked": rollback.cross_checked if rollback else None,
                     "steps": [
                         {"step_id": s.step_id, "decision": s.decision}
                         for s in (rollback.steps if rollback else [])
