@@ -163,6 +163,8 @@
     "benchmark/identity_ladder/identity_ladder.json",
     "benchmark/identity_looks/results_after.json",
     "benchmark/identity_looks/results_before.json",
+    "benchmark/incremental_value/contract.yaml",
+    "benchmark/incremental_value/results/score.json",
     "benchmark/known_ids/results.json",
     "benchmark/latency_cost.png",
     "benchmark/lending_fault_model/resolution_ladder_results.json",
