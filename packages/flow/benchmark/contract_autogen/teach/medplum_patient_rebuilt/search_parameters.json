@@ -1,0 +1,179 @@
+{
+ "resourceType": "Bundle",
+ "entry": [
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "given",
+    "type": "string",
+    "expression": "Patient.name.given | Practitioner.name.given",
+    "base": [
+     "Patient",
+     "Practitioner"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "family",
+    "type": "string",
+    "expression": "Patient.name.family | Practitioner.name.family",
+    "base": [
+     "Patient",
+     "Practitioner"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "name",
+    "type": "string",
+    "expression": "Patient.name",
+    "base": [
+     "Patient"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "birthdate",
+    "type": "date",
+    "expression": "Patient.birthDate | Person.birthDate | RelatedPerson.birthDate",
+    "base": [
+     "Patient",
+     "Person",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "gender",
+    "type": "token",
+    "expression": "Patient.gender | Person.gender | Practitioner.gender | RelatedPerson.gender",
+    "base": [
+     "Patient",
+     "Person",
+     "Practitioner",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "telecom",
+    "type": "token",
+    "expression": "Patient.telecom | Person.telecom | Practitioner.telecom | PractitionerRole.telecom | RelatedPerson.telecom",
+    "base": [
+     "Patient",
+     "Person",
+     "Practitioner",
+     "PractitionerRole",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "email",
+    "type": "token",
+    "expression": "Patient.telecom.where(system='email') | Person.telecom.where(system='email') | Practitioner.telecom.where(system='email') | PractitionerRole.telecom.where(system='email') | RelatedPerson.telecom.where(system='email')",
+    "base": [
+     "Patient",
+     "Person",
+     "Practitioner",
+     "PractitionerRole",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "phone",
+    "type": "token",
+    "expression": "Patient.telecom.where(system='phone') | Person.telecom.where(system='phone') | Practitioner.telecom.where(system='phone') | PractitionerRole.telecom.where(system='phone') | RelatedPerson.telecom.where(system='phone')",
+    "base": [
+     "Patient",
+     "Person",
+     "Practitioner",
+     "PractitionerRole",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "address",
+    "type": "string",
+    "expression": "Patient.address | Person.address | Practitioner.address | RelatedPerson.address",
+    "base": [
+     "Patient",
+     "Person",
+     "Practitioner",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "address-city",
+    "type": "string",
+    "expression": "Patient.address.city | Person.address.city | Practitioner.address.city | RelatedPerson.address.city",
+    "base": [
+     "Patient",
+     "Person",
+     "Practitioner",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "address-state",
+    "type": "string",
+    "expression": "Patient.address.state | Person.address.state | Practitioner.address.state | RelatedPerson.address.state",
+    "base": [
+     "Patient",
+     "Person",
+     "Practitioner",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "address-postalcode",
+    "type": "string",
+    "expression": "Patient.address.postalCode | Person.address.postalCode | Practitioner.address.postalCode | RelatedPerson.address.postalCode",
+    "base": [
+     "Patient",
+     "Person",
+     "Practitioner",
+     "RelatedPerson"
+    ]
+   }
+  },
+  {
+   "resource": {
+    "resourceType": "SearchParameter",
+    "code": "identifier",
+    "type": "token",
+    "expression": "Patient.identifier",
+    "base": [
+     "Patient"
+    ]
+   }
+  }
+ ]
+}

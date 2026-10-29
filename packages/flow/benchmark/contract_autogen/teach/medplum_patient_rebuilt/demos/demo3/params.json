@@ -1,0 +1,12 @@
+{
+ "fname": "Mei",
+ "lname": "Lindqvist",
+ "DOB": "2004-08-30",
+ "sex": "female",
+ "street": "1200 Beacon St Apt 3",
+ "city": "Brookline",
+ "state_label": "MA",
+ "postal_code": "02446",
+ "phone_home": "617-555-0188",
+ "email": "mei.lindqvist@example.invalid"
+}
