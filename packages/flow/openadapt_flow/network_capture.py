@@ -52,6 +52,17 @@ MAX_REQUEST_BYTES = 256 * 1024
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _page_of(request: Any) -> Any:
+    """The page a request came from, or None (a service worker has none)."""
+
+    try:
+        return request.frame.page
+    except Exception:  # noqa: BLE001 - service-worker and detached-frame requests
+        return None
+
+
 _SKIP_TYPES = frozenset(
     {"image", "font", "stylesheet", "script", "media", "manifest", "texttrack"}
 )
@@ -98,9 +109,10 @@ class NetworkCapture:
         self._lines: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._attached = False
-        # Writes the browser has sent and not seen finish or fail. A save the
-        # agent guard holds stays here until the guard sends or refuses it.
-        self._pending_writes: set[Any] = set()
+        # Writes the browser has sent and not seen finish or fail, with when
+        # they were sent. A save the agent guard holds stays here until the
+        # guard sends or refuses it.
+        self._pending_writes: dict[Any, float] = {}
 
     def start(self) -> "NetworkCapture":
         if not self._attached:
@@ -128,12 +140,35 @@ class NetworkCapture:
         with self._lock:
             return len(self._lines)
 
-    @property
-    def pending_writes(self) -> int:
-        """Writes (any method but GET, HEAD or OPTIONS) still in flight."""
+    def pending_writes(
+        self,
+        pages: Optional[Iterable[Any]] = None,
+        *,
+        max_age_s: Optional[float] = None,
+    ) -> list[Any]:
+        """Writes (any method but GET, HEAD or OPTIONS) still in flight.
 
+        ``pages`` keeps only requests from those pages, so another tab's
+        long-poll in an attached browser is never waited for. ``max_age_s``
+        drops requests sent longer ago than that: a request whose finish
+        Playwright never reports (a beacon from a closing popup) must not
+        stall the rest of a recording.
+        """
+
+        now = time.monotonic()
         with self._lock:
-            return len(self._pending_writes)
+            pending = list(self._pending_writes.items())
+        wanted = None if pages is None else list(pages)
+        found = []
+        for request, sent in pending:
+            if max_age_s is not None and now - sent > max_age_s:
+                continue
+            if wanted is not None:
+                page = _page_of(request)
+                if page is None or not any(page is p for p in wanted):
+                    continue
+            found.append(request)
+        return found
 
     # -- Playwright callbacks ------------------------------------------------
 
@@ -142,11 +177,11 @@ class NetworkCapture:
             return
         if str(request.method).upper() not in _READ_METHODS:
             with self._lock:
-                self._pending_writes.add(request)
+                self._pending_writes[request] = time.monotonic()
 
     def _settled(self, request: Any) -> None:
         with self._lock:
-            self._pending_writes.discard(request)
+            self._pending_writes.pop(request, None)
 
     def _on_failed(self, request: Any) -> None:
         self._settled(request)

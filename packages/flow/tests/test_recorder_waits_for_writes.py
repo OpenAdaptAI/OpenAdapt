@@ -14,6 +14,7 @@ save.
 
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 
 from openadapt_flow.interactive_recorder import InteractiveRecorder
@@ -34,14 +35,20 @@ class _Context:
         self.handlers[event](request)
 
 
+RECORDED_PAGE = object()
+OTHER_TAB = object()
+
+
 class _Request:
-    def __init__(self, method: str, resource_type: str = "fetch") -> None:
+    def __init__(
+        self, method: str, resource_type: str = "fetch", page=RECORDED_PAGE
+    ) -> None:
         self.method = method
         self.resource_type = resource_type
         self.url = "http://app.test/api/encounter"
         self.headers: dict[str, str] = {}
         self.post_data_buffer = None
-        self.frame = None
+        self.frame = SimpleNamespace(page=page)
 
     def all_headers(self) -> dict[str, str]:
         return {}
@@ -56,20 +63,54 @@ def test_writes_count_as_in_flight_until_they_finish_or_fail() -> None:
     save, other_save, read = _Request("POST"), _Request("PUT"), _Request("GET")
     for request in (save, other_save, read):
         context.emit("request", request)
-    assert capture.pending_writes == 2
+    assert len(capture.pending_writes()) == 2
     context.emit("requestfinished", save)
-    assert capture.pending_writes == 1
+    assert capture.pending_writes() == [other_save]
     context.emit("requestfailed", other_save)
-    assert capture.pending_writes == 0
+    assert capture.pending_writes() == []
     context.emit("requestfinished", read)
-    assert capture.pending_writes == 0
+    assert capture.pending_writes() == []
 
 
 def test_images_and_fonts_are_never_waited_for() -> None:
     context = _Context()
     capture = NetworkCapture(context).start()
     context.emit("request", _Request("POST", resource_type="image"))
-    assert capture.pending_writes == 0
+    assert capture.pending_writes() == []
+
+
+def test_another_tabs_long_poll_is_not_this_recordings_write() -> None:
+    # Attached to a person's browser, the context holds every tab.
+    context = _Context()
+    capture = NetworkCapture(context).start()
+    poll = _Request("POST", page=OTHER_TAB)
+
+    class _WorkerRequest(_Request):
+        @property
+        def frame(self):  # a service worker's request has no frame
+            raise RuntimeError(
+                "Service Worker requests do not have an associated frame"
+            )
+
+        @frame.setter
+        def frame(self, value) -> None:
+            pass
+
+    worker = _WorkerRequest("POST")
+    context.emit("request", poll)
+    context.emit("request", worker)
+    assert capture.pending_writes([RECORDED_PAGE]) == []
+    assert len(capture.pending_writes()) == 2
+
+
+def test_a_request_whose_finish_never_comes_ages_out() -> None:
+    context = _Context()
+    capture = NetworkCapture(context).start()
+    beacon = _Request("POST")
+    context.emit("request", beacon)
+    capture._pending_writes[beacon] = time.monotonic() - 60
+    assert capture.pending_writes(max_age_s=30) == []
+    assert capture.pending_writes() == [beacon]
 
 
 def test_stop_detaches_the_request_listener_too() -> None:
@@ -79,51 +120,86 @@ def test_stop_detaches_the_request_listener_too() -> None:
     assert context.handlers == {}
 
 
-def _recorder(network, page) -> InteractiveRecorder:
+class _Network:
+    """In-flight writes the guard sends after ``after`` of the recorder's waits."""
+
+    def __init__(self, waits: dict, after: int, requests=None) -> None:
+        self.waits, self.after = waits, after
+        self.requests = requests or [object()]
+
+    def pending_writes(self, pages=None, *, max_age_s=None):
+        return [] if self.waits["n"] >= self.after else list(self.requests)
+
+
+def _recorder(network, wait) -> InteractiveRecorder:
     recorder = InteractiveRecorder.__new__(InteractiveRecorder)
     recorder._network = network
-    recorder.page = page
+    recorder._pyq = []
+    recorder._primary_page = SimpleNamespace(wait_for_timeout=wait)
+    recorder.page = recorder._primary_page
+    recorder._pending_pages = []
+    recorder.recorder = None
     return recorder
 
 
+def _counting(waits: dict):
+    return lambda ms: waits.__setitem__("n", waits["n"] + 1)
+
+
 def test_the_recorder_waits_until_the_held_save_has_gone_through() -> None:
-    held = {"waits": 0}
+    waits = {"n": 0}
+    assert _recorder(_Network(waits, after=3), _counting(waits))._wait_for_writes()
+    assert waits["n"] == 3
 
-    class _Network:
-        @property
-        def pending_writes(self) -> int:
-            # The guard sends the save after three of the recorder's waits.
-            return 1 if held["waits"] < 3 else 0
 
-    page = SimpleNamespace(
-        wait_for_timeout=lambda ms: held.__setitem__("waits", held["waits"] + 1)
-    )
-    _recorder(_Network(), page)._wait_for_writes()
-    assert held["waits"] == 3
+def test_nothing_in_flight_means_no_wait() -> None:
+    waits = {"n": 0}
+    assert not _recorder(_Network(waits, after=0), _counting(waits))._wait_for_writes()
+    assert waits["n"] == 0
+
+
+def test_the_next_action_ends_the_wait() -> None:
+    # The recording must not hold a person's or agent's next click.
+    waits = {"n": 0}
+    recorder = _recorder(_Network(waits, after=10_000), _counting(waits))
+
+    def wait(ms: int) -> None:
+        waits["n"] += 1
+        recorder._pyq.append({"kind": "click"})
+
+    recorder._primary_page = SimpleNamespace(wait_for_timeout=wait)
+    recorder._wait_for_writes()
+    assert waits["n"] == 1
+
+
+def test_only_writes_in_flight_when_the_wait_starts_are_waited_for() -> None:
+    first, later = object(), object()
+    waits = {"n": 0}
+
+    class _Later:
+        def pending_writes(self, pages=None, *, max_age_s=None):
+            # The first save finishes after one wait; another starts then.
+            return [first] if waits["n"] == 0 else [later]
+
+    _recorder(_Later(), _counting(waits))._wait_for_writes()
+    assert waits["n"] == 1
 
 
 def test_the_wait_is_bounded_and_survives_a_closed_page() -> None:
-    class _Stuck:
-        pending_writes = 1
-
-    calls = {"n": 0}
-
-    def wait(ms: int) -> None:
-        calls["n"] += 1
-
-    _recorder(_Stuck(), SimpleNamespace(wait_for_timeout=wait))._wait_for_writes(
+    waits = {"n": 0}
+    _recorder(_Network(waits, after=10_000), _counting(waits))._wait_for_writes(
         timeout_s=0.05
     )
-    assert calls["n"] >= 1
+    assert waits["n"] >= 1
 
     def closed(ms: int) -> None:
         raise RuntimeError("Target page, context or browser has been closed")
 
-    _recorder(_Stuck(), SimpleNamespace(wait_for_timeout=closed))._wait_for_writes()
+    _recorder(_Network({"n": 0}, after=10_000), closed)._wait_for_writes()
 
 
 def test_no_network_capture_means_no_wait() -> None:
     def never(ms: int) -> None:
         raise AssertionError("waited without a network capture")
 
-    _recorder(None, SimpleNamespace(wait_for_timeout=never))._wait_for_writes()
+    assert not _recorder(None, never)._wait_for_writes()

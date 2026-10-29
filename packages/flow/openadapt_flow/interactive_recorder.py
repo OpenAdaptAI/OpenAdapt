@@ -3958,8 +3958,11 @@ class InteractiveRecorder:
             # frame and the record read both show its result. The screen
             # holds still while a save is in flight (the agent guard may be
             # holding it), and would otherwise settle on the old screen.
-            self._wait_for_writes()
+            # Settle first: the screenshots deliver the save's request event.
+            # If a write was in flight, settle again once it has landed.
             ev["_oaflow_after_frame"] = self.recorder._wait_settled()
+            if self._wait_for_writes():
+                ev["_oaflow_after_frame"] = self.recorder._wait_settled()
             ev["_oaflow_structural_after"] = self._structural_state()
             self._pending_click = ev
             self._pending_click_pumps = max(
@@ -4420,24 +4423,39 @@ class InteractiveRecorder:
                     )
         return state
 
-    def _wait_for_writes(self, timeout_s: float = WRITE_WAIT_S) -> None:
+    def _wait_for_writes(self, timeout_s: float = WRITE_WAIT_S) -> bool:
         """Let the writes the last action sent land before its result is read.
 
         The screen can settle while a save is still in flight, for example
         while the agent guard holds it for its checks. The after-frame then
         shows the old screen and a record read misses the write, so the
         compiler sees no change for the save step (a placeholder effect).
-        Playwright's own wait keeps its events coming meanwhile.
+
+        Only writes from the pages this recording follows count, and only
+        those in flight when the wait starts, each for at most ``timeout_s``
+        since it was sent. The wait ends early when the next action arrives:
+        the recording must not hold it. Playwright's own wait keeps its events
+        coming meanwhile. Returns whether it waited at all.
         """
 
         if self._network is None:
-            return
+            return False
+        waiting = self._network.pending_writes(
+            self._followed_pages(), max_age_s=timeout_s
+        )
+        if not waiting:
+            return False
         deadline = time.monotonic() + timeout_s
-        while self._network.pending_writes and time.monotonic() < deadline:
+        while time.monotonic() < deadline and not self._pyq:
+            still = self._network.pending_writes(max_age_s=timeout_s)
+            if not any(any(r is w for w in still) for r in waiting):
+                break
             try:
-                self.page.wait_for_timeout(50)
+                # Wait on the start tab: a followed popup may close by itself.
+                (self._primary_page or self.page).wait_for_timeout(50)
             except Exception:  # noqa: BLE001 - the page or browser is gone
-                return
+                break
+        return True
 
     def _structural_state(self) -> dict[str, Any]:
         if self._active_page_closed():
