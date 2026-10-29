@@ -1,0 +1,965 @@
+{
+  "schema": "openadapt.rdp-avc444-campaigns.v1",
+  "conditions": {
+    "emr/bpp16": {
+      "trials": 10,
+      "verified_saves": {
+        "count": 7,
+        "per_100": 70.0,
+        "ci95": [
+          39.7,
+          89.2
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "false_stops": {
+        "count": 3,
+        "per_100": 30.0,
+        "ci95": [
+          10.8,
+          60.3
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 90.36
+    },
+    "emr/desktop1440": {
+      "trials": 5,
+      "verified_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          43.4
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          43.4
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          43.4
+        ]
+      },
+      "false_stops": {
+        "count": 5,
+        "per_100": 100.0,
+        "ci95": [
+          56.6,
+          100.0
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          43.4
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 11.3
+    },
+    "emr/healthy": {
+      "trials": 20,
+      "verified_saves": {
+        "count": 8,
+        "per_100": 40.0,
+        "ci95": [
+          21.9,
+          61.3
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          16.1
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          16.1
+        ]
+      },
+      "false_stops": {
+        "count": 12,
+        "per_100": 60.0,
+        "ci95": [
+          38.7,
+          78.1
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          16.1
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 81.88
+    },
+    "pn/bpp16": {
+      "trials": 10,
+      "verified_saves": {
+        "count": 10,
+        "per_100": 100.0,
+        "ci95": [
+          72.2,
+          100.0
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "false_stops": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 18.72
+    },
+    "pn/decoy": {
+      "trials": 10,
+      "verified_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "false_stops": {
+        "count": 10,
+        "per_100": 100.0,
+        "ci95": [
+          72.2,
+          100.0
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 11.38
+    },
+    "pn/desktop1440": {
+      "trials": 10,
+      "verified_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "false_stops": {
+        "count": 10,
+        "per_100": 100.0,
+        "ci95": [
+          72.2,
+          100.0
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 18.58
+    },
+    "pn/healthy": {
+      "trials": 20,
+      "verified_saves": {
+        "count": 20,
+        "per_100": 100.0,
+        "ci95": [
+          83.9,
+          100.0
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          16.1
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          16.1
+        ]
+      },
+      "false_stops": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          16.1
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          16.1
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 18.28
+    },
+    "pn/reorder": {
+      "trials": 10,
+      "verified_saves": {
+        "count": 10,
+        "per_100": 100.0,
+        "ci95": [
+          72.2,
+          100.0
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "false_stops": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 18.06
+    },
+    "pn/siblings": {
+      "trials": 10,
+      "verified_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "wrong_target": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "silent_wrong_saves": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "false_stops": {
+        "count": 0,
+        "per_100": 0.0,
+        "ci95": [
+          0.0,
+          27.8
+        ]
+      },
+      "stops_on_lookalike": {
+        "count": 10,
+        "per_100": 100.0,
+        "ci95": [
+          72.2,
+          100.0
+        ]
+      },
+      "model_calls": 0,
+      "median_elapsed_s": 6.59
+    }
+  },
+  "stops": [
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 16,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 17,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 18,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 19,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 20,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 21,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "identity_precheck",
+      "step_id": "step_003",
+      "detail": "Identity check failed for step 'step_003' (click 'eil'): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Sorensen 1983-01-19' (coverage 0.00) \u2014 refusing to act; run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 22,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "identity_precheck",
+      "step_id": "step_003",
+      "detail": "Identity check failed for step 'step_003' (click 'eil'): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed '1983-01-19 Sorensen' (coverage 0.00) \u2014 refusing to act; run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 23,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "identity_precheck",
+      "step_id": "step_003",
+      "detail": "Identity check failed for step 'step_003' (click 'eil'): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Sorensen 1983-01-19' (coverage 0.00) \u2014 refusing to act; run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 24,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "identity_precheck",
+      "step_id": "step_003",
+      "detail": "Identity check failed for step 'step_003' (click 'eil'): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Sorensen 1983-01-19' (coverage 0.00) \u2014 refusing to act; run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 25,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "identity_precheck",
+      "step_id": "step_003",
+      "detail": "Identity check failed for step 'step_003' (click 'eil'): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Sorensen 1983-01-19' (coverage 0.00) \u2014 refusing to act; run aborted"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 31,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 32,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 33,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 34,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-1",
+      "app": "pn",
+      "trial": 35,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 16,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 17,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 18,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 19,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 20,
+      "condition": "decoy",
+      "class": "false_stop",
+      "cause": "state_check",
+      "step_id": "step_002",
+      "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 21,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "ambiguity_refusal",
+      "step_id": "step_003",
+      "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 22,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "ambiguity_refusal",
+      "step_id": "step_003",
+      "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 23,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "ambiguity_refusal",
+      "step_id": "step_003",
+      "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 24,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "ambiguity_refusal",
+      "step_id": "step_003",
+      "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 25,
+      "condition": "siblings",
+      "class": "stop_on_lookalike",
+      "cause": "ambiguity_refusal",
+      "step_id": "step_003",
+      "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 31,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 32,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 33,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 34,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "pn-run-3",
+      "app": "pn",
+      "trial": 35,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "hover_reresolve",
+      "step_id": "step_006",
+      "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+    },
+    {
+      "campaign": "emr-run-1",
+      "app": "emr",
+      "trial": 16,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "layout_reflow",
+      "step_id": "step_000",
+      "detail": "Postconditions failed for step 'step_000' (click 'ername'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(554, 342, 303, 93) \u2014 run aborted"
+    },
+    {
+      "campaign": "emr-run-1",
+      "app": "emr",
+      "trial": 17,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "layout_reflow",
+      "step_id": "step_000",
+      "detail": "Postconditions failed for step 'step_000' (click 'ername'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(554, 342, 303, 93) \u2014 run aborted"
+    },
+    {
+      "campaign": "emr-run-1",
+      "app": "emr",
+      "trial": 18,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "layout_reflow",
+      "step_id": "step_000",
+      "detail": "Postconditions failed for step 'step_000' (click 'ername'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(554, 342, 303, 93) \u2014 run aborted"
+    },
+    {
+      "campaign": "emr-run-1",
+      "app": "emr",
+      "trial": 19,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "layout_reflow",
+      "step_id": "step_000",
+      "detail": "Postconditions failed for step 'step_000' (click 'ername'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(554, 342, 303, 93) \u2014 run aborted"
+    },
+    {
+      "campaign": "emr-run-1",
+      "app": "emr",
+      "trial": 20,
+      "condition": "desktop1440",
+      "class": "false_stop",
+      "cause": "layout_reflow",
+      "step_id": "step_000",
+      "detail": "Postconditions failed for step 'step_000' (click 'ername'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(554, 342, 303, 93) \u2014 run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 1,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_014",
+      "detail": "Step 'step_014' (click 'Unassigned'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 2,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_014",
+      "detail": "Step 'step_014' (click 'Unassigned'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 4,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_014",
+      "detail": "Step 'step_014' (click 'Unassigned'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 6,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_009",
+      "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 8,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_014",
+      "detail": "Step 'step_014' (click 'Unassigned'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 9,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_014",
+      "detail": "Step 'step_014' (click 'Unassigned'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 10,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "identity_precheck",
+      "step_id": "step_011",
+      "detail": "Identity check failed for step 'step_011' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Preferred Name: Patient preferred name or name patier' (coverage 0.00) \u2014 refusing to act; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 12,
+      "condition": "bpp16",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_014",
+      "detail": "Step 'step_014' (click 'Unassigned'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 13,
+      "condition": "bpp16",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_014",
+      "detail": "Step 'step_014' (click 'Unassigned'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-2",
+      "app": "emr",
+      "trial": 14,
+      "condition": "bpp16",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_014",
+      "detail": "Step 'step_014' (click 'Unassigned'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-3",
+      "app": "emr",
+      "trial": 3,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_009",
+      "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-3",
+      "app": "emr",
+      "trial": 4,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_009",
+      "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-3",
+      "app": "emr",
+      "trial": 5,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "identity_precheck",
+      "step_id": "step_011",
+      "detail": "Identity check failed for step 'step_011' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Preferred Name: Patient preferred name or namepatier' (coverage 0.00) \u2014 refusing to act; run aborted"
+    },
+    {
+      "campaign": "emr-run-3",
+      "app": "emr",
+      "trial": 6,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_009",
+      "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    },
+    {
+      "campaign": "emr-run-3",
+      "app": "emr",
+      "trial": 10,
+      "condition": "healthy",
+      "class": "false_stop",
+      "cause": "timing_codec",
+      "step_id": "step_009",
+      "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+    }
+  ],
+  "ranked_causes": [
+    {
+      "cause": "timing_codec",
+      "false_stops": 13,
+      "fix": "Wait for the region to settle (bounded) before the identity and stability checks instead of failing on the first changing frame; mask a blinking caret; record the codec's refinement interval.",
+      "where": [
+        "emr/bpp16:step_014",
+        "emr/healthy:step_009",
+        "emr/healthy:step_014"
+      ]
+    },
+    {
+      "cause": "state_check",
+      "false_stops": 10,
+      "fix": "Do not compile an auto-selected row's header text into the next step's postcondition when the row is chosen by a later click.",
+      "where": [
+        "pn/decoy:step_002"
+      ]
+    },
+    {
+      "cause": "hover_reresolve",
+      "false_stops": 10,
+      "fix": "Accept a re-resolve inside the target's own box (or within the codec's measured jitter, 1-2 px) instead of exact pixel equality.",
+      "where": [
+        "pn/desktop1440:step_006"
+      ]
+    },
+    {
+      "cause": "layout_reflow",
+      "false_stops": 5,
+      "fix": "Bind postcondition regions to the resolved target (offsets from it), not the recorded frame's absolute pixels; or halt at the first step with an explicit 'layout changed' reason.",
+      "where": [
+        "emr/desktop1440:step_000"
+      ]
+    },
+    {
+      "cause": "identity_precheck",
+      "false_stops": 2,
+      "fix": "Exclude run parameters and transient dialog content (duplicate lists) from the recorded identity band.",
+      "where": [
+        "emr/healthy:step_011",
+        "pn/siblings:step_003"
+      ]
+    }
+  ],
+  "cause_frames": {
+    "state_check": "state_check_pn_decoy_step_002.png",
+    "ambiguity_refusal": "ambiguity_refusal_pn_siblings_step_003.png",
+    "hover_reresolve": "hover_reresolve_pn_desktop1440_step_006.png",
+    "layout_reflow": "layout_reflow_emr_desktop1440_step_000.png",
+    "timing_codec": "timing_codec_emr_healthy_step_014.png",
+    "identity_precheck": "identity_precheck_emr_healthy_step_011.png"
+  }
+}
