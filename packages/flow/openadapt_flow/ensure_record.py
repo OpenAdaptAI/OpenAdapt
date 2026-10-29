@@ -148,6 +148,14 @@ class EnsureContract(BaseModel):
     #: ``id``, ``meta`` and ``resourceType`` always are.
     closed: bool = False
     allow: list[str] = Field(default_factory=list)
+    #: A record holding any of these values asserts nothing (an
+    #: Immunization with ``status="entered-in-error"``): it is never the
+    #: person, so it is neither found nor a duplicate, and a created record
+    #: that holds one is wrong. Each is a path and its one value, as JSON, in
+    #: ``allow``'s form. It names values to leave out, never values to keep:
+    #: a value the list misses still matches, which stops for review instead
+    #: of missing a duplicate.
+    void: list[str] = Field(default_factory=list)
     #: The audit trail is written a little after the save (Medplum: up to
     #: about 0.1 s). The change feed is read until two reads ``settle_s``
     #: apart agree, at most ``stable_reads`` times; a feed still changing
@@ -166,6 +174,19 @@ class EnsureContract(BaseModel):
                 raise ValueError(f"identity names unknown fields: {missing}")
             if not any(p in self.search for p in rule):
                 raise ValueError(f"identity rule {rule} has no search parameter")
+        identity_paths = {self.fields[p].path for rule in self.identity for p in rule}
+        for entry in self.void:
+            path, eq, value = entry.partition("=")
+            if not path or not eq:
+                raise ValueError(f"void entry {entry!r} needs a path and a value")
+            try:
+                json.loads(value)
+            except ValueError as exc:
+                raise ValueError(
+                    f"void entry {entry!r}: the value is not JSON"
+                ) from exc
+            if path in identity_paths:
+                raise ValueError(f"void entry {entry!r} names an identity field")
         return self
 
 
@@ -268,6 +289,17 @@ def extract_all(node: Any, path: str) -> list[Any]:
     return extract_all(child, rest) if child is not None else []
 
 
+def is_void(contract: EnsureContract, resource: Mapping[str, Any]) -> bool:
+    """True when the resource holds a value that makes it assert nothing."""
+
+    for entry in contract.void:
+        path, _, want = entry.partition("=")
+        wanted = json.loads(want)
+        if any(value == wanted for value in extract_all(resource, path)):
+            return True
+    return False
+
+
 def is_person(
     contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
 ) -> bool:
@@ -275,8 +307,11 @@ def is_person(
 
     Every element counts: a record whose second name, or second email, is
     the person's is the person (a maiden name kept first doesn't hide it).
+    A void record (``contract.void``) is never the person.
     """
 
+    if is_void(contract, resource):
+        return False
     return any(
         all(
             any(
@@ -816,7 +851,9 @@ def judge(
             wrong = wrong_fields(contract, created, params)
             if wrong:
                 reasons.append("wrong or missing: " + ", ".join(wrong))
-            if not is_person(contract, created, params):
+            if is_void(contract, created):
+                reasons.append("the created record asserts nothing (void)")
+            elif not is_person(contract, created, params):
                 reasons.append("the created record is not the person")
             if contract.closed:
                 extra_paths = extra_elements(contract, created, params)
@@ -960,6 +997,7 @@ __all__ = [
     "Unreadable",
     "capture_baseline",
     "find_matches",
+    "is_void",
     "judge",
     "load_contract",
     "read_changes",

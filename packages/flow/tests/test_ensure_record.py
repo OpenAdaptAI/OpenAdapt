@@ -761,3 +761,124 @@ def test_an_identity_value_without_a_search_parameter_is_compared_not_searched()
     )
     assert set(matches) == {"a1"}
     assert all(set(q) == {"patient", "_count"} for q in asked)
+
+
+# -- void records: a record that asserts nothing is never the person -------------
+
+VAX_PARAMS = {"patient": "Patient/p1", "code": "141", "date": "2025-10-01"}
+
+
+def vax_contract(**extra) -> EnsureContract:
+    doc = {
+        "resource_type": "Immunization",
+        "base_url": "http://fhir.test/fhir/R4",
+        "self": [BOT],
+        "fields": {
+            "patient": {"path": "patient.reference"},
+            "code": {"path": "vaccineCode.coding.code"},
+            "date": {"path": "occurrenceDateTime", "compare": "date"},
+        },
+        "identity": [["patient", "code", "date"]],
+        "search": {"patient": "patient", "code": "vaccine-code", "date": "date"},
+        "closed": True,
+        "allow": ['status="completed"'],
+        "void": ['status="entered-in-error"'],
+        "settle_s": 0,
+    }
+    doc.update(extra)
+    return EnsureContract.model_validate(doc)
+
+
+def vax(iid: str, status: str = "completed") -> dict:
+    return {
+        "resourceType": "Immunization",
+        "id": iid,
+        "status": status,
+        "patient": {"reference": "Patient/p1"},
+        "vaccineCode": {"coding": [{"code": "141"}]},
+        "occurrenceDateTime": "2025-10-01",
+    }
+
+
+def test_a_void_lookalike_is_not_the_person():
+    from openadapt_flow.ensure_record import is_person, is_void
+
+    c = vax_contract()
+    assert is_void(c, vax("v", "entered-in-error"))
+    assert not is_person(c, vax("v", "entered-in-error"), VAX_PARAMS)
+    assert is_person(c, vax("x"), VAX_PARAMS)
+
+
+def test_a_create_beside_a_void_lookalike_is_verified():
+    # The void record was there before and is still there; neither counts.
+    x = vax("x")
+    r = judge(
+        vax_contract(), VAX_PARAMS, base(), ch("Immunization/x", "C"), {"x": x}, x
+    )
+    assert (r.outcome, r.record_id) == ("created_verified", "x")
+
+
+def test_without_void_the_same_lookalike_stops():
+    from openadapt_flow.ensure_record import is_person
+
+    c = vax_contract(void=[])
+    assert is_person(c, vax("v", "entered-in-error"), VAX_PARAMS)
+
+
+def test_a_created_record_that_is_void_needs_review():
+    x = vax("x", "entered-in-error")
+    r = judge(
+        vax_contract(allow=[]), VAX_PARAMS, base(), ch("Immunization/x", "C"), {}, x
+    )
+    assert r.outcome == "needs_review"
+    assert any("asserts nothing" in reason for reason in r.reasons)
+
+
+def test_a_status_void_does_not_name_still_matches():
+    # A deny list: a value it misses stops for review, never hides a duplicate.
+    from openadapt_flow.ensure_record import is_person
+
+    assert is_person(vax_contract(), vax("n", "not-done"), VAX_PARAMS)
+    e, x = vax("e", "not-done"), vax("x")
+    r = judge(
+        vax_contract(),
+        VAX_PARAMS,
+        base(e),
+        ch("Immunization/x", "C"),
+        {"e": e, "x": x},
+        x,
+    )
+    assert r.outcome == "needs_review"
+
+
+def test_void_compares_json_values_in_lists():
+    from openadapt_flow.ensure_record import is_void
+
+    c = vax_contract(void=['meta.tag.code="void"'])
+    tagged = dict(vax("t"), meta={"tag": [{"code": "keep"}, {"code": "void"}]})
+    assert is_void(c, tagged)
+    assert not is_void(c, dict(vax("t"), meta={"tag": [{"code": "keep"}]}))
+    assert not is_void(vax_contract(void=["status=1"]), vax("s"))
+
+
+@pytest.mark.parametrize(
+    "entry",
+    ["status", '="x"', "status=entered-in-error", 'patient.reference="Patient/p1"'],
+)
+def test_a_void_entry_must_be_a_path_and_a_json_value_off_identity(entry):
+    with pytest.raises(ValueError):
+        vax_contract(void=[entry])
+
+
+def test_find_matches_leaves_out_void_records():
+    from openadapt_flow.ensure_record import find_matches
+
+    rows = [vax("v", "entered-in-error"), vax("x")]
+
+    def get(url, params):
+        entry = [{"resource": r, "search": {"mode": "match"}} for r in rows]
+        return 200, {}, {"resourceType": "Bundle", "type": "searchset", "entry": entry}
+
+    c = vax_contract()
+    matches, seen = find_matches(c, FhirReader(c, get=get), VAX_PARAMS)
+    assert set(matches) == {"x"} and seen == 2
