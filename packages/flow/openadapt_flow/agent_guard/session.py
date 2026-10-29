@@ -21,6 +21,12 @@ until the save is read back. A save the agent sends before the guard attaches
 is not seen, so start the guard before the agent starts the task. Only the
 attached tab is guarded.
 
+This guard holds saves with CDP ``Fetch``, not the Playwright backend's wire
+check. Replaying run 2 on a tab attached over CDP (``run
+--browser-cdp-endpoint``) uses the wire check, whose WebSocket guard can't
+cover a page opened before the attach: a create-form save there refuses to
+hold until the tab is reloaded.
+
 Output, under ``out_dir``::
 
     recording/          run 1, in the format ``compile`` reads (with network.jsonl)
