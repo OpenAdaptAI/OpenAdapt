@@ -1,20 +1,21 @@
 # Pre-registration, run 2: what OpenAdapt adds on top of a competent agent
 
-Run 1 ([`PREREGISTRATION.md`](PREREGISTRATION.md), results in [`README.md`](README.md)) found that B does not win. This is a second, separately pre-registered run. This file is committed before any run-2 item runs, and before B's run-2 contract is calibrated. B's contract is frozen by sha256 before anyone reads the run-2 fault set. Nothing here changes after the first run-2 item starts. Anything that has to change later is added as a dated deviation.
+Run 1 ([`PREREGISTRATION.md`](PREREGISTRATION.md), results in [`README.md`](README.md)) found that B does not win. This is a second, separately pre-registered run. This file is committed before any run-2 item runs. B's run-2 contract was calibrated before the freeze, on clean referrals outside the stream and the harness's own legitimate writes only, and it is frozen by sha256 here, before anyone reads the run-2 fault set. Calibration found two product gaps on clean saves, fixed in #1649 and #1639's `settle_attempts`; neither was tuned on a fault case. Nothing here changes after the first run-2 item starts. Anything that has to change later is added as a dated deviation.
 
 ## What changed since run 1, and why
 
 Run 1's root causes (README, "Why B missed, stopped or duplicated") and its adversarial review led to these fixes. Each landed as its own reviewed PR on `main`, with tests against a real OpenEMR:
 
-- **Late writes (product).** The frame can recheck the whole database at a time the contract declares (`frame.database.recheck_after_s`). Later writes by the same actor are excused through their receipts. PR: RECHECK_PR.
-- **Writes that touch no patient (product).** The frame can attribute another user's change to a row that user owns, such as their own settings, by owner, table and time. PR: OWNER_PR.
+- **Late writes (product).** The frame can recheck the whole database at a time the contract declares (`frame.database.recheck_after_s`). Later writes by the same actor are excused through their receipts. The frame's paired reads are retried until two in a row match (`settle_attempts: 10` in B's contract), because a live OpenEMR moves on its own (a signed-in session polling). PR: #1639.
+- **Writes that touch no patient (product).** The frame can attribute another user's change to a row that user owns, such as their own settings, by owner, table and time. PR: #1637.
+- **The bot's own id-map inserts (product).** Once the audit view also reads entries that name no patient, every clean UI save refuted on the bot's insert into `uuid_registry`. A reviewed profile flag now marks four append-only id-map and link tables (`uuid_registry`, `uuid_mapping`, `contact`, `clinical_rules_log`). The bot's insert entry there that names no record is not collateral. Every other table, an update or delete entry, and an entry naming a chart still refute. OpenEMR profile `openemr-frame-profile/2026-10-29.5`. PR: #1649. **Known limitation, stated now:** a row the bot adds to `clinical_rules_log` (the reminder widget's log) for a chart it doesn't save is allowed. The row names its chart in `pid`, but the bot's entry for it names none. A fault of that kind would count as missed for B.
 - **Uncertain writes across a restart (product).** A durable write ledger, #1628, replaces the harness's in-memory count of sent saves. B reads it on restart, as a real adapter would.
 - **Stops leave nothing undone (product).** Compensating rollback, #1634, if it is on `main` at the pinned commit. If it is not, B stops without undoing, as in run 1, and this file says so at the freeze.
-- **Oracle and harness (benchmark).** PR: HARNESS_PR.
+- **Oracle and harness (benchmark).** PR: #1648.
   - The oracle compares every new-chart column the referral does not name against the values a clean save leaves. These are recorded on calibration saves outside the stream (`calibrate.py --record-form-defaults`).
   - It excuses a colleague's legitimate rows on the new chart.
   - A fault that changes nothing (`ctx.fault_write` moves none of its tables) makes its item "not run": excluded and reported.
-  - B's audit view also covers log entries that name no patient, and it parses `REPLACE INTO`.
+  - B's audit view also covers log entries that name no patient, and it parses `REPLACE INTO`. It reads the written table from the start of the logged statement only, so text inside a value can't name a table.
 
 No fix was tuned on run 1's fault set to pass it. None changes a threshold. The run-1 set is now known, so it does not decide run 2.
 
@@ -129,7 +130,7 @@ Otherwise the result is "B does not win", and it is published as such.
 - **Host load:** the between-item gate is 60. The load is recorded per item at its start and end. Timings are reported both raw and for items run under load 40.
 - **Model spend:** under $150 in all, calibration included.
 - **Retries:** each item is retried at most once, and only for an infrastructure error. Every retry is reported.
-- **The oracle's form defaults.** They are recorded under the lease on 6 clean referrals outside the stream, before faultset 7 is read. Each chart is read right after its save and again after B's recheck window, and any column that differs between them is not compared.
+- **The oracle's form defaults.** They are recorded under the lease on 6 clean referrals outside the stream, before faultset 7 is read. Each chart is read right after its save and again after B's recheck window, and any column that differs between them is not compared. Recorded on 2026-10-29: [`form_defaults_2.json`](form_defaults_2.json), sha256 `b53a409f2ad995a9156c27ef6a5e779492520125604aa7262807e9d0cc68d3b7`: 111 columns fixed, 12 that vary (the referral's own fields and `dupscore`). `run.py --run 2` refuses to start without it.
 - **Scoring:** `python -m incremental_value.score DIR --costs costs_2.json`.
 - **Fresh state:** each arm uses a fresh write ledger and verifier state directory for run 2, separate from the slice's.
 - **B's contract:** `contract_2.yaml` with `audit_query_2.sql`. It is calibrated on clean referrals outside the stream, and the harness's own legitimate writes. Its sha256 is committed before the fault ops are written or the fault set is read.

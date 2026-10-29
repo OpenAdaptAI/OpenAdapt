@@ -267,8 +267,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     with (out / "arm.json").open("w") as fh:
         json.dump({"describe": arm.describe(), "stream_sha256": stream.sha256(), "faultset_sha256": sha, "targets": targets,
                    "engine_commit": os.popen("git rev-parse HEAD").read().strip()}, fh, indent=1)
-    defaults_path = os.environ.get("INCREMENTAL_VALUE_FORM_DEFAULTS", "")
+    # Run 2 and its slice compare unnamed new-chart columns with the defaults
+    # recorded before the freeze (PREREGISTRATION_2); a missing file stops.
+    default_file = "form_defaults_2.json" if a.run in ("2", "slice") else ""
+    defaults_path = os.environ.get("INCREMENTAL_VALUE_FORM_DEFAULTS", "") or (str(HERE / default_file) if default_file else "")
     form_defaults = load_form_defaults(defaults_path) if defaults_path else None
+    if form_defaults is None and default_file:
+        raise SystemExit(f"run {a.run} needs the oracle's form defaults ({defaults_path})")
     if form_defaults is None:
         print("warning: no INCREMENTAL_VALUE_FORM_DEFAULTS; the oracle checks only the referral's fields", flush=True)
     setup = arm.setup(env, rec)
