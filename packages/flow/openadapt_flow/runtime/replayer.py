@@ -13033,8 +13033,7 @@ class Replayer:
             if late is not None:
                 return halt(
                     f"Step '{step.id}' ({step.intent}): after the previous save, "
-                    f"{late}; that submission was cancelled before it left the "
-                    "page — run aborted"
+                    f"{late} — run aborted"
                 )
         error = self._act_closing_surface(step, resolution, params, **kwargs)
         refusal_of = getattr(backend, "form_submit_guard_refusal", None)
@@ -13054,10 +13053,7 @@ class Replayer:
                 time.sleep(0.1)
             refusal = refusal_of()
         if refusal is not None and error is None:
-            return halt(
-                f"Step '{step.id}' ({step.intent}): {refusal}; that submission "
-                "was cancelled before it left the page — run aborted"
-            )
+            return halt(f"Step '{step.id}' ({step.intent}): {refusal} — run aborted")
         return error
 
     def _halt_on_late_form_submit(self, report: RunReport) -> None:
@@ -13076,10 +13072,7 @@ class Replayer:
         last.ok = False
         last.safety_halt = True
         last.failure_category = "safety_halt"
-        last.error = (
-            f"after the save, {late}; that submission was cancelled before it "
-            "left the page — run aborted"
-        )
+        last.error = f"after the save, {late} — run aborted"
         report.success = False
 
     def _act_closing_surface(
