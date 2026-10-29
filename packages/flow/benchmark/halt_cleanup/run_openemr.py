@@ -202,23 +202,12 @@ def main(argv: list[str] | None = None) -> int:
                             )
                         )
 
-                    def open_form() -> None:
-                        page.evaluate(
-                            "({path, name}) => { window.navigateTab(path, name); "
-                            "window.activateTabByName(name, true); }",
-                            {"path": demo.FORM_PATH, "name": demo.FORM_FRAME_NAME},
-                        )
-                        demo._form_frame(page).locator("#form_fname").wait_for(
-                            state="visible", timeout=60_000
-                        )
-
                     def reenter() -> None:
-                        page.goto(f"{fx.ui_base_url}/interface/main/tabs/main.php")
-                        page.wait_for_function(
-                            "() => typeof window.navigateTab === 'function'",
-                            timeout=60_000,
-                        )
-                        open_form()
+                        # main.php checks a per-login token, so loading it
+                        # directly signs the session out. Sign in again,
+                        # which lands on the form in the tab shell.
+                        page.context.clear_cookies()
+                        demo._preauthenticate_browser(task._PageOnly(page), fx)
 
                     # -- fresh_session: the start check before any item.
                     t0 = time.monotonic()
@@ -298,11 +287,10 @@ def main(argv: list[str] | None = None) -> int:
                     print("dialog_open", json.dumps(rows["dialog_open"]), flush=True)
 
                     # -- wrong_screen: no way back, so the session is dirty.
+                    # Loading main.php without its per-login token signs the
+                    # session out and leaves the login screen.
                     page.goto(f"{fx.ui_base_url}/interface/main/tabs/main.php")
-                    page.wait_for_function(
-                        "() => typeof window.navigateTab === 'function'",
-                        timeout=60_000,
-                    )
+                    page.locator("#authUser").wait_for(state="visible", timeout=60_000)
                     reason = run_cleanup(
                         replayer,
                         workflow,
