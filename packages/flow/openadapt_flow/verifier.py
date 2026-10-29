@@ -26,7 +26,12 @@ snapshot that was already used. Any call uses up its snapshot: a refused one,
 and one whose write is ``unconfirmed`` (reconcile, then capture again; don't
 re-verify). Whoever can write a snapshot controls the verdict (its records,
 and its salt, which is what single use is keyed on), so the writer being
-judged must never have access to it. No model calls.
+judged must never have access to it, nor to the state directory where
+captures are recorded (``OPENADAPT_VERIFIER_STATE_DIR``, default
+``~/.cache/openadapt/verifier``): a snapshot verifies only under the state
+directory it was captured under, so not across machines. Capture once per
+write: two snapshots taken before one write each verify it, and a capture
+never verified leaves its record behind. No model calls.
 
 The public names are ``Contract``, ``Snapshot``, ``Source``, ``capture``,
 ``verify_write``, ``WriteResult`` and ``VerifierError``
@@ -187,17 +192,21 @@ def _issued_dir() -> Path:
     issued = Path(root) / "issued"
     try:
         issued.mkdir(mode=0o700, parents=True, exist_ok=True)
-        info = os.lstat(issued)
+        Path(root).chmod(0o700)  # created above, or already this user's own
     except OSError as exc:
         raise VerifierError(f"can't keep the snapshot record: {exc}") from exc
-    if (
-        not os.path.isdir(issued)
-        or os.path.islink(issued)
-        or info.st_uid != os.geteuid()
-        or info.st_mode & 0o077
-    ):
-        # Another user could remove records (replay) or plant them.
-        raise VerifierError(f"{issued} must be a private directory owned by this user")
+    for path in (Path(root), issued):
+        info = os.lstat(path)
+        if (
+            not os.path.isdir(path)
+            or os.path.islink(path)
+            or info.st_uid != os.geteuid()
+            or info.st_mode & 0o077
+        ):
+            # Another user could remove records (replay) or plant them.
+            raise VerifierError(
+                f"{path} must be a private directory owned by this user"
+            )
     return issued
 
 
