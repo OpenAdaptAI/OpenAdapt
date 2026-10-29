@@ -212,7 +212,7 @@ Code versions:
   merged).
 
 Raw outputs (run reports, frames, bundles; 97 MB) are listed by SHA-256 in
-[`results/raw_sha256.txt`](results/raw_sha256.txt). They are kept off the
+[`results/raw_files.sha256`](results/raw_files.sha256). They are kept off the
 repository.
 
 ## Product fix found here
