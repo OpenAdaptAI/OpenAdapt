@@ -836,6 +836,7 @@ def _judge_source(
 
     from openadapt_flow.provenance import (
         bound_fields,
+        bound_maps,
         default_extractor,
         round_trip,
     )
@@ -851,7 +852,14 @@ def _judge_source(
         }
     extractor = second or default_extractor(provenance)
     record = _target_record(effects, verdicts) if delta_held else None
-    result = round_trip(provenance, record, bound_fields(effects), documents, extractor)
+    result = round_trip(
+        provenance,
+        record,
+        bound_fields(effects),
+        documents,
+        extractor,
+        maps=bound_maps(effects),
+    )
     evidence = result.summary()
     evidence["first_extractors"] = sorted(
         {p.extractor for p in provenance.params.values()}
