@@ -2461,6 +2461,10 @@ class InteractiveRecorder:
             binding_target.add_init_script(init_js)
             self._init_js = init_js
             if self._owns_browser:
+                from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+                # Guard the page's WebSockets from its first document (wire check).
+                prepare_ws_guard(self.page)
                 self.page.goto(self._url)
                 try:
                     self.page.wait_for_load_state("load")

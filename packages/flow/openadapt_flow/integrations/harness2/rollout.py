@@ -166,6 +166,10 @@ def _drive(
         browser = pw.chromium.launch(headless=headless)
         try:
             page = browser.new_page(viewport={"width": 1100, "height": 800})
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(url)
             page.wait_for_selector("#app *", timeout=10_000)
             driver = driver_factory(page)

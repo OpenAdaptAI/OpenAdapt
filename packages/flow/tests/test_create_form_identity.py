@@ -339,7 +339,10 @@ def formattr_bundle(url: str, tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 def _replay(url: str, bundle: Path, run_dir: Path) -> tuple[Any, list]:
-    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.backends.playwright_backend import (
+        PlaywrightBackend,
+        prepare_ws_guard,
+    )
     from openadapt_flow.runtime import Replayer
 
     since = len(SUBMISSIONS)
@@ -347,6 +350,8 @@ def _replay(url: str, bundle: Path, run_dir: Path) -> tuple[Any, list]:
         browser = playwright.chromium.launch(headless=True)
         try:
             page = browser.new_page(viewport={"width": 1280, "height": 800})
+            # As the runner does: guarded before the first document.
+            prepare_ws_guard(page.context)
             page.goto(url)
             page.wait_for_selector("[name=field_summary]", state="visible")
             report = Replayer(PlaywrightBackend(page)).run(

@@ -178,6 +178,10 @@ def record_app(app: AppSpec, out_dir: Path, browser: Any) -> Path:
         device_scale_factor=1,
     )
     try:
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Guard the page's WebSockets from its first document (wire check).
+        prepare_ws_guard(page)
         page.goto(app.url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT_MS)
         page.wait_for_timeout(int(POST_GOTO_SETTLE_S * 1000))
         backend = PlaywrightBackend(page)
@@ -409,6 +413,10 @@ def run_target(app: AppSpec, workdir: Path, browser: Any) -> dict:
         device_scale_factor=1,
     )
     try:
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Guard the page's WebSockets from its first document (wire check).
+        prepare_ws_guard(page)
         page.goto(app.url, wait_until="domcontentloaded", timeout=GOTO_TIMEOUT_MS)
         page.wait_for_timeout(int(POST_GOTO_SETTLE_S * 1000))
         backend = PlaywrightBackend(page)

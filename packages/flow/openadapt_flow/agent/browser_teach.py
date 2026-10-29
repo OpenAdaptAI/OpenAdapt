@@ -628,6 +628,10 @@ def _replay(
     page = browser.page
     file: Optional[Path] = None
     try:
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Guard the page's WebSockets from its first document (wire check).
+        prepare_ws_guard(page)
         page.goto(program["url"], wait_until="domcontentloaded")
         for i, step in enumerate(program["steps"], 1):
             if browser.blocked:
@@ -1038,6 +1042,10 @@ class BrowserTeachBridge:
 
             def open_page() -> str:
                 run.browser = _Browser(_origin(url), run.files_dir, self.headless)
+                from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+                # Guard the page's WebSockets from its first document (wire check).
+                prepare_ws_guard(run.browser.page)
                 run.browser.page.goto(url, wait_until="domcontentloaded")
                 return self._listing(run)
 
