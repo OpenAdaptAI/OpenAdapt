@@ -52,7 +52,11 @@ run is refused before it starts: nothing after a stop could be proven.
    agrees: a confirmed write the read doesn't show (in an allow-listed
    table, a column the profile leaves out, or outside the one collection
    read) ends `RECONCILIATION_REQUIRED`, and an uncertain write counts as
-   absent only when a fresh read of its own record says so. Only a
+   absent only when a fresh read of its own record says so. A step that
+   declares no effect and has no compensation (pressing Enter in a form
+   field) is judged by the whole-database reads themselves: if it wrote, the
+   store shows it, unless the write went only to a reviewed allow-listed
+   table or a column the app profile leaves out. Only a
    whole-database read proves the run's effects absent; a collection read
    never overrides the run's own uncertainty.
 2. **Compensate, latest change first.** For each change in the run's

@@ -275,6 +275,23 @@ def _certain(entry: ChangeLedgerEntry) -> bool:
     return entry.status == "confirmed" and entry.attempt_state != "delivery_uncertain"
 
 
+def _judged_by_reads(entry: ChangeLedgerEntry, workflow: Workflow, scope: str) -> bool:
+    """A step the whole-database reads judge: unconfirmed, with no declared
+    effect and no compensation (pressing Enter in a form field, say). If it
+    wrote, the store shows it; only a reviewed allow-listed table or a column
+    the app profile leaves out would hide it."""
+    from openadapt_flow.traversal import iter_workflow_steps
+
+    if scope != "database" or _certain(entry):
+        return False
+    if approved_undo(workflow, entry.step_id) is not None:
+        return False
+    step = next(
+        (s for s in iter_workflow_steps(workflow) if s.id == entry.step_id), None
+    )
+    return step is not None and not step.effects
+
+
 def _unseen_writes(
     pending: list[ChangeLedgerEntry],
     workflow: Workflow,
@@ -282,13 +299,17 @@ def _unseen_writes(
     run_dir: Path,
     params: dict[str, Any],
     read_records: Optional[RecordsReader],
+    scope: str = "collection",
 ) -> Optional[str]:
     """When the read shows nothing landed: a ledger write it contradicts. A
     confirmed write did land; an uncertain one counts as absent only when a
-    fresh read of its own record says so."""
+    fresh read of its own record says so, or, for a step that declares no
+    effect, when the whole-database read shows nothing."""
     for entry in pending:
         if _certain(entry):
             return f"step {entry.step_id} confirmed a write"
+        if _judged_by_reads(entry, workflow, scope):
+            continue
         undo = approved_undo(workflow, entry.step_id)
         if undo is None:
             return f"step {entry.step_id} may have written (no compensation to read it back)"
@@ -455,7 +476,12 @@ def roll_back(
     record.after_stop_diff = landed.summary()
     if not run_changes:
         unseen = _unseen_writes(
-            pending, workflow, run_dir=run_dir, params=params, read_records=read_records
+            pending,
+            workflow,
+            run_dir=run_dir,
+            params=params,
+            read_records=read_records,
+            scope=scope,
         )
         if unseen:
             return finish(
@@ -595,6 +621,14 @@ def roll_back(
             step_record.reason = "the step ran more than once"
             stop_reason = step_record.reason
             break
+        if _judged_by_reads(entry, workflow, scope):
+            # Whatever it wrote, the final whole-database read shows.
+            step_record.decision = "not_needed"
+            step_record.reason = (
+                "it declares no effect and has no compensation; the whole-database "
+                "reads judge it"
+            )
+            continue
         undo = approved_undo(workflow, entry.step_id)
         if undo is None:
             step_record.reason = (

@@ -1652,3 +1652,31 @@ def test_rollback_refuses_a_durable_run():
         _refuse_rollback_durable(object(), True)
     _refuse_rollback_durable(None, True)
     _refuse_rollback_durable(object(), False)
+
+
+def test_a_step_with_no_declared_effect_is_judged_by_the_whole_database(tmp_path):
+    # OpenEMR, live: pressing Enter in a form field is a ledger entry that
+    # stays unconfirmed (no effect declared, no compensation). A whole-
+    # database read that shows nothing changed settles it; a read of one
+    # collection doesn't.
+    workflow = Workflow(
+        name="w",
+        steps=[_key_step("press_enter", "press Enter", "Enter")],
+    )
+    rows = [{"id": 1, "x": "y"}]
+
+    def settle(reader):
+        return roll_back(
+            _stopped([_entry("press_enter", status="unknown")]),
+            workflow,
+            run_dir=tmp_path,
+            bundle_dir=tmp_path,
+            reader=reader,
+            before=records_snapshot(rows),
+            runner=RecordingRunner(),
+        )
+
+    assert settle(DatabaseListReader(rows)).status == "nothing_landed"
+    collection = settle(ListReader(rows))
+    assert collection.status == "not_rolled_back"
+    assert "may have written" in collection.reason
