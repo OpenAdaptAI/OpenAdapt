@@ -34,7 +34,9 @@ To keep pull requests fast, CI runs in three tiers:
 - **Nightly** (`nightly.yml`, daily at 07:23 UTC and on dispatch): calls
   Packages (with the Desktop test and build workflows) and the launcher CI as
   a scheduled run, so every package's full suite runs against main on every
-  platform its CI covers, whatever changed. The merge queue's push and a pull
+  platform its CI covers, whatever changed. Flow's unit shards also run all
+  of `tests/e2e` there; pull requests and main run the end-to-end tests
+  `flow-critical` names. The merge queue's push and a pull
   request run only the packages a change touches; this catches a package
   nobody touched breaking on main. When a job fails, the run opens the
   `main is red` issue (label `main-is-red`), or updates it if one is open. A
@@ -98,7 +100,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
 | ci.yml | `smoke`, `ci` | yes | yes | no |
-| packages.yml | `flow-unit` | 2 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
+| packages.yml | `flow-unit` | 4 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
