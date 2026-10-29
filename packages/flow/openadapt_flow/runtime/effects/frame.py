@@ -964,6 +964,9 @@ def judge_frame(
     side_links: list[set[str]] = []
     other_links: list[set[str]] = []
     side_found: list[dict[str, int]] = []
+    #: Side rows seen per link of another actor's new record: at most
+    #: ``count`` each are theirs, the rest are unexplained.
+    other_found: list[dict[str, int]] = []
     for side in spec.side_records:
         links: set[str] = set()
         theirs: set[str] = set()
@@ -998,6 +1001,7 @@ def judge_frame(
         side_links.append(links)
         other_links.append(theirs - links)
         side_found.append({link: 0 for link in links})
+        other_found.append({link: 0 for link in theirs - links})
 
     for name, (before_state, after_records) in slices.items():
         if not before_state.reachable:
@@ -1154,15 +1158,25 @@ def judge_frame(
                         declared_keys.add(str(side_ref))
                     new_row(name, key, after, (side.link_field,))
                     continue
-                theirs_side = any(
-                    side.surface == name
-                    and str(after.get(side.link_field)) in other_links[i]
-                    for i, side in enumerate(spec.side_records)
-                )
+                theirs_side = False
+                extra_side = False
+                for i, side in enumerate(spec.side_records):
+                    other_link = str(after.get(side.link_field))
+                    if side.surface == name and other_link in other_links[i]:
+                        other_found[i][other_link] += 1
+                        # Beyond the count, a side row of their chart is no
+                        # more theirs than anyone's: unexplained.
+                        theirs_side = other_found[i][other_link] <= side.count
+                        extra_side = not theirs_side
+                        break
                 change = FrameChange(
                     name,
                     "added",
-                    "other" if theirs_side else attribute(name, key, None, after),
+                    "other"
+                    if theirs_side
+                    else "unattributed"
+                    if extra_side
+                    else attribute(name, key, None, after),
                     sorted(_without(after, ignore_for(name))),
                     key=key,
                 )
