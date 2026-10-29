@@ -288,8 +288,10 @@ class Contract:
                     walk(v, name)
             elif isinstance(value, str) and _URL.match(value):
                 hosts.add(_location(value).split("://", 1)[1].split("/", 1)[0])
-            elif isinstance(value, str) and name.endswith("database"):
-                hosts.add(value)
+            elif name.endswith(("database", "_env")) or name in _HOST_KEYS:
+                # A database file or server, or the credential that picks
+                # a tenant: each tells one store from another.
+                hosts.add(f"{name}={_location(str(value)).lower()}")
 
         verifier = self.config.verifier.model_dump(mode="json")
         walk(verifier)
@@ -348,6 +350,7 @@ _TIMINGS = frozenset(
 #: Keys whose values are secrets themselves. ``*_env`` keys name an
 #: environment variable, which tells tenants apart and holds no secret.
 _SECRET = re.compile(r"password|secret|token|cookie|header|credential|value$", re.I)
+_HOST_KEYS = frozenset({"host", "hostname", "port", "dbname", "db", "unix_socket"})
 _URL = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 _LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 _DEFAULT_PORTS = {"http": 80, "https": 443, "mysql": 3306, "postgresql": 5432}

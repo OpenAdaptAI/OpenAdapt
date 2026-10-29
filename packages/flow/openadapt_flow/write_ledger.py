@@ -504,9 +504,7 @@ class Ledger:
             key, {"event": "delivered", "attempt": attempt_id, "at": _now()}
         )
 
-    def release(
-        self, key: str, *, by: str, reason: str, found: str = "absent"
-    ) -> Attempt:
+    def release(self, key: str, *, by: str, reason: str, found: str) -> Attempt:
         """A person checked the record: release the key's held attempt.
 
         ``found`` is what they saw in the store. ``absent``: the write isn't

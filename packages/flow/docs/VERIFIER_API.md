@@ -293,6 +293,13 @@ verify-run's own `.used` marker.
   process, a restart, or another worker that shares the ledger from resending
   while the outcome is unknown. A writer that bypasses the verifier isn't
   covered.
+- A store address respelled by hand between a write and its retry (a host
+  alias such as `127.1`, a hostname for an IP, a DNS alias) isn't
+  recognized as the same store, and the write could be sent again. Keep
+  store addresses stable while writes are open, and give each store its
+  own `environment_id`. Tenants told apart only by URL path also need
+  distinct `environment_id`s. Without them, one tenant's unresolved write
+  holds the same write for the other.
 - Workers on several hosts need a shared backend. `FileLedger` locks work on
   one machine's local disk, not on network file systems.
 - If a process crashes after `verify_write` records a delivered outcome but

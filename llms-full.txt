@@ -1609,7 +1609,9 @@ What the wire check doesn't see:
   the click, and one that starts while the save is held halts the run.
 - **WebSockets.** One opened while the save is held is never connected to the
   server. A message sent on one opened earlier can't be stopped: the run
-  halts on it, after it was sent.
+  halts on it, after it was sent. A socket that a save opens just as the page
+  navigates away closes with the page; it isn't connected, and the run may
+  not report it.
 - **Redirects.** A 307 or 308 answer to the checked save makes the browser send
   the same request again to the address the server names, possibly another
   site. The server that accepted the save chooses that.

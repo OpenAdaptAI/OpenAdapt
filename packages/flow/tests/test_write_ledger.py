@@ -212,7 +212,9 @@ def test_a_worker_killed_before_the_send_is_held_until_released(
     # A person checks the record and releases it; then the write may go.
     ledger = Ledger(FileLedger(ledger_dir))
     assert [k for k, _ in ledger.unresolved()] == [key]
-    ledger.release(key, by="nurse-lead", reason="checked the chart: no referral")
+    ledger.release(
+        key, by="nurse-lead", reason="checked the chart: no referral", found="absent"
+    )
     pending = begin_write(_contract(base), VALUES, actor=BOT)
     FakeAgent(base).click_save("p1", NOTE)
     assert verify_write(pending).verified and _landed(db) == 1
@@ -382,8 +384,8 @@ def test_a_release_names_who_and_why(sor, ledger_dir: Path) -> None:
     ledger = Ledger(FileLedger(ledger_dir))
     [(key, _)] = ledger.unresolved()
     with pytest.raises(LedgerError):
-        ledger.release(key, by="", reason="")
-    ledger.release(key, by="nurse-lead", reason="removed the duplicate")
+        ledger.release(key, by="", reason="", found="absent")
+    ledger.release(key, by="nurse-lead", reason="removed the duplicate", found="landed")
     assert ledger.unresolved() == []
 
 
@@ -640,7 +642,9 @@ def test_releasing_an_open_attempt_lifts_the_hold(sor, ledger_dir: Path) -> None
     ledger = Ledger(FileLedger(ledger_dir))
     [(key, attempt)] = ledger.unresolved()
     assert attempt.state == "open"
-    ledger.release(key, by="nurse-lead", reason="checked the chart: nothing saved")
+    ledger.release(
+        key, by="nurse-lead", reason="checked the chart: nothing saved", found="absent"
+    )
     pending = begin_write(_contract(base), VALUES, actor=BOT)
     FakeAgent(base).click_save("p1", NOTE)
     assert verify_write(pending).verified and _landed(db) == 1
@@ -654,7 +658,7 @@ def test_a_released_stale_attempt_never_holds_later_writes(
     dead.communicate(timeout=120)
     ledger = Ledger(FileLedger(ledger_dir))
     [(key, _)] = ledger.unresolved()
-    ledger.release(key, by="nurse-lead", reason="nothing saved")
+    ledger.release(key, by="nurse-lead", reason="nothing saved", found="absent")
     pending = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-new")
     FakeAgent(base).click_save("p1", NOTE)
     assert verify_write(pending).verified
@@ -808,3 +812,38 @@ def test_a_release_that_found_the_write_never_frees_it(sor, ledger_dir: Path) ->
         with pytest.raises(AlreadyWritten):
             begin_write(_contract(base), VALUES, actor=BOT, write_key="task-9")
     assert _landed(db) == 1
+
+
+# -- fifth review round ----------------------------------------------------------
+
+
+def test_two_sql_servers_with_one_database_name_are_different_shapes() -> None:
+    def contract(host: str) -> Contract:
+        return Contract.from_dict(
+            {
+                "schema_version": "openadapt.verify/v1",
+                "verifier": {
+                    "kind": "sql",
+                    "sql_driver": "pymysql",
+                    "sql_connect_args": {
+                        "host": host,
+                        "port": 3306,
+                        "database": "openemr",
+                    },
+                    "sql_query": "SELECT * FROM patient_data",
+                },
+                "effects": [
+                    {
+                        "kind": "record_written",
+                        "match": {"fname": {"param": "fname"}},
+                        "expected_count": 1,
+                    }
+                ],
+            }
+        )
+
+    try:
+        a, b = contract("emr-a.internal"), contract("emr-b.internal")
+    except Exception as exc:  # noqa: BLE001 - driver options vary by install
+        pytest.skip(f"sql contract shape not accepted here: {exc}")
+    assert a.shape != b.shape and a.store != b.store
