@@ -74,3 +74,8 @@ suite.
    were frozen earlier, and the generator still hasn't seen them. The review
    was given only the code and the existing Patient example, never the
    blind files.
+   Disclosure: the generator's author had read the blind author's summary
+   (the type is Immunization; its parameter names; its one-sentence
+   same-fact rule) before writing these fixes, but not the files. None of
+   the fixes is specific to Immunization. The identity proposal rule is
+   unchanged except for the floor that finding 3 asked for.
