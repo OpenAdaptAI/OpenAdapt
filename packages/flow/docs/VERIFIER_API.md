@@ -1,8 +1,10 @@
 # Verifier API
 
 One public module checks one write against the system of record:
-`openadapt_flow.verifier`. Adapters and tools build on it rather than on a
-second API. It wraps `verify_run` and checks exactly what verify-run checks.
+`openadapt_flow.verifier`. It replaces the two overlapping APIs proposed in
+#1588 (`openadapt_flow.verifier`) and #1589 (`openadapt_flow.verify`). Every
+adapter, the MCP tools and the `openadapt verify` CLI call it. It wraps
+`verify_run` and checks exactly what verify-run checks.
 
 ## The call
 
@@ -204,7 +206,8 @@ send and the read-back, and reconciles it before anything else.
 | `REFUTED` | `WriteHeld` until `release` |
 
 **Reconciliation.** `reconcile(contract, key)` resolves an attempt by reading
-back. Callers include `begin_write` and an operator's job.
+back. Callers include `begin_write`, `openadapt verify ledger reconcile`, and
+an operator's job.
 
 - It judges the attempt against the attempt's own baseline, so a record that
   was there before is never taken for this write. If the process died between
@@ -265,13 +268,17 @@ to the ledger, as verify-run keeps baselines today. Once it resolves for
 good (landed, refuted, retry-safe or released), they're removed. Receipts
 stay; they hold no record values.
 
-**People.** `Ledger.unresolved()` lists open and held keys (no values). `Ledger.release(key, by=..., reason=..., found="absent"|"landed")` records what a person found after they checked the record. `absent` frees the key, so the write may be sent again. `landed` resolves the attempt as landed, so it's handed back and never sent again. `reconcile(contract, key)` reads back.
+**People.** `openadapt verify ledger list` shows open and held keys (no
+values). `release KEY --by NAME --reason TEXT --found absent|landed` records what a person found after they checked the record. `absent` frees the key, so the write may be sent again. `landed` resolves the attempt as landed, so it's handed back and never sent again. `reconcile [KEY]` reads back.
 
 ## Modules
 
 | Module | After this change |
 |---|---|
 | `openadapt_flow.verifier` | The one public API: `Contract`, `Actor`, `Source`, `begin_write`, `verify_write`, `verified_write`, `reconcile`, `WriteResult`, `Outcome`, `Scope`, `PendingWrite`, the `WriteBlocked` family, `VerifierError`, the ledger classes, #1588's `capture_database`/`diff_database`, and its deprecated `capture`/`Snapshot`. Tests pin the signatures. |
+| `openadapt_flow.verify` (#1589) | A thin, deprecated wrapper with the same signatures. It warns on import. Results are one `WriteResult`, but `isinstance(r, VerifiedWrite)` still means `CONFIRMED`. `to_dict()` keeps `verdict`, `seal`, `seal_path`, `values_declared_by` and `authorization`. Its `BaselineUnreadable` is `WriteBlocked`, so existing `except BaselineUnreadable` blocks also refuse held writes. The message says which refusal it was; an `AlreadyWritten` carries the earlier `.result`. |
+| `openadapt.verify` (launcher) | Re-exports `openadapt_flow.verifier`. |
+| `agent/verify_tools.py` (MCP) | Calls `begin_write`/`verify_write`; the ledger applies through them. |
 | #1609 `WriteGuard` | Its in-memory `_held` and `_lost_replies` become ledger reads. The owner of #1609 drops them and catches `AlreadyWritten`. |
 
 #1588's `capture(contract, params)` and `verify_write(contract, before,
