@@ -170,14 +170,16 @@ def _frames_differ(out: Path) -> bool:
     return _pixels(before) != _pixels(after)
 
 
-def test_without_the_wait_the_login_click_records_the_old_screen(proxied, tmp_path):
-    url, values = proxied
-    out = tmp_path / "raced"
-    _record_login(url, values, out, settle_pending_timeout_s=0.0)
-    assert not _frames_differ(out), "the proxy did not reproduce the race"
-
-
 def test_the_login_click_is_judged_on_the_screen_it_led_to(proxied, tmp_path):
+    """Under a 2 s delay the Login click is still judged as navigation.
+
+    Measured on the pinned OpenEMR (2026-10-28): with the wait turned off, this
+    click compiled to the same checks, because OpenEMR paints a loading screen
+    at once. So OpenEMR does not show the #1378 refusal; this test guards that
+    the longer wait does not break a real app's navigation step. The refusal
+    itself is reproduced in a real browser on MockMed ``slow``
+    (tests/test_ui_dismiss_and_latency.py).
+    """
     from openadapt_flow.compiler.compile import compile_recording
     from openadapt_flow.ir import PostconditionKind
     from openadapt_flow.risk import infer_step_risk
