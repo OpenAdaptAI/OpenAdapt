@@ -85,6 +85,17 @@ FIELDS = (
 
 
 @pytest.fixture(scope="module")
+
+def _email_literal(email: str) -> str:
+    """The test's own made-up email as a SQL literal (the fixture's quoting
+    refuses ``@``)."""
+
+    import re
+
+    if not re.fullmatch(r"[A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+", email):
+        raise ValueError("unexpected email")
+    return "'" + email + "'"
+
 def openemr() -> Any:
     from benchmark.openemr_local.qualify_hooks import fixture
 
@@ -229,7 +240,7 @@ def _recheck(contract: Any, result: Any, body: dict[str, str], **kw: Any) -> Any
 
 def _pid(fx: Any, email: str) -> int:
     rows = fx._db_lines(
-        f"SELECT pid FROM openemr.patient_data WHERE email = {fx._sql_quote(email)}"
+        f"SELECT pid FROM openemr.patient_data WHERE email = {_email_literal(email)}"
     )
     assert len(rows) == 1, f"expected one chart for the made-up email, got {len(rows)}"
     return int(rows[0])
