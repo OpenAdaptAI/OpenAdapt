@@ -191,12 +191,18 @@ def _late_timing(counted: list[tuple[dict[str, Any], str]]) -> dict[str, Any]:
 
 
 def pair_not_run(rows: dict[str, list[dict[str, Any]]]) -> None:
-    """An item excluded in either arm (not run, or a harness failure), or
-    missing from one arm's ledger, is not run in both, so the two arms are
+    """An item excluded in either arm (not run, or a harness failure),
+    retried in either arm, or missing from one arm's ledger, is not run in
+    both, so the two arms are
     scored on the same items (PREREGISTRATION_2)."""
 
-    present = [{r["item_id"] for r in rs} for rs in rows.values()]
+    # Only arms with a ledger: the non-blocking slice is B only.
+    present = [ids for ids in ({r["item_id"] for r in rs} for rs in rows.values()) if ids]
     ids = {r["item_id"] for rs in rows.values() for r in rs if outcome(r) in EXCLUDED}
+    # A retry doesn't start from the same state in both arms (the first try
+    # may have saved; B's ledger then holds the resend, A's agent can't): an
+    # item retried in either arm is excluded from both, and reported.
+    ids |= {r["item_id"] for rs in rows.values() for r in rs if r.get("tries", 1) > 1}
     ids |= set().union(*present) - set.intersection(*present) if present else set()
     for rs in rows.values():
         for r in rs:

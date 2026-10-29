@@ -64,7 +64,8 @@ def run2_settings(run: str, arm: str) -> dict[str, str]:
     }
     for k, v in want.items():
         have = os.environ.get(k)
-        if have and have != v and not (Path(have).name == Path(v).name and Path(have).resolve() == Path(v).resolve()):
+        same = have == v or any(Path(x).resolve() == Path(v).resolve() for x in (have, HERE / have)) if have else True
+        if have and not same and not (k.endswith("_AUDIT_SQL") and (HERE / have).resolve() == (HERE / v).resolve()):
             raise SystemExit(f"run {run}: {k} is {have!r}, not {v!r}")
         os.environ[k] = v
     shas = {}

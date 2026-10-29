@@ -239,3 +239,25 @@ def test_a_confirmed_write_with_no_recheck_state_never_passes(tmp_path):
     state.write_text("{}")
     arm._queue_recheck("iv-009", {"outcome": "CONFIRMED"}, state)
     assert [q["item_id"] for q in arm.recheck_queue] == ["iv-009"] and arm.recheck_queue[0]["verified"]
+
+
+def test_pairing_a_b_only_slice_and_a_retry():
+    from incremental_value.score import pair_not_run
+
+    slice_rows = {"A": [], "B": [_ok("sl-001"), _ok("sl-002")]}
+    pair_not_run(slice_rows)
+    assert [outcome(r) for r in slice_rows["B"]] == ["correct", "correct"]
+    rows = {"A": [_ok("iv-001"), _ok("iv-002")], "B": [_ok("iv-001"), _ok("iv-002", tries=2)]}
+    pair_not_run(rows)
+    assert [outcome(r) for r in rows["A"]] == ["correct", "not_run"]
+    assert [outcome(r) for r in rows["B"]] == ["correct", "not_run"]
+
+
+def test_run2_settings_accept_the_frozen_files_by_full_path(monkeypatch):
+    from incremental_value import run
+
+    monkeypatch.setenv("INCREMENTAL_VALUE_AUDIT_SQL", str(run.HERE / "audit_query_2.sql"))
+    monkeypatch.setenv("INCREMENTAL_VALUE_CONTRACT", str(run.HERE / "contract_2.yaml"))
+    monkeypatch.delenv("INCREMENTAL_VALUE_FORM_DEFAULTS", raising=False)
+    monkeypatch.delenv("INCREMENTAL_VALUE_RECHECK_MODE", raising=False)
+    assert len(run.run2_settings("2", "A")) == 3
