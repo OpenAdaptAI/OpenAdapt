@@ -45,7 +45,7 @@ class Reader:
     def fetch(self, url, params=None):
         ref = url.removeprefix(self.base_url + "/")
         if ref not in self.records:
-            raise cards.Unreadable("gone")
+            raise cards.Unreadable(f"GET {url} returned HTTP 404")
         return {}, copy.deepcopy(self.records[ref])
 
     def bundle(self, path, params=None):
@@ -132,3 +132,61 @@ def test_person_seconds_follow_the_preregistered_model(category):
     want = 30 + (steps + 300 if category == "open" else steps + 1.2 + 2.0)
     got = card.person_seconds(1.0, 0.0 if category == "open" else 2.0)
     assert got == pytest.approx(want)
+
+
+def test_an_action_refuses_when_the_record_moved_after_the_card(monkeypatch):
+    bad = copy.deepcopy(GOOD)
+    bad["meta"] = {"versionId": "1"}
+    bad["gender"] = "female"
+    records = {"Patient/p1": bad}
+    _stub(monkeypatch, {"Patient/p1": _ch("Patient/p1", "C", BOT)}, {"p1": bad})
+    card = cards.build(CONTRACT, PARAMS, BASE, Reader(records))
+    assert card.category == "fix"
+    records["Patient/p1"] = dict(bad, meta={"versionId": "2"}, generalPractitioner=[])
+    res = cards.act(card, CONTRACT, PARAMS, Reader(records), lambda *a: 1 / 0)
+    assert not res.ok and "changed since the card was built" in res.problems[0]
+
+
+def test_any_other_users_write_in_the_window_means_open(monkeypatch):
+    changes = {
+        "Patient/p1": _ch("Patient/p1", "C", BOT),
+        "Observation/o1": _ch("Observation/o1", "C", BOT),
+        "Encounter/e1": _ch("Encounter/e1", "C", "Practitioner/other"),
+    }
+    records = {"Patient/p1": GOOD, "Observation/o1": {"id": "o1"}}
+    _stub(monkeypatch, changes, {"p1": GOOD})
+    assert cards.build(CONTRACT, PARAMS, BASE, Reader(records)).category == "open"
+
+
+def test_a_failed_read_is_not_a_delete(monkeypatch):
+    changes = {
+        "Patient/p1": _ch("Patient/p1", "C", BOT),
+        "Observation/o1": _ch("Observation/o1", "C", BOT),
+    }
+    records = {"Patient/p1": GOOD, "Observation/o1": {"id": "o1"}}
+    _stub(monkeypatch, changes, {"p1": GOOD})
+    card = cards.build(CONTRACT, PARAMS, BASE, Reader(records))
+
+    class Flaky(Reader):
+        def fetch(self, url, params=None):
+            if url.endswith("Observation/o1"):
+                raise cards.Unreadable(f"GET {url} returned HTTP 503")
+            return super().fetch(url, params)
+
+    card.versions = {}
+    res = cards.act(card, CONTRACT, PARAMS, Flaky(records), lambda *a: None)
+    assert not res.ok
+
+
+def test_undo_keeps_security_labels():
+    labelled = {"id": "o1", "meta": {"versionId": "3", "security": [{"code": "R"}]}}
+    assert cards._put_body(labelled)["meta"] == {"security": [{"code": "R"}]}
+    assert cards._strip(labelled) != cards._strip({"id": "o1"})
+
+
+def test_an_extra_that_two_elements_share_is_open_not_fix(monkeypatch):
+    bad = copy.deepcopy(GOOD)
+    bad["telecom"].append({"system": "email", "value": "evil@x.test"})
+    _stub(monkeypatch, {"Patient/p1": _ch("Patient/p1", "C", BOT)}, {"p1": bad})
+    card = cards.build(CONTRACT, PARAMS, BASE, Reader({"Patient/p1": bad}))
+    assert card.category == "open"

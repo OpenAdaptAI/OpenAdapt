@@ -59,6 +59,11 @@ class Card:
     own_writes: dict[str, set[str]]  # ref -> actions, the agent's writes
     keep: Optional[str] = None  # undo: the created record that stays
     before: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: ref -> meta.versionId when the card was built; an action refuses if
+    #: any of them moved, or anyone else wrote, before the tap.
+    versions: dict[str, Optional[str]] = field(default_factory=dict)
+    foreign: frozenset[str] = frozenset()
+    started: Any = None  # the window start the card was built from
 
     def render(self) -> str:
         head = {
@@ -179,8 +184,20 @@ def build(
     for ref in sorted(foreign_on_own):
         rows.append(Row("other", f"someone else also wrote {ref}"))
 
-    clean = not foreign_on_own and all(c.attributed and c.authors for c in own.values())
+    # Any other user's write in the window may depend on the agent's (an
+    # Encounter pointing at the new record), so neither Undo nor Fix is
+    # offered then.
+    foreign = frozenset(r for r, c in changes.items() if c.authors - selves)
+    clean = not foreign and all(c.attributed and c.authors for c in own.values())
     card = Card(rows, "open", created, {r: set(c.actions) for r, c in own.items()})
+    card.foreign = foreign
+    card.started = baseline.started
+    for ref in own:
+        try:
+            _, now = reader.fetch(f"{reader.base_url}/{ref}")
+            card.versions[ref] = (now.get("meta") or {}).get("versionId")
+        except Unreadable:
+            card.versions[ref] = None
     only_record = set(own) == {created} if created else False
     if (
         clean
@@ -190,7 +207,17 @@ def build(
         and not baseline.matches
         and set(after) <= mine_ids
     ):
-        card.category = "fix" if findings else "approve"
+        card.category = "approve"
+        if findings:
+            # Fix only when every extra element is in one place: dropping a
+            # path that two elements share would drop the right one too.
+            counts: dict[str, int] = {}
+            for path, _ in leaves(dict(resources[created])):
+                counts[path] = counts.get(path, 0) + 1
+            extras = extra_elements(contract, resources[created], params)
+            card.category = (
+                "fix" if all(counts.get(x, 0) == 1 for x in extras) else "open"
+            )
         return card
     keepers = [
         r
@@ -235,6 +262,9 @@ def act(
     base = reader.base_url
     t0 = time.monotonic()
     problems: list[str] = []
+    moved = _changed_since(card, contract, reader)
+    if moved:
+        return ActionResult(False, round(time.monotonic() - t0, 3), False, moved)
     if card.category == "fix":
         assert card.created is not None
         _, res = reader.fetch(f"{base}/{card.created}")
@@ -251,27 +281,70 @@ def act(
             if "C" in actions:
                 write("DELETE", f"{base}/{ref}", None)
             else:
-                body = copy.deepcopy(card.before[ref])
-                body.pop("meta", None)
-                write("PUT", f"{base}/{ref}", body)
+                write("PUT", f"{base}/{ref}", _put_body(card.before[ref]))
         for ref, actions in sorted(card.own_writes.items()):
             if ref == card.keep:
                 continue
             try:
                 _, now = reader.fetch(f"{base}/{ref}")
-            except Unreadable:
-                now = None
+                gone = False
+            except Unreadable as exc:
+                # Only "not found" or "gone" proves a delete; any other
+                # failed read proves nothing.
+                now, gone = None, "HTTP 404" in str(exc) or "HTTP 410" in str(exc)
             if "C" in actions:
-                if now is not None:
-                    problems.append(f"{ref} is still there")
+                if not gone:
+                    problems.append(f"{ref} is not confirmed deleted")
             elif now is None or _strip(now) != _strip(card.before[ref]):
                 problems.append(f"{ref} is not back at its earlier version")
         done = card.keep is not None and not problems
     return ActionResult(not problems, round(time.monotonic() - t0, 3), done, problems)
 
 
+KEPT_META = ("security", "tag", "account", "compartment", "profile")
+
+
 def _strip(resource: Mapping[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in resource.items() if k not in ("meta", "text")}
+    """What a put-back must restore: everything but the server's bookkeeping
+    and the narrative. Security labels and tags count."""
+
+    out = {k: v for k, v in resource.items() if k not in ("meta", "text")}
+    meta = {k: v for k, v in (resource.get("meta") or {}).items() if k in KEPT_META}
+    if meta:
+        out["meta"] = meta
+    return out
+
+
+def _put_body(resource: Mapping[str, Any]) -> dict[str, Any]:
+    out = copy.deepcopy(dict(resource))
+    meta = {k: v for k, v in (out.pop("meta", None) or {}).items() if k in KEPT_META}
+    if meta:
+        out["meta"] = meta
+    return out
+
+
+def _changed_since(
+    card: Card, contract: EnsureContract, reader: FhirReader
+) -> list[str]:
+    """Why the card's action must not run now: a record it would write moved,
+    or someone else wrote, since the card was built."""
+
+    out = []
+    for ref, version in card.versions.items():
+        try:
+            _, now = reader.fetch(f"{reader.base_url}/{ref}")
+            current = (now.get("meta") or {}).get("versionId")
+        except Unreadable:
+            current = None
+        if current != version:
+            out.append(f"{ref} changed since the card was built")
+    selves = {_ref(a) for a in contract.self_actors}
+    if card.started is not None:
+        changes = read_changes(contract, reader, card.started)
+        foreign = {r for r, c in changes.items() if c.authors - selves}
+        if foreign - card.foreign:
+            out.append("someone else wrote since the card was built")
+    return out
 
 
 def _fixed(
@@ -286,7 +359,7 @@ def _fixed(
 
     from openadapt_flow.generate.ensure_contract import _set_first
 
-    out = {k: copy.deepcopy(v) for k, v in resource.items() if k != "meta"}
+    out = _put_body(resource)
     for name in wrong_fields(contract, out, params):
         value = params[name]
         rule = contract.fields[name]

@@ -63,3 +63,14 @@ The person minutes, the generator's refusals and confirmations, the
 contract's lines with each line's source, silent passes, false stops and
 right answers out of the suite size. Per-case values stay private with the
 suite.
+
+## Deviations
+
+1. **2026-10-29, before the first blind demonstration was recorded: the
+   generator is re-frozen.** An adversarial review (`REVIEW.md`) found four
+   ways the generator at `f22e29a3c` could admit a contract that passes a
+   wrong record. Each is fixed with a regression test. The generator is now
+   frozen at the commit that adds this entry. The blind author's files
+   were frozen earlier, and the generator still hasn't seen them. The review
+   was given only the code and the existing Patient example, never the
+   blind files.

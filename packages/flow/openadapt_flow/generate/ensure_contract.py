@@ -128,16 +128,17 @@ def facts_from_probe(probe: Mapping[str, Any]) -> dict[str, Any]:
     if all(k in probe for k in FACTS):
         return {k: probe[k] for k in FACTS}
     out: dict[str, Any] = {}
-    if "bundle_and_graphql_writes_logged" in probe:
-        out["audit_logs_writes"] = bool(probe["bundle_and_graphql_writes_logged"])
-    if "audit_names_the_user_profile" in probe:
-        out["audit_names_actor"] = bool(probe["audit_names_the_user_profile"])
-    if "restricted_bot_audit_read_only" in probe:
-        out["agent_cannot_write_audit"] = bool(probe["restricted_bot_audit_read_only"])
-    if "delete_in_history" in probe:
-        out["history_lists_versions"] = bool(probe["delete_in_history"])
-    if "meta_author_returned" in probe:
-        out["meta_author_returned"] = bool(probe["meta_author_returned"])
+    logged = probe.get("bundle_and_graphql_writes_logged")
+    if isinstance(logged, list):
+        out["audit_logs_writes"] = len(logged) > 0
+    for name, key in (
+        ("audit_names_actor", "audit_names_the_user_profile"),
+        ("agent_cannot_write_audit", "restricted_bot_audit_read_only"),
+        ("history_lists_versions", "delete_in_history"),
+        ("meta_author_returned", "meta_author_returned"),
+    ):
+        if key in probe:
+            out[name] = probe[key]
     lags = probe.get("audit_lag_s")
     if isinstance(lags, Mapping) and lags:
         out["audit_lag_max_s"] = max(
@@ -175,7 +176,9 @@ def load_teach(root: str | Path, confirmed: Sequence[str] = ()) -> Teach:
         search_parameters=_resources(_load(sp_path)) if sp_path.exists() else [],
         facts=facts_from_probe(_load(base / "facts.json")),
         deployment=dict(meta.get("deployment") or {}),
-        confirmed=set(confirmed) | set(meta.get("confirmed") or []),
+        # A confirmation is a person's, given to the command, never read
+        # from the teach data.
+        confirmed=set(confirmed),
     )
 
 
@@ -240,6 +243,12 @@ def discriminators(
             ):
                 out[plain] = key
                 break
+        # Told apart by ``use`` while ``system`` still differs: a value could
+        # move to the wrong system and keep its ``use``. Refuse.
+        if out[plain] not in (None, "system") and any(
+            len({i.get("system") for i in items}) > 1 for items in lists
+        ):
+            out[plain] = None
     return out
 
 
@@ -314,8 +323,14 @@ def compare_for(path: str, values: Sequence[Any]) -> tuple[str, str]:
     if m and m.group(1) in tables.CONTACT_COMPARE:
         kind = tables.CONTACT_COMPARE[m.group(1)]
         return kind, f"ContactPoint system {m.group(1)}: {kind}"
-    if values and all(isinstance(v, str) and DATE_RE.match(v) for v in values):
-        return "date", "every stored value is a FHIR date"
+    leaf = path.rsplit(".", 1)[-1].split("[")[0]
+    dated = leaf == "date" or leaf.endswith(("Date", "DateTime"))
+    if (
+        dated
+        and values
+        and all(isinstance(v, str) and DATE_RE.match(v) for v in values)
+    ):
+        return "date", "a FHIR date element, and every stored value is a date"
     return "exact", "no reviewed table applies"
 
 
@@ -443,6 +458,18 @@ def _change_feed(
     missing = [k for k in FACTS if k not in facts]
     if missing:
         refusals.append("server facts not measured: " + ", ".join(missing))
+        return {}
+    lag = facts["audit_lag_max_s"]
+    mistyped = [k for k in FACTS[:-1] if not isinstance(facts[k], bool)] + (
+        []
+        if isinstance(lag, (int, float))
+        and not isinstance(lag, bool)
+        and math.isfinite(lag)
+        and lag >= 0
+        else ["audit_lag_max_s"]
+    )
+    if mistyped:
+        refusals.append("server facts of the wrong type: " + ", ".join(mistyped))
         return {}
     if not facts["audit_logs_writes"] or not facts["audit_names_actor"]:
         refusals.append(
@@ -582,6 +609,12 @@ def generate(teach: Teach) -> Generated:
             refusals.append(
                 f"{sample.plain}: in a list whose elements can't be told apart"
             )
+        elif "[" in path:
+            # An allowance names an unfiltered path, so it would hold for
+            # every element of the list, not only this one.
+            refusals.append(
+                f"{path}: an element of a told-apart list no task parameter explains"
+            )
         elif (
             present_in == len(per_demo)
             and len(vals) == len(per_demo)
@@ -625,7 +658,18 @@ def generate(teach: Teach) -> Generated:
             if (hit := search_for(index, f["path"]))
             and hit[1] in ("reference", "token")
         )
-        if proposed:
+        kinds = {
+            p: hit[1] for p in proposed if (hit := search_for(index, fields[p]["path"]))
+        }
+        if proposed and not (
+            "reference" in kinds.values()
+            and any(k != "reference" for k in kinds.values())
+        ):
+            refusals.append(
+                f"identity: {rtype} has no reviewed template, and the proposal "
+                f"{proposed} lacks a subject reference and a coded value"
+            )
+        elif proposed:
             identity.append(proposed)
             prov[f"identity.{'+'.join(proposed)}"] = (
                 "proposed: every bound field a reference or token search finds"

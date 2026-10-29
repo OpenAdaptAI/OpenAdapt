@@ -119,3 +119,12 @@ use this model; this file only fixes how the model is built and measured.
    charged V1's redo of 180 s, scaled with the other person steps. The
    original text didn't say what an Undo that removes the task's own record
    costs.
+2. **2026-10-29, before any card was built or timed: when Undo and Fix are
+   offered, after an adversarial review (`contract_autogen/REVIEW.md`).**
+   Neither is offered when anyone else wrote anything in the window. Each
+   refuses at the tap if a record it would write changed, or anyone else
+   wrote, since the card was built. That refusal counts as a failed
+   read-back, so the fallback is charged. Fix is offered only when every
+   extra element is in one place. Only HTTP 404 or 410 confirms a delete.
+   Undo keeps security labels and compares them on read-back. Each change
+   makes the card offer fewer one-tap actions, never more.

@@ -270,3 +270,71 @@ def test_expression_paths():
     assert gen.expression_paths("Patient.name.given", "Patient") == ["name.given"]
     assert gen.expression_paths("Patient.link.other.resolve()", "Patient") == []
     assert gen.expression_paths("(Observation.value as Quantity)", "Observation") == []
+
+
+# -- the adversarial review's findings ------------------------------------------
+
+
+def test_a_list_told_apart_by_use_while_system_differs_refuses(teach):
+    """Two phones and an email, told apart only by ``use``: a value could
+    move to the wrong system and keep its use."""
+
+    for i, d in enumerate(teach.demos):
+        r = _created(teach, i)
+        r["telecom"] = [
+            {"system": "phone", "use": "home", "value": d.params["phone_home"]},
+            {"system": "phone", "use": "mobile", "value": f"617-555-01{i}9"},
+            {"system": "email", "use": "work", "value": d.params["email"]},
+        ]
+        d.params["phone_mobile"] = f"617-555-01{i}9"
+    out = generate(teach)
+    assert not out.admitted
+    assert any("can't be told apart" in r for r in out.refusals)
+
+
+def test_an_unexplained_element_of_a_told_apart_list_refuses(teach):
+    for i in range(len(teach.demos)):
+        _created(teach, i)["telecom"].append({"system": "fax", "value": "1"})
+    out = generate(teach)
+    assert any("told-apart list no task parameter" in r for r in out.refusals)
+
+
+@pytest.mark.parametrize(
+    "bad", [{"agent_cannot_write_audit": "false"}, {"audit_lag_max_s": "0.1"}]
+)
+def test_server_facts_of_the_wrong_type_refuse(teach, bad):
+    teach.facts = dict(gen.facts_from_probe(dict(teach.facts)), **bad)
+    out = generate(teach)
+    assert any("wrong type" in r for r in out.refusals)
+
+
+def test_a_confirmation_in_the_teach_data_is_ignored(tmp_path):
+    import shutil
+
+    shutil.copytree(TEACH, tmp_path / "t")
+    meta = json.loads((tmp_path / "t" / "teach.json").read_text())
+    meta["confirmed"] = ["identity"]
+    (tmp_path / "t" / "teach.json").write_text(json.dumps(meta))
+    assert load_teach(tmp_path / "t").confirmed == set()
+
+
+def test_a_proposal_of_codes_alone_refuses():
+    t = _allergy_teach()
+    for d in t.demos:
+        d.params.pop("patient")
+    for d in t.demos:
+        for r in d.after:
+            r.pop("patient")
+    out = generate(t)
+    assert any("lacks a subject reference" in r for r in out.refusals)
+
+
+def test_a_date_looking_string_outside_a_date_element_compares_exactly(teach):
+    for i, d in enumerate(teach.demos):
+        _created(teach, i)["extension"] = [
+            {"url": "urn:x", "valueString": f"2026-03-2{i}"}
+        ]
+        d.params["directive_date"] = f"2026-03-2{i}"
+    out = generate(teach)
+    assert out.admitted, out.refusals
+    assert "compare" not in out.contract["fields"]["directive_date"]
