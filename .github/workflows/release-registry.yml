@@ -116,8 +116,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
       - name: Install the engine
-        run: python -m pip install -e packages/types -e 'packages/flow[dev]'
+        run: |
+          python scripts/ci/locked_install.py --lock 'packages/flow[dev]' \
+            --editable packages/types --editable packages/flow
       - name: Check the bundles
         run: |
           set -euo pipefail
