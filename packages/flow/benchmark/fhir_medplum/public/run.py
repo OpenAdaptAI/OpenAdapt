@@ -142,8 +142,15 @@ class Bench:
     def other_write(
         self, spec: dict[str, Any], refs: dict[str, str], excused: dict[str, str]
     ) -> None:
-        """Another user's write; the oracle excuses the version it leaves."""
+        """Another user's write; the oracle excuses the version it leaves.
 
+        ``{"read": {"target": name}}`` is a read by id, which writes nothing.
+        """
+
+        if "read" in spec:
+            url = f"{self.fx.fhir_url}/{refs[spec['read']['target']]}"
+            _http("GET", url, token=self.actors.token("other"))
+            return
         if "update" in spec:
             op = spec["update"]
             url = f"{self.fx.fhir_url}/{refs[op['target']]}"
@@ -332,22 +339,28 @@ class Bench:
                 "reasons": [f"unreadable: {exc}"],
                 "unreadable": True,
             }
+            row["verifier_strict"] = dict(row["verifier"])
         proxy.arm(case.get("faults") or [], RESOURCE[kind], refs)
         excused: dict[str, str] = {}
         now = [o for o in case.get("other") or [] if not o.get("at_write")]
-        during = [
-            {k: v for k, v in o.items() if k != "at_write"}
-            for o in case.get("other") or []
-            if o.get("at_write")
-        ]
+        # Another user's actions as the agent writes: ``at_write: true`` (or
+        # 1) just before its first write of the task's type, 2 its second.
+        during: dict[int, list[dict[str, Any]]] = {}
+        for o in case.get("other") or []:
+            if o.get("at_write"):
+                n = 1 if o["at_write"] is True else int(o["at_write"])
+                during.setdefault(n, []).append(
+                    {k: v for k, v in o.items() if k != "at_write"}
+                )
         for spec in now:
             self.other_write(spec, refs, excused)
-        # Another user's writes that land just as the agent writes.
-        proxy.on_first_write = (
-            (lambda: [self.other_write(o, refs, excused) for o in during])
-            if during
-            else None
-        )
+
+        def on_write(n: int) -> bool:
+            for spec in during.get(n, []):
+                self.other_write(spec, proxy.current_refs(), excused)
+            return n in during
+
+        proxy.on_write = on_write if during else None
         t0 = time.monotonic()
         try:
             claim = agent(task, proxy.fhir_url, self.actors.token("bot"))
@@ -361,14 +374,19 @@ class Bench:
         row["claim"] = claim
         t1 = time.monotonic()
         if baseline is not None:
-            result = verify_ensure(contract, params, baseline)
-            row["verifier"] = {
-                "outcome": result.outcome,
-                "id": result.record_id,
-                "reasons": result.reasons,
-                "evidence": result.evidence,
-                "unreadable": bool(result.evidence.get("unreadable")),
-            }
+            # The same write judged twice: as the contract says, and with the
+            # agent's own corrections refused (the verifier before they were
+            # accepted), so the two rules compare on one run.
+            strict = contract.model_copy(update={"accept_corrections": False})
+            for key, rule in (("verifier", contract), ("verifier_strict", strict)):
+                result = verify_ensure(rule, params, baseline)
+                row[key] = {
+                    "outcome": result.outcome,
+                    "id": result.record_id,
+                    "reasons": result.reasons,
+                    "evidence": result.evidence,
+                    "unreadable": bool(result.evidence.get("unreadable")),
+                }
         row["verify_s"] = round(time.monotonic() - t1, 1)
         row["readback"] = self.readback(kind, claim, want)
         proxy.run_after_check()
@@ -377,8 +395,9 @@ class Bench:
         row["oracle"] = judge(kind, case["expect"], want, before, after, excused)
         row["proxy"] = list(proxy.log)
         row["fault_delivered"] = proxy.delivered if case.get("faults") else True
-        if during and not any(e.get("other_at_write") for e in proxy.log):
-            row["fault_delivered"] = False  # the agent never wrote
+        reached = {e.get("other_at_write") for e in proxy.log}
+        if any(n not in reached for n in during):
+            row["fault_delivered"] = False  # the agent never made that write
         return row
 
 
@@ -515,6 +534,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             for stale in ("secrets.json", "clients.json"):
                 (fx.state_dir / stale).unlink(missing_ok=True)
     card = scorecard(rows)
+    strict = scorecard(rows, key="verifier_strict")
     doc = {
         "schema": "openadapt.medplum-public-bench.results/v1",
         "agent": name,
@@ -527,11 +547,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         "agent_usd": round(spent, 4),
         "stopped_early": stopped_early,
         "scorecard": card,
+        "scorecard_corrections_refused": strict,
         "cases": rows,
     }
     (out / "results.json").write_text(json.dumps(doc, indent=2, default=str) + "\n")
     text = render(card, rows, agent=name, stopped_early=stopped_early)
     (out / "SCORECARD.txt").write_text(text + "\n")
+    (out / "SCORECARD.corrections-refused.txt").write_text(
+        render(strict, rows, agent=name, stopped_early=stopped_early) + "\n"
+    )
     print()
     print(text)
     print(

@@ -68,6 +68,7 @@ def test_case_set_shape():
                 "refuse",
                 "side_write",
                 "fake_success",
+                "at_write",
             }
 
 
@@ -642,7 +643,43 @@ def test_proxy_runs_another_users_write_at_the_first_write(wire):
     up, proxy, _ = wire
     proxy.arm([], "Patient", {})
     seen = []
-    proxy.on_first_write = lambda: seen.append(len(up.calls))
+    proxy.on_write = lambda n: seen.append((n, len(up.calls)))
     _post(proxy, "Patient", {"resourceType": "Patient"})
     _post(proxy, "Patient", {"resourceType": "Patient"})
-    assert seen == [0]
+    assert seen == [(1, 0), (2, 1)]
+
+
+def test_proxy_applies_a_fault_to_the_write_it_names(wire):
+    up, proxy, side = wire
+    proxy.arm(
+        [
+            {
+                "at_write": 2,
+                "side_write": {"op": "update", "target": "created", "set": {}},
+            }
+        ],
+        "Patient",
+        {},
+    )
+    _post(proxy, "Patient", {"resourceType": "Patient"})
+    assert side == [] and not proxy.delivered
+    assert proxy.current_refs()["created"] == "Patient/n1"
+    _post(proxy, "Patient", {"resourceType": "Patient"})
+    assert side and side[0][0]["target"] == "created" and proxy.delivered
+
+
+def test_the_strict_scorecard_uses_the_strict_verdicts():
+    row = {
+        **_row("correct", "done", True, "created_verified"),
+        "verifier_strict": {"outcome": "needs_review", "reasons": []},
+    }
+    costs = score.load_costs()
+    new = score.scorecard([row], costs)
+    old = score.scorecard([row], costs, key="verifier_strict")
+    assert new["arms"]["openadapt"]["correct"] == 1
+    assert old["arms"]["openadapt"]["false_stops"] == 1
+    assert "corrections refused" in score.render(old, [row], agent="t")
+
+
+def test_agent_specs_include_the_fixing_agent():
+    assert agents.load("scripted-fix", model="m")[0] == "scripted-fix"

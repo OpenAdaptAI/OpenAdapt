@@ -121,14 +121,15 @@ class FaultProxy:
         self._faults: list[dict[str, Any]] = []
         self._rtype = ""
         self._refs: dict[str, str] = {}
-        self._fired = False
+        self._writes = 0
         self._token = ""
         self.after_check: list[dict[str, Any]] = []
         self.log: list[dict[str, Any]] = []
         #: True once a fault has done what it says: the case tests something.
         self.delivered = False
-        #: Called once, before the agent's first write is sent on.
-        self.on_first_write: Optional[Callable[[], Any]] = None
+        #: Called as on_write(n) before the agent's n-th write of the task's
+        #: type is sent on.
+        self.on_write: Optional[Callable[[int], Any]] = None
         #: Called as side_write(op, refs, token) for a write the fault adds.
         self.side_write: Optional[
             Callable[[dict[str, Any], dict[str, str], str], None]
@@ -154,12 +155,18 @@ class FaultProxy:
             self._faults = [copy.deepcopy(f) for f in faults]
             self._rtype = resource_type
             self._refs = dict(refs)
-            self._fired = False
+            self._writes = 0
             self._token = ""
             self.after_check = []
             self.log = []
             self.delivered = False
-            self.on_first_write = None
+            self.on_write = None
+
+    def current_refs(self) -> dict[str, str]:
+        """The case's names, with ``created`` once the agent's create landed."""
+
+        with self._lock:
+            return dict(self._refs)
 
     def _note(self, entry: dict[str, Any]) -> None:
         with self._lock:
@@ -214,26 +221,29 @@ class FaultProxy:
             p == "_search" or p.startswith("$") for p in parts[1:]
         )
         faults: list[dict[str, Any]] = []
-        first = False
+        nth = 0
         with self._lock:
             if headers.get("Authorization"):
                 self._token = headers["Authorization"].split(" ", 1)[-1]
-            if (
-                method in WRITE_METHODS
-                and rtype == self._rtype
-                and not operation
-                and not self._fired
-            ):
-                self._fired = first = True
-                faults = self._faults
+            if method in WRITE_METHODS and rtype == self._rtype and not operation:
+                self._writes += 1
+                nth = self._writes
+                # Each fault applies to one write: the first, unless it names
+                # another (``at_write: 2`` is the agent's second write).
+                faults = [f for f in self._faults if f.get("at_write", 1) == nth]
             refs = dict(self._refs)
-            hook = self.on_first_write
-        if first and hook is not None:
-            hook()
-            self._note({"other_at_write": True})
-        self._note({"method": method, "type": rtype, "faulted": bool(faults)})
+            hook = self.on_write
+        if nth and hook is not None:
+            if hook(nth):
+                self._note({"other_at_write": nth})
+        self._note(
+            {"method": method, "type": rtype, "write": nth, "faulted": bool(faults)}
+        )
         if not faults:
-            self._relay(h, *_send(method, url, headers, body))
+            status, rheaders, rbody = _send(method, url, headers, body)
+            if nth == 1:
+                self._remember_created(status, rbody)
+            self._relay(h, status, rheaders, rbody)
             return
         json_type = {"Content-Type": "application/fhir+json"}
         if any(f.get("refuse") for f in faults):
@@ -274,6 +284,10 @@ class FaultProxy:
             else:
                 self._note({"fault": "mutate", "changed": False})
         status, rheaders, rbody = _send(method, url, headers, body)
+        if nth == 1:
+            self._remember_created(status, rbody)
+        with self._lock:
+            refs = dict(self._refs)
         if any(f.get("duplicate") for f in faults):
             again, _, _ = _send(method, url, headers, body)
             if status // 100 == 2 and again // 100 == 2:
@@ -304,6 +318,19 @@ class FaultProxy:
             )
             return
         self._relay(h, status, rheaders, rbody)
+
+    def _remember_created(self, status: int, body: bytes) -> None:
+        """Name the record the agent's first write made ``created``."""
+
+        if status // 100 != 2:
+            return
+        try:
+            doc = json.loads(body)
+        except ValueError:
+            return
+        if isinstance(doc, dict) and doc.get("id") and doc.get("resourceType"):
+            with self._lock:
+                self._refs["created"] = f"{doc['resourceType']}/{doc['id']}"
 
     def _delivered(self, what: str) -> None:
         with self._lock:

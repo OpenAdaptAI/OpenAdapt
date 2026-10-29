@@ -16,6 +16,8 @@ optional.
 Choices for ``--agent``:
 
 - ``scripted``: a deterministic agent with no model; searches, then creates.
+- ``scripted-fix``: the same, then reads the record back and fixes it once
+  with a PUT if a value is wrong.
 - ``claude``: Claude through the Claude Agent SDK (``claude-agent-sdk``),
   with built-in tools off (openadapt_flow.integrations.agents.claude_sdk.only)
   and one tool for FHIR requests. Auth: ANTHROPIC_API_KEY or a signed-in
@@ -87,7 +89,15 @@ def _search(fhir_url: str, token: str, query: str) -> list[dict[str, Any]]:
     return [e["resource"] for e in body.get("entry") or [] if "resource" in e]
 
 
-def scripted(task: dict[str, Any], fhir_url: str, token: str) -> dict[str, Any]:
+def scripted_fix(task: dict[str, Any], fhir_url: str, token: str) -> dict[str, Any]:
+    """:func:`scripted`, then read the record back and fix it once if wrong."""
+
+    return scripted(task, fhir_url, token, fix=True)
+
+
+def scripted(
+    task: dict[str, Any], fhir_url: str, token: str, *, fix: bool = False
+) -> dict[str, Any]:
     """Find the record or create it once, from the task's structured values.
 
     It is the careful agent a vendor would write by hand: it searches
@@ -100,6 +110,7 @@ def scripted(task: dict[str, Any], fhir_url: str, token: str) -> dict[str, Any]:
         appointment_resource,
         is_the_task,
         patient_resource,
+        wrong_values,
     )
 
     kind, v = task["type"], task["values"]
@@ -161,11 +172,33 @@ def scripted(task: dict[str, Any], fhir_url: str, token: str) -> dict[str, Any]:
         return {"status": "not_done", "note": f"{len(found)} records already match"}
     status, made = _request(fhir_url, token, "POST", body["resourceType"], body)
     if status in (200, 201) and isinstance(made, dict) and made.get("id"):
-        return {
-            "status": "done",
-            "id": f"{made['resourceType']}/{made['id']}",
-            "note": "created",
-        }
+        ref = f"{made['resourceType']}/{made['id']}"
+        if not fix:
+            return {"status": "done", "id": ref, "note": "created"}
+        status, now = _request(fhir_url, token, "GET", ref)
+        if status != 200 or not isinstance(now, dict):
+            return {
+                "status": "not_done",
+                "id": ref,
+                "note": f"read back: HTTP {status}",
+            }
+        if not wrong_values(kind, now, want):
+            return {"status": "done", "id": ref, "note": "created, read back"}
+        status, _ = _request(fhir_url, token, "PUT", ref, {**body, "id": made["id"]})
+        if status not in (200, 201):
+            return {
+                "status": "not_done",
+                "id": ref,
+                "note": f"fix failed: HTTP {status}",
+            }
+        status, now = _request(fhir_url, token, "GET", ref)
+        if (
+            status == 200
+            and isinstance(now, dict)
+            and not wrong_values(kind, now, want)
+        ):
+            return {"status": "done", "id": ref, "note": "created, fixed once"}
+        return {"status": "not_done", "id": ref, "note": "still wrong after one fix"}
     return {"status": "not_done", "note": f"create failed: HTTP {status}"}
 
 
@@ -294,6 +327,8 @@ def load(spec: str, *, model: str) -> tuple[str, AgentFn]:
 
     if spec == "scripted":
         return "scripted", scripted
+    if spec == "scripted-fix":
+        return "scripted-fix", scripted_fix
     if spec == "claude":
         return f"claude ({model})", claude(model)
     if spec.startswith("cmd:"):
