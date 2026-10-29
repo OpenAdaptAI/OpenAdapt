@@ -43,6 +43,25 @@ PERTURBATIONS = (
 PER_PERTURBATION = 4
 #: Run 2 (PREREGISTRATION_2.md): run 1's mix at N = 300 with 80 fault cases.
 RUN2 = {"seed": 2029, "n_ordinary": 168, "per_perturbation": 13}
+#: Run 2's non-blocking slice: 30 items at run 1's density, 8 fault cases drawn
+#: from the set by the seed, and 5 perturbations (the 4 kinds, then the first).
+SLICE = {"seed": 2030, "n_ordinary": 17, "n_faults": 8, "n_perturbations": 5}
+
+
+def build_slice(fault_ids: list[str], faultset_sha256: Optional[str] = None) -> "Stream":
+    """The non-blocking slice's stream (PREREGISTRATION_2.md)."""
+
+    rng = random.Random(SLICE["seed"])
+    picked = rng.sample(sorted(fault_ids), SLICE["n_faults"])
+    s = build(picked, faultset_sha256, SLICE["seed"], n_ordinary=SLICE["n_ordinary"], per_perturbation=2)
+    pert = [i for i in s.items if i.kind == "perturbation"]
+    keep = [next(i for i in pert if i.label == name and i.variant == 0) for name in PERTURBATIONS]
+    keep.append(next(i for i in pert if i.label == PERTURBATIONS[0] and i.variant == 1))
+    items = [i for i in s.items if i.kind != "perturbation" or i in keep]
+    for n, it in enumerate(items, 1):
+        it.seq = n
+        it.item_id = f"sl-{n:03d}"
+    return Stream(seed=SLICE["seed"], items=items, existing=s.existing, faultset_sha256=faultset_sha256)
 
 
 @dataclass

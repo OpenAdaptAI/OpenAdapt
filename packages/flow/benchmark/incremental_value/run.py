@@ -209,7 +209,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--only", default="")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--no-reset", action="store_true")
-    ap.add_argument("--run", type=int, choices=[1, 2], default=1, help="the pre-registered stream size and seed")
+    ap.add_argument("--run", choices=["1", "2", "slice"], default="1", help="the pre-registered stream")
     a = ap.parse_args(argv)
 
     cases_list, sha, ops = faults.load_cases()
@@ -218,8 +218,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     if stream_path.exists():
         stream = workload.load(stream_path)
     else:
-        size = workload.RUN2 if a.run == 2 else {}
-        stream = workload.build([c["id"] for c in cases_list], sha, **size)
+        ids = [c["id"] for c in cases_list]
+        if a.run == "slice":
+            stream = workload.build_slice(ids, sha)
+        else:
+            stream = workload.build(ids, sha, **(workload.RUN2 if a.run == "2" else {}))
         a.out.mkdir(parents=True, exist_ok=True)
         workload.save(stream, stream_path)
     if stream.faultset_sha256 != sha:

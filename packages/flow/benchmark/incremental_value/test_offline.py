@@ -146,3 +146,12 @@ def test_score_not_run_and_late_refute():
     assert outcome({**base, "late": {"outcome": "REFUTED"}}) == "caught_harm"
     clean = {**base, "oracle": {"verdict": "correct"}}
     assert outcome({**clean, "late": {"outcome": "REFUTED"}}) == "false_stop"
+
+
+def test_slice_mix():
+    from incremental_value import workload
+
+    s = workload.build_slice([f"case{i}" for i in range(80)], "sha")
+    kinds = [i.kind for i in s.items]
+    assert (kinds.count("ordinary"), kinds.count("fault"), kinds.count("perturbation")) == (17, 8, 5)
+    assert s.items[0].item_id == "sl-001" and len({i.item_id for i in s.items}) == 30

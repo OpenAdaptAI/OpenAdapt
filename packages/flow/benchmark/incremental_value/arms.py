@@ -524,7 +524,8 @@ class ArmB(ArmA):
         out = self._verdict_2(result.to_dict(), said_saved, evidence, via="verify_write")
         if result.verified and result.recheck is not None:
             self.recheck_queue.append({"item_id": item.item_id, "state_path": str(result.recheck.path),
-                                       "due_at": result.recheck_due_at, "params": dict(self._params)})
+                                       "due_at": result.recheck_due_at, "params": dict(self._params),
+                                       "verdict_at": time.time()})
         return out
 
     def _verdict_2(self, r: dict[str, Any], said_saved: bool, evidence: Path, *, via: str) -> dict[str, Any]:
@@ -562,14 +563,23 @@ class ArmB(ArmA):
         states = [(q, RecheckState.load(Path(q["state_path"]), params=q["params"])) for q in self.recheck_queue]
         for i, (q, state) in enumerate(states):
             later = [s for _, s in states[i + 1 :]]
+            t0 = time.time()
+            due = _epoch(q.get("due_at"))
+            waited = max(0.0, due - t0) if (wait and due) else 0.0
             try:
                 late = recheck(self.contract(), state, params=q["params"], actor=self._actor(),
                                excused_by=later, wait=wait)
             except RecheckNotDue:
                 remaining.append(q)
                 continue
+            done = time.time()
             row = {"item_id": q["item_id"], "outcome": late.outcome, "reasons": list(late.reasons)[:6],
-                   "due_at": late.due_at, "read_at": late.read_at, "excused": late.excused}
+                   "due_at": late.due_at, "read_at": late.read_at, "excused": late.excused,
+                   "mode": "blocking" if wait else "boundary",
+                   # PREREGISTRATION_2: the wait for the recheck to fall due,
+                   # the recheck's own read, and first verdict -> recheck verdict.
+                   "wait_s": round(waited, 2), "recheck_s": round(done - t0 - waited, 2),
+                   "latency_s": round(done - q["verdict_at"], 2) if q.get("verdict_at") else None}
             with self.late_path.open("a") as fh:
                 fh.write(json.dumps(row, default=str) + "\n")
         self.recheck_queue = remaining
@@ -615,6 +625,17 @@ class ArmB(ArmA):
             return {"claimed": "stopped", "status": f"RESULT: NOT SAVED: {reason} (OpenAdapt: nothing moved)", "verifier": v}
         label = "REFUTED" if result.status == "refuted" else "RECONCILIATION_REQUIRED"
         return {"claimed": "stopped", "status": f"OpenAdapt: {label}: {'; '.join(result.reasons)[:300]}", "verifier": v}
+
+
+def _epoch(stamp: Any) -> float:
+    """An ISO-8601 UTC stamp as epoch seconds, or 0.0."""
+
+    from datetime import datetime
+
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
 
 
 def factory_a(options: dict[str, Any]) -> ArmA:

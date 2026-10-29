@@ -32,7 +32,9 @@ As in run 1, except where stated.
   **Why 240 s:** OpenEMR 8.0.0.3's shortest default interval for an active background service is 2 minutes (`Email_Service`, `sql/database.sql` at tag `v8_0_0_3`). A job the save triggers runs at that service's next tick, at most one interval later. The second interval allows for that run finishing. 240 s is two intervals.
 
   **Limitation, stated now:** the fault brief caps a delayed write at 90 s, so this run cannot show whether 240 s is long enough in production.
-- **The recheck does not hold up B's next item.** The harness runs item k's recheck when it falls due, while later items run. B's verdict on item k becomes the recheck's outcome. A late REFUTED counts as a stop at that time.
+- **The recheck holds up B's next item (blocking).** After item k, B waits until its recheck is due, runs it, and only then starts item k+1. B's verdict on item k becomes the recheck's outcome. A late REFUTED or UNCERTAIN counts as a stop at that time.
+  - **Why blocking:** run non-blocking, item k's recheck overlaps items k+1 to k+4. If one of those is a fault that B catches, the product correctly returns UNCERTAIN for item k, because it can't tell whose write caused the harm. With faults making up 27% of the stream, that would charge B false stops for a fault density no clinic sees.
+  - **Known limitation, stated now:** in production, writes overlap and those disputes happen. The non-blocking slice below measures how often.
 
 ## Workload
 
@@ -48,12 +50,29 @@ As in run 1, except where stated.
   - It is never reused as a held-out set, and neither are sets 1 to 6.
 - **Fault ops.** These are the implementations of the cases. They are written only after B's run-2 contract sha256 is committed. Each case is implemented as written, or reported "not run" with the reason.
 
+- **The non-blocking slice (secondary, reported apart).** 30 items, built with seed 2030 at run 1's density:
+  - 17 ordinary referrals;
+  - 8 fault cases drawn by that seed from faultset 7;
+  - 5 perturbations.
+
+  B only, with rechecks run at item boundaries while later items proceed (`INCREMENTAL_VALUE_RECHECK_MODE=boundary`). The slice reports:
+  - how many rechecks came back UNCERTAIN because a later write's window was disputed;
+  - B's false stops in the slice.
+
+  It is not part of the primary result or the verdict. Fault cases may appear in both the slice and the main stream, and are scored separately in each.
+
+## Schedule
+
+- **One fixture lease at a time, in chunks.** The 300 items run in 6 chunks of 50 per arm, by item order (iv-001–050, 051–100, and so on). The lease is released between chunks so queued runs can go in between.
+- **Chunk order, the same for both arms:** B1, A1, B2, A2, B3, A3, B4, A4, B5, A5, B6, A6, then the slice. Interleaving the arms keeps time-of-day drift from favouring either one.
+- **The fixture between chunks.** It is not reset between chunks; each arm's chunk resumes from its own ledger. Chunk boundaries are fixed here and are not moved.
+
 ## Oracle and outcomes
 
 As in run 1, with the fixes above. The outcome classes are run 1's, plus two:
 
 - **not run:** excluded and reported. Either the harness failed, or a harmful fault never landed.
-- **late REFUTED:** treated as a stop.
+- **late REFUTED or UNCERTAIN:** treated as a stop.
 
 ## Measures
 
@@ -62,7 +81,12 @@ The same as run 1:
 - correct completions, missed harmful changes, caught harmful changes, false stops and duplicates;
 - people minutes per correct transaction;
 - model cost per item;
-- latency: the median and p90 wall time, and B's verification time.
+- **latency.** B's 240 s recheck wait is counted three ways, all declared now and all reported, none chosen afterwards:
+  1. **People minutes do not include it.** No person waits for a recheck.
+  2. **Recheck latency, on its own:** the time from B's first verdict to the recheck's verdict, median and p90.
+  3. **Wall time per item without the wait:** the item's wall time minus the time spent waiting for its recheck to fall due, median and p90, for both arms.
+
+  B's wall time with the wait is reported too, as a raw figure.
 
 People time is costed from [`costs_2.json`](costs_2.json), which is frozen with this file:
 
@@ -91,7 +115,7 @@ Otherwise the result is "B does not win", and it is published as such.
 
 - **Engine:** the `main` commit ENGINE_COMMIT, with every fix above merged. Both arms run on it.
 - **Fixture:** OpenEMR 8.0.0.3 (`openemr/openemr:8.0.0.3@sha256:0aa4d3d5…`) with MariaDB 11.8, from the pinned lock in `benchmark/openemr_local`. Two copies run, one per arm, with A and B interleaved in time. The lease is taken through `~/oa/scratch/fixture-lease/QUEUE`.
-- **Host load:** the between-item gate is 40. The load is recorded per item. Timings are reported both raw and for items run under load 40.
+- **Host load:** the between-item gate is 60. The load is recorded per item at its start and end. Timings are reported both raw and for items run under load 40.
 - **Model spend:** under $150 in all, calibration included.
 - **Retries:** each item is retried at most once, and only for an infrastructure error. Every retry is reported.
 - **B's contract:** `contract_2.yaml` with `audit_query_2.sql`. It is calibrated on clean referrals outside the stream, and the harness's own legitimate writes. Its sha256 is committed before the fault ops are written or the fault set is read.
