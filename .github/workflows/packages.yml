@@ -431,12 +431,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Two shards, each running pytest-xdist on all four runner cores. Each
-        # job pays a few minutes of setup and runners are capped, so more
-        # shards cost more runner time than they save.
-        include:
-          - { shard: 1, of: 2 }
-          - { shard: 2, of: 2 }
+        # Each shard runs pytest-xdist on all four runner cores and pays about
+        # a minute and a half of setup. A pull request's fast lane takes four
+        # shards to fit `ci` in ten minutes at about the same runner time; the
+        # full suite on main and nightly takes two.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"shard":1,"of":4},{"shard":2,"of":4},{"shard":3,"of":4},{"shard":4,"of":4}]' || '[{"shard":1,"of":2},{"shard":2,"of":2}]') }}
     defaults:
       run:
         working-directory: packages/flow
@@ -494,13 +493,18 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ matrix.of }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          # Same scope as Flow's own PR gate: everything outside tests/e2e,
-          # minus the installer self-test and the long qualification campaign.
-          # Files are dealt round-robin from a sorted list, so every file lands
-          # in exactly one shard.
-          find tests -name 'test_*.py' -not -path 'tests/e2e/*' \
+          # Everything outside tests/e2e, minus the installer self-test and the
+          # long qualification campaign. The nightly run (a schedule, or a
+          # dispatch) also takes all of tests/e2e; pull requests and main run
+          # the end-to-end tests flow-critical names. Files are dealt
+          # round-robin from a sorted list, so every file lands in exactly one
+          # shard.
+          e2e=(-not -path 'tests/e2e/*')
+          case "$EVENT_NAME" in schedule|workflow_dispatch) e2e=() ;; esac
+          find tests -name 'test_*.py' "${e2e[@]}" \
             -not -path 'tests/test_install_playwright_browser.py' \
             -not -path 'tests/test_qualification_gate_campaign.py' \
             | LC_ALL=C sort | awk -v s="$SHARD" -v n="$SHARDS" 'NR % n == s % n' > "$RUNNER_TEMP/shard.txt"
@@ -579,6 +583,7 @@ jobs:
             tests/e2e/test_mcp_teach_e2e.py \
             tests/e2e/test_browser_teach_e2e.py \
             tests/e2e/test_agent_guard_e2e.py \
+            tests/e2e/test_agent_guard_slow_hold_e2e.py \
             --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Read-back and zero-model-call tests, by name
         run: |
