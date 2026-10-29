@@ -70,7 +70,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.app_profiles import Owner, table_name
 from openadapt_flow.runtime.effects.effect import (
@@ -318,7 +318,41 @@ class FrameDatabase(BaseModel):
     #: Seconds between the two reads after the save. They must match: a
     #: write the app makes a moment later (a background job) shows as a
     #: difference, and the frame is not checked until the database settles.
+    #: A write later than the second read is not seen: see
+    #: ``recheck_after_s``.
     settle_s: float = Field(default=1.0, ge=0)
+    #: How many reads after the first one, each ``settle_s`` after the last,
+    #: may be taken to find two in a row that match, after the save and at a
+    #: recheck. A live app moves on its own (a screen polling, a scheduler
+    #: tick), so one pair often differs. Two reads match when they are the
+    #: same, or differ only by rows added to append-only tables (the app's
+    #: logs, which the frame excuses anyway). The rows judged are the earlier
+    #: read of the matching pair. The budget is ``settle_attempts *
+    #: settle_s`` seconds; when no pair matches within it, the frame is not
+    #: checked. Default 1: one pair, as before.
+    settle_attempts: int = Field(default=1, ge=1, le=60)
+    #: Seconds after the settled read at which the database is read once
+    #: more (``openadapt_flow.verifier.recheck``). A write that lands later
+    #: than ``settle_s`` (a background job, a trigger-driven integration, a
+    #: delayed side record) lands after the verdict; the recheck judges every
+    #: change since that read with the same rules, and an unexplained one
+    #: turns the verdict into REFUTED (late). Unset: no recheck is scheduled,
+    #: and a write that lands after the verdict goes unseen. No default: the
+    #: right wait depends on the app's own jobs, so the contract's author
+    #: picks it.
+    recheck_after_s: Optional[float] = Field(default=None, gt=0)
+
+    @model_serializer(mode="wrap")
+    def _compact(self, handler: Any) -> dict[str, Any]:
+        # Unset (or at its default), a field added later is left out, so a
+        # contract that doesn't use it keeps the digests (``frame_sha256``,
+        # the check digest) it had.
+        data: dict[str, Any] = handler(self)
+        if data.get("recheck_after_s") is None:
+            data.pop("recheck_after_s", None)
+        if data.get("settle_attempts") == 1:
+            data.pop("settle_attempts", None)
+        return data
 
     @model_validator(mode="after")
     def _pinned_profile(self) -> "FrameDatabase":
@@ -537,6 +571,8 @@ class FrameChange:
     other_on_target: bool = False
     #: In memory only, for the operator's console; never put in a receipt.
     key: Any = None
+    #: In memory only: the audit entry behind an ``audit_only`` change.
+    entry: Any = None
 
 
 @dataclass
@@ -555,6 +591,12 @@ class FrameVerdict:
     added_by_others: set[tuple[str, str]] = field(default_factory=set)
     #: In memory only: app profile rules that excused a row change.
     excused_by: set[str] = field(default_factory=set)
+    #: In memory only, set when the frame held and ``recheck_after_s`` is
+    #: set: what a later recheck compares with (the settled post-save
+    #: snapshot as keyed MACs, the audit entries seen then as keyed hashes,
+    #: and when it was read). Never put in a receipt; only its salted digest
+    #: is.
+    post_state: Optional[dict[str, Any]] = None
 
     @property
     def held(self) -> bool:
@@ -1683,7 +1725,9 @@ def judge_frame(
                     continue
                 logged.add(str(ref))
                 collateral.append(
-                    FrameChange("", "changed", "self", audit_only=True, key=ref)
+                    FrameChange(
+                        "", "changed", "self", audit_only=True, key=ref, entry=entry
+                    )
                 )
 
     verdict = FrameVerdict(

@@ -20,12 +20,15 @@ from openadapt_flow.verifier import (
     Contract,
     MemoryLedger,
     Outcome,
+    RecheckResult,
+    RecheckState,
     VerifierError,
     WriteResult,
     begin_write,
     capture_database,
     classify,
     diff_database,
+    recheck,
     verify_write,
 )
 
@@ -269,6 +272,9 @@ def test_the_public_api_is_stable() -> None:
         "MemoryLedger",
         "Outcome",
         "PendingWrite",
+        "RecheckNotDue",
+        "RecheckResult",
+        "RecheckState",
         "Scope",
         "Snapshot",
         "Source",
@@ -282,6 +288,7 @@ def test_the_public_api_is_stable() -> None:
         "capture",
         "capture_database",
         "diff_database",
+        "recheck",
         "reconcile",
         "verified_write",
         "verify_write",
@@ -332,6 +339,33 @@ def test_the_public_api_is_stable() -> None:
         "checked",
         "reasons",
         "retry_safe",
+    ]
+    assert list(WriteResult.__dataclass_fields__)[-2:] == [
+        "recheck",
+        "recheck_due_at",
+    ]
+    assert params(recheck) == [
+        ("contract", "POSITIONAL_OR_KEYWORD"),
+        ("write", "POSITIONAL_OR_KEYWORD"),
+        ("params", "KEYWORD_ONLY"),
+        ("actor", "KEYWORD_ONLY"),
+        ("excused_by", "KEYWORD_ONLY"),
+        ("wait", "KEYWORD_ONLY"),
+    ]
+    assert [f for f in RecheckResult.__dataclass_fields__] == [
+        "outcome",
+        "frame",
+        "reasons",
+        "receipt_sha256",
+        "post_save_read_at",
+        "due_at",
+        "read_at",
+        "excused",
+        "evidence",
+    ]
+    assert list(inspect.signature(RecheckState.load).parameters) == [
+        "path",
+        "params",
     ]
 
 
