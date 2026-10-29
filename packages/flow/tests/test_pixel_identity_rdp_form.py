@@ -139,3 +139,17 @@ def test_live_caret_after_run_value_is_not_a_different_name():
         verify_template_identity(tmpl, other, params=run, param_examples=ex).status
         != "verified"
     )
+
+
+def test_a_label_that_shares_a_word_with_a_later_value_is_kept():
+    # "Triage" is a word of the note typed later; before then it is the
+    # button's own label, and replay needs it to find the button after a
+    # layout swap (tests/e2e/test_chaos.py::TestLayoutSwapMidRun).
+    from openadapt_flow.compiler.compile import _label_shows_param_value
+
+    note = ("E2E triage booking three months",)
+    assert not _label_shows_param_value("Triage", note, typed=())
+    # Once the note is typed, a fragment of it may be the typed value itself.
+    assert _label_shows_param_value("Triage", note, typed=note)
+    # A label that contains a value shows it whether or not it was typed.
+    assert _label_shows_param_value("Jane Sample", ("Jane Sample",), typed=())
