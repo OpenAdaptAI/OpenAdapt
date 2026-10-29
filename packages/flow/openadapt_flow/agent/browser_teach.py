@@ -961,7 +961,7 @@ class BrowserTeachBridge:
         secrets: Optional[Mapping[str, str]] = None,
         verify_dir: Optional[Path] = None,
     ) -> None:
-        """``contracts`` (name -> :class:`~openadapt_flow.verify.WriteContract`)
+        """``contracts`` (name -> :class:`~openadapt_flow.verifier.Contract`)
         turns on taught writes: a task that names one may write to the app,
         and every run of it is verified against it. ``secrets`` maps an input
         name to the environment variable that holds its value (a sign-in), so
@@ -1364,13 +1364,16 @@ class BrowserTeachBridge:
             if contract is not None:
                 # Run 1 is a real write: read the store first, so it can be
                 # verified like every later run.
-                from openadapt_flow.verify import BaselineUnreadable, begin_write
+                from openadapt_flow.verifier import Actor, WriteBlocked, begin_write
 
                 try:
                     run.pending = begin_write(
-                        contract, {**inputs, **secret_values}, self.verify_dir
+                        contract,
+                        {**inputs, **secret_values},
+                        actor=Actor("agent", "teach-run-1"),
+                        workdir=self.verify_dir,
                     )
-                except BaselineUnreadable as exc:
+                except WriteBlocked as exc:
                     thread.stop()
                     raise BridgeError(f"{exc}; nothing was done") from None
 
@@ -1676,8 +1679,17 @@ class BrowserTeachBridge:
     def _abort(self) -> dict[str, Any]:
         with self._lock:
             run = self._active()
+            sent = bool(run.browser and run.browser.writes_sent)
             self._end("aborted")
-        return {"status": "aborted", "name": run.name}
+        reply: dict[str, Any] = {"status": "aborted", "name": run.name}
+        if run.pending is not None and not run.pending.used:
+            # Read back what run 1 left, so the ledger knows whether it landed.
+            from openadapt_flow.verifier import verify_write
+
+            reply["verification"] = verify_write(
+                run.pending, write_attempted=sent
+            ).to_dict()
+        return reply
 
     def _status(self) -> dict[str, Any]:
         run = self._teaching
@@ -1700,7 +1712,7 @@ class BrowserTeachBridge:
     def _finish_write(self) -> dict[str, Any]:
         """End a taught write: verify run 1's write, then add the tool."""
 
-        from openadapt_flow.verify import verify_write
+        from openadapt_flow.verifier import verify_write
 
         with self._lock:
             run = self._active()
@@ -1725,15 +1737,13 @@ class BrowserTeachBridge:
                 )
             steps = list(run.steps)
             self._end("finished")
-        result = verify_write(
-            run.pending, executor={"kind": "agent", "id": "teach-run-1"}
-        )
+        result = verify_write(run.pending)
         if not result.verified:
             return {
                 "status": "not_added",
                 "what_happened": (
                     f"Run 1's write was not verified ({result.verdict}: "
-                    f"{getattr(result, 'reason', '')}). No tool was added. A person "
+                    f"{result.reason}). No tool was added. A person "
                     "checks the record before anything else is written; don't "
                     "teach it again until they have."
                 ),
@@ -1905,7 +1915,13 @@ class BrowserTeachBridge:
     ) -> dict[str, Any]:
         """Make a taught write and verify it. Only a verified write is done."""
 
-        from openadapt_flow.verify import BaselineUnreadable, begin_write, verify_write
+        from openadapt_flow.verifier import (
+            Actor,
+            AlreadyWritten,
+            WriteBlocked,
+            begin_write,
+            verify_write,
+        )
 
         name = program["result"]["contract"]
         contract = self.contracts.get(name)
@@ -1925,8 +1941,21 @@ class BrowserTeachBridge:
             }
         values = {**inputs, **secret_values}
         try:
-            pending = begin_write(contract, values, self.verify_dir)
-        except BaselineUnreadable as exc:
+            pending = begin_write(
+                contract,
+                values,
+                actor=Actor("program", tool),
+                workdir=self.verify_dir,
+                declared_by="agent (tool inputs)",
+            )
+        except AlreadyWritten as exc:
+            return {
+                "outcome": "already_done",
+                "what_happened": f"{exc}.",
+                "earlier_result": exc.result,
+                "model_calls": 0,
+            }
+        except WriteBlocked as exc:
             return {
                 "outcome": "did_not_run",
                 "what_happened": f"{exc}; nothing was written",
@@ -1949,9 +1978,12 @@ class BrowserTeachBridge:
                     timeout=600,
                 )
         except BridgeError as exc:
+            # The steps may have sent the write before they failed: read back.
+            check = verify_write(pending)
             return {
-                "outcome": "did_not_run",
+                "outcome": "done" if check.verified else "needs_review",
                 "what_happened": str(exc),
+                "verification": check.to_dict(),
                 "model_calls": 0,
             }
         finally:
@@ -1962,17 +1994,13 @@ class BrowserTeachBridge:
             "writes_sent": len(run.writes_sent),
         }
         if run.stopped is not None and not run.writes_sent:
+            verify_write(pending, write_attempted=False)  # releases the ledger
             return {
                 **base,
                 "outcome": "stopped",
                 "what_happened": f"Stopped before any write was sent: {run.stopped}.",
             }
-        result = verify_write(
-            pending,
-            executor={"kind": "program", "id": tool},
-            write_attempted=bool(run.writes_sent),
-            declared_by="agent (tool inputs)",
-        )
+        result = verify_write(pending, write_attempted=bool(run.writes_sent))
         stopped = f" The steps stopped: {run.stopped}." if run.stopped else ""
         if run.blocked:
             # A write outside the taught set was stopped before it was sent:

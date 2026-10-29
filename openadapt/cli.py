@@ -1261,6 +1261,117 @@ def verify_serve(contracts: str, state: Optional[str]) -> None:
     sys.exit(int(agent_main(argv) or 0))
 
 
+def _write_ledger(folder: Optional[str]):
+    """The uncertain-write ledger (default ~/.openadapt/ledger)."""
+    _require_supported_python()
+    try:
+        from openadapt_flow.write_ledger import FileLedger, Ledger, default_ledger
+    except ImportError:
+        click.echo("Error: the OpenAdapt engine is not installed.", err=True)
+        sys.exit(1)
+    return Ledger(FileLedger(folder)) if folder else default_ledger()
+
+
+_LEDGER_OPTION = click.option(
+    "--ledger",
+    "ledger_dir",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Ledger folder (default: OPENADAPT_LEDGER_DIR or ~/.openadapt/ledger).",
+)
+
+
+@verify.group("ledger")
+def verify_ledger() -> None:
+    """Writes whose outcome isn't known yet, held so they aren't sent twice.
+
+    Every verified write goes through the ledger. A write that may have
+    landed, or was refuted, is held: no worker sends it again until a
+    read-back resolves it (`reconcile`) or a person checks the record
+    (`release`). The ledger holds no record values.
+    """
+
+
+@verify_ledger.command("list")
+@_LEDGER_OPTION
+def verify_ledger_list(ledger_dir: Optional[str]) -> None:
+    """Show held and open writes: key, state, when it began, outcome."""
+    ledger = _write_ledger(ledger_dir)
+    rows = ledger.unresolved()
+    if not rows:
+        click.echo("No held or open writes.")
+        return
+    for key, attempt in rows:
+        outcome = (attempt.resolved or {}).get("outcome", "-")
+        click.echo(
+            f"{key}  {attempt.state:<9}  began {attempt.begun.get('at')}  "
+            f"outcome {outcome}  by {attempt.begun.get('actor_kind')}:"
+            f"{attempt.begun.get('actor_id')}"
+        )
+
+
+@verify_ledger.command("reconcile")
+@click.option(
+    "--contracts",
+    "contracts",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Folder of write contracts (<name>.yaml) the writes were made under.",
+)
+@click.argument("key", required=False)
+@_LEDGER_OPTION
+def verify_ledger_reconcile(
+    contracts: str, key: Optional[str], ledger_dir: Optional[str]
+) -> None:
+    """Read held writes back and resolve the ones the store now settles."""
+    from openadapt_flow.verifier import Contract, VerifierError, reconcile
+
+    ledger = _write_ledger(ledger_dir)
+    by_digest = {}
+    for path in sorted(Path(contracts).glob("*.y*ml")):
+        try:
+            contract = Contract.load(path)
+        except VerifierError as exc:
+            click.echo(f"Error: contract {path.name}: {exc}", err=True)
+            sys.exit(2)
+        by_digest[contract.digest] = contract
+    rows = [(k, a) for k, a in ledger.unresolved() if key is None or k == key]
+    if key is not None and not rows:
+        click.echo(f"Error: no held or open write with key {key}", err=True)
+        sys.exit(2)
+    for k, attempt in rows:
+        contract = by_digest.get(str(attempt.begun.get("contract")))
+        if contract is None:
+            click.echo(f"{k}  skipped: its contract isn't in {contracts}")
+            continue
+        try:
+            state = reconcile(contract, k, ledger=ledger)
+        except VerifierError as exc:
+            click.echo(f"{k}  skipped: {exc}")
+            continue
+        click.echo(f"{k}  {state}")
+
+
+@verify_ledger.command("release")
+@click.argument("key")
+@click.option("--by", "by", required=True, help="Who checked the record.")
+@click.option("--reason", "reason", required=True, help="What they found.")
+@_LEDGER_OPTION
+def verify_ledger_release(
+    key: str, by: str, reason: str, ledger_dir: Optional[str]
+) -> None:
+    """Release a held write after a person checked the record."""
+    from openadapt_flow.write_ledger import LedgerError
+
+    ledger = _write_ledger(ledger_dir)
+    try:
+        ledger.release(key, by=by, reason=reason)
+    except LedgerError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(2)
+    click.echo(f"{key}  released by {by}")
+
+
 @main.command(
     "agent",
     context_settings={

@@ -157,15 +157,23 @@ send and the read-back, and reconciles it before anything else.
 back. Callers include `begin_write`, `openadapt verify ledger reconcile`, and
 an operator's job.
 
-- If the attempt's baseline is unused and still inside the window, it runs
-  the full check with it. This is the kill-and-restart case: the process died
-  between the send and the read-back.
-- Otherwise (the baseline was used by an `UNCERTAIN` check, or it's too old),
-  it reads the store with no baseline. If every declared effect is observed
-  `present`, the attempt resolves as landed. It isn't verified, but it's never
-  sent again. If the effects are `absent`, the attempt stays `UNCERTAIN`. It
-  is released only after the ledger's `settle_s` (default: off), or by a
-  person.
+- It judges the attempt against the attempt's own baseline, so a record that
+  was there before is never taken for this write. If the process died between
+  the send and the read-back, that baseline is unused. If an `UNCERTAIN`
+  check already used it, reconciliation reads a private copy. That's still
+  the same write, and the lease stops any other attempt at it from being
+  sent in the meantime. A copy carries `remediates` with the earlier
+  receipt's digest.
+- `CONFIRMED` and `REFUTED` resolve the attempt. A `CONFIRMED` reconciliation
+  is handed back once (`AlreadyWritten`) instead of a resend.
+- `UNCERTAIN` keeps the attempt held. Past the contract's
+  `max_execution_window_s`, the baseline proves nothing, so the attempt stays
+  held. A held attempt is released by a person. An attempt the store still
+  shows `absent` is also released once the ledger's `settle_s` has passed.
+  `settle_s` defaults to off, because a queued write can land late.
+- An attempt whose process died before it sent anything looks the same as
+  one that died just after: it stays held until a person, or `settle_s`,
+  releases it.
 
 The attempt's baseline and values stay in its private folder (mode 0700,
 files 0600) next to the ledger, as verify-run keeps baselines today.

@@ -107,7 +107,9 @@ def test_an_agent_wraps_its_writes(sor: str, tmp_path: Path) -> None:
     assert len(out["good"]["receipt_sha256"]) == 64
     assert "checked once" in out["again"]["_error"]
     assert out["bad"]["verified"] is False
-    assert out["bad"]["verdict"] == "RECONCILIATION_REQUIRED"
+    # The note landed on another patient: the store shows a different write.
+    assert out["bad"]["verdict"] == "REFUTED"
+    assert out["bad"]["outcome"] == "REFUTED"
     assert out["bad"]["retry_safe"] is False
     assert "values missing for: note" in out["missing"]["_error"]
 

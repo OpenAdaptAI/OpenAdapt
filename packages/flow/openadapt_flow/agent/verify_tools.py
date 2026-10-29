@@ -16,10 +16,13 @@ agent calls:
     After the write. The server reads the store again and returns
     ``verified: true`` with a receipt, or a refusal: ``REFUTED`` (the store
     shows a different write) or ``RECONCILIATION_REQUIRED`` (it doesn't show
-    the write, which may still land). Never retry a refused write: a person
-    checks the record.
+    the write, which may still land); ``outcome`` says the same as
+    ``CONFIRMED``, ``REFUTED`` or ``UNCERTAIN``. Never retry a refused write:
+    a person checks the record.
 
-No model is called. See :mod:`openadapt_flow.verify`.
+``verify_begin`` consults the uncertain-write ledger, so a write whose
+outcome is unknown is refused, also after a restart or in another server.
+No model is called. See :mod:`openadapt_flow.verifier`.
 """
 
 from __future__ import annotations
@@ -30,10 +33,12 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from openadapt_flow.agent.bridge import BridgeError, ToolSpec
-from openadapt_flow.verify import (
-    BaselineUnreadable,
+from openadapt_flow.verifier import (
+    Actor,
+    AlreadyWritten,
+    Contract,
     PendingWrite,
-    WriteContract,
+    WriteBlocked,
     begin_write,
     verify_write,
 )
@@ -55,24 +60,10 @@ INSTRUCTIONS = (
 )
 
 
-def contract_params(contract: WriteContract) -> list[str]:
-    """The ``{"param": name}`` placeholders a contract's effects use."""
+def contract_params(contract: Contract) -> list[str]:
+    """The ``{"param": name}`` placeholders a contract binds."""
 
-    found: set[str] = set()
-
-    def walk(value: Any) -> None:
-        if isinstance(value, Mapping):
-            name = value.get("param")
-            if isinstance(name, str) and name:
-                found.add(name)
-            for item in value.values():
-                walk(item)
-        elif isinstance(value, (list, tuple)):
-            for item in value:
-                walk(item)
-
-    walk([effect.model_dump(mode="json") for effect in contract.config.effects])
-    return sorted(found)
+    return contract.params
 
 
 def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -94,16 +85,16 @@ class VerifyBridge:
         self.contracts_dir = Path(contracts_dir).expanduser().resolve()
         self.state_dir = Path(state_dir).expanduser().resolve()
         self.state_dir.mkdir(parents=True, exist_ok=True)
-        self.contracts: dict[str, WriteContract] = {}
+        self.contracts: dict[str, Contract] = {}
         for path in sorted(self.contracts_dir.glob("*.y*ml")):
             if not _NAME.fullmatch(path.stem):
                 raise ValueError(
                     f"contract file name {path.name!r}: use a-z, 0-9, _ and -"
                 )
-            self.contracts[path.stem] = WriteContract.load(path)
+            self.contracts[path.stem] = Contract.load(path)
         if not self.contracts:
             raise ValueError(f"no write contracts (*.yaml) in {self.contracts_dir}")
-        self._pending: dict[str, tuple[PendingWrite, str]] = {}
+        self._pending: dict[str, PendingWrite] = {}
         self._lock = threading.Lock()
 
     # -- the MCP layer's interface ------------------------------------------
@@ -202,13 +193,24 @@ class VerifyBridge:
         missing = [p for p in contract_params(contract) if p not in values]
         if missing:
             raise BridgeError(f"values missing for: {', '.join(missing)}")
-        try:
-            pending = begin_write(contract, values, self.state_dir)
-        except BaselineUnreadable as exc:
-            return {"ok_to_write": False, "reason": f"{exc}; don't make the write"}
         agent_id = str(args.get("agent_id") or "mcp-agent")
+        try:
+            pending = begin_write(
+                contract,
+                values,
+                actor=Actor("agent", agent_id),
+                workdir=self.state_dir,
+            )
+        except AlreadyWritten as exc:
+            return {
+                "ok_to_write": False,
+                "reason": f"{exc}; don't make the write",
+                "earlier_result": exc.result,
+            }
+        except WriteBlocked as exc:
+            return {"ok_to_write": False, "reason": f"{exc}; don't make the write"}
         with self._lock:
-            self._pending[pending.write_id] = (pending, agent_id)
+            self._pending[pending.write_id] = pending
         return {
             "ok_to_write": True,
             "write_id": pending.write_id,
@@ -223,10 +225,7 @@ class VerifyBridge:
             raise BridgeError(
                 "no pending write with that write_id (each one is checked once)"
             )
-        pending, agent_id = entry
         result = verify_write(
-            pending,
-            executor={"kind": "agent", "id": agent_id},
-            write_attempted=bool(args.get("write_attempted", True)),
+            entry, write_attempted=bool(args.get("write_attempted", True))
         )
         return result.to_dict()

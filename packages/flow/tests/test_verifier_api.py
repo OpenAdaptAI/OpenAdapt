@@ -1,14 +1,12 @@
-"""The stable verifier API: capture, write, verify_write.
+"""The one verifier API: begin_write, the write, verify_write.
 
-MCP skills, the RL reward and the registry call ``openadapt_flow.verifier``.
-These tests pin its public signatures and check it end to end on a SQLite
-store. Records are made up.
+These tests pin its public signatures and outcome vocabulary, and check it
+end to end on a SQLite store. Records are made up.
 """
 
 from __future__ import annotations
 
 import inspect
-import json
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -20,11 +18,13 @@ from openadapt_flow.verifier import (
     Actor,
     BaselineUnreadable,
     Contract,
-    Snapshot,
+    MemoryLedger,
+    Outcome,
     VerifierError,
     WriteResult,
-    capture,
+    begin_write,
     capture_database,
+    classify,
     diff_database,
     verify_write,
 )
@@ -33,12 +33,9 @@ BOT = Actor(kind="agent", id="bot")
 
 
 @pytest.fixture(autouse=True)
-def _used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Each test records used snapshots in its own directory."""
-
-    used = tmp_path / "used"
-    monkeypatch.setattr(verifier, "USED_DIR", used)
-    return used
+def _ledger_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / "ledger"))
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
 
 
 PARAMS = {"fname": "Ada", "lname": "Quill", "email": "ada@example.test"}
@@ -94,56 +91,105 @@ SAVE = (
 
 def _check(tmp_path: Path, *statements: str) -> WriteResult:
     db = _store(tmp_path)
-    contract = _contract(db)
-    before = capture(contract, PARAMS)
+    pending = begin_write(_contract(db), PARAMS, actor=BOT, ledger=MemoryLedger())
     _write(db, *statements)
-    return verify_write(contract, before, params=PARAMS, actor=BOT)
+    return verify_write(pending)
 
 
-def test_a_correct_write_is_verified(tmp_path: Path) -> None:
+def test_a_correct_write_is_confirmed(tmp_path: Path) -> None:
     result = _check(tmp_path, SAVE)
-    assert result.verified and result.outcome == "verified"
-    assert result.status == "verified"
+    assert result.outcome is Outcome.CONFIRMED and result.verified
+    assert result.receipt_outcome == "verified" and result.verdict == "VERIFIED"
     assert len(result.receipt_sha256) == 64
     assert result.checked["delta"] == "held" and result.checked["frame"] == "held"
-    assert result.reasons == []
-    assert result.receipt["outcome"] == "verified"
+    assert result.reasons == [] and result.observed == "present"
 
 
-def test_a_wrong_value_is_not_verified(tmp_path: Path) -> None:
+def test_a_result_says_what_it_establishes(tmp_path: Path) -> None:
+    scope = _check(tmp_path, SAVE).scope
+    assert scope.read_paths == ("database",) and scope.stores == ("sql",)
+    assert scope.unread == ()
+    assert scope.strength == "independent_system_of_record"
+    assert scope.window.baseline_read_at and scope.window.read_at
+    assert scope.window.max_execution_window_s == 3600
+    joined = " ".join(scope.not_covered)
+    for gap in ("after read_at", "email", "other services", "authorized"):
+        assert gap in joined
+    # No frame.database: what's outside the read set isn't covered either.
+    assert "outside the read set" in joined
+
+
+def test_a_wrong_value_is_not_confirmed(tmp_path: Path) -> None:
     wrong = SAVE.replace("'Ada', 'Quill'", "'Eda', 'Quill'")
     result = _check(tmp_path, wrong)
-    assert not result.verified
-    assert result.checked["delta"] != "held"
-    assert result.reasons
+    assert result.outcome is not Outcome.CONFIRMED
+    assert result.checked["delta"] != "held" and result.reasons
 
 
-def test_a_stray_write_is_not_verified(tmp_path: Path) -> None:
+def test_a_stray_write_is_refuted(tmp_path: Path) -> None:
     result = _check(tmp_path, SAVE, "UPDATE patient SET phone = '2' WHERE id = 1")
-    assert not result.verified and result.status == "refuted"
+    assert result.outcome is Outcome.REFUTED and not result.retry_safe
     assert result.checked["frame"] == "refuted"
     assert any("outside the declared write" in r for r in result.reasons)
 
 
-def test_no_write_is_not_verified(tmp_path: Path) -> None:
+def test_a_duplicate_write_is_refuted(tmp_path: Path) -> None:
+    assert _check(tmp_path, SAVE, SAVE).outcome is Outcome.REFUTED
+
+
+def test_no_write_is_uncertain(tmp_path: Path) -> None:
     result = _check(tmp_path)
-    assert not result.verified
     # The store doesn't show the write: it may still land, so reconcile.
-    assert result.status == "unconfirmed"
+    assert result.outcome is Outcome.UNCERTAIN and not result.retry_safe
+    assert result.verdict == "RECONCILIATION_REQUIRED"
+
+
+def test_a_write_never_sent_and_absent_is_retry_safe(tmp_path: Path) -> None:
+    db = _store(tmp_path)
+    pending = begin_write(_contract(db), PARAMS, actor=BOT, ledger=MemoryLedger())
+    result = verify_write(pending, write_attempted=False)
+    assert result.receipt_outcome == "halted_before_effect"
+    assert result.outcome is Outcome.REFUTED and result.retry_safe
 
 
 def test_an_unreadable_store_stops_before_the_write(tmp_path: Path) -> None:
     contract = _contract(tmp_path / "missing" / "app.sqlite")
     with pytest.raises(BaselineUnreadable):
-        capture(contract, PARAMS)
+        begin_write(contract, PARAMS, actor=BOT, ledger=MemoryLedger())
 
 
-def test_an_unknown_actor_kind_is_refused(tmp_path: Path) -> None:
-    db = _store(tmp_path)
-    contract = _contract(db)
-    before = capture(contract, PARAMS)
+def test_an_unknown_actor_kind_is_refused_before_reading(tmp_path: Path) -> None:
     with pytest.raises(VerifierError):
-        verify_write(contract, before, params=PARAMS, actor=Actor("robot", "x"))
+        begin_write(
+            _contract(_store(tmp_path)), PARAMS, actor=Actor("robot", "x"), ledger=None
+        )
+
+
+def test_a_missing_value_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(VerifierError, match="values missing"):
+        begin_write(_contract(_store(tmp_path)), {"fname": "Ada"}, actor=BOT)
+
+
+def test_a_pending_write_is_checked_once(tmp_path: Path) -> None:
+    db = _store(tmp_path)
+    pending = begin_write(_contract(db), PARAMS, actor=BOT, ledger=MemoryLedger())
+    _write(db, SAVE)
+    assert verify_write(pending).verified
+    with pytest.raises(VerifierError):
+        verify_write(pending)
+
+
+def test_without_a_ledger_the_folder_is_the_workdir(tmp_path: Path) -> None:
+    db = _store(tmp_path)
+    pending = begin_write(
+        _contract(db), PARAMS, actor=BOT, ledger=None, workdir=tmp_path / "w"
+    )
+    assert pending.workdir.parent == tmp_path / "w"
+    assert pending.workdir.stat().st_mode & 0o777 == 0o700
+    _write(db, SAVE)
+    result = verify_write(pending)
+    assert result.verified and result.write_key == ""
+    assert Path(str(result.receipt_path)).parent == pending.workdir
 
 
 def test_the_database_diff_names_what_moved_without_values(tmp_path: Path) -> None:
@@ -155,29 +201,8 @@ def test_the_database_diff_names_what_moved_without_values(tmp_path: Path) -> No
     assert set(moved) == {"patient"}
     assert (moved["patient"].added, moved["patient"].changed) == (1, 1)
     assert moved["patient"].changed_columns == ["phone"]
-    # Undone: back where it was.
     _write(db, "DELETE FROM patient WHERE id = 2", "UPDATE patient SET phone = '1'")
     assert diff_database(before, capture_database(read, "sqlite")) == {}
-
-
-def test_a_snapshot_verifies_one_write(tmp_path: Path) -> None:
-    db = _store(tmp_path)
-    contract = _contract(db)
-    before = capture(contract, PARAMS)
-    _write(db, SAVE)
-    verify_write(contract, before, params=PARAMS, actor=BOT)
-    with pytest.raises(VerifierError):
-        verify_write(contract, before, params=PARAMS, actor=BOT)
-
-
-def test_a_snapshot_crosses_a_process_boundary(tmp_path: Path) -> None:
-    db = _store(tmp_path)
-    contract = _contract(db)
-    path = capture(contract, PARAMS).save(tmp_path / "before.json")
-    assert path.stat().st_mode & 0o777 == 0o600
-    _write(db, SAVE)
-    result = verify_write(contract, Snapshot.load(path), params=PARAMS, actor=BOT)
-    assert result.verified
 
 
 def test_a_bad_contract_raises(tmp_path: Path) -> None:
@@ -185,40 +210,103 @@ def test_a_bad_contract_raises(tmp_path: Path) -> None:
         Contract.from_dict({"schema_version": "openadapt.verify/v1"})
 
 
+def test_the_contract_names_the_values_it_binds(tmp_path: Path) -> None:
+    assert _contract(_store(tmp_path)).params == ["email", "fname", "lname"]
+
+
+@pytest.mark.parametrize(
+    "receipt_outcome, checked, rows, expected",
+    [
+        ("verified", {}, [], (Outcome.CONFIRMED, False)),
+        ("halted_before_effect", {}, [], (Outcome.REFUTED, True)),
+        ("rejected_policy", {}, [], (Outcome.REFUTED, False)),
+        ("failed_platform", {}, [], (Outcome.UNCERTAIN, False)),
+        ("reconciliation_required", {"frame": "refuted"}, [], (Outcome.REFUTED, False)),
+        (
+            "reconciliation_required",
+            {"source": "refuted"},
+            [],
+            (Outcome.REFUTED, False),
+        ),
+        (
+            "reconciliation_required",
+            {"delta": "not_checked"},
+            [],
+            (Outcome.UNCERTAIN, False),
+        ),
+        (
+            "reconciliation_required",
+            {"delta": "refuted"},
+            [{"verdict": "REFUTED", "observed_effect": "absent"}],
+            (Outcome.UNCERTAIN, False),
+        ),
+        (
+            "reconciliation_required",
+            {"delta": "refuted"},
+            [{"verdict": "REFUTED", "observed_effect": "present"}],
+            (Outcome.REFUTED, False),
+        ),
+    ],
+)
+def test_every_receipt_outcome_maps_to_one_of_three(
+    receipt_outcome: str, checked: dict, rows: list, expected: tuple
+) -> None:
+    evidence = {"readback": {"effects": rows}}
+    assert classify(receipt_outcome, checked, evidence) == expected
+
+
 def test_the_public_api_is_stable() -> None:
     assert sorted(verifier.__all__) == [
         "Actor",
+        "AlreadyWritten",
         "BaselineUnreadable",
         "Contract",
         "DatabaseSnapshot",
-        "Snapshot",
+        "FileLedger",
+        "Ledger",
+        "LedgerBackend",
+        "LedgerError",
+        "MemoryLedger",
+        "Outcome",
+        "PendingWrite",
+        "Scope",
         "Source",
         "TableDiff",
         "VerifierError",
+        "Window",
+        "WriteBlocked",
+        "WriteHeld",
         "WriteResult",
-        "capture",
+        "begin_write",
         "capture_database",
         "diff_database",
+        "reconcile",
+        "verified_write",
         "verify_write",
     ]
+    assert [o.value for o in Outcome] == ["CONFIRMED", "REFUTED", "UNCERTAIN"]
 
     def params(fn: Any) -> list[tuple[str, str]]:
         return [
             (name, p.kind.name) for name, p in inspect.signature(fn).parameters.items()
         ]
 
-    assert params(capture) == [
+    assert params(begin_write) == [
         ("contract", "POSITIONAL_OR_KEYWORD"),
         ("params", "POSITIONAL_OR_KEYWORD"),
+        ("actor", "KEYWORD_ONLY"),
+        ("ledger", "KEYWORD_ONLY"),
+        ("write_key", "KEYWORD_ONLY"),
+        ("authorization_ref", "KEYWORD_ONLY"),
+        ("workdir", "KEYWORD_ONLY"),
+        ("declared_by", "KEYWORD_ONLY"),
     ]
     assert params(verify_write) == [
-        ("contract", "POSITIONAL_OR_KEYWORD"),
-        ("before", "POSITIONAL_OR_KEYWORD"),
-        ("params", "KEYWORD_ONLY"),
-        ("actor", "KEYWORD_ONLY"),
-        ("source", "KEYWORD_ONLY"),
-        ("authorization_ref", "KEYWORD_ONLY"),
+        ("pending", "POSITIONAL_OR_KEYWORD"),
         ("write_attempted", "KEYWORD_ONLY"),
+        ("source", "KEYWORD_ONLY"),
+        ("seal", "KEYWORD_ONLY"),
+        ("delivered", "KEYWORD_ONLY"),
     ]
     assert [n for n in inspect.signature(capture_database).parameters] == [
         "read",
@@ -230,15 +318,12 @@ def test_the_public_api_is_stable() -> None:
         "before",
         "actor_names",
     ]
-    assert [f for f in WriteResult.__dataclass_fields__] == [
-        "verified",
-        "status",
+    assert list(WriteResult.__dataclass_fields__)[:5] == [
         "outcome",
+        "scope",
         "checked",
         "reasons",
-        "receipt",
-        "receipt_sha256",
-        "evidence",
+        "retry_safe",
     ]
 
 
@@ -263,118 +348,16 @@ def test_diff_database_applies_the_profile_and_before(tmp_path: Path) -> None:
         "UPDATE users_secure SET login_fail_counter = 1, last_update = 'b' WHERE id = 2",
     )
     after = capture_database(read, "sqlite", before=before, **args)
-    # The acting user's own sign-in bookkeeping: back where it was.
     assert diff_database(before, after, **args) == {}
     _write(db, "UPDATE users_secure SET password = 'x' WHERE id = 1")
     after = capture_database(read, "sqlite", before=before, **args)
     assert set(diff_database(before, after, **args)) == {"users_secure"}
 
 
-def test_a_reloaded_or_copied_snapshot_is_still_single_use(tmp_path: Path) -> None:
-    """Adversarial review of #1588: one write must not earn two rewards."""
-
-    import copy
-
-    db = _store(tmp_path)
-    contract = _contract(db)
-    first = capture(contract, PARAMS)
-    path = first.save(tmp_path / "before.json")
-    _write(db, SAVE)
-    assert verify_write(
-        contract, Snapshot.load(path), params=PARAMS, actor=BOT
-    ).verified
-    for reuse in (
-        Snapshot.load(path),
-        first,
-        Snapshot(copy.deepcopy(first.payload)),
-    ):
-        with pytest.raises(VerifierError):
-            verify_write(contract, reuse, params=PARAMS, actor=BOT)
-
-
-def test_a_snapshot_from_another_contract_or_unbound_params_raise_verifier_error(
-    tmp_path: Path,
-) -> None:
-    db = _store(tmp_path)
-    contract = _contract(db)
-    (tmp_path / "other").mkdir()
-    other_db = _store(tmp_path / "other")
-    with pytest.raises(VerifierError):
-        verify_write(
-            _contract(other_db), capture(contract, PARAMS), params=PARAMS, actor=BOT
-        )
-    with pytest.raises(VerifierError):
-        verify_write(
-            contract, capture(contract, PARAMS), params={"fname": "Ada"}, actor=BOT
-        )
-
-
-def test_a_snapshot_repr_shows_no_values_or_salt(tmp_path: Path) -> None:
-    snapshot = capture(_contract(_store(tmp_path)), PARAMS)
-    assert str(snapshot.payload["salt"]) not in repr(snapshot)
-    assert "Wendell" not in repr(snapshot)
-
-
-def test_a_used_snapshot_is_refused_in_another_process(
-    tmp_path: Path, _used_dir: Path
-) -> None:
-    """Re-review of #1588: a copied file, or a snapshot pickled to a worker,
-    must not verify a second write in a new process."""
-
-    import shutil
-    import subprocess
-    import sys
-
-    db = _store(tmp_path)
-    contract = _contract(db)
-    first = capture(contract, PARAMS)
-    path = first.save(tmp_path / "before.json")
-    _write(db, SAVE)
-    assert verify_write(
-        contract, Snapshot.load(path), params=PARAMS, actor=BOT
-    ).verified
-    copy = tmp_path / "copy.json"
-    shutil.copy(path, copy)
-    script = (
-        "import sys; from pathlib import Path\n"
-        "from openadapt_flow import verifier as v\n"
-        "v.USED_DIR = Path(sys.argv[3])\n"
-        "c = v.Contract.from_dict(__import__('json').loads(sys.argv[2]))\n"
-        "try:\n"
-        "    v.verify_write(c, v.Snapshot.load(sys.argv[1]),"
-        " params={'fname': 'Ada', 'lname': 'Quill', 'email': 'ada@example.test'},"
-        " actor=v.Actor(kind='agent', id='bot'))\n"
-        "    print('verified')\n"
-        "except v.VerifierError:\n"
-        "    print('refused')\n"
+def test_a_pending_write_repr_shows_no_values(tmp_path: Path) -> None:
+    pending = begin_write(
+        _contract(_store(tmp_path)), PARAMS, actor=BOT, ledger=MemoryLedger()
     )
-    out = subprocess.run(
-        [sys.executable, "-c", script, str(copy), json.dumps(_doc(db)), str(_used_dir)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert out.stdout.strip() == "refused"
-
-
-def test_the_snapshot_fields_are_stable() -> None:
-    from dataclasses import fields
-
-    assert [f.name for f in fields(Snapshot)] == ["payload", "used", "path"]
-    assert list(inspect.signature(Snapshot.load).parameters) == ["path"]
-    assert list(inspect.signature(Snapshot.save).parameters) == ["self", "path"]
-
-
-def test_a_snapshot_verifies_only_where_it_was_captured(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Re-review of #1588: a worker with another HOME (another state
-    directory) must refuse, not replay."""
-
-    db = _store(tmp_path)
-    contract = _contract(db)
-    before = capture(contract, PARAMS)
-    _write(db, SAVE)
-    monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "elsewhere")
-    with pytest.raises(VerifierError, match="captured under this state"):
-        verify_write(contract, before, params=PARAMS, actor=BOT)
+    text = repr(pending)
+    assert "Ada" not in text and "example.test" not in text
+    pending.release()
