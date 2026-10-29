@@ -635,6 +635,7 @@ improvising or retrying when something is off.
 | A scroll that never finds the next click's target halts on that click, so self-repair can take a relabelled control behind a scroll; the refusal for unreviewed-risk steps names them | On main ([#1337](https://github.com/OpenAdaptAI/OpenAdapt/pull/1337)) | Synthetic; openIMIS drift row checked offline on its recorded frames | `runtime/replayer.py`, `qualify set-risk` |
 | Self-repair across several new steps: a bridge of up to three actions for a new required dialog or a control moved into a menu, each new step armed with a record check and probed up to the save, one person approving | On main ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)) | Synthetic (MockMed menu and provider drifts, scripted agent; [benchmark/auto_repair](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/auto_repair/README.md)) | `run --self-repair`, [SELF_REPAIR.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SELF_REPAIR.md) |
 | Keep pixel-path runs working across display scaling and font smoothing changes | On main ([#1286](https://github.com/OpenAdaptAI/OpenAdapt/pull/1286)) | Synthetic (in-process RDP and canvas renderings: 17 of 24 healthy runs across 100–175%, up from 3; 0 wrong saves) | [benchmark/pixel_scale](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/pixel_scale/README.md) |
+| Find icons again on Citrix, RDP and VNC after a display-scale, zoom, font, theme or codec change, with a local model that counts look-alikes and stops on a tie (`--local-grounding`, off by default) | On main ([#1596](https://github.com/OpenAdaptAI/OpenAdapt/pull/1596)) | Synthetic (Chromium-drawn clinic screen, pixels only: icons found under 21 of 26 conditions, template matching 8; 0 wrong targets in 65; whole runs unchanged, 4 of 39 in both arms, because the layout, identity and census checks stop first) | [benchmark/pixel_grounding](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/pixel_grounding/README.md), `runtime/local_grounder.py` |
 | Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | On main ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
 | Repair a pinned bundle: the fix runs the pinned bundle's own qualification campaign on a test copy, keeps every write, effect, identity rule and record check, and is re-admitted with signed lineage (at most three repairs, no revoked key) that the pin verifies | On main | Synthetic | [SELF_REPAIR.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/SELF_REPAIR.md#a-pinned-bundle-re-qualify-and-re-admit) |
 | Repair by default: once a repair agent is configured, every stop that wrote nothing goes to it without anyone starting it; a stop after a possible write goes to reconciliation; every stop is a row in a ledger with the funnel from stop to resumed item | On main ([#1360](https://github.com/OpenAdaptAI/OpenAdapt/pull/1360)) | Synthetic (MockMed, 22 drift modes, real Claude agent: 6 of 21 repairable stops resumed and verified, 0 wrong saves in 66 runs); routing over recorded OpenEMR stops; live openIMIS relabel: 3 of 3 reached repair and stopped with no wrong save; silent-saves 1.1.0 UI-change blocks: 18 of 28 items that always stopped now correct, 0 wrong | `run` (on by default, `--no-auto-repair`), `repair:` in `deploy.yaml`, [benchmark/auto_repair](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/auto_repair/README.md) |
@@ -1589,6 +1590,32 @@ fixture's own IDs (`MRN A1001`) halted at the identity check at every render
 other than the recorded one, before and after the extra identity looks: that
 workflow always opens the recorded record, whose ID the recording read as
 `MRN Alo01`, and the kiosk has no selectable text.
+
+**Icons on the pixel path, and the local grounding model.** A template match
+compares the recorded crop with the live frame pixel for pixel, so an icon is
+not found at another display scale, zoom, font size or theme, or through a
+lossy codec. The optional local grounding model (`--local-grounding`, off by
+default) finds it again: a small open vision model (DINOv2-small, Apache-2.0,
+run in process) scores every place that looks like the recorded crop, and the
+step continues only when one place qualifies, alone or singled out by every
+landmark that OCR can locate. Two qualifying places stop the step. On a
+Chromium-drawn clinic screen
+([`benchmark/pixel_grounding`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/../benchmark/pixel_grounding/README.md)) it
+found the two toolbar and form icons under 21 of 26 conditions where the
+template matcher found 8, abstained on the other 5, and picked no wrong
+target among 65 click targets. A query takes 133 ms (p95 139 ms) on a 1080p
+frame and about 310 ms (p95 up to 374 ms) at 4K on an M2 Max CPU; Apple's
+Neural Engine, through onnxruntime's CoreML provider, is slower. It does not change what a whole run
+does there: the same 4 of 39 runs saved in both arms, because other checks
+stop the run first. The layout check stops a zoomed or larger-font screen at
+its first step. The identity template of a banner does not match a dark
+theme. On a scaled screen the look-alike census counts the record's name in
+both the banner and the worklist row, and stops. The model only locates: a
+target with a text label is left to OCR, a crop of blank input field (whose
+look-alikes overlap) is left to the rest of the ladder, and identity, census,
+risk gate and postconditions apply to its point as to any other. The fixture
+is not a live Citrix ICA/HDX or RDP session, and the rung's thresholds were set
+on it.
 
 ### 2. A postcondition verifies only what it observes
 

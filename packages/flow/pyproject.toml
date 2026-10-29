@@ -137,6 +137,13 @@ grounder = ["anthropic>=0.40"]
 # OCRAnchorGrounder imports it lazily and abstains (returns None) when absent,
 # so the core stays installable and the ladder safe-halts without it.
 grounding = ["openadapt-grounding>=0.1.0"]
+# Local grounding model for pixel surfaces (runtime.local_grounder,
+# `--local-grounding`): DINOv2-small int8 on onnxruntime, which the base
+# install already carries through rapidocr-onnxruntime, so the extra adds no
+# distribution and the install-weight budget is unchanged. The 24 MB weights
+# are not in the wheel; they are fetched once from a pinned revision and
+# SHA-256 checked (or placed under OPENADAPT_FLOW_MODEL_DIR for offline sites).
+local-grounding = ["onnxruntime>=1.17"]
 # Operator console: `openadapt-flow console` serves a localhost-only web UI
 # over compiled bundles / run reports / skill libraries (openadapt_flow.console).
 # FastAPI app + uvicorn server; the API client side (httpx) is already core.
