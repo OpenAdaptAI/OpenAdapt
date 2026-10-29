@@ -56,6 +56,35 @@ from pydantic import (
 )
 from pydantic_core import to_jsonable_python
 
+ValueKind = Literal["phone", "date", "email"]
+
+
+def kind_form(
+    kind: Optional[str], value: Any, date_order: Optional[str] = None
+) -> Optional[str]:
+    """``value`` in the canonical form of a declared value kind, or None when
+    it can't be read as one (which then matches nothing). The one normalizer
+    is :mod:`openadapt_flow.runtime.effects.readback_values`, shared with the
+    on-screen read-back:
+
+    - ``phone``: the digits, with an extension kept apart; a value with
+      anything but digits, ``( ) + - . /``, spaces and one trailing extension
+      isn't a phone number;
+    - ``date``: ISO ``YYYY-MM-DD`` (a stored date-time keeps its date; nothing
+      else may follow); a numeric date needs ``date_order``, or it is
+      ambiguous;
+    - ``email``: one address, case folded.
+    """
+
+    from openadapt_flow.runtime.effects.readback_values import normalize_value
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if kind is None:
+        return text
+    return normalize_value(text, kind, date_order=date_order)  # type: ignore[arg-type]
+
 
 class ValueExpr(BaseModel):
     """A single effect-contract value: either a static ``literal`` or a
@@ -91,6 +120,19 @@ class ValueExpr(BaseModel):
     #: reads the entered value back as its code. A value the map doesn't name
     #: resolves to nothing, so the check matches nothing and fails closed.
     map: Optional[dict[str, str]] = None
+    #: For a ``param`` the system of record stores transformed: how it stores
+    #: what was entered (OpenEMR's New Patient form saves street and city in
+    #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
+    #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). The check stays exact:
+    #: it expects the stored form, not any casing.
+    stored: Optional[Literal["upper", "lower"]] = None
+    #: A declared value kind (:func:`kind_form`): the expected value and the
+    #: stored one are compared in canonical form, so formatting alone never
+    #: refutes, and a different value always does. Never inferred.
+    kind: Optional[ValueKind] = None
+    #: ``kind: date`` only: how a numeric date entered for this value reads.
+    date_order: Optional[Literal["mdy", "dmy"]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
@@ -102,6 +144,10 @@ class ValueExpr(BaseModel):
             raise ValueError("effect parameter name must not be empty")
         if self.map is not None and (self.param is None or not self.map):
             raise ValueError("a value map needs a parameter and at least one entry")
+        if self.stored is not None and self.param is None:
+            raise ValueError("a stored form applies to a parameter")
+        if self.date_order is not None and self.kind != "date":
+            raise ValueError("date_order applies to kind: date")
         return self
 
     @model_serializer(mode="wrap")
@@ -109,8 +155,10 @@ class ValueExpr(BaseModel):
         # A value without a map serializes exactly as before, so existing
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
-        if isinstance(data, dict) and data.get("map") is None:
-            data.pop("map", None)
+        if isinstance(data, dict):
+            for key in ("map", "stored", "kind", "date_order"):
+                if data.get(key) is None:
+                    data.pop(key, None)
         return data
 
     def resolve(self, params: Mapping[str, object]) -> Optional[str]:
@@ -129,14 +177,36 @@ class ValueExpr(BaseModel):
             from openadapt_flow.runtime.authorization import runtime_param_text
 
             entered = runtime_param_text(params[self.param])  # type: ignore[arg-type]
-            if self.map is not None:
-                return self.map.get(entered)
-            return entered
+            return self.stored_form(entered)
         return self.literal
+
+    def stored_form(self, entered: str) -> Optional[str]:
+        """What the system of record stores for ``entered``: its code under
+        :attr:`map` (None when the map doesn't name it), then :attr:`stored`."""
+
+        value: Optional[str] = entered
+        if self.map is not None:
+            value = self.map.get(entered)
+        if value is not None and self.stored == "upper":
+            value = value.upper()
+        elif value is not None and self.stored == "lower":
+            value = value.lower()
+        return value
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
         """Return a pure-literal copy of this expression bound to ``params``."""
-        return ValueExpr(literal=self.resolve(params))
+        return ValueExpr(
+            literal=self.resolve(params), kind=self.kind, date_order=self.date_order
+        )
+
+    def matches(self, stored: Any) -> bool:
+        """Does a stored value equal this (resolved) value? In canonical form
+        when a kind is declared, as text otherwise."""
+
+        if self.kind is None:
+            return str(stored) == str(self)
+        want = kind_form(self.kind, self.literal, self.date_order)
+        return want is not None and kind_form(self.kind, stored) == want
 
     # -- transparent str-compatibility (back-compat with the v1 plain-string
     #    form): a literal ValueExpr compares, hashes, stringifies, and reprs
@@ -1280,7 +1350,10 @@ def record_matches(record: dict[str, Any], selector: dict[str, str]) -> bool:
     An empty selector matches every record (used by absence checks).
     """
     for key, want in selector.items():
-        if str(record.get(key, None)) != str(want):
+        if isinstance(want, ValueExpr) and want.kind is not None:
+            if not want.matches(record.get(key, None)):
+                return False
+        elif str(record.get(key, None)) != str(want):
             return False
     return True
 

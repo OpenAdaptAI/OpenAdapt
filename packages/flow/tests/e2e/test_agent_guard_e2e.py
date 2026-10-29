@@ -86,7 +86,14 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
         assert ok["verdict"] == "VERIFIED"
         assert ok["guard_exit"] == 0
         handoff = ok["handoff"]
-        assert handoff["status"] == "draft", handoff
+        # When run 1 was not recorded, the guard's notes say why (a refused
+        # recording names its reason there).
+        assert handoff["status"] == "draft", {
+            "handoff": handoff,
+            "guard_notes": ok.get("guard_notes"),
+            "guard_error": ok.get("guard_error"),
+            "load_avg_1m": ok.get("load_avg_1m"),
+        }
         assert handoff["inputs"] == ["note"]
         assert handoff["expect"] == {"patient_id": "p1", "type": "Triage"}
 
@@ -103,5 +110,39 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
         assert by_name["ok"]["model_calls"] == 0
         for fault in ("no_persist", "partial", "duplicate", "wrong_record", "stale"):
             assert by_name[fault]["outcome"] == "caught_by_readback", by_name[fault]
+    finally:
+        app.stop()
+
+
+def test_an_agent_with_no_think_time_is_recorded_when_it_waits(tmp_path: Path) -> None:
+    # A script acts as soon as its last click returns. On a loaded runner that
+    # came before the recorder had kept the last click's after-frame, and the
+    # recorder rightly refused the run ("more than one logical browser action
+    # arrived before Flow could retain an exact intermediate frame"). The
+    # guard reports what the recording has kept; the agent waits for it.
+    _chromium_or_skip()
+    app = serve(tmp_path / "app.sqlite")
+    try:
+        files = bench.write_setup(
+            tmp_path / "setup",
+            app.base_url,
+            teach_dir=tmp_path / "teach",
+            db_path=app.db_path,
+        )
+        ok = bench.run_one(
+            app,
+            _scenario("ok"),
+            "guard",
+            tmp_path / "run-ok",
+            _port(),
+            think_s=0.0,
+            files=files,
+            teach=True,
+        )
+        assert ok["outcome"] == "clean", ok
+        assert ok["handoff"]["status"] == "draft", {
+            "handoff": ok["handoff"],
+            "guard_notes": ok.get("guard_notes"),
+        }
     finally:
         app.stop()

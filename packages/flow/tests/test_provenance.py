@@ -378,6 +378,45 @@ def test_round_trip_maps_a_label_to_the_stored_code() -> None:
     assert judge("RI") == "refuted"
 
 
+def test_round_trip_applies_the_stored_form() -> None:
+    """OpenEMR saves the street in capitals; the referral prints mixed case."""
+
+    from openadapt_flow.provenance import bound_fields, bound_maps, default_extractor
+
+    document = IntakeDocument("r.txt", "text", ["Street: 41 Larch Way"])
+    sha = sha256_bytes(document.text.encode("utf-8"))
+    prov = ProvenanceFile(
+        params={
+            "street": ParamProvenance(
+                value="41 Larch Way",
+                source=SourceRef(kind="document", sha256=sha, line=1, label="Street"),
+                extractor="model:first-reader",
+            )
+        }
+    )
+    effects = [
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match={"id": "1"},
+            field="street",
+            value={"param": "street", "stored": "upper"},
+        )
+    ]
+
+    def judge(stored: str) -> str:
+        return round_trip(
+            prov,
+            {"id": 1, "street": stored},
+            bound_fields(effects),
+            {sha: document},
+            default_extractor(prov),
+            maps=bound_maps(effects),
+        ).status
+
+    assert judge("41 LARCH WAY") == "held"
+    assert judge("14 LARCH WAY") == "refuted"
+
+
 def _mapped_round_trip(label: str, stored: dict, effects: list) -> str:
     from openadapt_flow.provenance import bound_fields, bound_maps, default_extractor
 
@@ -451,4 +490,5 @@ def test_a_map_follows_the_binding_its_field_comes_from() -> None:
     written = Effect(kind=EffectKind.RECORD_WRITTEN, match=_MATCH)
     two = [written, _equals("state_name"), _equals("state", state)]
     stored = {"state_name": "Massachusetts", "state": "MA"}
-    assert _mapped_round_trip("State: Massachusetts", stored, two) == "held"
+    # Bound two ways: left unchecked (``bindings``), never a map on the wrong field.
+    assert _mapped_round_trip("State: Massachusetts", stored, two) == "not_checked"
