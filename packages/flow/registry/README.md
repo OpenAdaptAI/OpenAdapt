@@ -23,7 +23,7 @@ Before it downloads anything, `pull` checks who published the index:
   `release-registry.yml` on a `registry-*` tag of OpenAdaptAI/OpenAdapt. The
   attestation must name the exact index it read, and an archive must be one it
   names too. This needs the `registry` extra
-  (`pip install 'openadapt-flow[registry]'`).
+  (`pip install 'openadapt-flow[registry]'`, Python 3.11 or later).
 - Verification is offline, against the Sigstore trusted root shipped with the
   package. `openadapt-flow pull --refresh-trust` fetches the current one
   through Sigstore's TUF repository into `$OPENADAPT_HOME`.

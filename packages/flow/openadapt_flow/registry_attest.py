@@ -100,8 +100,8 @@ def _sigstore() -> Any:
         import sigstore  # noqa: F401
     except ImportError as exc:
         raise AttestationError(
-            "verifying the registry needs the sigstore package: "
-            "pip install 'openadapt-flow[registry]'"
+            "verifying the registry needs the sigstore package, on Python "
+            "3.11 or later: pip install 'openadapt-flow[registry]'"
         ) from exc
     return sigstore
 

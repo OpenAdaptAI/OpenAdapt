@@ -165,7 +165,7 @@ def test_a_shipped_contract_names_every_address_and_credential_by_a_declared_var
 
 
 def test_a_shipped_contract_cannot_read_the_environment(tmp_path, monkeypatch):
-    monkeypatch.setenv("PROBE_SECRET", "s3cr3t-from-os-environ")
+    monkeypatch.setenv("PROBE_SECRET", "value-from-os-environ")
     dest = _pull(
         tmp_path,
         contract=CONTRACT.replace(
@@ -182,7 +182,7 @@ def test_a_shipped_contract_cannot_read_the_environment(tmp_path, monkeypatch):
 def test_an_unbound_variable_takes_its_default_not_the_environment(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("SITE_LABEL", "s3cr3t-from-os-environ")
+    monkeypatch.setenv("SITE_LABEL", "value-from-os-environ")
     dest = _pull(
         tmp_path,
         contract=CONTRACT.replace("name: Demo", "name: Demo ${SITE_LABEL:-default}"),

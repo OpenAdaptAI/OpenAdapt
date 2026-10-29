@@ -184,7 +184,7 @@ def test_bind_records_names_never_secrets(tmp_path):
     binding = dest / skills.BINDING
     assert binding.stat().st_mode & 0o077 == 0
     for name, value, message in (
-        ("RECORD_TOKEN_VAR", "eyJhbGciOiJIUzI1NiJ9.secret", "NAME of an environment"),
+        ("RECORD_TOKEN_VAR", "a token, not a name", "NAME of an environment"),
         ("APP_URL", "https://user:pw@emr.example.org", "credentials in the URL"),
         ("APP_URL", "emr.example.org", "http"),
         ("UNKNOWN", "x", "not a variable"),
