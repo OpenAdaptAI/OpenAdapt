@@ -497,9 +497,7 @@ def test_an_older_index_from_a_local_copy_is_refused(tmp_path, monkeypatch):
         "openemr/new-referral", tmp_path / "a", index_url=DEFAULT + "index.json"
     )
     with pytest.raises(registry.RegistryError, match="older than"):
-        registry.pull(
-            "openemr/new-referral@1.0.0", tmp_path / "b", index_url=str(old)
-        )
+        registry.pull("openemr/new-referral@1.0.0", tmp_path / "b", index_url=str(old))
     assert not (tmp_path / "b").exists()
     # One mark for the release workflow, whatever the address.
     state = json.loads((tmp_path / "openadapt-home/registry-state.json").read_text())
@@ -586,6 +584,12 @@ def test_the_release_workflow_attests_and_adds_the_attestation_by_name():
     ]
     assert granted == ["attest"]
     assert jobs["attest"]["environment"] == "release-identity"
+    # A re-run of an old tag's run can't stamp a fresh serial on an old tree.
+    guard = jobs["attest"]["steps"][0]
+    assert guard["env"]["RUN_ATTEMPT"] == "${{ github.run_attempt }}"
+    assert guard["env"]["TRIGGERING_ACTOR"] == "${{ github.triggering_actor }}"
+    assert '[ "$RUN_ATTEMPT" != 1 ]' in guard["run"]
+    assert '"$TRIGGERING_ACTOR" != "$EXPECTED_ACTOR"' in guard["run"]
 
 
 # -- 6. stripping the provenance doesn't make an unqualified pull runnable ------------------
