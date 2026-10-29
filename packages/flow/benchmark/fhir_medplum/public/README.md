@@ -28,7 +28,8 @@ your agent's own model calls.
 ## Run it
 
 You need Docker (with about 3 GB free for Medplum's images), git, and
-Python 3.10, 3.11 or 3.12.
+Python 3.10, 3.11 or 3.12. Podman or Colima work too: the runner calls
+`docker compose`, so point `DOCKER_HOST` at their socket.
 
 ```bash
 git clone https://github.com/OpenAdaptAI/OpenAdapt
@@ -51,7 +52,8 @@ writes once. It costs nothing and checks your setup. The first run pulls
 Medplum's images (pinned by digest in `../environment.lock.json`) and waits
 for the server, which takes a few minutes. `--down` stops Medplum and
 deletes its data at the end; leave it off to keep the server for another
-run, and add `--no-up` to that run.
+run, and add `--no-up` to that run. Medplum listens on 127.0.0.1:9590
+(`--port` to change it).
 
 To run the reference model agent, Claude through the Claude Agent SDK, set
 `ANTHROPIC_API_KEY` (or sign in to Claude Code), then:

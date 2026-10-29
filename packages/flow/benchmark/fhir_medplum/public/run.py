@@ -439,8 +439,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     ap.add_argument(
         "--state-dir",
-        default=str(DEFAULT_STATE),
-        help="generated passwords and client ids (outside the repo)",
+        default=None,
+        help="generated passwords and client ids (default ~/.openadapt/bench-medplum/<port>)",
     )
     ap.add_argument(
         "--max-usd",
@@ -467,10 +467,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     fx = MedplumFixture(
-        state_dir=Path(args.state_dir).expanduser(),
+        state_dir=Path(args.state_dir or DEFAULT_STATE / str(args.port)).expanduser(),
         server_port=args.port,
         app_port=args.port + 1,
-        project=PROJECT,
+        project=f"{PROJECT}-{args.port}",
     )
     started = time.monotonic()
     up_s = 0.0 if args.no_up else bring_up(fx)
