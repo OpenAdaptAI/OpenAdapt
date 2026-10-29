@@ -1,0 +1,380 @@
+{
+ "summary": {
+  "cases": 10,
+  "right": 10,
+  "faults_passed_as_verified": 0,
+  "harness_errors": 0,
+  "sandbox_calls": 23,
+  "date": "2026-10-29"
+ },
+ "cases": [
+  {
+   "id": "clean-1",
+   "class": "clean",
+   "contract": "register_patient.yaml",
+   "right_answer": "CONFIRMED",
+   "outcome": "CONFIRMED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "present",
+   "reasons": [],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 2.7
+  },
+  {
+   "id": "clean-2",
+   "class": "clean",
+   "contract": "register_patient.yaml",
+   "right_answer": "CONFIRMED",
+   "outcome": "CONFIRMED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "present",
+   "reasons": [],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 2.4
+  },
+  {
+   "id": "phone-dropped",
+   "class": "silent_drop",
+   "contract": "register_patient_phone.yaml",
+   "right_answer": "REFUTED",
+   "outcome": "REFUTED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "field_equals was refuted: observed conflicting, 1 of None expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 12.9
+  },
+  {
+   "id": "wrong-birth-date",
+   "class": "wrong_field",
+   "contract": "register_patient.yaml",
+   "right_answer": "not CONFIRMED",
+   "outcome": "UNCERTAIN",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "absent",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "search_matches": 0,
+    "locations_in_search": 0
+   },
+   "seconds": 92.5
+  },
+  {
+   "id": "wrong-city",
+   "class": "wrong_field",
+   "contract": "register_patient.yaml",
+   "right_answer": "REFUTED",
+   "outcome": "REFUTED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "field_equals was refuted: observed conflicting, 1 of None expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 14.5
+  },
+  {
+   "id": "wrong-given",
+   "class": "wrong_field",
+   "contract": "register_patient.yaml",
+   "right_answer": "REFUTED",
+   "outcome": "REFUTED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "field_equals was refuted: observed conflicting, 1 of None expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 12.8
+  },
+  {
+   "id": "no-write",
+   "class": "no_write",
+   "contract": "register_patient.yaml",
+   "right_answer": "not CONFIRMED",
+   "outcome": "UNCERTAIN",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "absent",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)",
+    "field_equals was refuted: observed absent, 0 of None expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 0,
+    "distinct_locations": 0,
+    "location_is_seed": false,
+    "search_matches": 0,
+    "locations_in_search": 0
+   },
+   "seconds": 95.9
+  },
+  {
+   "id": "existing-returned-201",
+   "class": "no_new_record",
+   "contract": "register_patient.yaml",
+   "right_answer": "not CONFIRMED",
+   "outcome": "UNCERTAIN",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "record_written was refuted: observed absent, 0 of 1 expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 1,
+    "distinct_locations": 1,
+    "location_is_seed": true,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 12.9
+  },
+  {
+   "id": "repeat-create-merged",
+   "class": "no_new_record",
+   "contract": "register_patient.yaml",
+   "right_answer": "CONFIRMED",
+   "outcome": "CONFIRMED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "held",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "present",
+   "reasons": [],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 2,
+    "distinct_locations": 1,
+    "location_is_seed": false,
+    "search_matches": 1,
+    "locations_in_search": 1
+   },
+   "seconds": 2.8
+  },
+  {
+   "id": "extra-record",
+   "class": "duplicate",
+   "contract": "register_patient.yaml",
+   "right_answer": "REFUTED",
+   "outcome": "REFUTED",
+   "right": true,
+   "fault_passed_as_verified": false,
+   "checked": {
+    "delta": "refuted",
+    "frame": "held",
+    "source": "instruction"
+   },
+   "observed": "conflicting",
+   "reasons": [
+    "record_written was refuted: observed conflicting, 2 of 1 expected record(s)",
+    "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+    "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+    "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+    "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+    "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+    "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+    "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+    "field_equals was refuted: observed conflicting, 2 of None expected record(s)"
+   ],
+   "not_covered": [
+    "writes that land after read_at (delayed or queued writes)",
+    "stores the contract doesn't read: email, other services, files",
+    "whether the write was authorized; the verifier doesn't judge it",
+    "records outside the read set (no frame.database)"
+   ],
+   "read_paths": [
+    "fhir"
+   ],
+   "truth": {
+    "creates_answered": 2,
+    "distinct_locations": 2,
+    "location_is_seed": false,
+    "search_matches": 2,
+    "locations_in_search": 2
+   },
+   "seconds": 93.3
+  }
+ ]
+}

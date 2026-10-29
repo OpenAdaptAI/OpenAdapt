@@ -310,6 +310,40 @@ def test_fhir_included_resources_are_not_matches(serve) -> None:
     assert len(_read(_fhir(holder["url"])) or []) == 6
 
 
+def _empty_with_outcome(severity: str) -> dict:
+    """Epic's empty search: no matches and an OperationOutcome entry."""
+
+    return {
+        "resourceType": "Bundle",
+        "type": "searchset",
+        "total": 0,
+        "entry": [
+            {
+                "resource": {
+                    "resourceType": "OperationOutcome",
+                    "issue": [{"severity": severity, "code": "processing"}],
+                },
+                "search": {"mode": "outcome"},
+            }
+        ],
+    }
+
+
+def test_fhir_a_warning_outcome_is_not_a_record(serve) -> None:
+    """Counted as a record, the outcome vanished once the patient was
+    created, and the frame refused a clean write as a removed record."""
+
+    url = serve(lambda path, n: (200, _empty_with_outcome("warning")))
+    assert _read(_fhir(url)) == []
+
+
+def test_fhir_an_error_outcome_is_unreadable(serve) -> None:
+    url = serve(lambda path, n: (200, _empty_with_outcome("error")))
+    state = _fhir(url).capture_pre_state()
+    assert not state.reachable
+    assert state.detail["read_problem"] == "the search returned an error outcome"
+
+
 def test_fhir_next_origin_is_named(serve) -> None:
     url = serve(lambda path, n: (200, _bundle("http://203.0.113.9", n)))
     state = _fhir(url).capture_pre_state()
