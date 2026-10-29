@@ -186,17 +186,17 @@ result = compile_first_run(
     on_screen=["Jane Sample", "MRN P1"],
     agent=ClaudeAgent(vision="selective"),
     model_key=load_customer_model_key("anthropic"),
-    confirm_checks="dana@clinic.example",     # or a callback that shows them to a person
+    confirm_checks="dana@clinic.example",  # or a callback that shows them to a person
     drop_fields=["key"],
     canary_params=[{"note": "Canary test note"}],  # a real save; choose safe values
-    admitter=agent_principal,                  # principal_from_key(...)
+    admitter=agent_principal,  # principal_from_key(...)
 )
-result.status          # "admitted"
-result.run1["agent"]   # model calls, tokens, cost, seconds
-result.emitted         # {"skill": ..., "mcp_server": ..., "cli": ...}
+result.status  # "admitted"
+result.run1["agent"]  # model calls, tokens, cost, seconds
+result.emitted  # {"skill": ..., "mcp_server": ..., "cli": ...}
 
 later = run_compiled(result.dir, note="Recheck knee in ten days")
-later.verified, later.model_calls, later.receipt_outcome   # True, 0, "VERIFIED"
+later.verified, later.model_calls, later.receipt_outcome  # True, 0, "VERIFIED"
 ```
 
 `FirstRunCompiler` exposes the same steps one at a time (`record`,

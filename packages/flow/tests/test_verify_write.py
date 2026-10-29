@@ -29,6 +29,12 @@ NOTE = "Follow-up in two weeks"
 AGENT = {"kind": "agent", "id": "intake-bot"}
 
 
+@pytest.fixture(autouse=True)
+def _seal_home(tmp_path, monkeypatch):
+    # Receipts are sealed; keep the test's Seal key out of the home folder.
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+
+
 @pytest.fixture
 def sor():
     url, db, stop = fault_serve()
@@ -115,3 +121,30 @@ def test_an_unknown_executor_kind_is_refused(sor, tmp_path: Path) -> None:
     pending = begin_write(_contract(base), {"patient_id": "p1", "note": NOTE}, tmp_path)
     with pytest.raises(ValueError, match="executor kind"):
         verify_write(pending, executor={"kind": "robot", "id": "x"})
+
+
+def test_a_verified_receipt_says_whether_it_is_sealed(
+    sor, tmp_path: Path, monkeypatch
+) -> None:
+    base, _db = sor
+    pending = begin_write(_contract(base), {"patient_id": "p1", "note": NOTE}, tmp_path)
+    FakeAgent(base).click_save("p1", NOTE)
+    result = verify_write(pending, executor=AGENT)
+    assert result.verified and result.seal == "sealed"
+    assert Path(result.seal_path).exists()
+
+    # A key that can't be used: still verified, and the result says unsealed.
+    from openadapt_flow import offline_seal
+
+    def broken(*_a, **_k):
+        raise PermissionError("key unreadable")
+
+    monkeypatch.setattr(offline_seal, "sign_file", broken)
+    pending = begin_write(
+        _contract(base), {"patient_id": "p2", "note": NOTE}, tmp_path / "two"
+    )
+    FakeAgent(base).click_save("p2", NOTE)
+    result = verify_write(pending, executor=AGENT)
+    assert result.verified and result.seal_path is None
+    assert result.seal.startswith("unsealed:")
+    assert result.to_dict()["seal"].startswith("unsealed:")

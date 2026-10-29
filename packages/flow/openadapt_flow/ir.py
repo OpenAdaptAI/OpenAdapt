@@ -378,6 +378,49 @@ class IdentityTemplate(BaseModel):
         return data
 
 
+class FormIdentity(BaseModel):
+    """Record identity of a save on a create-new form: the form it submits is
+    the demonstrated form, holding exactly what this run typed.
+
+    A form that creates a record shows no existing record next to its save
+    button: the record is the one the run is entering. So the save's identity
+    is the form itself, all of it. The recorder observes, right before the
+    demonstrated click on a labelled submit button, that the button submits
+    the one HTML form owning every field typed into since the last save (not
+    in a table row or a single field's own widget), and fingerprints that
+    form. Before the click at run time, the replayer requires:
+
+    - the button is still that form's submit button, and the form owns
+      exactly ``filled_fields`` fields this run typed into, each holding
+      exactly what the run typed;
+    - the form submits to the same origin and path (``action_sha256``) with
+      the same ``method``, and would send the same set of control names and
+      types (``controls_sha256``), hidden ones included;
+    - every control the run did not type into (a hidden record or parent id,
+      a select left on its default, a checked box) holds the demonstrated
+      value: salted digests in ``value_digests``, under ``value_salt`` (the
+      identity-template scheme). Hidden tokens are not compared (``exempt``):
+      ones named like a token, and ones that changed while the demonstration
+      was typed.
+
+    Anything else halts before the click. A submit event from any other form
+    or control during the click is cancelled and halts the run.
+
+    Counts, tokens, names and digests only; no field text or value.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    filled_fields: int = Field(ge=1, le=10_000)
+    submit_role: Literal["form_submit"]
+    action_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    method: Literal["get", "post", "dialog"]
+    controls_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    value_salt: str = Field(default="", max_length=128)
+    value_digests: dict[str, str] = Field(default_factory=dict)
+    exempt: tuple[str, ...] = ()
+
+
 class Anchor(BaseModel):
     """Redundant evidence for locating a step's target on screen.
 
@@ -502,6 +545,14 @@ class Anchor(BaseModel):
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
         ),
     )
+    form_identity: Optional[FormIdentity] = Field(
+        default=None,
+        description=(
+            "A labelled save on a create-new form: before the click, its form"
+            " must hold exactly the fields this run typed, with the values"
+            " typed. See FormIdentity. None everywhere else."
+        ),
+    )
     landmarks: list[Landmark] = Field(default_factory=list)
     search_pad: int = Field(
         default=80,
@@ -553,6 +604,16 @@ class PostconditionKind(str, Enum):
     # shown, so a list that has not loaded yet never passes. Unreadable rows
     # fail the check.
     NO_DUPLICATE_CANDIDATE = "no_duplicate_candidate"
+    # A key press that moves the focus and changes nothing visible (a Tab
+    # onto an icon button, an ArrowDown that highlights an option): after the
+    # step the focused element has a specific identity, ``focus_by`` (a
+    # ``testid``, an ``id``, or a ``role_name``: a role and a non-empty
+    # accessible name), and no other element on the page has it. With
+    # ``focus_active_option`` an option of the focused control is active
+    # (``aria-activedescendant``, or ``aria-selected`` in the listbox it
+    # controls). Unobservable focus, or no specific identity, fails the check
+    # (:func:`focus_identity_is_specific`).
+    FOCUS_ON = "focus_on"
 
 
 class Postcondition(BaseModel):
@@ -580,6 +641,20 @@ class Postcondition(BaseModel):
     candidate_rows: Optional[str] = Field(default=None, min_length=1, max_length=256)
     #: NO_DUPLICATE_CANDIDATE: the frame chain the list is in (outermost first).
     candidate_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
+    #: FOCUS_ON: how the focused element is identified.
+    focus_by: Optional[Literal["testid", "id", "role_name"]] = None
+    #: FOCUS_ON: the ``data-testid`` or ``id`` (``focus_by`` testid / id).
+    focus_value: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    #: FOCUS_ON: the ARIA role and accessible name (``focus_by`` role_name;
+    #: with a testid or id too, when the element had them, and then both must
+    #: hold at replay).
+    focus_role: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    focus_name: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    #: FOCUS_ON: an option of the focused control must be active.
+    focus_active_option: bool = False
+    #: FOCUS_ON: the frame chain the focused element is in (outermost first;
+    #: empty in the top document). A testid or id is unique within its frame.
+    focus_frame_path: Optional[tuple[str, ...]] = Field(default=None, max_length=8)
     #: NO_DUPLICATE_CANDIDATE: parameters whose value in any row makes it a
     #: real candidate.
     candidate_params: Optional[tuple[str, ...]] = Field(
@@ -596,10 +671,43 @@ class Postcondition(BaseModel):
             data.pop("field_selector", None)
         if self.param is None:
             data.pop("param", None)
-        for name in ("candidate_rows", "candidate_frame_path", "candidate_params"):
+        for name in (
+            "candidate_rows",
+            "candidate_frame_path",
+            "candidate_params",
+            "focus_by",
+            "focus_value",
+            "focus_role",
+            "focus_name",
+            "focus_frame_path",
+        ):
             if getattr(self, name) is None:
                 data.pop(name, None)
+        if not self.focus_active_option:
+            data.pop("focus_active_option", None)
         return data
+
+
+def focus_identity_is_specific(pc: "Postcondition") -> bool:
+    """Whether a FOCUS_ON postcondition names one element, not a kind of element.
+
+    A ``testid`` or an ``id`` with a value, or a role with a non-empty
+    accessible name. A tag alone, or a role with no name, names no element:
+    such a postcondition asserts nothing and never passes.
+    """
+
+    if pc.kind is not PostconditionKind.FOCUS_ON:
+        return False
+    if pc.focus_by in ("testid", "id"):
+        return bool(pc.focus_value and pc.focus_value.strip())
+    if pc.focus_by == "role_name":
+        return bool(
+            pc.focus_role
+            and pc.focus_role.strip()
+            and pc.focus_name
+            and pc.focus_name.strip()
+        )
+    return False
 
 
 IdentitySignalKeyValue = Literal[
@@ -3755,6 +3863,7 @@ class IdentityCheck(BaseModel):
         "vlm",
         "signal_quorum",
         "hover",
+        "form",
     ] = "context"
     coverage: float = 0.0
     expected: str = ""

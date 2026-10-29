@@ -48,6 +48,12 @@ FIRST = {"customer": "Acme Ltd", "product": "Desk lamp", "units": "3"}
 SECOND = {"customer": "Birch Co", "product": "Office chair", "units": "5"}
 
 
+@pytest.fixture(autouse=True)
+def _seal_home(tmp_path, monkeypatch):
+    # Receipts are sealed; keep the test's Seal key out of the home folder.
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+
+
 @pytest.fixture
 def app() -> Iterator[str]:
     base, stop = serve(0)
@@ -68,6 +74,8 @@ def _contract(base: str) -> WriteContract:
     return WriteContract.from_dict(
         {
             "schema_version": "openadapt.verify/v1",
+            # The requests a taught order may send: the sign-in and the save.
+            "writes": ["POST /login", "POST /orders"],
             "verifier": {
                 "kind": "rest",
                 "base_url": base,

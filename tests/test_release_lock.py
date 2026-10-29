@@ -104,7 +104,11 @@ def test_release_workflow_pins_actions_and_separates_permissions():
     assert "stage-flow-admission" not in jobs
     assert jobs["publish-pypi"]["environment"] == "pypi"
     assert jobs["publish-pypi"]["permissions"]["id-token"] == "write"
-    assert jobs["verify-pinned-components"]["permissions"] == {"contents": "read"}
+    # actions: read lets it find the launcher's newest green run on main.
+    assert jobs["verify-pinned-components"]["permissions"] == {
+        "contents": "read",
+        "actions": "read",
+    }
     assert jobs["create-release-tag"]["permissions"] == {"contents": "read"}
     assert jobs["build-and-attest"]["permissions"] == {
         "contents": "read",

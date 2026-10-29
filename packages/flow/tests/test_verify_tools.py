@@ -29,6 +29,12 @@ from openadapt_flow.mockmed.fault_server import serve as fault_serve  # noqa: E4
 NOTE = "Follow-up in two weeks"
 
 
+@pytest.fixture(autouse=True)
+def _seal_home(tmp_path, monkeypatch):
+    # Receipts are sealed; keep the test's Seal key out of the home folder.
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+
+
 @pytest.fixture
 def sor():
     url, _db, stop = fault_serve()

@@ -66,9 +66,21 @@ The agent calls `verify_begin` before the write, makes the write its own way, th
 | `RECONCILIATION_REQUIRED` | The store doesn't show the write, or couldn't be read. It may still land. | Don't retry, or it could save twice. A person checks. |
 | `ok_to_write: false` (from `verify_begin`) | The store couldn't be read before the write. | Don't make the write. |
 
+A verified result proves the system of record holds what was declared. It doesn't prove the write was authorized: `values_declared_by` says who declared the values (the agent), and `authorization` is `unbound` unless you pass an operator's authorization reference to `begin_write`. The receipt is sealed with this computer's Seal key (`seal_path`; manage the key with `openadapt-flow local-seal key`, or turn Seals off with `OPENADAPT_LOCAL_SEAL=off`), so someone else can check it was issued here and not written by the agent. `seal` says `sealed`, `off`, or `unsealed:` with why the key couldn't be used.
+
 ## Teach a write as a tool
 
-`openadapt-agent serve --teach-browser --contracts ./contracts` lets your agent teach a browser write once, against a contract, and call it again as a `taught_<name>` tool. Each call makes the write and returns the same verified receipt or refusal. Sign-in values stay with the server:
+`openadapt-agent serve --teach-browser --contracts ./contracts` lets your agent teach a browser write once, against a contract, and call it again as a `taught_<name>` tool. Each call makes the write and returns the same verified receipt or refusal.
+
+For a taught write, the contract also lists the requests the write may send:
+
+```yaml
+writes: ["POST /login", "POST /orders"]   # the sign-in and the save
+```
+
+The browser stops any other write before it is sent, while teaching and on every call. The tool sends exactly the writes it was taught, in order and with the same fields, and a call where the page tries anything else ends in `needs_review`, never `done`.
+
+Sign-in values stay with the server. They go only into a password field or another field of a sign-in form, never into an address, and no form of them (encoded or not) reaches the agent:
 
 ```bash
 openadapt-agent serve --teach-browser --contracts ./contracts \
