@@ -13,6 +13,7 @@ hold. tests/test_recorder_waits_for_writes.py checks the recorder's wait alone.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -48,7 +49,10 @@ def test_a_slowly_held_save_is_recorded_with_its_write(
     patch = tmp_path / "slow_hold"
     patch.mkdir()
     (patch / "sitecustomize.py").write_text(_SLOW_HOLD, encoding="utf-8")
-    monkeypatch.setenv("PYTHONPATH", str(patch))
+    existing = os.environ.get("PYTHONPATH")
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join(filter(None, [str(patch), existing]))
+    )
     app = serve(tmp_path / "app.sqlite")
     try:
         teach_dir = tmp_path / "teach"
@@ -67,11 +71,17 @@ def test_a_slowly_held_save_is_recorded_with_its_write(
         )
         assert ok["outcome"] == "clean", ok
         assert ok["hold_ms"] and ok["hold_ms"][0] >= HOLD_S * 1000 * 0.9, ok["hold_ms"]
+        handoff = ok["handoff"]
+        diagnosis = {k: ok.get(k) for k in ("guard_notes", "guard_error", "handoff")}
+        assert handoff and handoff.get("task_dir"), diagnosis
+        # The recording the program was compiled from, as the handoff kept it.
+        events_path = (
+            Path(handoff["task_dir"]) / "program" / "recording" / "events.jsonl"
+        )
+        assert events_path.is_file(), diagnosis
         events = [
             json.loads(line)
-            for line in (tmp_path / "run-ok" / "recording" / "events.jsonl")
-            .read_text(encoding="utf-8")
-            .splitlines()
+            for line in events_path.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
         save = events[-1]
@@ -79,8 +89,7 @@ def test_a_slowly_held_save_is_recorded_with_its_write(
         # recorder waited for the held save to go through.
         records = save.get("sor_after")
         assert records and records[0]["patient_id"] == "p1", records
-        handoff = ok["handoff"]
-        monkeypatch.delenv("PYTHONPATH")
+        monkeypatch.undo()
         second = bench.run2(
             app,
             Path(handoff["task_dir"]),
