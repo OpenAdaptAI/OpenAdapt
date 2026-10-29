@@ -55,6 +55,8 @@ fixture). Without a reset, the second user and the made-up patients stay.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import os
 import re
 import uuid
@@ -256,6 +258,20 @@ def _last_log_id(fx: Any) -> int:
     return int(found[0])
 
 
+def _statement(comments: bytes) -> str:
+    """The logged statement, plain or as OpenEMR 8 stores it (base64)."""
+
+    plain = comments.decode("utf-8", "replace")
+    if _TABLE.match(plain):
+        return plain
+    # The read is cut at 300 bytes; decode whole base64 groups only.
+    cut = comments[: len(comments) - len(comments) % 4]
+    try:
+        return base64.b64decode(cut, validate=True).decode("utf-8", "replace")
+    except (binascii.Error, ValueError):
+        return plain
+
+
 def _window(fx: Any, after_id: int) -> list[dict[str, Any]]:
     """The window's write entries that name ``user_settings``.
 
@@ -276,8 +292,7 @@ def _window(fx: Any, after_id: int) -> list[dict[str, Any]]:
         kind = event.rsplit("-", 1)[-1]
         if kind not in ("insert", "update", "delete") or encrypted == "Yes":
             continue
-        statement = bytes.fromhex(comments_hex).decode("utf-8", "replace")
-        match = _TABLE.match(statement)
+        match = _TABLE.match(_statement(bytes.fromhex(comments_hex)))
         if match is None or match.group(1).lower() != "user_settings":
             continue
         out.append(
