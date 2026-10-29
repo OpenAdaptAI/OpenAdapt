@@ -512,8 +512,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.down:
             fx.down(volumes=True)
             # The users and clients it names are gone with the database.
-            for name in ("secrets.json", "clients.json"):
-                (fx.state_dir / name).unlink(missing_ok=True)
+            for stale in ("secrets.json", "clients.json"):
+                (fx.state_dir / stale).unlink(missing_ok=True)
     card = scorecard(rows)
     doc = {
         "schema": "openadapt.medplum-public-bench.results/v1",

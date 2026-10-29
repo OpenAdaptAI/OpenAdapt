@@ -49,11 +49,13 @@ openadapt bench medplum --agent scripted --down
 
 `--agent scripted` is a reference agent with no model: it searches, then
 writes once. It costs nothing and checks your setup. The first run pulls
-Medplum's images (pinned by digest in `../environment.lock.json`) and waits
-for the server, which takes a few minutes. `--down` stops Medplum and
+Medplum's images (pinned by digest in `../environment.lock.json`). With the
+images already pulled, a cold run from `git clone` to the scorecard took 5
+minutes: under a minute to install, 45 seconds for Medplum to start, and
+about 4 minutes for the cases. `--down` stops Medplum and
 deletes its data at the end; leave it off to keep the server for another
-run, and add `--no-up` to that run. Medplum listens on 127.0.0.1:9590
-(`--port` to change it).
+run, and add `--no-up` to that run. Medplum listens on port 9590 of the
+loopback interface only (`--port` to change it).
 
 To run the reference model agent, Claude through the Claude Agent SDK, set
 `ANTHROPIC_API_KEY` (or sign in to Claude Code), then:
@@ -67,8 +69,11 @@ reported spend passes `--max-usd` (default 30).
 
 Results go to `bench-medplum-results/` in the current folder
 (`--out` to change it): `results.json` with every case, and
-`SCORECARD.txt`. `python -m benchmark.fhir_medplum.public.score
-results.json` (from `packages/flow`) prints the scorecard again.
+`SCORECARD.txt`. To print the scorecard again:
+
+```bash
+PYTHONPATH=packages/flow python -m benchmark.fhir_medplum.public.score bench-medplum-results/results.json
+```
 
 ## Plug in your agent
 
