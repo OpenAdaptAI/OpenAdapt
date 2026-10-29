@@ -41,6 +41,8 @@ PERTURBATIONS = (
     "timeout_after_save",
 )
 PER_PERTURBATION = 4
+#: Run 2 (PREREGISTRATION_2.md): run 1's mix at N = 300 with 80 fault cases.
+RUN2 = {"seed": 2029, "n_ordinary": 168, "per_perturbation": 13}
 
 
 @dataclass
@@ -87,19 +89,26 @@ class Stream:
         return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def build(fault_ids: list[str], faultset_sha256: Optional[str] = None, seed: int = SEED) -> Stream:
-    wl = generate(seed, 400, 1)
+def build(
+    fault_ids: list[str],
+    faultset_sha256: Optional[str] = None,
+    seed: int = SEED,
+    *,
+    n_ordinary: int = N_ORDINARY,
+    per_perturbation: int = PER_PERTURBATION,
+) -> Stream:
+    wl = generate(seed, max(400, 4 * (n_ordinary + len(fault_ids) + 4 * per_perturbation)), 1)
     ordinary: list[Item] = []
     spare: list[dict[str, Any]] = []
     for w in wl.items:
         t = wl.truth[w.item_id]
-        if t.exception in ORDINARY_KINDS and len(ordinary) < N_ORDINARY:
+        if t.exception in ORDINARY_KINDS and len(ordinary) < n_ordinary:
             ordinary.append(
                 Item(0, "", "ordinary", t.exception, dict(w.params), w.source_text, dict(t.person), t.intended)
             )
         elif t.exception == "clean":
             spare.append({"person": dict(t.person)})
-    need = len(fault_ids) + len(PERTURBATIONS) * PER_PERTURBATION
+    need = len(fault_ids) + len(PERTURBATIONS) * per_perturbation
     if len(spare) < need:
         raise RuntimeError("not enough spare people for the stream")
     rest: list[Item] = []
@@ -108,7 +117,7 @@ def build(fault_ids: list[str], faultset_sha256: Optional[str] = None, seed: int
         rest.append(Item(0, "", "fault", case_id, dict(p), _source_text(p), dict(p), dict(p)))
     k = len(fault_ids)
     for name in PERTURBATIONS:
-        for v in range(PER_PERTURBATION):
+        for v in range(per_perturbation):
             p = spare[k]["person"]
             k += 1
             rest.append(Item(0, "", "perturbation", name, dict(p), _source_text(p), dict(p), dict(p), variant=v))

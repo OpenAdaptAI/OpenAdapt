@@ -71,6 +71,8 @@ class Ctx:
         self.intended: Optional[dict[str, str]] = item.intended
         self.legit = Legit()
         self.events: list[dict[str, Any]] = []
+        #: One entry per `fault_write`: whether it moved any of its tables.
+        self.faults_landed: list[bool] = []
         self.saves = 0
         self._threads: list[threading.Thread] = []
         self._lock = threading.Lock()
@@ -81,6 +83,19 @@ class Ctx:
         """A direct database change (no audit entry): the ``none`` actor."""
 
         return self.app.sql(statement)
+
+    def fault_write(self, tables: list[str], fn: Callable[[], Any]) -> Any:
+        """Run a fault's write and record whether it landed: whether any of
+        ``tables`` moved. A harmful case whose fault never landed (say an
+        ``INSERT IGNORE`` that found the row already there) is reported as
+        not run, not scored (PREREGISTRATION_2.md)."""
+
+        before = {t: self.oracle.read_table(t) for t in tables}
+        out = fn()
+        moved = [t for t in tables if self.oracle.read_table(t) != before[t]]
+        self.faults_landed.append(bool(moved))
+        self.log(fault_write=tables, landed=bool(moved))
+        return out
 
     def api(self, user: str, method: str, path: str, body: Optional[dict] = None) -> Any:
         """OpenEMR's REST API as ``user`` (``openadapt_actor`` or ``clinician2``),
@@ -114,14 +129,17 @@ class Ctx:
         return out
 
     def _is_items_own(self, table: str, row: dict[str, str], pid: Optional[int]) -> bool:
-        """A row of this item's own save, which a legit write that overlaps
-        it in time must never excuse."""
+        """A row of this item's own save (the person's chart and the save's
+        side rows), which a legit write that overlaps it in time must never
+        excuse. Other rows on the new chart, such as a colleague adding a
+        problem to it, are the colleague's and are excused."""
 
-        from .oracle import _is_person
+        from .oracle import SAVE_SIDE_TABLES, _is_person
 
-        if table == "patient_data" and _is_person(row, self.item.person):
-            return True
-        return pid is not None and row.get("pid") == str(pid) and table != "patient_data"
+        if table == "patient_data":
+            return _is_person(row, self.item.person)
+        side = SAVE_SIDE_TABLES.get(table)
+        return pid is not None and side is not None and row.get(side[0]) == str(pid)
 
     def new_pid(self) -> Optional[int]:
         """The pid of the chart this item created, if one exists yet."""
@@ -236,6 +254,8 @@ def _bookkeeping_burst(ctx: Ctx, n: int) -> None:
 
 
 def perturbation(name: str, variant: int) -> Hooks:
+    # Run 2 repeats each perturbation 13 times; the 4 variants cycle.
+    variant %= 4
     h = Hooks()
     if name == "delayed_legit_write":
         delay = (15.0, 25.0, 32.0, 40.0)[variant]

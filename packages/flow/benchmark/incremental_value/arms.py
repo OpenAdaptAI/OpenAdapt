@@ -276,6 +276,12 @@ class ArmA(AgentToolsArm):
         self._warm_tokens()
         return None
 
+    def after_item(self, ctx: Ctx, result: ItemResult) -> Optional[dict[str, Any]]:
+        """Work the arm does once the item's own run is over, before the
+        oracle judges it. A checks nothing later."""
+
+        return None
+
     def _on_finish(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
         """A trusts its own read-back: the claim stands."""
 

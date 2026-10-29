@@ -31,7 +31,7 @@ from lifecycle.arm import Env, OperatorDecision, OperatorRequest
 from lifecycle.apps import OpenEMRApp
 
 from . import faults, workload
-from .oracle import DbOracle, judge, root_sql
+from .oracle import DbOracle, judge, load_form_defaults, root_sql
 
 HERE = Path(__file__).resolve().parent
 BOT = "openadapt_actor"
@@ -209,6 +209,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--only", default="")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--no-reset", action="store_true")
+    ap.add_argument("--run", type=int, choices=[1, 2], default=1, help="the pre-registered stream size and seed")
     a = ap.parse_args(argv)
 
     cases_list, sha, ops = faults.load_cases()
@@ -217,7 +218,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     if stream_path.exists():
         stream = workload.load(stream_path)
     else:
-        stream = workload.build([c["id"] for c in cases_list], sha)
+        size = workload.RUN2 if a.run == 2 else {}
+        stream = workload.build([c["id"] for c in cases_list], sha, **size)
         a.out.mkdir(parents=True, exist_ok=True)
         workload.save(stream, stream_path)
     if stream.faultset_sha256 != sha:
@@ -253,6 +255,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     with (out / "arm.json").open("w") as fh:
         json.dump({"describe": arm.describe(), "stream_sha256": stream.sha256(), "faultset_sha256": sha, "targets": targets,
                    "engine_commit": os.popen("git rev-parse HEAD").read().strip()}, fh, indent=1)
+    defaults_path = os.environ.get("INCREMENTAL_VALUE_FORM_DEFAULTS", "")
+    form_defaults = load_form_defaults(defaults_path) if defaults_path else None
+    if form_defaults is None:
+        print("warning: no INCREMENTAL_VALUE_FORM_DEFAULTS; the oracle checks only the referral's fields", flush=True)
     setup = arm.setup(env, rec)
     only = set(filter(None, a.only.split(",")))
     n = 0
@@ -296,9 +302,13 @@ def main(argv: Optional[list[str]] = None) -> int:
                 infra = f"{type(exc).__name__}: {exc}"[:500]
                 res = None
             quiet = ctx.wait_background(ctx.max_delay(hooks) + 120)
+            # B's later recheck runs at the time its contract declares, not
+            # when the harness knows the background writes are done.
+            late = arm.after_item(ctx, res) if res is not None and infra is None else None
             time.sleep(3)
             diffs = oracle.advance()
-            verdict = judge(oracle, diffs, intended=ctx.intended, person=item.person, legit=ctx.legit)
+            verdict = judge(oracle, diffs, intended=ctx.intended, person=item.person, legit=ctx.legit,
+                            form_defaults=form_defaults)
             row = {
                 "item_id": item.item_id,
                 "seq": item.seq,
@@ -312,6 +322,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "events": ctx.events,
                 "background_done": quiet,
                 "legit_rows": len(ctx.legit.keys),
+                "faults_landed": ctx.faults_landed,
+                "late": late,
                 "infra_error": infra,
                 "result": asdict(res) if res is not None else None,
                 "operator_requests": list(rec.requests),

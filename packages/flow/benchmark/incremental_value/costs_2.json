@@ -1,0 +1,45 @@
+{
+ "schema": "incremental-value/costs/v2",
+ "frozen_with": "PREREGISTRATION_2.md",
+ "note": "People seconds per outcome for run 2. Chosen and cited before run 2; never changed after it starts.",
+ "missed_harm": {
+  "seconds": 14737,
+  "basis": "USD 96 to correct one duplicate patient record, at the US median wage of a medical records specialist, USD 23.45 per hour: 96 / 23.45 h = 4.09 h = 14,737 s.",
+  "sources": [
+   "Just BH, Marc D, Munns M, Sandefer R. Why Patient Matching Is a Challenge: Research on Master Patient Index (MPI) Data Discrepancies in Key Identifying Fields. Perspectives in Health Information Management. 2016;13(Spring):1e. PMID 27134610. PMC4832129. Cites USD 96 per duplicate record (Children's Medical Center Dallas).",
+   "U.S. Bureau of Labor Statistics, Occupational Employment and Wages, May 2023, 29-2072 Medical Records Specialists: median hourly wage USD 23.45. https://www.bls.gov/oes/2023/May/oes292072.htm"
+  ],
+  "applies_to": "every missed harmful change (wrong value, collateral change, missing or extra side record, duplicate). A wrong-chart or collateral correction is assumed to cost at least what a duplicate's does.",
+  "sensitivity": {
+   "low_seconds": 330,
+   "low_basis": "run 1's modelled cleanup (reconcile 120 + redo 180 + interrupt 30)",
+   "high_seconds": 153518,
+   "high_basis": "USD 1,000 per duplicate pair (HIMSS 2014 panel, as reported by Healthcare IT News), at the same wage"
+  }
+ },
+ "caught_harm": {
+  "seconds": 420,
+  "basis": "Modelled, not measured: no operator was timed. Cost model V1 (economic_comparison/assumptions.json): stop 90 + reconcile 120 + redo 180 + interrupt 30."
+ },
+ "false_stop": {
+  "seconds": 120,
+  "basis": "Modelled: stop 90 + interrupt 30 (the state is right, so no reconcile or redo)."
+ },
+ "correct_stop": {
+  "seconds": 120,
+  "basis": "Modelled: stop 90 + interrupt 30."
+ },
+ "failed_stop": {
+  "seconds": 420,
+  "basis": "Modelled: stop 90 + interrupt 30 + reconcile 120 + redo 180 (the state is wrong)."
+ },
+ "silent_absent": {
+  "seconds": 330,
+  "basis": "Modelled: the referral was never registered and nobody was told; reconcile 120 + redo 180 + interrupt 30 when it is found."
+ },
+ "setup_min": {
+  "A_agent_readback": 60.0,
+  "B_agent_openadapt": 90.0
+ },
+ "amortized_items_secondary": 1000
+}

@@ -24,7 +24,7 @@ import json
 import math
 import statistics
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 HERE = Path(__file__).resolve().parent
 ASSUMPTIONS = json.loads((HERE.parent / "economic_comparison" / "assumptions.json").read_text())
@@ -43,12 +43,29 @@ PEOPLE_S = {
     "silent_absent": RECONCILE + REDO + INTERRUPT,
 }
 CORRECT_AFTER_HANDLING = {"correct", "correct_stop", "false_stop", "caught_harm", "failed_stop"}
+EXCLUDED = {"infra", "not_run"}
+
+
+def load_costs(path: Path) -> tuple[dict[str, float], dict[str, float], dict[str, Any]]:
+    """People seconds per outcome and setup minutes from a frozen cost file
+    (``costs_2.json`` for run 2)."""
+
+    c = json.loads(path.read_text())
+    people = {"correct": 0.0, **{k: float(c[k]["seconds"]) for k in PEOPLE_S if k != "correct"}}
+    return people, {k: float(v) for k, v in c["setup_min"].items()}, c
 
 
 def outcome(row: dict[str, Any]) -> str:
     if row.get("infra_error") or row.get("result") is None or row.get("prepare_error"):
         return "infra"
+    # A harmful fault that never landed is not a test of either arm.
+    if row.get("faults_landed") and not all(row["faults_landed"]):
+        return "not_run"
     done = row["result"]["claimed"] == "done"
+    # A later recheck that refutes the write stops it then.
+    late = row.get("late") or {}
+    if done and late.get("outcome") in ("REFUTED", "refuted"):
+        done = False
     v = row["oracle"]["verdict"]
     if v == "harmful":
         return "missed_harm" if done else "caught_harm"
@@ -60,13 +77,25 @@ def outcome(row: dict[str, Any]) -> str:
     return "correct_stop" if not done else "correct"
 
 
-def arm_summary(rows: list[dict[str, Any]], arm: str, factor: float = 1.0) -> dict[str, Any]:
+def arm_summary(
+    rows: list[dict[str, Any]],
+    arm: str,
+    factor: float = 1.0,
+    *,
+    people: Optional[dict[str, float]] = None,
+    setup: Optional[dict[str, float]] = None,
+    amortize_over: Optional[int] = None,
+) -> dict[str, Any]:
+    people = PEOPLE_S if people is None else people
     outs = [outcome(r) for r in rows]
-    counted = [(r, o) for r, o in zip(rows, outs) if o != "infra"]
+    counted = [(r, o) for r, o in zip(rows, outs) if o not in EXCLUDED]
     n = len(counted)
     count = {k: sum(1 for _, o in counted if o == k) for k in PEOPLE_S}
-    people_s = sum(PEOPLE_S[o] for _, o in counted) * factor
-    setup_min = SETUP_MIN[arm]
+    people_s = sum(people[o] for _, o in counted) * factor
+    setup_min = (SETUP_MIN if setup is None else setup)[arm]
+    if amortize_over:
+        # Setup is paid once; charge this run its share of amortize_over items.
+        setup_min = setup_min * n / amortize_over
     correct_after = sum(1 for _, o in counted if o in CORRECT_AFTER_HANDLING)
     walls = [r["result"]["wall_s"] for r, _ in counted]
     cost = sum(r["result"]["cost_usd"] for r, _ in counted)
@@ -79,7 +108,8 @@ def arm_summary(rows: list[dict[str, Any]], arm: str, factor: float = 1.0) -> di
     total_min = setup_min + people_s / 60
     return {
         "items": n,
-        "infra_excluded": len(rows) - n,
+        "infra_excluded": sum(1 for o in outs if o == "infra"),
+        "not_run_excluded": sum(1 for o in outs if o == "not_run"),
         "correct_completions": count["correct"] + count["correct_stop"],
         "missed_harmful_changes": count["missed_harm"],
         "caught_harmful_changes": count["caught_harm"],
@@ -125,15 +155,27 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("dir", type=Path)
     ap.add_argument("--json", type=Path)
+    ap.add_argument("--costs", type=Path, help="a frozen cost file (costs_2.json); default: run 1's V1 model")
     a = ap.parse_args()
     rows = {arm: load(a.dir, arm) for arm in SETUP_MIN}
-    out: dict[str, Any] = {"cost_model": "V1 (economic_comparison/assumptions.json); modelled, not measured"}
+    people, setup, meta = (None, None, {}) if a.costs is None else load_costs(a.costs)
+    out: dict[str, Any] = {
+        "cost_model": "V1 (economic_comparison/assumptions.json); modelled, not measured"
+        if a.costs is None else f"{a.costs.name}: missed harm cited, other outcomes modelled"
+    }
+
+    def variant(key: str, **kw: Any) -> None:
+        costs = kw.pop("people", people)
+        s = {arm: arm_summary(r, arm, people=costs, setup=setup, **kw) for arm, r in rows.items() if r}
+        out[key] = {**s, "verdict": verdict(s["A_agent_readback"], s["B_agent_openadapt"])} if len(s) == 2 else s
+
     for f in (1.0, 0.5, 2.0):
-        s = {arm: arm_summary(r, arm, f) for arm, r in rows.items() if r}
-        if len(s) == 2:
-            out[f"x{f:g}"] = {**s, "verdict": verdict(s["A_agent_readback"], s["B_agent_openadapt"])}
-        else:
-            out[f"x{f:g}"] = s
+        variant(f"x{f:g}", factor=f)
+    if meta:
+        sens = meta["missed_harm"]["sensitivity"]
+        for name in ("low", "high"):
+            variant(f"missed_harm_{name}", people={**(people or {}), "missed_harm": float(sens[f"{name}_seconds"])})
+        variant(f"amortized_{meta['amortized_items_secondary']}", amortize_over=int(meta["amortized_items_secondary"]))
     text = json.dumps(out, indent=1)
     print(text)
     if a.json:
