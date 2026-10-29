@@ -36,6 +36,15 @@ CREATE TABLE user_prefs (owner_name TEXT, pref TEXT, value TEXT,
   PRIMARY KEY (owner_name, pref));
 CREATE TABLE keys (id INTEGER PRIMARY KEY, name TEXT, value TEXT);
 CREATE TABLE uuid_registry (id INTEGER PRIMARY KEY, uuid TEXT, table_name TEXT);
+CREATE TABLE extended_log (id INTEGER PRIMARY KEY, event TEXT, user TEXT,
+  recipient TEXT, description TEXT, patient_id INTEGER);
+CREATE TABLE audit_master (id INTEGER PRIMARY KEY, pid INTEGER,
+  approval_status INTEGER, type INTEGER);
+CREATE TABLE audit_details (id INTEGER PRIMARY KEY, table_name TEXT,
+  field_name TEXT, field_value TEXT, audit_master_id INTEGER);
+CREATE TABLE ip_tracking (id INTEGER PRIMARY KEY, ip_string TEXT,
+  total_ip_login_fail_counter INTEGER, ip_login_fail_counter INTEGER,
+  ip_last_login_fail TEXT, ip_force_block INTEGER);
 CREATE TABLE log (id INTEGER PRIMARY KEY, user TEXT, patient_id INTEGER,
   event TEXT, tbl TEXT);
 INSERT INTO patient_data VALUES (1, 1, 'Wendell', 'Prior', 'w@example.test', 'u-1');
@@ -51,6 +60,7 @@ INSERT INTO recent_patients VALUES (2, 1, 9, '9');
 INSERT INTO user_prefs VALUES ('clinic2', 'theme', 'light');
 INSERT INTO keys VALUES (1, 'oauth2key', 'k1');
 INSERT INTO uuid_registry VALUES (1, 'u-1', 'patient_data');
+INSERT INTO ip_tracking VALUES (1, '203.0.113.9', 40, 40, '2026-10-28', 0);
 """
 NEW = {"fname": "Ada", "lname": "Quill", "email": "ada@example.test"}
 
@@ -644,10 +654,52 @@ def test_the_bots_entry_for_an_append_only_table_is_its_bookkeeping(
         (_entry("bot", "insert", "other.uuid_registry"), ADD_UUID),
         # A table the profile compares row by row is not append-only.
         (_entry("bot", "update", "keys"),),
+        # Review of #1649: append-only tables that hold a disclosure, a
+        # pending change to a chart, or a sign-in lockout are not marked, so
+        # the bot's entry there still refutes.
+        (
+            _entry("bot", "insert", "extended_log", pid="1"),
+            "INSERT INTO extended_log (event, user, recipient, description, "
+            "patient_id) VALUES ('disclosure-healthcare', 'bot', 'acme-insurer', "
+            "'full chart', 1)",
+        ),
+        (
+            _entry("bot", "insert", "audit_master", pid="1"),
+            "INSERT INTO audit_master (pid, approval_status, type) VALUES (1, 1, 1)",
+            _entry("bot", "insert", "audit_details", pid="1"),
+            "INSERT INTO audit_details (table_name, field_name, field_value, "
+            "audit_master_id) VALUES ('patient_data', 'DOB', '1901-01-01', 1)",
+        ),
+        (
+            _entry("bot", "update", "ip_tracking", pid="1"),
+            "UPDATE ip_tracking SET total_ip_login_fail_counter = 0, "
+            "ip_login_fail_counter = 0, ip_last_login_fail = NULL WHERE id = 1",
+        ),
+        # A marked table, but the entry names a chart the save doesn't declare.
+        (_entry("bot", "insert", "uuid_registry", pid="1"), ADD_UUID),
     ],
 )
-def test_an_append_only_table_covers_only_added_rows(
+def test_only_a_marked_tables_insert_naming_no_record_is_bookkeeping(
     tmp_path: Path, sql: tuple[str, ...]
 ) -> None:
     status, refuting, _ = _why(_run(tmp_path, *sql))
     assert (status, refuting > 0) == ("refuted", True), sql
+
+
+def test_a_rule_that_excuses_insert_entries_has_rows_that_never_change() -> None:
+    from openadapt_flow.app_profiles import ProfileRule
+
+    for bad in (
+        {"mode": "columns", "columns": ["id"]},
+        {"mode": "append_only", "columns": ["ip_login_fail_counter"]},
+    ):
+        with pytest.raises(ValueError):
+            ProfileRule(
+                id="x",
+                table="ip_tracking",
+                reason="r",
+                insert_entry_names_no_record=True,
+                **bad,
+            )
+    marked = load_profile("openemr").no_record_insert_tables()
+    assert marked == {"uuid_registry", "uuid_mapping", "contact", "clinical_rules_log"}

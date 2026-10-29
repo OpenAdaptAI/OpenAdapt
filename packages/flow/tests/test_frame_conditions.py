@@ -277,30 +277,37 @@ def test_a_bot_log_entry_on_an_undeclared_record_is_collateral() -> None:
 
 
 @pytest.mark.parametrize(
-    ("read", "status"),
+    ("read", "entry", "status"),
     [
-        # Both reads read uuid_registry as append-only: the bot's insert
-        # there is the row they allow.
-        (["openemr.uuid_registry"], "held"),
-        # No read of it (or one that skipped it): the entry still refutes.
-        ([], "refuted"),
-        (["openemr.log"], "refuted"),
+        # Both reads read uuid_registry as append-only, and the profile marks
+        # it: the bot's insert there, filed under no chart, is bookkeeping.
+        (["openemr.uuid_registry"], {}, "held"),
+        # No read of it, or a read of another table: the entry still refutes.
+        ([], {}, "refuted"),
+        (["openemr.log"], {}, "refuted"),
+        # An update or delete entry, or one that names a record, still counts.
+        (["openemr.uuid_registry"], {"ev": "update"}, "refuted"),
+        (["openemr.uuid_registry"], {"ev": "delete"}, "refuted"),
+        (["openemr.uuid_registry"], {"record": 1}, "refuted"),
     ],
 )
-def test_a_bot_entry_on_an_append_only_table_needs_that_table_read(
-    read: list[str], status: str
+def test_a_bot_insert_entry_naming_no_record_needs_that_table_read(
+    read: list[str], entry: dict, status: str
 ) -> None:
     spec = _audit_spec()
     assert spec.attribution is not None
     spec.attribution.table_field = "tbl"
-    entry = {"id": 101, "user": "bot", "record": 0, "tbl": "uuid_registry"}
+    spec.attribution.event_field = "ev"
+    spec.attribution.insert_events = ["insert"]
+    logged = {"id": 101, "user": "bot", "record": 0, "tbl": "uuid_registry"}
+    logged.update({"ev": "insert", **entry})
     verdict = _judge(
         _state(OTHER),
         [dict(OTHER), dict(TARGET)],
         spec=spec,
         audit_before=[],
-        audit_after=[entry],
-        append_only_read=read,
+        audit_after=[logged],
+        no_record_inserts=read,
     )
     assert verdict.status == status, verdict.reason
 

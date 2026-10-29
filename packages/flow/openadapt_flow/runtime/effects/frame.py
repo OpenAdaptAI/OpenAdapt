@@ -693,7 +693,7 @@ def judge_frame(
     identities: Optional[Mapping[str, str]] = None,
     new_row_defaults: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     unread_changes: Sequence[tuple[str, str]] = (),
-    append_only_read: Collection[str] = (),
+    no_record_inserts: Collection[str] = (),
     hashers: Optional[Mapping[str, Callable[[str, Any], str]]] = None,
     clock: tuple[str, str] = ("", ""),
     database_evidence: Optional[dict[str, Any]] = None,
@@ -728,9 +728,9 @@ def judge_frame(
             ``CLOCK_DEFAULT`` a column the database fills with the time.
         unread_changes: (table, why) for tables that moved in a way no row
             comparison explains. Each is collateral.
-        append_only_read: Tables both database reads read as append-only:
-            any actor may add a row there, and a changed or removed row is
-            in ``unread_changes``.
+        no_record_inserts: Tables both database reads read as append-only
+            whose profile rule marks the acting user's insert entry naming no
+            record as the app's bookkeeping (an id map, a link row).
         hashers: Slice -> (column, value) -> the keyed MAC its baseline records hold instead of
             values (database tables). A post-save record is plain; it is
             hashed to compare with the baseline.
@@ -1685,13 +1685,23 @@ def judge_frame(
                     # is collateral there. Without such a row, the entry
                     # still refutes.
                     continue
-                if entry_table not in (None, "") and any(
-                    same_table(entry_table, t) for t in append_only_read
+                event = (
+                    str(get_path(entry, attribution.event_field))  # type: ignore[union-attr]
+                    if attribution is not None and attribution.event_field
+                    else ""
+                )
+                if (
+                    ref in (None, "", "0", 0)
+                    and attribution is not None
+                    and event in attribution.insert_events
+                    and entry_table not in (None, "")
+                    and any(same_table(entry_table, t) for t in no_record_inserts)
                 ):
-                    # The bot's insert into an id map or a log that every
-                    # save writes (OpenEMR's uuid_registry): both reads read
-                    # the table, which allows the row and judges every
-                    # existing row. A table the reads skip is not one.
+                    # The bot's insert into an id map or link row a save
+                    # makes (OpenEMR's uuid_registry), filed under no chart:
+                    # both reads read the table, which allows the row and
+                    # judges every existing row. An update or delete, an
+                    # entry naming a record, or any other table still counts.
                     continue
                 logged.add(str(ref))
                 collateral.append(

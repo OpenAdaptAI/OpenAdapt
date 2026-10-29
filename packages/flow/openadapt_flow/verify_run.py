@@ -593,8 +593,9 @@ class _DatabaseFrame:
     #: Every user's id by sign-in name (in memory only), to resolve an
     #: audit entry's actor to an owner column (owner-scoped attribution).
     users_map: dict[str, str] = field(default_factory=dict)
-    #: Tables both reads read as append-only.
-    append_only: list[str] = field(default_factory=list)
+    #: Append-only tables in both reads whose profile rule excuses the acting
+    #: user's insert entries that name no record.
+    no_record_inserts: list[str] = field(default_factory=list)
 
 
 def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
@@ -702,6 +703,10 @@ def _database_frame(
             ("(database code)", "triggers, views, routines or events changed")
         )
     counts = {"compare": 0, "append_only": 0, "skip": 0}
+    from openadapt_flow.app_profiles import table_name
+
+    profile = database.loaded_profile()
+    no_record = profile.no_record_insert_tables() if profile is not None else set()
     for name in sorted(set(old.tables) | set(new.tables)):
         a, b = old.tables.get(name), new.tables.get(name)
         try:
@@ -711,8 +716,13 @@ def _database_frame(
         out.unread.extend((name, why) for why in reasons)
         if b is not None:
             counts[b.mode] = counts.get(b.mode, 0) + 1
-        if a is not None and b is not None and a.mode == b.mode == "append_only":
-            out.append_only.append(name)
+        if (
+            a is not None
+            and b is not None
+            and a.mode == b.mode == "append_only"
+            and table_name(name) in no_record
+        ):
+            out.no_record_inserts.append(name)
         if (
             a is None
             or b is None
@@ -915,7 +925,7 @@ def judge_run_frame(
         identities=identities,
         new_row_defaults=None if db is None else db.defaults,
         unread_changes=() if db is None else db.unread,
-        append_only_read=() if db is None else db.append_only,
+        no_record_inserts=() if db is None else db.no_record_inserts,
         hashers=None if db is None else db.hashers,
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,

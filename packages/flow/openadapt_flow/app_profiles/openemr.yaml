@@ -11,7 +11,7 @@
 # excused.
 schema_version: openadapt.app-profile/v2
 app: openemr
-version: openemr-frame-profile/2026-10-29.4
+version: openemr-frame-profile/2026-10-29.5
 bookkeeping_tables: [log, log_comment_encrypt, api_log, extended_log, audit_master,
   audit_details, clinical_rules_log, uuid_registry, uuid_mapping, contact,
   session_tracker, ip_tracking, background_services, sequences,
@@ -19,17 +19,22 @@ bookkeeping_tables: [log, log_comment_encrypt, api_log, extended_log, audit_mast
 system_columns: [uuid]
 users: {table: users, id_column: id, name_column: username}
 rules:
-  # Logs and id maps: rows are added, never changed or removed.
+  # Logs and id maps: rows are added, never changed or removed. On the four
+  # marked insert_entry_names_no_record, OpenEMR inserts a row with a save or
+  # a chart view and files the acting user's entry under no chart (patient_id
+  # 0); run-2 calibration on 8.0.0.3 saw each on every clean UI save. The
+  # disclosure log (extended_log) and the portal's pending changes
+  # (audit_master, audit_details) are not marked: an entry there still counts.
   - {id: log, table: log, mode: append_only, reason: "audit log"}
   - {id: log-comment-encrypt, table: log_comment_encrypt, mode: append_only, reason: "audit log checksums"}
   - {id: api-log, table: api_log, mode: append_only, reason: "API audit log"}
   - {id: extended-log, table: extended_log, mode: append_only, reason: "activity log"}
   - {id: audit-master, table: audit_master, mode: append_only, reason: "audit log"}
   - {id: audit-details, table: audit_details, mode: append_only, reason: "audit log"}
-  - {id: clinical-rules-log, table: clinical_rules_log, mode: append_only, reason: "the reminder widget's log, written when a chart is shown"}
-  - {id: uuid-registry, table: uuid_registry, mode: append_only, reason: "system id map, written with any new record or a uuid backfill"}
-  - {id: uuid-mapping, table: uuid_mapping, mode: append_only, reason: "system id map"}
-  - {id: contact, table: contact, mode: append_only, reason: "a link row (table name and record id, no address) created when a chart is first opened"}
+  - {id: clinical-rules-log, table: clinical_rules_log, mode: append_only, insert_entry_names_no_record: true, reason: "the reminder widget's log, written when a chart is shown"}
+  - {id: uuid-registry, table: uuid_registry, mode: append_only, insert_entry_names_no_record: true, reason: "system id map, written with any new record or a uuid backfill"}
+  - {id: uuid-mapping, table: uuid_mapping, mode: append_only, insert_entry_names_no_record: true, reason: "system id map"}
+  - {id: contact, table: contact, mode: append_only, insert_entry_names_no_record: true, reason: "a link row (table name and record id, no address) created when a chart is first opened"}
   # Session and scheduler state: only the columns that move.
   - {id: session-tracker, table: session_tracker, mode: append_only, columns: [last_updated, number_scripts], reason: "one row per sign-in session, its counters updated while it lasts"}
   - {id: ip-tracking, table: ip_tracking, mode: append_only, columns: [total_ip_login_fail_counter, ip_login_fail_counter, ip_last_login_fail], reason: "sign-in failure counters per address"}

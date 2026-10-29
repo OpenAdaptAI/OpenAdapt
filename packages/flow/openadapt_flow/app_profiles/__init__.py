@@ -7,7 +7,10 @@ profile names is compared; a rule only says which changes in it are the
 app's own:
 
 - ``append_only``: rows may be added; an existing row may change only in the
-  rule's ``columns`` (none, by default) and may never go.
+  rule's ``columns`` (none, by default) and may never go. With
+  ``insert_entry_names_no_record``, the table is an id map or link row the
+  app inserts with a save: the acting user's own insert entry for it that
+  names no record is the app's bookkeeping, not a write the run hid.
 - ``columns``: an existing row may change in the named columns, and no row
   may be added or removed. Narrowed by ``fill_only`` (only from NULL or empty
   to a value: a backfill, never a swap, overwrite or clear), ``with_fill``
@@ -88,6 +91,8 @@ class ProfileRule(BaseModel):
     fill_only: bool = False
     with_fill: Optional[str] = None
     owner: Optional[Owner] = None
+    #: ``append_only`` with no ``columns`` only: see the module docstring.
+    insert_entry_names_no_record: bool = False
     reason: str = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -96,6 +101,13 @@ class ProfileRule(BaseModel):
             raise ValueError(f"rule {self.id}: a column rule names its columns")
         if self.mode == "own_rows" and (self.owner is None or self.columns):
             raise ValueError(f"rule {self.id}: own_rows names an owner, not columns")
+        if self.insert_entry_names_no_record and (
+            self.mode != "append_only" or self.columns or self.table == "*"
+        ):
+            raise ValueError(
+                f"rule {self.id}: only an append-only table whose rows never "
+                "change can excuse the acting user's insert entries"
+            )
         if self.mode != "columns" and (self.fill_only or self.with_fill):
             raise ValueError(f"rule {self.id}: fill conditions go with column rules")
         if self.table == "*" and not (self.mode == "columns" and self.fill_only):
@@ -176,6 +188,14 @@ class AppProfile(BaseModel):
             for r in self.rules
             if r.mode == "append_only" and (present is None or r.table in present)
         ]
+
+    def no_record_insert_tables(self) -> set[str]:
+        """Tables whose acting-user insert entries naming no record are the
+        app's bookkeeping (``insert_entry_names_no_record``)."""
+
+        return {
+            table_name(r.table) for r in self.rules if r.insert_entry_names_no_record
+        }
 
     def ignore_columns(self) -> dict[str, list[str]]:
         """Columns left out of each row's contents MAC: unconditional column
