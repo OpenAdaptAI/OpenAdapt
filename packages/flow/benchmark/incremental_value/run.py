@@ -137,7 +137,7 @@ class Fixture:
         )
         self.sql(
             "CREATE DATABASE IF NOT EXISTS oa_audit; CREATE OR REPLACE SQL SECURITY DEFINER VIEW oa_audit.writes AS "
-            + (HERE / "audit_query.sql").read_text().strip().rstrip(";")
+            + (HERE / os.environ.get("INCREMENTAL_VALUE_AUDIT_SQL", "audit_query.sql")).read_text().strip().rstrip(";")
             + ";"
         )
         targets: dict[str, Any] = {
