@@ -6,12 +6,17 @@ API, so callers keep working while they move:
 - ``WriteContract`` is :class:`~openadapt_flow.verifier.Contract`;
 - ``begin_write(contract, params, workdir)`` names the executor later, in
   ``verify_write(pending, executor={...})``;
-- ``VerifiedWrite`` and ``WriteRefused`` are both
-  :class:`~openadapt_flow.verifier.WriteResult`: test ``result.verified``,
-  not ``isinstance``. ``to_dict()`` keeps the old ``verdict`` key next to
-  the new ``outcome``;
+- results are one :class:`~openadapt_flow.verifier.WriteResult`;
+  ``isinstance(r, VerifiedWrite)`` still means CONFIRMED and
+  ``isinstance(r, WriteRefused)`` anything else. ``to_dict()`` keeps
+  ``verdict``, ``seal``, ``seal_path``, ``values_declared_by`` and
+  ``authorization``, next to the new ``outcome``;
 - ``BaselineUnreadable`` is :class:`~openadapt_flow.verifier.WriteBlocked`,
   so an ``except BaselineUnreadable`` also refuses a write the ledger holds.
+  Its message says why: the store couldn't be read, the write is held, or
+  (:class:`~openadapt_flow.verifier.AlreadyWritten`, with ``.result``) it
+  was already made and checked and is not sent again. Don't report every
+  such refusal as an unreadable store.
 
 Writes go through the uncertain-write ledger, as with the new API.
 """
@@ -56,8 +61,25 @@ __all__ = [
 ]
 
 WriteContract = Contract
-VerifiedWrite = WriteResult
-WriteRefused = WriteResult
+
+
+class _ByOutcome(type):
+    def __instancecheck__(cls, obj: object) -> bool:
+        return isinstance(obj, WriteResult) and obj.verified is cls._verified  # type: ignore[attr-defined]
+
+
+class VerifiedWrite(metaclass=_ByOutcome):
+    """``isinstance(result, VerifiedWrite)``: the outcome is CONFIRMED."""
+
+    _verified = True
+
+
+class WriteRefused(metaclass=_ByOutcome):
+    """``isinstance(result, WriteRefused)``: anything but CONFIRMED."""
+
+    _verified = False
+
+
 _UNNAMED = Actor("agent", "unidentified")
 
 

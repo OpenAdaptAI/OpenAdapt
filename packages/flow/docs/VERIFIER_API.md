@@ -50,6 +50,21 @@ system of record show the declared write, and only it?
 true in one case only: the caller said the write was never sent and the store
 shows nothing landed (verify-run's `halted_before_effect`).
 
+A caller that can't tell whether the write was sent, such as a tool that
+raised before or while acting, leaves `write_attempted=True`. A store that
+shows nothing is then `UNCERTAIN`, never `retry_safe`.
+
+**Delivery is the caller's call.** `verify_write(pending, delivered=False)`
+records the outcome but marks it undelivered, for example when a tool call
+was cancelled or timed out after the read-back. The next identical call
+raises `AlreadyWritten` with that result instead of sending again.
+
+**Who declared each value.** `begin_write(..., declared_by=...)` takes one
+name (`"agent"`) or a map from value name to who set it (`{"clinic":
+"operator", "note": "agent"}`). `to_dict()` returns it as
+`values_declared_by`. To bind it into the receipt as well, put it in
+`Actor.build`, which verify-run digests.
+
 ### Mapping from the old names
 
 | Source | Old name | New outcome |
@@ -135,8 +150,11 @@ database for workers on several hosts. `MemoryLedger` is for tests.
 `ledger=None` turns the ledger off; use it only for a sandbox that resets
 between runs, such as RL episodes.
 
-**Leases.** `begin_write` takes an exclusive lease on the key (`flock` on a
-lock file) and holds it until `verify_write` returns. The operating system
+**Leases.** `begin_write` takes an exclusive lease on the key, without
+waiting (`flock` with `LOCK_NB` on the lease's own open file), and holds it
+until `verify_write` returns. Whichever thread runs `verify_write` releases
+it, and a second `begin_write` in the same process is refused, never
+blocked. The operating system
 releases a lease when its process dies. So a second worker that can't get the
 lease knows the first is alive and refuses (`WriteHeld`). A worker that gets
 the lease while an attempt is still open knows its owner died between the
@@ -187,7 +205,7 @@ person checked the record. `reconcile [KEY]` reads back.
 | Module | After this change |
 |---|---|
 | `openadapt_flow.verifier` | The one public API: `Contract`, `Actor`, `Source`, `begin_write`, `verify_write`, `verified_write`, `reconcile`, `WriteResult`, `Outcome`, `Scope`, `PendingWrite`, the `WriteBlocked` family, `VerifierError`, the ledger classes, and #1588's `capture_database`/`diff_database`. A test pins the signatures. |
-| `openadapt_flow.verify` (#1589) | A thin, deprecated wrapper with the same signatures. It warns on import. `VerifiedWrite`/`WriteRefused` become one `WriteResult`, and `to_dict()` keeps the old `verdict` key next to `outcome`. Its `BaselineUnreadable` is `WriteBlocked`, so existing `except BaselineUnreadable` blocks also refuse held writes. |
+| `openadapt_flow.verify` (#1589) | A thin, deprecated wrapper with the same signatures. It warns on import. Results are one `WriteResult`, but `isinstance(r, VerifiedWrite)` still means `CONFIRMED`. `to_dict()` keeps `verdict`, `seal`, `seal_path`, `values_declared_by` and `authorization`. Its `BaselineUnreadable` is `WriteBlocked`, so existing `except BaselineUnreadable` blocks also refuse held writes. The message says which refusal it was; an `AlreadyWritten` carries the earlier `.result`. |
 | `openadapt.verify` (launcher) | Re-exports `openadapt_flow.verifier`. |
 | `agent/verify_tools.py` (MCP) | Calls `begin_write`/`verify_write`; the ledger applies through them. |
 | #1609 `WriteGuard` | Its in-memory `_held` and `_lost_replies` become ledger reads. The owner of #1609 drops them and catches `AlreadyWritten`. |
@@ -206,7 +224,8 @@ verify-run's own `.used` marker.
   covered.
 - Workers on several hosts need a shared backend. `FileLedger` locks work on
   one machine's local disk, not on network file systems.
-- If a crash happens after `verify_write` records `delivered` but before the
-  reply reaches the agent, the reply is lost, and an identical call counts as
-  a new write. `write_key` closes that gap for callers that have a stable
-  task id.
+- If a process crashes after `verify_write` records a delivered outcome but
+  before the reply reaches the agent, the reply is lost, and an identical
+  call without a `write_key` counts as a new write. A cancellation the
+  caller sees isn't affected (`delivered=False`). `write_key` closes the
+  remaining gap for callers that have a stable task id.

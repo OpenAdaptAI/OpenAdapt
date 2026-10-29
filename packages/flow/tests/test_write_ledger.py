@@ -380,3 +380,38 @@ def test_a_release_names_who_and_why(sor, ledger_dir: Path) -> None:
         ledger.release(key, by="", reason="")
     ledger.release(key, by="nurse-lead", reason="removed the duplicate")
     assert ledger.unresolved() == []
+
+
+def test_threads_in_one_process_share_the_lease_rules(sor, ledger_dir: Path) -> None:
+    """Adapters begin and verify on pool threads: a second begin_write in the
+    same process is refused at once, and whichever thread verifies releases."""
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    base, db = sor
+    pool = ThreadPoolExecutor(max_workers=2)
+    pending = pool.submit(
+        begin_write, _contract(base), VALUES, actor=BOT, write_key="task-t"
+    ).result()
+    started = time.monotonic()
+    with pytest.raises(WriteHeld, match="in flight"):
+        pool.submit(
+            begin_write, _contract(base), VALUES, actor=BOT, write_key="task-t"
+        ).result(timeout=5)
+    assert time.monotonic() - started < 5  # refused, never waited
+    FakeAgent(base).click_save("p1", NOTE)
+    assert pool.submit(verify_write, pending).result().verified  # another thread
+    with pytest.raises(AlreadyWritten):
+        pool.submit(
+            begin_write, _contract(base), VALUES, actor=BOT, write_key="task-t"
+        ).result()
+    pool.shutdown()
+    assert _landed(db) == 1
+
+
+def test_who_declared_each_value_reaches_the_reply(sor, ledger_dir: Path) -> None:
+    base, _db = sor
+    declared = {"patient_id": "operator", "note": "agent"}
+    pending = begin_write(_contract(base), VALUES, actor=BOT, declared_by=declared)
+    FakeAgent(base).click_save("p1", NOTE)
+    assert verify_write(pending).to_dict()["values_declared_by"] == declared

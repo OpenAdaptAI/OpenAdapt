@@ -18,7 +18,9 @@ from openadapt_flow.guard_demo import FakeAgent, verify_yaml
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.verify import (
     BaselineUnreadable,
+    VerifiedWrite,
     WriteContract,
+    WriteRefused,
     begin_write,
     verified_write,
     verify_write,
@@ -56,6 +58,7 @@ def test_a_correct_write_is_verified(sor, tmp_path: Path) -> None:
     result = verify_write(pending, executor=AGENT)
     assert result.verified and result.verdict == "VERIFIED"
     assert result.outcome.value == "CONFIRMED"
+    assert isinstance(result, VerifiedWrite) and not isinstance(result, WriteRefused)
     assert receipt_problem(dict(result.receipt)) is None
     assert len(result.receipt_sha256) == 64
     assert Path(result.receipt_path).exists()
@@ -89,6 +92,7 @@ def test_a_write_saved_twice_is_refuted(sor, tmp_path: Path) -> None:
     agent.click_save("p1", NOTE)
     result = verify_write(pending, executor=AGENT)
     assert not result.verified and result.verdict == "REFUTED"
+    assert isinstance(result, WriteRefused) and not isinstance(result, VerifiedWrite)
 
 
 def test_a_baseline_is_used_once(sor, tmp_path: Path) -> None:

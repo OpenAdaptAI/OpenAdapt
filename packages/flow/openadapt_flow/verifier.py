@@ -122,6 +122,12 @@ READ_PATHS = {
 }
 
 
+#: Who declared the values: one name for all (``"agent"``), or each value's
+#: name mapped to who set it (``{"clinic": "operator", "note": "agent"}``).
+#: Names only, never values.
+DeclaredBy = Union[str, Mapping[str, str]]
+
+
 class Outcome(str, enum.Enum):
     """Does the system of record show the declared write, and only it?"""
 
@@ -363,7 +369,7 @@ class WriteResult:
     write_id: str = ""
     #: The write's ledger key (an HMAC, no values), or "" without a ledger.
     write_key: str = ""
-    declared_by: str = "agent"
+    declared_by: DeclaredBy = "agent"
     authorization: str = "unbound"
     seal: str = "off"
     seal_path: Optional[str] = None
@@ -400,7 +406,9 @@ class WriteResult:
             "receipt_outcome": self.receipt_outcome,
             "receipt_sha256": self.receipt_sha256 or None,
             "receipt_path": self.receipt_path,
-            "values_declared_by": self.declared_by,
+            "values_declared_by": self.declared_by
+            if isinstance(self.declared_by, str)
+            else dict(self.declared_by),
             "authorization": self.authorization,
             "seal": self.seal,
             "seal_path": self.seal_path,
@@ -423,7 +431,7 @@ class PendingWrite:
     authorization_ref: str = field(repr=False)
     #: An operator's authorization reference was given (not defaulted).
     authorized: bool = False
-    declared_by: str = "agent"
+    declared_by: DeclaredBy = "agent"
     write_key: str = ""
     ledger: Optional[Ledger] = field(default=None, repr=False)
     write_key_bound: bool = False
@@ -461,7 +469,7 @@ def begin_write(
     write_key: Optional[str] = None,
     authorization_ref: str = "",
     workdir: Union[str, Path, None] = None,
-    declared_by: str = "agent",
+    declared_by: DeclaredBy = "agent",
 ) -> PendingWrite:
     """Consult the ledger, then read the system of record before the write.
 
@@ -482,7 +490,9 @@ def begin_write(
             only its salted digest enters the receipt.
         workdir: Where this write's private folder goes (default: the
             ledger's, or ``~/.openadapt/verify`` without one).
-        declared_by: Who declared the values, for the receipt reply.
+        declared_by: Who declared the values, for the reply: a name, or each
+            value's name mapped to who set it (operator-pinned or agent).
+            To bind it into the receipt too, put it in ``actor.build``.
 
     Raises :class:`WriteBlocked` (:class:`BaselineUnreadable`,
     :class:`WriteHeld` or :class:`AlreadyWritten`) when the write must not
@@ -540,7 +550,9 @@ def begin_write(
             actor_id=actor.id,
             write_key_bound=write_key is not None,
             authorized=pending.authorized,
-            declared_by=declared_by,
+            declared_by=declared_by
+            if isinstance(declared_by, str)
+            else {str(k): str(v) for k, v in declared_by.items()},
         )
     except BaseException:
         lease.release()
@@ -566,7 +578,7 @@ def _capture(
     write_id: str,
     folder: Path,
     authorization_ref: str,
-    declared_by: str,
+    declared_by: DeclaredBy,
 ) -> PendingWrite:
     pending = PendingWrite(
         contract=contract,
@@ -684,7 +696,7 @@ def _reconcile(
         workdir=workdir,
         authorization_ref=str(saved.get("authorization_ref") or attempt.attempt_id),
         authorized=bool(attempt.begun.get("authorized")),
-        declared_by=str(attempt.begun.get("declared_by") or "agent"),
+        declared_by=attempt.begun.get("declared_by") or "agent",
         write_key=key,
     )
     result = _judge(
@@ -747,15 +759,18 @@ def verify_write(
 
     Args:
         pending: From :func:`begin_write`. Single use.
-        write_attempted: False only when the write was never sent (a stop
-            before the save); then a store that shows nothing makes the
-            result ``retry_safe``.
+        write_attempted: False only when the caller knows the write was
+            never sent (a stop before the save); then a store that shows
+            nothing makes the result ``retry_safe``. When it can't know (a
+            tool raised before or while acting), leave it True: a store
+            that shows nothing is then ``UNCERTAIN``, never retry_safe.
         source: The written values' provenance and documents, to compare the
             saved record with its source.
         seal: Sign a confirmed receipt with this computer's Seal key.
         delivered: False when the reply won't reach the caller (a
-            cancelled tool call); the next identical call then gets this
-            result instead of a resend.
+            cancelled tool call, a timeout); the next identical call then
+            raises :class:`AlreadyWritten` with this result instead of a
+            resend. The caller decides this, not the verifier.
     """
 
     if pending.used:
