@@ -83,33 +83,19 @@ permissions:
   contents: read
 
 concurrency:
-  # A pull request's newer push supersedes its older run.
+  # A pull request's newer push cancels its older run. Every other event (a
+  # push to main, a merge queue group, a dispatch) gets a group of its own and
+  # is never cancelled or replaced.
   #
-  # On main, desktop-release.yml waits for the Packages run of the newest
-  # first-parent commit that changed packages/desktop (#1398). A push whose
-  # commits touch packages/desktop/ therefore keeps its own group and is never
-  # cancelled. Every other push to main shares one group, so a newer one
-  # cancels it instead of queueing behind it. The test is conservative: any
-  # mention of packages/desktop/ in the push payload (file lists or messages)
-  # counts as a Desktop change. A push with no commit list, or with 20 or more
-  # commits (GitHub truncates the payload's list at 20, which could hide a
-  # Desktop change), keeps its own group. Merge queue groups and dispatches
-  # are never cancelled.
-  group: >-
-    packages-${{
-      github.event.pull_request.number
-      || (github.event_name == 'push'
-          && github.event.head_commit
-          && !github.event.commits[19]
-          && !contains(toJSON(github.event.commits), 'packages/desktop/')
-          && 'main-without-desktop')
-      || github.sha }}
-  cancel-in-progress: >-
-    ${{ github.event_name == 'pull_request'
-        || (github.event_name == 'push'
-            && github.event.head_commit != null
-            && !github.event.commits[19]
-            && !contains(toJSON(github.event.commits), 'packages/desktop/')) }}
+  # desktop-release.yml releases from the Packages push run of the newest
+  # first-parent commit that changed packages/desktop, so that run must finish.
+  # An earlier rule let a push to main without a Desktop change cancel an older
+  # one, judging the change from the push payload's per-commit file lists. Those
+  # lists did not show Desktop files for PR merge pushes, so Desktop-changing
+  # runs were cancelled and Desktop 0.23.0 and 0.24.1 never released (run
+  # 40210206361, #1574). tests/test_packages_concurrency.py evaluates this rule.
+  group: packages-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
