@@ -1250,7 +1250,9 @@ def _downgrade(
             # verify_write never raises: un-issue the state instead, so a
             # recheck of it is UNCERTAIN ("not issued") all the same.
             try:
-                (_issued_dir("rechecks") / _state_digest(result.recheck.payload)).unlink()
+                (
+                    _issued_dir("rechecks") / _state_digest(result.recheck.payload)
+                ).unlink()
             except (OSError, VerifierError):
                 pass
     return dataclasses.replace(
