@@ -542,6 +542,21 @@ def test_a_side_row_of_another_users_new_chart_is_theirs(tmp_path: Path) -> None
         tmp_path / "b", lambda con: con.execute(stray), save=save, frame=frame
     )
     assert _frame(result) == "refuted"
+    # A second contact or history row for their chart is no more theirs than
+    # anyone's (re-review of the #1570 port).
+    for i, extra in enumerate(
+        (
+            "INSERT INTO contact (foreign_id) VALUES (3)",
+            "INSERT INTO history_data (pid, date) VALUES (3, '2026-10-25')",
+        )
+    ):
+
+        def doubled(con: sqlite3.Connection, extra: str = extra) -> None:
+            colleague(con)
+            con.execute(extra)
+
+        result = _run(tmp_path / f"c{i}", doubled, save=save, frame=frame)
+        assert _frame(result) == "refuted"
 
 
 # -- round 2 of the review ---------------------------------------------------------
