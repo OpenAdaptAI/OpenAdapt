@@ -315,6 +315,13 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
         cfg = VerifyConfig.model_validate(data)
     except Exception as exc:
         raise VerifyRunError(f"invalid {source}: {exc}") from exc
+    key = record.get("duplicate_key") if isinstance(record, dict) else None
+    if isinstance(key, list):
+        from openadapt_flow.qualify.config import composite_key_read_problems
+
+        problems = composite_key_read_problems(key, cfg.verifier)
+        if problems:
+            raise VerifyRunError(f"invalid {source}: " + "; ".join(problems))
     kinds = [cfg.verifier.kind] + [s.kind for s in cfg.verifier.surfaces.values()]
     for kind in kinds:
         if kind in _NOT_INDEPENDENT:

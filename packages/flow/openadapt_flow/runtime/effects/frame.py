@@ -472,8 +472,7 @@ def declared_selectors(effect: Effect) -> list[dict[str, str]]:
 
     def plain(selector: Mapping[str, Any]) -> dict[str, str]:
         out = {k: str(v) for k, v in selector.items()}
-        if effect.idempotency_key is not None:
-            out[effect.key_field] = str(effect.idempotency_key)
+        out.update({k: str(v) for k, v in effect.key_selector().items()})
         return out
 
     if effect.kind is EffectKind.EXACT_NEW_SET:
