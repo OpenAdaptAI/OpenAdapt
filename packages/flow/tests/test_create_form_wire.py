@@ -13,6 +13,8 @@ each case asserts what actually arrived.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import http.server
 import json
 import threading
@@ -73,13 +75,15 @@ document.getElementById('ticket').addEventListener('submit', () => {
     # A service worker controls the page: its requests skip page routes.
     "sw": """
 navigator.serviceWorker.register('/sw.js');""",
-    # The click opens a WebSocket and sends on it.
-    "ws": """
+}
+# The save opens a WebSocket and sends on it. It saves with fetch, so the
+# page stays put while the save is held (a native save navigates, and the
+# socket goes with the page).
+_SCRIPTS["ws"] = """
 document.getElementById('ticket').addEventListener('submit', () => {
   const ws = new WebSocket('ws://' + location.host + '/ws');
   ws.onopen = () => ws.send('close-account');
-}, true);""",
-}
+}, true);""" + _SCRIPTS["fetch"]
 _POPUP = """<!doctype html><title>Popup</title>
 <form method="post" action="/account/close"><input name="confirm" value="yes"></form>
 <script>document.forms[0].submit();</script>"""
@@ -114,6 +118,9 @@ def _page(variant: str) -> str:
 </body></html>"""
 
 
+_WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+
 class _Server:
     def __init__(self) -> None:
         self.received: list[dict[str, Any]] = []
@@ -122,7 +129,9 @@ class _Server:
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802 (http.server API)
                 path = urlsplit(self.path).path
-                if path == "/popup":
+                if path == "/ws":
+                    self._accept_websocket()
+                elif path == "/popup":
                     self._send(_POPUP)
                 elif path == "/sw.js":
                     self._send(_SERVICE_WORKER, "text/javascript")
@@ -141,6 +150,32 @@ class _Server:
                 self._send(
                     "<!doctype html><title>Created</title><h1>Ticket created</h1>"
                 )
+
+            def _accept_websocket(self) -> None:
+                # A real handshake, so a socket that got through would
+                # deliver its message here.
+                key = self.headers["Sec-WebSocket-Key"] + _WS_GUID
+                accept = base64.b64encode(hashlib.sha1(key.encode()).digest())
+                self.send_response(101)
+                self.send_header("Upgrade", "websocket")
+                self.send_header("Connection", "Upgrade")
+                self.send_header("Sec-WebSocket-Accept", accept.decode())
+                self.end_headers()
+                self.wfile.flush()
+                head = self.rfile.read(2)
+                if len(head) < 2:
+                    return
+                length = head[1] & 0x7F
+                if length == 126:
+                    length = int.from_bytes(self.rfile.read(2), "big")
+                mask = self.rfile.read(4)
+                data = bytes(
+                    b ^ mask[i % 4] for i, b in enumerate(self.rfile.read(length))
+                )
+                server.received.append(
+                    {"path": "/ws", "fields": {"message": data.decode()}}
+                )
+                self.close_connection = True
 
             def _send(self, html: str, ctype: str = "text/html") -> None:
                 body = html.encode()
@@ -330,8 +365,9 @@ def test_a_page_a_service_worker_controls_is_refused(
 def test_a_websocket_opened_by_the_save_halts_the_run(
     server: _Server, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
-    bundle = _bundle(server, "plain", tmp_path_factory.mktemp("rec"))
-    report, _received = _replay(server, "ws", bundle, tmp_path_factory.mktemp("run"))
+    bundle = _bundle(server, "fetch", tmp_path_factory.mktemp("rec"))
+    report, received = _replay(server, "ws", bundle, tmp_path_factory.mktemp("run"))
     assert not report.success
+    assert "/ws" not in [r["path"] for r in received], received
     errors = " ".join(r.error or "" for r in report.results)
     assert "WebSocket" in errors, errors
