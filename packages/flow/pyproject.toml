@@ -263,6 +263,17 @@ agent = [
     "anyio>=4.0",
 ]
 
+# Verified write tools for agent frameworks
+# (openadapt_flow.integrations.agents): one extra per framework, each only
+# the framework itself. Every write the wrapped tool makes is read back from
+# the system of record before the agent sees a result.
+claude-agent-sdk = ["claude-agent-sdk>=0.2.174,<0.3"]
+openai-agents = ["openai-agents>=0.24,<0.25"]
+langgraph = ["langgraph>=1.2,<2", "langchain-core>=1.7,<2"]
+# CrewAI has no extra: every release pins a chromadb with open critical
+# advisories, and its current releases need mcp<2 and openai<3. The CrewAI
+# adapter works with whatever crewai the user installs.
+
 [project.urls]
 Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
 Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"

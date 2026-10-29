@@ -46,6 +46,8 @@ def save_order(customer: str, product: str, units: str) -> dict:
     return write.result.to_dict()             # CONFIRMED, or a refusal
 ```
 
+For the Claude Agent SDK, OpenAI Agents SDK, LangGraph and CrewAI, `verified(tool, contract=...)` wraps an existing tool in one line: [AGENT_FRAMEWORKS.md](AGENT_FRAMEWORKS.md).
+
 From any MCP client, run the server with your contracts:
 
 ```bash
