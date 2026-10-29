@@ -392,9 +392,12 @@ Getter = Callable[
 
 
 def _ref(value: str) -> str:
-    """``Type/id``, whether the server wrote it relative or absolute."""
+    """``Type/id``, whether the server wrote it relative, absolute or versioned
+    (``Patient/x/_history/2``)."""
 
     parts = value.rstrip("/").split("/")
+    if "_history" in parts[1:]:
+        parts = parts[: parts.index("_history", 1)]
     return "/".join(parts[-2:]) if len(parts) >= 2 else value
 
 
@@ -587,6 +590,8 @@ class Change:
     )
     #: Versions ``_history`` shows in the window (None: history not read).
     versions: Optional[int] = None
+    #: Those versions as the server returned them.
+    bodies: list[dict[str, Any]] = field(default_factory=list)
     #: The audit trail's reads of it by id: (time, actors).
     reads: list[tuple[Optional[datetime], frozenset[str]]] = field(default_factory=list)
 
@@ -659,36 +664,37 @@ def read_changes(
             if action not in AUDIT_ACTIONS:
                 raise Unreadable(f"an audit event has action {action!r}")
             when = _when(extract(event, a.time_path))
-            if action == "R":
-                seen = extract(event, a.entity_path)
-                if isinstance(seen, str) and "/" in seen:
-                    readers = frozenset(
-                        _ref(x)
-                        for x in extract_all(event, a.actor_path)
-                        if isinstance(x, str) and x
-                    )
-                    reads.setdefault(_ref(seen), []).append((when, readers))
-                continue
             actors = [
                 _ref(x)
                 for x in extract_all(event, a.actor_path)
                 if isinstance(x, str) and x
             ]
-            ref = extract(event, a.entity_path)
-            if not isinstance(ref, str) or "/" not in ref:
+            # Every resource the event names, not only the first.
+            refs = sorted(
+                {
+                    _ref(x)
+                    for x in extract_all(event, a.entity_path)
+                    if isinstance(x, str) and "/" in x
+                }
+            )
+            if action == "R":
+                for ref in refs:
+                    reads.setdefault(ref, []).append((when, frozenset(actors)))
+                continue
+            if not refs:
                 if action == "E" and actors and not set(actors) & selves:
                     continue  # another user's operation on no resource
                 # A write the log can't tie to a resource: the window can't be
                 # read completely.
                 raise Unreadable("an audit write names no resource")
-            ref = _ref(ref)
-            change = changes.setdefault(ref, Change(ref=ref))
-            change.actions.add(str(action))
-            change.events.append((when, str(action), frozenset(actors)))
-            if actors:
-                change.authors.update(actors)
-            else:
-                change.attributed = False
+            for ref in refs:
+                change = changes.setdefault(ref, Change(ref=ref))
+                change.actions.add(str(action))
+                change.events.append((when, str(action), frozenset(actors)))
+                if actors:
+                    change.authors.update(actors)
+                else:
+                    change.attributed = False
         for ref, seen_by in reads.items():
             if ref in changes:
                 changes[ref].reads = seen_by
@@ -710,6 +716,7 @@ def read_changes(
                     if when is None or when < since or (until and when > until):
                         continue
                     change.versions += 1
+                    change.bodies.append(version)
                     if not feed.history_author:
                         continue
                     who = (meta.get("author") or {}).get("reference")
@@ -842,7 +849,7 @@ def judge(
         tid = target.split("/", 1)[1]
         corrected = bool(set(mine[target].actions) - {"C"})
         if corrected:
-            refused = correction_refused(contract, mine[target], selfs)
+            refused = correction_refused(contract, mine[target], selfs, params)
             if refused:
                 reasons.append(refused)
         if target in others or (changes[target].authors - selfs):
@@ -889,7 +896,10 @@ def judge(
 
 
 def correction_refused(
-    contract: EnsureContract, change: Change, selfs: set[str]
+    contract: EnsureContract,
+    change: Change,
+    selfs: set[str],
+    params: Mapping[str, Any],
 ) -> Optional[str]:
     """Why a create followed by more writes can't count as one write, or None.
 
@@ -914,7 +924,16 @@ def correction_refused(
         return f"{changed}, and the audit trail doesn't attribute every write"
     if any(not who or who - selfs for _, _, who in change.events):
         return "someone else changed the created record"
-    if change.versions is not None and change.versions != len(change.events):
+    if contract.settle_s < 1:
+        # The verifier's own read of the record must land after the window.
+        return f"{changed}, and with settle_s under 1 s its reads can't be told apart"
+    if change.versions is None:
+        return f"{changed}, and without _history its versions can't be counted"
+    if any(not is_person(contract, body, params) for body in change.bodies):
+        # A version that was someone else (or no one) may have been found by
+        # a search no audit event names, and acted on.
+        return f"{changed}, and a version in between was not the person"
+    if change.versions != len(change.events):
         # A write the trail didn't log may be someone else's.
         return (
             f"{changed}, and its history shows {change.versions} versions "
@@ -931,11 +950,13 @@ def correction_refused(
     updates = [when for when, action in timed if action == "U"]
     if len(creates) != 1 or not updates or min(updates) < creates[0]:
         return changed
-    start, end = creates[0], max(updates)
+    start = creates[0]
+    # From the create to the window's close: a read logged a moment after the
+    # last update may have seen the version before it.
     for read_at, who in change.reads:
         if read_at is None:
             return f"unreadable: {changed}, and a read of it has no time"
-        if start <= read_at <= end and (not who or who - selfs):
+        if start <= read_at and (not who or who - selfs):
             return "another actor read the record between the agent's writes"
     return None
 
@@ -968,18 +989,25 @@ def _hear_own_read(
 def _agents_part(
     changes: Mapping[str, Change], selfs: set[str]
 ) -> dict[str, tuple[Any, ...]]:
-    """The fingerprint of the writes ``judge`` counts as the agent's."""
+    """The fingerprint of the writes ``judge`` counts as the agent's.
+
+    Writes only: the verifier's own reads land after the window, and must not
+    read as a late write.
+    """
 
     return _fingerprint(
         {
             r: c
             for r, c in changes.items()
             if not c.attributed or not c.authors or c.authors & selfs
-        }
+        },
+        reads=False,
     )
 
 
-def _fingerprint(changes: Mapping[str, Change]) -> dict[str, tuple[Any, ...]]:
+def _fingerprint(
+    changes: Mapping[str, Change], *, reads: bool = True
+) -> dict[str, tuple[Any, ...]]:
     return {
         ref: (
             sorted(c.actions),
@@ -987,7 +1015,7 @@ def _fingerprint(changes: Mapping[str, Change]) -> dict[str, tuple[Any, ...]]:
             c.attributed,
             c.unlogged,
             len(c.events),
-            len(c.reads),
+            len(c.reads) if reads else 0,
         )
         for ref, c in changes.items()
     }

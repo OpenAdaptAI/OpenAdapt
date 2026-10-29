@@ -36,18 +36,33 @@ It counts only when all of these hold; anything else is `needs_review`:
 
 - the audit trail shows exactly one create of the record and then updates,
   no delete, each with a time and each by the agent;
-- the record's `_history` shows as many versions in the window as the trail
-  shows writes, so a write the trail didn't log can't be hidden among them;
-- no other actor read the record by id between the create and the last
-  update (someone may have acted on the wrong value), and the trail is
-  logging reads by id at all (the verifier's own read of the record must
-  show up, as for `found_existing`);
+- the record's `_history` is read, and shows as many versions in the window
+  as the trail shows writes, so a write the trail didn't log can't be
+  hidden among them;
+- every one of those versions is the person (by the contract's identity
+  rules): a correction may fix a value, never who the record is, since a
+  search no audit event names may have found an earlier version;
+- no other actor read the record by id from the create to the window's
+  close, and the trail is logging reads by id at all (the verifier's own
+  read of the record must show up, as for `found_existing`);
+- the contract's `settle_s` is at least 1 s, so the verifier's own reads
+  land after the window;
 - everything else in the table above: the final record holds every value,
   the agent wrote no other record, and the record is the only one that is
   the person.
 
-A read the trail doesn't log by id, such as a search that returned the
-record, can't be seen, so it can't stop a correction. `accept_corrections:
+What this can't see:
+
+- A read the trail doesn't log by id (a search that returned the record,
+  `$everything`, a subscription delivery). The identity rule above limits
+  what such a read could have got wrong; a wrong non-identity value (a
+  phone number, an allergy's criticality) could have been seen.
+- Someone using the agent's own account: their reads and writes are the
+  agent's.
+- The heartbeat shows the trail logs reads when the verifier reads, not
+  that it did throughout the window.
+
+`accept_corrections:
 false` in the contract sends every change after the create to review.
 
 ## The contract
