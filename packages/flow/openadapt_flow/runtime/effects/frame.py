@@ -100,7 +100,12 @@ class FrameAttribution(BaseModel):
     #: ``audit_read`` only: the record field the audit entry's
     #: ``record_field`` refers to, when it isn't the frame's identity field.
     #: OpenEMR's log names a patient (``pid``) while ``lists`` or ``pnotes``
-    #: rows are told apart by their own ``id``.
+    #: rows are told apart by their own ``id``. Such a log names a patient,
+    #: not a table: any entry for a patient covers every row of that
+    #: patient. So the bot's write to a table the frame doesn't read, logged
+    #: under a declared patient, is excused, and another user's entry for the
+    #: patient being saved refutes the save even when they wrote elsewhere.
+    #: The whole-database frame (``frame.database``) closes the first.
     record_key: Optional[str] = None
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
