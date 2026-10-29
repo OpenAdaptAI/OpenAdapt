@@ -68,6 +68,7 @@ def test_case_set_shape():
                 "refuse",
                 "side_write",
                 "fake_success",
+                "at_write",
             }
 
 
@@ -642,7 +643,102 @@ def test_proxy_runs_another_users_write_at_the_first_write(wire):
     up, proxy, _ = wire
     proxy.arm([], "Patient", {})
     seen = []
-    proxy.on_first_write = lambda: seen.append(len(up.calls))
+    proxy.on_write = lambda n: seen.append((n, len(up.calls)))
     _post(proxy, "Patient", {"resourceType": "Patient"})
     _post(proxy, "Patient", {"resourceType": "Patient"})
-    assert seen == [0]
+    assert seen == [(1, 0), (2, 1)]
+
+
+def test_proxy_applies_a_fault_to_the_write_it_names(wire):
+    up, proxy, side = wire
+    proxy.arm(
+        [
+            {
+                "at_write": 2,
+                "side_write": {"op": "update", "target": "created", "set": {}},
+            }
+        ],
+        "Patient",
+        {},
+    )
+    _post(proxy, "Patient", {"resourceType": "Patient"})
+    assert side == [] and not proxy.delivered
+    assert proxy.current_refs()["created"] == "Patient/n1"
+    _post(proxy, "Patient", {"resourceType": "Patient"})
+    assert side and side[0][0]["target"] == "created" and proxy.delivered
+
+
+def test_the_strict_scorecard_uses_the_strict_verdicts():
+    row = {
+        **_row("correct", "done", True, "created_verified"),
+        "verifier_strict": {"outcome": "needs_review", "reasons": []},
+    }
+    costs = score.load_costs()
+    new = score.scorecard([row], costs)
+    old = score.scorecard([row], costs, key="verifier_strict")
+    assert new["arms"]["openadapt"]["correct"] == 1
+    assert old["arms"]["openadapt"]["false_stops"] == 1
+    assert "corrections refused" in score.render(old, [row], agent="t")
+
+
+def test_agent_specs_include_the_fixing_agent():
+    assert agents.load("scripted-fix", model="m")[0] == "scripted-fix"
+
+
+def test_harm_to_another_user_the_end_state_hides():
+    good = _with(allergy_resource(ALLERGY, PAT), "a1")
+    wrong = {**good, "criticality": "low"}
+    after = _snap(good, _with(patient_resource(SUITE["people"]["rosa"]), "p1", "3"))
+    made = {"AllergyIntolerance/a1"}
+    assert oracle.others_harmed("allergy", ALLERGY, after, [], [], made) == []
+    seen = [("AllergyIntolerance/a1", wrong)]
+    read = oracle.others_harmed("allergy", ALLERGY, after, seen, [], made)
+    assert read and "criticality" in read[0]
+    # Another record of the same type isn't the task's record.
+    assert not oracle.others_harmed("allergy", ALLERGY, after, seen, [], set())
+    ok = [("AllergyIntolerance/a1", good)]
+    assert not oracle.others_harmed("allergy", ALLERGY, after, ok, [], made)
+    sets = [("Patient/p1", {"active": False})]
+    lost = oracle.others_harmed("allergy", ALLERGY, after, [], sets, made)
+    assert lost and "lost" in lost[0]
+
+
+def test_another_users_update_of_the_agents_record_keeps_it_created():
+    seed = _with(patient_resource(SUITE["people"]["rosa"]), "p1")
+    wrong = _with({**allergy_resource(ALLERGY, PAT), "criticality": "low"}, "a1", "2")
+    v = oracle.judge(
+        "allergy",
+        "create",
+        ALLERGY,
+        _snap(seed),
+        _snap(seed, wrong),
+        {},
+        {"AllergyIntolerance/a1": "2"},
+    )
+    assert v["verdict"] == "harmful" and v["changes"] == {
+        "AllergyIntolerance/a1": "created"
+    }
+    touched = _with({**seed, "active": True}, "p1", "2")
+    a1 = _with(allergy_resource(ALLERGY, PAT), "a1")
+    ok = oracle.judge(
+        "allergy",
+        "create",
+        ALLERGY,
+        _snap(seed),
+        _snap(touched, a1),
+        {},
+        {"Patient/p1": "2"},
+    )
+    assert ok["verdict"] == "correct"
+
+
+def test_the_blind_correction_set_is_frozen():
+    import hashlib
+
+    raw = (HERE / "cases_corrections.yaml").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == (
+        "0a01807c6b73c41071d6a60fe9f6c776881902d5854b10c18126eeeeb54f7ab1"
+    )
+    blind = yaml.safe_load(raw)
+    assert [c["id"] for c in blind["cases"]] == [f"C{i:02}" for i in range(1, 16)]
+    assert {c["type"] for c in blind["cases"]} == set(RESOURCE)

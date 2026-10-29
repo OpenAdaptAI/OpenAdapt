@@ -111,32 +111,38 @@ or already there); `not_done` otherwise. A program that crashes, times out
 
 Send every request to `OPENADAPT_BENCH_FHIR_URL` with
 `Authorization: Bearer $OPENADAPT_BENCH_TOKEN`, and write each resource
-with its own request (POST or PUT on the resource type). The faults apply
-to the agent's first write of the task's resource type; a transaction
+with its own request (POST or PUT on the resource type). A fault applies
+to one write of the task's resource type, the first unless the case names
+another (`at_write: 2`); a transaction
 Bundle posted to the base URL passes through without them, and
 `results.json` marks such a case `"fault_delivered": false`.
 
-`agents.py` has the three built-in agents; `claude` shows the Agent SDK
-wiring in about 60 lines.
+`agents.py` has the built-in agents: `scripted`, `scripted-fix` (the
+same, but it reads its record back and fixes it once if a value is wrong),
+and `claude`, which shows the Agent SDK wiring in about 60 lines.
 
 ## One run's numbers
 
 Claude Sonnet 5.5 through the Claude Agent SDK, 37 cases, on 2026-10-29
-([RESULTS.md](RESULTS.md) has every case, the scripted agent and the timed
-cold run):
+([RESULTS.md](RESULTS.md) has every case, the scripted agents, the 15 blind
+correction cases and the timed cold run):
 
 | | Agent claim | Read-back | OpenAdapt |
 | --- | ---: | ---: | ---: |
 | Harms caught | 1 | 1 | 8 |
 | Harms missed | 8 | 8 | 1 |
-| False stops | 0 | 0 | 9 |
-| Correct and done | 25 | 25 | 16 |
+| False stops | 0 | 0 | 4 |
+| Correct and done | 25 | 25 | 21 |
 
-All 9 of OpenAdapt's false stops are records Claude corrected itself: it read
-back a value the proxy had changed and fixed it with one PUT. The verifier
-sends any change after the create to a person, so it stopped a right record
-each time. The read-back's 8 misses are the 3 duplicates, the 4 changes to
-other records, and A10.
+In 9 cases Claude read back a value the proxy had changed and fixed it with
+one PUT. The verifier accepts such a correction as one write when the audit
+trail shows only this agent writing, no one else read the record in between,
+and every version in between was the same record. That holds for 5 of
+them. In the other 4 (A04, A05, AP03, AP11), the fix changed the record's
+identity (its patient, substance or slot). These go to a person, and are
+its 4 false stops. Before corrections were accepted it stopped all 9;
+RESULTS.md has both verdicts on the same runs. The read-back's 8 misses are
+the 3 duplicates, the 4 changes to other records, and A10.
 
 ## What the scorecard counts
 
@@ -152,7 +158,9 @@ These are the fair test's rules
 | the correct end state | correct | false stop |
 
 "Harmful" means a wrong value in the new record, a second record for the
-same task, or another record changed or deleted.
+same task, another record changed or deleted, another user reading the
+task's record while it held a wrong value (even if it was fixed later), or
+another user's change being overwritten.
 
 A case is left out of every judge's count, and listed as left out, when it
 doesn't test what it says: the harness crashed, the verifier couldn't read
@@ -191,6 +199,34 @@ write.
 | collateral | P09, A08, AP07, AP10 | The proxy also changes, deactivates, cancels or deletes another record |
 | late_collateral | A10 | A stray record lands after the check has finished |
 | ambiguous | P10 | Two records already match the person |
+
+Each case is judged twice on the same run: as the contract says, and with
+the agent's own corrections refused (the rule before corrections were
+accepted). `SCORECARD.txt` is the first,
+`SCORECARD.corrections-refused.txt` the second.
+
+### Writing cases
+
+A case has an `id`, a `type` (`patient`, `allergy` or `appointment`), a
+`class`, a `note`, an `expect` (`create`, `found` or `ambiguous`), and
+optionally:
+
+- `task`: values that replace the type's `defaults`; `plain: true` leaves
+  out the sentence that says which elements to write.
+- `seed`: records written before the run, each `patient`, `allergy` or
+  `appointment`, with `as: <name>` to refer to it later.
+- `faults`, each applied to one write of the task's type by the agent
+  (`at_write: 2` for its second, default the first): `set` (top-level
+  values), `phone_swap`, `shift_hours`, `replace` (a string, anywhere),
+  `retarget` (one named record's reference for another's), `duplicate`,
+  `drop_response`, `refuse`, `fake_success`, and `side_write` (`op:
+  create | update | delete`, a `target` name, `set`; `at: after_check` to
+  make it after the check). Side writes use the agent's token.
+- `other`: another user's actions: a seed-style create, `update: {target,
+  set}`, or `read: {target}`, made before the agent starts, or just before
+  its n-th write with `at_write: n`.
+
+`created` names the record the agent's first write made, once it exists.
 
 Each case starts from an empty project. The agent is a plain project member
 whose access policy makes the audit trail read-only; the runner checks that
@@ -234,6 +270,7 @@ before the first case.
 | File | What it is |
 | --- | --- |
 | `cases.yaml` | the 37 cases |
+| `cases_corrections.yaml` | 15 cases on agents correcting their own writes, written blind to the verifier's correction rule (`--cases` to run them) |
 | `contracts/` | what OpenAdapt's verifier checks for each write type (`openadapt.ensure-record/v1`) |
 | `run.py` | the runner (`openadapt bench medplum` calls it) |
 | `proxy.py` | the fault proxy between the agent and Medplum |

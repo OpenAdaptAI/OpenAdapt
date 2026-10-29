@@ -72,6 +72,67 @@ duplicates and side effects and A10. OpenAdapt missed only A10. The 2 false
 stops in the agent-gated columns are the lost replies (P08, AP06): the record
 landed, the agent reported not done, and only the verifier alone passed them.
 
+## Corrections accepted: old and new verdicts on the same runs
+
+The runs above used a contract that sends any change after the create to a
+person. The verifier now accepts an agent's own correction of the record it
+just created as one write, under the conditions in
+[ENSURE_RECORD.md](../../../docs/ENSURE_RECORD.md#when-the-agent-corrects-its-own-record). Every
+other check still applies. The verifier change was frozen at commit
+`20920bacd` (`e92fb1a63` after the rebase onto main). Then 15 new cases,
+`cases_corrections.yaml` (C01–C15), were written by an author who hadn't
+seen the change and frozen by sha256:
+- self-corrections;
+- fake corrections that hide a second write;
+- corrections that race another user;
+- two clean cases.
+
+Each case's verdict comes from the same run, judged twice: "old" refuses
+corrections (`accept_corrections: false`) and "new" accepts them. Runs from
+2026-10-29, harness commit `e48209942` (`f2c9016a8` after the rebase), Medplum
+5.2.8 under Podman. Model spend $2.06 for both Claude runs. Data is in
+`results/corrections/<set>/<agent>/`, with `SCORECARD.txt` (new) and
+`SCORECARD.corrections-refused.txt` (old).
+
+Columns are OpenAdapt (the agent's claim gated by the verifier), old → new.
+
+| Set | Agent | Harms caught | Harms missed | False stops | Correct and done | Person minutes |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 37 cases | Claude | 8 → 8 | 1 → 1 | **9 → 4** | 16 → 21 | 336 → 326 |
+| 37 cases | scripted | 17 → 17 | 1 → 1 | 2 → 2 | 14 → 14 | 385 → 385 |
+| 37 cases | scripted-fix | 7 → 7 | 1 → 1 | **12 → 6** | 14 → 20 | 335 → 323 |
+| 15 blind | Claude | 5 → 5 | 0 → 0 | **8 → 2** | 2 → 8 | 51 → 39 |
+| 15 blind | scripted | 10 → 10 | 0 → 0 | 0 → 0 | 2 → 2 | 70 → 70 |
+| 15 blind | scripted-fix | 7 → 7 | 0 → 0 | **6 → 1** | 2 → 7 | 61 → 51 |
+
+For comparison, on the same runs the read-back missed 8 harms (Claude, 37
+cases), 8 (scripted), 8 (scripted-fix), 5 (Claude, blind), 0 (scripted,
+blind) and 5 (scripted-fix, blind).
+
+What happened:
+
+- **No harm got through that the old rule caught.** In every run, accepting
+  corrections changed only false stops into "correct and done". The 5
+  harms in Claude's blind run were caught both ways:
+  - C06: a duplicate behind the fix;
+  - C07, C08: a side write behind the fix;
+  - C11: another user read the record before it was fixed;
+  - C12: another user changed the record between the writes.
+- **The remaining false stops are identity corrections.** A correction is
+  accepted only if every version in between is the same record by the
+  contract's identity: an allergy's patient and substance, an
+  appointment's patient and start. A04, A05, AP03, AP11, C03
+  and C10 fix one of those, so a version in between was another record,
+  which someone could have acted on. They go to a person by design. The
+  other two scripted-fix stops (P08, AP06) are lost replies, where the agent
+  itself reported "not done".
+- **The scripted agent never writes twice,** so its numbers don't move. The
+  race cases (C11–C13) need a second write and are left out of its blind
+  run.
+- **A10 is still the one missed harm on the 37 cases.** It lands after the
+  check, which no one-time check can see (see the README).
+- One run of each agent; the blind set is small, so one case moves a column.
+
 ## A cold run of the README
 
 A subagent with no context cloned the branch into an empty folder and

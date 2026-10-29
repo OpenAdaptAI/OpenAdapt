@@ -761,3 +761,280 @@ def test_an_identity_value_without_a_search_parameter_is_compared_not_searched()
     )
     assert set(matches) == {"a1"}
     assert all(set(q) == {"patient", "_count"} for q in asked)
+
+
+# -- the agent's own corrections ------------------------------------------------------
+
+READER = "ClientApplication/someone"
+
+
+def _t(seconds: float) -> datetime:
+    return T0 + timedelta(seconds=seconds)
+
+
+def cc(**extra) -> EnsureContract:
+    """A contract that may accept corrections (they need settle_s >= 1)."""
+
+    return contract(settle_s=1, **extra)
+
+
+def fixed(*extra_events, reads=(), versions=None, bodies=None, ref="Patient/x"):
+    """The agent created ``ref`` at +1 s and updated it at +3 s."""
+
+    events = [(_t(1), "C", frozenset({BOT})), (_t(3), "U", frozenset({BOT}))]
+    events += list(extra_events)
+    n = len(events) if versions is None else versions
+    return {
+        ref: Change(
+            ref=ref,
+            actions={a for _, a, _ in events},
+            authors={w for _, _, who in events for w in who},
+            events=events,
+            reads=list(reads),
+            versions=n,
+            bodies=[patient("x")] * n if bodies is None else bodies,
+        )
+    }
+
+
+def test_a_create_the_agent_corrected_is_verified_and_says_so():
+    x = patient("x")
+    r = judge(cc(), PARAMS, base(), fixed(), {"x": x}, x)
+    assert (r.outcome, r.record_id) == ("created_verified", "x")
+    assert r.evidence["corrected"] is True and r.evidence["writes_to_record"] == 2
+    assert "corrected" in r.reasons[0]
+
+
+def test_corrections_can_be_turned_off():
+    x = patient("x")
+    r = judge(cc(accept_corrections=False), PARAMS, base(), fixed(), {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_a_correction_needs_settle_time_and_history():
+    x = patient("x")
+    assert judge(contract(), PARAMS, base(), fixed(), {"x": x}, x).outcome == (
+        "needs_review"
+    )
+    changes = fixed()
+    changes["Patient/x"].versions = None
+    assert judge(cc(), PARAMS, base(), changes, {"x": x}, x).outcome == "needs_review"
+
+
+def test_a_correction_that_leaves_a_wrong_value_needs_review():
+    x = patient("x", birthDate="1984-07-03")
+    r = judge(cc(), PARAMS, base(), fixed(), {"x": x}, x)
+    assert r.outcome == "needs_review" and "corrected" not in r.evidence
+
+
+def test_a_correction_that_changes_who_the_record_is_needs_review():
+    # Version 1 was someone else: a search for them may have found it.
+    bob = patient(
+        "x",
+        name=[{"given": ["Bob"], "family": "Stone"}],
+        birthDate="1990-01-01",
+        telecom=[],
+    )
+    x = patient("x")
+    r = judge(cc(), PARAMS, base(), fixed(bodies=[bob, x]), {"x": x}, x)
+    assert r.outcome == "needs_review"
+    assert any("not the person" in reason for reason in r.reasons)
+
+
+def test_another_actor_reading_between_the_writes_needs_review():
+    x = patient("x")
+    seen = [(_t(2), frozenset({READER}))]
+    r = judge(cc(), PARAMS, base(), fixed(reads=seen), {"x": x}, x)
+    assert r.outcome == "needs_review"
+    assert any("read the record" in reason for reason in r.reasons)
+
+
+def test_a_read_logged_just_after_the_last_fix_still_counts():
+    x = patient("x")
+    seen = [(_t(3.001), frozenset({READER}))]
+    r = judge(cc(), PARAMS, base(), fixed(reads=seen), {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_the_agents_own_reads_dont_count():
+    x = patient("x")
+    seen = [(_t(2), frozenset({BOT})), (_t(4), frozenset({BOT}))]
+    r = judge(cc(), PARAMS, base(), fixed(reads=seen), {"x": x}, x)
+    assert r.outcome == "created_verified"
+
+
+def test_an_anonymous_read_between_the_writes_needs_review():
+    x = patient("x")
+    seen = [(_t(2), frozenset())]
+    r = judge(cc(), PARAMS, base(), fixed(reads=seen), {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_a_correction_with_a_second_create_hides_no_duplicate():
+    x, y = patient("x"), patient("y")
+    changes = {**fixed(), **ch("Patient/y", "C")}
+    r = judge(cc(), PARAMS, base(), changes, {"x": x, "y": y}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_a_correction_with_a_write_elsewhere_hides_no_collateral():
+    x = patient("x")
+    changes = {**fixed(), **ch("Patient/z", "U")}
+    r = judge(cc(), PARAMS, base(), changes, {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_a_delete_and_recreate_is_not_a_correction():
+    x = patient("x")
+    changes = fixed((_t(4), "D", frozenset({BOT})))
+    r = judge(cc(), PARAMS, base(), changes, {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_an_update_by_someone_else_is_not_a_correction():
+    x = patient("x")
+    changes = fixed((_t(4), "U", frozenset({OTHER})))
+    r = judge(cc(), PARAMS, base(), changes, {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_an_update_with_no_actor_or_no_time_is_not_a_correction():
+    x = patient("x")
+    for extra in [(_t(4), "U", frozenset()), (None, "U", frozenset({BOT}))]:
+        r = judge(cc(), PARAMS, base(), fixed(extra), {"x": x}, x)
+        assert r.outcome == "needs_review", extra
+
+
+def test_a_version_the_trail_did_not_log_is_not_a_correction():
+    x = patient("x")
+    r = judge(cc(), PARAMS, base(), fixed(versions=3), {"x": x}, x)
+    assert r.outcome == "needs_review"
+    assert any("history" in reason for reason in r.reasons)
+
+
+def test_an_update_logged_before_the_create_is_not_a_correction():
+    x = patient("x")
+    events = [(_t(3), "C", frozenset({BOT})), (_t(1), "U", frozenset({BOT}))]
+    changes = {
+        "Patient/x": Change(
+            ref="Patient/x",
+            actions={"C", "U"},
+            authors={BOT},
+            events=events,
+            versions=2,
+            bodies=[x, x],
+        )
+    }
+    r = judge(cc(), PARAMS, base(), changes, {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_without_an_audit_trail_a_correction_needs_review():
+    x = patient("x")
+    c = cc(change_feed={"audit": None, "sweep_types": ["Patient"]})
+    r = judge(c, PARAMS, base(), fixed(), {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def test_a_correction_after_the_person_existed_still_needs_review():
+    e, x = patient("e"), patient("x")
+    r = judge(cc(), PARAMS, base(e), fixed(), {"e": e, "x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+def _stamped(action, ref, when, who=BOT, *more):
+    event = {
+        **audit(action, ref, who),
+        "id": f"a-{action}-{ref}-{when}",
+        "recorded": when,
+    }
+    event["entity"] += [{"what": {"reference": r}} for r in more]
+    return event
+
+
+def _iso(seconds: float) -> str:
+    return _t(seconds).isoformat().replace("+00:00", "Z")
+
+
+def test_reader_keeps_write_times_and_reads_of_written_records():
+    r = reader_for(
+        {
+            "AuditEvent": bundle(
+                _stamped("C", "Patient/x", _iso(1)),
+                _stamped("R", "Patient/x/_history/1", _iso(2), READER),
+                _stamped("R", "Patient/q", _iso(2), READER, "Patient/x"),
+                _stamped("U", "Patient/x", _iso(3)),
+            ),
+            "Observation": bundle(),
+            "Patient/x/_history": bundle(
+                versioned(patient("x"), BOT, _iso(1)),
+                versioned(patient("x"), BOT, _iso(3)),
+                kind="history",
+            ),
+        }
+    )
+    changes = read_changes(
+        contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+    )
+    x = changes["Patient/x"]
+    assert [a for _, a, _ in x.events] == ["C", "U"]
+    # A versioned entity, and a second entity, are reads of Patient/x.
+    assert x.reads == [(_t(2), frozenset({READER}))] * 2
+    assert x.versions == 2 and len(x.bodies) == 2 and "Patient/q" not in changes
+
+
+class _Server:
+    """A FHIR server that logs every read by id, as Medplum does."""
+
+    def __init__(self, *writes):
+        self.events = [_stamped(a, "Patient/x", _iso(s)) for a, s in writes]
+        self.history = [versioned(patient("x"), BOT, _iso(s)) for _, s in writes]
+        self.now = 12.0  # the verifier's reads land after the window
+
+    def get(self, url, params):
+        key = url.split("/fhir/R4/", 1)[-1]
+        params = dict(params or {})
+        if key == "metadata":
+            return 200, {"Date": "Wed, 28 Oct 2026 12:00:10 GMT"}, {}
+        if key == "AuditEvent":
+            bounds = params.get("date") or []
+            bounds = [bounds] if isinstance(bounds, str) else bounds
+
+            def inside(e):
+                when = datetime.fromisoformat(e["recorded"].replace("Z", "+00:00"))
+                for b in bounds:
+                    at = datetime.fromisoformat(b[2:].replace("Z", "+00:00"))
+                    if (b[:2] == "ge" and when < at) or (b[:2] == "le" and when > at):
+                        return False
+                ent = params.get("entity")
+                act = params.get("action")
+                return (not ent or e["entity"][0]["what"]["reference"] == ent) and (
+                    not act or e["action"] == act
+                )
+
+            return 200, {}, bundle(*[e for e in self.events if inside(e)])
+        if key == "Patient/x/_history":
+            return 200, {}, bundle(*self.history, kind="history")
+        if key == "Patient/x":
+            self.events.append(
+                _stamped("R", "Patient/x", _iso(self.now), "ClientApplication/verifier")
+            )
+            self.now += 0.1
+            return 200, {}, patient("x")
+        return 200, {}, bundle(patient("x"))
+
+
+@pytest.mark.parametrize(
+    "writes,corrected",
+    [([("C", 2)], False), ([("C", 2), ("U", 3)], True)],
+)
+def test_a_server_that_logs_the_verifiers_own_reads(writes, corrected):
+    from openadapt_flow.ensure_record import verify_ensure
+
+    server = _Server(*writes)
+    c = cc(change_feed={"audit": {"heartbeat": True}, "history_author": False})
+    r = verify_ensure(
+        c, PARAMS, base(), reader=FhirReader(c, server.get), sleep=lambda s: None
+    )
+    assert r.outcome == "created_verified", r.reasons
+    assert bool(r.evidence.get("corrected")) is corrected

@@ -24,6 +24,47 @@ The outcome is one of three:
 The agent's own report is not evidence. A save that landed while the agent
 reported a timeout is judged like any other save.
 
+### When the agent corrects its own record
+
+An agent that reads its create back may find a wrong value (a tool changed
+it, say) and fix the record with an update. That is still one record
+created once, so it can be `created_verified`, with `corrected: true` and
+`writes_to_record` (the create and the updates) in the evidence and the
+reason. A person reading the result can see it was corrected.
+
+It counts only when all of these hold; anything else is `needs_review`:
+
+- the audit trail shows exactly one create of the record and then updates,
+  no delete, each with a time and each by the agent;
+- the record's `_history` is read, and shows as many versions in the window
+  as the trail shows writes, so a write the trail didn't log can't be
+  hidden among them;
+- every one of those versions is the person (by the contract's identity
+  rules): a correction may fix a value, never who the record is, since a
+  search no audit event names may have found an earlier version;
+- no other actor read the record by id from the create to the window's
+  close, and the trail is logging reads by id at all (the verifier's own
+  read of the record must show up, as for `found_existing`);
+- the contract's `settle_s` is at least 1 s, so the verifier's own reads
+  land after the window;
+- everything else in the table above: the final record holds every value,
+  the agent wrote no other record, and the record is the only one that is
+  the person.
+
+What this can't see:
+
+- A read the trail doesn't log by id (a search that returned the record,
+  `$everything`, a subscription delivery). The identity rule above limits
+  what such a read could have got wrong; a wrong non-identity value (a
+  phone number, an allergy's criticality) could have been seen.
+- Someone using the agent's own account: their reads and writes are the
+  agent's.
+- The heartbeat shows the trail logs reads when the verifier reads, not
+  that it did throughout the window.
+
+`accept_corrections:
+false` in the contract sends every change after the create to review.
+
 ## The contract
 
 `openadapt.ensure-record/v1` (example:
@@ -37,6 +78,7 @@ reported a timeout is judged like any other save.
 | `self` | the agent's own actor references | setup |
 | `closed` | the created record holds nothing the task didn't give (a field the task left out must be absent; `meta.security` and `meta.tag` count), except what `allow` names | a person |
 | `change_feed` | the audit read, `_history`, whether the server returns `meta.author`, sweep types | a person, once per server |
+| `accept_corrections` | whether the agent's own updates after its create can count (default true; see above) | a person |
 
 ## What this read path sees, and what it doesn't
 

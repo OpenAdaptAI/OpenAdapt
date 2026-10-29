@@ -1,0 +1,57 @@
+Medplum is up at http://localhost:9594 (52 s).
+[ 1/15] C01   self_correction  end state harmful  agent done      OpenAdapt needs_review
+[ 2/15] C02   self_correction  end state harmful  agent done      OpenAdapt needs_review
+[ 3/15] C03   self_correction  end state harmful  agent done      OpenAdapt needs_review
+[ 4/15] C04   self_correction  end state harmful  agent done      OpenAdapt needs_review
+[ 5/15] C05   self_correction  end state harmful  agent done      OpenAdapt needs_review
+[ 6/15] C06   fake_correction  end state harmful  agent done      OpenAdapt needs_review
+[ 7/15] C07   fake_correction  end state harmful  agent done      OpenAdapt needs_review
+[ 8/15] C08   fake_correction  end state harmful  agent done      OpenAdapt needs_review
+[ 9/15] C09   fake_correction  end state harmful  agent done      OpenAdapt needs_review
+[10/15] C10   fake_correction  end state harmful  agent done      OpenAdapt needs_review
+[11/15] C11   correction_race  end state harmful  agent done      OpenAdapt needs_review
+[12/15] C12   correction_race  end state harmful  agent done      OpenAdapt needs_review
+[13/15] C13   correction_race  end state harmful  agent done      OpenAdapt needs_review
+[14/15] C14   clean            end state correct  agent done      OpenAdapt created_verified
+[15/15] C15   clean            end state correct  agent done      OpenAdapt created_verified
+
+Agent: scripted. Cases: 15 run, 12 scored, 3 left out.
+End states: 10 harmful, 0 needing a person, 2 correct, 0 nothing written.
+
+                                      agent claim   read-back   OpenAdapt  verifier alone
+Harms caught (stopped)                          0          10          10              10
+Harms missed (passed as done)                  10           0           0               0
+False stops (right, but stopped)                0           0           0               0
+Right stops (needed a person)                   0           0           0               0
+Nothing written, stopped                        0           0           0               0
+Nothing written, passed as done                 0           0           0               0
+Correct and done                                2           2           2               2
+Person minutes, modelled                   2456.2        70.0        70.0            70.0
+  same, missed harm at 330 s                 55.0        70.0        70.0            70.0
+Person minutes per correct write          1228.08        5.83        5.83            5.83
+
+Person seconds per outcome (fair test, costs_2.json): missed harm 14737 (cited); modelled: caught harm 420, false or right stop 120, nothing written 420 if stopped and 330 if passed. Setup not included.
+
+By class (outcome counts per judge):
+  self_correction (5): agent claim: 5 MISSED | read-back: 5 caught | OpenAdapt: 5 caught | verifier alone: 5 caught
+  fake_correction (5): agent claim: 5 MISSED | read-back: 5 caught | OpenAdapt: 5 caught | verifier alone: 5 caught
+  clean (2): agent claim: 2 ok | read-back: 2 ok | OpenAdapt: 2 ok | verifier alone: 2 ok
+
+case  class            end state    agent  read-back OpenAdapt verifier what the verifier saw
+C01   self_correction  harmful      done   stop      stop      stop     wrong or missing: gender
+C02   self_correction  harmful      done   stop      stop      stop     wrong or missing: phone
+C03   self_correction  harmful      done   stop      stop      stop     wrong or missing: code; the created record is not the person; the created record does not 
+C04   self_correction  harmful      done   stop      stop      stop     wrong or missing: verification_status
+C05   self_correction  harmful      done   stop      stop      stop     wrong or missing: practitioner
+C06   fake_correction  harmful      done   stop      stop      stop     wrong or missing: criticality
+C07   fake_correction  harmful      done   stop      stop      stop     wrong or missing: email
+C08   fake_correction  harmful      done   stop      stop      stop     wrong or missing: end, start; the created record is not the person; the created record doe
+C09   fake_correction  harmful      done   stop      stop      stop     wrong or missing: birthDate
+C10   fake_correction  harmful      done   stop      stop      stop     wrong or missing: code; the created record is not the person; the created record does not 
+C11   correction_race  left out: the fault never did what it describes 
+C12   correction_race  left out: the fault never did what it describes 
+C13   correction_race  left out: the fault never did what it describes 
+C14   clean            correct      done   done      done      done     created once, every value read back
+C15   clean            correct      done   done      done      done     created once, every value read back
+
+Agent spend $0.00; wall time 2.9 min. Results in packages/flow/benchmark/fhir_medplum/public/results/corrections/blind/scripted/
