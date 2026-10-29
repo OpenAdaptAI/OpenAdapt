@@ -815,8 +815,9 @@ def _excuse_attributed_additions(
     new patient in the same window) is not this save's addition. Only such
     attributed additions are set aside; an unattributed one still refutes.
 
-    Only an insert event proves who created a record: the frame must read the
-    log with ``insert_events``. A colleague's later entry or last-modifier
+    Only an insert event into the record's own table proves who created it:
+    the frame must diff the database (``frame.database``) and read the log
+    with ``insert_events`` and a ``table_field``. A colleague's later entry or last-modifier
     stamp on a record says who touched it, not who added it, so under any
     other attribution nothing is set aside.
     """
@@ -831,6 +832,8 @@ def _excuse_attributed_additions(
         attribution is None
         or attribution.kind != "audit_read"
         or not attribution.insert_events
+        or not attribution.table_field
+        or spec.database is None
     ):
         return
     excused = {
