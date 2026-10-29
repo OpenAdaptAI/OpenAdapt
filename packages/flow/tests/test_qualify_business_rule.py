@@ -417,6 +417,13 @@ def test_halt_steps_follow_halt_at() -> None:
     workflow = _workflow()
     (rule,) = _config().business_rules
     assert rule_halt_steps(workflow, rule, "s3") == {"s2"}
+    # A bundle compiled before the exact checks carries a plain text check.
+    workflow.steps[1].expect[0].exact = False
+    assert rule_halt_steps(workflow, rule, "s3") == {"s2"}
+    # Any other text is not a rule's check.
+    workflow.steps[1].expect[0].text = "Confirm Create New Patient"
+    assert rule_halt_steps(workflow, rule, "s3") == set()
+    workflow = _workflow()
     (before,) = _config(
         rules=[{**RULE, "halt_at": "before_save", "halt_reason": "x"}]
     ).business_rules

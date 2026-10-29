@@ -1774,17 +1774,21 @@ def rule_halt_steps(
 ) -> set[str]:
     """The steps a rule's run may halt at (``BusinessRuleCase.halt_at``)."""
 
-    from openadapt_flow.compiler.empty_result_guard import (
-        is_empty_result_check,
-        is_empty_result_statement,
-    )
+    from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
+    from openadapt_flow.ir import PostconditionKind
 
     ids = [step.id for step in workflow.steps]
     if rule.halt_at == "empty_result_guard":
+        # The compiler's exact checks, and an empty-result text check a bundle
+        # compiled before them carries (added by hand after compiling).
         return {
             step.id
             for step in workflow.steps
-            if any(is_empty_result_check(pc) for pc in step.expect)
+            if any(
+                pc.kind is PostconditionKind.TEXT_PRESENT
+                and is_empty_result_statement(pc.text or "")
+                for pc in step.expect
+            )
             or (
                 step.guard is not None
                 and step.guard.on_unmet == "halt"
