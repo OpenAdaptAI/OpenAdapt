@@ -142,6 +142,7 @@ def _ensure_second_user(fx: Any) -> None:
     _sql(
         fx,
         f"""
+        USE {DB};
         CREATE TEMPORARY TABLE oa_u AS SELECT * FROM {DB}.users WHERE username = {actor};
         UPDATE oa_u SET id = (SELECT MAX(id) + 1 FROM {DB}.users), username = {name},
           fname = 'Owner', lname = 'Second', uuid = NULL;
