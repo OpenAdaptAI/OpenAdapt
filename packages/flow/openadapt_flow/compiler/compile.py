@@ -752,7 +752,9 @@ def _squash(text: str) -> str:
     return "".join(normalize_text(text).split())
 
 
-def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
+def _contains_excluded(
+    text: str, excluded: tuple[str, ...], *, fragments: bool = True
+) -> bool:
     """True if ``text`` fuzzily contains (or is contained by) an excluded value.
 
     OCR mangles whitespace and the odd character, so exact substring checks
@@ -764,6 +766,7 @@ def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
     Args:
         text: A TEXT_PRESENT candidate (raw OCR line text).
         excluded: Excluded (parameterized) values, raw.
+        fragments: Also count ``text`` that is contained by a value.
 
     Returns:
         True when the candidate must not be asserted.
@@ -775,7 +778,7 @@ def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
         ex = _squash(raw)
         if len(ex) < MIN_EXCLUDE_CHARS:
             continue
-        if ex in hay or hay in ex:
+        if ex in hay or (fragments and hay in ex):
             return True
         matcher = difflib.SequenceMatcher(None, ex, hay)
         matched = sum(block.size for block in matcher.get_matching_blocks())
@@ -1244,6 +1247,42 @@ def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
             **common,
         )
     return None
+
+
+def _label_shows_param_value(
+    text: str, values: tuple[str, ...], *, typed_here: tuple[str, ...]
+) -> bool:
+    """True if a click target's label shows a parameter value.
+
+    A label shows a value when it (fuzzily) contains one. A label that is
+    only a fragment of a value counts when that value is ``typed_here``: OCR
+    can split a typed value across lines. Anywhere else such a fragment is a
+    label that shares a word with a value, like the "Triage" button and a
+    note "E2E triage booking ...". Dropping that label left the click with no
+    text to find, and when the buttons swapped places the geometry rung
+    clicked the one now at the recorded spot. A kept label that does vary
+    per run only fails to match; ``lint_param_leakage`` allows the slot.
+
+    Args:
+        text: The OCR label under the click.
+        values: Every parameter (and secret) value in the recording.
+        typed_here: Values that can be the text under this click: those typed
+            earlier into the field the click lands in, and every secret.
+    """
+
+    return _contains_excluded(text, typed_here) or _contains_excluded(
+        text, values, fragments=False
+    )
+
+
+def _point_in_rect(point: Point, rect: object) -> bool:
+    if not isinstance(rect, (list, tuple)) or len(rect) != 4:
+        return False
+    try:
+        x, y, w, h = (int(v) for v in rect)
+    except (TypeError, ValueError):
+        return False
+    return x <= point[0] < x + w and y <= point[1] < y + h
 
 
 def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> list[str]:
@@ -2254,6 +2293,13 @@ def _compile_recording(
     # postconditions too, even though it never lands in workflow.params.
     param_values.extend(secret_exclude_values)
     exclude_texts: tuple[str, ...] = tuple(dict.fromkeys(param_values))
+    # Where and when each parameter value is typed, for the click labels
+    # that can show it (_label_shows_param_value).
+    typed_param_at: list[tuple[int, str, object]] = [
+        (int(event["i"]), str(event["text"]), event.get("field_rect"))
+        for event in events
+        if event.get("kind") == "type" and event.get("param") and event.get("text")
+    ]
 
     # The recording date arms the near/far date split in the volatility
     # classifier (a DOB is identity data; "last updated" is chronology).
@@ -2365,7 +2411,18 @@ def _compile_recording(
                 frame_lines,
                 click,
             )
-            if ocr_text and _contains_excluded(ocr_text, exclude_texts):
+            if ocr_text and _label_shows_param_value(
+                ocr_text,
+                exclude_texts,
+                typed_here=(
+                    *(
+                        text
+                        for at, text, rect in typed_param_at
+                        if at < i and _point_in_rect(click, rect)
+                    ),
+                    *secret_exclude_values,
+                ),
+            ):
                 # The text under the click is (part of) a value typed from a
                 # parameter, so it changes every run: never anchor on it.
                 ocr_text = None

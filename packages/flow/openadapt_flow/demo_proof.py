@@ -304,6 +304,18 @@ _PLAIN_CHOICES: tuple[tuple[str, str], ...] = (
         "After checking the record, let the run continue from the stopped "
         "step. Steps already confirmed don't repeat.",
     ),
+    # A save that was sent but not confirmed may have landed, so the engine
+    # offers these in place of a plain resume (``_RECONCILE_OPTIONS``).
+    (
+        "Reconcile the live application and independently verify whether "
+        "the effect landed",
+        "Check in the app whether the save landed. If it did, the run can "
+        "continue without saving again.",
+    ),
+    (
+        "If reconciliation proves a retry is necessary",
+        "If it didn't land, approve one more try of the save.",
+    ),
     ("Abort the run", "Cancel the run."),
 )
 
