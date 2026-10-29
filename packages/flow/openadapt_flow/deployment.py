@@ -768,6 +768,13 @@ class RuntimeSection(BaseModel):
     #: grounder / identity-VLM / state-verifier. Off by default => fully local,
     #: zero outbound calls.
     allow_model_grounding: bool = False
+    #: Local grounding model for pixel surfaces (Citrix, RDP, VNC, canvas):
+    #: finds an icon or unlabeled control again after a display-scale, zoom,
+    #: font or theme change, counting look-alikes and halting on a tie. Runs
+    #: in process with no outbound call; the pinned weights (24 MB) are
+    #: fetched once and SHA-256 checked. Off by default. See
+    #: :mod:`openadapt_flow.runtime.local_grounder`.
+    local_grounding: bool = False
     #: Arm the pixel-compare identity tier's VERIFY branch (experimental,
     #: evidence-gated). Off by default => the pixel tier only ever HALTs on a
     #: localized glyph change or ABSTAINs; it never pixel-VERIFIES (a
@@ -1301,7 +1308,10 @@ def pin_deployment_bytes(source: str | Path, sha256: str) -> bytes:
     import stat
 
     try:
-        fd = os.open(str(source), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        # O_BINARY: on Windows a plain os.open reads in text mode, turning
+        # CRLF into LF, so the bytes hashed wouldn't be the bytes written.
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+        fd = os.open(str(source), flags)
     except OSError as exc:
         raise ValueError(
             f"deployment config {source} can't be opened as a plain file: {exc}"
@@ -1667,7 +1677,20 @@ def build_replayer(
     fallback = model_grounder
     if fallback is None and appliance is not None:
         fallback = appliance.grounder
-    grounder = build_grounder(fallback=fallback)
+    local_model: Optional[Any] = None
+    if runtime_config is not None and runtime_config.local_grounding:
+        from openadapt_flow.runtime.local_grounder import LocalGroundingModel
+
+        local_model = LocalGroundingModel.load()
+        print(
+            "Local grounding model active for pixel surfaces "
+            "(in process, no outbound calls)."
+        )
+    grounder = (
+        build_grounder(fallback=fallback, local_model=local_model)
+        if local_model is not None
+        else build_grounder(fallback=fallback)
+    )
     if grounder is not None:
         print(f"Grounding rung active: {type(grounder).__name__}")
     require_settled = (
@@ -2179,23 +2202,37 @@ def _build_effect_verifier_unredacted(
         if not cfg.sql_query:
             raise ValueError("effects.kind 'sql' requires effects.sql_query")
         from openadapt_flow.runtime.effects import SqlRecordVerifier
+        from openadapt_flow.runtime.effects.sql import (
+            READ_ONLY_DRIVERS,
+            read_only_connection,
+        )
 
         connect: Callable[[], Any]
         if cfg.sqlite_database:
             import sqlite3
 
             database = cfg.sqlite_database
-            connect = lambda: sqlite3.connect(database)  # noqa: E731
+            connect = lambda: read_only_connection(  # noqa: E731
+                sqlite3.connect(database), "sqlite3"
+            )
         elif cfg.sql_driver:
             import importlib
 
-            module = importlib.import_module(cfg.sql_driver)
+            driver = cfg.sql_driver
+            module = importlib.import_module(driver)
             connect_args = dict(cfg.sql_connect_args)
             if cfg.sql_password_env:
                 connect_args["password"] = _require_env(
                     cfg.sql_password_env, "effects.sql_password_env"
                 )
-            connect = lambda: module.connect(**connect_args)  # noqa: E731
+            # The read-back never writes: where the driver can, its session
+            # is read-only, so a query that would write is refused there.
+            if driver in READ_ONLY_DRIVERS:
+                connect = lambda: read_only_connection(  # noqa: E731
+                    module.connect(**connect_args), driver
+                )
+            else:
+                connect = lambda: module.connect(**connect_args)  # noqa: E731
         else:
             raise ValueError(
                 "effects.kind 'sql' requires effects.sqlite_database or "

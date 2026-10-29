@@ -193,6 +193,18 @@ exclude = [
     "/output.png",
 ]
 
+[tool.uv]
+# Wheel-only dependencies drop old Pythons (onnxruntime 1.24 has no cp310
+# wheel and no sdist), and a universal lock does not notice: it locked 1.24.3
+# for Python 3.10, which no 3.10 interpreter can install. These environments
+# make the resolver keep a version with a wheel for the oldest supported
+# Python on each platform CI runs.
+required-environments = [
+    "python_version == '3.10' and sys_platform == 'linux'",
+    "python_version == '3.10' and sys_platform == 'darwin'",
+    "python_version == '3.10' and sys_platform == 'win32'",
+]
+
 [tool.ruff]
 line-length = 88
 target-version = "py310"
