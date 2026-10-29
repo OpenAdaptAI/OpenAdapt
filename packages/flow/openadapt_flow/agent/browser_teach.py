@@ -830,6 +830,10 @@ def _run_steps(
     )
     page = browser.page
     try:
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Guard the page's WebSockets from its first document (wire check).
+        prepare_ws_guard(page)
         page.goto(program["url"], wait_until="domcontentloaded")
         for i, step in enumerate(program["steps"], 1):
             if browser.blocked:
@@ -1383,6 +1387,10 @@ class BrowserTeachBridge:
                     allowed_writes=contract.writes if contract is not None else (),
                     secrets=list(secret_values.values()),
                 )
+                from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+                # Guard the page's WebSockets from its first document (wire check).
+                prepare_ws_guard(run.browser.page)
                 run.browser.page.goto(url, wait_until="domcontentloaded")
                 return self._listing(run)
 

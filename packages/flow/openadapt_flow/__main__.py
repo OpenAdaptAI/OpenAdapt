@@ -2547,6 +2547,10 @@ def _build_surface_backends(surface_cfgs, *, page) -> dict:
                 if browser is None:
                     raise
                 opened = browser.new_page(viewport=page.viewport_size)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(opened)
             opened.goto(url)
             try:
                 opened.wait_for_load_state("load")
@@ -2805,6 +2809,10 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                 page = context.new_page()
             else:
                 page = browser.new_page(viewport=_VIEWPORT, service_workers="block")
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(url)
             try:
                 report = run_on_page(page, entry_url=url)
@@ -4526,6 +4534,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=not headed)
                     page = browser.new_page(viewport=_VIEWPORT)
+                    from openadapt_flow.backends.playwright_backend import (
+                        prepare_ws_guard,
+                    )
+
+                    # Guard the page's WebSockets from its first document (wire check).
+                    prepare_ws_guard(page)
                     page.goto(url)
                     try:
                         report = _resume_with(build_backend(backend_cfg, page=page))
@@ -5042,6 +5056,10 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         with sync_playwright() as p:
             browser = launch_chromium(p.chromium, headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(target_url)
             try:
                 yield PlaywrightBackend(page)
