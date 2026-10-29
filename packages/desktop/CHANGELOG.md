@@ -11,6 +11,7 @@
 
 - **desktop**: a Mac reads its Keychain approver root with Keychain prompts turned off, so an item another program planted or rewrote counts as no root instead of a prompt someone might allow. A Keychain root that disagrees with the administrator's pin is refused.
 - **desktop**: the stop-review screen says when no approver root is pinned, since answers can't count until one is.
+- **desktop**: bundles openadapt-flow 2.4.1, which reads a pinned deployment config as exact bytes on Windows, so a config with Windows line endings matches its pinned digest.
 
 
 
