@@ -26,6 +26,7 @@ from openadapt_flow.verifier import (
     Contract,
     FileLedger,
     Ledger,
+    MemoryLedger,
     Outcome,
     WriteHeld,
     begin_write,
@@ -165,8 +166,12 @@ def test_a_worker_killed_after_the_send_is_not_resent_on_restart(
     assert len(caught.value.result["receipt_sha256"]) == 64
     assert _landed(db) == 1
 
-    # The result reached a caller, so the next identical call is a new write.
-    pending = begin_write(_contract(base), VALUES, actor=BOT)
+    # An identical call inside the repeat window is a retry: handed back too.
+    with pytest.raises(AlreadyWritten):
+        begin_write(_contract(base), VALUES, actor=BOT)
+    # After it (repeat_s=0 here), the same values are a new write.
+    no_repeat = Ledger(FileLedger(ledger_dir), repeat_s=0)
+    pending = begin_write(_contract(base), VALUES, actor=BOT, ledger=no_repeat)
     FakeAgent(base).click_save("p1", NOTE)
     # Its own baseline holds the first note, so the second is its new record.
     assert verify_write(pending).verified
@@ -415,3 +420,137 @@ def test_who_declared_each_value_reaches_the_reply(sor, ledger_dir: Path) -> Non
     pending = begin_write(_contract(base), VALUES, actor=BOT, declared_by=declared)
     FakeAgent(base).click_save("p1", NOTE)
     assert verify_write(pending).to_dict()["values_declared_by"] == declared
+
+
+# -- review findings (adversarial review of #1628) -------------------------------
+
+
+def test_editing_read_settings_after_a_crash_keeps_the_hold(
+    sor, ledger_dir: Path
+) -> None:
+    base, db = sor
+    dead = _worker(base, "die_after_send", ledger_dir)
+    dead.communicate(timeout=120)
+    moved = Contract.from_dict(
+        verify_yaml(base.replace("127.0.0.1", "localhost")), name="referral"
+    )
+    assert moved.identity == _contract(base).identity
+    # Another address for the store: the old baseline was read by another
+    # verifier, so nothing can judge the attempt. Held, never resent.
+    with pytest.raises(WriteHeld):
+        begin_write(moved, VALUES, actor=BOT)
+    doc = verify_yaml(base)
+    doc["effects"][0]["timeout_s"] = 2.0
+    doc["max_execution_window_s"] = 1800
+    edited = Contract.from_dict(doc, name="referral")
+    assert edited.digest != _contract(base).digest
+    assert edited.identity == _contract(base).identity
+    # Only timings changed: the attempt is judged and handed back.
+    with pytest.raises(AlreadyWritten):
+        begin_write(edited, VALUES, actor=BOT)
+    assert _landed(db) == 1
+
+
+def test_a_value_typed_differently_is_the_same_write(sor, ledger_dir: Path) -> None:
+    base, _db = sor
+    pending = begin_write(_contract(base), VALUES, actor=BOT)
+    with pytest.raises(WriteHeld, match="in flight"):
+        begin_write(_contract(base), {"patient_id": "p1", "note": NOTE}, actor=BOT)
+    ledger = Ledger(MemoryLedger())
+    assert ledger.key_for("c", {"n": 7}) == ledger.key_for("c", {"n": "7"})
+    pending.release()
+
+
+def test_another_tasks_identical_write_is_never_taken_for_this_one(
+    sor, ledger_dir: Path
+) -> None:
+    base, db = sor
+    # task-1 reads its baseline and dies before sending.
+    dead = _worker(base, "die_before_send", ledger_dir, key="task-1")
+    dead.communicate(timeout=120)
+    # task-2 makes the same write and it lands.
+    pending = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-2")
+    FakeAgent(base).click_save("p1", NOTE)
+    assert verify_write(pending).verified
+    # task-1 restarts: the one record may be task-2's, so it isn't confirmed.
+    with pytest.raises(WriteHeld, match="may still land"):
+        begin_write(_contract(base), VALUES, actor=BOT, write_key="task-1")
+    assert _landed(db) == 1
+
+
+def test_other_workers_records_dont_hold_a_correct_write(sor, ledger_dir: Path) -> None:
+    base, db = sor
+    contract = _contract(base)
+    a = begin_write(contract, VALUES, actor=BOT)
+    other = {"patient_id": "p2", "note": NOTE}
+    b = begin_write(contract, other, actor=BOT)
+    FakeAgent(base).click_save("p1", NOTE)
+    FakeAgent(base).click_save("p2", NOTE)
+    for pending in (a, b):
+        result = verify_write(pending)
+        # Each sees the other's record beside its own: landed, not confirmed,
+        # never held and never resent.
+        assert result.outcome is Outcome.UNCERTAIN and result.landed
+    with pytest.raises(AlreadyWritten):
+        begin_write(contract, VALUES, actor=BOT)
+    assert Ledger(FileLedger(ledger_dir)).unresolved() == []
+
+
+def test_a_stray_record_no_attempt_explains_stays_refuted(
+    sor, ledger_dir: Path
+) -> None:
+    base, _db = sor
+    pending = begin_write(_contract(base), VALUES, actor=BOT)
+    FakeAgent(base).click_save("p1", NOTE)
+    FakeAgent(base).click_save("p3", "a stray write")  # no attempt in the ledger
+    result = verify_write(pending)
+    assert result.outcome is Outcome.REFUTED and not result.landed
+
+
+def test_a_write_reconciled_after_others_landed_is_not_held(
+    sor, ledger_dir: Path
+) -> None:
+    base, db = sor
+    dead = _worker(base, "die_after_send", ledger_dir)
+    dead.communicate(timeout=120)
+    # Another write lands before the restart.
+    other = {"patient_id": "p2", "note": NOTE}
+    pending = begin_write(_contract(base), other, actor=BOT)
+    FakeAgent(base).click_save("p2", NOTE)
+    verify_write(pending)
+    with pytest.raises(AlreadyWritten) as caught:
+        begin_write(_contract(base), VALUES, actor=BOT)
+    assert caught.value.result["landed"] is True
+    assert _landed(db) == 1
+
+
+def test_an_unusable_ledger_blocks_the_write(sor, tmp_path: Path, monkeypatch) -> None:
+    base, _db = sor
+    bad = tmp_path / "not-private"
+    bad.mkdir()
+    (bad / "entries").symlink_to(tmp_path)
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(bad))
+    with pytest.raises(WriteHeld, match="ledger can't be used"):
+        begin_write(_contract(base), VALUES, actor=BOT)
+
+
+def test_a_released_pending_write_leaves_the_ledger_alone(
+    sor, ledger_dir: Path
+) -> None:
+    base, _db = sor
+    pending = begin_write(_contract(base), VALUES, actor=BOT)
+    FakeAgent(base).click_save("p1", NOTE)
+    pending.release()
+    verify_write(pending)  # judged, but not recorded without the lease
+    [(key, attempt)] = Ledger(FileLedger(ledger_dir)).unresolved()
+    assert attempt.state == "open"
+
+
+def test_a_resolved_attempt_keeps_no_values(sor, ledger_dir: Path) -> None:
+    base, _db = sor
+    pending = begin_write(_contract(base), VALUES, actor=BOT)
+    FakeAgent(base).click_save("p1", NOTE)
+    verify_write(pending)
+    assert not (pending.workdir / "attempt.json").exists()
+    assert not (pending.workdir / "baseline.json").exists()
+    assert (pending.workdir / "effect-receipt.json").exists()

@@ -60,6 +60,7 @@ from openadapt_flow.write_ledger import (
     LedgerError,
     MemoryLedger,
     default_ledger,
+    prune,
 )
 
 __all__ = [
@@ -254,6 +255,32 @@ class Contract:
         return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
     @property
+    def identity(self) -> str:
+        """SHA-256 of what the write is: each effect's kind, target and
+        values, unbound. Read settings (where the store is, timeouts, the
+        window, the frame) are left out, so editing them between a crash and
+        a restart can't make the same write look new."""
+
+        def strip(value: Any) -> Any:
+            if isinstance(value, Mapping):
+                return {
+                    str(k): strip(v)
+                    for k, v in value.items()
+                    if not str(k).endswith("_s")
+                }
+            if isinstance(value, (list, tuple)):
+                return [strip(v) for v in value]
+            return value
+
+        body = json.dumps(
+            [strip(e.model_dump(mode="json")) for e in self.config.effects],
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+    @property
     def params(self) -> list[str]:
         """Every ``{"param": name}`` the contract's reads and effects bind."""
 
@@ -373,6 +400,9 @@ class WriteResult:
     authorization: str = "unbound"
     seal: str = "off"
     seal_path: Optional[str] = None
+    #: Not confirmed, but the store holds the declared records: the write is
+    #: never sent again, and it isn't held for a person.
+    landed: bool = False
 
     @property
     def verified(self) -> bool:
@@ -412,6 +442,7 @@ class WriteResult:
             "authorization": self.authorization,
             "seal": self.seal,
             "seal_path": self.seal_path,
+            "landed": self.landed,
         }
 
 
@@ -510,7 +541,10 @@ def begin_write(
     if missing:
         raise VerifierError(f"values missing for: {', '.join(missing)}")
     values = {n: params[n] for n in names}
-    led = _resolve_ledger(ledger)
+    try:
+        led = _resolve_ledger(ledger)
+    except LedgerError as exc:
+        raise WriteHeld(f"the write ledger can't be used ({exc})") from exc
     write_id = f"write-{secrets.token_hex(12)}"
     if led is None:
         folder = _new_folder(Path(workdir or DEFAULT_WORKDIR), write_id)
@@ -518,7 +552,8 @@ def begin_write(
             contract, params, actor, write_id, folder, authorization_ref, declared_by
         )
     try:
-        key = led.key_for(contract.digest, values, write_key)
+        key = led.key_for(contract.identity, values, write_key)
+        values_key = led.key_for(contract.identity, values, None)
         lease = led.backend.lease(key)
     except LedgerError as exc:
         raise WriteHeld(f"the write ledger can't be used ({exc})") from exc
@@ -545,7 +580,9 @@ def begin_write(
             key,
             write_id,
             folder=str(folder),
-            contract=contract.digest,
+            contract=contract.identity,
+            values_key=values_key,
+            records=sum(int(e.expected_count or 1) for e in contract.config.effects),
             actor_kind=actor.kind,
             actor_id=actor.id,
             write_key_bound=write_key is not None,
@@ -554,6 +591,9 @@ def begin_write(
             if isinstance(declared_by, str)
             else {str(k): str(v) for k, v in declared_by.items()},
         )
+    except LedgerError as exc:
+        lease.release()
+        raise WriteHeld(f"the write ledger can't be used ({exc})", key=key) from exc
     except BaseException:
         lease.release()
         raise
@@ -625,7 +665,7 @@ def _settle(
         # read-back. Read back before anything is sent.
         _reconcile(led, key, attempt, contract, params)
         attempt = led.latest(key)
-    state = attempt.state if attempt is not None else "free"
+    state = led.state(attempt)
     if state == "free":
         return
     if state == "undelivered":
@@ -635,8 +675,14 @@ def _settle(
         if not attempt.delivered:
             led.delivered(key, attempt.attempt_id)
         raise AlreadyWritten(
-            "this write was already made and checked; its result is attached, "
-            "and it was not sent again",
+            (
+                "this write was already made: the store holds it, though it "
+                "wasn't confirmed; its result is attached, and it was not sent "
+                "again"
+                if result.get("landed")
+                else "this write was already made and checked; its result is "
+                "attached, and it was not sent again"
+            ),
             key=key,
             result=result,
         )
@@ -670,8 +716,6 @@ def _reconcile(
     window the baseline proves nothing, and the attempt stays uncertain.
     """
 
-    if attempt.begun.get("contract") != contract.digest:
-        return  # another contract's attempt: nothing here can judge it
     folder = attempt.folder
     baseline = folder / "baseline.json"
     try:
@@ -706,7 +750,20 @@ def _reconcile(
         seal=True,
         remediates=f"sha256:{previous}" if previous else None,
     )
-    if result.outcome is not Outcome.UNCERTAIN or attempt.resolved is None:
+    result = _excuse_overlap(led, attempt.attempt_id, result)
+    if result.outcome is Outcome.CONFIRMED and _same_values_after(led, attempt):
+        # Another attempt with the same values began after this one's
+        # baseline: the record may be its write, not this one's.
+        result = _downgrade(
+            result,
+            "another attempt with the same values began after this one, so "
+            "the record may be that write; a person checks which one landed",
+        )
+    if (
+        result.outcome is not Outcome.UNCERTAIN
+        or attempt.resolved is None
+        or _landed(result)
+    ):
         _record(
             led,
             key,
@@ -715,6 +772,7 @@ def _reconcile(
             delivered=False,
             via="reconcile",
             write_key_bound=bool(attempt.begun.get("write_key_bound")),
+            folder=folder,
         )
     if (
         result.outcome is Outcome.UNCERTAIN
@@ -776,11 +834,15 @@ def verify_write(
     if pending.used:
         raise VerifierError("this write was already checked; begin a new one")
     pending.used = True
+    # Without the lease (released), another worker may be reconciling this
+    # attempt: judge, but leave the ledger to it.
+    holds_lease = pending.ledger is not None and pending._lease is not None
     try:
         result = _judge(
             pending, write_attempted=write_attempted, source=source, seal=seal
         )
-        if pending.ledger is not None:
+        if holds_lease and pending.ledger is not None:
+            result = _excuse_overlap(pending.ledger, pending.write_id, result)
             _record(
                 pending.ledger,
                 pending.write_key,
@@ -789,6 +851,7 @@ def verify_write(
                 delivered=delivered,
                 via="verify_write",
                 write_key_bound=pending.write_key_bound,
+                folder=pending.workdir,
             )
     finally:
         pending.release()
@@ -804,17 +867,91 @@ def _record(
     delivered: bool,
     via: str,
     write_key_bound: bool,
+    folder: Optional[Path] = None,
 ) -> None:
     led.resolved(
         key,
         attempt_id,
         outcome=result.outcome.value,
         retry_safe=result.retry_safe,
+        landed=result.landed,
         delivered=delivered,
         via=via,
         write_key_bound=write_key_bound,
         receipt_sha256=result.receipt_sha256 or None,
         result=result.to_dict(),
+    )
+    if folder is not None and _landed(result):
+        prune(folder)
+
+
+def _landed(result: WriteResult) -> bool:
+    """Resolved for good: nothing will read this attempt back again."""
+
+    return result.outcome is not Outcome.UNCERTAIN or result.landed or result.retry_safe
+
+
+def _downgrade(
+    result: WriteResult, reason: str, *, landed: bool = False
+) -> WriteResult:
+    import dataclasses
+
+    return dataclasses.replace(
+        result,
+        outcome=Outcome.UNCERTAIN,
+        reasons=[*result.reasons, reason],
+        retry_safe=False,
+        landed=landed,
+    )
+
+
+def _excuse_overlap(led: Ledger, attempt_id: str, result: WriteResult) -> WriteResult:
+    """A refuted frame that other attempts in the ledger explain.
+
+    The declared records landed exactly (``delta`` held); the only breach is
+    records added outside them, no more than other attempts in the ledger
+    could have added while this one's window was open. Then this write
+    landed, and the extra records are most likely theirs: it is never sent
+    again, and it isn't held. It isn't confirmed either.
+    """
+
+    if result.outcome is not Outcome.REFUTED or result.checked.get("delta") != "held":
+        return result
+    if result.checked.get("source") == "refuted":
+        return result
+    frame = result.evidence.get("frame") or {}
+    kinds = set(frame.get("collateral_kinds") or [])
+    if frame.get("status") != "refuted" or not kinds or kinds - {"added"}:
+        return result
+    since, until = result.scope.window.baseline_read_at, result.scope.window.read_at
+    if not since or not until:
+        return result
+    others = 0
+    for _key, begun, resolved in led.attempts():
+        if begun.get("attempt") == attempt_id or str(begun.get("at", "")) > until:
+            continue
+        if resolved is not None and str(resolved.get("at", "")) < since:
+            continue  # its write was in this attempt's baseline
+        others += int(begun.get("records") or 1)
+    if int(frame.get("collateral_count") or 0) > others:
+        return result
+    return _downgrade(
+        result,
+        "the declared records landed; the records added beside them match "
+        "other writes made in the same window, so this write isn't confirmed, "
+        "and it isn't sent again",
+        landed=True,
+    )
+
+
+def _same_values_after(led: Ledger, attempt: Attempt) -> bool:
+    values_key = attempt.begun.get("values_key")
+    since = str(attempt.begun.get("at", ""))
+    return any(
+        begun.get("values_key") == values_key
+        and begun.get("attempt") != attempt.attempt_id
+        and str(begun.get("at", "")) >= since
+        for _key, begun, _resolved in led.attempts()
     )
 
 

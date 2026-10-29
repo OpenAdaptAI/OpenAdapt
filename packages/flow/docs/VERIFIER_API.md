@@ -135,11 +135,25 @@ sent. Adapters turn it into a `written: false` reply.
 The ledger stops a restart or a second worker from resending a write whose
 outcome isn't known.
 
-**Identity.** A write's key is an HMAC-SHA256 over the contract's digest, the
-bound values, and an optional caller `write_key`. The HMAC key is a secret in
-the ledger folder (mode 0600), so the ledger never holds values or plain
-digests of them. Two intended writes with the same values need distinct
-`write_key`s.
+**Identity.** A write's key is an HMAC-SHA256 over three things:
+
+- the contract's identity (`Contract.identity`): each effect's kind, target
+  and values, unbound;
+- the bound values, normalized so that `7` and `"7"` are the same write;
+- an optional caller `write_key`.
+
+Read settings are left out of the identity: where the store is, timeouts,
+the window, and the frame. Editing them between a crash and a restart can't
+make the same write look new. If the store's address changes, the old
+baseline can't be judged, so the attempt stays held.
+
+The HMAC key is a secret in the ledger folder (mode 0600), so the ledger
+never holds values or plain digests of them. A landed write without a
+`write_key` is handed back to an identical call for `repeat_s` (default 10
+minutes); after that, the same values are a new write. Inside that window,
+two intended writes with the same values need distinct `write_key`s. With a
+`write_key`, a landed write is never made again under it. The MCP tool
+`verify_begin` takes an optional `write_key`.
 
 **Storage.** `FileLedger` is the default, in `~/.openadapt/ledger/`
 (`OPENADAPT_LEDGER_DIR` overrides it). It keeps one append-only JSON Lines
@@ -164,10 +178,10 @@ send and the read-back, and reconciles it before anything else.
 
 | Latest attempt | `begin_write` |
 |---|---|
-| none, `CONFIRMED` and delivered, or `retry_safe` | new attempt |
+| none, `retry_safe`, or landed and delivered more than `repeat_s` ago (no `write_key`) | new attempt |
 | open, lease held elsewhere | `WriteHeld` (in flight) |
 | open, lease free (owner died) | reconcile, then decide again |
-| `CONFIRMED`, not delivered | `AlreadyWritten` with the stored result |
+| landed (`CONFIRMED`, or `landed`): undelivered, inside `repeat_s`, or under a `write_key` | `AlreadyWritten` with the stored result |
 | `UNCERTAIN` | reconcile, then decide again |
 | `REFUTED` | `WriteHeld` until `release` |
 
@@ -193,8 +207,24 @@ an operator's job.
   one that died just after: it stays held until a person, or `settle_s`,
   releases it.
 
-The attempt's baseline and values stay in its private folder (mode 0700,
-files 0600) next to the ledger, as verify-run keeps baselines today.
+**Other writes in the window.** A correct write can see records that other
+workers added in the same window. Then its declared records landed exactly
+(`delta` held), and the only frame breach is added records, no more than
+other ledger attempts that were open during its window could have made. In
+that case the result is `UNCERTAIN` with `landed: true`. It isn't confirmed,
+it isn't held, and it's never sent again. A breach that ledger attempts
+don't explain stays `REFUTED`.
+
+**Another task's identical write.** Reconciliation doesn't record
+`CONFIRMED` if another attempt with the same values began after this one.
+The record may be that other attempt's write, so the attempt stays held for
+a person.
+
+**What's kept on disk.** While an attempt may still need a read-back, its
+baseline and values stay in its private folder (mode 0700, files 0600) next
+to the ledger, as verify-run keeps baselines today. Once it resolves for
+good (landed, refuted, retry-safe or released), they're removed. Receipts
+stay; they hold no record values.
 
 **People.** `openadapt verify ledger list` shows open and held keys (no
 values). `release KEY --reason TEXT` appends a `released` event after a

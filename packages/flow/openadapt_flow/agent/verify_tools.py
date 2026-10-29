@@ -47,6 +47,7 @@ __all__ = ["VERIFY_TOOLS", "VerifyBridge", "contract_params"]
 
 VERIFY_TOOLS = ("verify_contracts", "verify_begin", "verify_check")
 _NAME = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+_WRITE_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$")
 _AGENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
 
 INSTRUCTIONS = (
@@ -133,6 +134,15 @@ class VerifyBridge:
                                 "type": ["string", "number", "boolean"]
                             },
                         },
+                        "write_key": {
+                            "type": "string",
+                            "pattern": _WRITE_KEY.pattern,
+                            "description": (
+                                "Your id for this one write (a task or ticket "
+                                "id). With it, a retry of the write is never "
+                                "sent twice, however late it comes."
+                            ),
+                        },
                         "agent_id": {
                             "type": "string",
                             "pattern": _AGENT_ID.pattern,
@@ -194,12 +204,16 @@ class VerifyBridge:
         if missing:
             raise BridgeError(f"values missing for: {', '.join(missing)}")
         agent_id = str(args.get("agent_id") or "mcp-agent")
+        write_key = args.get("write_key")
+        if write_key is not None and not _WRITE_KEY.fullmatch(str(write_key)):
+            raise BridgeError("write_key: 1-128 of A-Za-z0-9._:@/-")
         try:
             pending = begin_write(
                 contract,
                 values,
                 actor=Actor("agent", agent_id),
                 workdir=self.state_dir,
+                write_key=None if write_key is None else str(write_key),
             )
         except AlreadyWritten as exc:
             return {

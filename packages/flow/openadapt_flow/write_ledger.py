@@ -154,11 +154,20 @@ class FileLedger:
                 os.fsync(fh.fileno())
         # Another worker may be writing it: wait for the whole key.
         for _ in range(50):
-            text = path.read_text().strip()
+            try:
+                text = path.read_text().strip()
+            except OSError as exc:
+                raise LedgerError(f"can't read the ledger key: {exc}") from exc
             if len(text) == 64:
-                return bytes.fromhex(text)
+                try:
+                    return bytes.fromhex(text)
+                except ValueError:
+                    break
             time.sleep(0.01)
-        raise LedgerError(f"{path} is not a ledger key")
+        raise LedgerError(
+            f"{path} is not a ledger key (a crash while it was written?). "
+            "A person checks that no write is open, then removes it"
+        )
 
     def events(self, key: str) -> list[dict[str, Any]]:
         path = self._entries / f"{_check_key(key)}.jsonl"
@@ -197,7 +206,10 @@ class FileLedger:
 
     def lease(self, key: str) -> Optional[Lease]:
         path = self._locks / f"{_check_key(key)}.lock"
-        handle = open(path, "a")  # noqa: SIM115 - the lease owns it
+        try:
+            handle = open(path, "a")  # noqa: SIM115 - the lease owns it
+        except OSError as exc:
+            raise LedgerError(f"can't lease a write ledger key: {exc}") from exc
         try:
             os.chmod(path, 0o600)
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -282,20 +294,31 @@ class Attempt:
 
     @property
     def state(self) -> str:
+        """The state with no repeat window (see :meth:`state_with`)."""
+
+        return self.state_with(0.0)
+
+    def state_with(self, repeat_s: float) -> str:
         """``open`` (no outcome yet), ``free`` (a new attempt may start),
         ``undelivered`` (an outcome to hand back instead of a resend),
-        ``uncertain`` (reconcile first) or ``held`` (a person checks)."""
+        ``uncertain`` (reconcile first) or ``held`` (a person checks).
+
+        A write that landed (``CONFIRMED``, or found in the store on a
+        reconcile) is handed back instead of sent again while its reply may
+        not have reached the caller, and for ``repeat_s`` after it resolved:
+        a retry inside that window gets the result. A caller-given write
+        key names one write, made once: it is handed back for good.
+        """
 
         r = self.resolved
         if r is None:
             return "open"
         if self.released or r.get("retry_safe"):
             return "free"
-        if r.get("outcome") == "CONFIRMED":
-            if r.get("write_key_bound"):
-                # A caller-given write key names one write, made once.
+        if r.get("outcome") == "CONFIRMED" or r.get("landed"):
+            if r.get("write_key_bound") or not self.delivered:
                 return "undelivered"
-            return "free" if self.delivered else "undelivered"
+            return "free" if _age(r.get("at")) >= repeat_s else "undelivered"
         if r.get("outcome") == "REFUTED":
             return "held"
         return "uncertain"
@@ -303,6 +326,28 @@ class Attempt:
     @property
     def folder(self) -> Path:
         return Path(str(self.begun.get("folder", "")))
+
+
+def _age(at: Any) -> float:
+    import calendar
+
+    try:
+        then = calendar.timegm(time.strptime(str(at), "%Y-%m-%dT%H:%M:%SZ"))
+    except ValueError:
+        return 0.0
+    return time.time() - then
+
+
+def prune(folder: Path) -> None:
+    """Remove an attempt's raw values and baseline once nothing needs them
+    (it resolved for good). Receipts stay; they hold no record values."""
+
+    if not str(folder) or not folder.is_absolute():
+        return  # an attempt with no folder of its own
+    for name in ("attempt.json", "baseline.json"):
+        (folder / name).unlink(missing_ok=True)
+    for copy in folder.glob("reconcile-*/baseline.json"):
+        copy.unlink(missing_ok=True)
 
 
 def fold(events: Sequence[Mapping[str, Any]]) -> Optional[Attempt]:
@@ -330,6 +375,22 @@ def fold(events: Sequence[Mapping[str, Any]]) -> Optional[Attempt]:
     return latest
 
 
+def _scalar(value: Any) -> Any:
+    """One form per stored value: ``7`` and ``"7"`` are the same write."""
+
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return ""
+    if isinstance(value, (int, float, str)):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {str(k): _scalar(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_scalar(v) for v in value]
+    return str(value)
+
+
 def _canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode(
         "utf-8"
@@ -343,11 +404,23 @@ class Ledger:
     nothing proves the write never landed. Default None: such an attempt
     stays held until a person releases it, because a queued write can land
     late.
+
+    ``repeat_s``: how long a landed write without a write key is handed
+    back to an identical call instead of being sent again (an agent's retry
+    after a lost reply). Default 10 minutes. Two intended writes with the
+    same values inside it need distinct write keys.
     """
 
-    def __init__(self, backend: LedgerBackend, *, settle_s: Optional[float] = None):
+    def __init__(
+        self,
+        backend: LedgerBackend,
+        *,
+        settle_s: Optional[float] = None,
+        repeat_s: float = 600.0,
+    ):
         self.backend = backend
         self.settle_s = settle_s
+        self.repeat_s = repeat_s
 
     def key_for(
         self,
@@ -359,12 +432,35 @@ class Ledger:
         caller's ``write_key`` (a task id) when given."""
 
         body = _canonical(
-            {"contract": contract_digest, "values": dict(values), "key": write_key}
+            {
+                "contract": contract_digest,
+                "values": _scalar(dict(values)),
+                "key": write_key,
+            }
         )
         return hmac.new(self.backend.secret(), body, hashlib.sha256).hexdigest()
 
     def latest(self, key: str) -> Optional[Attempt]:
         return fold(self.backend.events(key))
+
+    def state(self, attempt: Optional[Attempt]) -> str:
+        return "free" if attempt is None else attempt.state_with(self.repeat_s)
+
+    def attempts(self) -> list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]]:
+        """Every attempt in the ledger: (key, begun event, resolved event)."""
+
+        out = []
+        for key in self.backend.keys():
+            begun: dict[str, dict[str, Any]] = {}
+            resolved: dict[str, dict[str, Any]] = {}
+            for event in self.backend.events(key):
+                attempt = str(event.get("attempt"))
+                if event.get("event") == "begun":
+                    begun[attempt] = dict(event)
+                elif event.get("event") == "resolved":
+                    resolved.setdefault(attempt, dict(event))
+            out += [(key, b, resolved.get(a)) for a, b in begun.items()]
+        return out
 
     def begun(self, key: str, attempt_id: str, **fields: Any) -> None:
         self.backend.append(
@@ -408,6 +504,7 @@ class Ledger:
                 },
             )
             attempt.released = True
+            prune(attempt.folder)
             return attempt
         finally:
             lease.release()

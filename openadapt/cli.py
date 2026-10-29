@@ -1334,7 +1334,7 @@ def verify_ledger_reconcile(
         except VerifierError as exc:
             click.echo(f"Error: contract {path.name}: {exc}", err=True)
             sys.exit(2)
-        by_digest[contract.digest] = contract
+        by_digest[contract.identity] = contract
     rows = [(k, a) for k, a in ledger.unresolved() if key is None or k == key]
     if key is not None and not rows:
         click.echo(f"Error: no held or open write with key {key}", err=True)

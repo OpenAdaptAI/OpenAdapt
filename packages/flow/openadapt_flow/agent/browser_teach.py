@@ -1679,8 +1679,10 @@ class BrowserTeachBridge:
     def _abort(self) -> dict[str, Any]:
         with self._lock:
             run = self._active()
-            sent = bool(run.browser and run.browser.writes_sent)
             self._end("aborted")
+            # After the browser closed: a request the page sent while closing
+            # counts too.
+            sent = bool(run.browser and run.browser.writes_sent)
         reply: dict[str, Any] = {"status": "aborted", "name": run.name}
         if run.pending is not None and not run.pending.used:
             # Read back what run 1 left, so the ledger knows whether it landed.
