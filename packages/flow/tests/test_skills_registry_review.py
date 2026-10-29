@@ -424,6 +424,101 @@ def test_an_older_index_is_refused_once_a_newer_one_was_seen(tmp_path):
     assert not (tmp_path / "b").exists()
 
 
+def _as_release_workflow(monkeypatch):
+    """Treat the test envelope as the release workflow's, to test freshness alone."""
+
+    from openadapt_flow import registry_attest
+
+    real = registry_attest.verify
+
+    def verify(att, **kw):
+        _, subjects = real(att, allow_test_key=True)
+        return (
+            "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/"
+            "release-registry.yml@refs/tags/registry-x",
+            subjects,
+        )
+
+    monkeypatch.setattr(registry_attest, "verify", verify)
+
+
+def _serve_from(monkeypatch, routes):
+    real = registry._read
+
+    def read(location, **kw):
+        for base, directory in routes.items():
+            if location.startswith(base):
+                return (directory / location[len(base) :]).read_bytes()
+        return real(location, **kw)
+
+    monkeypatch.setattr(registry, "_read", read)
+
+
+def _two_releases(tmp_path):
+    """Last week's release and today's, which withdrew new-referral 1.0.0."""
+
+    now = datetime.now(timezone.utc)
+    old = _attest(_index(tmp_path / "old"), now=now - timedelta(days=10))
+    new = _attest(_index(tmp_path / "new"), now=now)
+    data = json.loads(new.read_text())
+    for item in data["workflows"]:
+        if item["id"] == "openemr/new-referral":
+            item["version"] = "1.0.1"
+    new.write_text(json.dumps(data))
+    _attest(new, now=now)
+    return old, new
+
+
+DEFAULT = "https://raw.example/main/registry/"
+
+
+def test_an_older_index_from_a_mirror_is_refused(tmp_path, monkeypatch):
+    _as_release_workflow(monkeypatch)
+    old, new = _two_releases(tmp_path)
+    mirror = "https://mirror.example/registry/"
+    _serve_from(monkeypatch, {DEFAULT: new.parent, mirror: old.parent})
+    registry.pull(
+        "openemr/new-referral", tmp_path / "a", index_url=DEFAULT + "index.json"
+    )
+    with pytest.raises(registry.RegistryError, match="older than"):
+        registry.pull(
+            "openemr/new-referral@1.0.0",
+            tmp_path / "b",
+            index_url=mirror + "index.json",
+        )
+    assert not (tmp_path / "b").exists()
+
+
+def test_an_older_index_from_a_local_copy_is_refused(tmp_path, monkeypatch):
+    _as_release_workflow(monkeypatch)
+    old, new = _two_releases(tmp_path)
+    _serve_from(monkeypatch, {DEFAULT: new.parent})
+    registry.pull(
+        "openemr/new-referral", tmp_path / "a", index_url=DEFAULT + "index.json"
+    )
+    with pytest.raises(registry.RegistryError, match="older than"):
+        registry.pull(
+            "openemr/new-referral@1.0.0", tmp_path / "b", index_url=str(old)
+        )
+    assert not (tmp_path / "b").exists()
+    # One mark for the release workflow, whatever the address.
+    state = json.loads((tmp_path / "openadapt-home/registry-state.json").read_text())
+    assert len(state["serials"]) == 1
+
+
+def test_the_lock_records_the_index_serial(tmp_path, monkeypatch):
+    _as_release_workflow(monkeypatch)
+    _, new = _two_releases(tmp_path)
+    _serve_from(monkeypatch, {DEFAULT: new.parent})
+    out = registry.pull(
+        "openemr/new-referral", tmp_path / "a", index_url=DEFAULT + "index.json"
+    )
+    lock = skills.read_lock(out)
+    index = json.loads(new.read_text())
+    assert lock["index_serial"] == index["serial"]
+    assert lock["index_issued_at"] == index["issued_at"]
+
+
 def test_an_entry_dropped_from_an_attested_index_is_refused(tmp_path):
     index = _attest(_index(tmp_path))
     data = json.loads(index.read_text())

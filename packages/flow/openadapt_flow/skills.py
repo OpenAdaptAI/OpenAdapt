@@ -98,7 +98,13 @@ def read_binding(bundle_dir: Path | str) -> dict[str, str]:
 
 
 def mark_pulled(
-    bundle_dir: Path, entry: Any, *, index_url: str, attested_by: Optional[str] = None
+    bundle_dir: Path,
+    entry: Any,
+    *,
+    index_url: str,
+    attested_by: Optional[str] = None,
+    index_serial: Optional[int] = None,
+    index_issued_at: Optional[str] = None,
 ) -> None:
     """Write the lock and expire any certification the pulled bundle carries."""
 
@@ -131,6 +137,8 @@ def mark_pulled(
             "version": entry.version,
             "index": index_url,
             "signed_by": workflow.registry.signed_by,
+            "index_serial": index_serial,
+            "index_issued_at": index_issued_at,
             "app_license": raw.get("app_license"),
             "pulled_at": _now(),
             "files": entry.files,
@@ -749,6 +757,11 @@ def cmd_skill(args: Any) -> int:
                 print("TEST SIGNER: pulled from a local index with --allow-test-key")
             else:
                 print(f"Attested by {signer}")
+            if lock.get("index_issued_at"):
+                print(
+                    f"Index serial {lock.get('index_serial')}, issued "
+                    f"{lock['index_issued_at']}"
+                )
             missing = missing_bindings(args.bundle)
             if missing:
                 print("Unbound: " + ", ".join(missing))

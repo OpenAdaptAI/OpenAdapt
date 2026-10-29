@@ -29,7 +29,8 @@ Before it downloads anything, `pull` checks who published the index:
   through Sigstore's TUF repository into `$OPENADAPT_HOME`.
 - The attested index carries `issued_at`, `expires_at` and a `serial`. `pull`
   refuses an expired index, and one whose serial is lower than the highest it
-  has seen from that address (kept in `$OPENADAPT_HOME/registry-state.json`).
+  has seen from the release workflow at any address, mirror or local file
+  (kept in `$OPENADAPT_HOME/registry-state.json`).
 - A remote index is fetched over https only. For an index you are authoring
   on the local disk, `--allow-unsigned` takes one with no attestation, and
   `--allow-test-key` one attested by the local test signer

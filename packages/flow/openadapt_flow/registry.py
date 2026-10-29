@@ -26,7 +26,7 @@ A remote index must carry a Sigstore attestation from the registry release
 workflow (:mod:`openadapt_flow.registry_attest`) naming its exact sha256, and
 every archive's. The attested index carries ``issued_at``, ``expires_at`` and
 a ``serial``: ``pull`` refuses an expired index and one whose serial is lower
-than the highest it has seen for that index
+than the highest it has seen from the same attesting identity, at any address
 (``$OPENADAPT_HOME/registry-state.json``). ``--allow-unsigned`` and
 ``--allow-test-key`` apply only to an index on the local disk.
 """
@@ -189,30 +189,39 @@ def _read_state() -> dict[str, Any]:
     return state if isinstance(state, dict) else {}
 
 
-def _index_key(index_url: str) -> str:
-    if index_url.startswith("https://"):
-        return index_url
-    return str(Path(index_url).resolve())
+def identity_key(identity: Any, attested_by: Optional[str] = None) -> str:
+    """The high-water key for whoever attested an index, whatever its address.
+
+    Every genuine index comes from one release workflow on one serial
+    sequence, so the mark belongs to that identity (issuer, repository and
+    SAN pattern), not to the URL or path the copy was read from. A mirror or
+    a local copy of an older release is then held to the same mark.
+    """
+
+    if attested_by and attested_by.startswith("test:"):
+        return attested_by
+    return "|".join(
+        (identity.issuer, identity.source_repository_uri, identity.san.pattern)
+    )
 
 
-def serial_problem(index_url: str, serial: int) -> Optional[str]:
-    """Why ``serial`` is older than the newest this index has served, or None."""
+def serial_problem(key: str, serial: int) -> Optional[str]:
+    """Why ``serial`` is older than the newest this identity has issued, or None."""
 
-    seen = (_read_state().get("serials") or {}).get(_index_key(index_url))
+    seen = (_read_state().get("serials") or {}).get(key)
     if isinstance(seen, int) and serial < seen:
         return (
             f"the index's serial {serial} is older than {seen}, the newest seen "
-            "from it: a stale or rolled-back copy"
+            "from its publisher at any address: a stale or rolled-back copy"
         )
     return None
 
 
-def record_serial(index_url: str, serial: int) -> None:
-    """Keep the highest serial seen for this index."""
+def record_serial(key: str, serial: int) -> None:
+    """Keep the highest serial seen for this attesting identity."""
 
     state = _read_state()
     serials = state.setdefault("serials", {})
-    key = _index_key(index_url)
     if not isinstance(serials.get(key), int) or serial > serials[key]:
         serials[key] = serial
         path = _state_path()
@@ -485,7 +494,8 @@ def pull(
       pinned release-workflow identity and name the exact sha256 of the index
       that was read;
     - the attested index must be unexpired, with a serial never lower than
-      the highest seen from it.
+      the highest seen from the same attesting identity, whether it was read
+      from the default address, a mirror or the local disk.
 
     An archive must be one the attestation names too. ``allow_unsigned``
     takes an index with no attestation, and ``allow_test_key`` one attested by
@@ -518,17 +528,19 @@ def pull(
     attestation = _read_attestation(index_url)
     attested_by: Optional[str] = None
     subjects: Optional[dict[str, str]] = None
+    serial_key: Optional[str] = None
     if attestation is None:
         if remote or not allow_unsigned:
             raise RegistryError(
                 f"the index has no attestation ({registry_attest.ATTESTATION_NAME})"
             )
     else:
+        pinned = identity or registry_attest.REGISTRY_IDENTITY
         try:
             attested_by, subjects = registry_attest.verify(
                 attestation,
                 allow_test_key=allow_test_key and not remote,
-                identity=identity or registry_attest.REGISTRY_IDENTITY,
+                identity=pinned,
                 trusted_root=trusted_root,
             )
         except registry_attest.AttestationError as exc:
@@ -539,8 +551,9 @@ def pull(
         ):
             raise RegistryError("the attestation does not name this index")
         problem = index_freshness_problem(index_data, now=now)
+        serial_key = identity_key(pinned, attested_by)
         if problem is None:
-            problem = serial_problem(index_url, index_data["serial"])
+            problem = serial_problem(serial_key, index_data["serial"])
         if problem is not None:
             raise RegistryError(problem)
     dest = Path(out) if out else Path(entry.id.split("/", 1)[1])
@@ -587,15 +600,24 @@ def pull(
 
         # Mark it as pulled and expire any certification it carries: a
         # registry certification is about our test copy, never the user's.
-        mark_pulled(stage, entry, index_url=index_url, attested_by=attested_by)
+        mark_pulled(
+            stage,
+            entry,
+            index_url=index_url,
+            attested_by=attested_by,
+            index_serial=index_data.get("serial") if subjects is not None else None,
+            index_issued_at=(
+                index_data.get("issued_at") if subjects is not None else None
+            ),
+        )
         if unpacked is not None and NOTICE_NAME in unpacked:
             (stage / NOTICE_NAME).write_bytes(unpacked[NOTICE_NAME])
         if dest.exists():
             shutil.rmtree(dest)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(stage, dest)
-    if subjects is not None:
-        record_serial(index_url, index_data["serial"])
+    if serial_key is not None:
+        record_serial(serial_key, index_data["serial"])
     return dest
 
 

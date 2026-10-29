@@ -184,8 +184,14 @@ AGPL entry is published.
   error suggests either.
 - **Rollback and freeze.** The attested index carries `issued_at`,
   `expires_at` (30 days) and a `serial`. `pull` refuses an expired index and
-  a serial lower than the highest seen for that index
-  (`$OPENADAPT_HOME/registry-state.json`).
+  a serial lower than the highest seen from the same attesting identity
+  (issuer, repository and SAN pattern), at any address: the default URL, a
+  mirror and a file on disk share one mark
+  (`$OPENADAPT_HOME/registry-state.json`). The lock records the serial and
+  `issued_at`, and `skill status` prints them. A machine that has never
+  pulled has no mark, so on its first pull it accepts any unexpired index:
+  an attacker who controls that first read can serve a release up to 30
+  days old. Expiry bounds that window; it is inherent to the design.
 - **Stripping the provenance.** `pull` records the program's steps digest in
   `$OPENADAPT_HOME/pulled.json`. A bundle without provenance whose steps
   match is refused until it carries a current certification on a named
