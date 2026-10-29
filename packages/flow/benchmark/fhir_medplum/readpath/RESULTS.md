@@ -30,4 +30,39 @@ fix was tested on a second suite.
 
 ## Round 2
 
-ROUND2
+Suite `803b34c6dcdba0651d3367dd1ea146591a6ed047567d3bc637e50dbc9a36d278`,
+20 cases from a second, independent author (duplicate 2, look-alike 3, wrong
+field 6, collateral 2, timeout 3, concurrent 4; right answers: needs_review
+16, created_verified 3, found_existing 1). Verifier at `2efc74000`, fixture
+at `08dc2c58e`.
+
+**17 of 20 right; no fault passed as verified.** Every one of the 16 faults
+went to `needs_review`, and the clean found record was found.
+
+The three misses were clean creates sent to `needs_review`: each record
+carried `active: true`, which the task doesn't give, and the contract's
+closed record refused it. The brief left `active` open, and FHIR clients
+commonly send it. `5ce6e6b26` lets the contract allow one extra element
+with one exact value (`allow: [active=true]`; `active: false` still fails).
+
+## Both suites on the final version
+
+Not blind: both suites were seen before these runs. Verifier and contract
+at `5ce6e6b26`.
+
+| Suite | Right | Fault passed as verified |
+| --- | --- | --- |
+| Round 1 (`5c1742e8`) | 18 of 18 | 0 |
+| Round 2 (`803b34c6`) | 20 of 20 | 0 |
+
+A third suite, written blind against this version, is what would show
+whether these fixes generalize; it hasn't been run.
+
+## What the rounds cover, and what they don't
+
+The suites exercise what the brief describes: existing and duplicate
+records, look-alikes, wrong and extra values, collateral writes of other
+resource types, saves whose response was lost, and another user's writes
+during the run. They don't exercise a server that has stopped logging
+AuditEvents (the heartbeat's unit tests do), writes outside the FHIR API,
+or an agent with administrator rights; ENSURE_RECORD.md states those limits.
