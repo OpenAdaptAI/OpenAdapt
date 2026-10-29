@@ -1967,7 +1967,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-flow"
-version = "2.4.0"
+version = "2.4.1"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
@@ -2043,6 +2043,9 @@ keychain = [
 ]
 linux = [
     { name = "pygobject", marker = "sys_platform == 'linux'" },
+]
+local-grounding = [
+    { name = "onnxruntime" },
 ]
 macos = [
     { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin'" },
@@ -2120,6 +2123,7 @@ requires-dist = [
     { name = "mlx-vlm", marker = "extra == 'service-mlx'", specifier = ">=0.6.17,<0.8" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "numpy", specifier = ">=1.26" },
+    { name = "onnxruntime", marker = "extra == 'local-grounding'", specifier = ">=1.17" },
     { name = "openadapt-capture", marker = "extra == 'capture'", specifier = ">=1.2.0" },
     { name = "openadapt-grounding", marker = "extra == 'grounding'", specifier = ">=0.1.0" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'privacy'", specifier = ">=1.0.0" },
@@ -2165,7 +2169,7 @@ requires-dist = [
     { name = "winrt-windows-media-ocr", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
     { name = "winrt-windows-storage-streams", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
 ]
-provides-extras = ["native-ocr", "browser", "dev", "grounder", "grounding", "console", "countersign", "keychain", "pkcs11", "execute", "windows", "reward", "harness2", "macos", "linux", "rdp", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent"]
+provides-extras = ["native-ocr", "browser", "dev", "grounder", "grounding", "local-grounding", "console", "countersign", "keychain", "pkcs11", "execute", "windows", "reward", "harness2", "macos", "linux", "rdp", "privacy", "hosted", "service", "service-mlx", "capture", "interop", "agent"]
 
 [[package]]
 name = "openadapt-grounding"
