@@ -1244,7 +1244,15 @@ def _downgrade(
         # Its receipt says verified, but the write is no longer CONFIRMED: a
         # recheck of it must not say "the earlier verdict still stands". It
         # still excuses its own window for later writes (its frame held).
-        _withdraw_recheck(result.recheck.payload)
+        try:
+            _withdraw_recheck(result.recheck.payload)
+        except VerifierError:
+            # verify_write never raises: un-issue the state instead, so a
+            # recheck of it is UNCERTAIN ("not issued") all the same.
+            try:
+                (_issued_dir("rechecks") / _state_digest(result.recheck.payload)).unlink()
+            except (OSError, VerifierError):
+                pass
     return dataclasses.replace(
         result,
         outcome=Outcome.UNCERTAIN,
