@@ -52,7 +52,7 @@ import os
 import re
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
@@ -455,19 +455,41 @@ def _same_connection(
 
 
 def _audit_sql(cfg: VerifyConfig) -> dict[str, str]:
-    """The audit query, when it can run inside the database snapshot."""
+    """Reads that run inside the database snapshot: the audit query (when it
+    shares the connection), and the acting user's ids (for a profile's
+    own-row rules)."""
 
     frame = cfg.frame
-    if frame is None or frame.database is None or frame.attribution is None:
+    if frame is None or frame.database is None:
         return {}
+    out: dict[str, str] = {}
+    profile = frame.database.loaded_profile()
+    if profile is not None:
+        query = profile.actor_ids_query(_self_names(cfg), frame.database.dialect)
+        if query:
+            out["actor_ids"] = query
+        users = profile.users_query(frame.database.dialect)
+        if users:
+            out["users_map"] = users
+    if frame.attribution is None:
+        return out
     audit = frame.attribution.read
     if (
         _same_connection(audit, frame.database.read)
         and audit
         and audit.get("sql_query")
     ):
-        return {"audit": str(audit["sql_query"])}
-    return {}
+        out["audit"] = str(audit["sql_query"])
+    return out
+
+
+def _self_names(cfg: VerifyConfig) -> list[str]:
+    """The bot's own sign-in names the frame lists (literal ``self``)."""
+
+    a = cfg.frame.attribution if cfg.frame is not None else None
+    if a is None:
+        return []
+    return sorted({v.literal for v in a.self_actors if v.literal})
 
 
 def _ref_columns(cfg: VerifyConfig) -> list[str]:
@@ -484,6 +506,9 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
         cols |= set(a.record_keys.values())
     for side in frame.side_records:
         cols |= {side.link_field, side.of_field}
+    profile = frame.database.loaded_profile() if frame.database else None
+    if profile is not None:
+        cols |= set(profile.ref_columns())
     return sorted(c for c in cols if c)
 
 
@@ -506,9 +531,10 @@ def _read_database(
             max_rows=database.max_rows,
             before=before,
             extra_queries=_audit_sql(cfg),
-            ignore=database.ignore_columns,
+            ignore=database.all_ignore_columns(),
             ref_columns=_ref_columns(cfg),
             schemas=database.schemas,
+            optional_modes=database.profile_modes(),  # type: ignore[arg-type]
         )
     except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
         return None
@@ -559,6 +585,49 @@ class _DatabaseFrame:
     blind: bool = False
     #: The two reads after the save differed: the database was still moving.
     still_moving: bool = False
+    #: The app profile's judgment of one row change (``AppProfile.excuse``).
+    excuse: Any = None
+    #: Every user's id by sign-in name (in memory only), and the names and
+    #: ids of other users who wrote in the window.
+    users_map: dict[str, str] = field(default_factory=dict)
+    colleagues: tuple[set[str], set[str]] = (set(), set())
+
+
+def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
+    """The profile's unconditional rules that applied in this run: an
+    append-only table that gained rows, or a row of a compared table whose
+    only changes were in a column rule's columns. (Conditional rules are
+    reported by the judge when they excuse a row.)"""
+
+    from openadapt_flow.app_profiles import table_name
+    from openadapt_flow.runtime.effects.db_snapshot import unpack
+
+    used = []
+    for rule in profile.rules:
+        if rule.conditional:
+            continue
+        tables = [n for n in new.tables if table_name(n) == table_name(rule.table)]
+        for name in tables:
+            a, b = old.tables.get(name), new.tables.get(name)
+            if a is None or b is None:
+                continue
+            if rule.mode == "append_only" and len(b.rows.keys() - a.rows.keys()):
+                used.append(rule.id)
+                break
+            cols = [c for c in rule.columns if c in a.cell_columns]
+            if (
+                cols
+                and a.cell_columns == b.cell_columns
+                and any(
+                    unpack(a.cell_columns, a.rows[k][1])[c]
+                    != unpack(b.cell_columns, b.rows[k][1])[c]
+                    for k in a.rows.keys() & b.rows.keys()
+                    for c in cols
+                )
+            ):
+                used.append(rule.id)
+                break
+    return used
 
 
 def _database_frame(
@@ -672,6 +741,34 @@ def _database_frame(
         "schemas": list(new.schemas),
         "allow_list_sha256": database.allow_list_sha256(),
     }
+    profile = database.loaded_profile()
+    if profile is not None:
+        out.evidence["profile"] = {
+            "version": profile.version,
+            "sha256": profile.sha256(),
+            "rules_used": _rules_used(profile, old, new),
+        }
+        names = set(_self_names(cfg))
+        ids = {str(r.get("id")) for r in new.extra.get("actor_ids", [])}
+        hashers = out.hashers
+        out.users_map = {
+            str(r.get("name")): str(r.get("id")) for r in new.extra.get("users_map", [])
+        }
+        frame_out = out
+
+        def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
+            return profile.excuse(
+                name,
+                before,
+                after,
+                fields,
+                hashers[name],
+                names,
+                ids,
+                frame_out.colleagues,
+            )
+
+        out.excuse = excuse
     return out
 
 
@@ -808,7 +905,20 @@ def judge_run_frame(
             else:
                 audit_before = list(stored.get("records", []))
                 audit_after = entries_now
-    return judge_frame(
+    if db is not None and audit_after is not None and spec.attribution is not None:
+        # Other users who wrote in the window: their own per-user state is
+        # their work (the profile's own_rows rules only).
+        a = spec.attribution
+        writes = set(a.write_events)
+        mine = set(_self_names(cfg)) | {str(x) for x in run_actors}
+        active = {
+            str(e.get(a.actor_field))
+            for e in audit_after
+            if (not writes or str(e.get(a.event_field or "")) in writes)
+            and e.get(a.actor_field) not in (None, "")
+        } - mine
+        db.colleagues = (active, {db.users_map[n] for n in active if n in db.users_map})
+    verdict = judge_frame(
         spec,
         bound_effects,
         slices,
@@ -823,7 +933,14 @@ def judge_run_frame(
         hashers=None if db is None else db.hashers,
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,
+        excuse=None if db is None else db.excuse,
     )
+    profile = db.evidence.get("profile") if db is not None else None
+    if profile is not None:
+        # The rules that actually excused something: unconditional ones seen
+        # in the snapshots, conditional ones as the judge applied them.
+        profile["rules_used"] = sorted(set(profile["rules_used"]) | verdict.excused_by)
+    return verdict
 
 
 def _target_record(
