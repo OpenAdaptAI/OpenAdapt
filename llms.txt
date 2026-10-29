@@ -2,26 +2,26 @@
 
 > A person, or a computer-use agent once, shows a task in an application with no usable API. OpenAdapt compiles it into a program that makes the same entry every time with no model calls, confirms the right record before acting, reads the saved record back from the system of record, and stops instead of improvising or retrying.
 
-This is the llms.txt for the OpenAdapt monorepo (github.com/OpenAdaptAI/OpenAdapt). Start with the capability map: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md. It lists every capability with its release (released, or on main for the next release), its evidence (real app or synthetic) and where it lives. Check it before concluding that OpenAdapt lacks something.
+This is the llms.txt for the OpenAdapt monorepo (github.com/OpenAdaptAI/OpenAdapt). Start with the capability map: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md. It lists every capability with its status (released, or on main), its evidence (real app or synthetic) and where it lives. Measured results: OpenEMR referral entry in 3.3 s with the API step and 22.5 s on screen against 36.5 s for a computer-use agent, 18 of 18 saved correctly; 148 of 149 openIMIS claims read back correct with none saved wrong; 30 of 30 bad saves an agent reported as done flagged by the read-back. The systems each result ran on: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/LIMITS.md#validated-on.
 
 ## OpenAdapt in ten capabilities
 
 Each capability is implemented in the
 [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt). "Released"
-means it ships in the current PyPI packages; "on main" means it ships in the
-next release.
+means it ships in the current PyPI packages; "on main" means merged into the
+monorepo and installable from source.
 
 1. **Learns from any successful run, a person's or an agent's.** A person
    records a task, or a computer-use agent does it once and OpenAdapt compiles
    the verified run into a program (`openadapt_flow.jit`, released;
-   prompt-to-program `compile-agent`, landing). Agents can drive the recording
-   on web, native Windows, RDP and Citrix.
+   prompt-to-program `compile-agent`, on main). Agents can drive the recording
+   through the web, native Windows, RDP and Citrix backends.
 2. **Compiles to the fastest layer the app allows.** Page structure first (DOM,
    Windows UI Automation, macOS Accessibility), direct API calls where the app's
    own traffic allows them (`ApiActuator`, released; compiled from captured
    traffic in [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261)),
    and pixels only
-   where nothing else exists, such as RDP and Citrix. It is not a pixel-macro
+   where nothing else exists, such as a remote desktop. It is not a pixel-macro
    recorder.
 3. **Builds branching programs, not one linear path.** One program from several
    demonstrations (`induce`, `disambiguate`), a branch learned from several
@@ -30,8 +30,8 @@ next release.
    [#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), and a router
    that sends each item to the right verified variant. Shadow mining and the
    router are on main; the rest is released.
-4. **Works across surfaces in one workflow.** Web, native Windows and macOS,
-   RDP and Citrix. Programs chain across surfaces passing confirmed values
+4. **Works across surfaces in one workflow.** Backends for web, native Windows
+   and macOS, Linux, RDP and Citrix. Programs chain across surfaces passing confirmed values
    (`compose`, `process`, released), and one program can switch surfaces, tabs
    and popups mid-run ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)).
 5. **Confirms the right record before every write and reads it back after.**
@@ -53,7 +53,7 @@ next release.
    review, campaign, canary, rollback), agent-demonstrated fixes for a halted
    run, and fleet drift patches shared with no patient data are released.
    Self-repair, where an agent proposes a fix and Flow probes it up to the save
-   without saving, is landing.
+   without saving, is on main.
 9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
    save around any agent's write
    ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), `verify-run`
@@ -77,7 +77,7 @@ next release.
 | Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) |
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/APPROVAL_MODES.md) |
 | Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/INTAKE.md) |
-| Ships as one monorepo with separately installable packages (flow, agent, types, capture, and privacy and desktop moving in). | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
+| Ships as one monorepo with separately installable packages (flow, agent, types, capture, privacy, desktop and tray). | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
 | Makes no model calls on healthy runs. Model training (openadapt-ml) is separate research. | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
 
 The MCP server section follows; the other packages are listed at the end.
@@ -86,7 +86,7 @@ The MCP server section follows; the other packages are listed at the end.
 
 > Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 
-Use this when an AI agent has decided what to enter in an app with no usable API, such as an EMR, a payer portal, or a desktop or Citrix app. OpenAdapt enters the values in the same screens staff use, on a computer the customer controls, then reads the saved record back. When something doesn't match, it stops and a person decides. A normal run makes no AI model calls.
+Use this when an AI agent has decided what to enter in an app with no usable API, such as an EMR, a payer portal, or a desktop or remote-desktop app. OpenAdapt enters the values in the same screens staff use, on a computer the customer controls, then reads the saved record back. When something doesn't match, it stops and a person decides. A normal run makes no AI model calls.
 
 ## The contract: three tools
 
