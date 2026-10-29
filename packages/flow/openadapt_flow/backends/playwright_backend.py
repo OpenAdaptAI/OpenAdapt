@@ -1714,11 +1714,15 @@ class PlaywrightBackend:
         closed_page_frame: bool = False,
         bring_to_front_before_capture: bool = False,
         native_fill: Optional[bool] = None,
+        ws_guard: Optional[tuple[str, dict[str, Any]]] = None,
     ) -> None:
         """Wrap an existing Playwright page.
 
         Args:
             page: A Playwright page.
+            ws_guard: What :func:`prepare_ws_guard` returned for the page's
+                context before its first document loaded (as :meth:`launch`
+                does), so every document starts guarded and routed.
             native_fill: Insert typed text in one call when the focused
                 element is an ordinary text field. Off by default; the
                 ``fast`` speed profile (``runtime/speed.py``) turns it on
@@ -1799,6 +1803,11 @@ class PlaywrightBackend:
         self._ws_guard_key = f"__oaflow_ws_{uuid.uuid4().hex}"
         self._ws_guard_generation = 0
         self._ws_hold_script: Any = None
+        self._held_pages: list[tuple[Any, Callable[[Any], None]]] = []
+        if ws_guard is not None:
+            self._ws_guard_key, routes = ws_guard
+            routes["backend"] = self
+            self._ws_routed = bool(routes.get("routed"))
         try:
             # A frame sent on this page's WebSockets while a save is held is
             # reported (the wire check routes only sockets opened then).
@@ -1808,7 +1817,8 @@ class PlaywrightBackend:
         # Every document this context loads from now on wraps its WebSocket
         # constructor before any page script runs, so a socket constructed
         # while a save is held is refused in the page, at construction.
-        self._add_ws_guard_script()
+        if ws_guard is None:
+            self._add_ws_guard_script()
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
@@ -2588,9 +2598,16 @@ class PlaywrightBackend:
         never created, and one that still reaches the route is never
         connected; both are reported. The hold on the page side is set
         before the click and released only when the outcome has been read
-        (:meth:`_disarm_wire_check`). A frame sent on a socket already open
-        is reported. A page script that kept a reference to the browser's
-        own constructor before this backend existed is outside the guard.
+        (:meth:`_disarm_wire_check`). A message sent on a socket already
+        open is dropped and reported. Workers' WebSockets skip both the
+        guard and the route, so a page running a dedicated worker is refused
+        before the click, and a worker (or shared worker) constructed
+        meanwhile is refused in the page; one that still starts is
+        reported. Limits: a shared worker started before the hold can't be
+        seen, and a page script that kept a reference to the browser's own
+        constructor before the guard was installed is outside it; pages
+        from :meth:`launch` are guarded before their first document loads,
+        which closes that gap for them.
         A service worker's requests skip routes, so a page a service
         worker controls is refused before the click (the runner's contexts
         block service workers), and one that starts meanwhile is reported.
@@ -2612,6 +2629,14 @@ class PlaywrightBackend:
                 "a service worker runs on this page, and its requests can't be "
                 "checked; run with service workers blocked"
             )
+        try:
+            pages = list(context.pages)
+            workers = any(page.workers for page in pages)
+        except Exception:  # noqa: BLE001
+            return "could not tell whether a worker runs on the page"
+        if workers:
+            # A worker's WebSockets skip the page's guard and its routes.
+            return "a worker runs on this page, and its WebSockets can't be held"
         check = WireCheck(submission=submission)
 
         def handler(route: Any) -> None:
@@ -2626,9 +2651,28 @@ class PlaywrightBackend:
                 "requests can't be checked"
             )
 
+        def on_page_worker(_worker: Any) -> None:
+            # The page-side guard refuses new workers; one that still
+            # started is reported.
+            notes.append(
+                "a worker started while the save was held, and its "
+                "WebSockets can't be held"
+            )
+
         context.route("**/*", handler)
         context.on("serviceworker", on_worker)
+        for page in pages:
+            try:
+                page.on("worker", on_page_worker)
+            except Exception:  # noqa: BLE001
+                continue
+            self._held_pages.append((page, on_page_worker))
         self._form_wire = (handler, check, on_worker, notes)
+        # Guard the open documents before Playwright's routing replaces their
+        # WebSocket (1.64 does that in open documents too): the browser's
+        # own WebSocket prototype is then guarded as well, so a message sent
+        # on a socket from a reference a page script kept is still dropped.
+        self._ws_guard_frames({})
         if not self._ws_routed:
             # Routed once for the context's life; it only acts while armed.
             # Playwright installs its routing in the page by replacing
@@ -2636,10 +2680,10 @@ class PlaywrightBackend:
             # guard script goes in again after it so it wraps the routed one.
             try:
                 context.route_web_socket(lambda _url: True, self._route_websocket)
+                self._ws_routed = True
             except Exception:  # noqa: BLE001
                 self._disarm_wire_check()
                 return "could not hold the page's WebSockets"
-            self._ws_routed = True
             self._add_ws_guard_script()
         # Hold the page side: documents loaded from now on start held, and
         # every open document is held now. The page decides at construction
@@ -2653,7 +2697,7 @@ class PlaywrightBackend:
         except Exception:  # noqa: BLE001
             self._disarm_wire_check()
             return "could not hold the page's WebSockets"
-        _refused, unheld = self._ws_guard_frames({"hold": True})
+        _counts, unheld = self._ws_guard_frames({"hold": True})
         if unheld:
             self._disarm_wire_check()
             return (
@@ -2670,17 +2714,19 @@ class PlaywrightBackend:
         except Exception:  # noqa: BLE001 - a page stand-in; arming re-checks
             pass
 
-    def _ws_guard_frames(self, options: dict[str, Any]) -> tuple[int, int]:
-        """Run the WebSocket guard in every frame of every page of this
+    def _ws_guard_frames(
+        self, options: dict[str, Any]
+    ) -> tuple[tuple[int, int, int], int]:
+        """Run the page-side guard in every frame of every page of this
         context (installing it where the document predates it). Returns
-        the sockets it refused since the hold began and how many frames it
-        could not reach."""
+        what it refused since the hold began (sockets, workers, messages)
+        and how many frames it could not reach."""
 
-        refused = unreached = 0
+        sockets = workers = sends = unreached = 0
         try:
             pages = list(self.page.context.pages)
         except Exception:  # noqa: BLE001 - the context is gone
-            return 0, 1
+            return (0, 0, 0), 1
         for page in pages:
             try:
                 frames = list(page.frames)
@@ -2696,20 +2742,37 @@ class PlaywrightBackend:
                 except Exception:  # noqa: BLE001 - detached or closing
                     unreached += 1
                     continue
-                if isinstance(count, int) and count >= 0:
-                    refused += count
+                if (
+                    isinstance(count, list)
+                    and len(count) == 3
+                    and all(isinstance(n, int) and n >= 0 for n in count)
+                ):
+                    sockets += count[0]
+                    workers += count[1]
+                    sends += count[2]
                 else:
                     unreached += 1
-        return refused, unreached
+        return (sockets, workers, sends), unreached
 
     def _ws_guard_notes(self) -> list[str]:
-        refused, _unreached = self._ws_guard_frames({})
-        if not refused:
-            return []
-        return [
-            "the page opened a WebSocket while the save was held; it was "
-            "refused before it connected"
-        ]
+        (sockets, workers, sends), _unreached = self._ws_guard_frames({})
+        notes = []
+        if sockets:
+            notes.append(
+                "the page opened a WebSocket while the save was held; it was "
+                "refused before it connected"
+            )
+        if workers:
+            notes.append(
+                "the page started a worker while the save was held; it was "
+                "refused before it ran"
+            )
+        if sends:
+            notes.append(
+                "the page sent a WebSocket message while the save was held; "
+                "it was not sent"
+            )
+        return notes
 
     def _release_ws_guard(self) -> None:
         handle, self._ws_hold_script = self._ws_hold_script, None
@@ -2756,9 +2819,18 @@ class PlaywrightBackend:
             return []
         handler, check, on_worker, notes = wire
         reasons = _wire_reasons(check, notes + self._ws_guard_notes())
-        # Release the page side first: until the Python side is cleared too,
-        # a socket that reaches the route is still never connected.
+        # Release the page side first, while the Python side still holds:
+        # a socket that reaches the route meanwhile is never connected. One
+        # more round trip to every frame lets the route callbacks of sockets
+        # opened before the release arrive while still held.
         self._release_ws_guard()
+        self._ws_guard_frames({})
+        held_pages, self._held_pages = self._held_pages, []
+        for page, listener in held_pages:
+            try:
+                page.remove_listener("worker", listener)
+            except Exception:  # noqa: BLE001 - the page is gone
+                pass
         context = self.page.context
         try:
             context.unroute("**/*", handler)
@@ -4709,8 +4781,11 @@ class PlaywrightBackend:
             except BaseException:
                 close()
                 raise
+        # Guard and route WebSockets before the first document loads, so no
+        # page script can keep a reference to the unguarded constructor.
+        ws_guard = prepare_ws_guard(page.context)
         page.goto(url)
-        backend = cls(page)
+        backend = cls(page, ws_guard=ws_guard)
         # Read by the generic web environment observer: the environment
         # digest of a headless and a headed browser differ.
         backend.headless = headless
@@ -4723,61 +4798,132 @@ from openadapt_flow.backends._browser_process import (  # noqa: E402
     shared_browser,  # noqa: F401 - re-exported
 )
 
-# The page-side WebSocket guard, run as ``(key, options)`` at the start of
-# every document (an init script) and in every open frame when a save is
-# held. It wraps the page's WebSocket constructor (Playwright's routed one
-# when that is installed) so a socket constructed while the document is held
-# is refused there and never created; it counts what it refused. A document
+# The page-side guard, run as ``(key, options)`` at the start of every
+# document (an init script) and in every open frame when a save is held. It
+# wraps the page's WebSocket, Worker and SharedWorker constructors
+# (Playwright's routed WebSocket when that is installed) so one constructed
+# while the document is held is refused there and never created, and it
+# drops what is sent on a socket while held. The wrapped constructor is
+# reachable from no prototype: each ``prototype.constructor`` on the chain
+# points at the wrapper, whose own prototype is EventTarget. A document
 # loaded during a hold starts held (``armed`` above ``released``). Options:
-# ``hold`` holds this document and resets its count, ``release`` (a hold's
+# ``hold`` holds this document and resets its counts, ``release`` (a hold's
 # generation) releases it, ``armed``/``released`` record a hold's generation.
-# Returns the count, or -1 when the guard can't be kept here.
+# Returns ``[sockets, workers, sends]`` refused since the hold began, or -1
+# when the guard can't be kept here.
 _WS_GUARD_JS = r"""(key, o) => {
   const g = globalThis;
   let s = Object.prototype.hasOwnProperty.call(g, key) ? g[key] : null;
   if (!s || typeof s !== 'object') {
-    s = {held: false, armed: 0, released: 0, refused: 0, guarded: null};
+    s = {held: false, armed: 0, released: 0, sockets: 0, workers: 0,
+         sends: 0, guarded: {}, sendsPatched: []};
     try {
       Object.defineProperty(g, key, {value: s, enumerable: false});
     } catch (e) { return -1; }
   }
   const held = () => s.held || s.armed > s.released;
-  const inner = g.WebSocket;
-  if (typeof inner === 'function' && inner !== s.guarded) {
-    const Guarded = function WebSocket(...args) {
+  const base = typeof g.EventTarget === 'function' ? g.EventTarget : null;
+  const stop = base ? base.prototype : Object.prototype;
+  const wrap = (name, count) => {
+    const inner = g[name];
+    if (typeof inner !== 'function' || inner === s.guarded[name]) return true;
+    const Guarded = {[name]: function (...args) {
       if (!new.target) {
-        throw new TypeError("Failed to construct 'WebSocket': " +
+        throw new TypeError("Failed to construct '" + name + "': " +
           "Please use the 'new' operator");
       }
       if (held()) {
-        s.refused += 1;
+        s[count] += 1;
         throw new DOMException(
-          'A WebSocket cannot open while a checked save is held',
+          'A ' + name + ' cannot start while a checked save is held',
           'SecurityError');
       }
       return Reflect.construct(
         inner, args, new.target === Guarded ? inner : new.target);
-    };
+    }}[name];
     Guarded.prototype = inner.prototype;
-    Object.setPrototypeOf(Guarded, inner);
+    if (base) Object.setPrototypeOf(Guarded, base);
+    for (const k of Object.getOwnPropertyNames(inner)) {
+      if (k === 'prototype' || k === 'length' || k === 'name') continue;
+      const d = Object.getOwnPropertyDescriptor(inner, k);
+      try { Object.defineProperty(Guarded, k, d); } catch (e) { return false; }
+    }
+    // No prototype's constructor leads back to the unguarded one.
+    for (let q = inner.prototype; q && q !== stop && q !== Object.prototype;
+         q = Object.getPrototypeOf(q)) {
+      try {
+        Object.defineProperty(q, 'constructor', {
+          value: Guarded, writable: true, configurable: true, enumerable: false,
+        });
+      } catch (e) { return false; }
+      if (name !== 'WebSocket' ||
+          !Object.prototype.hasOwnProperty.call(q, 'send') ||
+          s.sendsPatched.includes(q)) continue;
+      const send = q.send;
+      if (typeof send !== 'function') continue;
+      try {
+        Object.defineProperty(q, 'send', {
+          value: function send_(...args) {
+            if (held()) { s.sends += 1; return undefined; }
+            return Reflect.apply(send, this, args);
+          }, writable: true, configurable: true, enumerable: true,
+        });
+      } catch (e) { return false; }
+      s.sendsPatched.push(q);
+    }
     try {
-      Object.defineProperty(g, 'WebSocket', {
+      Object.defineProperty(g, name, {
         value: Guarded, writable: true, configurable: true, enumerable: false,
       });
-    } catch (e) { return -1; }
-    s.guarded = Guarded;
+    } catch (e) { return false; }
+    s.guarded[name] = Guarded;
+    return true;
+  };
+  if (!wrap('WebSocket', 'sockets') || !wrap('Worker', 'workers') ||
+      !wrap('SharedWorker', 'workers')) {
+    return -1;
   }
   if (typeof o.armed === 'number') s.armed = Math.max(s.armed, o.armed);
   if (typeof o.released === 'number') {
     s.released = Math.max(s.released, o.released);
   }
-  if (o.hold) { s.held = true; s.refused = 0; }
+  if (o.hold) { s.held = true; s.sockets = 0; s.workers = 0; s.sends = 0; }
   if (typeof o.release === 'number') {
     s.held = false;
     s.released = Math.max(s.released, o.release);
   }
-  return s.refused;
+  return [s.sockets, s.workers, s.sends];
 }"""
+
+
+def prepare_ws_guard(context: Any) -> tuple[str, dict[str, Any]]:
+    """Install the page-side WebSocket guard and the WebSocket route on a
+    browser context before its pages load anything, for a
+    :class:`PlaywrightBackend` created later with ``ws_guard=``. Until that
+    backend exists (and while no save is held) sockets connect as usual.
+    Never raises: what could not be installed is installed again, in the
+    open frames, when a save is held."""
+
+    key = f"__oaflow_ws_{uuid.uuid4().hex}"
+    routes: dict[str, Any] = {"backend": None, "routed": False}
+
+    def route(ws: Any) -> None:
+        backend = routes["backend"]
+        if backend is None:
+            ws.connect_to_server()
+        else:
+            backend._route_websocket(ws)
+
+    script = f"({_WS_GUARD_JS})({json.dumps(key)}, {{}})"
+    try:
+        context.add_init_script(script)
+        context.route_web_socket(lambda _url: True, route)
+        routes["routed"] = True
+        # Again after Playwright's routing, which replaces WebSocket.
+        context.add_init_script(script)
+    except Exception:  # noqa: BLE001 - arming installs what is missing
+        pass
+    return key, routes
 
 
 def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:

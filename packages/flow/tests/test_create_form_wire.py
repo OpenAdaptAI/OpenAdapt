@@ -478,3 +478,198 @@ def test_websockets_connect_again_once_the_hold_is_released(server: _Server) -> 
         r["fields"]["message"] for r in server.received[before:] if r["path"] == "/ws"
     )
     assert sent == ["new", "old", "popup"], sent
+
+
+# Ways a page reaches a WebSocket constructor other than the global, each
+# run while a save is held (the #1581 review's probes). ``M`` is sent on
+# whatever socket results; it must never reach the server.
+_REACHES = {
+    "prototype_constructor": "new WebSocket.prototype.constructor(U)",
+    "constructor_prototype": "new (Object.getPrototypeOf(WebSocket))(U)",
+    "instance_constructor": (
+        "(() => { const C = Object.getPrototypeOf(WebSocket.prototype)"
+        ".constructor; return new C(U); })()"
+    ),
+    "new_iframe": (
+        "(() => { const f = document.createElement('iframe');"
+        " document.body.appendChild(f); return new f.contentWindow.WebSocket(U); })()"
+    ),
+    "new_blank_window": "new (window.open('about:blank').WebSocket)(U)",
+    "worker": (
+        "(() => { const b = new Blob([`const s = new WebSocket(${JSON.stringify(U)});"
+        " s.onopen = () => s.send(${JSON.stringify(M)});`]);"
+        " return new Worker(URL.createObjectURL(b)); })()"
+    ),
+    "kept_reference": "new window.__kept(U)",
+}
+_REACH_JS = """([U, M, E]) => {
+  try {
+    const s = eval(E);
+    if (s && typeof s.send === 'function') {
+      s.onopen = () => s.send(M);
+      return 'constructed';
+    }
+    return s instanceof Worker ? 'constructed' : 'no socket';
+  } catch (e) { return 'refused'; }
+}"""
+
+
+def _hold(backend: Any, server: _Server) -> None:
+    from openadapt_flow.wire_check import ExpectedSubmission
+
+    origin = server.url.rsplit("/", 1)[0]
+    held = backend._arm_wire_check(
+        ExpectedSubmission(method="POST", address=f"{origin}/ticket")
+    )
+    assert held is None, held
+
+
+def _ws_url(server: _Server) -> str:
+    return "ws://" + server.url.split("://", 1)[1].rsplit("/", 1)[0] + "/ws"
+
+
+def _messages(server: _Server, before: int) -> list[str]:
+    return [
+        r["fields"]["message"] for r in server.received[before:] if r["path"] == "/ws"
+    ]
+
+
+@pytest.mark.parametrize("reach", sorted(_REACHES))
+def test_no_route_to_a_websocket_while_held(server: _Server, reach: str) -> None:
+    """The page kept a reference to WebSocket before the backend existed,
+    and tries every other way to a constructor: nothing it sends while the
+    save is held reaches the server, and the run is told."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    before = len(server.received)
+    with sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_context(service_workers="block").new_page()
+            page.goto(f"{server.url}?v=fetch")
+            page.evaluate("() => { window.__kept = WebSocket; }")
+            backend = PlaywrightBackend(page)
+            _hold(backend, server)
+            opened = page.evaluate(_REACH_JS, [_ws_url(server), reach, _REACHES[reach]])
+            page.wait_for_timeout(800)
+            refusal = backend.form_submit_guard_refusal(disarm=True)
+            page.wait_for_timeout(500)
+        finally:
+            browser.close()
+    assert reach not in _messages(server, before)
+    # A lookup that lands on EventTarget makes no socket: nothing to report.
+    if opened != "no socket":
+        assert refusal is not None, (opened, refusal)
+        assert "WebSocket" in refusal or "worker" in refusal, refusal
+
+
+def test_a_page_running_a_worker_is_refused_before_the_click(
+    server: _Server,
+) -> None:
+    """A worker's WebSockets skip the page guard and the routes."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.wire_check import ExpectedSubmission
+
+    origin = server.url.rsplit("/", 1)[0]
+    with sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_context().new_page()
+            page.goto(f"{server.url}?v=fetch")
+            with page.expect_worker():
+                page.evaluate(
+                    "() => { window.__w = new Worker(URL.createObjectURL("
+                    "new Blob(['setInterval(() => 0, 1000)']))); }"
+                )
+            refusal = PlaywrightBackend(page)._arm_wire_check(
+                ExpectedSubmission(method="POST", address=f"{origin}/ticket")
+            )
+        finally:
+            browser.close()
+    assert refusal is not None and "worker" in refusal, refusal
+
+
+def test_a_launched_page_is_guarded_before_its_first_document(
+    server: _Server,
+) -> None:
+    """With the guard installed before the first load (as ``launch`` does),
+    even a reference the page kept refuses to open while held."""
+
+    from openadapt_flow.backends.playwright_backend import (
+        PlaywrightBackend,
+        prepare_ws_guard,
+    )
+
+    before = len(server.received)
+    with sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_context().new_page()
+            ws_guard = prepare_ws_guard(page.context)
+            page.goto(f"{server.url}?v=fetch")
+            page.evaluate("() => { window.__kept = WebSocket; }")
+            backend = PlaywrightBackend(page, ws_guard=ws_guard)
+            assert page.evaluate(
+                _REACH_JS, [_ws_url(server), "free", "new window.__kept(U)"]
+            ) == ("constructed")
+            page.wait_for_timeout(800)
+            _hold(backend, server)
+            opened = page.evaluate(
+                _REACH_JS, [_ws_url(server), "held", "new window.__kept(U)"]
+            )
+            refusal = backend.form_submit_guard_refusal(disarm=True)
+            page.wait_for_timeout(800)
+        finally:
+            browser.close()
+    assert opened == "refused"
+    assert refusal is not None and "WebSocket" in refusal, refusal
+    assert _messages(server, before) == ["free"]
+
+
+def test_holds_on_a_reloading_frame_release_every_frame(server: _Server) -> None:
+    """Arming and releasing while an iframe keeps reloading leaves no frame
+    held once the reloads stop."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    before = len(server.received)
+    with sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_context().new_page()
+            page.goto(f"{server.url}?v=fetch")
+            page.evaluate(
+                """() => { const f = document.createElement('iframe');
+                  f.src = '/newticket?v=plain'; document.body.appendChild(f);
+                  window.__reload = setInterval(() => {
+                    f.src = '/newticket?v=plain&t=' + Math.random(); }, 30); }"""
+            )
+            page.wait_for_timeout(300)
+            backend = PlaywrightBackend(page)
+            for _ in range(10):
+                if backend._arm_wire_check(_expected(server)) is None:
+                    backend.form_submit_guard_refusal(disarm=True)
+            page.evaluate("() => clearInterval(window.__reload)")
+            page.wait_for_timeout(500)
+            opened = [
+                frame.evaluate(
+                    _REACH_JS, [_ws_url(server), f"frame{i}", "new WebSocket(U)"]
+                )
+                for i, frame in enumerate(page.frames)
+            ]
+            page.wait_for_timeout(800)
+        finally:
+            browser.close()
+    assert opened == ["constructed"] * len(opened), opened
+    assert sorted(_messages(server, before)) == [
+        f"frame{i}" for i in range(len(opened))
+    ]
+
+
+def _expected(server: _Server) -> Any:
+    from openadapt_flow.wire_check import ExpectedSubmission
+
+    origin = server.url.rsplit("/", 1)[0]
+    return ExpectedSubmission(method="POST", address=f"{origin}/ticket")
