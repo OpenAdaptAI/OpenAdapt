@@ -18,7 +18,7 @@ Three choices the form forces:
   (``phone``, ``email``) into it.
 - Controls with nothing readable beside them are reached by keyboard (see
   ``demonstrate``).
-- Birth Date is a native date input; the backend sets an ISO date into it.
+- Birth Date is a native date input, typed as ``date_keys`` gives it.
 
 Synthetic values only.
 """
@@ -52,6 +52,17 @@ SETTLE = {
 
 #: Targets are kept below the sticky header and banner, above the fold.
 SAFE_TOP, SAFE_BOTTOM, ANCHOR_Y = 170, 800, 420
+
+
+def date_keys(iso: str) -> str:
+    """The keystrokes headless Chromium's date input takes for an ISO date.
+
+    It shows the segments year first, and the year takes six digits before
+    the caret moves on, so 1979-11-23 is typed 0019791123.
+    """
+
+    year, month, day = iso.split("-")
+    return f"{int(year):06d}{month}{day}"
 
 
 def _center(recorder: Any, page: Any, locator: Any) -> tuple[int, int]:
@@ -161,7 +172,7 @@ def demonstrate(recorder: Any, page: Any, values: dict[str, str]) -> None:
     # Choosing a gender re-renders the field and drops the focus, so the date
     # goes first and Gender last.
     _keys(recorder, page, "Tab", 4, {"tag": "INPUT", "name": "birthDate"})
-    recorder.type_text(values["DOB"], param="DOB")
+    recorder.type_text(date_keys(values["DOB"]), param="DOB")
     _keys_until(recorder, page, "Shift+Tab", {"tag": "INPUT", "name": "gender"})
     recorder.type_text(values["sex"], param="sex")
     page.wait_for_timeout(1200)

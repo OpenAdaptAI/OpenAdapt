@@ -1,0 +1,49 @@
+# ensure_patient_registered on Medplum, read through FHIR only.
+#
+# Built from the parts `generate-parts` wrote from three demonstrations of
+# Medplum's new-patient form (generated/, generator 13e2cbdb5 from #1520).
+# Each line says where it came from: GEN = generated and kept as is;
+# HAND = a person wrote or corrected it (MINUTES.md has the time each took).
+schema_version: openadapt.ensure-record/v1
+resource_type: Patient                          # GEN channel.json
+base_url: ${MEDPLUM_FHIR_URL}                   # GEN channel.json (a deployment sets the URL)
+access_token_env: MEDPLUM_RECORD_TOKEN          # GEN channel.json
+self: ["${MEDPLUM_BOT_REF}"]                    # HAND: setup, the agent's own Practitioner
+
+fields:
+  fname: {path: name.given}                     # GEN
+  lname: {path: name.family}                    # GEN
+  DOB: {path: birthDate, compare: date}         # GEN path; HAND compare
+  sex: {path: gender}                           # GEN
+  street: {path: address.line}                  # GEN
+  city: {path: address.city}                    # GEN
+  state_label:                                  # GEN path
+    path: address.state
+    map: {Massachusetts: MA}                    # HAND: the task names the state, the record holds its code
+  postal_code: {path: address.postalCode}       # GEN
+  # HAND: the generator read both telecom entries as one `telecom.value`, so
+  # it bound the phone and couldn't find the email (its gate refused the
+  # contract for that). The system filter tells them apart.
+  phone_home: {path: "telecom[system=phone].value", compare: digits}
+  email: {path: "telecom[system=email].value", compare: casefold}
+
+# GEN: the calibrated rule (first, last and date of birth the same).
+# HAND: the email rule.
+identity:
+  - [fname, lname, DOB]
+  - [email]
+# HAND: the FHIR search parameter for each identity value.
+search: {fname: given, lname: family, DOB: birthdate, email: email}
+
+# HAND: the created record holds only what the task gave.
+closed: true
+
+# HAND, once per server: Medplum keeps AuditEvents (saveAuditEvents) and
+# never returns meta.author, so the audit trail alone says who wrote; the
+# Patient sweep is a second source for creates and updates.
+change_feed:
+  audit: {}
+  history: true
+  history_author: false
+  sweep_types: [Patient]
+settle_s: 1

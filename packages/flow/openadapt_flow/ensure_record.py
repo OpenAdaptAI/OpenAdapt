@@ -38,7 +38,8 @@ from __future__ import annotations
 import os
 import re
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections import Counter
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -96,6 +97,10 @@ class ChangeFeed(BaseModel):
     audit: Optional[AuditRead] = Field(default_factory=AuditRead)
     #: Read each written resource's ``_history`` for its window versions.
     history: bool = True
+    #: Whether the server returns ``meta.author`` on each version, a second
+    #: witness to who wrote it. Medplum 5.2 doesn't, so its contract sets
+    #: false and attribution rests on the audit trail alone.
+    history_author: bool = True
     #: Resource types searched by ``_lastUpdated`` as a second source.
     sweep_types: list[str] = Field(default_factory=list)
 
@@ -111,9 +116,7 @@ class EnsureContract(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    schema_version: Literal["openadapt.ensure-record/v1"] = (
-        "openadapt.ensure-record/v1"
-    )
+    schema_version: Literal["openadapt.ensure-record/v1"] = "openadapt.ensure-record/v1"
     resource_type: str = Field(min_length=1)
     base_url: str = Field(min_length=1)
     access_token_env: Optional[str] = None
@@ -127,7 +130,19 @@ class EnsureContract(BaseModel):
     search: dict[str, str] = Field(min_length=1)
     change_feed: ChangeFeed = Field(default_factory=ChangeFeed)
     #: Wait this long after the write before reading, for the audit trail.
+    #: The created record may hold only what ``fields`` describe, one value
+    #: each: an element the task didn't give (a second given name, a fax
+    #: number, a district) is a wrong field. ``allow`` names extra leaf paths
+    #: the application adds on its own (``id``, ``meta`` and
+    #: ``resourceType`` always are).
+    closed: bool = False
+    allow: list[str] = Field(default_factory=list)
+    #: The audit trail is written a little after the save (Medplum: up to
+    #: about 0.1 s). The change feed is read until two reads ``settle_s``
+    #: apart agree, at most ``stable_reads`` times; a feed still changing
+    #: then reads as unreadable.
     settle_s: float = Field(default=2.0, ge=0, le=120)
+    stable_reads: int = Field(default=3, ge=1, le=10)
     timeout_s: float = Field(default=15.0, gt=0, le=300)
 
     @model_validator(mode="after")
@@ -214,13 +229,51 @@ def wrong_fields(
     return sorted(
         name
         for name, rule in contract.fields.items()
-        if name in params and not same(contract, name, extract(resource, rule.path), params[name])
+        if name in params
+        and not same(contract, name, extract(resource, rule.path), params[name])
     )
+
+
+def leaf_paths(node: Any, prefix: str = "") -> list[str]:
+    """Every value's path, list positions dropped (``telecom.value`` twice)."""
+
+    if isinstance(node, dict):
+        return [p for k, v in node.items() for p in leaf_paths(v, f"{prefix}{k}.")]
+    if isinstance(node, list):
+        return [p for v in node for p in leaf_paths(v, prefix)]
+    return [prefix[:-1]]
+
+
+def _expected_leaves(contract: EnsureContract) -> Counter[str]:
+    want: Counter[str] = Counter()
+    for rule in contract.fields.values():
+        parts = []
+        for seg in rule.path.split("."):
+            name, _, cond = seg.partition("[")
+            if cond:
+                want[".".join(parts + [name, cond.split("=", 1)[0]])] += 1
+            parts.append(name)
+        want[".".join(parts)] += 1
+    return want
+
+
+def extra_elements(contract: EnsureContract, resource: Mapping[str, Any]) -> list[str]:
+    """Leaf paths the record holds beyond what the contract's fields describe."""
+
+    always = ("id", "resourceType", "meta")
+    have = Counter(
+        p
+        for p in leaf_paths(dict(resource))
+        if p.split(".")[0] not in always and p not in contract.allow
+    )
+    return sorted((have - _expected_leaves(contract)).elements())
 
 
 # -- the read path ---------------------------------------------------------------
 
-Getter = Callable[[str, Optional[Mapping[str, str]]], tuple[int, Mapping[str, str], Any]]
+Getter = Callable[
+    [str, Optional[Mapping[str, Any]]], tuple[int, Mapping[str, str], Any]
+]
 
 
 def _origin(url: str) -> str:
@@ -263,7 +316,7 @@ class FhirReader:
         return resp.status_code, dict(resp.headers), body
 
     def fetch(
-        self, url: str, params: Optional[Mapping[str, str]] = None
+        self, url: str, params: Optional[Mapping[str, Any]] = None
     ) -> tuple[Mapping[str, str], Any]:
         try:
             status, headers, body = self._get(url, params)
@@ -276,12 +329,12 @@ class FhirReader:
         return headers, body
 
     def bundle(
-        self, path: str, params: Optional[Mapping[str, str]] = None
+        self, path: str, params: Optional[Mapping[str, Any]] = None
     ) -> list[dict[str, Any]]:
         """Every entry of a search or history Bundle, across all pages."""
 
         url: Optional[str] = f"{self.base_url}/{path}"
-        query: Optional[Mapping[str, str]] = params
+        query: Optional[Mapping[str, Any]] = params
         entries: list[dict[str, Any]] = []
         for _ in range(MAX_PAGES):
             assert url is not None
@@ -317,7 +370,7 @@ class FhirReader:
         raise Unreadable(f"{path}: more than {MAX_PAGES} pages")
 
     def resources(
-        self, path: str, params: Optional[Mapping[str, str]] = None
+        self, path: str, params: Optional[Mapping[str, Any]] = None
     ) -> list[dict[str, Any]]:
         out = []
         for entry in self.bundle(path, params):
@@ -404,7 +457,9 @@ def find_matches(
 
 
 def capture_baseline(
-    contract: EnsureContract, params: Mapping[str, Any], reader: Optional[FhirReader] = None
+    contract: EnsureContract,
+    params: Mapping[str, Any],
+    reader: Optional[FhirReader] = None,
 ) -> Baseline:
     reader = reader or FhirReader(contract)
     # One second before the server's clock: an instant search is to the second.
@@ -414,17 +469,24 @@ def capture_baseline(
 
 
 def read_changes(
-    contract: EnsureContract, reader: FhirReader, since: datetime
+    contract: EnsureContract,
+    reader: FhirReader,
+    since: datetime,
+    until: Optional[datetime] = None,
 ) -> dict[str, Change]:
-    """Every resource written since ``since``, with who wrote it."""
+    """Every resource written in ``[since, until]``, with who wrote it."""
+
+    def window(param: str) -> dict[str, Any]:
+        bounds = [f"ge{_instant(since)}"]
+        if until is not None:
+            bounds.append(f"le{_instant(until)}")
+        return {param: bounds, "_count": "200"}
 
     feed = contract.change_feed
     changes: dict[str, Change] = {}
     if feed.audit is not None:
         a = feed.audit
-        for event in reader.resources(
-            a.resource_type, {a.since_param: f"ge{_instant(since)}", "_count": "200"}
-        ):
+        for event in reader.resources(a.resource_type, window(a.since_param)):
             action = extract(event, a.action_path)
             if action not in WRITE_ACTIONS:
                 continue
@@ -442,9 +504,7 @@ def read_changes(
             else:
                 change.attributed = False
     for rtype in feed.sweep_types:
-        for res in reader.resources(
-            rtype, {"_lastUpdated": f"ge{_instant(since)}", "_count": "200"}
-        ):
+        for res in reader.resources(rtype, window("_lastUpdated")):
             ref = f"{rtype}/{res['id']}"
             if ref not in changes:
                 changes[ref] = Change(ref=ref, actions={"U"}, unlogged=True)
@@ -457,7 +517,9 @@ def read_changes(
                 if isinstance(res, dict):
                     meta = res.get("meta") or {}
                     when = _when(meta.get("lastUpdated"))
-                    if when is None or when < since:
+                    if when is None or when < since or (until and when > until):
+                        continue
+                    if not feed.history_author:
                         continue
                     who = (meta.get("author") or {}).get("reference")
                     if isinstance(who, str) and who:
@@ -472,6 +534,7 @@ def read_changes(
                     change.attributed = False
                 change.authors |= authors
             elif change.unlogged:
+                # Neither the log nor the record says who wrote it.
                 change.attributed = False
     return changes
 
@@ -506,11 +569,15 @@ def judge(
     changes: Mapping[str, Change],
     after_matches: Mapping[str, Mapping[str, Any]],
     created: Optional[Mapping[str, Any]],
+    existing_now: Optional[Mapping[str, Any]] = None,
 ) -> EnsureResult:
     """Decide the outcome from the snapshots. Reads nothing itself.
 
     ``created`` is the current version of the one resource the agent
     created (or None when it created none, or more than one).
+    ``existing_now`` is the current version of the one record that was
+    already the person (None when it is gone): someone else may have edited
+    it during the run, which doesn't change what the agent found.
     """
 
     selfs = set(contract.self_actors)
@@ -525,7 +592,9 @@ def judge(
         "after_matches": len(after_matches),
         "agent_writes": len(mine),
         "other_writes": len(others),
-        "unattributed_writes": sum(1 for c in mine.values() if not c.attributed or not c.authors),
+        "unattributed_writes": sum(
+            1 for c in mine.values() if not c.attributed or not c.authors
+        ),
         "unlogged_writes": sum(1 for c in changes.values() if c.unlogged),
         "agent_write_types": sorted({r.split("/")[0] for r in mine}),
     }
@@ -533,13 +602,22 @@ def judge(
     if not mine:
         if len(baseline.matches) == 1:
             (rid,) = baseline.matches
-            if rid in after_matches:
+            if rid in after_matches or (
+                existing_now is not None and str(existing_now.get("id")) == rid
+            ):
                 return EnsureResult(
-                    "found_existing", rid, ["one record was already the person"], evidence
+                    "found_existing",
+                    rid,
+                    ["one record was already the person"],
+                    evidence,
                 )
-            return _review(["the existing record is gone or no longer matches"], evidence)
+            return _review(
+                ["the existing record is gone or no longer matches"], evidence
+            )
         if not baseline.matches:
-            return _review(["no record is the person and the agent created none"], evidence)
+            return _review(
+                ["no record is the person and the agent created none"], evidence
+            )
         return _review(
             [f"{len(baseline.matches)} records were already the person"], evidence
         )
@@ -549,7 +627,9 @@ def judge(
             f"{len(baseline.matches)} record(s) were already the person, "
             "and the agent wrote anyway"
         )
-    creates = [r for r, c in mine.items() if r.startswith(own_type + "/") and "C" in c.actions]
+    creates = [
+        r for r, c in mine.items() if r.startswith(own_type + "/") and "C" in c.actions
+    ]
     if len(creates) != 1:
         reasons.append(f"the agent created {len(creates)} {own_type} records, not one")
     unexplained = [r for r, c in mine.items() if not c.attributed or not c.authors]
@@ -559,7 +639,9 @@ def judge(
     extra = sorted(r for r in mine if r != target)
     if extra:
         types = sorted({r.split("/")[0] for r in extra})
-        reasons.append(f"the agent wrote {len(extra)} other resource(s): {', '.join(types)}")
+        reasons.append(
+            f"the agent wrote {len(extra)} other resource(s): {', '.join(types)}"
+        )
     if target is not None:
         tid = target.split("/", 1)[1]
         if set(mine[target].actions) - {"C"}:
@@ -574,6 +656,10 @@ def judge(
                 reasons.append("wrong or missing: " + ", ".join(wrong))
             if not is_person(contract, created, params):
                 reasons.append("the created record is not the person")
+            if contract.closed:
+                extra_paths = extra_elements(contract, created)
+                if extra_paths:
+                    reasons.append("not given by the task: " + ", ".join(extra_paths))
         dupes = sorted(set(after_matches) - {tid})
         if dupes:
             reasons.append(f"{len(dupes)} other record(s) are now also the person")
@@ -581,9 +667,19 @@ def judge(
             reasons.append("the created record does not come back from a search")
         if not reasons:
             return EnsureResult(
-                "created_verified", tid, ["created once, every value read back"], evidence
+                "created_verified",
+                tid,
+                ["created once, every value read back"],
+                evidence,
             )
     return _review(reasons, evidence)
+
+
+def _fingerprint(changes: Mapping[str, Change]) -> dict[str, tuple[Any, ...]]:
+    return {
+        ref: (sorted(c.actions), sorted(c.authors), c.attributed, c.unlogged)
+        for ref, c in changes.items()
+    }
 
 
 def verify_ensure(
@@ -597,10 +693,21 @@ def verify_ensure(
     """Read the server after the write and judge it against ``baseline``."""
 
     reader = reader or FhirReader(contract)
-    if contract.settle_s:
-        sleep(contract.settle_s)
     try:
-        changes = read_changes(contract, reader, baseline.started)
+        # The window closes now (the Date header counts whole seconds).
+        until = reader.server_time() + timedelta(seconds=1)
+        sleep(contract.settle_s)
+        changes = read_changes(contract, reader, baseline.started, until)
+        for _ in range(contract.stable_reads):
+            sleep(contract.settle_s)
+            again = read_changes(contract, reader, baseline.started, until)
+            if _fingerprint(again) == _fingerprint(changes):
+                break
+            changes = again
+        else:
+            raise Unreadable(
+                f"the change feed was still changing after {contract.stable_reads} reads"
+            )
         after_matches, _ = find_matches(contract, reader, params)
         selfs = set(contract.self_actors)
         own = [
@@ -616,9 +723,20 @@ def verify_ensure(
                 _, created = reader.fetch(f"{reader.base_url}/{own[0]}")
             except Unreadable:
                 created = None  # gone (deleted) or unreadable: judged below
+        existing_now = None
+        if len(baseline.matches) == 1 and not own:
+            (rid,) = baseline.matches
+            try:
+                _, existing_now = reader.fetch(
+                    f"{reader.base_url}/{contract.resource_type}/{rid}"
+                )
+            except Unreadable:
+                existing_now = None  # gone or unreadable: not found
     except Unreadable as exc:
         return _review([f"unreadable: {exc}"], {"unreadable": True})
-    return judge(contract, params, baseline, changes, after_matches, created)
+    return judge(
+        contract, params, baseline, changes, after_matches, created, existing_now
+    )
 
 
 __all__ = [

@@ -1,0 +1,103 @@
+{
+  "schema_version": "openadapt.duplicate-rule/v1",
+  "roles": {
+    "first": "name.given",
+    "last": "name.family",
+    "dob": "birthDate",
+    "phone": "telecom.value",
+    "street": "address.city"
+  },
+  "exact": [
+    [
+      "first",
+      "eq"
+    ],
+    [
+      "last",
+      "eq"
+    ],
+    [
+      "dob",
+      "eq"
+    ]
+  ],
+  "close": [],
+  "calibration": {
+    "distinct_queries": 0,
+    "false_match_rate": 0.0,
+    "calibration_duplicates": 15,
+    "miss_rate": 0.9333,
+    "miss_by_error": {
+      "both_names_typo+contact_changed": 1.0,
+      "both_names_typo+contact_kept": 1.0,
+      "contact_changed+contact_changed": 0.0,
+      "dob_digit+contact_changed": 1.0,
+      "dob_digit+contact_kept": 1.0,
+      "first_initial+contact_changed": 1.0,
+      "first_initial+contact_kept": 1.0,
+      "first_nickname+contact_changed": 1.0,
+      "first_nickname+contact_kept": 1.0,
+      "first_typo+contact_changed": 1.0,
+      "first_typo+contact_kept": 1.0,
+      "last_typo+contact_changed": 1.0,
+      "last_typo+contact_kept": 1.0,
+      "names_swapped+contact_changed": 1.0,
+      "names_swapped+contact_kept": 1.0
+    }
+  },
+  "estimated_false_stops_per_record": 0.0,
+  "name_variants": "a generic table of given-name variants (name_variants.json, made by a model from common names only)",
+  "notes": [
+    "a new record's roles come from the task: dob = DOB, first = fname, last = lname, phone = phone_home, street = city"
+  ],
+  "new_record_params": {
+    "first": "fname",
+    "last": "lname",
+    "dob": "DOB",
+    "phone": "phone_home",
+    "street": "city"
+  },
+  "adoption": {
+    "use": "generated",
+    "why": "no reference check to compare with",
+    "calibration_generated": {
+      "duplicates": 15,
+      "missed": 14,
+      "missed_by_error": {
+        "both_names_typo+contact_changed": 1,
+        "both_names_typo+contact_kept": 1,
+        "dob_digit+contact_changed": 1,
+        "dob_digit+contact_kept": 1,
+        "first_initial+contact_changed": 1,
+        "first_initial+contact_kept": 1,
+        "first_nickname+contact_changed": 1,
+        "first_nickname+contact_kept": 1,
+        "first_typo+contact_changed": 1,
+        "first_typo+contact_kept": 1,
+        "last_typo+contact_changed": 1,
+        "last_typo+contact_kept": 1,
+        "names_swapped+contact_changed": 1,
+        "names_swapped+contact_kept": 1
+      },
+      "missed_cases": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "distinct_queries": 1,
+      "false_stops": 0
+    },
+    "calibration_reference": null
+  }
+}

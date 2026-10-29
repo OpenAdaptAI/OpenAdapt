@@ -1,0 +1,89 @@
+{
+  "audit_lag_s": {
+    "C": {
+      "max": 0.032,
+      "median": 0.005
+    },
+    "D": {
+      "max": 0.034,
+      "median": 0.005
+    },
+    "U": {
+      "max": 0.034,
+      "median": 0.004
+    }
+  },
+  "audit_names_the_user_profile": true,
+  "audit_seen_on_an_immediate_read": [
+    "C by bot",
+    "C by bot",
+    "D by bot",
+    "U by other"
+  ],
+  "audit_writes_are_logged": false,
+  "bot_admin_endpoint": "HTTP 403",
+  "bot_is_project_admin": false,
+  "bot_is_super_admin": false,
+  "bundle_and_graphql_writes_logged": [
+    "C Observation by bot",
+    "C Observation by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "C Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "D Patient by bot",
+    "U Patient by ['Practitioner/09412aec-ee86-4c3d-9ef8-1fdb667105be']",
+    "U Patient by bot",
+    "U Patient by bot",
+    "U Patient by bot",
+    "U Patient by bot",
+    "U Patient by bot",
+    "U Patient by bot",
+    "U Patient by bot",
+    "U Patient by bot",
+    "U Patient by bot",
+    "U Patient by bot"
+  ],
+  "date_header": true,
+  "delete_in_history": true,
+  "meta_author_returned": false,
+  "policy": "AccessPolicy/40e4de5e-8b4d-4389-922b-4c045d40030a",
+  "restricted_bot_audit_read_only": true,
+  "restricted_bot_audit_writes": {
+    "create": "HTTP 403",
+    "delete": "HTTP 403",
+    "update": "HTTP 403"
+  },
+  "restricted_bot_can_write": {
+    "Observation": "allowed",
+    "Patient": "allowed",
+    "Task": "allowed"
+  },
+  "sweep_sees_delete": false,
+  "type_history": "HTTP 404",
+  "unrestricted_bot_audit_writes": {
+    "create": null,
+    "delete": null,
+    "update": null
+  }
+}

@@ -40,6 +40,8 @@ DEFAULT_STATE = Path.home() / "oa/scratch/second-installation/medplum-state"
 #: loopback-only server with synthetic data).
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_PASSWORD = "medplum_admin"
+#: The project every fixture user and client belongs to (not Super Admin).
+PROJECT_NAME = "OpenAdapt synthetic clinic"
 
 
 class FixtureError(RuntimeError):
@@ -65,14 +67,22 @@ def _http(
         headers["Content-Type"] = "application/json"
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(url, data=data, method=method, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-            raw = resp.read()
-    except HTTPError as exc:
-        detail = exc.read().decode(errors="replace")[:500]
-        raise FixtureError(f"{method} {url} -> HTTP {exc.code}: {detail}") from exc
-    return json.loads(raw) if raw else None
+    # Medplum allows a few sign-ins a minute; a sign-in that hits the limit
+    # waits for the window to reset instead of failing setup.
+    auth = "/auth/" in url or "/oauth2/" in url
+    for attempt in range(4 if auth else 1):
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+                raw = resp.read()
+            return json.loads(raw) if raw else None
+        except HTTPError as exc:
+            detail = exc.read().decode(errors="replace")[:500]
+            if exc.code == 429 and auth and attempt < 3:
+                time.sleep(float(exc.headers.get("Retry-After") or 61))
+                continue
+            raise FixtureError(f"{method} {url} -> HTTP {exc.code}: {detail}") from exc
+    raise AssertionError("unreachable")
 
 
 class MedplumFixture:
@@ -91,6 +101,8 @@ class MedplumFixture:
         self.server_port = server_port
         self.app_port = app_port
         self.project = project
+        #: Access tokens by role, reused for half their hour-long lifetime.
+        self._tokens: dict[str, tuple[float, str]] = {}
         self.lock = json.loads((HERE / "environment.lock.json").read_text())
         for name, image in self.lock["services"].items():
             if "@sha256:" not in image:
@@ -182,9 +194,28 @@ class MedplumFixture:
 
     # -- tokens ----------------------------------------------------------------
 
-    def admin_token(self) -> str:
-        """An access token for the seeded administrator (setup only)."""
+    def _cached(self, key: str, fetch: Any) -> str:
+        now = time.monotonic()
+        hit = self._tokens.get(key)
+        if hit and now - hit[0] < 1800:
+            return hit[1]
+        token = fetch()
+        self._tokens[key] = (now, token)
+        return token
 
+    def admin_token(self) -> str:
+        """An access token for the fixture project's administrator (setup only).
+
+        Medplum seeds its first administrator into the "Super Admin" project,
+        whose every member can call the server's ``/admin/super`` operations.
+        A deployment's agent never runs there, so the fixture works in a
+        project of its own, made once by that administrator, and every user
+        and client it makes is a member of that project only.
+        """
+
+        return self._cached("admin", self._admin_token)
+
+    def _admin_token(self) -> str:
         verifier = secrets.token_urlsafe(32)
         login = _http(
             "POST",
@@ -197,14 +228,36 @@ class MedplumFixture:
                 "codeChallenge": verifier,
             },
         )
-        if "code" not in login and login.get("memberships"):
+        ours = [
+            m
+            for m in login.get("memberships") or []
+            if (m.get("project") or {}).get("display") == PROJECT_NAME
+        ]
+        if len(ours) > 1:
+            raise FixtureError(f"more than one project named {PROJECT_NAME!r}")
+        if ours:
             login = _http(
                 "POST",
                 f"{self.base_url}/auth/profile",
+                body={"login": login["login"], "profile": ours[0]["id"]},
+            )
+        else:
+            fresh = _http(
+                "POST",
+                f"{self.base_url}/auth/login",
                 body={
-                    "login": login["login"],
-                    "profile": login["memberships"][0]["id"],
+                    "email": ADMIN_EMAIL,
+                    "password": ADMIN_PASSWORD,
+                    "scope": "openid",
+                    "codeChallengeMethod": "plain",
+                    "codeChallenge": verifier,
+                    "projectId": "new",
                 },
+            )
+            login = _http(
+                "POST",
+                f"{self.base_url}/auth/newproject",
+                body={"login": fresh["login"], "projectName": PROJECT_NAME},
             )
         token = _http(
             "POST",
@@ -214,8 +267,11 @@ class MedplumFixture:
                 "code": login["code"],
                 "code_verifier": verifier,
             },
-        )
-        return token["access_token"]
+        )["access_token"]
+        me = _http("GET", f"{self.base_url}/auth/me", token=token)
+        if me["project"].get("superAdmin") or me["project"].get("name") != PROJECT_NAME:
+            raise FixtureError("the setup token is not for the fixture project")
+        return token
 
     def client(self, name: str) -> dict[str, str]:
         """A client application (id and secret) for one role, made once."""
@@ -266,7 +322,79 @@ class MedplumFixture:
         path.write_text(json.dumps(data, indent=2))
         return password
 
+    def restrict_agent(self, profile: str, *, on: bool = True) -> str:
+        """Make the audit trail read-only to one member; returns the policy id.
+
+        A plain project member can create, change and delete AuditEvents, and
+        those writes are not themselves logged, so an agent could erase the
+        record of its own write. Medplum lets any entry that allows a write
+        win, so a ``*`` entry can't be narrowed: the policy names every type
+        the server serves, each writable except AuditEvent. ``on=False``
+        removes the member's policy (the probe's unrestricted baseline).
+        """
+
+        admin = self.admin_token()
+        cap = _http("GET", f"{self.fhir_url}/metadata", token=admin)
+        types = sorted({r["type"] for r in cap["rest"][0]["resource"]})
+        policy = {
+            "resourceType": "AccessPolicy",
+            "name": "openadapt agent: audit trail read-only",
+            "resource": [{"resourceType": "AuditEvent", "readonly": True}]
+            + [{"resourceType": t} for t in types if t != "AuditEvent"],
+        }
+        found = (
+            _http(
+                "GET",
+                f"{self.fhir_url}/AccessPolicy?"
+                + urllib.parse.urlencode({"name:exact": policy["name"]}),
+                token=admin,
+            ).get("entry")
+            or []
+        )
+        if found:
+            pid = found[0]["resource"]["id"]
+            _http(
+                "PUT",
+                f"{self.fhir_url}/AccessPolicy/{pid}",
+                body={**policy, "id": pid},
+                token=admin,
+            )
+        else:
+            pid = _http(
+                "POST", f"{self.fhir_url}/AccessPolicy", body=policy, token=admin
+            )["id"]
+        members = (
+            _http(
+                "GET",
+                f"{self.fhir_url}/ProjectMembership?"
+                + urllib.parse.urlencode({"profile": profile}),
+                token=admin,
+            ).get("entry")
+            or []
+        )
+        if len(members) != 1:
+            raise FixtureError(
+                f"expected one membership for {profile}, found {len(members)}"
+            )
+        member = members[0]["resource"]
+        if member.get("admin"):
+            raise FixtureError(f"{profile} is a project administrator")
+        if on:
+            member["accessPolicy"] = {"reference": f"AccessPolicy/{pid}"}
+        else:
+            member.pop("accessPolicy", None)
+        _http(
+            "PUT",
+            f"{self.fhir_url}/ProjectMembership/{member['id']}",
+            body=member,
+            token=admin,
+        )
+        return pid
+
     def client_token(self, name: str) -> str:
+        return self._cached(f"client:{name}", lambda: self._client_token(name))
+
+    def _client_token(self, name: str) -> str:
         c = self.client(name)
         token = _http(
             "POST",

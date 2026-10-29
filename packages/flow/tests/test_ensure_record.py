@@ -48,7 +48,12 @@ def contract(**extra) -> EnsureContract:
             "state": {"path": "address.state", "map": {"Massachusetts": "MA"}},
         },
         "identity": [["given", "family", "birthDate"], ["email"]],
-        "search": {"given": "given", "family": "family", "birthDate": "birthdate", "email": "email"},
+        "search": {
+            "given": "given",
+            "family": "family",
+            "birthDate": "birthdate",
+            "email": "email",
+        },
         "settle_s": 0,
     }
     doc.update(extra)
@@ -133,14 +138,19 @@ def test_another_users_write_elsewhere_is_not_counted():
 
 def test_another_users_edit_of_the_created_record_needs_review():
     x = patient("x")
-    changes = {"Patient/x": Change(ref="Patient/x", actions={"C", "U"}, authors={BOT, OTHER})}
+    changes = {
+        "Patient/x": Change(ref="Patient/x", actions={"C", "U"}, authors={BOT, OTHER})
+    }
     r = judge(contract(), PARAMS, base(), changes, {"x": x}, x)
     assert r.outcome == "needs_review"
 
 
 def test_an_unattributed_write_counts_as_the_agents():
     x = patient("x")
-    changes = {**ch("Patient/x", "C"), "Task/t": Change(ref="Task/t", actions={"U"}, authors=set())}
+    changes = {
+        **ch("Patient/x", "C"),
+        "Task/t": Change(ref="Task/t", actions={"U"}, authors=set()),
+    }
     r = judge(contract(), PARAMS, base(), changes, {"x": x}, x)
     assert r.outcome == "needs_review"
 
@@ -161,7 +171,11 @@ def test_identity_needs_a_search_parameter():
 
 
 def bundle(*resources, total=None, next_url=None, kind="searchset"):
-    body = {"resourceType": "Bundle", "type": kind, "entry": [{"resource": r} for r in resources]}
+    body = {
+        "resourceType": "Bundle",
+        "type": kind,
+        "entry": [{"resource": r} for r in resources],
+    }
     if total is not None:
         body["total"] = total
     if next_url:
@@ -177,7 +191,9 @@ def reader_for(routes):
             return reply, {}, None
         return 200, {}, reply
 
-    return FhirReader(contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), get)
+    return FhirReader(
+        contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), get
+    )
 
 
 def audit(action, ref, who=BOT):
@@ -202,9 +218,12 @@ def test_reader_reads_audit_history_and_sweep():
         {
             "AuditEvent": bundle(audit("C", "Patient/x"), audit("R", "Patient/z")),
             "Observation": bundle({"resourceType": "Observation", "id": "o"}),
-            "Patient/x/_history": bundle(versioned(patient("x"), BOT, LATER), kind="history"),
+            "Patient/x/_history": bundle(
+                versioned(patient("x"), BOT, LATER), kind="history"
+            ),
             "Observation/o/_history": bundle(
-                versioned({"resourceType": "Observation", "id": "o"}, BOT, LATER), kind="history"
+                versioned({"resourceType": "Observation", "id": "o"}, BOT, LATER),
+                kind="history",
             ),
         }
     )
@@ -212,7 +231,9 @@ def test_reader_reads_audit_history_and_sweep():
         contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
     )
     assert set(changes) == {"Patient/x", "Observation/o"}
-    assert changes["Observation/o"].unlogged and changes["Observation/o"].authors == {BOT}
+    assert changes["Observation/o"].unlogged and changes["Observation/o"].authors == {
+        BOT
+    }
     assert changes["Patient/x"].authors == {BOT}
 
 
@@ -221,10 +242,14 @@ def test_log_and_record_disagreeing_on_the_author_is_unattributed():
         {
             "AuditEvent": bundle(audit("U", "Patient/y", who=OTHER)),
             "Observation": bundle(),
-            "Patient/y/_history": bundle(versioned(patient("y"), BOT, LATER), kind="history"),
+            "Patient/y/_history": bundle(
+                versioned(patient("y"), BOT, LATER), kind="history"
+            ),
         }
     )
-    changes = read_changes(contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0)
+    changes = read_changes(
+        contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+    )
     assert changes["Patient/y"].attributed is False
 
 
@@ -238,9 +263,166 @@ def test_log_and_record_disagreeing_on_the_author_is_unattributed():
         {"AuditEvent": bundle({"resourceType": "AuditEvent"})},
         {"AuditEvent": bundle(audit("C", None))},
     ],
-    ids=["http-500", "not-a-bundle", "short-total", "other-origin", "no-id", "no-entity"],
+    ids=[
+        "http-500",
+        "not-a-bundle",
+        "short-total",
+        "other-origin",
+        "no-id",
+        "no-entity",
+    ],
 )
 def test_every_incomplete_read_is_unreadable(routes):
     r = reader_for({"Observation": bundle(), **routes})
     with pytest.raises(Unreadable):
-        read_changes(contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0)
+        read_changes(
+            contract(change_feed={"audit": {}, "sweep_types": ["Observation"]}), r, T0
+        )
+
+
+def test_a_server_without_history_authors_relies_on_the_audit_trail():
+    feed = {"audit": {}, "sweep_types": ["Observation"], "history_author": False}
+    r = reader_for(
+        {
+            "AuditEvent": bundle(audit("C", "Patient/x")),
+            "Observation": bundle(),
+            "Patient/x/_history": bundle(
+                {**patient("x"), "meta": {"lastUpdated": LATER}}, kind="history"
+            ),
+        }
+    )
+    changes = read_changes(contract(change_feed=feed), r, T0)
+    assert changes["Patient/x"].attributed and changes["Patient/x"].authors == {BOT}
+
+
+def test_without_history_authors_an_unlogged_write_is_the_agents():
+    feed = {"audit": {}, "sweep_types": ["Observation"], "history_author": False}
+    obs = {"resourceType": "Observation", "id": "o", "meta": {"lastUpdated": LATER}}
+    r = reader_for(
+        {
+            "AuditEvent": bundle(),
+            "Observation": bundle(obs),
+            "Observation/o/_history": bundle(obs, kind="history"),
+        }
+    )
+    changes = read_changes(contract(change_feed=feed), r, T0)
+    x = patient("x")
+    result = judge(
+        contract(change_feed=feed),
+        PARAMS,
+        base(),
+        {**ch("Patient/x", "C"), **changes},
+        {"x": x},
+        x,
+    )
+    assert result.outcome == "needs_review"
+
+
+def test_an_element_the_task_did_not_give_needs_review():
+    x = patient("x", maritalStatus={"text": "M"})
+    x["name"][0]["given"].append("Mae")
+    r = judge(contract(closed=True), PARAMS, base(), ch("Patient/x", "C"), {"x": x}, x)
+    assert r.outcome == "needs_review"
+    assert any("maritalStatus.text" in m and "name.given" in m for m in r.reasons)
+
+
+def test_a_closed_record_with_exactly_the_task_values_is_verified():
+    x = patient("x")
+    r = judge(
+        contract(closed=True, allow=["address.use"]),
+        PARAMS,
+        base(),
+        ch("Patient/x", "C"),
+        {"x": x},
+        x,
+    )
+    assert r.outcome == "created_verified"
+
+
+def test_another_users_edit_of_the_found_record_is_still_found():
+    e = patient("e", birthDate="1999-01-01")
+    changes = ch("Patient/e", "U", by=OTHER)
+    r = judge(contract(), PARAMS, base(patient("e")), changes, {}, None, existing_now=e)
+    assert (r.outcome, r.record_id) == ("found_existing", "e")
+
+
+def test_a_found_record_that_is_gone_needs_review():
+    r = judge(
+        contract(),
+        PARAMS,
+        base(patient("e")),
+        ch("Patient/e", "D", by=OTHER),
+        {},
+        None,
+        None,
+    )
+    assert r.outcome == "needs_review"
+
+
+def _live_reader(audit_replies, patients):
+    """A server whose audit trail answers each read in turn (the last repeats)."""
+
+    from openadapt_flow.ensure_record import verify_ensure  # noqa: F401
+
+    calls = {"audit": 0}
+
+    def get(url, params):
+        key = url.split("/fhir/R4/", 1)[-1]
+        if key == "metadata":
+            return (
+                200,
+                {"Date": "Wed, 28 Oct 2026 12:00:10 GMT"},
+                {"resourceType": "CapabilityStatement"},
+            )
+        if key == "AuditEvent":
+            reply = audit_replies[min(calls["audit"], len(audit_replies) - 1)]
+            calls["audit"] += 1
+            return 200, {}, reply
+        if key.endswith("/_history"):
+            return 200, {}, bundle(kind="history")
+        if key.startswith("Patient/"):
+            return 200, {}, patients[key.split("/")[1]]
+        return 200, {}, bundle(*patients.values())
+
+    return FhirReader(contract(change_feed={"audit": {}, "history": True}), get)
+
+
+def test_an_audit_event_that_arrives_late_is_still_read():
+    from openadapt_flow.ensure_record import verify_ensure
+
+    x = patient("x")
+    late = [
+        bundle(audit("C", "Patient/x")),
+        bundle(audit("C", "Patient/x"), audit("C", "Observation/o")),
+    ]
+    r = verify_ensure(
+        contract(change_feed={"audit": {}}),
+        PARAMS,
+        base(),
+        reader=_live_reader(late, {"x": x}),
+        sleep=lambda s: None,
+    )
+    assert r.outcome == "needs_review"
+    assert r.evidence["agent_write_types"] == ["Observation", "Patient"]
+
+
+def test_a_change_feed_that_never_settles_is_unreadable():
+    from openadapt_flow.ensure_record import verify_ensure
+
+    x = patient("x")
+    growing = [
+        bundle(
+            *(audit("C", f"Observation/o{i}") for i in range(n)),
+            audit("C", "Patient/x"),
+        )
+        for n in range(9)
+    ]
+    r = verify_ensure(
+        contract(change_feed={"audit": {}}),
+        PARAMS,
+        base(),
+        reader=_live_reader(growing, {"x": x}),
+        sleep=lambda s: None,
+    )
+    assert r.outcome == "needs_review" and r.evidence.get("unreadable")
+    assert "still changing" in r.reasons[0]

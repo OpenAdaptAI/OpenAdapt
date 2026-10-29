@@ -39,6 +39,28 @@ BOT_EMAIL = "openadapt.bot@example.invalid"
 OTHER_EMAIL = "clinician.other@example.invalid"
 
 
+def audit_is_read_only(fx: MedplumFixture, actors: "Actors", who: str) -> bool:
+    """True when the member can't write an AuditEvent (refused by the server)."""
+
+    probe = {
+        "resourceType": "AuditEvent",
+        "type": {"code": "rest"},
+        "recorded": "2000-01-01T00:00:00Z",
+        "source": {"observer": {"display": "preflight"}},
+        "agent": [{"who": {"reference": actors.ref(who)}, "requestor": True}],
+    }
+    try:
+        made = _http(
+            "POST", f"{fx.fhir_url}/AuditEvent", body=probe, token=actors.token(who)
+        )
+    except FixtureError as exc:
+        return "HTTP 403" in str(exc)
+    _http(
+        "DELETE", f"{fx.fhir_url}/AuditEvent/{made['id']}", token=actors.token("setup")
+    )
+    return False
+
+
 def user_token(fx: MedplumFixture, email: str, password: str) -> str:
     """A token for one project member, by the same login flow the app uses."""
 
@@ -136,7 +158,9 @@ def _walk(doc: Any, path: str, *, create: bool) -> tuple[Any, str]:
     return node, parts[-1]
 
 
-def apply_edits(resource: dict[str, Any], op: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
+def apply_edits(
+    resource: dict[str, Any], op: dict[str, Any], names: dict[str, str]
+) -> dict[str, Any]:
     out = copy.deepcopy(resource)
     out.pop("meta", None)
     for path, value in (op.get("set") or {}).items():
@@ -158,7 +182,13 @@ def apply_edits(resource: dict[str, Any], op: dict[str, Any], names: dict[str, s
     return out
 
 
-def write(fx: MedplumFixture, actors: Actors, who: str, op: dict[str, Any], names: dict[str, str]) -> None:
+def write(
+    fx: MedplumFixture,
+    actors: Actors,
+    who: str,
+    op: dict[str, Any],
+    names: dict[str, str],
+) -> None:
     """One operation, by one actor. ``never_sent`` skips it."""
 
     if op.get("response") == "never_sent":
@@ -167,13 +197,20 @@ def write(fx: MedplumFixture, actors: Actors, who: str, op: dict[str, Any], name
     kind = op["op"]
     if kind == "create":
         body = _resolve(op["resource"], names)
-        made = _http("POST", f"{fx.fhir_url}/{body['resourceType']}", body=body, token=token)
+        made = _http(
+            "POST", f"{fx.fhir_url}/{body['resourceType']}", body=body, token=token
+        )
         if op.get("as"):
             names[op["as"]] = f"{made['resourceType']}/{made['id']}"
     elif kind == "update":
         ref = names[op["target"]]
         current = _http("GET", f"{fx.fhir_url}/{ref}", token=token)
-        _http("PUT", f"{fx.fhir_url}/{ref}", body=apply_edits(current, op, names), token=token)
+        _http(
+            "PUT",
+            f"{fx.fhir_url}/{ref}",
+            body=apply_edits(current, op, names),
+            token=token,
+        )
     elif kind == "delete":
         _http("DELETE", f"{fx.fhir_url}/{names[op['target']]}", token=token)
     else:
@@ -201,7 +238,9 @@ def wipe(fx: MedplumFixture, actors: Actors, types: set[str]) -> None:
     token = actors.token("setup")
     for rtype in sorted(types):
         for _ in range(20):
-            bundle = _http("GET", f"{fx.fhir_url}/{rtype}?_count=200&_elements=id", token=token)
+            bundle = _http(
+                "GET", f"{fx.fhir_url}/{rtype}?_count=200&_elements=id", token=token
+            )
             ids = [e["resource"]["id"] for e in bundle.get("entry") or []]
             if not ids:
                 break
@@ -227,7 +266,12 @@ def referral_params(referral: dict[str, Any]) -> dict[str, str]:
 
 
 def run_case(
-    fx: MedplumFixture, actors: Actors, contract: Any, case: dict[str, Any], default_referral: dict[str, Any], types: set[str]
+    fx: MedplumFixture,
+    actors: Actors,
+    contract: Any,
+    case: dict[str, Any],
+    default_referral: dict[str, Any],
+    types: set[str],
 ) -> dict[str, Any]:
     from openadapt_flow.ensure_record import capture_baseline, verify_ensure
 
@@ -254,7 +298,8 @@ def run_case(
         "class": case["class"],
         "expected": expected["outcome"],
         "actual": result.outcome,
-        "id_right": expected["outcome"] == "needs_review" or result.record_id == want_id,
+        "id_right": expected["outcome"] == "needs_review"
+        or result.record_id == want_id,
         "right": right,
         "fault_passed_as_verified": result.outcome != "needs_review" and not right,
         "reasons": result.reasons,
@@ -270,7 +315,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--suite", required=True)
-    ap.add_argument("--sha256", required=True, help="the frozen digest; refuses any other file")
+    ap.add_argument(
+        "--sha256", required=True, help="the frozen digest; refuses any other file"
+    )
     ap.add_argument("--contract", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--only", action="append", help="run only these case ids")
@@ -284,7 +331,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     suite = yaml.safe_load(raw)
     fx = MedplumFixture()
     actors = Actors(fx)
-    os.environ["MEDPLUM_BOT_REF"] = actors.ref("bot")
+    bot_ref = actors.ref("bot")
+    me = _http("GET", f"{fx.base_url}/auth/me", token=actors.token("bot"))
+    if me["project"].get("superAdmin") or me["membership"].get("admin"):
+        print("the bot is an administrator; refusing to run", file=sys.stderr)
+        return 2
+    policy = fx.restrict_agent(bot_ref)
+    actors._tokens.pop("bot", None)  # sign in again under the policy
+    if not audit_is_read_only(fx, actors, "bot"):
+        print("the bot can write AuditEvents; refusing to run", file=sys.stderr)
+        return 2
+    os.environ["MEDPLUM_BOT_REF"] = bot_ref
+    os.environ.setdefault("MEDPLUM_FHIR_URL", fx.fhir_url)
     contract = load_contract(args.contract)
     types = types_in(suite) | set(contract.change_feed.sweep_types)
     rows = []
@@ -294,17 +352,35 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             row = run_case(fx, actors, contract, case, suite["referral"], types)
         except FixtureError as exc:
-            row = {"id": case["id"], "class": case["class"], "error": str(exc)[:300], "right": False}
+            row = {
+                "id": case["id"],
+                "class": case["class"],
+                "error": str(exc)[:300],
+                "right": False,
+            }
         rows.append(row)
-        print(json.dumps({k: row.get(k) for k in ("id", "expected", "actual", "right", "reasons")}))
+        print(
+            json.dumps(
+                {
+                    k: row.get(k)
+                    for k in ("id", "expected", "actual", "right", "reasons")
+                }
+            )
+        )
     summary = {
         "suite_sha256": digest,
         "cases": len(rows),
         "right": sum(1 for r in rows if r.get("right")),
-        "fault_passed_as_verified": sum(1 for r in rows if r.get("fault_passed_as_verified")),
+        "fault_passed_as_verified": sum(
+            1 for r in rows if r.get("fault_passed_as_verified")
+        ),
         "errors": sum(1 for r in rows if "error" in r),
+        "agent_access_policy": f"AccessPolicy/{policy}",
+        "agent_audit_write_refused": True,
     }
-    Path(args.out).write_text(json.dumps({"summary": summary, "cases": rows}, indent=2) + "\n")
+    Path(args.out).write_text(
+        json.dumps({"summary": summary, "cases": rows}, indent=2) + "\n"
+    )
     print(json.dumps(summary))
     return 0
 
