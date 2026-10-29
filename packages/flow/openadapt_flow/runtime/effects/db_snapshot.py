@@ -886,6 +886,34 @@ def diff(
     return out
 
 
+def settled_state(a: Snapshot, b: Snapshot) -> bool:
+    """Do two reads taken after the save show the same database, apart from
+    rows added to append-only tables (the app's logs, which the frame
+    excuses)? An append-only table's existing rows must not change, and
+    every other table must be the same, as in :func:`same_state`."""
+
+    if (a.objects, a.code_visible) != (b.objects, b.code_visible):
+        return False
+    if set(a.tables) != set(b.tables):
+        return False
+    for name, x in a.tables.items():
+        y = b.tables[name]
+        if (x.mode, x.schema) != (y.mode, y.schema):
+            return False
+        if x.mode == "append_only":
+            if any(y.rows.get(k) != v for k, v in x.rows.items()):
+                return False
+            continue
+        if (x.count, x.counter, x.max_auto, x.rows) != (
+            y.count,
+            y.counter,
+            y.max_auto,
+            y.rows,
+        ):
+            return False
+    return True
+
+
 def same_state(a: Snapshot, b: Snapshot) -> bool:
     """Do two reads taken after the save show the same database?"""
 

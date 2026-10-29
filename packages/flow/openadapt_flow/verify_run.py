@@ -663,7 +663,7 @@ def _database_frame(
         SnapshotError,
         cell_hash,
         mac_key,
-        same_state,
+        settled_state,
         unpack,
         unread_reasons,
     )
@@ -689,16 +689,34 @@ def _database_frame(
     new = _read_database(cfg, salt, before=old)
     if new is None:
         return unreachable
-    # Read again a moment later: the two reads must match, or the app is
-    # still writing and what the save caused can't be told yet.
-    time.sleep(database.settle_s)
-    again = _read_database(cfg, salt, before=old)
-    if again is None:
-        return unreachable
-    again_at = _now()
-    if not same_state(new, again):
+    new_at = _now()
+    # Read again a moment later: two reads in a row must match, or the app
+    # is still writing and what the save caused can't be told yet. A live
+    # app moves on its own, so up to ``settle_attempts`` more reads are
+    # taken, each ``settle_s`` after the last; the earlier read of the first
+    # matching pair is judged. Rows added to append-only tables between the
+    # two don't count: the frame excuses them anyway.
+    attempts = database.settle_attempts
+    settled = False
+    used = 0
+    for used in range(1, attempts + 1):
+        time.sleep(database.settle_s)
+        again = _read_database(cfg, salt, before=old)
+        if again is None:
+            return unreachable
+        if settled_state(new, again):
+            settled = True
+            break
+        if used < attempts:
+            new, new_at = again, _now()
+    if not settled:
         moving = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
         moving.still_moving = True
+        moving.evidence = {
+            "settle_attempts": used,
+            "settle_attempts_allowed": attempts,
+            "settled": False,
+        }
         return moving
     if not (old.code_visible and new.code_visible):
         blind = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
@@ -706,7 +724,7 @@ def _database_frame(
         return blind
     key = mac_key(salt)
     out = _DatabaseFrame({}, {}, [], {}, (old.clock, new.clock), {}, None)
-    out.post, out.post_read_at, out.old = again, again_at, old
+    out.post, out.post_read_at, out.old = new, new_at, old
     if "audit" in new.extra:
         out.audit_after = list(new.extra["audit"])
     if old.objects != new.objects:
@@ -756,6 +774,8 @@ def _database_frame(
         ),
         "schemas": list(new.schemas),
         "allow_list_sha256": database.allow_list_sha256(),
+        "settle_attempts": used,
+        "settle_attempts_allowed": attempts,
     }
     profile = database.loaded_profile()
     if profile is not None:
@@ -900,13 +920,16 @@ def judge_run_frame(
     identities: Optional[dict[str, str]] = None
     db = _database_frame(cfg, before, salt)
     if db is not None and db.still_moving:
+        tries = db.evidence.get("settle_attempts", 1)
         return FrameVerdict(
             status="not_checked",
             reason=(
-                "the database was still changing after the save (two reads "
-                "differed); what the save caused can't be told yet"
+                "the database was still changing after the save (no two reads "
+                f"in a row matched in {tries} attempt(s)); what the save "
+                "caused can't be told yet"
             ),
             attribution=spec.attribution.kind if spec.attribution else "none",
+            database=dict(db.evidence),
         )
     if db is not None and db.blind:
         return FrameVerdict(

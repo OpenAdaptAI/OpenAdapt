@@ -39,6 +39,8 @@ Environment:
 - ``OPENEMR_LATE_WRITE_RECHECK_S``: the test's ``recheck_after_s`` (default
   2). A test value only: the right wait for a deployment depends on the
   app's own jobs, and the contract's author picks it;
+- ``OPENEMR_LATE_WRITE_SETTLE_ATTEMPTS``: the test's ``settle_attempts``
+  (default 5), also a test value;
 - ``OPENEMR_LATE_WRITE_FRAME_JSON``: a JSON object merged into the
   contract's ``frame`` (for example ``new_row_fields`` or ``side_records``,
   if this OpenEMR build's patient insert sets columns the default doesn't
@@ -264,6 +266,11 @@ def _contract(fx: Any, lname: str) -> Any:
                 ],
                 "history_data": ["id", "pid", "uuid", "date", "created_by"],
             },
+            # A live OpenEMR moves on its own (a UI session polling): a test
+            # value, as recheck_after_s is.
+            "settle_attempts": int(
+                os.environ.get("OPENEMR_LATE_WRITE_SETTLE_ATTEMPTS", "5")
+            ),
             "recheck_after_s": float(
                 os.environ.get("OPENEMR_LATE_WRITE_RECHECK_S", "2")
             ),

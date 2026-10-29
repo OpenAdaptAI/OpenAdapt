@@ -227,6 +227,17 @@ second read, such as a background job, a trigger-driven integration or a
 delayed duplicate side record, lands after the verdict, and that check
 doesn't see it.
 
+A live app moves on its own: a screen that polls, a scheduler tick. Set
+`frame.database.settle_attempts` (default 1) to take up to that many more
+reads, each `settle_s` after the last, until two in a row match. Two reads
+also match when they differ only by rows added to append-only tables, which
+the frame excuses anyway. Any other difference, including an edited row of
+an append-only table, keeps it waiting. The earlier read of the matching
+pair is judged. The budget is `settle_attempts * settle_s` seconds; when no
+pair matches within it, the frame is not checked.
+`evidence.frame.database.settle_attempts` says how many reads it took. The
+same budget applies after the save and at a recheck.
+
 Set `frame.database.recheck_after_s` to read the database once more after a
 verified save:
 

@@ -294,6 +294,16 @@ class FrameDatabase(BaseModel):
     #: A write later than the second read is not seen: see
     #: ``recheck_after_s``.
     settle_s: float = Field(default=1.0, ge=0)
+    #: How many reads after the first one, each ``settle_s`` after the last,
+    #: may be taken to find two in a row that match, after the save and at a
+    #: recheck. A live app moves on its own (a screen polling, a scheduler
+    #: tick), so one pair often differs. Two reads match when they are the
+    #: same, or differ only by rows added to append-only tables (the app's
+    #: logs, which the frame excuses anyway). The rows judged are the earlier
+    #: read of the matching pair. The budget is ``settle_attempts *
+    #: settle_s`` seconds; when no pair matches within it, the frame is not
+    #: checked. Default 1: one pair, as before.
+    settle_attempts: int = Field(default=1, ge=1, le=60)
     #: Seconds after the settled read at which the database is read once
     #: more (``openadapt_flow.verifier.recheck``). A write that lands later
     #: than ``settle_s`` (a background job, a trigger-driven integration, a
@@ -307,11 +317,14 @@ class FrameDatabase(BaseModel):
 
     @model_serializer(mode="wrap")
     def _compact(self, handler: Any) -> dict[str, Any]:
-        # Unset, the field is left out, so a contract that doesn't use it
-        # keeps the digests (``frame_sha256``, the check digest) it had.
+        # Unset (or at its default), a field added later is left out, so a
+        # contract that doesn't use it keeps the digests (``frame_sha256``,
+        # the check digest) it had.
         data: dict[str, Any] = handler(self)
         if data.get("recheck_after_s") is None:
             data.pop("recheck_after_s", None)
+        if data.get("settle_attempts") == 1:
+            data.pop("settle_attempts", None)
         return data
 
     @model_validator(mode="after")

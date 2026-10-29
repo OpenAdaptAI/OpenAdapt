@@ -82,7 +82,9 @@ def _db(tmp_path: Path) -> Path:
     return path
 
 
-def _doc(db: Path, recheck_after_s: float | None = 60) -> dict[str, Any]:
+def _doc(
+    db: Path, recheck_after_s: float | None = 60, settle_attempts: int = 1
+) -> dict[str, Any]:
     database: dict[str, Any] = {
         "dialect": "sqlite",
         "read": {"sqlite_database": str(db)},
@@ -96,6 +98,8 @@ def _doc(db: Path, recheck_after_s: float | None = 60) -> dict[str, Any]:
     }
     if recheck_after_s is not None:
         database["recheck_after_s"] = recheck_after_s
+    if settle_attempts != 1:
+        database["settle_attempts"] = settle_attempts
     return {
         "schema_version": "openadapt.verify/v1",
         "verifier": {
@@ -682,3 +686,120 @@ def test_a_downgraded_later_write_still_excuses_its_own_window(
     # Its frame held, so its own rows still don't refute the earlier write.
     assert _recheck(contract, first, excused_by=[down]).outcome == "CONFIRMED"
     assert _recheck(contract, first).outcome == "REFUTED"
+
+
+# -- settling: a live app moves on its own ------------------------------------------
+
+
+def _moving(
+    monkeypatch: pytest.MonkeyPatch, db: Path, writes: dict[int, list[str]]
+) -> dict[str, int]:
+    """Run ``writes[n]`` just before the recheck's n-th database read."""
+
+    from openadapt_flow import verify_run
+
+    real = verify_run._read_database
+    calls = {"n": 0}
+
+    def read(cfg: Any, salt: bytes, before: Any = None) -> Any:
+        calls["n"] += 1
+        if writes.get(calls["n"]) or writes.get(0):
+            _sql(db, *(writes.get(calls["n"]) or writes[0]))
+        return real(cfg, salt, before=before)
+
+    monkeypatch.setattr(verify_run, "_read_database", read)
+    return calls
+
+
+def test_a_recheck_that_settles_on_a_later_attempt_gives_the_normal_verdict(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract, db, first = _first(tmp_path, settle_attempts=3)
+    # Between the first two reads, another user edits a chart (attributed);
+    # then the database is still, so the second and third reads match.
+    _moving(
+        monkeypatch,
+        db,
+        {
+            2: [
+                "UPDATE patient_data SET phone_cell = '555-0107' WHERE pid = 1",
+                "INSERT INTO log (user, patient_id, event, tbl) "
+                "VALUES ('nurse', 1, 'update', 'patient_data')",
+            ]
+        },
+    )
+    late = _recheck(contract, first)
+    assert late.outcome == "CONFIRMED", late.reasons
+    assert late.evidence["database"]["settle_attempts"] == 2
+    assert late.evidence["concurrent_count"] == 1
+
+
+def test_a_recheck_that_never_settles_is_uncertain(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract, db, first = _first(tmp_path, settle_attempts=3)
+    calls = _moving(
+        monkeypatch, db, {0: ["INSERT INTO calendar (pid, title) VALUES (1, 'x')"]}
+    )
+    late = _recheck(contract, first)
+    assert late.outcome == "UNCERTAIN"
+    assert calls["n"] == 4  # the first read and 3 more, then it gives up
+    assert late.evidence["database"] == {
+        "settle_attempts": 3,
+        "settle_attempts_allowed": 3,
+        "settled": False,
+    }
+    assert "3 attempt(s)" in late.reasons[0]
+
+
+def test_bookkeeping_only_movement_counts_as_settled(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract, db, first = _first(tmp_path)  # one pair only
+    # The app's own log grows on every read (an append-only table).
+    _moving(monkeypatch, db, {0: ["INSERT INTO api_log (note) VALUES ('poll')"]})
+    late = _recheck(contract, first)
+    assert late.outcome == "CONFIRMED", late.reasons
+    assert late.evidence["database"]["settle_attempts"] == 1
+
+
+def test_a_changed_log_row_is_still_movement(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract, db, first = _first(tmp_path)
+    _sql(db, "INSERT INTO api_log (note) VALUES ('seed')")
+    # An existing append-only row edited between the reads is not
+    # bookkeeping: the pair doesn't match.
+    _moving(monkeypatch, db, {2: ["UPDATE api_log SET note = 'edited'"]})
+    assert _recheck(contract, first).outcome == "UNCERTAIN"
+
+
+def test_the_save_itself_settles_within_the_same_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db, settle_attempts=2))
+    before = begin_write(contract, _params(2), actor=BOT)
+    _sql(db, *_save_sql(2))
+    # The app's scheduler writes an append-only row while verify reads.
+    _moving(monkeypatch, db, {0: ["INSERT INTO api_log (note) VALUES ('tick')"]})
+    result = verify_write(before)
+    assert result.verified, result.reasons
+    assert result.evidence["frame"]["database"]["settle_attempts"] == 1
+
+
+def test_settle_attempts_at_its_default_stays_out_of_the_digest() -> None:
+    plain = FrameSpec.model_validate(
+        {"database": {"dialect": "sqlite", "read": {"sqlite_database": "x"}}}
+    )
+    explicit = FrameSpec.model_validate(
+        {
+            "database": {
+                "dialect": "sqlite",
+                "read": {"sqlite_database": "x"},
+                "settle_attempts": 1,
+            }
+        }
+    )
+    assert plain.digest() == explicit.digest()
+    assert "settle_attempts" not in json.dumps(plain.model_dump())
