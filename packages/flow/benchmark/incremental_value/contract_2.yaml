@@ -85,6 +85,9 @@ frame:
       patient_data: [billing_note, birth_fname, birth_lname, birth_mname, care_team_status, completed_ad, created_by, date, dupscore, financial_review, gender_identity, guardianaddress, guardiancity, guardiancountry, guardianemail, guardianphone, guardianpostalcode, guardianrelationship, guardiansex, guardiansname, guardianstate, guardianworkphone, hipaa_allowemail, hipaa_allowsms, id, imm_reg_status, industry, interpreter_needed, last_updated, nationality_country, occupation, patient_groups, pid, preferred_name, pricelevel, pronoun, protect_indicator, publicity_code, pubpid, regdate, sex_identified, sexual_orientation, street_line_2, suffix, tribal_affiliations, updated_by, uuid]
       history_data: [id, pid, uuid, date, created_by]
     settle_s: 2
+    # A live OpenEMR moves on its own (UI polling, background ticks): retry the
+    # paired read up to 10 times, a 20 s budget, until two reads match (#1639).
+    settle_attempts: 10
     # Two of OpenEMR 8.0.0.3's shortest active background-service intervals
     # (Email_Service, 2 min): a job the save triggers runs by the next tick.
     recheck_after_s: 240
