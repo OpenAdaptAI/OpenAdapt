@@ -262,12 +262,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                 continue
             if a.limit and n >= a.limit:
                 break
-            while load1() > 40:
+            gate = float(os.environ.get("INCREMENTAL_VALUE_LOAD_GATE", "40"))
+            while load1() > gate:
                 print(f"[{arm.name}] load {load1():.0f}; waiting", flush=True)
                 time.sleep(30)
             if shutil.disk_usage("/System/Volumes/Data").free / 2**30 < 10:
                 raise SystemExit("free disk under 10 GiB; stopping between items")
             n += 1
+            load_at_start = round(load1(), 1)
             hooks = hooks_for(item, cases, ops)
             ctx = faults.Ctx(item, app, oracle, targets, fx.api_for)
             prep_err = None
@@ -316,6 +318,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "oracle": verdict,
                 "moved_tables": sorted(diffs),
                 "t": round(time.time(), 1),
+                "load1_at_start": load_at_start,
+                "load1_at_end": round(load1(), 1),
             }
             fh.write(json.dumps(row, default=str) + "\n")
             fh.flush()
