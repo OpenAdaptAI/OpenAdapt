@@ -16,8 +16,9 @@ then check the start screen):
   OpenEMR's duplicate-check confirmation dialog is open, and halts there.
   After the cleanup, the dialog must be gone, the form empty and the start
   screen confirmed; the next item's first steps then run on that session.
-- ``wrong_screen``: the session is left on another screen and re-entry is
-  disabled, so the start screen can't come back. The session must be dirty.
+- ``wrong_screen``: the form's tab is left on the patient finder and
+  re-entry is disabled, so the start screen can't come back. The session
+  must be dirty.
 
 Synthetic data only (example.invalid, 555-01xx); no model calls; nothing is
 saved (the dialog's Confirm is never pressed).
@@ -55,6 +56,7 @@ sys.modules["benchmark"] = _pkg
 
 UI_PORT, API_PORT = "9561", "9560"
 PROJECT = "openadapt-openemr-rollback"
+FINDER_PATH = "/interface/main/finder/dynamic_finder.php"
 
 
 def _clone_state(source: Path, root: Path) -> Path:
@@ -202,13 +204,11 @@ def main(argv: list[str] | None = None) -> int:
                             state="visible", timeout=60_000
                         )
 
+                    # Sign-in left the blank form open in its tab. Loading
+                    # main.php again doesn't bring the tab shell back (it
+                    # needs sign-in's token), so re-entry reopens the form's
+                    # tab, as OpenEMR's own menu does.
                     # -- dialog_open: a halted item leaves the confirmation up.
-                    page.goto(f"{fx.ui_base_url}/interface/main/tabs/main.php")
-                    page.wait_for_function(
-                        "() => typeof window.navigateTab === 'function'",
-                        timeout=60_000,
-                    )
-                    open_form()
                     form = demo._form_frame(page)
                     form.locator("#form_fname").fill(values["fname"])
                     form.locator("#form_lname").fill(values["lname"])
@@ -218,14 +218,6 @@ def main(argv: list[str] | None = None) -> int:
                     demo._confirm_create_locator(page)
                     dialog_before = _confirm_visible(page)
 
-                    def reenter() -> None:
-                        page.goto(f"{fx.ui_base_url}/interface/main/tabs/main.php")
-                        page.wait_for_function(
-                            "() => typeof window.navigateTab === 'function'",
-                            timeout=60_000,
-                        )
-                        open_form()
-
                     t0 = time.monotonic()
                     reason = run_cleanup(
                         replayer,
@@ -233,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
                         cleanup,
                         bundle_dir=bundle,
                         run_dir=work / "cleanup-dialog",
-                        reenter=reenter,
+                        reenter=open_form,
                     )
                     cleanup_s = round(time.monotonic() - t0, 1)
                     form = demo._form_frame(page)
@@ -267,12 +259,14 @@ def main(argv: list[str] | None = None) -> int:
                     }
                     print("dialog_open", json.dumps(rows["dialog_open"]), flush=True)
 
-                    # -- wrong_screen: no way back, so the session is dirty.
-                    page.goto(f"{fx.ui_base_url}/interface/main/tabs/main.php")
-                    page.wait_for_function(
-                        "() => typeof window.navigateTab === 'function'",
-                        timeout=60_000,
+                    # -- wrong_screen: the form's tab shows the patient finder
+                    # and there is no way back, so the session is dirty.
+                    page.evaluate(
+                        "({path, name}) => { window.navigateTab(path, name); "
+                        "window.activateTabByName(name, true); }",
+                        {"path": FINDER_PATH, "name": demo.FORM_FRAME_NAME},
                     )
+                    page.wait_for_timeout(3000)
                     reason = run_cleanup(
                         replayer,
                         workflow,
