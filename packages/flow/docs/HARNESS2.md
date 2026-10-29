@@ -179,8 +179,12 @@ from openadapt_flow.integrations.harness2.tasks import mockmed_tasks
 adapter = OpenAdaptGuiAdapter(
     mockmed_tasks(("lookalike",)), ScriptedGuiAgent(), Path("runs"), evidence="readback"
 )
-prop = ScriptedProposer(ChannelSpec("claude_cli", "scripted"), audit_dir=Path("runs/audit"))
-summary = run_task("mockmed/lookalike", 1, adapter=adapter, prop=prop, work_dir=Path("runs/work"))
+prop = ScriptedProposer(
+    ChannelSpec("claude_cli", "scripted"), audit_dir=Path("runs/audit")
+)
+summary = run_task(
+    "mockmed/lookalike", 1, adapter=adapter, prop=prop, work_dir=Path("runs/work")
+)
 print(summary["chosen_score"]["outcome"])  # verified
 ```
 

@@ -534,8 +534,12 @@ def declared_selectors(effect: Effect) -> list[dict[str, str]]:
     """
 
     def plain(selector: Mapping[str, Any]) -> dict[str, str]:
-        out = {k: str(v) for k, v in selector.items()}
-        out.update({k: str(v) for k, v in effect.key_selector().items()})
+        # A value with a declared kind stays an expression, so the record
+        # is matched in canonical form (``record_matches``).
+        out = {
+            k: (v if getattr(v, "kind", None) else str(v))  # type: ignore[misc]
+            for k, v in [*selector.items(), *effect.key_selector().items()]
+        }
         return out
 
     if effect.kind is EffectKind.EXACT_NEW_SET:

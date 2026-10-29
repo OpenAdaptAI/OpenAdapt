@@ -230,13 +230,19 @@ class WebPoolWorker:
             self._context = contexts[0]
             self._page = self._context.new_page()
             self._page.set_viewport_size(dict(self.viewport))
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(self._page)
             self._page.goto(self.entry_url)
         else:
             from openadapt_flow._browser_setup import launch_chromium
 
             self._browser = launch_chromium(self._pw.chromium, headless=not self.headed)
             self._context = self._browser.new_context(
-                viewport=dict(self.viewport), device_scale_factor=1
+                viewport=dict(self.viewport),
+                device_scale_factor=1,
+                service_workers="block",
             )
             self._page = self._context.new_page()
             if self.sign_in is not None:
@@ -251,6 +257,10 @@ class WebPoolWorker:
         if self.open_entry is not None:
             self.open_entry(self._page)
         else:
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(self._page)
             self._page.goto(self.entry_url)
         report = self.run_item_on_page(self._page, idx, row, item_dir, self._pipeline)
         return _item_run(report, self._pipeline)
@@ -335,9 +345,12 @@ def sign_in_with_bundle(
 ) -> None:
     """Replay the recorded sign-in bundle with this account's credentials."""
 
+    from openadapt_flow.backends.playwright_backend import prepare_ws_guard
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 
+    # Guard the page's WebSockets from its first document (wire check).
+    prepare_ws_guard(page)
     page.goto(url)
     workflow = Workflow.load(bundle)
     params = {k: os.environ[v] for k, v in account.params_env.items()}
@@ -362,8 +375,11 @@ def entry_with_bundle(
 
     from uuid import uuid4
 
+    from openadapt_flow.backends.playwright_backend import prepare_ws_guard
     from openadapt_flow.runtime import Replayer
 
+    # Guard the page's WebSockets from its first document (wire check).
+    prepare_ws_guard(page)
     page.goto(url)
     report = Replayer(backend_factory(page)).run(
         workflow, params={}, bundle_dir=bundle, run_dir=run_dir / uuid4().hex[:12]

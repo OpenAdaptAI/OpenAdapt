@@ -114,7 +114,7 @@ def test_browser_sends_no_write_request(browser: bt._Browser, portal: str) -> No
             ".then(() => 'sent', () => 'failed')"
         )
         assert sent == "failed"
-        assert browser.blocked == ["POST /reports/email"]
+        assert browser.blocked == ["POST /reports/email, a write this run doesn't send"]
 
     _on(browser, check)
     assert _writes(portal) == 0
@@ -278,3 +278,34 @@ def test_bad_programs_on_disk_are_skipped(tmp_path: Path, capsys) -> None:
 def test_serve_teach_browser_refuses_other_modes(argv: list[str], capsys) -> None:
     assert agent_main(argv) == 2
     assert "--teach-browser" in capsys.readouterr().err
+
+
+def test_controls_in_a_named_frame_are_listed_and_found(
+    browser: bt._Browser, portal: str
+) -> None:
+    """OpenEMR shows its forms in named iframes. A control there is listed
+    with its frame, found again through it, and clicked; a frame with no name
+    or id can't be found again, so its controls aren't offered."""
+
+    def check():
+        page = browser.page
+        page.goto(f"{portal}/")
+        page.set_content(
+            '<iframe name="pat" srcdoc="<button onclick=\'window.parent.hit=1\'>'
+            'Inner Save</button>"></iframe>'
+            '<iframe srcdoc="<button>Hidden twin</button>"></iframe>'
+        )
+        page.wait_for_function("window.frames.length === 2")
+        page.frames[1].wait_for_selector("button")
+        raw = bt._observe_page(page, bt._origin(portal))
+        text, controls = bt._render(raw)
+        assert "(a frame with no name is not listed)" in text
+        inner = next(c for c in controls if c["label"] == "Inner Save")
+        assert inner["frames"] == ['iframe[name="pat"]']
+        assert not any(c["label"] == "Hidden twin" for c in controls)
+        target = bt._unique_target(page, inner)
+        assert target is not None and target["frames"] == ['iframe[name="pat"]']
+        bt._resolve(page, target, 1000).click()
+        assert page.evaluate("window.hit") == 1
+
+    _on(browser, check)
