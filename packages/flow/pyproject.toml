@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.4.0"
+version = "2.4.1"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -130,6 +130,9 @@ dev = [
     # The Windows real-app row census drives a WPF list through UI Automation
     # (tests/test_native_census_real_apps.py).
     "uiautomation>=2.0.20; sys_platform == 'win32'",
+    # The registry's Sigstore attestation tests; see the `registry` extra.
+    # Python 3.11+: on 3.10 it pulls dnspython 2.8, which has an open advisory.
+    "sigstore>=4.5,<5; python_version >= '3.11'",
 ]
 grounder = ["anthropic>=0.40"]
 # PRIMARY grounding rung: OCR text-anchoring via openadapt-grounding
@@ -137,6 +140,13 @@ grounder = ["anthropic>=0.40"]
 # OCRAnchorGrounder imports it lazily and abstains (returns None) when absent,
 # so the core stays installable and the ladder safe-halts without it.
 grounding = ["openadapt-grounding>=0.1.0"]
+# Local grounding model for pixel surfaces (runtime.local_grounder,
+# `--local-grounding`): DINOv2-small int8 on onnxruntime, which the base
+# install already carries through rapidocr-onnxruntime, so the extra adds no
+# distribution and the install-weight budget is unchanged. The 24 MB weights
+# are not in the wheel; they are fetched once from a pinned revision and
+# SHA-256 checked (or placed under OPENADAPT_FLOW_MODEL_DIR for offline sites).
+local-grounding = ["onnxruntime>=1.17"]
 # Operator console: `openadapt-flow console` serves a localhost-only web UI
 # over compiled bundles / run reports / skill libraries (openadapt_flow.console).
 # FastAPI app + uvicorn server; the API client side (httpx) is already core.
@@ -200,6 +210,10 @@ linux = [
 # (legacy EMR over RDP). Lazily imported by AardwolfTransport — never
 # needed for the mock-tested adapter, only for the real/live transport.
 rdp = ["aardwolf==0.2.14"]
+# `pull` from the skills registry: verifies the release workflow's Sigstore
+# attestation of the index (openadapt_flow.registry_attest), offline against
+# the pinned trusted root. Only `pull` of a remote index needs it.
+registry = ["sigstore>=4.5,<5; python_version >= '3.11'"]
 # PHI/PII scrubbing on persist/log paths (Presidio-backed). Optional: the
 # runtime imports openadapt_flow.privacy unconditionally, but it degrades to a
 # no-op when this extra is absent (OPENADAPT_FLOW_SCRUB=auto). A regulated

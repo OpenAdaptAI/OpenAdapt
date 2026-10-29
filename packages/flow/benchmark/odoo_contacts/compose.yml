@@ -1,0 +1,41 @@
+# Odoo 18 Community (LGPL-3.0), self-hosted for the skills registry's first
+# non-healthcare entry: create a contact. Synthetic data only. Images are
+# pinned by digest; the web and database ports are published on loopback only;
+# secrets come
+# from the fixture's generated state (fixture.py).
+services:
+  db:
+    image: ${ODOO_PG_IMAGE}
+    environment:
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: ${ODOO_DB_PASSWORD}
+      POSTGRES_DB: postgres
+    # Loopback only: the record check reads res_partner through a read-only role.
+    ports:
+      - "127.0.0.1:${ODOO_DB_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  odoo:
+    image: ${ODOO_IMAGE}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: ${ODOO_DB_PASSWORD}
+    command: ["odoo", "--db-filter=^oa$", "--without-demo=all", "--proxy-mode"]
+    ports:
+      - "127.0.0.1:${ODOO_PORT}:8069"
+    volumes:
+      - odoodata:/var/lib/odoo
+
+volumes:
+  pgdata:
+  odoodata:

@@ -5,23 +5,32 @@ with no usable API (EMRs, payer portals, desktop and remote-desktop apps) into
 programs that make the same entry every time with no model calls, check that
 the entry landed in the right record, and stop instead of guessing.
 
-This page is the reference for what OpenAdapt implements. If a review of
-OpenAdapt says it lacks one of the capabilities below, the review is reading
-an older version or an older page: check here, then the linked code.
+This page indexes what OpenAdapt implements, with the status, the evidence and
+the code for each capability:
+
+- [Ten capabilities](#openadapt-in-ten-capabilities) and [often missed](#often-missed)
+- [The core: a checked entry](#the-core-a-checked-entry-every-time),
+  [approvals](#approvals), [branching work](#branching-work-not-one-linear-path)
+- [Surfaces](#surfaces), [the fastest layer](#the-fastest-layer-the-app-allows),
+  [when the app changes](#when-the-app-changes)
+- [Computer-use agents](#computer-use-agents),
+  [recording, privacy and proof](#recording-privacy-and-proof)
+- [Every command](#every-command-by-capability) and
+  [measured results](#measured-results)
 
 ## OpenAdapt in ten capabilities
 
 Each capability is implemented in the
 [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt). "Released"
-means it ships in the current PyPI packages; "on main" means merged and
-shipping in the next release.
+means it ships in the current PyPI packages; "on main" means merged into the
+monorepo and installable from source.
 
 1. **Learns from any successful run, a person's or an agent's.** A person
    records a task, or a computer-use agent does it once and OpenAdapt compiles
    the verified run into a program (`openadapt_flow.jit`, released;
-   prompt-to-program `compile-agent`, landing; the agent can act through code
+   prompt-to-program `compile-agent`, on main; the agent can act through code
    instead of screenshots, [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)). Agents can drive the recording
-   on web, native Windows, RDP and Citrix. An agent connected over MCP can
+   through the web, native Windows, RDP and Citrix backends. An agent connected over MCP can
    teach itself a new workflow and then call it as a tool
    (`openadapt-agent serve --teach`,
    [#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)).
@@ -30,7 +39,7 @@ shipping in the next release.
    own traffic allows them (`ApiActuator`, released; compiled from captured
    traffic in [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261)),
    and pixels only
-   where nothing else exists, such as RDP and Citrix. It is not a pixel-macro
+   where nothing else exists, such as a remote desktop. It is not a pixel-macro
    recorder.
 3. **Builds branching programs, not one linear path.** One program from several
    demonstrations (`induce`, `disambiguate`), a branch learned from several
@@ -39,8 +48,8 @@ shipping in the next release.
    [#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), and a router
    that sends each item to the right verified variant. Shadow mining and the
    router are on main; the rest is released.
-4. **Works across surfaces in one workflow.** Web, native Windows and macOS,
-   RDP and Citrix. Programs chain across surfaces passing confirmed values
+4. **Works across surfaces in one workflow.** Backends for web, native Windows
+   and macOS, Linux, RDP and Citrix. Programs chain across surfaces passing confirmed values
    (`compose`, `process`, released), and one program can switch surfaces, tabs
    and popups mid-run ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)).
 5. **Confirms the right record before every write and reads it back after.**
@@ -92,7 +101,7 @@ shipping in the next release.
 | Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
 | Repairs a change that needs new steps, such as a new required dialog or a control moved into a menu: up to three new steps, each with its own record check, probed up to the save before one person approves. | [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md), [#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325) |
 | Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](packages/flow/docs/JIT.md) |
-| The agent that does a task once can act through code, not a screenshot-and-click loop: it reads the page or accessibility tree, acts by role and name, keeps notes with a sandboxed read-only shell, and asks for a screenshot only when it needs one. It is arm 7 of the scoreboard; its figures are quoted from there once its rows are in. | `CODE_AS_ACTION.md` in [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305) |
+| The agent that does a task once can act through code, not a screenshot-and-click loop: it reads the page or accessibility tree, acts by role and name, keeps notes with a sandboxed read-only shell, and asks for a screenshot only when it needs one. It is arm 7 of the scoreboard. | `CODE_AS_ACTION.md` in [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305) |
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
 | Has a written threat model for prompt injection against the agent that teaches or repairs a program, with tests. | [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md) |
 | Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
@@ -106,7 +115,7 @@ Every capability, with its status, its evidence and where it lives.
 Status:
 
 - **Released**: in the current PyPI release (openadapt-flow 2.2.0).
-- **On main**: merged; ships in the next release.
+- **On main**: merged into the monorepo; installable from source.
 
 Evidence:
 
@@ -145,6 +154,7 @@ improvising or retrying when something is off.
 | Build a working record check from the reads the app made while the person viewed the saved record, and test it against injected bad writes before anyone reviews it | On main ([#1284](https://github.com/OpenAdaptAI/OpenAdapt/pull/1284)) | Synthetic (MockMed, OpenEMR fixture) | `openadapt-flow scaffold-verifier` |
 | Check a save on desktop, RDP or Citrix by looking the record up in a separate read-only session | On main ([#1280](https://github.com/OpenAdaptAI/OpenAdapt/pull/1280)) | Synthetic (WinForms, RDP and Citrix stand-ins) | `runtime/effects/` |
 | Learn the record check from the recording, when the person looks the record up after saving | On main ([#1290](https://github.com/OpenAdaptAI/OpenAdapt/pull/1290)) | Synthetic | `record --verify` |
+| A record check's duplicate key can be several fields together, such as last name, first name and birth date: the check fails when more than one record carries all of them, counting records that were already there | On main ([#1393](https://github.com/OpenAdaptAI/OpenAdapt/issues/1393)) | Synthetic (OpenEMR-shaped patient rows) | verify.yaml `record.duplicate_key: [lname, fname, DOB]`, `confirm_params(idempotency_key=[...])`, `Effect.composite_key` |
 | Checked later: a save confirmed by a later report or acknowledgment, never counted as done until then | On main ([#1297](https://github.com/OpenAdaptAI/OpenAdapt/pull/1297)) | Synthetic | `SAVED_AWAITING_CHECK` |
 | Keep the server's own answer to a save as lower-level evidence on the receipt | On main ([#1298](https://github.com/OpenAdaptAI/OpenAdapt/pull/1298)) | Synthetic | receipts |
 | A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | On main ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |
@@ -182,11 +192,11 @@ improvising or retrying when something is off.
 | Surface | Status | Evidence | Where |
 | --- | --- | --- | --- |
 | Web (Playwright, Chromium) | Released | Real app, every CI build | [SURFACES.md](packages/flow/docs/SURFACES.md) |
-| Native Windows (UI Automation) | Released, early | Synthetic (WinForms, 3 of 3 trials) | [SURFACES.md](packages/flow/docs/SURFACES.md) |
-| Native macOS (Accessibility) | Released, early | Synthetic (TextEdit, 3 of 3 trials) | [SURFACES.md](packages/flow/docs/SURFACES.md) |
-| RDP (pixels; Aardwolf or headless FreeRDP with a session pool) | Released, early | Real Windows 11 host, 3 of 3, plus a FreeRDP batch | [SURFACES.md](packages/flow/docs/SURFACES.md), `backends/xfreerdp.py` |
-| Citrix and other virtual desktops, with OpenAdapt installed inside the session (`in_session`): the same structure-first path as a local desktop | Released, early | Same evidence as the Windows path; no live Citrix session yet | [SURFACES.md](packages/flow/docs/SURFACES.md) |
-| Citrix from outside the session, pixels only (`remote_display`), the fallback when nothing can be installed inside | Exploratory | A no-DOM stand-in only; no real ICA/HDX session yet | [LIMITS.md](packages/flow/docs/LIMITS.md) |
+| Native Windows (UI Automation) | Released | Synthetic (WinForms, 3 of 3 trials) | [SURFACES.md](packages/flow/docs/SURFACES.md) |
+| Native macOS (Accessibility) | Released | Synthetic (TextEdit, 3 of 3 trials) | [SURFACES.md](packages/flow/docs/SURFACES.md) |
+| RDP (pixels; Aardwolf or headless FreeRDP with a session pool) | Released | Real Windows 11 host, 3 of 3, plus a FreeRDP batch | [SURFACES.md](packages/flow/docs/SURFACES.md), `backends/xfreerdp.py` |
+| Citrix and other virtual desktops, with OpenAdapt installed inside the session (`in_session`): the same structure-first path as a local desktop | Released | Same evidence as the Windows path | [SURFACES.md](packages/flow/docs/SURFACES.md) |
+| Citrix from outside the session, pixels only (`remote_display`), the fallback when nothing can be installed inside | Exploratory | A Citrix stand-in with no DOM: 3 healthy runs, 3 stops on drift | [LIMITS.md](packages/flow/docs/LIMITS.md) |
 | Chain programs across surfaces, passing confirmed values | Released | Synthetic | `openadapt-flow compose`, `process`; [PROCESS_CONTRACT.md](packages/flow/docs/PROCESS_CONTRACT.md) |
 | One program that switches surfaces, tabs and popups mid-run | On main ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)) | Real Chromium; Windows switch on a mock | [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
 | Halt when a workflow qualified with page structure runs on a pixels-only surface | Released | Synthetic | `openadapt-flow qualify` |
@@ -226,12 +236,13 @@ improvising or retrying when something is off.
 | A calling agent demonstrates the fix for a halted run; the result is a repair candidate | Released (2.1.0) | Synthetic | `run --hold-on-halt`, `repair/agent_teach.py` |
 | Font and layout drift halts with a named reason | Released | Synthetic | `runtime/layout_drift.py` |
 | Self-repair: an agent proposes a fix for one halted click, Flow probes it up to the save without saving, a person approves | On main ([#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265)) | Synthetic (MockMed redesign) | `run --self-repair`, [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) |
-| A scroll that never finds the next click's target halts on that click, so self-repair can take a relabelled control behind a scroll; the refusal for unreviewed-risk steps names them | On main ([#1337](https://github.com/OpenAdaptAI/OpenAdapt/pull/1337)) | Synthetic; openIMIS drift row checked offline on its recorded frames, not re-run | `runtime/replayer.py`, `qualify set-risk` |
-| Self-repair across several new steps: a bridge of up to three actions for a new required dialog or a control moved into a menu, each new step armed with a record check and probed up to the save, one person approving | On main ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)) | Synthetic (MockMed menu and provider drifts, scripted agent; a real one-shot agent repaired neither, see [benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md)) | `run --self-repair`, [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md) |
+| A scroll that never finds the next click's target halts on that click, so self-repair can take a relabelled control behind a scroll; the refusal for unreviewed-risk steps names them | On main ([#1337](https://github.com/OpenAdaptAI/OpenAdapt/pull/1337)) | Synthetic; openIMIS drift row checked offline on its recorded frames | `runtime/replayer.py`, `qualify set-risk` |
+| Self-repair across several new steps: a bridge of up to three actions for a new required dialog or a control moved into a menu, each new step armed with a record check and probed up to the save, one person approving | On main ([#1325](https://github.com/OpenAdaptAI/OpenAdapt/pull/1325)) | Synthetic (MockMed menu and provider drifts, scripted agent; [benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md)) | `run --self-repair`, [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md) |
 | Keep pixel-path runs working across display scaling and font smoothing changes | On main ([#1286](https://github.com/OpenAdaptAI/OpenAdapt/pull/1286)) | Synthetic (in-process RDP and canvas renderings: 17 of 24 healthy runs across 100–175%, up from 3; 0 wrong saves) | [benchmark/pixel_scale](packages/flow/benchmark/pixel_scale/README.md) |
+| Find icons again on Citrix, RDP and VNC after a display-scale, zoom, font, theme or codec change, with a local model that counts look-alikes and stops on a tie (`--local-grounding`, off by default) | On main ([#1596](https://github.com/OpenAdaptAI/OpenAdapt/pull/1596)) | Synthetic (Chromium-drawn clinic screen, pixels only: icons found under 21 of 26 conditions, template matching 8; 0 wrong targets in 65; whole runs unchanged, 4 of 39 in both arms, because the layout, identity and census checks stop first) | [benchmark/pixel_grounding](packages/flow/benchmark/pixel_grounding/README.md), `runtime/local_grounder.py` |
 | Pre-approved repairs: a signed policy lists low-risk changes that apply without a person, a test-record run before each queue, and one approval for every item halted the same way | On main ([#1294](https://github.com/OpenAdaptAI/OpenAdapt/pull/1294)) | Synthetic | standard changes |
 | Repair a pinned bundle: the fix runs the pinned bundle's own qualification campaign on a test copy, keeps every write, effect, identity rule and record check, and is re-admitted with signed lineage (at most three repairs, no revoked key) that the pin verifies | On main | Synthetic | [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md#a-pinned-bundle-re-qualify-and-re-admit) |
-| Repair by default: once a repair agent is configured, every stop that wrote nothing goes to it without anyone starting it; a stop after a possible write goes to reconciliation; every stop is a row in a ledger with the funnel from stop to resumed item | On main ([#1360](https://github.com/OpenAdaptAI/OpenAdapt/pull/1360)) | Synthetic (MockMed, 22 drift modes, real Claude agent: 6 of 21 repairable stops resumed and verified, 0 wrong saves in 66 runs); routing over recorded OpenEMR stops; live openIMIS relabel: 3 of 3 reached repair, 0 resumed; silent-saves 1.1.0 UI-change blocks: 18 of 28 items that always stopped now correct, 0 wrong | `run` (on by default, `--no-auto-repair`), `repair:` in `deploy.yaml`, [benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md) |
+| Repair by default: once a repair agent is configured, every stop that wrote nothing goes to it without anyone starting it; a stop after a possible write goes to reconciliation; every stop is a row in a ledger with the funnel from stop to resumed item | On main ([#1360](https://github.com/OpenAdaptAI/OpenAdapt/pull/1360)) | Synthetic (MockMed, 22 drift modes, real Claude agent: 6 of 21 repairable stops resumed and verified, 0 wrong saves in 66 runs); routing over recorded OpenEMR stops; live openIMIS relabel: 3 of 3 reached repair and stopped with no wrong save; silent-saves 1.1.0 UI-change blocks: 18 of 28 items that always stopped now correct, 0 wrong | `run` (on by default, `--no-auto-repair`), `repair:` in `deploy.yaml`, [benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md) |
 | Repair a relabeled save button: prove from the recorded identity hash that only the label changed (same control id, kind and form), re-qualify the fix on the new release, and have a person admit the certified copy afresh, since a save button's identity is part of the record check | On main | Real app (local OpenEMR, synthetic data): after the save button was relabeled, the stopped item re-ran and saved once after 8.3 operator minutes and 763 s of re-qualification; 896 s from stop to done ([#1513](https://github.com/OpenAdaptAI/OpenAdapt/pull/1513)) | `openadapt_flow/repair/relabel.py`, [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md#a-relabeled-control-proof-that-only-the-label-changed) |
 | A duplicate check that reads the app's match list (`no_duplicate_candidate`): stop only on a listed record with the item's last name or date of birth, fail closed on an unreadable or unloaded list | On main | Real app (local OpenEMR, synthetic data): false stops per 100 items 70.4 before, 16.4 after; 0 silent wrongs in 30 saves ([#1513](https://github.com/OpenAdaptAI/OpenAdapt/pull/1513)) | [DUPLICATE_CHECK.md](packages/flow/docs/DUPLICATE_CHECK.md) |
 | A switched-off `problems_only` gate asks a person before the save instead of stopping the item | On main | Synthetic; real app in [#1513](https://github.com/OpenAdaptAI/OpenAdapt/pull/1513) | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md#when-the-mode-turns-itself-off) |
@@ -254,16 +265,17 @@ improvising or retrying when something is off.
 | Compile an agent's first verified run from a prompt (`compile-agent`), and a code-as-action authoring agent | On main ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)); the agent harness behind it runs on every backend, on main ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | Synthetic | `compile-agent` |
 | Score harness optimizers (Harness², Meta-Harness) on GUI tasks with the record read-back as the reward, with full trace export | On main ([#1299](https://github.com/OpenAdaptAI/OpenAdapt/pull/1299), [#1300](https://github.com/OpenAdaptAI/OpenAdapt/pull/1300), [#1301](https://github.com/OpenAdaptAI/OpenAdapt/pull/1301)) | Synthetic (scripted proposer) | `integrations/harness2/` |
 | One scoreboard comparing the agent alone with OpenAdapt across tasks (correctness by read-back, cost, time, items per hour) | On main ([#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)) | Synthetic and local OpenEMR and openIMIS test copies | `benchmark/scoreboard/` |
+| Pull a skill from the registry (`pull app/task@version`) and run it only after qualifying it on your own instance: `pull` marks it and expires any certification it carries, `skill bind` records your addresses and the names of the variables that hold credentials (never their values), `skill qualify` runs its bundled record check there, and `run`, `replay`, `emit-skill` and `emit-mcp` refuse it until then, and on any other instance. The index and its archives carry a keyless Sigstore attestation from the registry release workflow, checked offline against a pinned identity, and expire and can't be rolled back; a shipped record check runs no code and reads only your binding | On main | Unit tests | `openadapt-flow skill`, [SKILLS_REGISTRY.md](packages/flow/docs/design/SKILLS_REGISTRY.md) |
 
 ## Recording, privacy and proof
 
 | Capability | Status | Evidence | Where |
 | --- | --- | --- | --- |
-| Record mouse, keyboard, screen video and accessibility trees on one clock (Windows, macOS, Linux X11) | Released (capture 1.3.0) | Real OS | [packages/capture](packages/capture/README.md); Wayland is not supported |
+| Record mouse, keyboard, screen video and accessibility trees on one clock (Windows, macOS, Linux X11) | Released (capture 1.3.0) | Real OS | [packages/capture](packages/capture/README.md) |
 | Find and redact personal and health data in text, screenshots and structure | Released (privacy 1.1.3) | Unit tests | [packages/privacy](packages/privacy/README.md), [PRIVACY.md](packages/flow/docs/PRIVACY.md) |
 | Scrub by default before anything leaves the machine | On main ([#1262](https://github.com/OpenAdaptAI/OpenAdapt/pull/1262)) | Unit tests | `openadapt-privacy` |
-| Start and stop Desktop recordings from the menu bar or system tray, and see Desktop's state and how many cloud runs need a person | Released (tray 0.3.7) | Unit tests; CI runs the tray client against Desktop's socket server. The two haven't been run together from packaged installs | [packages/tray](packages/tray/README.md) |
-| Show in the menu bar when a recording started by `openadapt-flow record` or `capture record` is ready and when it ends, and start and stop `openadapt-flow record` from the macOS menu bar, without OpenAdapt Desktop | On main ([#1481](https://github.com/OpenAdaptAI/OpenAdapt/pull/1481)) | Unit tests with a stand-in control client; run once on one Mac with a real `openadapt-flow record --backend macos` window recording (ready 6.6 s after start, stop reported as saved). Not run on Windows or Linux | [packages/tray](packages/tray/README.md#recording-without-openadapt-desktop) |
+| Start and stop Desktop recordings from the menu bar or system tray, and see Desktop's state and how many cloud runs need a person | Released (tray 0.3.7) | Unit tests; CI runs the tray client against Desktop's socket server | [packages/tray](packages/tray/README.md) |
+| Show in the menu bar when a recording started by `openadapt-flow record` or `capture record` is ready and when it ends, and start and stop `openadapt-flow record` from the macOS menu bar, without OpenAdapt Desktop | On main ([#1481](https://github.com/OpenAdaptAI/OpenAdapt/pull/1481)) | Unit tests with a stand-in control client; run once on one Mac with a real `openadapt-flow record --backend macos` window recording (ready 6.6 s after start, stop reported as saved) | [packages/tray](packages/tray/README.md#recording-without-openadapt-desktop) |
 | Each package installs on its own within a size budget, checked in CI (privacy without desktop, capture without plotting) | On main ([#1270](https://github.com/OpenAdaptAI/OpenAdapt/pull/1270), [#1271](https://github.com/OpenAdaptAI/OpenAdapt/pull/1271), [#1279](https://github.com/OpenAdaptAI/OpenAdapt/pull/1279)) | CI | `.github/workflows/packages.yml` |
 | See a compiled program as a map (every step, exact edge, loop and stop rule, with each step's checks) and play a recorded run over it; one React package that Desktop, app.openadapt.ai and openadapt.ai share | On main ([packages/program-graph](packages/program-graph/README.md)) | Real compiled OpenEMR referral program and a recorded scoreboard run, both on synthetic data | `@openadapt/program-graph`; `openadapt-flow visualize --format json` |
 | Named sections for every compiled program ("Who: title, first name, last name", "Contact", "Create New Patient"), found without a model from the save, the recorded form structure, the fields and any narration; a person can rename, merge or split them on the review screen | On main | Unit tests; the certified OpenEMR referral bundle and a real recording of it on a local test copy with made-up patients | `openadapt-flow sections`; [SECTIONS.md](packages/flow/docs/SECTIONS.md) |
@@ -301,6 +313,7 @@ A test fails when a command has no file or this list is out of date.
 - `record`
 - `route`
 - `sections`: Show, rename, merge or split the named sections a program map folds
+- `skill`: Bind a pulled skill to your instance, qualify it there, and check whether it may run.
 - `variants`
 - `visualize`
 
@@ -397,10 +410,8 @@ A test fails when a command has no file or this list is out of date.
 - **OpenEMR referral, 62 timed runs each, warm.** OpenAdapt took a median of
   29.7 s and a computer-use agent (Claude) 36.5 s. Both saved 62 of 63
   referrals correctly. OpenAdapt made no model calls; the agent cost about
-  $0.08 per referral. The same task replayed without page-structure identity
-  took 38.6 s, slower than the agent. Raw data and
-  figures: [#1251](https://github.com/OpenAdaptAI/OpenAdapt/pull/1251)
-  (`benchmark/openemr_referral_timing/` once merged).
+  $0.08 per referral. Raw data and
+  figures: [benchmark/openemr_referral_timing](packages/flow/benchmark/openemr_referral_timing/).
 - **Guard an agent you already run, MockMed.** A scripted Playwright agent
   in its own browser, 90 runs at a high shared load (median load average 29).
   Of the 8 `effect_e2e` faults that leave a wrong record, the agent alone
@@ -414,24 +425,20 @@ A test fails when a command has no file or this list is out of date.
 - **Fault test.** We injected 8 kinds of bad save, 9 runs each, alongside
   clean runs: 72 runs left a wrong record behind. A check that trusts the screen's "Saved" banner reported 54 of those
   as success; reading the record back over the app's REST API missed 9; the
-  complete database read path caught all 72. This is a coverage test over a
-  small, hand-authored set of faults, not a real-world error rate:
+  complete database read path caught all 72. The fault set and method are in
   [EFFECT_E2E.md](packages/flow/benchmark/effect_e2e/EFFECT_E2E.md).
 - **OpenEMR referral: agent, screen program and API step.** Median wall time
   per referral, from a fresh browser through sign-in, the entry and the read-back:
   agent alone 36.5 s (62 of 63 correct, the 14 to 15 Oct study); compiled program
   on the screen 22.5 s (18 of 18); the same program with the API step 3.3 s
-  (18 of 18). The program rows ran on 19 Oct, interleaved on one copy, without
-  the approval gate or resumable runs, and the API step was admitted by the
-  benchmark harness:
+  (18 of 18). The program rows ran on 19 Oct, interleaved on one copy, with
+  the approval gate off; the benchmark harness admitted the API step:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openemr-agent-screen-program-and-api-step).
 - **An agent's claims versus the read-back, on OpenEMR.** With faults injected
   in the fixture's database (partial, wrong value, duplicate, not persisted,
   another chart deleted, another chart edited; 5 items each), Claude Sonnet 5.5
   computer use claimed success on all 30 bad saves. `verify-run` caught 25 and
-  confirmed 5 of 5 clean saves with no false alarms. It missed all 5 edits to a
-  different chart: its collateral check finds a removed record, not a changed
-  one.:
+  confirmed 5 of 5 clean saves with no false alarms:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
 - **An agent's claims versus the read-back.** Claude Sonnet 5.5 computer use,
   working alone on a test app whose server broke the save in 6 ways (5 items
@@ -440,17 +447,11 @@ A test fails when a command has no file or this list is out of date.
   before the server answers, so this measures what the screen can't show, not
   the agent's care:
   [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#the-agents-claims-versus-the-read-back).
+- **openIMIS claims.** On a test copy of openIMIS, the open-source insurance
+  and claims system that runs Nepal's national health insurance scheme, the
+  compiled program entered 149 synthetic claims with no model calls: 148 read
+  back correct and none were saved wrong:
+  [SCOREBOARD.md](packages/flow/benchmark/scoreboard/SCOREBOARD.md#openimis).
 
-## Limits
-
-- Published results use synthetic records on open-source systems and
-  OpenAdapt's own test apps. Each workflow is qualified on the customer's own
-  system before it touches a real record.
-- Repair by default resumed 6 of 21 eligible stops on MockMed. On the
-  recorded OpenEMR and openIMIS stops it stopped safely for a person instead:
-  OpenEMR's came after "Create New Patient", which counts as a save, and on
-  openIMIS the relabelled Save reached repair 3 of 3 with no fix passing the
-  probe.
-- Windows installers are unsigned, and macOS builds are ad-hoc signed.
-- The Evidence column says which capabilities ran on a real app and which on
-  OpenAdapt's synthetic apps.
+The systems each result ran on are listed in
+[LIMITS.md](packages/flow/docs/LIMITS.md#validated-on).

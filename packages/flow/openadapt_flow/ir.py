@@ -640,15 +640,25 @@ class Postcondition(BaseModel):
 def focus_identity_is_specific(pc: "Postcondition") -> bool:
     """Whether a FOCUS_ON postcondition names one element, not a kind of element.
 
-    A ``testid`` or an ``id`` with a value, or a role with a non-empty
-    accessible name. A tag alone, or a role with no name, names no element:
-    such a postcondition asserts nothing and never passes.
+    A role with a non-empty accessible name, alone or with a ``testid`` or an
+    ``id``. A tag, a role with no name, or an id or testid without a role and
+    name names no element: such a postcondition asserts nothing and never
+    passes.
     """
 
     if pc.kind is not PostconditionKind.FOCUS_ON:
         return False
     if pc.focus_by in ("testid", "id"):
-        return bool(pc.focus_value and pc.focus_value.strip())
+        # An id or testid names one element only together with its role and
+        # name: an id alone can move to another element between renders.
+        return bool(
+            pc.focus_value
+            and pc.focus_value.strip()
+            and pc.focus_role
+            and pc.focus_role.strip()
+            and pc.focus_name
+            and pc.focus_name.strip()
+        )
     if pc.focus_by == "role_name":
         return bool(
             pc.focus_role
@@ -2770,6 +2780,31 @@ class BundleProvenance(BaseModel):
     )
 
 
+class RegistryOrigin(BaseModel):
+    """Where a bundle pulled from the skills registry came from.
+
+    Part of the workflow content, so the content digest covers it: a bundle
+    that says it came from the registry runs only with a certification bound
+    to its own digest and environment (``openadapt_flow.skills``). Removing
+    it makes a different, unverified local bundle.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=3, max_length=200)
+    version: Optional[str] = Field(default=None, max_length=64)
+    index_url: str = Field(max_length=2048)
+    #: SHA-256 of the signed entry statement (``registry.entry_statement``).
+    entry_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    #: Who attested the index: the release workflow's certificate identity,
+    #: ``test:...`` for the local test signer, or None for a local index with
+    #: no attestation.
+    signed_by: Optional[str] = Field(default=None, max_length=256)
+    #: The bundle's content digest as the registry published it.
+    published_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    pulled_at: str
+
+
 class BundleManifest(BaseModel):
     """Integrity + provenance manifest for a compiled bundle (schema v2).
 
@@ -3053,6 +3088,8 @@ class Workflow(BaseModel):
     # review, canary or admission pins. None for every other bundle, and
     # omitted from its serialized bytes.
     origin: Optional[Literal["agent_run"]] = None
+    #: Set by ``openadapt-flow pull``: the registry entry this bundle came from.
+    registry: Optional[RegistryOrigin] = None
     # Narration that suggested a certified guard, keyed by the program state
     # (or step) id the guard sits on. Explanation only: the runtime never reads
     # it. Empty for every bundle without narrated guards, and then omitted
@@ -3107,6 +3144,8 @@ class Workflow(BaseModel):
             data.pop("surfaces", None)
         if self.origin is None:
             data.pop("origin", None)
+        if self.registry is None:
+            data.pop("registry", None)
         if not self.guard_sources:
             data.pop("guard_sources", None)
         if not self.undo_steps:
@@ -3500,6 +3539,9 @@ class Resolution(BaseModel):
     elapsed_ms: float
     structural_handle: Optional[StructuralHandle] = None
     visual_evidence: Optional["VisualResolutionEvidence"] = None
+    # "local" when the grounder rung was resolved by the in-process local
+    # grounding model, which sends nothing off the box. Absent otherwise.
+    grounder_model: Optional[Literal["local"]] = None
     resolution_evidence_regions: tuple[Region, ...] = Field(
         default_factory=tuple,
         exclude=True,
@@ -3515,6 +3557,8 @@ class Resolution(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.visual_evidence is None:
             data.pop("visual_evidence", None)
+        if self.grounder_model is None:
+            data.pop("grounder_model", None)
         return data
 
 
@@ -5733,6 +5777,10 @@ class RunReport(BaseModel):
     render_scale: Optional[dict[str, Any]] = None
     heal_count: int = 0
     model_calls: int = 0
+    # Steps resolved by the in-process local grounding model. Counted apart
+    # from ``model_calls`` because they make no outbound call and cost
+    # nothing per query; written only when nonzero.
+    local_model_calls: int = Field(default=0, ge=0, exclude_if=lambda value: value == 0)
     external_network_calls: Literal["none", "observed", "unknown"] = "unknown"
     est_model_cost_usd: float = 0.0
     total_ms: float = 0.0
