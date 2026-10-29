@@ -378,6 +378,49 @@ class IdentityTemplate(BaseModel):
         return data
 
 
+class FormIdentity(BaseModel):
+    """Record identity of a save on a create-new form: the form it submits is
+    the demonstrated form, holding exactly what this run typed.
+
+    A form that creates a record shows no existing record next to its save
+    button: the record is the one the run is entering. So the save's identity
+    is the form itself, all of it. The recorder observes, right before the
+    demonstrated click on a labelled submit button, that the button submits
+    the one HTML form owning every field typed into since the last save (not
+    in a table row or a single field's own widget), and fingerprints that
+    form. Before the click at run time, the replayer requires:
+
+    - the button is still that form's submit button, and the form owns
+      exactly ``filled_fields`` fields this run typed into, each holding
+      exactly what the run typed;
+    - the form submits to the same origin and path (``action_sha256``) with
+      the same ``method``, and would send the same set of control names and
+      types (``controls_sha256``), hidden ones included;
+    - every control the run did not type into (a hidden record or parent id,
+      a select left on its default, a checked box) holds the demonstrated
+      value: salted digests in ``value_digests``, under ``value_salt`` (the
+      identity-template scheme). Hidden tokens are not compared (``exempt``):
+      ones named like a token, and ones that changed while the demonstration
+      was typed.
+
+    Anything else halts before the click. A submit event from any other form
+    or control during the click is cancelled and halts the run.
+
+    Counts, tokens, names and digests only; no field text or value.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    filled_fields: int = Field(ge=1, le=10_000)
+    submit_role: Literal["form_submit"]
+    action_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    method: Literal["get", "post", "dialog"]
+    controls_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    value_salt: str = Field(default="", max_length=128)
+    value_digests: dict[str, str] = Field(default_factory=dict)
+    exempt: tuple[str, ...] = ()
+
+
 class Anchor(BaseModel):
     """Redundant evidence for locating a step's target on screen.
 
@@ -500,6 +543,14 @@ class Anchor(BaseModel):
             " by the recorded region's offset from the recorded click point,"
             " exactly as the OCR band's exclude region is) so the pixel/VLM"
             " tiers compare like-for-like. Set iff `identifier_crop` is set."
+        ),
+    )
+    form_identity: Optional[FormIdentity] = Field(
+        default=None,
+        description=(
+            "A labelled save on a create-new form: before the click, its form"
+            " must hold exactly the fields this run typed, with the values"
+            " typed. See FormIdentity. None everywhere else."
         ),
     )
     landmarks: list[Landmark] = Field(default_factory=list)
@@ -3859,6 +3910,7 @@ class IdentityCheck(BaseModel):
         "vlm",
         "signal_quorum",
         "hover",
+        "form",
     ] = "context"
     coverage: float = 0.0
     expected: str = ""

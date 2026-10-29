@@ -19,8 +19,10 @@ result = compile_first_run(
     "Open the referral for Jane Sample, start a Triage encounter, and save this note: {note}",
     params={"note": "Follow up in two weeks"},
     agent=ClaudeAgent(vision="code", model="claude-sonnet-5-5"),
-    url="http://localhost:8080/#tasks", verify="verify.yaml",
-    expect={"patient_id": "p1"}, on_screen=["Jane Sample", "MRN P1"],
+    url="http://localhost:8080/#tasks",
+    verify="verify.yaml",
+    expect={"patient_id": "p1"},
+    on_screen=["Jane Sample", "MRN P1"],
 )
 ```
 

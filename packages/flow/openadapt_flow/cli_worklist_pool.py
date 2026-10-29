@@ -236,7 +236,9 @@ class WebPoolWorker:
 
             self._browser = launch_chromium(self._pw.chromium, headless=not self.headed)
             self._context = self._browser.new_context(
-                viewport=dict(self.viewport), device_scale_factor=1
+                viewport=dict(self.viewport),
+                device_scale_factor=1,
+                service_workers="block",
             )
             self._page = self._context.new_page()
             if self.sign_in is not None:

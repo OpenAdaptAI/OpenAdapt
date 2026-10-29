@@ -393,6 +393,99 @@ The binding ties the click to the entry the run made. It doesn't check that
 the entry is right: the values typed come from the run's parameters, and only
 a record check can confirm what the application saved.
 
+A labelled save on a create-new form (Trac's **Create ticket**, NetBox's
+**Create**) has the same problem: no existing record is on screen next to it,
+so it compiled with no identity check, and a policy that refuses unarmed saves
+refused it. Its record is the one the run is typing into the form. When the
+recording shows the save is the submit button of the one form that owns every
+field typed since the last save, the compiler gives it a **form identity**
+(`Anchor.form_identity`). Before the click, a run requires (identity mode
+`form`):
+
+- the button is still that form's submit button, and the form owns exactly the
+  fields this run typed into, each holding exactly what the run typed;
+- the form submits to the same origin, path and query parameter names with the
+  same method, and would send the same set of field names and types, hidden
+  and file ones included, so an edit form that looks like the create form, or
+  an address, method or record id a script changed or added, halts;
+- every field the run did not type into (a hidden parent or record id, a
+  select left on its default, a checked box, a query parameter's value) holds
+  its demonstrated value, stored as a salted digest. Only a per-page token is
+  not compared: a hidden field or query value named like one (`csrf`, `token`,
+  `nonce` and the like) whose value is shaped like one (16 characters or more,
+  not all digits) and is not shaped like a record id (hex groups joined by `-`
+  or `_`, as a UUID is) unless it changed while the demonstration was filled
+  in. A short, numeric or record-shaped value under such a name, and a value a
+  script set while the form was filled in, are compared. A program that
+  should create under a different parent on each run therefore halts until
+  that parent is checked another way.
+
+The checks above read the page before the click; they are pre-checks. The
+safety layer is the wire check (`openadapt_flow/wire_check.py`, shared with
+taught browser writes): from the check until the next step, a Playwright route
+on the browser context holds every write request from any of its pages (a
+popup or new tab the click opens included), and a GET navigation to the
+form's address, at the network, where page scripts can't reach it. A request
+leaves only when its method, address, query and fields equal what the checked
+button would send (form fields or a flat JSON object, every value except the
+exempt tokens), and only once; anything else is aborted before it is sent. So
+a page listener that runs after the check (a submit, capture or `formdata`
+listener, a click handler that fills in or enables a field, a timer), a save
+sent by script (`form.submit()`, `fetch`), a write from a popup, a submit from
+another form and a second submit can't send anything the check didn't see. A
+save sent in another shape (nested JSON, JSON with a repeated key, a custom
+encoding) can't be compared, so it is held too. The run watches the wire check
+for two seconds after the click, then again at the start of the next step and
+at the end of the run, and halts on any held request.
+
+What the wire check doesn't see:
+
+- **Service workers.** Their requests skip routes. The runner's browsers block
+  service workers; on a page one controls anyway, the save is refused before
+  the click, and one that starts while the save is held halts the run.
+- **WebSockets.** One opened while the save is held is never connected to the
+  server. A message sent on one opened earlier can't be stopped: the run
+  halts on it, after it was sent. A socket that a save opens just as the page
+  navigates away closes with the page; it isn't connected, and the run may
+  not report it.
+- **Redirects.** A 307 or 308 answer to the checked save makes the browser send
+  the same request again to the address the server names, possibly another
+  site. The server that accepted the save chooses that.
+- **GET requests.** Reads pass. An app whose GET addresses change records
+  (some do, OpenEMR among them) is outside the wire check; its record check
+  still applies.
+- **Late requests.** A submission a script delays past the end of the run is
+  still held until the page closes, but the run, already over, doesn't
+  report it.
+
+A page whose own listener changes a field as the form is sent changes what is
+sent after the check, so its save halts even when the demonstration did the
+same: a false halt, in the safe direction. The compiler treats a click on the
+submit button of the form the demonstration typed into as a save, whatever
+the screen did afterwards, so a slow recording still arms the check. When the
+check can't be armed on such a save, the step names why, and the save is
+refused.
+
+The digests of untouched values are salted; with the per-bundle salt stored in
+the bundle (the default, unless `OPENADAPT_FLOW_IDENTITY_SALT` is set), a
+low-entropy value such as a numeric id or a select option can be recovered by
+trying candidates. The recording itself holds those values in plain text, as
+it holds the typed ones.
+
+A backend that can't read the page leaves the identity unreadable, which halts
+too. Each field must hold exactly what the run typed, so a controlled input
+that reformats the value halts: one that reformats on every keystroke stops at
+the typed-value read-back, and one that reformats when it loses focus (a
+phone-number mask, for example) stops at the form check. A field that a React
+keyed remount replaces with a new element, even with the same value, also
+halts: the new element isn't one the run typed into. A submit button outside
+the `<form>` element counts when its `form=` attribute names that form. One
+with no form owner at all (a React portal that submits from script) gets no
+form identity, so its save stays unarmed.
+
+The form identity ties the click to the entry the run made in the demonstrated
+form. It doesn't prove the app saved it correctly: only a record check does.
+
 For consequential or entity-sensitive workflows, require a policy that refuses
 unarmed actions, review the inferred risk and tags, and test identity against
 real near-match and same-name records. Pure-pixel substrates should expect more
