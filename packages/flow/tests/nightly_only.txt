@@ -11,10 +11,19 @@
 # the files flow-critical names. tests/test_lanes.py checks every entry still
 # exists. Move a test here, or out, with its measured time.
 
+# Whole files: their module fixtures (a compiled bundle, a live backend)
+# cost the time, so leaving out one test only moves it to the next one.
+# Measured on the 2026-10-28 PR run (setup seconds of the first test).
+tests/test_desktop_check_it_cli_mockmed.py  # 126s
+tests/test_effectbench_task_pack.py  # 34s
+tests/test_ap_invoice_benchmark.py  # 12s
+tests/test_o2c_recon_benchmark.py  # 9s
+tests/test_ui_readback_benchmark.py  # 24s
+tests/test_silent_wrong_action_benchmark.py  # 31s
+
 tests/test_agent_teach_branch.py::test_two_demonstrations_become_one_approved_branch  # 5s
 tests/test_agent_teach_repair.py::test_dismiss_without_a_dialog_box_stays_unarmed  # 8s
 tests/test_agent_teach_repair.py::test_halt_to_teach_to_approved_replay  # 7s
-tests/test_ap_invoice_benchmark.py::test_every_scenario_ran_under_both_arms  # 12s
 tests/test_api.py::test_api_record_compile_replay_on_mockmed  # 14s
 tests/test_api_tier_web_form.py::test_gui_steps_run_when_the_api_step_may_not  # 7s
 tests/test_approval_mode_each_item.py::test_a_phone_approval_after_the_wait_reaches_the_pause_and_resumes  # 6s
@@ -34,8 +43,6 @@ tests/test_compatibility_matrix.py::test_workers_run_governed_durable_api_items 
 tests/test_competitor_drift_instrument.py::test_honest_stub_has_zero_silent_everywhere  # 8s
 tests/test_competitor_drift_instrument.py::test_screen_blind_headline_rate_is_nonzero  # 8s
 tests/test_dense_surface.py::test_end_to_end_record_and_replay_faithful  # 11s
-tests/test_desktop_check_it_cli_mockmed.py::test_qualify_drills_sets_up_the_five_drills_from_the_practice_case  # 75s
-tests/test_desktop_check_it_cli_mockmed.py::test_run_it_saves_once_after_approval_and_never_saves_a_form_nobody_sees  # 25s
 tests/test_durable_pipelined_readback.py::test_a_check_that_fails_on_resume_leaves_a_reconciliation_pause  # 5s
 tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends  # 6s
 tests/test_durable_program.py::test_delivery_callback_cannot_remove_a_required_postcondition  # 5s
@@ -43,7 +50,6 @@ tests/test_durable_program.py::test_program_settling_mutation_cannot_create_a_ve
 tests/test_durable_program.py::test_settling_callback_cannot_remove_a_required_postcondition  # 5s
 tests/test_durable_resume_state_binding.py::test_replacing_sealed_template_invalidates_exact_resume_approval  # 20s
 tests/test_effect_mining.py::test_mined_record_written_refutes_a_duplicate_on_the_real_sor  # 6s
-tests/test_effectbench_task_pack.py::test_every_mockmed_task_runs_and_is_scoreable  # 34s
 tests/test_fault_gate.py::test_a_check_that_claims_no_frame_is_not_tested_on_one  # 7s
 tests/test_fault_gate.py::test_a_full_read_kills_every_fault  # 7s
 tests/test_fault_gate.py::test_a_missed_claimed_class_refuses_whatever_the_total  # 13s
@@ -99,7 +105,6 @@ tests/test_multi_surface_selfclose.py::test_interactive_recorder_switches_back_f
 tests/test_multi_surface_selfclose.py::test_scripted_recorder_switches_back_from_a_self_closed_popup  # 10s
 tests/test_multi_surface_selfclose_delivery.py::test_expected_close_counts_as_delivered  # 10s
 tests/test_multi_surface_selfclose_delivery.py::test_unexpected_close_stays_uncertain  # 6s
-tests/test_o2c_recon_benchmark.py::test_every_scenario_ran_under_both_arms  # 9s
 tests/test_pixel_scale_replay.py::test_canvas_kiosk_at_150_percent_cleartype_off_books_the_right_record  # 14s
 tests/test_program_transition_evidence.py::test_transition_evidence_rejects_deleted_prefix_and_linear_invention  # 7s
 tests/test_program_transition_evidence.py::test_visual_transition_requires_exact_retained_frame_bytes  # 27s
@@ -123,10 +128,6 @@ tests/test_self_repair_bridge.py::test_a_new_required_dialog_is_bridged_and_veri
 tests/test_self_repair_bridge.py::test_a_save_moved_into_a_menu_is_bridged_and_verified  # 28s
 tests/test_self_repair_bridge.py::test_bridges_that_save_invent_values_or_run_long_are_refused  # 16s
 tests/test_self_repair_cli.py::test_run_self_repair_cli_resumes_after_one_phone_tap  # 20s
-tests/test_silent_wrong_action_benchmark.py::test_aggregate_over_all_scenarios  # 8s
-tests/test_silent_wrong_action_benchmark.py::test_clean_and_fixed_scenarios_confirmed_by_both  # 8s
-tests/test_silent_wrong_action_benchmark.py::test_each_silent_class_is_silent_under_screen_caught_by_effect  # 8s
-tests/test_silent_wrong_action_benchmark.py::test_screen_silent_rate_nonzero_effect_drives_to_zero  # 8s
 tests/test_standard_change.py::test_one_approval_releases_five_halted_items  # 62s
 tests/test_standard_change.py::test_relabelled_link_is_repaired_without_a_person  # 38s
 tests/test_structural_rung.py::test_playwright_structural_locator_and_locate_roundtrip  # 10s
@@ -137,7 +138,6 @@ tests/test_surface_bindings.py::test_cli_replay_binds_a_web_backend_surface  # 1
 tests/test_transaction_outcome.py::test_real_run_that_halts_before_actuation_stays_halted_before_effect  # 10s
 tests/test_tutorial_presentation.py::test_human_recorder_output_can_pass_the_tutorial_effect_contract  # 13s
 tests/test_tutorial_run_params.py::test_a_run_with_a_new_note_is_checked_against_that_note  # 20s
-tests/test_ui_readback_benchmark.py::test_same_screen_misses_every_accepted_wrong_save  # 16s
 tests/test_verify_run.py::test_cli_end_to_end  # 6s
 tests/test_win_agent_tls.py::test_wrong_pinned_fingerprint_is_rejected  # 8s
 tests/test_worklist_pool.py::test_pool_closes_process_workers_when_a_sibling_fails_to_open  # 12s

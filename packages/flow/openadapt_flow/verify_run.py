@@ -149,6 +149,8 @@ _STRENGTH_RANK = {
 FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
 #: Where the baseline keeps the whole-database snapshot (``frame.database``).
 FRAME_DB_DETAIL = "openadapt:frame_database"
+#: Where the baseline keeps the read set as keyed MACs (``effects/sealed.py``).
+SEALED_DETAIL = "openadapt:sealed_records"
 
 #: ``checked`` (``docs/VERIFICATION_COVERAGE.md``): which parts of the claim
 #: behind ``verified`` were checked, and how each came out.
@@ -583,6 +585,8 @@ class _DatabaseFrame:
     #: The read account can't see triggers: what the save caused can't be
     #: ruled out, so the frame is not checked.
     blind: bool = False
+    #: The two reads after the save differed: the database was still moving.
+    still_moving: bool = False
     #: The app profile's judgment of one row change (``AppProfile.excuse``).
     excuse: Any = None
     #: Every user's id by sign-in name (in memory only), and the names and
@@ -647,6 +651,7 @@ def _database_frame(
         SnapshotError,
         cell_hash,
         mac_key,
+        same_state,
         unpack,
         unread_reasons,
     )
@@ -669,11 +674,19 @@ def _database_frame(
     if not isinstance(stored, dict):
         return unreachable
     old = Snapshot.from_json(stored)
-    if database.settle_s:
-        time.sleep(database.settle_s)
     new = _read_database(cfg, salt, before=old)
     if new is None:
         return unreachable
+    # Read again a moment later: the two reads must match, or the app is
+    # still writing and what the save caused can't be told yet.
+    time.sleep(database.settle_s)
+    again = _read_database(cfg, salt, before=old)
+    if again is None:
+        return unreachable
+    if not same_state(new, again):
+        moving = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
+        moving.still_moving = True
+        return moving
     if not (old.code_visible and new.code_visible):
         blind = _DatabaseFrame({}, {}, [], {}, ("", ""), {}, None)
         blind.blind = True
@@ -833,6 +846,15 @@ def judge_run_frame(
         slices[""] = (before, _post_records(after))
     identities: Optional[dict[str, str]] = None
     db = _database_frame(cfg, before, salt)
+    if db is not None and db.still_moving:
+        return FrameVerdict(
+            status="not_checked",
+            reason=(
+                "the database was still changing after the save (two reads "
+                "differed); what the save caused can't be told yet"
+            ),
+            attribution=spec.attribution.kind if spec.attribution else "none",
+        )
     if db is not None and db.blind:
         return FrameVerdict(
             status="not_checked",
@@ -1146,6 +1168,7 @@ def capture_baseline(
         }
     if detail:
         state = state.model_copy(update={"detail": {**state.detail, **detail}})
+    state = _seal_state(cfg, state, salt)
     payload = {
         "schema_version": BASELINE_SCHEMA,
         "execution_id": execution_id,
@@ -1156,6 +1179,65 @@ def capture_baseline(
     }
     _write_private(Path(out), payload)
     return payload
+
+
+def _seal_state(cfg: VerifyConfig, state: EffectState, salt: bytes) -> EffectState:
+    """The read set as keyed MACs: the baseline holds no record values."""
+
+    from openadapt_flow.runtime.effects.sealed import seal
+
+    identity = cfg.frame.identity_field if cfg.frame is not None else None
+    key = _mac_key(salt)
+    sealed = {"": seal(state.records, key, identity)}
+    detail = dict(state.detail or {})
+    for name, sub in (state.detail or {}).items():
+        if name.startswith("openadapt:") or not isinstance(sub, dict):
+            continue
+        if isinstance(sub.get("records"), list):
+            sealed[name] = seal(sub["records"], key, identity, name)
+            detail[name] = {**sub, "records": []}
+    detail[SEALED_DETAIL] = sealed
+    return state.model_copy(update={"records": [], "detail": detail})
+
+
+def _unseal_state(
+    cfg: VerifyConfig, before: EffectState, verifier: Any, salt: bytes
+) -> EffectState:
+    """Rebuild a sealed baseline's records from one read now."""
+
+    from openadapt_flow.runtime.effects.sealed import unseal
+
+    sealed = (before.detail or {}).get(SEALED_DETAIL)
+    if not isinstance(sealed, dict):
+        return before  # an older baseline that kept the records
+    try:
+        now = verifier.capture_pre_state()
+    except Exception:  # noqa: BLE001 - unreadable: nothing can be rebuilt
+        now = None
+    if not isinstance(now, EffectState) or not now.reachable:
+        return before.model_copy(update={"reachable": False})
+    identity = cfg.frame.identity_field if cfg.frame is not None else None
+    key = _mac_key(salt)
+    detail = dict(before.detail)
+    for name, entries in sealed.items():
+        if not name:
+            continue
+        current = (now.detail or {}).get(name, {})
+        if not (isinstance(current, dict) and current.get("reachable")):
+            detail[name] = {**detail.get(name, {}), "reachable": False}
+            continue
+        detail[name] = {
+            **detail.get(name, {}),
+            "records": unseal(
+                entries, list(current.get("records", [])), key, identity, name
+            ),
+        }
+    return before.model_copy(
+        update={
+            "records": unseal(sealed.get("", []), list(now.records), key, identity),
+            "detail": detail,
+        }
+    )
 
 
 def baseline_digest(baseline: Mapping[str, Any], salt: bytes) -> str:
@@ -1413,6 +1495,7 @@ def verify_run(
         ).total_seconds()
         if 0 <= elapsed <= cfg.max_execution_window_s:
             before = EffectState.model_validate(baseline["state"])
+            before = _unseal_state(cfg, before, verifier, salt)
             baseline_sha = baseline_digest(baseline, salt)
             baseline_read_at = str(baseline["baseline_read_at"])
         else:

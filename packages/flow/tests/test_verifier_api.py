@@ -270,6 +270,7 @@ def test_the_public_api_is_stable() -> None:
         "Outcome",
         "PendingWrite",
         "Scope",
+        "Snapshot",
         "Source",
         "TableDiff",
         "VerifierError",
@@ -278,6 +279,7 @@ def test_the_public_api_is_stable() -> None:
         "WriteHeld",
         "WriteResult",
         "begin_write",
+        "capture",
         "capture_database",
         "diff_database",
         "reconcile",
@@ -303,10 +305,16 @@ def test_the_public_api_is_stable() -> None:
     ]
     assert params(verify_write) == [
         ("pending", "POSITIONAL_OR_KEYWORD"),
+        # before, params, actor and authorization_ref: the deprecated
+        # (contract, before) form; test_verifier_snapshot_api.py pins it.
+        ("before", "POSITIONAL_OR_KEYWORD"),
         ("write_attempted", "KEYWORD_ONLY"),
         ("source", "KEYWORD_ONLY"),
         ("seal", "KEYWORD_ONLY"),
         ("delivered", "KEYWORD_ONLY"),
+        ("params", "KEYWORD_ONLY"),
+        ("actor", "KEYWORD_ONLY"),
+        ("authorization_ref", "KEYWORD_ONLY"),
     ]
     assert [n for n in inspect.signature(capture_database).parameters] == [
         "read",

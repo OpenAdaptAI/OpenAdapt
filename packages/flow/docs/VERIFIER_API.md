@@ -275,17 +275,21 @@ values). `release KEY --by NAME --reason TEXT --found absent|landed` records wha
 
 | Module | After this change |
 |---|---|
-| `openadapt_flow.verifier` | The one public API: `Contract`, `Actor`, `Source`, `begin_write`, `verify_write`, `verified_write`, `reconcile`, `WriteResult`, `Outcome`, `Scope`, `PendingWrite`, the `WriteBlocked` family, `VerifierError`, the ledger classes, and #1588's `capture_database`/`diff_database`. A test pins the signatures. |
+| `openadapt_flow.verifier` | The one public API: `Contract`, `Actor`, `Source`, `begin_write`, `verify_write`, `verified_write`, `reconcile`, `WriteResult`, `Outcome`, `Scope`, `PendingWrite`, the `WriteBlocked` family, `VerifierError`, the ledger classes, #1588's `capture_database`/`diff_database`, and its deprecated `capture`/`Snapshot`. Tests pin the signatures. |
 | `openadapt_flow.verify` (#1589) | A thin, deprecated wrapper with the same signatures. It warns on import. Results are one `WriteResult`, but `isinstance(r, VerifiedWrite)` still means `CONFIRMED`. `to_dict()` keeps `verdict`, `seal`, `seal_path`, `values_declared_by` and `authorization`. Its `BaselineUnreadable` is `WriteBlocked`, so existing `except BaselineUnreadable` blocks also refuse held writes. The message says which refusal it was; an `AlreadyWritten` carries the earlier `.result`. |
 | `openadapt.verify` (launcher) | Re-exports `openadapt_flow.verifier`. |
 | `agent/verify_tools.py` (MCP) | Calls `begin_write`/`verify_write`; the ledger applies through them. |
 | #1609 `WriteGuard` | Its in-memory `_held` and `_lost_replies` become ledger reads. The owner of #1609 drops them and catches `AlreadyWritten`. |
 
-#1588's `capture(contract, params)` and `verify_write(contract, before, ...)`
-had no importers outside these PRs. The replacements are
-`begin_write(contract, params, actor=...)` and `verify_write(pending)`. Its
-single-use snapshot record (`issued/`) becomes the ledger attempt plus
-verify-run's own `.used` marker.
+#1588's `capture(contract, params)` and `verify_write(contract, before,
+params=..., actor=...)` shipped in 2.4.1, so they keep working, deprecated:
+`capture` warns, and a snapshot still verifies once, only under the state
+directory it was captured in (`OPENADAPT_VERIFIER_STATE_DIR`). The result is
+the one `WriteResult`: `status` gives 2.4.1's `verified`, `refuted` or
+`unconfirmed`, and 2.4.1's `outcome` string (verify-run's outcome) is now
+`receipt_outcome`, since `outcome` is `CONFIRMED`, `REFUTED` or `UNCERTAIN`.
+A snapshot doesn't go through the ledger, so move to
+`begin_write(contract, params, actor=...)` and `verify_write(pending)`.
 
 ## What this doesn't do
 

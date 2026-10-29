@@ -288,9 +288,10 @@ class FrameDatabase(BaseModel):
     #: The profile's digest, pinned: a package upgrade that changes what is
     #: excused can't change it under a contract (``frame_sha256`` binds it).
     profile_sha256: Optional[str] = None
-    #: Seconds to wait after the save before the read, so writes the app
-    #: makes a moment later (background jobs) fall inside the window.
-    settle_s: float = Field(default=0.0, ge=0)
+    #: Seconds between the two reads after the save. They must match: a
+    #: write the app makes a moment later (a background job) shows as a
+    #: difference, and the frame is not checked until the database settles.
+    settle_s: float = Field(default=1.0, ge=0)
 
     @model_validator(mode="after")
     def _pinned_profile(self) -> "FrameDatabase":
@@ -507,6 +508,22 @@ def get_path(record: Mapping[str, Any], path: str) -> Any:
             return None
         node = node[part]
     return node
+
+
+def path_unknown(record: Mapping[str, Any], path: str) -> bool:
+    """True when ``path`` runs through a value that isn't a mapping: a field
+    a sealed baseline rebuilt as changed, so what was under it is unknown."""
+
+    if path in record:
+        return False
+    node: Any = record
+    for part in path.split("."):
+        if not isinstance(node, Mapping):
+            return True
+        if part not in node:
+            return False
+        node = node[part]
+    return False
 
 
 def declared_selectors(effect: Effect) -> list[dict[str, str]]:
@@ -952,6 +969,14 @@ def judge_frame(
             return "unattributed"
         if str(actor) in self_ids:
             return "self"
+        if before is not None and any(
+            path_unknown(before, p)
+            for p in (attribution.actor_field, attribution.version_field)
+            if p
+        ):
+            # The baseline can't say who last changed it, or which version
+            # it was: nothing shows another actor made this change.
+            return "unattributed"
         if attribution.version_field:
             new_version = get_path(after, attribution.version_field)
             old_version = (
