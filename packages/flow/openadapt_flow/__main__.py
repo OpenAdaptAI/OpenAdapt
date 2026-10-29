@@ -920,13 +920,7 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
-    if rollback_plan is not None and durable:
-        # A resumed run has no first read to roll back to, and a rollback at
-        # a pause would leave a resumable run half undone.
-        raise SystemExit(
-            "REFUSED before the run: rollback is on, and it doesn't run on a "
-            "durable (pausable) run yet. Turn one of them off. Nothing ran."
-        )
+    _refuse_rollback_durable(rollback_plan, durable)
     if rollback_plan is not None:
         _require_undo_or_person(workflow, rollback_plan, approval_gate)
     before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
@@ -995,6 +989,18 @@ def _build_and_run_replayer(
             runner=ReplayerRunner(make_compensation_replayer, fresh_session),
         )
     return report
+
+
+def _refuse_rollback_durable(rollback_plan, durable: bool) -> None:
+    """A resumed run has no first read to roll back to, and a rollback at a
+    pause would leave a resumable run half undone: refuse the pair. (The
+    Standard and Regulated profiles require durable runs.)"""
+    if rollback_plan is not None and durable:
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and it doesn't run on a "
+            "durable (pausable) run yet, which the Standard and Regulated "
+            "profiles require. Turn one of them off. Nothing ran."
+        )
 
 
 def _refuse_rollback_unwired(cfg, where: str) -> None:

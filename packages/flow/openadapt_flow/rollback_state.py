@@ -522,18 +522,14 @@ class Attributor:
     The same two sources ``verify-run``'s frame uses: ``audit_read`` (the
     app's audit log, read before the run and again later; the entries in
     between are the window) or ``record_field`` (each record carries its last
-    modifier, a field only the server sets). A row nothing attributes is
-    ``unattributed`` and counts as the run's: a rollback never sets aside a
-    change it can't explain.
+    modifier, a field only the server sets). A rollback compensates only
+    rows ``is_own`` vouches for; everything else goes to a person.
 
     Audit entries are read as the frame reads them: only write events
     (``event_field``/``write_events``), only for the row's table
-    (``table_field``), and by kind: an added row is another actor's only
-    through their insert (``insert_events``), a removed one only through
-    their delete. With ``record_field``, a field holding the last writer, an
-    added row is never another actor's (the last writer isn't the creator),
-    and a row the run changed that another actor changed after it reads as
-    theirs: only an audit log tells the two writes apart.
+    (``table_field``), and by kind (an insert for an added row). A
+    last-writer field shows only the last writer: another user's edit
+    between two of the run's writes to a row is invisible to it.
     """
 
     def __init__(
@@ -723,6 +719,38 @@ class Attributor:
         ):
             return "unattributed"
         return "other"
+
+    def unvouched(
+        self, rows: Sequence[Change], window: Optional[list[dict[str, Any]]]
+    ) -> list[Change]:
+        """Added rows the run's own logged inserts can't account for: more
+        rows on a record and table than the run logged inserts for (one entry
+        never vouches for a colleague's second row). Audit log only."""
+        from openadapt_flow.runtime.effects.frame import get_path
+
+        if self.spec.kind != "audit_read" or window is None:
+            return []
+        groups: dict[tuple[str, Optional[str]], list[Change]] = {}
+        for c in rows:
+            if c[2] is None and c[3] is not None:
+                groups.setdefault((c[0], self._ref(*c)), []).append(c)
+        inserts = set(self.spec.insert_events)
+        out: list[Change] = []
+        for (table, ref), added in groups.items():
+            logged = sum(
+                1
+                for e in window
+                if str(get_path(e, self.spec.record_field or "")) == ref
+                and str(get_path(e, self.spec.actor_field)) in self.self_actors
+                and self._event(e) in inserts
+                and (
+                    not self.spec.table_field
+                    or _same_table(get_path(e, self.spec.table_field), table)
+                )
+            )
+            if ref is None or len(added) > logged:
+                out += added
+        return out
 
     def _key_field(self, table: str) -> Optional[str]:
         return self.spec.record_keys.get(table, self.spec.record_key)

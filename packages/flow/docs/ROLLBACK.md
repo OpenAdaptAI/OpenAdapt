@@ -11,7 +11,7 @@ ends in one of three ways:
 
 | Outcome | Meaning |
 | --- | --- |
-| `ROLLED_BACK` | Flow undid every change the run made, and a read of the whole system of record shows each of the run's rows back as it was and nothing else changed, apart from rows another user changed. |
+| `ROLLED_BACK` | Flow undid every change the run made, and a read of the whole system of record shows each of the run's rows back as it was and nothing else changed. |
 | `HALTED_BEFORE_EFFECT` | Nothing landed: right after the stop, nothing the run did is in the system of record. |
 | `RECONCILIATION_REQUIRED` | Anything else. The report says what differs, and a private file holds the rows a person needs to repair it. |
 
@@ -137,10 +137,13 @@ run's:
   attribution without it, or without `event_field`, `write_events`,
   `insert_events` and `table_field`. Entries count only as the frame counts
   them: write events, for the row's own table; a colleague viewing a record
-  is not a write.
+  is not a write. The run's logged inserts must account for its new rows:
+  two new rows on one record and table need two of its inserts. This rests
+  on the app logging every user's write under the record it touches.
 - **A last-writer field** (`record_field`): the row's server-set modified-by
-  value is the run's own user. It can't show an edit another user made to a
-  run row while a compensation deleted it; the audit log can.
+  value is the run's own user. It shows only the last writer, so it vouches
+  only for a run with one write: with two, another user's edit between them
+  would be hidden, and the rollback goes to a person.
 - **Silence is never "the run's":** a row with no record value, no
   last-writer value, in a table the audit log doesn't cover, or one that was
   removed (the first read keeps no values to name it by), goes to a person.
@@ -149,7 +152,17 @@ run's:
 Any other user's write during the run, anywhere in the store, sends the
 rollback to a person, with the diff. That is fail-closed on a busy app: it
 makes rollback a tool for a quiet store, or a moment when only the run is
-writing. Without attribution, nothing is compensated.
+writing. Without attribution, nothing is compensated. "The run's own user"
+is the account: the bot account must be used by the run alone, since
+anything signed in as it counts as the run.
+
+**What a rollback can't see.** Flow reads the whole store before and after
+each compensation, but not during one. A colleague's write to the run's
+record while a compensation runs can be lost with it: an edit to a run row
+the compensation then deletes, a new row the app's delete takes with the
+record, or an edit a restore overwrites. An audit log shows such a write
+afterward (`RECONCILIATION_REQUIRED`); it doesn't prevent it. A last-writer
+field can't show it at all.
 
 ## Turn it on
 
@@ -290,7 +303,13 @@ profile as `app/version` (`profile_id`).
 - **No rollback in a workflow with a loop,** or when a step ran more than
   once. A compensation runs with the run's base parameters.
 - **Single web runs only, for now.** A desktop, RDP, worklist-pool or
-  durable (pausable) run with rollback on is refused before it starts.
+  durable (pausable) run with rollback on is refused before it starts. The
+  Standard and Regulated execution profiles require durable runs, so
+  rollback doesn't run under them yet.
+- **Database-numbered ids move on.** A delete compensation can't wind back
+  an id counter (MySQL `AUTO_INCREMENT`, SQLite `AUTOINCREMENT`); the final
+  read accepts a counter that moved by no more than the rows the run's
+  compensations deleted.
 - **A rolled-back run isn't resumed.** Durable runs are refused with
   rollback on; and as a second guard, once a compensation has started,
   `resume`, the attended console and its relay all refuse the run.

@@ -48,6 +48,7 @@ from openadapt_flow.rollback import (
     roll_back as _roll_back,
 )
 from openadapt_flow.rollback_state import (
+    Attributor,
     DatabaseReader,
     StateUnreadable,
     VerifierReader,
@@ -308,9 +309,16 @@ CREATE TABLE allergies (id INTEGER PRIMARY KEY, patient_id INTEGER, substance TE
 """
 
 
-def _make_db(path: Path) -> None:
+def _make_db(path: Path, *, autoinc: bool = False) -> None:
     conn = sqlite3.connect(path)
-    conn.executescript(SCHEMA)
+    schema = SCHEMA
+    if autoinc:
+        # Database-numbered ids: the counter can't be wound back.
+        schema = schema.replace(
+            "CREATE TABLE patients (id INTEGER PRIMARY KEY,",
+            "CREATE TABLE patients (id INTEGER PRIMARY KEY AUTOINCREMENT,",
+        )
+    conn.executescript(schema)
     conn.execute(
         "INSERT INTO patients (name, dob) VALUES ('Existing Person', '1950-01-01')"
     )
@@ -475,6 +483,11 @@ class ClinicBackend(FakeBackend):
                     "SELECT id FROM patients WHERE name = 'Bo Synthetic'"
                 ).fetchone()
                 self._log("nurse", "update", "patients", bo)
+            if self.during_undo == "extra_patient":
+                # Another patient written and removed again: the counter moves
+                # past more rows than the run's own.
+                conn.execute("INSERT INTO patients (name) VALUES ('Temp Synthetic')")
+                conn.execute("DELETE FROM patients WHERE name = 'Temp Synthetic'")
             if self.during_undo == "wipe_seeded":
                 # The app's delete also takes the note that was there before.
                 conn.execute("DELETE FROM notes WHERE id = 1")
@@ -602,10 +615,11 @@ def _run_clinic(
     during_undo: Optional[str] = None,
     audit_down: Optional[str] = None,
     on_read: Optional[dict[int, Any]] = None,
+    autoinc: bool = False,
 ) -> RunReport:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
-    _make_db(db)
+    _make_db(db, autoinc=autoinc)
     workflow = _clinic_workflow(kind=kind, retains=retains)
     bundle = tmp_path / "bundle"
     workflow.save(bundle)
@@ -1545,3 +1559,89 @@ def test_attribution_whose_own_user_cant_be_resolved_arms_nothing():
     )
     plan = RollbackPlan(ListReader([]), attribution=spec)
     assert plan.arm({}) is None
+
+
+# ---------------------------------------------------------------------------
+# Review of #1634, round 5
+# ---------------------------------------------------------------------------
+
+
+def test_a_delete_on_a_database_numbered_table_rolls_back(tmp_path):
+    # The id counter can't be wound back: it may move by the rows the run's
+    # compensations deleted, and no more.
+    report = _run_clinic(tmp_path / "a", autoinc=True)
+    assert report.rollback.status == "rolled_back", report.rollback.reason
+    more = _run_clinic(tmp_path / "b", autoinc=True, during_undo="extra_patient")
+    assert more.rollback.status == "not_rolled_back", more.rollback.reason
+    assert "counter moved" in more.rollback.reason
+
+
+def test_a_last_writer_field_never_vouches_for_two_writes(tmp_path):
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
+    spec = FrameAttribution(
+        kind="record_field",
+        actor_field="modified_by",
+        self=["bot"],
+        server_set=["modified_by"],
+    )
+    row = {"id": 7, "patient_id": "p1", "type": "Triage", "modified_by": "bot"}
+    attributor = Attributor.from_spec(spec, {})
+    assert attributor is not None
+    runner = RecordingRunner()
+    first, second = _entry(), _entry("save_triage_2")
+    second.position = 2
+    record = _roll_back(
+        _stopped([first, second]),
+        _single_save_workflow(),
+        run_dir=tmp_path,
+        bundle_dir=tmp_path,
+        reader=ListReader([row]),
+        before=records_snapshot([]),
+        runner=runner,
+        attributor=attributor,
+        allow_delete=True,
+    )
+    assert record.status == "not_rolled_back"
+    assert "between two of them" in record.reason
+    assert runner.runs == []
+
+
+def _unlogged_history_on_run_patient(db: Path) -> None:
+    conn = sqlite3.connect(db)
+    (pid,) = conn.execute(
+        "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
+    ).fetchone()
+    conn.execute(
+        "INSERT INTO history (patient_id, smoker, modified_by) VALUES (?, 'yes', 'nurse')",
+        (pid,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_one_logged_insert_never_vouches_for_two_rows(tmp_path):
+    # The nurse's second history row for the run's patient isn't in the
+    # log (or is filed elsewhere): the run logged one insert, so two rows
+    # can't both be its own. Nothing is compensated.
+    report = _run_clinic(
+        tmp_path,
+        attribution="audit",
+        on_read={3: _unlogged_history_on_run_patient},
+    )
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert all(step.decision != "compensated" for step in rollback.steps)
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute(
+        "SELECT COUNT(*) FROM history WHERE modified_by = 'nurse'"
+    ).fetchone() == (1,)
+
+
+def test_rollback_refuses_a_durable_run():
+    from openadapt_flow.__main__ import _refuse_rollback_durable
+
+    with pytest.raises(SystemExit, match="durable"):
+        _refuse_rollback_durable(object(), True)
+    _refuse_rollback_durable(None, True)
+    _refuse_rollback_durable(object(), False)

@@ -5297,10 +5297,10 @@ class RollbackRecord(BaseModel):
     final_sha256: Optional[str] = None
     #: What the stop left, against the read from before the run.
     after_stop_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    #: What still differs at the end and isn't another actor's (empty when
-    #: rolled back).
+    #: What still differs at the end, or what the read that stopped the
+    #: rollback showed (empty when rolled back).
     remaining_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    #: Rows the run touched that another actor also changed: not compensated.
+    #: Rows that stopped the rollback: changed and not positively the run's.
     conflicts: int = 0
     #: Voided records left in place by a ``void`` compensation.
     retained_rows: int = 0

@@ -2,10 +2,10 @@
   "schema": "openadapt.rollback-measurement/v1",
   "app": "mockmed",
   "mode": "live (real browser, in-process app declared a test copy)",
-  "measured_at": "2026-10-29T18:16:36-0400",
+  "measured_at": "2026-10-29T18:43:33-0400",
   "host": "macOS-15.7.3-arm64-arm-64bit",
-  "load_1m": 6.39,
-  "seconds": 60.0,
+  "load_1m": 10.91,
+  "seconds": 76.5,
   "rows": {
     "qualify": {
       "exit_code": 0,

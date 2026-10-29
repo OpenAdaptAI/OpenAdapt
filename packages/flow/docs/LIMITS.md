@@ -834,7 +834,11 @@ The limits of that:
   positively the run's own: any other user's write during the run, or a
   row attribution can't vouch for, goes to a person with the diff. That
   suits a quiet store, not a busy one. A save that removes a row isn't
-  rolled back outside a test copy. A hard delete runs only with
+  rolled back outside a test copy, and a last-writer field vouches only
+  for a run with one write. Nothing is read during a compensation, so a
+  colleague's write to the run's record in that window can be lost; an
+  audit log shows it afterward. The Standard and Regulated profiles
+  require durable runs, so rollback doesn't run under them yet. A hard delete runs only with
   `rollback.allow_delete`. Rollback runs on single web runs only (a desktop,
   RDP, pool or durable run with it on is refused), and never in a workflow
   with a loop.

@@ -53,6 +53,7 @@ from openadapt_flow.ir import (
     Workflow,
 )
 from openadapt_flow.rollback_state import (
+    UNREAD_KEY,
     Attributor,
     Change,
     StateDiff,
@@ -64,6 +65,9 @@ from openadapt_flow.rollback_state import (
 )
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot
 
+#: ``db_snapshot.unread_reasons`` for an id counter that moved past rows that
+#: are gone again.
+COUNTER_MOVED = "a row was written and removed (counter moved)"
 ROLLBACK_DIRNAME = "rollback"
 #: Written before the first compensation runs: from then on the run's store
 #: may have changed, and the run is never resumed (runtime.durable.resume).
@@ -301,6 +305,24 @@ def _unseen_writes(
     return None
 
 
+def _counter_moved_only(
+    before: Snapshot, after: Snapshot, table: str, dialect: str, deleted: int
+) -> bool:
+    """Did ``table`` move only because its id counter (SQLite AUTOINCREMENT,
+    MySQL AUTO_INCREMENT) advanced past rows the run added and its
+    compensations deleted, by no more than ``deleted``?"""
+    from openadapt_flow.runtime.effects.db_snapshot import unread_reasons
+
+    a, b = before.tables.get(table), after.tables.get(table)
+    if a is None or b is None or b.counter is None or deleted <= 0:
+        return False
+    if unread_reasons(a, b, dialect) != [COUNTER_MOVED]:
+        return False
+    step = 1 if dialect == "mysql" else 0
+    expected = max(a.counter or 0, 0 if b.max_auto is None else b.max_auto + step)
+    return 0 < b.counter - expected <= deleted
+
+
 def _unsettled(
     pending: list[ChangeLedgerEntry], steps: list[RollbackStepRecord]
 ) -> Optional[str]:
@@ -442,12 +464,28 @@ def roll_back(
         assert attributor is not None
         window = attributor.window()
         moved = {(t.table, k): c for t in diff.tables for k, _b, _a, c in t.changed}
-        return [
-            c
-            for c in changes(diff)
-            if not attributor.is_own(c, window, moved.get(c[:2], ()))
+        rows = changes(diff)
+        out = [
+            c for c in rows if not attributor.is_own(c, window, moved.get(c[:2], ()))
         ]
+        return out + [c for c in attributor.unvouched(rows, window) if c not in out]
 
+    if (
+        attributor is not None
+        and not exclusive
+        and attributor.spec.kind == "record_field"
+        and len(pending) > 1
+    ):
+        # The run's second write to a row would hide another user's edit
+        # between the two: a last-writer field can't vouch for it.
+        return finish(
+            "not_rolled_back",
+            f"the run made {len(pending)} writes, and a last-writer field can't "
+            "show another user's edit between two of them; nothing was "
+            "compensated. A person decides (an audit log can tell). "
+            "Different now: " + landed.describe(),
+            landed,
+        )
     # Compensate only while the store holds nothing but the run's own changes:
     # anything else, a person sees first.
     foreign = not_own(landed)
@@ -482,19 +520,24 @@ def roll_back(
     #: The latest read: after the stop, then after each compensation.
     last = after_stop
 
+    #: What the read that stopped the rollback showed, for the person.
+    evidence: Optional[StateDiff] = None
+
     def drifted(now: Snapshot, since: Snapshot) -> Optional[str]:
         """Why the store can't take a compensation now: a run row moved since
         the last read, a row the run didn't make changed, or a change since
         the first read isn't positively the run's own."""
+        nonlocal evidence
         since_last = changes(diff_states(since, now, excuse=_excuser(reader, now)))
         moved = [c for c in since_last if c[:2] in run_keys]
+        evidence = diff_states(before, now, excuse=_excuser(reader, now))
         if moved:
             record.conflicts = len(moved)
             return (
                 f"{len(moved)} row(s) the run wrote changed since the last read; "
                 "not compensated, so that change isn't lost"
             )
-        others = not_own(diff_states(before, now, excuse=_excuser(reader, now)))
+        others = not_own(evidence)
         if others:
             record.conflicts = len(others)
             return (
@@ -613,12 +656,12 @@ def roll_back(
                 f"the read after compensating step {entry.step_id} failed ({exc})"
             )
             break
-        touched = [
-            c
-            for c in changes(diff_states(now, after, excuse=_excuser(reader, after)))
-            if c[:2] not in run_keys
-        ]
+        by_compensation = diff_states(now, after, excuse=_excuser(reader, after))
+        touched = [c for c in changes(by_compensation) if c[:2] not in run_keys]
         if touched:
+            # A row born and gone between two reads leaves no trace at the
+            # end: this diff is the only record of it.
+            evidence = keep_rows(by_compensation, touched)
             record.conflicts = len(touched)
             stop_reason = (
                 f"the compensation for step {entry.step_id} also changed "
@@ -668,12 +711,40 @@ def roll_back(
                 "change isn't lost",
                 landed,
             )
+    if stop_reason is not None:
+        # The rollback stopped short: never "rolled back", whatever the
+        # final read shows.
+        return finish(
+            "not_rolled_back",
+            f"{stop_reason}. Still different: {remaining.describe()}",
+            evidence if evidence is not None and not evidence.empty else remaining,
+        )
+    #: Rows the run added at the stop, per table: a database counter may have
+    #: moved by that many when the compensations deleted them.
+    added_by_run: dict[str, int] = {}
+    for c in run_changes:
+        if c[2] is None:
+            added_by_run[c[0]] = added_by_run.get(c[0], 0) + 1
+
+    def counter_only(table: str) -> bool:
+        """The table moved only because its id counter can't be wound back
+        after the run's own rows were deleted."""
+        return _counter_moved_only(
+            before,
+            final,
+            table,
+            final.dialect,
+            added_by_run.get(table, 0),
+        )
+
     residue: list[Change] = []
     kept = 0
     #: Void rows kept on purpose, per table and kind (added, removed, changed).
     explained: dict[str, list[int]] = {}
     for change in changes(remaining):
         table, key, old, new = change
+        if key == UNREAD_KEY and counter_only(table):
+            continue
         stop = at_stop.get((table, key))
         if (
             new is not None
@@ -717,7 +788,7 @@ def roll_back(
         unexplained = sorted(
             t
             for t, d in (verdict or {}).items()
-            if getattr(d, "unread", None)
+            if (getattr(d, "unread", None) and not counter_only(t))
             or any(
                 n > m
                 for n, m in zip(
