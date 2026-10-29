@@ -210,6 +210,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--no-reset", action="store_true")
     ap.add_argument("--run", choices=["1", "2", "slice"], default="1", help="the pre-registered stream")
+    ap.add_argument("--chunk", type=int, default=0,
+                    help="run 2: run only items iv-(50k-49)..iv-50k (PREREGISTRATION_2's fixed chunks)")
     a = ap.parse_args(argv)
 
     cases_list, sha, ops = faults.load_cases()
@@ -232,6 +234,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     out = a.out / arm.name
     out.mkdir(parents=True, exist_ok=True)
     ledger = out / "ledger.jsonl"
+    ldir = os.environ.get("INCREMENTAL_VALUE_LEDGER_DIR")
+    if a.arm == "B" and ldir and Path(ldir).is_dir() and any(Path(ldir).iterdir()) and not ledger.exists():
+        # A ledger left from another run would answer AlreadyWritten for
+        # the same seed, ids and values.
+        raise SystemExit(f"{ldir} holds another run's write ledger; use a fresh INCREMENTAL_VALUE_LEDGER_DIR")
     # B's late rechecks land after their item's row: one line per recheck.
     arm.late_path = out / "late.jsonl"
     done = set()
@@ -266,6 +273,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("warning: no INCREMENTAL_VALUE_FORM_DEFAULTS; the oracle checks only the referral's fields", flush=True)
     setup = arm.setup(env, rec)
     only = set(filter(None, a.only.split(",")))
+    if a.chunk:
+        only |= {f"iv-{n:03d}" for n in range(50 * a.chunk - 49, 50 * a.chunk + 1)}
     n = 0
     with ledger.open("a") as fh:
         for item in stream.items:
@@ -273,7 +282,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 continue
             if a.limit and n >= a.limit:
                 break
-            gate = float(os.environ.get("INCREMENTAL_VALUE_LOAD_GATE", "40"))
+            gate = float(os.environ.get("INCREMENTAL_VALUE_LOAD_GATE", "40" if a.run == "1" else "60"))
             while load1() > gate:
                 print(f"[{arm.name}] load {load1():.0f}; waiting", flush=True)
                 time.sleep(30)
@@ -309,7 +318,14 @@ def main(argv: Optional[list[str]] = None) -> int:
             quiet = ctx.wait_background(ctx.max_delay(hooks) + 120)
             # B's later recheck runs at the time its contract declares, not
             # when the harness knows the background writes are done.
-            arm.after_item(ctx, res) if res is not None and infra is None else None
+            if res is not None and infra is None:
+                try:
+                    arm.after_item(ctx, res)
+                except Exception as exc:  # noqa: BLE001 - never lose the item's row
+                    print(f"[{arm.name}] after_item failed: {type(exc).__name__}: {exc}", flush=True)
+                    # A recheck that could not run never passes.
+                    if hasattr(arm, "recheck_failed"):
+                        arm.recheck_failed(item.item_id, exc)
             time.sleep(3)
             diffs = oracle.advance()
             verdict = judge(oracle, diffs, intended=ctx.intended, person=item.person, legit=ctx.legit,

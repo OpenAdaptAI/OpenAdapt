@@ -71,8 +71,19 @@ As in run 1, except where stated.
 
 As in run 1, with the fixes above. The outcome classes are run 1's, plus two:
 
-- **not run:** excluded and reported. Either the harness failed, or a harmful fault never landed.
+- **not run:** excluded and reported. Three cases count:
+  - the harness failed;
+  - the case's ops could not implement it (`hooks.not_run`);
+  - none of the fault's writes moved anything.
+
+  An item that is not run in either arm is excluded from both, so the arms are scored on the same items.
 - **late REFUTED or UNCERTAIN:** treated as a stop.
+
+- **B's verdict overrides the agent's claim, as in run 1.** If the record shows exactly the declared write (CONFIRMED), B finishes as done, even when the agent said "NOT SAVED" after a timeout or a restart. Anything else stops.
+- **A restart in B.** The fresh adapter asks the ledger (`begin_write` with the item's id as `write_key`) before it may send again.
+  - If the ledger already has the result, it is used, and every resend is held.
+  - If the ledger holds the attempt, B stops.
+  - If neither, B starts a new attempt.
 
 ## Measures
 
@@ -118,4 +129,7 @@ Otherwise the result is "B does not win", and it is published as such.
 - **Host load:** the between-item gate is 60. The load is recorded per item at its start and end. Timings are reported both raw and for items run under load 40.
 - **Model spend:** under $150 in all, calibration included.
 - **Retries:** each item is retried at most once, and only for an infrastructure error. Every retry is reported.
+- **The oracle's form defaults.** They are recorded under the lease on 6 clean referrals outside the stream, before faultset 7 is read. Each chart is read right after its save and again after B's recheck window, and any column that differs between them is not compared.
+- **Scoring:** `python -m incremental_value.score DIR --costs costs_2.json`.
+- **Fresh state:** each arm uses a fresh write ledger and verifier state directory for run 2, separate from the slice's.
 - **B's contract:** `contract_2.yaml` with `audit_query_2.sql`. It is calibrated on clean referrals outside the stream, and the harness's own legitimate writes. Its sha256 is committed before the fault ops are written or the fault set is read.

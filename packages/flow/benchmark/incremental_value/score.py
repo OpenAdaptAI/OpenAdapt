@@ -58,8 +58,13 @@ def load_costs(path: Path) -> tuple[dict[str, float], dict[str, float], dict[str
 def outcome(row: dict[str, Any]) -> str:
     if row.get("infra_error") or row.get("result") is None or row.get("prepare_error"):
         return "infra"
-    # A harmful fault that never landed is not a test of either arm.
-    if row.get("faults_landed") and not all(row["faults_landed"]):
+    # A case the ops could not implement, or whose fault writes moved
+    # nothing, is not a test of either arm.
+    if (row.get("hooks") or {}).get("not_run"):
+        return "not_run"
+    if row.get("faults_landed") and not any(row["faults_landed"]):
+        return "not_run"
+    if row.get("paired_not_run"):
         return "not_run"
     done = row["result"]["claimed"] == "done"
     # A later recheck that refutes the write stops it then.
@@ -127,8 +132,49 @@ def arm_summary(
         "wall_s_median": round(statistics.median(walls), 1) if walls else None,
         "wall_s_p90": round(sorted(walls)[int(0.9 * (len(walls) - 1))], 1) if walls else None,
         "verify_s_median": round(statistics.median(verify), 2) if verify else None,
+        **_late_timing(counted),
         "by_kind": by_kind,
     }
+
+
+def _pct(xs: list[float], q: float) -> Optional[float]:
+    return round(sorted(xs)[int(q * (len(xs) - 1))], 1) if xs else None
+
+
+def _late_timing(counted: list[tuple[dict[str, Any], str]]) -> dict[str, Any]:
+    """PREREGISTRATION_2's three ways of counting B's recheck wait (none
+    applies to A): the recheck latency, the wall time per item without the
+    wait (the item plus the recheck's own read), and the raw wall time with it."""
+
+    late = [r["late"] for r, _ in counted if r.get("late")]
+    if not late:
+        return {}
+    walls = {r["item_id"]: r["result"]["wall_s"] for r, _ in counted}
+    lat = [x["latency_s"] for x in late if x.get("latency_s") is not None]
+    without = [walls[x["item_id"]] + x.get("recheck_s", 0) for x in late if x["item_id"] in walls]
+    raw = [walls[x["item_id"]] + x.get("recheck_s", 0) + x.get("wait_s", 0) for x in late if x["item_id"] in walls]
+    disputed = sum(
+        1 for x in late if x.get("outcome") == "UNCERTAIN" and any("reconcile both" in s for s in x.get("reasons") or [])
+    )
+    return {
+        "rechecks": len(late),
+        "rechecks_by_outcome": {o: sum(1 for x in late if x.get("outcome") == o) for o in {x.get("outcome") for x in late}},
+        "rechecks_disputed": disputed,
+        "recheck_latency_s_median": _pct(lat, 0.5), "recheck_latency_s_p90": _pct(lat, 0.9),
+        "wall_s_without_wait_median": _pct(without, 0.5), "wall_s_without_wait_p90": _pct(without, 0.9),
+        "wall_s_with_wait_median": _pct(raw, 0.5), "wall_s_with_wait_p90": _pct(raw, 0.9),
+    }
+
+
+def pair_not_run(rows: dict[str, list[dict[str, Any]]]) -> None:
+    """An item that is not run in either arm is not run in both, so the two
+    arms are scored on the same items (PREREGISTRATION_2)."""
+
+    ids = {r["item_id"] for rs in rows.values() for r in rs if outcome(r) == "not_run"}
+    for rs in rows.values():
+        for r in rs:
+            if r["item_id"] in ids:
+                r["paired_not_run"] = True
 
 
 def verdict(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
@@ -170,6 +216,8 @@ def main() -> int:
     ap.add_argument("--costs", type=Path, help="a frozen cost file (costs_2.json); default: run 1's V1 model")
     a = ap.parse_args()
     rows = {arm: load(a.dir, arm) for arm in SETUP_MIN}
+    if a.costs is not None:
+        pair_not_run(rows)
     people, setup, meta = (None, None, {}) if a.costs is None else load_costs(a.costs)
     out: dict[str, Any] = {
         "cost_model": "V1 (economic_comparison/assumptions.json); modelled, not measured"
