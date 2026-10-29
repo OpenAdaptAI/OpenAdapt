@@ -197,3 +197,44 @@ def test_a_side_record_for_an_existing_link_is_collateral() -> None:
         routes={"0": ["patient"]},
     )
     assert verdict.status == "refuted"
+
+
+def test_a_side_row_filed_under_another_record_key_is_collateral() -> None:
+    """Re-review of #1570: linked by row id, filed under another patient."""
+
+    side = FrameSideRecord(
+        surface="history", link_field="patient_row", of_surface="patient", of_field="id"
+    )
+    old = {"id": 1, "pid": 1, "lname": "Old"}
+    history = {"id": 5, "pid": 1, "patient_row": 1}
+
+    def status(pid: int) -> str:
+        return judge_frame(
+            FrameSpec(
+                identity_field="id", side_records=[side], attribution=ATTRIBUTION
+            ),
+            [
+                Effect(
+                    kind=EffectKind.RECORD_WRITTEN,
+                    match={"lname": "New"},
+                    count_new_only=True,
+                    probe="surface:patient",
+                )
+            ],
+            {
+                "patient": (_state(old), [old, {"id": 2, "pid": 2, "lname": "New"}]),
+                "history": (
+                    _state(history),
+                    [history, {"id": 6, "pid": pid, "patient_row": 2}],
+                ),
+            },
+            routes={"0": ["patient"]},
+            audit_before=[],
+            audit_after=[
+                {"id": 1, "user": "bot", "patient_id": "2"},
+                {"id": 2, "user": "bot", "patient_id": "7"},
+            ],
+        ).status
+
+    assert status(7) == "refuted"
+    assert status(1) == "refuted"
