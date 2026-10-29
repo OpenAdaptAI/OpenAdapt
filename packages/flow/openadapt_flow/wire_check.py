@@ -329,8 +329,7 @@ class WireCheck:
         except Exception:  # noqa: BLE001 - a request this check can't read
             why = "a request this check could not read"
         if why is not None:
-            # Each refusal says what happened to it: this one never left.
-            self.refused.append(f"{why}; it was cancelled before it left the page")
+            self.refused.append(why)
             try:
                 route.abort()
             except Exception:  # noqa: BLE001 - already handled

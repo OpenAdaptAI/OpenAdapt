@@ -2600,8 +2600,11 @@ class PlaywrightBackend:
         def handler(route: Any) -> None:
             check.handle(route, proceed=route.fallback)
 
+        # What the backend saw beside the requests it aborted.
+        notes: list[str] = []
+
         def on_worker(_worker: Any) -> None:
-            check.refused.append(
+            notes.append(
                 "a service worker started while the save was held, and its "
                 "requests can't be checked"
             )
@@ -2612,7 +2615,7 @@ class PlaywrightBackend:
             # Routed once for the context's life; it only acts while armed.
             context.route_web_socket(lambda _url: True, self._route_websocket)
             self._ws_routed = True
-        self._form_wire = (handler, check, on_worker)
+        self._form_wire = (handler, check, on_worker, notes)
         return None
 
     def _route_websocket(self, ws: Any) -> None:
@@ -2622,7 +2625,7 @@ class PlaywrightBackend:
             return
         # Never connected to the server: what the page sends on it goes
         # nowhere. (Closing it from a sync route handler deadlocks.)
-        wire[1].refused.append(
+        wire[3].append(
             "the page opened a WebSocket while the save was held; it was not connected"
         )
 
@@ -2630,7 +2633,7 @@ class PlaywrightBackend:
         def on_frame(_payload: Any) -> None:
             wire = self._form_wire
             if wire is not None:
-                wire[1].refused.append(
+                wire[3].append(
                     "the page sent a WebSocket message while the save was held"
                 )
 
@@ -2641,14 +2644,14 @@ class PlaywrightBackend:
         self._form_wire = None
         if wire is None:
             return []
-        handler, check, on_worker = wire
+        handler, check, on_worker, notes = wire
         context = self.page.context
         try:
             context.unroute("**/*", handler)
             context.remove_listener("serviceworker", on_worker)
         except Exception:  # noqa: BLE001 - the context is gone
             pass
-        return list(check.refused)
+        return _wire_reasons(check, notes)
 
     def wait_form_submit_guard(self, ms: int) -> None:
         """Let the page and the wire check run for ``ms`` milliseconds."""
@@ -2665,7 +2668,7 @@ class PlaywrightBackend:
         wire = self._form_wire
         if wire is None:
             return None
-        reasons = list(wire[1].refused)
+        reasons = _wire_reasons(wire[1], wire[3])
         if disarm:
             self._disarm_wire_check()
         return "; ".join(dict.fromkeys(reasons)) if reasons else None
@@ -4603,3 +4606,11 @@ from openadapt_flow.backends._browser_process import (  # noqa: E402
     _start_browser,
     shared_browser,  # noqa: F401 - re-exported
 )
+
+
+def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:
+    """Each refusal says what happened: an aborted request never left."""
+
+    return [
+        f"{why}; it was cancelled before it left the page" for why in check.refused
+    ] + notes
