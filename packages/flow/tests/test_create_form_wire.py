@@ -860,7 +860,7 @@ def test_a_page_cannot_pass_on_a_guarded_frames_answer(server: _Server) -> None:
                   f.src = '/newticket?v=plain'; f.onload = () => done(true);
                   document.body.appendChild(f);
                   Object.defineProperty(window, k, {
-                    value: (a, o) => f.contentWindow[k](a, o),
+                    value: (...a) => f.contentWindow[k](...a),
                     writable: false, configurable: false });
                 })""",
                 backend._ws_guard_key,
@@ -871,3 +871,136 @@ def test_a_page_cannot_pass_on_a_guarded_frames_answer(server: _Server) -> None:
             browser.close()
     assert not armed
     assert refusal is not None and "answered for the WebSocket guard" in refusal
+
+
+_PROTOTYPE_HOOK_JS = """() => {
+  const k = Object.getOwnPropertyNames(window).find(
+    (n) => n.startsWith('__oaflow_ws_'));
+  window.__k = k;
+  window.__seen = [];
+  for (const name of ['start', 'armed', 'released', 'hold', 'release', 'id']) {
+    Object.defineProperty(Object.prototype, name, {configurable: true, get() {
+      window.__seen.push(name);
+      try {
+        const a = window[k].arguments;
+        if (a && a[0] && !window.__auth) {
+          window.__auth = a[0]; window.__opts = JSON.stringify(a[1]);
+        }
+      } catch (e) { window.__err = e.name; }
+      return undefined;
+    }});
+  }
+  let strict = false;
+  try { void window[k].arguments; } catch (e) { strict = true; }
+  try { void window[k].caller; strict = false; } catch (e) {}
+  return [k || null, strict];
+}"""
+
+
+def test_page_getters_never_see_the_guards_secret(server: _Server) -> None:
+    """A getter on Object.prototype runs if the guard reads an option
+    through the prototype chain; with a sloppy-mode function it could read
+    the secret from ``.arguments`` and release the hold. The guard is strict
+    and reads its options only as own properties (the #1647 review's
+    probe)."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    before = len(server.received)
+    with sync_api.sync_playwright() as playwright:
+        browser, page = _browser_page(playwright)
+        try:
+            page.goto(f"{server.url}?v=fetch")
+            backend = PlaywrightBackend(page)
+            key, strict = page.evaluate(_PROTOTYPE_HOOK_JS)
+            _hold(backend, server)
+            seen, auth = page.evaluate("() => [window.__seen, !!window.__auth]")
+            opened = page.evaluate(
+                """([U, M]) => {
+                  try {
+                    if (window.__auth) {
+                      const o = JSON.parse(window.__opts);
+                      window[window.__k](window.__auth, {release: o.hold});
+                    }
+                    const s = new WebSocket(U);
+                    s.onopen = () => s.send(M);
+                    return 'constructed';
+                  } catch (e) { return 'refused'; }
+                }""",
+                [_ws_url(server), "hooked"],
+            )
+            page.wait_for_timeout(800)
+            refusal = backend.form_submit_guard_refusal(disarm=True)
+        finally:
+            browser.close()
+    assert key and strict
+    assert seen == [] and not auth, (seen, auth)
+    assert opened == "refused"
+    assert refusal is not None and "WebSocket" in refusal, refusal
+    assert _leaked(server, before, "hooked") == []
+
+
+_EAVESDROP_JS = """() => {
+  // Playwright evaluates through the page's eval: see every call.
+  const original = window.eval;
+  window.__heard = [];
+  window.eval = function (source) {
+    window.__heard.push(String(source));
+    const f = original(source);
+    if (typeof f !== 'function') return f;
+    return function (...args) {
+      try { window.__heard.push(JSON.stringify(args)); } catch (e) {}
+      return f.apply(this, args);
+    };
+  };
+}"""
+_FORGE_JS = """([U, M]) => {
+  const k = Object.getOwnPropertyNames(window).find(
+    (n) => n.startsWith('__oaflow_ws_'));
+  const words = new Set();
+  for (const heard of window.__heard) {
+    for (const m of heard.matchAll(/"([^"]{8,})"/g)) words.add(m[1]);
+  }
+  let tries = 0;
+  for (const x of words) {
+    for (const e of words) {
+      for (const op of ['release', 'released']) {
+        try { window[k](op, x, e, 'n'); tries += 1; } catch (err) {}
+      }
+      // The earlier guard's form: a secret and an options object.
+      try { window[k](x, {id: e, release: e}); tries += 1; } catch (err) {}
+    }
+  }
+  try {
+    const s = new WebSocket(U);
+    s.onopen = () => s.send(M);
+    return ['constructed', tries];
+  } catch (e) { return ['refused', tries]; }
+}"""
+
+
+def test_a_page_that_hears_every_call_cannot_end_the_hold(server: _Server) -> None:
+    """The page replaces eval, which Playwright evaluates through, so it
+    sees every call the backend makes while arming; trying every string it
+    heard as a hold's secret still can't end the hold."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    before = len(server.received)
+    with sync_api.sync_playwright() as playwright:
+        browser, page = _browser_page(playwright)
+        try:
+            page.goto(f"{server.url}?v=fetch")
+            backend = PlaywrightBackend(page)
+            page.evaluate(_EAVESDROP_JS)
+            _hold(backend, server)
+            heard = page.evaluate("() => window.__heard.length")
+            opened, tries = page.evaluate(_FORGE_JS, [_ws_url(server), "forged"])
+            refusal = backend.form_submit_guard_refusal(disarm=True)
+            page.wait_for_timeout(800)
+        finally:
+            browser.close()
+    assert heard > 0 and tries > 0, (heard, tries)
+    assert opened == "refused"
+    assert refusal is not None and "WebSocket" in refusal, refusal
+    assert _leaked(server, before, "forged") == []
