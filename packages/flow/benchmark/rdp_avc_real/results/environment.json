@@ -1,0 +1,40 @@
+{
+  "schema": "openadapt.rdp-avc444-environment.v1",
+  "captured_at": "2026-10-29T04:35:00Z",
+  "host": {
+    "os": "Microsoft Windows Server 2022 Datacenter Azure Edition 10.0.20348",
+    "azure_size": "Standard_D4ds_v4 (no GPU)",
+    "role": "remote desktop host, remote administration mode (no RD Session Host role, no CAL)",
+    "graphics_policy": {
+      "AVC444ModePreferred": 1,
+      "AVCHardwareEncodePreferred": 1,
+      "bEnumerateHWBeforeSW": 1,
+      "fEnableWddmDriver": 1,
+      "policy_names": [
+        "Prioritize H.264/AVC 444 graphics mode for Remote Desktop Connections: Enabled",
+        "Configure H.264/AVC hardware encoding for Remote Desktop Connections: Enabled (no GPU present, so the encoder is software)",
+        "Use hardware graphics adapters for all Remote Desktop Services sessions: Enabled",
+        "Use WDDM graphics display driver for Remote Desktop Connections: Enabled"
+      ]
+    }
+  },
+  "client": {
+    "os": "Microsoft Windows Server 2022 Datacenter Azure Edition 10.0.20348",
+    "azure_size": "Standard_D2ds_v4",
+    "remote_desktop_client": "Remote Desktop Connection (mstsc.exe) 10.0.20348.5386, mstscax.dll 10.0.20348.5386",
+    "h264_decode": "Server-Media-Foundation feature installed",
+    "session_settings": "1280x800 windowed, 32-bit colour unless the condition says 16-bit or 1440x900; network autodetect on; clipboard and audio redirection off",
+    "transport": "same Azure virtual network (TCP 3389, UDP transport accepted per RdpCoreTS event 131)"
+  },
+  "negotiated_codec": {
+    "source": "host log Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational, event 162",
+    "connections_logged": 24,
+    "window_utc": ["2026-10-29T00:46:54Z", "2026-10-29T04:29:53Z"],
+    "message_on_every_connection": "The client supports version 0xA0600 of the RDP graphics protocol, client mode: 0, AVC available: 1, Initial profile: 2048. Server: vm-rdhost",
+    "interpretation": "AVC available: 1 with Initial profile: 2048 is the documented signal that AVC444 is in use (Microsoft, RDP 10 AVC/H.264 improvements, 2016). No event 170 (hardware encoder) was logged: encoding is software."
+  },
+  "apps": {
+    "patient_notes": "scripts/desktop/patient_notes.ps1 (WinForms) with its SQLite record C:\\oa\\patients.db on the host",
+    "openemr": "openemr/openemr:7.0.3 (patch 4) with mariadb:11.4 on a separate Linux VM, shown in Microsoft Edge app mode on the host; GPL, run as an external app, nothing vendored"
+  }
+}

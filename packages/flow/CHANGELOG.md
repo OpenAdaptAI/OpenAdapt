@@ -15,6 +15,12 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Features
+
+- A write that lands after the verdict can now be caught. With `frame.database.recheck_after_s`, a verified write's receipt says when a recheck is due (`recheck_due_at`), and `openadapt_flow.verifier.recheck` reads the whole database again at or after that time. It judges every change since the post-save read with the frame's rules: the app profile's bookkeeping, other users' writes the audit log attributes, and changes a later write by the same actor under the same contract saw in its own window (`excused_by`, any outcome). Anything else turns the earlier result into `REFUTED` (late). A change that may be what refuted a later write, a database that can't be read, or a saved state that wasn't issued here or doesn't match its receipt gives `UNCERTAIN`. The saved state holds keyed hashes, not values. `frame.database.settle_attempts` lets the reads after a save, and at a recheck, retry within a stated budget until two in a row match; rows added to append-only tables between them don't count as movement. Without these settings, nothing changes ([#1639](https://github.com/OpenAdaptAI/OpenAdapt/pull/1639)).
+
 ## v2.4.1 (2026-10-28)
 
 Flow runs without its benchmark package and accepts a pinned config with Windows line endings. Several checks now halt or refute where 2.4.0 could act on the wrong row or pass a weaker check, and the frame can compare the whole database.
@@ -41,6 +47,8 @@ Flow runs without its benchmark package and accepts a pinned config with Windows
 - `frame.database.profile: openemr` applies a versioned profile of the bookkeeping OpenEMR writes on its own (`openadapt_flow.app_profiles`). A rule may not excuse a patient-data table, and the receipt names the profile version and the rules it used ([#1604](https://github.com/OpenAdaptAI/OpenAdapt/pull/1604)).
 - `openadapt_flow.verifier` is a stable Python API for checking one write: `capture` reads the baseline before the write, and `verify_write` returns `verified`, `refuted` or `unconfirmed` with the checks and the receipt digest ([#1588](https://github.com/OpenAdaptAI/OpenAdapt/pull/1588)).
 - Skills can be pulled from an attested registry, bound to the user's own instance and qualified there before they run. A shipped SQL read-back runs on a read-only session and may only be a plain `SELECT` ([#1623](https://github.com/OpenAdaptAI/OpenAdapt/pull/1623), [#1624](https://github.com/OpenAdaptAI/OpenAdapt/pull/1624)).
+- A contract value can declare how the store saves what was entered (`stored: upper` or `lower`), so the check expects exactly that stored form, for example a street saved in capitals ([#1586](https://github.com/OpenAdaptAI/OpenAdapt/pull/1586)).
+- A contract value can declare its kind (`phone`, `date` or `email`), and record matching, `field_equals`, the frame and the source round trip compare it in that kind's canonical form. A value that can't be read in its kind, such as a numeric date with no `date_order`, matches nothing ([#1597](https://github.com/OpenAdaptAI/OpenAdapt/pull/1597)).
 
 ## v2.4.0 (2026-10-25)
 

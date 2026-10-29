@@ -21,6 +21,12 @@ until the save is read back. A save the agent sends before the guard attaches
 is not seen, so start the guard before the agent starts the task. Only the
 attached tab is guarded.
 
+This guard holds saves with CDP ``Fetch``, not the Playwright backend's wire
+check. Replaying run 2 on a tab attached over CDP (``run
+--browser-cdp-endpoint``) uses the wire check, whose WebSocket guard can't
+cover a page opened before the attach: a create-form save there refuses to
+hold until the tab is reloaded.
+
 Output, under ``out_dir``::
 
     recording/          run 1, in the format ``compile`` reads (with network.jsonl)
@@ -127,8 +133,11 @@ def _connect(
 class _RecorderThread:
     """The run-1 recorder on its own thread and its own connection."""
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self, on_kept: Optional[Callable[[int], None]] = None, **kwargs: Any
+    ) -> None:
         self._kwargs = kwargs
+        self._on_kept = on_kept
         self._stop = threading.Event()
         self.ready = threading.Event()
         self.recording: Optional[Path] = None
@@ -148,9 +157,13 @@ class _RecorderThread:
             recorder = InteractiveRecorder(**self._kwargs)
             recorder.start()
             self.ready.set()
+            kept = 0
             while not self._stop.is_set():
                 if not recorder.pump():
                     break
+                if self._on_kept is not None and recorder.events_kept != kept:
+                    kept = recorder.events_kept
+                    self._on_kept(kept)
             self.recording = recorder.finish()
         except BaseException as exc:  # noqa: BLE001 - reported, never raised
             self.error = str(exc) or type(exc).__name__
@@ -205,12 +218,16 @@ def guard_task(
     secret_fields: tuple[str, ...] = (),
     record: bool = True,
     on_attached: Optional[Callable[[], None]] = None,
+    on_recorded: Optional[Callable[[int], None]] = None,
     stop: Optional[Callable[[], bool]] = None,
 ) -> GuardRun:
     """Guard one task's save in the agent's own browser and record the run.
 
     ``on_attached`` is called once the guard holds the tab's requests and the
-    recorder has started (or failed): a harness starts its agent then. ``stop``
+    recorder has started (or failed): a harness starts its agent then.
+    ``on_recorded`` is called, on the recorder's thread, with the number of
+    browser events the recording has kept a frame for; an agent that acts
+    before its last action is kept makes the recorder refuse the run. ``stop``
     ends the session early when it returns True. After the save is read back
     the session keeps recording for ``linger_s`` so the save's result is on
     the last frame.
@@ -267,6 +284,7 @@ def guard_task(
                 cdp_endpoint=cdp_endpoint,
                 browser_page_url=page_url,
                 capture_network=True,
+                on_kept=on_recorded,
                 system_of_record_reader=reader,
                 secret_fields=secret_fields,
             )

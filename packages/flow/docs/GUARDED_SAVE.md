@@ -84,17 +84,19 @@ guarded = GuardedSave.from_file("verify.yaml", "runs/guarded", approval="each_it
 task = load_task("tasks/referral-task-01.json")
 
 try:
-    guard = guarded.begin(task, screen_text=harness.open_record_text(), agent_id="cua-01")
+    guard = guarded.begin(
+        task, screen_text=harness.open_record_text(), agent_id="cua-01"
+    )
     step = guard.commit(screenshot_png=harness.screenshot())
     while step.status == "waiting_for_approval":
-        step = guard.commit(wait_s=30)   # a person approves on Desktop or a phone
+        step = guard.commit(wait_s=30)  # a person approves on Desktop or a phone
 except GuardRefused as refused:
-    stop(refused.code)                  # nothing was written
+    stop(refused.code)  # nothing was written
 
-harness.click_save()                    # once
+harness.click_save()  # once
 result = guard.confirm()
-result.verdict                          # GuardVerdict.VERIFIED, REFUTED, or RECONCILIATION_REQUIRED
-result.receipt_path                     # runs/guarded/<guard_id>/effect-receipt.json
+result.verdict  # GuardVerdict.VERIFIED, REFUTED, or RECONCILIATION_REQUIRED
+result.receipt_path  # runs/guarded/<guard_id>/effect-receipt.json
 ```
 
 - `begin(task, screen_text=..., agent_id=...)` checks identity and reads the

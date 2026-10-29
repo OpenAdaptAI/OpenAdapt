@@ -90,3 +90,20 @@ class FakeResponse:
 
     def json(self) -> dict:
         return self._json
+
+
+@pytest.fixture(autouse=True)
+def _pins_as_on_a_mac_without_an_anchor(monkeypatch) -> None:
+    """Every engine test sees a Mac with no administrator anchor.
+
+    The pin reads the real ``/Library``, ``/etc`` or ProgramData anchor and
+    turns off Keychain prompts through Security.framework; tests use the
+    in-memory keyring instead, on every OS. Anchor tests set their own.
+    """
+    import contextlib
+
+    from openadapt_desktop import approver_anchor, approver_keychain
+
+    monkeypatch.setattr(approver_keychain.FlowRoster, "keychain_pins", True)
+    monkeypatch.setattr(approver_keychain, "_no_keychain_ui", contextlib.nullcontext)
+    monkeypatch.setattr(approver_anchor, "read_anchor", lambda *a, **k: None)

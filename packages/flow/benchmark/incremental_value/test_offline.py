@@ -86,3 +86,178 @@ def test_stream_and_perturbations() -> None:
     for name in workload.PERTURBATIONS:
         for v in range(4):
             faults.perturbation(name, v)
+
+
+def test_run2_stream_mix():
+    from incremental_value import workload
+
+    s = workload.build([f"case{i}" for i in range(80)], "sha", **workload.RUN2)
+    kinds = [i.kind for i in s.items]
+    assert len(kinds) == 300
+    assert (kinds.count("ordinary"), kinds.count("fault"), kinds.count("perturbation")) == (168, 80, 52)
+    assert len({i.person["email"] for i in s.items}) == 300
+
+
+def test_run1_stream_unchanged():
+    from incremental_value import workload
+
+    s = workload.build([f"case{i}" for i in range(24)], "sha")
+    assert len(s.items) == 90
+
+
+def _one_new_chart(row):
+    from incremental_value.oracle import TableDiff
+
+    d = TableDiff()
+    d.added.append(row)
+    h = TableDiff()
+    h.added.append({"id": "9", "pid": row["pid"]})
+    return {"patient_data": d, "history_data": h}
+
+
+class _Keys:
+    def key_of(self, table, row):
+        return row.get("id")
+
+
+def test_oracle_flags_a_column_the_referral_does_not_name():
+    from incremental_value.oracle import Legit, judge
+
+    person = {"fname": "Ann", "lname": "Lee", "email": "a@x.org"}
+    intended = {"fname": "Ann", "lname": "Lee", "email": "a@x.org"}
+    defaults = {"providerID": "0", "deceased_date": ""}
+    clean = {"id": "1", "pid": "7", "fname": "Ann", "lname": "Lee", "email": "a@x.org", "providerID": "0", "deceased_date": ""}
+    ok = judge(_Keys(), _one_new_chart(clean), intended=intended, person=person, legit=Legit(), form_defaults=defaults)
+    assert ok["verdict"] == "correct"
+    bad = dict(clean, providerID="3")
+    v = judge(_Keys(), _one_new_chart(bad), intended=intended, person=person, legit=Legit(), form_defaults=defaults)
+    assert v["verdict"] == "harmful"
+    assert {"table": "patient_data", "kind": "unnamed column set", "columns": ["providerID"]} in v["findings"]
+    # Without defaults the oracle behaves as in run 1.
+    assert judge(_Keys(), _one_new_chart(bad), intended=intended, person=person, legit=Legit())["verdict"] == "correct"
+
+
+def test_score_not_run_and_late_refute():
+    from incremental_value.score import outcome
+
+    base = {"result": {"claimed": "done"}, "oracle": {"verdict": "harmful"}, "intended": True}
+    assert outcome(base) == "missed_harm"
+    assert outcome({**base, "faults_landed": [False, False]}) == "not_run"
+    assert outcome({**base, "faults_landed": [True, False]}) == "missed_harm"
+    assert outcome({**base, "hooks": {"not_run": [("*", "no builder")]}}) == "not_run"
+    assert outcome({**base, "late": {"outcome": "REFUTED"}}) == "caught_harm"
+    clean = {**base, "oracle": {"verdict": "correct"}}
+    assert outcome({**clean, "late": {"outcome": "REFUTED"}}) == "false_stop"
+
+
+def test_slice_mix():
+    from incremental_value import workload
+
+    s = workload.build_slice([f"case{i}" for i in range(80)], "sha")
+    kinds = [i.kind for i in s.items]
+    assert (kinds.count("ordinary"), kinds.count("fault"), kinds.count("perturbation")) == (17, 8, 5)
+    assert s.items[0].item_id == "sl-001" and len({i.item_id for i in s.items}) == 30
+
+
+def _ok(item_id, **over):
+    r = {"item_id": item_id, "kind": "ordinary", "intended": True, "hooks": {}, "result": {"claimed": "done", "wall_s": 10.0,
+         "cost_usd": 0.05, "detail": {}}, "oracle": {"verdict": "correct"}, "load1_at_start": 5, "load1_at_end": 5}
+    r.update(over)
+    return r
+
+
+def test_pairing_excludes_a_harness_failure_and_a_missing_item_from_both_arms():
+    from incremental_value.score import pair_not_run
+
+    rows = {
+        "A": [_ok("iv-001"), _ok("iv-002"), _ok("iv-003")],
+        "B": [_ok("iv-001"), _ok("iv-002", infra_error="VerifierError: x", result=None)],
+    }
+    pair_not_run(rows)
+    assert [outcome(r) for r in rows["A"]] == ["correct", "not_run", "not_run"]
+    assert [outcome(r) for r in rows["B"]] == ["correct", "infra"]
+
+
+def test_an_items_last_try_counts(tmp_path):
+    import json
+
+    from incremental_value.score import load
+
+    (tmp_path / "B").mkdir()
+    rows = [_ok("iv-001", infra_error="boom", result=None), _ok("iv-001"), _ok("iv-002")]
+    (tmp_path / "B" / "ledger.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    got = load(tmp_path, "B")
+    assert [(r["item_id"], r["tries"], outcome(r)) for r in got] == [("iv-001", 2, "correct"), ("iv-002", 1, "correct")]
+
+
+def test_a_harmful_case_with_nothing_to_do_is_not_run():
+    assert outcome(_ok("iv-001", kind="fault", expect="harmful", hooks={"prepare": 0, "form_mutators": 0})) == "not_run"
+    assert outcome(_ok("iv-001", kind="fault", expect="harmful", hooks={"form_mutators": 1})) == "correct"
+    assert outcome(_ok("iv-001", kind="fault", expect="clean", hooks={})) == "correct"
+
+
+def test_run2_settings_come_from_the_run_and_the_frozen_files(monkeypatch):
+    import pytest
+
+    from incremental_value import run
+
+    for k in ("INCREMENTAL_VALUE_CONTRACT", "INCREMENTAL_VALUE_AUDIT_SQL", "INCREMENTAL_VALUE_FORM_DEFAULTS",
+              "INCREMENTAL_VALUE_RECHECK_MODE"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("INCREMENTAL_VALUE_LEDGER_DIR", "/nonexistent-fresh")
+    shas = run.run2_settings("slice", "B")
+    assert set(shas) == {"contract_2.yaml", "audit_query_2.sql", "form_defaults_2.json"}
+    import os
+
+    assert os.environ["INCREMENTAL_VALUE_RECHECK_MODE"] == "boundary"
+    assert os.environ["INCREMENTAL_VALUE_AUDIT_SQL"] == "audit_query_2.sql"
+    monkeypatch.setenv("INCREMENTAL_VALUE_CONTRACT", str(run.HERE / "contract.yaml"))
+    with pytest.raises(SystemExit):
+        run.run2_settings("2", "B")
+    monkeypatch.delenv("INCREMENTAL_VALUE_CONTRACT")
+    monkeypatch.delenv("INCREMENTAL_VALUE_LEDGER_DIR")
+    with pytest.raises(SystemExit):
+        run.run2_settings("2", "B")
+    monkeypatch.setattr(run, "RUN2_FILES", {**run.RUN2_FILES, "contract": ("contract_2.yaml", "0" * 64)})
+    with pytest.raises(SystemExit):
+        run.run2_settings("2", "A")
+
+
+def test_a_confirmed_write_with_no_recheck_state_never_passes(tmp_path):
+    import json
+
+    from incremental_value.arms import ArmB
+
+    arm = ArmB.__new__(ArmB)
+    arm.recheck_queue, arm._params, arm.late_path = [], {}, tmp_path / "late.jsonl"
+    arm._queue_recheck("iv-007", {"outcome": "CONFIRMED", "recheck_due_at": "2026-10-29T12:00:00Z"}, tmp_path / "missing.json")
+    arm._queue_recheck("iv-008", {"outcome": "REFUTED"}, tmp_path / "missing.json")
+    late = [json.loads(x) for x in arm.late_path.read_text().splitlines()]
+    assert [(x["item_id"], x["outcome"]) for x in late] == [("iv-007", "UNCERTAIN")]
+    assert arm.recheck_queue == []
+    state = tmp_path / "recheck.json"
+    state.write_text("{}")
+    arm._queue_recheck("iv-009", {"outcome": "CONFIRMED"}, state)
+    assert [q["item_id"] for q in arm.recheck_queue] == ["iv-009"] and arm.recheck_queue[0]["verified"]
+
+
+def test_pairing_a_b_only_slice_and_a_retry():
+    from incremental_value.score import pair_not_run
+
+    slice_rows = {"A": [], "B": [_ok("sl-001"), _ok("sl-002")]}
+    pair_not_run(slice_rows)
+    assert [outcome(r) for r in slice_rows["B"]] == ["correct", "correct"]
+    rows = {"A": [_ok("iv-001"), _ok("iv-002")], "B": [_ok("iv-001"), _ok("iv-002", tries=2)]}
+    pair_not_run(rows)
+    assert [outcome(r) for r in rows["A"]] == ["correct", "not_run"]
+    assert [outcome(r) for r in rows["B"]] == ["correct", "not_run"]
+
+
+def test_run2_settings_accept_the_frozen_files_by_full_path(monkeypatch):
+    from incremental_value import run
+
+    monkeypatch.setenv("INCREMENTAL_VALUE_AUDIT_SQL", str(run.HERE / "audit_query_2.sql"))
+    monkeypatch.setenv("INCREMENTAL_VALUE_CONTRACT", str(run.HERE / "contract_2.yaml"))
+    monkeypatch.delenv("INCREMENTAL_VALUE_FORM_DEFAULTS", raising=False)
+    monkeypatch.delenv("INCREMENTAL_VALUE_RECHECK_MODE", raising=False)
+    assert len(run.run2_settings("2", "A")) == 3

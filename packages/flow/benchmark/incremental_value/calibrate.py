@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
 from lifecycle.workload import generate
@@ -21,6 +22,30 @@ from .run import Fixture, Recorder, env_for
 LOG_COLS = "id, date, event, category, user, patient_id, success, LEFT(comments, 160)"
 
 
+def _new_charts(oracle: DbOracle, pids: list, intended: dict) -> list[dict[str, str]]:
+    """The chart this save added (by its new pid), minus the referral's
+    fields. Exactly one, or none."""
+
+    from .oracle import NEW_CHART_VOLATILE
+
+    if len(pids) != 1:
+        return []
+    rows = [r for r in oracle.read_table("patient_data").values() if r.get("pid") == str(pids[0])]
+    skip = set(intended) | NEW_CHART_VOLATILE
+    return [{**{c: v for c, v in r.items() if c not in skip}, "__pid": str(pids[0])} for r in rows[:1]]
+
+
+def _write_form_defaults(path: Path, charts: list[dict[str, str]], clean_n: int, later: list[dict[str, str]]) -> None:
+    if len(charts) < 6 or len(charts) != clean_n or len(later) != len(charts):
+        raise SystemExit(f"form defaults need 6 or more clean saves with one chart each; got {len(charts)} of {clean_n}")
+    rows = [{k: v for k, v in r.items() if k != "__pid"} for r in charts + later]
+    cols = sorted(set().union(*rows))
+    same = {c: rows[0].get(c, "") for c in cols if all(r.get(c, "") == rows[0].get(c, "") for r in rows)}
+    varies = [c for c in cols if c not in same]
+    path.write_text(json.dumps({"saves": len(charts), "columns": same, "varies": varies}, indent=1, sort_keys=True) + "\n")
+    print(f"form defaults: {len(same)} columns fixed, {len(varies)} vary: {varies}", flush=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
@@ -29,6 +54,9 @@ def main() -> int:
     ap.add_argument("--first", type=int, default=0)
     ap.add_argument("--n", type=int, default=3)
     ap.add_argument("--skip-legit", action="store_true")
+    ap.add_argument("--recheck-wait-s", type=float, default=245.0)
+    ap.add_argument("--record-form-defaults", type=Path,
+                    help="write the new chart's columns the referral does not name, from these clean saves")
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     fx = Fixture()
@@ -41,8 +69,9 @@ def main() -> int:
     oracle.start()
     last_log = int(app.sql("SELECT MAX(id) FROM openemr.log;").strip() or 0)
     report = {"targets": targets, "steps": []}
+    charts: list[dict[str, str]] = []
 
-    def step(name: str, intended=None, person=None, legit=None) -> None:
+    def step(name: str, intended=None, person=None, legit=None) -> dict:
         nonlocal last_log
         d = oracle.advance()
         moved = {}
@@ -60,6 +89,7 @@ def main() -> int:
             entry["oracle"] = judge(oracle, d, intended=intended, person=person, legit=legit or faults.Legit())
         report["steps"].append(entry)
         print(json.dumps(entry, indent=1)[:6000], flush=True)
+        return entry
 
     step("after seed and oracle start (should be empty)")
     if not a.skip_agent:
@@ -78,9 +108,22 @@ def main() -> int:
             ctx = faults.Ctx(item, app, oracle, targets, fx.api_for)
             arm.begin(ctx, faults.Hooks())
             res = arm.run_item(w, env, rec)
+            # Run 2: B's late recheck on this clean save, as in the stream.
+            if hasattr(arm, "after_item"):
+                arm.late_path = a.out / a.arm / "late.jsonl"
+                arm.after_item(ctx, res)
             print("claimed", res.claimed, res.product_status, res.wall_s, res.cost_usd, json.dumps(res.detail.get("verifier"), default=str)[:1500], flush=True)
-            step(f"agent save {w.item_id}", intended=t.intended, person=t.person)
+            entry = step(f"agent save {w.item_id}", intended=t.intended, person=t.person)
+            pids = (entry.get("oracle") or {}).get("new_pids") or []
+            charts.extend(_new_charts(oracle, pids, t.intended))
         arm.close()
+        if a.record_form_defaults:
+            # Read the same charts again once B's recheck window has passed:
+            # a column a background job sets later is not a default.
+            time.sleep(a.recheck_wait_s)
+            oracle.advance()
+            later = [_new_charts(oracle, [c["__pid"]], {})[0] for c in charts if _new_charts(oracle, [c["__pid"]], {})]
+            _write_form_defaults(a.record_form_defaults, charts, clean_n=len(clean), later=later)
     # The harness's own legitimate writes, to see their audit rows.
     if a.skip_legit:
         (a.out / "calibration.json").write_text(json.dumps(report, indent=1, default=str))
