@@ -129,8 +129,14 @@ case first wrote a known note straight into the database. Results are in
   patient before and after its search. The lab's driver had left Neil
   Sorenson open between look-ups, so nothing on screen could prove a
   refresh. That is a lab fault, not a product fault.
-- **Second run:** restarts the reader's app before each look-up.
-  READBACK_SECOND_RUN
+- **Second run:** restarts the reader's app before each look-up. It
+  confirmed all 5 cases whose stored note matched. All 5 mismatches came
+  back INDETERMINATE and halted the run; none was falsely confirmed. The
+  verifier never reports an OCR read that disagrees as REFUTED ("OCR can
+  misread, so this is not proof the save is wrong"). So on the pixel path,
+  read-back can confirm a save or stop a run, but it cannot refute one. A
+  look-up took a median of 45 s. The tier is persisted-state reacquisition
+  (tier 3): a separate logon, without the application's own sign-in.
 
 ## Licence and publishing
 
@@ -193,6 +199,7 @@ SECRETS="EmrPassword=rdlab-emruser PnPassword=rdlab-pnuser" \
 SECRETS="HarnessPassword=rdlab-harness EmrPassword=rdlab-emruser PnPassword=rdlab-pnuser" \
   bash scripts/rdp_avc_lab/run_ps.sh vm-client client_setup.ps1 Ref=<commit>
 bash scripts/rdp_avc_lab/submit_job.sh job.json out/   # {"kind": "pn_campaign" | "emr_campaign" | "pn_readback", ...}
+RG=openadapt-avd-lab bash scripts/citrix_lab/lifecycle.sh stop   # deallocate when idle
 python benchmark/rdp_avc_real/analyze.py out/pn-run-3 out/emr-run-3 ... --out analysis/
 python benchmark/rdp_avc_real/grounding_heldout.py out/pn-run-3 out/emr-run-3 --output ...
 ```
