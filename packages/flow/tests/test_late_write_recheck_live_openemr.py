@@ -195,10 +195,15 @@ def _contract(fx: Any, lname: str) -> Any:
                 # The fixture's HTTPS port has a self-signed certificate,
                 # which the verifier rightly refuses: OPENEMR_LATE_WRITE_API_URL
                 # can point at its plain-HTTP port instead.
-                "base_url": os.environ.get("OPENEMR_LATE_WRITE_API_URL", fx.api_base_url),
+                "base_url": os.environ.get(
+                    "OPENEMR_LATE_WRITE_API_URL", fx.api_base_url
+                ),
                 "records_path": f"/apis/default/api/patient?lname={lname}&_limit=100",
                 "records_key": "data",
-                "session": "benchmark.openemr_local.qualify_hooks:oracle_session",
+                "session": os.environ.get(
+                    "OPENEMR_LATE_WRITE_SESSION",
+                    "benchmark.openemr_local.qualify_hooks:oracle_session",
+                ),
             },
             "record": {
                 "name": "patient",
