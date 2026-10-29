@@ -506,6 +506,7 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
     if a is not None:
         cols |= {a.record_key} if a.record_key else set()
         cols |= set(a.record_keys.values())
+        cols |= {o.column for o in a.owners.values()}
     for side in frame.side_records:
         cols |= {side.link_field, side.of_field}
     profile = frame.database.loaded_profile() if frame.database else None
@@ -589,10 +590,9 @@ class _DatabaseFrame:
     still_moving: bool = False
     #: The app profile's judgment of one row change (``AppProfile.excuse``).
     excuse: Any = None
-    #: Every user's id by sign-in name (in memory only), and the names and
-    #: ids of other users who wrote in the window.
+    #: Every user's id by sign-in name (in memory only), to resolve an
+    #: audit entry's actor to an owner column (owner-scoped attribution).
     users_map: dict[str, str] = field(default_factory=dict)
-    colleagues: tuple[set[str], set[str]] = (set(), set())
 
 
 def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
@@ -756,18 +756,10 @@ def _database_frame(
         out.users_map = {
             str(r.get("name")): str(r.get("id")) for r in new.extra.get("users_map", [])
         }
-        frame_out = out
 
         def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
             return profile.excuse(
-                name,
-                before,
-                after,
-                fields,
-                hashers[name],
-                names,
-                ids,
-                frame_out.colleagues,
+                name, before, after, fields, hashers[name], names, ids
             )
 
         out.excuse = excuse
@@ -907,19 +899,6 @@ def judge_run_frame(
             else:
                 audit_before = list(stored.get("records", []))
                 audit_after = entries_now
-    if db is not None and audit_after is not None and spec.attribution is not None:
-        # Other users who wrote in the window: their own per-user state is
-        # their work (the profile's own_rows rules only).
-        a = spec.attribution
-        writes = set(a.write_events)
-        mine = set(_self_names(cfg)) | {str(x) for x in run_actors}
-        active = {
-            str(e.get(a.actor_field))
-            for e in audit_after
-            if (not writes or str(e.get(a.event_field or "")) in writes)
-            and e.get(a.actor_field) not in (None, "")
-        } - mine
-        db.colleagues = (active, {db.users_map[n] for n in active if n in db.users_map})
     verdict = judge_frame(
         spec,
         bound_effects,
@@ -936,6 +915,7 @@ def judge_run_frame(
         clock=("", "") if db is None else db.clock,
         database_evidence=None if db is None else db.evidence,
         excuse=None if db is None else db.excuse,
+        user_ids=None if db is None else db.users_map,
     )
     profile = db.evidence.get("profile") if db is not None else None
     if profile is not None:

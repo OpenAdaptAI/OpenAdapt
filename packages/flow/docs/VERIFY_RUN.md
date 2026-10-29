@@ -135,6 +135,102 @@ Only evidence the bot can't write counts:
   `reconciliation_required` (`evidence.frame.target_changed_by_other`). Only
   changes outside the declared delta can be concurrent edits.
 
+Some rows belong to a user rather than a record, such as a user's own UI
+settings, so no log entry names them by record. With `frame.database` and
+an audit log that names the table each entry wrote (`table_field`), such a
+change is another user's when their own write entry in the window names the
+table and the row is theirs. The tables are the app profile's `own_rows`
+tables (OpenEMR's `user_settings` and `recent_patients`), each with its
+`owner` (`{column, by}`). `by: username` compares the entry's actor with the
+column; `by: user_id` looks the actor's id up in the profile's `users`
+table. Table names compare lower-cased and without a schema, so an entry
+naming `USER_SETTINGS` or `openemr.user_settings` names `user_settings`.
+
+Some apps write a global default row beside a user's row. The first time
+anyone saves a label, OpenEMR's `setUserSetting` also inserts the label's
+default, a `user_settings` row with `setting_user = 0` and the same label
+and value. The profile declares it on the owner
+(`default: {value: "0", same: [setting_label, setting_value]}`), so a
+default row with a value nobody saved is never explained. A default
+row added in the window is explained only beside one explained row of the
+same table with equal `same` columns: another user's row (then the default
+is theirs too) or the bot's own row (then it is the bot's bookkeeping). Each
+explained row explains one default row. A default row changed or removed,
+added beside a row of another label, or added beside a row nothing
+explains, stays unexplained.
+
+`attribution.owners` can restate a profile table's owner in a contract, in
+the same shape. It can't add one: a table outside the profile's reviewed
+bookkeeping tables, or one that an append-only or column rule names (such
+as `users_secure`, whose owner is only for the acting user's sign-in
+counters), is refused, and so is a different owner for a profile table.
+Credentials never get an owner here.
+
+Fail closed:
+
+- Only a row that names no record is judged by its owner: a row whose
+  `record_key` (or `record_keys`) value is empty, or a table without that
+  column. A row that names a chart is judged by its chart, and another
+  entry by the same user doesn't explain it. Without `record_key`, every
+  row names itself, and no row is judged by its owner.
+- Each entry explains one row, of the kind it wrote (insert, update or
+  delete), owned by that entry's actor. A row of another user, or a row whose
+  owner changed, is collateral.
+- If the bot's own entry names the table in the window, every changed row of
+  that table is collateral: the entry names no row, so any of them may be the
+  bot's change.
+- The bot's own per-user rows stay the profile's bookkeeping when its entry
+  names the table, and that entry is not counted as a write the contract
+  doesn't cover, because the whole-database diff judged the table row by row. A bot
+  entry for such a table with none of its own rows excused still refutes, and
+  so does one that names the table in a schema the frame doesn't read. An
+  entry's table matches a snapshot table only by its exact name (case
+  aside), or by its unqualified name when the entry names no schema.
+- That leaves a limit: in such a table, a change the bot makes and reverts
+  within the window, such as setting another user's row and setting it
+  back, leaves the same table before and after. Its entry is passed over,
+  so nothing refutes it, as with any comparison of two snapshots.
+- A table with no declared owner, an actor the users table doesn't know, a
+  row with no owner, or an audit log that can't be read leaves the change
+  unexplained.
+- What the log can't show stays a limit: a change the app writes without
+  logging it can't be told from another user's.
+
+OpenEMR's `log` table has no table column, so the audit read takes the table
+from the statement OpenEMR logs in `comments`, and the write kind from the
+end of `event` (`patient-record-update`, `other-insert`). OpenEMR logs a
+`user_settings` or `recent_patients` write as an `other` event, which it
+records only when the `audit_events_other` global is on; with it off, such a
+change has no entry and stays unexplained. An encrypted comment
+(`log_comment_encrypt.encrypt = 'Yes'`) yields no table, so its entry
+explains nothing. On MariaDB:
+
+```yaml
+  attribution:
+    kind: audit_read
+    actor_field: user
+    self: [{param: bot_user}]
+    record_field: patient_id
+    record_key: pid
+    event_field: kind
+    write_events: [insert, update, delete]
+    insert_events: [insert]
+    delete_events: [delete]
+    table_field: tbl
+    read:
+      kind: sql
+      sql_driver: pymysql
+      sql_query: >-
+        SELECT l.id, l.user, l.patient_id,
+          SUBSTRING_INDEX(l.event, '-', -1) AS kind,
+          CASE WHEN IFNULL(e.encrypt, 'No') = 'Yes' THEN NULL ELSE
+            LOWER(REPLACE(REGEXP_SUBSTR(l.comments,
+              '(?i)(?<=insert into |update |delete from |replace into )[`a-z0-9_.]+'),
+              '`', ''))
+          END AS tbl
+        FROM log l LEFT JOIN log_comment_encrypt e ON e.log_id = l.id
+```
+
 Without `attribution`, every change outside the delta is collateral. A
 change is not proof that the executor made it: another user may have edited
 the record during the run. A person checks the record before anything is
