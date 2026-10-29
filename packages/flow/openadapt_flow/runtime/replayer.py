@@ -2420,6 +2420,9 @@ class Replayer:
                 report.model_calls,
                 sum(self._result_model_calls(result) for result in resumed_results),
             )
+            report.local_model_calls = sum(
+                self._result_local_model_calls(result) for result in resumed_results
+            )
 
         if workflow.program is not None:
             # Workflow-program IR, Phase 2: interpret the STATE MACHINE (loops /
@@ -3923,6 +3926,7 @@ class Replayer:
         # accounting).
         if account_model_calls:
             report.model_calls += Replayer._result_model_calls(result)
+            report.local_model_calls += Replayer._result_local_model_calls(result)
         if result.heal is not None:
             report.heal_count += 1
 
@@ -3936,9 +3940,19 @@ class Replayer:
                     result.ok
                     and result.resolution is not None
                     and result.resolution.rung == "grounder"
+                    and result.resolution.grounder_model != "local"
                 )
                 else 0
             )
+        )
+
+    @staticmethod
+    def _result_local_model_calls(result: StepResult) -> int:
+        return int(
+            result.ok
+            and result.resolution is not None
+            and result.resolution.rung == "grounder"
+            and result.resolution.grounder_model == "local"
         )
 
     def _initial_external_network_calls(
@@ -4128,6 +4142,9 @@ class Replayer:
                 report.model_calls = max(
                     report.model_calls,
                     sum(self._result_model_calls(result) for result in resumed_results),
+                )
+                report.local_model_calls = sum(
+                    self._result_local_model_calls(result) for result in resumed_results
                 )
             else:
                 # A fresh program run must not import state from its output
