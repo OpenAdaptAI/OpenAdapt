@@ -104,6 +104,24 @@ def test_a_row_for_another_chart_is_still_collateral() -> None:
     assert _with_history({"id": 6, "pid": 2}, {"id": 7, "pid": 1}) == "refuted"
 
 
+def test_a_table_can_name_its_record_through_another_field() -> None:
+    # OpenEMR's contact row points at its chart through foreign_id.
+    keyed = ATTRIBUTION.model_copy(update={"record_keys": {"contact": "foreign_id"}})
+    contact = {"id": 3, "foreign_id": 1}
+
+    def status(spec: FrameSpec) -> str:
+        return judge_frame(
+            spec,
+            [Effect(kind=EffectKind.RECORD_WRITTEN, match={"lname": "Newchart"})],
+            {"contact": (_state(), [contact])},
+            audit_before=[],
+            audit_after=[{"id": 1, "user": "clinic2", "patient_id": "1"}],
+        ).status
+
+    assert status(FrameSpec(identity_field="id", attribution=keyed)) == "held"
+    assert status(FrameSpec(identity_field="id", attribution=ATTRIBUTION)) == "refuted"
+
+
 # Adversarial review of #1570: each of these ended ``held``.
 
 _TARGET = [Effect(kind=EffectKind.RECORD_WRITTEN, match={"id": "10"}, field="body")]
