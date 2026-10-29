@@ -1,0 +1,144 @@
+# Flow tests that run on main and nightly but not in the pull-request lane.
+#
+# The `ci` check sets OPENADAPT_TEST_LANE=fast, and tests/lanes.py leaves
+# these out (an entry covers every parametrized case). Each one took more than
+# 5 s in a case on CI (ubuntu-latest, 4 xdist workers, 2026-10-28 profile);
+# the number is its total seconds across cases. The realism tests that guard
+# safety (record check, wire check, rollback, identity, approval) stay in the
+# lane whatever they take: test_realism_*, test_injection_*, test_effect_*,
+# test_lending_swer, test_ui_readback_browser, test_readback_*, test_undo_*,
+# test_after_stop_mockmed, test_agent_guard, test_multi_surface_identity and
+# the files flow-critical names. tests/test_lanes.py checks every entry still
+# exists. Move a test here, or out, with its measured time.
+
+# Whole files: their module fixtures (a compiled bundle, a live backend)
+# cost the time, so leaving out one test only moves it to the next one.
+# Measured on the 2026-10-28 PR run (setup seconds of the first test).
+tests/test_desktop_check_it_cli_mockmed.py  # 126s
+tests/test_effectbench_task_pack.py  # 34s
+tests/test_ap_invoice_benchmark.py  # 12s
+tests/test_o2c_recon_benchmark.py  # 9s
+tests/test_ui_readback_benchmark.py  # 24s
+tests/test_silent_wrong_action_benchmark.py  # 31s
+
+tests/test_agent_teach_branch.py::test_two_demonstrations_become_one_approved_branch  # 5s
+tests/test_agent_teach_repair.py::test_dismiss_without_a_dialog_box_stays_unarmed  # 8s
+tests/test_agent_teach_repair.py::test_halt_to_teach_to_approved_replay  # 7s
+tests/test_api.py::test_api_record_compile_replay_on_mockmed  # 14s
+tests/test_api_tier_web_form.py::test_gui_steps_run_when_the_api_step_may_not  # 7s
+tests/test_approval_mode_each_item.py::test_a_phone_approval_after_the_wait_reaches_the_pause_and_resumes  # 6s
+tests/test_approval_mode_each_item.py::test_an_approval_that_raced_the_timeout_is_carried_to_the_pause_by_resume  # 6s
+tests/test_approval_mode_each_item.py::test_no_answer_in_time_stops_before_the_save_and_a_later_approval_resumes  # 6s
+tests/test_attached_browser_run.py::test_practice_run_starts_from_the_signed_in_session_it_was_recorded_in  # 15s
+tests/test_authoring.py::test_mockmed_continue_uses_text_value_at_not_type_text  # 10s
+tests/test_auto_repair_cli.py::test_a_configured_agent_repairs_a_stop_without_being_asked  # 23s
+tests/test_auto_repair_cli.py::test_the_cli_repairs_without_a_shared_browser_from_its_caller  # 13s
+tests/test_behavioral_generalization.py::test_held_out_rows_on_an_in_memory_app  # 7s
+tests/test_browser_attach.py::test_launched_browser_refuses_static_unbound_closed_shadow_password  # 9s
+tests/test_browser_attach.py::test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trials  # 134s
+tests/test_business_decision.py::test_signed_decision_selects_one_branch_then_normal_action_gates_run  # 6s
+tests/test_cli_hints.py::test_printed_hints_never_hard_code_the_engine_spelling  # 6s
+tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says  # 13s
+tests/test_compatibility_matrix.py::test_workers_run_governed_durable_api_items  # 8s
+tests/test_competitor_drift_instrument.py::test_honest_stub_has_zero_silent_everywhere  # 8s
+tests/test_competitor_drift_instrument.py::test_screen_blind_headline_rate_is_nonzero  # 8s
+tests/test_dense_surface.py::test_end_to_end_record_and_replay_faithful  # 11s
+tests/test_durable_pipelined_readback.py::test_a_check_that_fails_on_resume_leaves_a_reconciliation_pause  # 5s
+tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends  # 6s
+tests/test_durable_program.py::test_delivery_callback_cannot_remove_a_required_postcondition  # 5s
+tests/test_durable_program.py::test_program_settling_mutation_cannot_create_a_verified_checkpoint  # 5s
+tests/test_durable_program.py::test_settling_callback_cannot_remove_a_required_postcondition  # 5s
+tests/test_durable_resume_state_binding.py::test_replacing_sealed_template_invalidates_exact_resume_approval  # 20s
+tests/test_effect_mining.py::test_mined_record_written_refutes_a_duplicate_on_the_real_sor  # 6s
+tests/test_fault_gate.py::test_a_check_that_claims_no_frame_is_not_tested_on_one  # 7s
+tests/test_fault_gate.py::test_a_full_read_kills_every_fault  # 7s
+tests/test_fault_gate.py::test_a_missed_claimed_class_refuses_whatever_the_total  # 13s
+tests/test_fault_gate.py::test_a_read_of_both_tables_kills_the_outside_faults  # 7s
+tests/test_fault_gate.py::test_a_read_scoped_to_the_patient_misses_the_unrelated_edit  # 7s
+tests/test_fault_gate.py::test_admission_policy  # 13s
+tests/test_fault_gate.py::test_scaffold_verifier_on_the_gate_reads_the_target_table_whole  # 138s
+tests/test_fault_gate.py::test_the_gate_finds_a_read_scoped_to_the_patient  # 41s
+tests/test_fault_gate.py::test_the_same_table_read_whole_kills_it  # 7s
+tests/test_fault_gate.py::test_verify_run_signs_the_coverage_it_was_admitted_with  # 14s
+tests/test_fleet_drift.py::test_canary_failure_blocks_the_patch  # 10s
+tests/test_governed_authorization.py::test_durable_resume_restores_governed_authorization  # 10s
+tests/test_governed_authorization.py::test_program_transition_cannot_hide_governed_asset_mutation  # 6s
+tests/test_governed_authorization.py::test_transition_halt_checkpoints_already_performed_write  # 8s
+tests/test_halt_detail.py::test_a_record_row_label_is_withheld_even_when_it_is_the_click_target  # 10s
+tests/test_halt_detail.py::test_a_typed_value_degrades_to_the_field_shape_and_never_appears  # 10s
+tests/test_halt_detail.py::test_resolution_halt_says_what_broke_and_what_continue_will_recheck  # 10s
+tests/test_halt_detail.py::test_the_cloud_safe_task_is_unchanged_by_the_local_enrichment  # 10s
+tests/test_halt_detail.py::test_the_local_detail_carries_only_closed_values  # 10s
+tests/test_hardening_flywheel.py::test_template_sweep_is_deterministic  # 9s
+tests/test_harness2_adapter.py::test_a_rollout_is_redone_when_the_harness_changed  # 6s
+tests/test_harness2_adapter.py::test_model_selector_path_runs_harness2_selection  # 15s
+tests/test_harness2_adapter.py::test_reward_selection_finds_the_safe_harness  # 9s
+tests/test_harness2_adapter.py::test_rollout_is_scored_by_readback  # 17s
+tests/test_harness2_pixels.py::test_rdp_window_rollout_is_scored_by_readback  # 8s
+tests/test_harness2_pixels.py::test_web_pixels_rollout_is_scored_by_readback  # 14s
+tests/test_harness2_traces.py::test_wrong_patient_write_is_a_mismatch_with_its_readback  # 6s
+tests/test_heal_fuzz.py::test_heal_produces_valid_bundle_and_is_idempotent  # 9s
+tests/test_identity_ladder.py::test_harness_zero_false_accept_bounded_configs  # 230s
+tests/test_identity_ocr_conservative_9th.py::test_alphanumeric_regression_ac50061_still_abstains  # 5s
+tests/test_identity_ocr_conservative_9th.py::test_numeric_417063_l1_collapse_abstains  # 5s
+tests/test_identity_ocr_conservative_9th.py::test_numeric_mrn_homonym_never_verifies_real_stack  # 53s
+tests/test_induction.py::test_c_branch_program_dismisses_when_present_skips_when_absent  # 12s
+tests/test_interactive_recorder.py::test_recording_shape_matches_the_demonstration  # 17s
+tests/test_interactive_recorder.py::test_replay_succeeds_with_secret_and_new_param  # 6s
+tests/test_interactive_recorder.py::test_unparameterized_label_yields_flagged_proposal_only  # 7s
+tests/test_interactive_recorder_gestures.py::test_contenteditable_records_typed_text  # 6s
+tests/test_interactive_recorder_gestures.py::test_double_click_compiles_to_one_double_click_step  # 7s
+tests/test_jit_surface_pixels.py::test_an_agent_run_on_a_remote_window_compiles_and_fails_closed  # 59s
+tests/test_loop_shapes.py::test_a_row_missing_its_identity_column_stops  # 6s
+tests/test_loop_shapes.py::test_a_row_whose_identity_differs_stops_before_its_record  # 9s
+tests/test_loop_shapes.py::test_a_row_without_a_note_skips_the_note  # 6s
+tests/test_loop_shapes.py::test_hashed_identity_still_verifies_each_row  # 23s
+tests/test_loop_shapes.py::test_held_out_rows_each_write_their_own_record  # 13s
+tests/test_loop_shapes.py::test_one_demonstration_of_several_rows_is_enough  # 12s
+tests/test_mcp_teach_surfaces.py::test_teach_on_a_remote_window  # 32s
+tests/test_multi_surface_attach.py::test_cdp_attach_records_a_popup_and_a_tab_as_surfaces  # 10s
+tests/test_multi_surface_backends.py::test_compiles_a_typed_backend_switch  # 7s
+tests/test_multi_surface_backends.py::test_switch_to_a_windows_app_that_is_not_the_recorded_one_halts  # 8s
+tests/test_multi_surface_e2e.py::test_popup_on_a_different_url_halts  # 11s
+tests/test_multi_surface_interactive.py::test_interactive_recording_has_the_scripted_bundle_shape  # 8s
+tests/test_multi_surface_selfclose.py::test_interactive_recorder_switches_back_from_a_self_closed_popup  # 16s
+tests/test_multi_surface_selfclose.py::test_scripted_recorder_switches_back_from_a_self_closed_popup  # 10s
+tests/test_multi_surface_selfclose_delivery.py::test_expected_close_counts_as_delivered  # 10s
+tests/test_multi_surface_selfclose_delivery.py::test_unexpected_close_stays_uncertain  # 6s
+tests/test_pixel_scale_replay.py::test_canvas_kiosk_at_150_percent_cleartype_off_books_the_right_record  # 14s
+tests/test_program_transition_evidence.py::test_transition_evidence_rejects_deleted_prefix_and_linear_invention  # 7s
+tests/test_program_transition_evidence.py::test_visual_transition_requires_exact_retained_frame_bytes  # 27s
+tests/test_record_check_synthesis.py::test_cli_writes_a_working_check_and_its_proof  # 5s
+tests/test_record_check_synthesis.py::test_database_read_path_covers_every_table_and_passes_the_suite  # 5s
+tests/test_record_check_synthesis.py::test_frozen_demo_value_fails_the_live_clean_save  # 6s
+tests/test_record_sor.py::test_recorded_change_yields_a_contract_that_verify_run_grades_independent  # 6s
+tests/test_recorder.py::test_record_triage_demo_produces_valid_recording  # 6s
+tests/test_run_authorization.py::test_cli_run_verify_authorize_and_profile  # 6s
+tests/test_safety_gallery.py::test_generator_end_to_end_every_dangerous_case_is_safe  # 8s
+tests/test_seal_anchor.py::test_cli_anchor_and_verify_require_anchor  # 6s
+tests/test_seal_keys.py::test_cli_pin_revoke_and_verify_with_keys  # 10s
+tests/test_sealed_at_rest.py::test_record_compile_and_governed_run_write_no_plaintext  # 16s
+tests/test_sealed_at_rest.py::test_sealed_run_pauses_and_resumes_without_plaintext  # 6s
+tests/test_self_repair.py::test_a_proposal_steered_off_the_app_by_page_text_is_refused  # 5s
+tests/test_self_repair.py::test_healthy_run_never_calls_the_agent  # 12s
+tests/test_self_repair.py::test_nothing_is_written_without_a_person  # 18s
+tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified  # 15s
+tests/test_self_repair.py::test_wrong_proposals_are_refused_and_nothing_is_written  # 10s
+tests/test_self_repair_bridge.py::test_a_new_required_dialog_is_bridged_and_verified  # 20s
+tests/test_self_repair_bridge.py::test_a_save_moved_into_a_menu_is_bridged_and_verified  # 28s
+tests/test_self_repair_bridge.py::test_bridges_that_save_invent_values_or_run_long_are_refused  # 16s
+tests/test_self_repair_cli.py::test_run_self_repair_cli_resumes_after_one_phone_tap  # 20s
+tests/test_standard_change.py::test_one_approval_releases_five_halted_items  # 62s
+tests/test_standard_change.py::test_relabelled_link_is_repaired_without_a_person  # 38s
+tests/test_structural_rung.py::test_playwright_structural_locator_and_locate_roundtrip  # 10s
+tests/test_submit_binding_interactive.py::test_interactive_recording_binds_the_save_a_person_clicked  # 10s
+tests/test_submit_binding_record_replay.py::test_a_demonstration_with_two_unlabeled_icons_compiles_unbound_and_refuses  # 12s
+tests/test_submit_binding_record_replay.py::test_compiled_save_carries_its_form_binding  # 14s
+tests/test_surface_bindings.py::test_cli_replay_binds_a_web_backend_surface  # 18s
+tests/test_transaction_outcome.py::test_real_run_that_halts_before_actuation_stays_halted_before_effect  # 10s
+tests/test_tutorial_presentation.py::test_human_recorder_output_can_pass_the_tutorial_effect_contract  # 13s
+tests/test_tutorial_run_params.py::test_a_run_with_a_new_note_is_checked_against_that_note  # 20s
+tests/test_verify_run.py::test_cli_end_to_end  # 6s
+tests/test_win_agent_tls.py::test_wrong_pinned_fingerprint_is_rejected  # 8s
+tests/test_worklist_pool.py::test_pool_closes_process_workers_when_a_sibling_fails_to_open  # 12s
+tests/test_worklist_pool.py::test_process_worker_failed_open_ends_its_child  # 11s

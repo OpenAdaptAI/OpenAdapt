@@ -24,11 +24,18 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Literal, Optional
+from typing import TYPE_CHECKING, Any, Iterable, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openadapt_flow.ir import ActionKind, Step, Workflow
+from openadapt_flow.ir import (
+    ActionKind,
+    Postcondition,
+    PostconditionKind,
+    Step,
+    Workflow,
+    focus_identity_is_specific,
+)
 from openadapt_flow.risk import classify_step_risk, is_local_edit, step_text
 from openadapt_flow.traversal import iter_workflow_steps
 from openadapt_flow.verification import declared_effect_is_independent_read
@@ -139,7 +146,15 @@ def is_vacuous(step: Step) -> bool:
         return False
     if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
         return False
-    return expects_effect(step) and not step.expect
+    return expects_effect(step) and not any(_asserts(pc) for pc in step.expect)
+
+
+def _asserts(pc: Postcondition) -> bool:
+    """Whether a postcondition can fail: a FOCUS_ON must name one element."""
+
+    if pc.kind is PostconditionKind.FOCUS_ON:
+        return focus_identity_is_specific(pc)
+    return True
 
 
 def has_screen_postcondition(step: Step) -> bool:
@@ -393,11 +408,37 @@ def effect_has_idempotency_key(step: Step) -> bool:
     """True when at least one of the step's system-of-record effects carries a
     non-empty idempotency / at-most-once key — the guard that collapses a
     retried or double-delivered submission to a single record instead of a
-    silent duplicate write."""
+    silent duplicate write. A key of one field (``idempotency_key``) or of
+    several (``composite_key``, such as last name, first name and birth date)
+    both count."""
     paths = list(iter_effect_paths(step))
     return bool(paths) and all(
-        any(getattr(effect, "idempotency_key", None) for effect in effects)
-        for _path, effects in paths
+        any(_has_usable_key(effect) for effect in effects) for _path, effects in paths
+    )
+
+
+def _has_usable_key(effect: Any) -> bool:
+    """A key whose every field is named and whose every value can be non-empty
+    (a run parameter, or a literal that is not blank)."""
+
+    composite = getattr(effect, "composite_key", None) or {}
+    if composite:
+        selector = dict(composite)
+    else:
+        key = getattr(effect, "idempotency_key", None)
+        if not key:
+            return False
+        selector = {getattr(effect, "key_field", "") or "": key}
+
+    def usable(value: Any) -> bool:
+        if getattr(value, "param", None):
+            return True
+        literal = getattr(value, "literal", value)
+        return isinstance(literal, str) and bool(literal.strip())
+
+    return all(
+        isinstance(name, str) and name.strip() and usable(value)
+        for name, value in selector.items()
     )
 
 

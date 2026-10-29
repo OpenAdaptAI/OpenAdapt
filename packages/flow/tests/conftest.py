@@ -12,11 +12,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from tests import lanes  # noqa: E402 - needs the sys.path line above
 from tests._approver_keys import approver  # noqa: E402,F401 - shared fixture
 from tests.repo_tree_guard import (  # noqa: E402 - needs the sys.path line above
     capture_baseline,
     check_and_report,
 )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """In the fast lane, leave out the tests in tests/nightly_only.txt."""
+
+    lanes.deselect(config, items)
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
@@ -45,3 +54,7 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     # Offline Seals are on by default; keep each test's Seal key and batch
     # queue out of the real home directory.
     monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / ".seal-home"))
+    # The frame's host secret: a per-test value, so a test never creates or
+    # reads the real ~/.config/openadapt/frame.key.
+    monkeypatch.setenv("OPENADAPT_FRAME_SECRET", "11" * 32)
+    monkeypatch.delenv("OPENADAPT_FRAME_SECRET_FILE", raising=False)

@@ -204,7 +204,7 @@ def test_qualification_runs_the_in_tree_tray_protocol_peer() -> None:
         step for step in steps if step.get("name") == "Exercise the Desktop and Tray IPC contract"
     )
     assert contract["env"] == {"OPENADAPT_TRAY_SOURCE": "../tray/src"}
-    assert contract["run"] == "uv run pytest tests/test_tray_integration.py -v"
+    assert contract["run"] == "uv run --locked pytest tests/test_tray_integration.py -v"
     assert (ROOT / contract["env"]["OPENADAPT_TRAY_SOURCE"] / "openadapt_tray" / "ipc.py").is_file()
 
 
@@ -215,7 +215,7 @@ def test_linux_sidecar_installs_browser_libraries_before_the_frozen_smoke() -> N
         step for step in steps if step.get("name") == "Install Linux Chromium runtime libraries"
     )
     assert libraries["if"] == "runner.os == 'Linux'"
-    assert libraries["run"] == "uv run python -m playwright install-deps chromium"
+    assert libraries["run"] == "uv run --locked python -m playwright install-deps chromium"
     aliases = next(
         step for step in steps if step.get("name") == "Alias lowercase X11 names for Flow 1.34.0"
     )
