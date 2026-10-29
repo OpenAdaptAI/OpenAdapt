@@ -102,6 +102,7 @@ from openadapt_flow.ir import (
     CheckToClickRecheck,
     EffectVerificationEvidence,
     ExecutionTargetKind,
+    FormIdentity,
     FreshActuationEvent,
     HaltObservation,
     HoverLook,
@@ -744,6 +745,11 @@ class _WebFormApprovalView:
 # ("Contact" / "Stats") measure 0.5 or less.
 PIXEL_CENSUS_OCR_MIN_CONFIDENCE = 0.8
 PIXEL_CENSUS_OCR_MAX_SIMILARITY = 0.6
+
+
+#: How long after a create-new form's save the replayer keeps watching its
+#: submit guard before the next step (a script may submit after the click).
+_FORM_GUARD_SETTLE_S = 2.0
 
 
 class Replayer:
@@ -2536,6 +2542,7 @@ class Replayer:
             report.success = len(report.results) == len(workflow.steps) and all(
                 result.ok for result in report.results
             )
+            self._halt_on_late_form_submit(report)
         report.total_ms = (time.monotonic() - t_run) * 1000.0
 
         # Emit the structured HALT record on any unsuccessful run, so the
@@ -3792,6 +3799,7 @@ class Replayer:
                 or step.anchor.structured_identity
                 or step.anchor.identity_template
                 or step.anchor.identifier_crop
+                or step.anchor.form_identity
             ):
                 report.identity_armed_steps += 1
             else:
@@ -10645,6 +10653,7 @@ class Replayer:
                     or step.anchor.structured_identity
                     or step.anchor.identity_template
                     or step.anchor.identifier_crop
+                    or step.anchor.form_identity
                 )
             )
         ):
@@ -11109,6 +11118,7 @@ class Replayer:
             or anchor.structured_identity
             or anchor.identity_template
             or anchor.identifier_crop
+            or anchor.form_identity
         )
 
     def _unbound_submit_refusal(
@@ -13021,6 +13031,81 @@ class Replayer:
         is confirmed closed. Every other step leaves such a report uncertain.
         """
 
+        guarded = step.anchor is not None and step.anchor.form_identity is not None
+        backend = self.backend
+        result = kwargs.get("result")
+
+        def halt(message: str) -> str:
+            if result is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+            return message
+
+        # A create-new form's save armed a guard that cancels any submit that
+        # isn't exactly the checked one (ir.FormIdentity). It stays armed
+        # after its click; the next step reads what it cancelled since, then
+        # disarms it so that step can submit its own forms.
+        if not guarded and getattr(backend, "form_submit_guard_armed", False):
+            late = backend.cancel_form_submit_guard()  # type: ignore[attr-defined]
+            if late is not None:
+                return halt(
+                    f"Step '{step.id}' ({step.intent}): after the previous save, "
+                    f"{late}; that submission was cancelled before it left the "
+                    "page — run aborted"
+                )
+        error = self._act_closing_surface(step, resolution, params, **kwargs)
+        refusal_of = getattr(backend, "form_submit_guard_refusal", None)
+        if not guarded or not callable(refusal_of):
+            return error
+        # A script may submit after the click returns (setTimeout): watch the
+        # guard through a short settle window.
+        wait = getattr(backend, "wait_form_submit_guard", None)
+        refusal = refusal_of()
+        deadline = time.monotonic() + _FORM_GUARD_SETTLE_S
+        while refusal is None and error is None and time.monotonic() < deadline:
+            # The wire guard runs only while the browser connection is
+            # serviced: wait through the backend, not with a bare sleep.
+            if callable(wait):
+                wait(100)
+            else:
+                time.sleep(0.1)
+            refusal = refusal_of()
+        if refusal is not None and error is None:
+            return halt(
+                f"Step '{step.id}' ({step.intent}): {refusal}; that submission "
+                "was cancelled before it left the page — run aborted"
+            )
+        return error
+
+    def _halt_on_late_form_submit(self, report: RunReport) -> None:
+        """A create-new form's submit guard still armed when the run ends
+        (the save was the last step): fail the run if it cancelled anything.
+        It stays armed, so a submission a script sends later is still
+        cancelled; the next step or run on this page reads it."""
+
+        backend = self.backend
+        if not getattr(backend, "form_submit_guard_armed", False):
+            return
+        late = backend.form_submit_guard_refusal()  # type: ignore[attr-defined]
+        if late is None or not report.results:
+            return
+        last = report.results[-1]
+        last.ok = False
+        last.safety_halt = True
+        last.failure_category = "safety_halt"
+        last.error = (
+            f"after the save, {late}; that submission was cancelled before it "
+            "left the page — run aborted"
+        )
+        report.success = False
+
+    def _act_closing_surface(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        params: Mapping[str, RuntimeParamScalar],
+        **kwargs: Any,
+    ) -> Optional[str]:
         expect = (
             getattr(self.backend, "expect_page_close", None)
             if step.closes_surface
@@ -15535,7 +15620,7 @@ class Replayer:
                 identity_policy is not None
                 and identity_policy.enforcement.value == "signal_quorum"
             ):
-                return self._verify_signal_quorum(
+                quorum = self._verify_signal_quorum(
                     step=step,
                     resolution=resolution,
                     before_png=before_png,
@@ -15544,6 +15629,20 @@ class Replayer:
                     bundle_dir=bundle_dir,
                     policy=identity_policy,
                 )
+                # An operator's quorum policy and a create-new form's identity
+                # must both hold.
+                if quorum.status == "verified" and anchor.form_identity is not None:
+                    form = self._verify_form_identity(
+                        step, resolution, anchor.form_identity
+                    )
+                    if form.status != "verified":
+                        return form
+                return quorum
+        if anchor.form_identity is not None:
+            # A create-new form's save: the record is what this run typed into
+            # the form, so the form is checked, in the DOM (see
+            # ir.FormIdentity).
+            return self._verify_form_identity(step, resolution, anchor.form_identity)
 
         def structured_tier() -> Optional[IdentityCheck]:
             # PHI-free bundles carry a salted-hash identity_template instead of
@@ -16156,6 +16255,39 @@ class Replayer:
         live_png = identity_mod.crop_region(before_png, live_region)
         return recorded_png, live_png
 
+    def _verify_form_identity(
+        self, step: Step, resolution: Resolution, identity: FormIdentity
+    ) -> IdentityCheck:
+        """Verify a create-new form's save against what this run typed.
+
+        ``verified`` only when the backend can read the form and the control
+        at the resolved point belongs to the form holding exactly the fields
+        this run typed into, each with the value typed. A backend that cannot
+        read the page leaves identity ``unreadable``, which halts an armed
+        step like any other unreadable identity.
+        """
+
+        expected = (
+            f"the form holding the {identity.filled_fields} field(s) this run "
+            "typed, with the values typed"
+        )
+        check = getattr(self.backend, "form_identity_at", None)
+        if not callable(check):
+            return IdentityCheck(
+                status="unreadable",
+                mode="form",
+                expected=expected,
+                observed="this backend cannot read the form's fields",
+            )
+        reason = check(int(resolution.point[0]), int(resolution.point[1]), identity)
+        if reason is None:
+            return IdentityCheck(
+                status="verified", mode="form", expected=expected, observed=expected
+            )
+        return IdentityCheck(
+            status="mismatch", mode="form", expected=expected, observed=reason
+        )
+
     def _verify_identity_ocr(
         self,
         step: Step,
@@ -16471,6 +16603,7 @@ class Replayer:
             or anchor.structured_identity
             or anchor.identity_template
             or anchor.identifier_crop
+            or anchor.form_identity
         ):
             return None
         hover = getattr(self.backend, "hover", None)

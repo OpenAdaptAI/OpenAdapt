@@ -31,6 +31,7 @@ if TYPE_CHECKING:  # pragma: no cover
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
+    FormIdentity,
     StructuralHandle,
     StructuralLocator,
     SubmitBinding,
@@ -42,8 +43,16 @@ from openadapt_flow.runtime.resolver import (
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
     SUBMIT_BINDING_FIELD_SELECTOR,
+    form_values_from_page,
+    form_values_record,
     observation_from_page,
+    verify_form_identity,
     verify_submit_binding,
+)
+from openadapt_flow.wire_check import (
+    ExpectedSubmission,
+    WireCheck,
+    expected_submission,
 )
 
 VIEWPORT: tuple[int, int] = (1280, 800)
@@ -720,7 +729,9 @@ _SUBMIT_BINDING_AT_JS = (
     + OBSERVE_SUBMIT_BINDING_JS
     + r""";
     const fills = window[args.fillKey];
-    return observe(control, Array.isArray(fills) ? fills : []);
+    return observe(
+        control, Array.isArray(fills) ? fills : [], window[args.fillKey + '_hidden']
+    );
 }"""
 )
 
@@ -738,9 +749,141 @@ _REGISTER_FILLED_FIELD_JS = (
         Object.defineProperty(window, key, {value: fills, configurable: true});
     }
     if (fills.indexOf(el) < 0) fills.push(el);
+    // Each hidden control's value as typing starts, so a create-new form's
+    // fingerprint can tell a token that rotates while the form is filled in.
+    let hidden = window[key + '_hidden'];
+    if (!(hidden instanceof WeakMap)) {
+        hidden = new WeakMap();
+        Object.defineProperty(
+            window, key + '_hidden', {value: hidden, configurable: true});
+    }
+    for (const input of el.ownerDocument.querySelectorAll('input[type="hidden"]')) {
+        if (!hidden.has(input)) hidden.set(input, String(input.value));
+    }
     return true;
 }"""
 )
+
+# Remember what a field holds once the run has finished typing into it, and
+# whether that is exactly what the run typed, for a create-new form's identity
+# check (openadapt_flow.ir.FormIdentity). A select holds what was typed when
+# its chosen option's label is the typed text. A field that reformatted the
+# typed text (a controlled input, a mask) does not. The WeakMap lives in the
+# field's own document under a per-backend random key and is only compared in
+# the page; no value is returned to Python.
+_SNAPSHOT_FILLED_VALUE_JS = r"""(el, args) => {
+    let values = window[args.key];
+    if (!(values instanceof WeakMap)) {
+        values = new WeakMap();
+        Object.defineProperty(window, args.key, {value: values, configurable: true});
+    }
+    const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const value = ('value' in el) ? String(el.value) : String(el.innerText || '');
+    let typed;
+    if (el.localName === 'select') {
+        const option = el.options[el.selectedIndex];
+        typed = Boolean(option) && clean(option.text) === clean(args.typed);
+    } else if ('value' in el) {
+        typed = value === String(args.typed);
+    } else {
+        typed = clean(value) === clean(args.typed);
+    }
+    values.set(el, {value: value, typed: typed});
+    return true;
+}"""
+
+# A create-new form's identity at a point: the submit-binding observation of
+# the control there against the fields this run typed into, and how many of
+# those fields in the control's form no longer hold what the run left in them
+# (or were never snapshotted). Counts only: no value leaves the page.
+_FORM_IDENTITY_AT_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    if (!hit) return null;
+    const control = hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""");
+    if (!control) return null;
+    const observe = """
+    + OBSERVE_SUBMIT_BINDING_JS
+    + r""";
+    const fills = Array.isArray(window[args.fillKey]) ? window[args.fillKey] : [];
+    const out = observe(control, fills, window[args.fillKey + '_hidden']);
+    const values = window[args.valueKey];
+    const form = control.form || control.closest('form');
+    let changed = 0;
+    for (const field of fills) {
+        if (!field || !field.isConnected || !form) continue;
+        const owner = field.form || field.closest('form');
+        if (owner !== form) continue;
+        const now = ('value' in field) ? String(field.value)
+            : String(field.innerText || '');
+        const left = (values instanceof WeakMap) ? values.get(field) : null;
+        if (!left || !left.typed || left.value !== now) changed += 1;
+    }
+    return {observation: out.observation, changed: changed};
+}"""
+)
+
+# Before a create-new form's save: what the checked button would send (the
+# address with its query, the method, and every field, from the form's
+# controls, never from new FormData(), which runs the page's own formdata
+# listeners). The wire check holds the save's request to exactly this.
+_FORM_EXPECTED_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    const control = hit ? hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""") : null;
+    const form = control ? (control.form || control.closest('form')) : null;
+    if (!form) return null;
+    const exempt = new Set(args.exempt || []);
+    const expected_parts = () => {
+        const pairs = [];
+        for (const el of Array.from(form.elements)) {
+            const name = el.name;
+            if (!name || exempt.has(name)) continue;
+            let disabled = false;
+            try { disabled = el.matches(':disabled'); } catch (_) {}
+            if (disabled) continue;
+            const type = String(el.type || el.localName || '').toLowerCase();
+            if (['submit', 'button', 'reset', 'image'].indexOf(type) >= 0) {
+                if (el === control && type !== 'image') pairs.push([name, String(el.value)]);
+                continue;
+            }
+            if (['fieldset', 'object', 'output'].indexOf(el.localName) >= 0) continue;
+            if ((type === 'checkbox' || type === 'radio') && !el.checked) continue;
+            if (type === 'file') {
+                const files = Array.from(el.files || []);
+                if (!files.length) pairs.push([name, 'file:']);
+                for (const f of files) pairs.push([name, 'file:' + f.name]);
+                continue;
+            }
+            if (el.localName === 'select') {
+                for (const o of Array.from(el.selectedOptions)) pairs.push([name, String(o.value)]);
+                continue;
+            }
+            pairs.push([name, String(el.value)]);
+        }
+        const target = control.hasAttribute('formaction') ? control.formAction : form.action;
+        let address = String(target);
+        const query = [];
+        try {
+            const url = new URL(target, document.baseURI);
+            address = url.origin + url.pathname;
+            for (const [k, v] of url.searchParams) if (!exempt.has('?' + k)) query.push([k, v]);
+        } catch (_) {}
+        const method = String((control.hasAttribute('formmethod')
+            ? control.formMethod : form.method) || 'get').toLowerCase();
+        const order = (x, y) => (x[0] + '\u0000' + x[1]) < (y[0] + '\u0000' + y[1]) ? -1 : 1;
+        pairs.sort(order);
+        query.sort(order);
+        return {address, query, method, pairs};
+    };
+    return expected_parts();
+}"""
+)
+
 
 # Page-structure identity of a FORM FIELD that sits in no record row.
 #
@@ -1648,6 +1791,15 @@ class PlaywrightBackend:
         # Fields this backend typed into, kept page-side per document (element
         # references only) for submit bindings. A new backend starts empty.
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
+        self._fill_value_slot = f"__oaflow_filled_values_{uuid.uuid4().hex}"
+        self._form_wire: Any = None
+        self._ws_routed = False
+        try:
+            # A frame sent on this page's WebSockets while a save is held is
+            # reported (the wire check routes only sockets opened then).
+            self.page.on("websocket", self._watch_websocket)
+        except Exception:  # noqa: BLE001 - a page stand-in without events
+            pass
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
@@ -2341,6 +2493,206 @@ class PlaywrightBackend:
         self._focused_element_call(
             _REGISTER_FILLED_FIELD_JS, arg=self._fill_store_key, with_arg=True
         )
+
+    def _snapshot_focused_field(self, typed: str) -> None:
+        """Remember what the focused field holds now that ``typed`` is in,
+        and whether that is exactly ``typed``.
+
+        A create-new form's identity check compares each filled field with
+        this snapshot before the save. A field with no snapshot, or one that
+        did not end up holding exactly what was typed, counts as changed, so
+        a failure here makes that check refuse: the safe direction.
+        """
+
+        self._focused_element_call(
+            _SNAPSHOT_FILLED_VALUE_JS,
+            arg={"key": self._fill_value_slot, "typed": typed},
+            with_arg=True,
+        )
+
+    def form_identity_at(self, x: int, y: int, identity: FormIdentity) -> Optional[str]:
+        """Check a create-new form's identity for the control at a point.
+
+        Returns None when the control is still the submit button of the
+        demonstrated form (same address, method and set of fields), the form
+        owns exactly the fields this run typed into, each holding exactly what
+        the run typed, and every other field holds its demonstrated value.
+        Then it arms a one-shot guard that cancels any other submit during the
+        click (:meth:`form_submit_guard_refusal` reports it). Otherwise the
+        reason, in plain words, including when the page can't be read.
+        """
+
+        late = self.cancel_form_submit_guard()
+        if late is not None:
+            return f"after the previous save, {late}; that submission was cancelled"
+        try:
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return "the resolved point has no readable page"
+            raw = point.scope.evaluate(
+                _FORM_IDENTITY_AT_JS,
+                {
+                    "x": point.x,
+                    "y": point.y,
+                    "fillKey": self._fill_store_key,
+                    "valueKey": self._fill_value_slot,
+                },
+            )
+            if not isinstance(raw, dict):
+                return "no control at the resolved point"
+            observation = observation_from_page(raw.get("observation"))
+            values = form_values_from_page(raw.get("observation"))
+            changed = int(raw.get("changed", -1))
+        except Exception:
+            return "could not read the form at the resolved point"
+        if changed < 0:
+            return "could not read the form's field values"
+        reason = verify_form_identity(
+            identity, observation, changed_fields=changed, values=values
+        )
+        if reason is not None:
+            return reason
+        try:
+            expected = point.scope.evaluate(
+                _FORM_EXPECTED_JS,
+                {"x": point.x, "y": point.y, "exempt": list(identity.exempt)},
+            )
+        except Exception:
+            expected = None
+        if not isinstance(expected, dict):
+            return "could not read what the form would send"
+        return self._arm_wire_check(expected_submission(expected, identity.exempt))
+
+    # -- the wire check (openadapt_flow.wire_check) --------------------------
+
+    def _arm_wire_check(self, submission: ExpectedSubmission) -> Optional[str]:
+        """Hold the save's request at the network to the checked form.
+
+        Until it is disarmed, every write request from any page of this
+        browser context (a popup or new tab included), and a GET navigation
+        to the form's address, goes through a
+        :class:`~openadapt_flow.wire_check.WireCheck`: the checked submission
+        goes once; anything else is aborted before it is sent. A WebSocket
+        opened meanwhile is never connected to the server, and a frame sent
+        on one already open is reported. A service worker's requests skip routes, so a page a service
+        worker controls is refused before the click (the runner's contexts
+        block service workers), and one that starts meanwhile is reported.
+        Returns why the save can't be held, or None once it is.
+        """
+
+        self._disarm_wire_check()
+        context = self.page.context
+        try:
+            controlled = bool(context.service_workers) or bool(
+                self.page.evaluate(
+                    "() => !!(navigator.serviceWorker && navigator.serviceWorker.controller)"
+                )
+            )
+        except Exception:  # noqa: BLE001
+            return "could not tell whether a service worker controls the page"
+        if controlled:
+            return (
+                "a service worker runs on this page, and its requests can't be "
+                "checked; run with service workers blocked"
+            )
+        check = WireCheck(submission=submission)
+
+        def handler(route: Any) -> None:
+            check.handle(route, proceed=route.fallback)
+
+        def on_worker(_worker: Any) -> None:
+            check.refused.append(
+                "a service worker started while the save was held, and its "
+                "requests can't be checked"
+            )
+
+        context.route("**/*", handler)
+        context.on("serviceworker", on_worker)
+        if not self._ws_routed:
+            # Routed once for the context's life; it only acts while armed.
+            context.route_web_socket(lambda _url: True, self._route_websocket)
+            self._ws_routed = True
+        self._form_wire = (handler, check, on_worker)
+        return None
+
+    def _route_websocket(self, ws: Any) -> None:
+        wire = self._form_wire
+        if wire is None:
+            ws.connect_to_server()
+            return
+        # Never connected to the server: what the page sends on it goes
+        # nowhere. (Closing it from a sync route handler deadlocks.)
+        wire[1].refused.append(
+            "the page opened a WebSocket while the save was held; it was not connected"
+        )
+
+    def _watch_websocket(self, ws: Any) -> None:
+        def on_frame(_payload: Any) -> None:
+            wire = self._form_wire
+            if wire is not None:
+                wire[1].refused.append(
+                    "the page sent a WebSocket message while the save was held"
+                )
+
+        ws.on("framesent", on_frame)
+
+    def _disarm_wire_check(self) -> list[str]:
+        wire = self._form_wire
+        self._form_wire = None
+        if wire is None:
+            return []
+        handler, check, on_worker = wire
+        context = self.page.context
+        try:
+            context.unroute("**/*", handler)
+            context.remove_listener("serviceworker", on_worker)
+        except Exception:  # noqa: BLE001 - the context is gone
+            pass
+        return list(check.refused)
+
+    def wait_form_submit_guard(self, ms: int) -> None:
+        """Let the page and the wire check run for ``ms`` milliseconds."""
+
+        try:
+            self.page.wait_for_timeout(ms)
+        except Exception:  # noqa: BLE001 - the page is gone
+            time.sleep(ms / 1000)
+
+    def form_submit_guard_refusal(self, *, disarm: bool = False) -> Optional[str]:
+        """Why the wire check refused a request so far, or None. ``disarm``
+        also removes it."""
+
+        wire = self._form_wire
+        if wire is None:
+            return None
+        reasons = list(wire[1].refused)
+        if disarm:
+            self._disarm_wire_check()
+        return "; ".join(dict.fromkeys(reasons)) if reasons else None
+
+    @property
+    def form_submit_guard_armed(self) -> bool:
+        return self._form_wire is not None
+
+    def cancel_form_submit_guard(self) -> Optional[str]:
+        """Read the wire check's last refusals and disarm it."""
+
+        return self.form_submit_guard_refusal(disarm=True)
+
+    def form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """RECORD-TIME: the values of the form's fields the demonstration did
+        not type into, for the control at a point (see
+        :func:`~openadapt_flow.submit_binding.form_values_record`), or None.
+        Plaintext for the recording only; the compiler keeps salted digests.
+        Never raises.
+        """
+
+        try:
+            raw = self._observe_submit_binding(x, y)
+            values = form_values_from_page(raw.get("observation")) if raw else None
+        except Exception:
+            return None
+        return form_values_record(values) if values is not None else None
 
     def _focused_element_call(
         self,
@@ -3562,13 +3914,15 @@ class PlaywrightBackend:
         """Type through the pre-identity focused-element lease."""
 
         self._register_focused_field()
-        return self._act_guarded_keyboard(
+        receipt = self._act_guarded_keyboard(
             expected_frame_sha256=expected_frame_sha256,
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
             # keyboard, so delivery stays bound to the checked target.
             deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
         )
+        self._snapshot_focused_field(text)
+        return receipt
 
     def _handle_screenshot_frame_lifecycle(self, _frame: Any = None) -> None:
         """Advance the irreversible frame-tree generation."""
@@ -4143,6 +4497,7 @@ class PlaywrightBackend:
         self._assert_qualification_environment_current()
         self._register_focused_field()
         self._deliver_text(text, lambda: self.page.keyboard.type(text))
+        self._snapshot_focused_field(text)
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'Meta+a'``."""
@@ -4204,10 +4559,14 @@ class PlaywrightBackend:
                 device_scale_factor=1,
                 record_video_dir=record_video_dir,
                 record_video_size=viewport,
+                service_workers="block",
             )
             page = context.new_page()
         else:
-            page = browser.new_page(viewport=viewport, device_scale_factor=1)
+            # No service workers: their requests would skip the wire check.
+            page = browser.new_page(
+                viewport=viewport, device_scale_factor=1, service_workers="block"
+            )
 
         def close() -> None:
             if shared is not None:

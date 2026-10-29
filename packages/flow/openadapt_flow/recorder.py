@@ -70,7 +70,6 @@ from openadapt_flow.ir import (
     MAX_PAGES_OPENED_PER_STEP,
     PRIMARY_SURFACE_ID,
     StructuralLocator,
-    structural_locator_is_locatable,
 )
 
 #: Bound on waiting for a newly opened page's first navigation.
@@ -727,17 +726,18 @@ class Recorder:
             section = self._section_context_at(int(event["x"]), int(event["y"]))
             if section:
                 event = {**event, "section": section}
-            # An unlabeled control has no structural locator. Observe how it
-            # relates to the fields typed into so far (form ownership, submit
-            # role, position, uniqueness) so the compiler can bind it to the
-            # form it submits. Before the action: the click may submit it.
-            if not structural_locator_is_locatable(locator) and event.get("kind") in (
-                "click",
-                "double_click",
-            ):
+            # Observe how the control relates to the fields typed into so far
+            # (form ownership, submit role, position, uniqueness) so the
+            # compiler can bind an unlabeled control to the form it submits,
+            # or give a labelled save on a create-new form its form identity.
+            # Before the action: the click may submit it.
+            if event.get("kind") in ("click", "double_click"):
                 binding = self._submit_binding_at(int(event["x"]), int(event["y"]))
                 if binding:
                     event = {**event, "submit_binding": binding}
+                    values = self._form_values_at(int(event["x"]), int(event["y"]))
+                    if values:
+                        event = {**event, "form_values": values}
         dialog_response, self._expected_dialog = self._expected_dialog, None
         if dialog_response is not None:
             arm = getattr(self._backend, "arm_dialog", None)
@@ -989,6 +989,18 @@ class Recorder:
         except Exception:
             return None
         return observation if isinstance(observation, dict) else None
+
+    def _form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """A create-new form's untouched field values at (x, y), if any (the
+        backend's ``form_values_at``). The compiler keeps salted digests."""
+        getter = getattr(self._backend, "form_values_at", None)
+        if getter is None:
+            return None
+        try:
+            values = getter(int(x), int(y))
+        except Exception:
+            return None
+        return values if isinstance(values, dict) else None
 
     @staticmethod
     def _redact(png: bytes, region: tuple[int, int, int, int]) -> bytes:

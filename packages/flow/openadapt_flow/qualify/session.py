@@ -58,6 +58,7 @@ def playwright_session(config: VerifyConfig) -> SessionOpener:
                 viewport={"width": app.viewport[0], "height": app.viewport[1]},
                 device_scale_factor=1,
                 storage_state=storage_state,
+                service_workers="block",
             )
             page = context.new_page()
             page.goto(app.entry_url or app.url)

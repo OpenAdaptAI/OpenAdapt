@@ -9,6 +9,11 @@ The report page also has an "Email this report" form that sends a POST. The
 read-only teach lane must refuse it; tests read ``/_stats`` to check that no
 POST ever reached the app.
 
+For taught writes it has a sign-in (``/login``, user ``clerk``, password
+``portal-demo``) and a New Order form (``/orders/new``) that saves by POST.
+``GET /api/orders`` returns the saved orders, so a write contract can read
+them back.
+
 Standard library only. It listens on 127.0.0.1 and nowhere else.
 """
 
@@ -19,6 +24,7 @@ import html
 import io
 import json
 import random
+import secrets
 import threading
 from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -189,7 +195,64 @@ def _csv(rows: list[dict[str, str]]) -> bytes:
     return out.getvalue().encode()
 
 
-def _handler(stats: dict[str, int], lock: threading.Lock) -> type:
+#: The demo sign-in for the order form. Made up; the app listens on 127.0.0.1.
+DEMO_USER = "clerk"
+DEMO_PASSWORD = "portal-demo"
+
+
+def _login(error: str = "") -> bytes:
+    return _page(
+        "Sign in",
+        "<h1>Sign in</h1>"
+        + (f'<p class="error" role="alert">{html.escape(error)}</p>' if error else "")
+        + '<form method="post" action="/login">'
+        '<label for="username">Username<input id="username" name="username"></label>'
+        '<label for="password">Password<input id="password" name="password" '
+        'type="password"></label>'
+        '<button type="submit">Sign in</button></form>',
+    )
+
+
+def _new_order(orders: list[dict[str, str]], error: str = "") -> bytes:
+    options = "".join(
+        f'<option value="{html.escape(name)}">{html.escape(name)}</option>'
+        for name, _price in _PRODUCTS
+    )
+    recent = "".join(
+        "<tr>"
+        + "".join(f"<td>{html.escape(o[c])}</td>" for c in ORDER_FIELDS)
+        + "</tr>"
+        for o in orders[-5:]
+    )
+    return _page(
+        "New order",
+        "<h1>New order</h1>"
+        + (f'<p class="error" role="alert">{html.escape(error)}</p>' if error else "")
+        + '<form method="post" action="/orders">'
+        '<label for="customer">Customer<input id="customer" name="customer"></label>'
+        f'<label for="product">Product<select id="product" name="product">{options}</select></label>'
+        '<label for="units">Units<input id="units" name="units" type="number" min="1"></label>'
+        '<button type="submit">Save order</button></form>'
+        + (
+            "<section><h2>Recent orders</h2><table><thead><tr>"
+            + "".join(f"<th>{c}</th>" for c in ORDER_FIELDS)
+            + f"</tr></thead><tbody>{recent}</tbody></table></section>"
+            if orders
+            else ""
+        ),
+    )
+
+
+ORDER_FIELDS = ("order_id", "customer", "product", "units")
+
+
+def _handler(
+    stats: dict[str, int],
+    lock: threading.Lock,
+    orders: list[dict[str, str]],
+    sessions: set[str],
+    fault: dict[str, str],
+) -> type:
     class Handler(BaseHTTPRequestHandler):
         server_version = "ReportsPortal/1"
 
@@ -237,8 +300,117 @@ def _handler(stats: dict[str, int], lock: threading.Lock) -> type:
                 with lock:
                     body = json.dumps(stats).encode()
                 self._send(200, body, "application/json")
+            elif parts.path == "/login":
+                self._send(200, _login(), "text/html; charset=utf-8")
+            elif parts.path == "/orders/new":
+                if not self._signed_in():
+                    self._send(303, b"", "text/plain", Location="/login")
+                    return
+                with lock:
+                    page = _new_order(list(orders))
+                self._send(200, page, "text/html; charset=utf-8")
+            elif parts.path.startswith("/orders/") and self._signed_in():
+                order_id = parts.path.rsplit("/", 1)[-1]
+                self._send(
+                    200,
+                    _page(
+                        "Order saved",
+                        f"<h1>Order {html.escape(order_id)} saved</h1>"
+                        '<p><a href="/orders/new">New order</a></p>',
+                    ),
+                    "text/html; charset=utf-8",
+                )
+            elif parts.path == "/api/orders":
+                # The order store, for a write contract to read back.
+                with lock:
+                    body = json.dumps({"records": list(orders)}).encode()
+                self._send(200, body, "application/json")
+            elif parts.path == "/_fault":
+                # Tests only: "no_persist" answers saved but keeps nothing,
+                # "twice" keeps the order twice.
+                with lock:
+                    fault["mode"] = query.get("mode", "")
+                self._send(200, b"ok", "text/plain")
             else:
                 self._send(404, _page("Not found", "<h1>Not found</h1>"), "text/html")
+
+        def _signed_in(self) -> bool:
+            cookie = self.headers.get("Cookie", "")
+            token = next(
+                (
+                    part.split("=", 1)[1]
+                    for part in cookie.split(";")
+                    if part.strip().startswith("session=")
+                ),
+                "",
+            )
+            with lock:
+                return bool(token) and token in sessions
+
+        def _form(self) -> dict[str, str]:
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length).decode("utf-8", "replace")
+            return {k: v[-1] for k, v in parse_qs(body).items()}
+
+        def do_POST(self) -> None:  # noqa: N802 - http.server API
+            path = urlsplit(self.path).path
+            if path == "/login":
+                form = self._form()
+                if (form.get("username"), form.get("password")) != (
+                    DEMO_USER,
+                    DEMO_PASSWORD,
+                ):
+                    self._send(
+                        200,
+                        _login("Wrong username or password."),
+                        "text/html; charset=utf-8",
+                    )
+                    return
+                token = secrets.token_hex(16)
+                with lock:
+                    sessions.add(token)
+                self._send(
+                    303,
+                    b"",
+                    "text/plain",
+                    Location="/orders/new",
+                    Set_Cookie=f"session={token}; HttpOnly; Path=/",
+                )
+                return
+            if path == "/orders":
+                if not self._signed_in():
+                    self._send(303, b"", "text/plain", Location="/login")
+                    return
+                form = self._form()
+                customer = form.get("customer", "").strip()
+                product = form.get("product", "")
+                units = form.get("units", "").strip()
+                if (
+                    not customer
+                    or product not in dict(_PRODUCTS)
+                    or not units.isdigit()
+                ):
+                    with lock:
+                        page = _new_order(list(orders), "Fill in every field.")
+                    self._send(200, page, "text/html; charset=utf-8")
+                    return
+                with lock:
+                    order_id = f"WO-{1001 + len(orders)}"
+                    record = {
+                        "order_id": order_id,
+                        "customer": customer,
+                        "product": product,
+                        "units": units,
+                    }
+                    if fault.get("mode") != "no_persist":
+                        orders.append(record)
+                    if fault.get("mode") == "twice":
+                        orders.append(
+                            {**record, "order_id": f"WO-{1001 + len(orders)}"}
+                        )
+                self._send(303, b"", "text/plain", Location=f"/orders/{order_id}")
+                return
+            self._refuse_write()
 
         def _refuse_write(self) -> None:
             with lock:
@@ -249,7 +421,7 @@ def _handler(stats: dict[str, int], lock: threading.Lock) -> type:
                 "text/html; charset=utf-8",
             )
 
-        do_POST = do_PUT = do_PATCH = do_DELETE = _refuse_write  # noqa: N815
+        do_PUT = do_PATCH = do_DELETE = _refuse_write  # noqa: N815
 
     return Handler
 
@@ -262,7 +434,10 @@ def serve(port: int = 0) -> tuple[str, Callable[[], None]]:
     """
 
     stats = {"get": 0, "exports": 0, "writes": 0}
-    server = ThreadingHTTPServer(("127.0.0.1", port), _handler(stats, threading.Lock()))
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", port),
+        _handler(stats, threading.Lock(), [], set(), {"mode": ""}),
+    )
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

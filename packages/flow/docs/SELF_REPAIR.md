@@ -217,16 +217,22 @@ Four objects make up the API:
 
 ```python
 from openadapt_flow.repair.self_repair import (
-    AppSession, RepairProposal, ReplayTarget, ScreenAccess, SelfRepair,
+    AppSession,
+    RepairProposal,
+    ReplayTarget,
+    ScreenAccess,
+    SelfRepair,
 )
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.runtime.effects import RestRecordVerifier
 
 URL = "http://127.0.0.1:8765/?fault=ok&idempotency=demo&drift=redesign#tasks"
 
+
 def open_session(fault):
     backend, close = PlaywrightBackend.launch(fault or URL)
     return AppSession(backend=backend, close=close)
+
 
 target = ReplayTarget(
     open_session,
@@ -280,15 +286,17 @@ contains:
 
 ```python
 class MyAgent:
-    dialect = "anthropic"        # any name in openadapt_flow.jit.dialects()
-    agent_id = "agent:my-repair" # recorded; can never approve its own fix
-    requires_model_key = True    # False only for an agent that calls no model
+    dialect = "anthropic"  # any name in openadapt_flow.jit.dialects()
+    agent_id = "agent:my-repair"  # recorded; can never approve its own fix
+    requires_model_key = True  # False only for an agent that calls no model
 
     def propose(self, request):
         # request.intent, request.recorded_label, request.recorded_crop_png,
         # request.live_png, request.viewport, request.previous_refusals,
         # request.model_key (the customer's key; never an OpenAdapt key)
-        action = ask_my_model(request)   # e.g. {"action": "left_click", "coordinate": [846, 457]}
+        action = ask_my_model(
+            request
+        )  # e.g. {"action": "left_click", "coordinate": [846, 457]}
         return RepairProposal(action=action, model_calls=1, cost_usd=0.004)
 ```
 
@@ -616,8 +624,9 @@ standard = StandardChanges(
     key_dir=Path("~/.openadapt/jit").expanduser(),
     test_record=test_record,
 )
-repair = SelfRepair(agent, target, store="repair-store",
-                    screen_access=access, standard_changes=standard)
+repair = SelfRepair(
+    agent, target, store="repair-store", screen_access=access, standard_changes=standard
+)
 ```
 
 `test_record_target` is a `ReplayTarget` whose sessions open the test record,
@@ -648,8 +657,12 @@ window. An item that halts for any other reason stays halted for a person.
 ```python
 from openadapt_flow.repair.preflight_queue import QueueItem, WorklistQueue
 
-queue = WorklistQueue("bundles/triage", test_record, "runs/worklist-2026-10-18",
-                      self_repair=lambda target: SelfRepair(agent, target, ...))
+queue = WorklistQueue(
+    "bundles/triage",
+    test_record,
+    "runs/worklist-2026-10-18",
+    self_repair=lambda target: SelfRepair(agent, target, ...),
+)
 result = queue.run([QueueItem(item_id, target_for(item_id)) for item_id in ids])
 print(result.status, [(i.item_id, i.status) for i in result.items])
 ```
