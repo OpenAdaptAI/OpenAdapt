@@ -33,3 +33,34 @@ def test_paths_without_a_filter_are_unchanged():
     assert extract_path(PATIENT, "name.family") == "Okafor"
     assert extract_path(PATIENT, "name.given") == "Ada"
     assert extract_path(PATIENT, "missing.path") is None
+
+
+APPOINTMENT = {
+    "resourceType": "Appointment",
+    "participant": [
+        {"actor": {"reference": "Practitioner/d1"}, "status": "accepted"},
+        {"actor": {"reference": "Patient/p1"}, "status": "accepted"},
+    ],
+}
+
+
+def test_a_dotted_prefix_filter_picks_by_reference_type():
+    path = "participant[actor.reference^=Patient/].actor.reference"
+    assert extract_path(APPOINTMENT, path) == "Patient/p1"
+    assert (
+        extract_path(
+            APPOINTMENT, "participant[actor.reference^=Practitioner/].actor.reference"
+        )
+        == "Practitioner/d1"
+    )
+    assert extract_path(
+        APPOINTMENT, "participant[actor.reference=Patient/p1].status"
+    ) == ("accepted")
+    assert (
+        extract_path(APPOINTMENT, "participant[actor.reference^=Device/].actor") is None
+    )
+
+
+def test_a_filter_on_a_missing_key_matches_nothing():
+    # Before, a missing key read as the text "None".
+    assert extract_path(PATIENT, "telecom[use=None].value") is None

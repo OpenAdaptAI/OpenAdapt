@@ -51,7 +51,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Outcome = Literal["found_existing", "created_verified", "needs_review"]
-Compare = Literal["exact", "casefold", "digits", "date"]
+Compare = Literal["exact", "casefold", "digits", "date", "instant"]
 
 #: A search longer than this many pages reads as unreadable.
 MAX_PAGES = 50
@@ -216,6 +216,16 @@ def normalize(value: Any, rule: FieldRule, *, task: bool = False) -> Optional[st
         return re.sub(r"\D", "", text)
     if rule.compare == "date":
         return text[:10]
+    if rule.compare == "instant":
+        # One moment however it is written (an offset, Z, milliseconds), to
+        # the second. A time with no zone names no moment, so never matches.
+        try:
+            when = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if when.tzinfo is None:
+            return None
+        return _instant(when)
     return text
 
 
@@ -239,13 +249,22 @@ def extract_all(node: Any, path: str) -> list[Any]:
         return [v for item in node for v in extract_all(item, path)]
     if not isinstance(node, dict):
         return []
-    seg, _, rest = path.partition(".")
+    from openadapt_flow.runtime.effects.fhir import (
+        filter_matches,
+        parse_filter,
+        split_path,
+    )
+
+    segs = split_path(path)
+    seg, rest = segs[0], ".".join(segs[1:])
     name, _, cond = seg.partition("[")
     child = node.get(name)
     if cond:
-        key, _, want = cond[:-1].partition("=")
+        want = parse_filter(cond[:-1])
+        if want is None:
+            return []
         items = child if isinstance(child, list) else [child]
-        child = [i for i in items if isinstance(i, dict) and str(i.get(key)) == want]
+        child = [i for i in items if filter_matches(i, want)]
     return extract_all(child, rest) if child is not None else []
 
 
@@ -309,13 +328,25 @@ def _expected_leaves(
     for name, rule in contract.fields.items():
         if params is not None and params.get(name) in (None, ""):
             continue  # the task didn't give it, so the record mustn't hold it
+        from openadapt_flow.runtime.effects.fhir import parse_filter, split_path
+
         parts: list[str] = []
-        for seg in rule.path.split("."):
+        filters: list[str] = []
+        for seg in split_path(rule.path):
             key, _, cond = seg.partition("[")
             if cond:
-                want[".".join(parts + [key, cond.split("=", 1)[0]])] += 1
+                parsed = parse_filter(cond[:-1])
+                if parsed is not None:
+                    filters.append(".".join(parts + [key, parsed[0]]))
             parts.append(key)
-        want[".".join(parts)] += 1
+        leaf = ".".join(parts)
+        want[leaf] += 1
+        # The filter's own element is a leaf too (``telecom.system``), unless
+        # it is the value itself (``participant[actor.reference^=Patient/]
+        # .actor.reference``), which is one leaf, not two.
+        for path in filters:
+            if path != leaf:
+                want[path] += 1
     return want
 
 
