@@ -687,6 +687,10 @@ class DeploymentProbeTarget:
             try:
                 context = browser.new_context(viewport={"width": 1280, "height": 800})
                 page = context.new_page()
+                from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+                # Guard the page's WebSockets from its first document (wire check).
+                prepare_ws_guard(page)
                 page.goto(backend_cfg.url)
                 backend = build_backend(backend_cfg, page=page)
                 return self._replay(backend, workflow, bundle_dir, run_dir, params)

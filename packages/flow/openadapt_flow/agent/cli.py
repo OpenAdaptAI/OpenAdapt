@@ -1203,12 +1203,12 @@ def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
         return 2
     contracts = {}
     if args.contracts:
-        from openadapt_flow.verify import WriteContract
+        from openadapt_flow.verifier import Contract
 
         folder = Path(args.contracts)
         for path in sorted(folder.glob("*.y*ml")):
             try:
-                contracts[path.stem] = WriteContract.load(path)
+                contracts[path.stem] = Contract.load(path)
             except Exception as exc:  # noqa: BLE001 - reported, nothing served
                 print(f"serve: contract {path.name}: {exc}", file=sys.stderr)
                 return 2

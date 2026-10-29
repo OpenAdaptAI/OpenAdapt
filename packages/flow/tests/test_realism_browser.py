@@ -152,7 +152,11 @@ def browser() -> Iterator[object]:
 
 
 def _page(browser: object, url: str):
+    from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
     page = browser.new_page(viewport=VIEWPORT, device_scale_factor=1)  # type: ignore[attr-defined]
+    # As the runner does: guarded before the first document, so a save can be held.
+    prepare_ws_guard(page.context)
     page.goto(url)
     page.wait_for_load_state("load")
     page.wait_for_timeout(150)

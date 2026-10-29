@@ -57,4 +57,6 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     # The frame's host secret: a per-test value, so a test never creates or
     # reads the real ~/.config/openadapt/frame.key.
     monkeypatch.setenv("OPENADAPT_FRAME_SECRET", "11" * 32)
+    # The uncertain-write ledger: per test, never ~/.openadapt/ledger.
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / ".write-ledger"))
     monkeypatch.delenv("OPENADAPT_FRAME_SECRET_FILE", raising=False)
