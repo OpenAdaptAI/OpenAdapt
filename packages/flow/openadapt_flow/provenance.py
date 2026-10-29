@@ -99,6 +99,9 @@ class ParamProvenance(BaseModel):
     extractor: str = Field(min_length=1)
     #: ``text`` | ``code`` | ``date`` | ``currency``. Unset: inferred.
     value_kind: Optional[Literal["text", "code", "date", "currency"]] = None
+    #: How the source document writes a numeric date (``03/07/1984``):
+    #: ``mdy`` or ``dmy``. Unset, a date that reads two ways is ambiguous.
+    date_order: Optional[Literal["mdy", "dmy"]] = None
     #: The text as the source wrote it, when intake converted it (``value`` is
     #: the converted form, for example a date as ISO).
     raw_value: Optional[str] = None
@@ -247,7 +250,7 @@ def same_value(a: str, b: str, kind: str) -> bool:
 class FieldCheck:
     name: str
     #: ``agree`` | ``disagree`` | ``missing`` | ``instruction`` |
-    #: ``not_independent`` | ``no_document``
+    #: ``not_independent`` | ``no_document`` | ``ambiguous``
     result: str
     #: In memory only: never put in a receipt (values are data).
     first: Optional[str] = None
@@ -385,7 +388,7 @@ def bound_maps(effects: Any) -> dict[str, Any]:
     return {
         param: expr
         for param, (_field, expr) in bindings(effects).items()
-        if expr.map or expr.stored
+        if expr.map or expr.stored or expr.kind
     }
 
 
@@ -431,6 +434,7 @@ def round_trip(
             continue
         source_value = second.read(document, name, prov.source)
         mapping = (maps or {}).get(name)
+        kind = None if isinstance(mapping, Mapping) else getattr(mapping, "kind", None)
         if mapping is not None and source_value is not None:
             # The document shows the label, the record stores its code (a
             # state's name and "MA", a provider's name and their id), or a
@@ -452,6 +456,32 @@ def round_trip(
             # empty code agrees only with an empty (or unsaved) field.
             result = "agree" if stored == source_value else "disagree"
             checks.append(FieldCheck(name, result, stored, source_value))
+        elif kind is not None:
+            # A declared kind: the stored value against the document's, in
+            # canonical form. The document is read in its own date order (the
+            # provenance's), never the app's; without one, a date it prints
+            # two ways is ambiguous and stays unchecked.
+            from openadapt_flow.runtime.effects.readback_values import compare_value
+
+            verdict = compare_value(
+                stored,
+                source_value,
+                kind=kind,
+                source="structure",
+                date_order=prov.date_order,
+            )
+            checks.append(
+                FieldCheck(
+                    name,
+                    "agree"
+                    if verdict == "match"
+                    else "disagree"
+                    if verdict == "mismatch"
+                    else "ambiguous",
+                    stored,
+                    source_value,
+                )
+            )
         elif same_value(stored, source_value, _kind(prov, source_value)):
             checks.append(FieldCheck(name, "agree", stored, source_value))
         else:
@@ -492,12 +522,16 @@ def default_extractor(provenance: ProvenanceFile) -> LabelExtractor:
 
     specs: dict[str, Any] = {}
     aliases: dict[str, list[str]] = {}
+    formats: dict[str, str] = {}
     for name, prov in provenance.params.items():
         kind = ParamKind.DATE if prov.value_kind == "date" else ParamKind.STRING
         specs[name] = ParamSpec(name=name, type=kind)
         if prov.source.label:
             aliases[name] = [prov.source.label]
-    return LabelExtractor(specs, aliases)
+        if prov.date_order:
+            # The document's own order, never the app's.
+            formats[name] = "MM/DD/YYYY" if prov.date_order == "mdy" else "DD/MM/YYYY"
+    return LabelExtractor(specs, aliases, date_formats=formats)
 
 
 def read_sources(paths: list[Path]) -> dict[str, Any]:
