@@ -269,6 +269,7 @@ improvising or retrying when something is off.
 | Compile an agent's first verified run from a prompt (`compile-agent`), and a code-as-action authoring agent | On main ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)); the agent harness behind it runs on every backend, on main ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | Synthetic | `compile-agent` |
 | Score harness optimizers (Harness², Meta-Harness) on GUI tasks with the record read-back as the reward, with full trace export | On main ([#1299](https://github.com/OpenAdaptAI/OpenAdapt/pull/1299), [#1300](https://github.com/OpenAdaptAI/OpenAdapt/pull/1300), [#1301](https://github.com/OpenAdaptAI/OpenAdapt/pull/1301)) | Synthetic (scripted proposer) | `integrations/harness2/` |
 | One scoreboard comparing the agent alone with OpenAdapt across tasks (correctness by read-back, cost, time, items per hour) | On main ([#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)) | Synthetic and local OpenEMR and openIMIS test copies | `benchmark/scoreboard/` |
+| Pull a skill from the registry (`pull app/task@version`) and run it only after qualifying it on your own instance: `pull` marks it and expires any certification it carries, `skill bind` records your addresses and the names of the variables that hold credentials (never their values), `skill qualify` runs its bundled record check there, and `run`, `replay`, `emit-skill` and `emit-mcp` refuse it until then, and on any other instance. The index and its archives carry a keyless Sigstore attestation from the registry release workflow, checked offline against a pinned identity, and expire and can't be rolled back; a shipped record check runs no code and reads only your binding | On main | Unit tests | `openadapt-flow skill`, [SKILLS_REGISTRY.md](packages/flow/docs/design/SKILLS_REGISTRY.md) |
 
 ## Recording, privacy and proof
 
@@ -316,6 +317,7 @@ A test fails when a command has no file or this list is out of date.
 - `record`
 - `route`
 - `sections`: Show, rename, merge or split the named sections a program map folds
+- `skill`: Bind a pulled skill to your instance, qualify it there, and check whether it may run.
 - `variants`
 - `visualize`
 
