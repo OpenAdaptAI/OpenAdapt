@@ -84,8 +84,6 @@ FIELDS = (
 )
 
 
-@pytest.fixture(scope="module")
-
 def _email_literal(email: str) -> str:
     """The test's own made-up email as a SQL literal (the fixture's quoting
     refuses ``@``)."""
@@ -96,6 +94,8 @@ def _email_literal(email: str) -> str:
         raise ValueError("unexpected email")
     return "'" + email + "'"
 
+
+@pytest.fixture(scope="module")
 def openemr() -> Any:
     from benchmark.openemr_local.qualify_hooks import fixture
 
