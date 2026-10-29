@@ -279,3 +279,23 @@ def test_render_scaled_view_maps_the_dialog_box_back() -> None:
     )
     view = rs.render_scaled_backend(Inner(), transform)
     assert view.dialog_region_at(400, 160) == ("dialog", (300, 60, 400, 200))
+
+
+def test_dialog_band_is_the_whole_dialog_not_the_button_row() -> None:
+    # OpenEMR's duplicate dialog: the button row holds only the other button,
+    # so the band is every line of the dialog, the result text included.
+    dialog = (202, 12, 876, 500)
+    lines = [
+        _Line("1 - 0 of 0", (996, 52, 60, 16)),
+        _Line("No matches were found.", (227, 175, 160, 40)),
+        _Line("Confirm Create New Patient", (500, 270, 200, 20)),
+        _Line("Cancel", (730, 270, 50, 20)),
+        _Line("County:", (110, 262, 60, 18)),  # the form behind
+    ]
+    exclude = (520, 247, 160, 64)  # the confirm button's crop
+    text = identity_mod.context_from_lines(
+        lines, exclude_region=exclude, band=dialog, point=None, scope=dialog
+    )
+    assert text is not None
+    assert "No matches were found." in text and "Cancel" in text
+    assert "County" not in text and "Confirm" not in text

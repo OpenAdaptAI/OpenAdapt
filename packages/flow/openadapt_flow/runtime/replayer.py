@@ -15752,6 +15752,10 @@ class Replayer:
         tmpl = anchor.identity_template
         if not (anchor.context_text or (tmpl is not None and tmpl.tokens)):
             return census_mod.CensusDecision("cannot_count")
+        if anchor.dialog_region is not None:
+            # The band of a dialog target is the whole topmost dialog, and
+            # only one dialog is on top: there are no look-alike rows to count.
+            return census_mod.CensusDecision("not_a_row")
         today = date.today()
         try:
             lines = [
@@ -16261,6 +16265,11 @@ class Replayer:
         band = identity_mod.band_region(
             resolution.point, anchor.region[3], self.backend.viewport
         )
+        # A target in a dialog was recorded with the whole dialog as its band
+        # (see _verify_identity, which blanked the frame outside it).
+        dialog_box: Optional[Region] = self.__dict__.get("_identity_dialog_box")
+        if dialog_box is not None:
+            band = dialog_box
         # The recorded band was extracted EXCLUDING the target's own crop
         # (labels are mutable evidence the ladder heals through) and
         # excluding volatile lines. The live band must mirror both, or
@@ -16310,7 +16319,8 @@ class Replayer:
                         line.text, reference_date=today
                     )
                 ]
-                lines = identity_mod.lines_near_point(lines, point_y)
+                if dialog_box is None:
+                    lines = identity_mod.lines_near_point(lines, point_y)
                 if row_lines is not None:
                     row_lines.extend(lines)
                 observed = " ".join(line.text.strip() for line in lines)
@@ -16348,7 +16358,9 @@ class Replayer:
                 # translated identifier region. OCRing the crop itself can
                 # change segmentation/glyph recognition and false-halt a
                 # healthy screen.
-                None if identifier_region is not None else live_region,
+                None
+                if identifier_region is not None or dialog_box is not None
+                else live_region,
                 resolution.point[1],
                 exclude,
                 scoped_identifier=identifier_region is not None,
@@ -16442,6 +16454,7 @@ class Replayer:
             check.status == "verified"
             or identity_read_contradicts(check)
             or identifier_region is not None
+            or dialog_box is not None
         ):
             # A read of a different record is final: the row re-read below
             # must never overrule it into "verified".

@@ -48,6 +48,8 @@ def _open_dialog(demo, fixture, scroll_y: int):
     form.locator("#form_fname").fill("Wilhelmina")
     form.locator("#form_lname").fill("Okonkwo-Hale")
     form.locator("#form_DOB").fill("1961-04-09")
+    form.locator("#form_DOB").press("Escape")  # close the date picker
+    form.locator("#form_sex").select_option(label="Female")
     form.locator("#create").scroll_into_view_if_needed()
     form.evaluate(f"() => window.scrollTo(0, {int(scroll_y)})")
     form.locator("#create").evaluate("el => el.click()")

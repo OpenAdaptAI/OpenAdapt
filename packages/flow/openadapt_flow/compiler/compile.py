@@ -1683,8 +1683,8 @@ def _emit_identifier_crop(
         band_box = context_region_from_lines(
             frame_lines,
             exclude_region=crop_region,
-            band=band_region(click, crop_region[3], frame_size),
-            point=click,
+            band=scope or band_region(click, crop_region[3], frame_size),
+            point=None if scope is not None else click,
             min_confidence=MIN_OCR_CONFIDENCE,
             reference_date=reference_date,
             scope=scope,
@@ -2411,16 +2411,18 @@ def _compile_recording(
                 identity_lines = (
                     cached_lines(i, "dialog", masked) if masked is not None else []
                 )
+            # In a dialog the band is the whole dialog (its title, its result
+            # text, its buttons), not the button's row: the row of a dialog
+            # button often holds nothing but the other buttons.
             context_text = context_from_lines(
                 identity_lines,
                 exclude_region=crop_region,
-                band=band_region(
-                    click, crop_region[3], (frame.shape[1], frame.shape[0])
-                ),
+                band=dialog_region
+                or band_region(click, crop_region[3], (frame.shape[1], frame.shape[0])),
                 # Row refinement: record only the click point's OWN text
                 # row, matching what replay-time verification reads (the
                 # 64px band spans 2-3 rows of a dense table).
-                point=click,
+                point=None if dialog_region is not None else click,
                 min_confidence=MIN_OCR_CONFIDENCE,
                 reference_date=reference_date,
                 scope=dialog_region,
