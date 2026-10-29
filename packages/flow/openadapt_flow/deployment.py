@@ -768,6 +768,13 @@ class RuntimeSection(BaseModel):
     #: grounder / identity-VLM / state-verifier. Off by default => fully local,
     #: zero outbound calls.
     allow_model_grounding: bool = False
+    #: Local grounding model for pixel surfaces (Citrix, RDP, VNC, canvas):
+    #: finds an icon or unlabeled control again after a display-scale, zoom,
+    #: font or theme change, counting look-alikes and halting on a tie. Runs
+    #: in process with no outbound call; the pinned weights (24 MB) are
+    #: fetched once and SHA-256 checked. Off by default. See
+    #: :mod:`openadapt_flow.runtime.local_grounder`.
+    local_grounding: bool = False
     #: Arm the pixel-compare identity tier's VERIFY branch (experimental,
     #: evidence-gated). Off by default => the pixel tier only ever HALTs on a
     #: localized glyph change or ABSTAINs; it never pixel-VERIFIES (a
@@ -1670,7 +1677,20 @@ def build_replayer(
     fallback = model_grounder
     if fallback is None and appliance is not None:
         fallback = appliance.grounder
-    grounder = build_grounder(fallback=fallback)
+    local_model: Optional[Any] = None
+    if runtime_config is not None and runtime_config.local_grounding:
+        from openadapt_flow.runtime.local_grounder import LocalGroundingModel
+
+        local_model = LocalGroundingModel.load()
+        print(
+            "Local grounding model active for pixel surfaces "
+            "(in process, no outbound calls)."
+        )
+    grounder = (
+        build_grounder(fallback=fallback, local_model=local_model)
+        if local_model is not None
+        else build_grounder(fallback=fallback)
+    )
     if grounder is not None:
         print(f"Grounding rung active: {type(grounder).__name__}")
     require_settled = (

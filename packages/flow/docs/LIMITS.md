@@ -433,6 +433,32 @@ other than the recorded one, before and after the extra identity looks: that
 workflow always opens the recorded record, whose ID the recording read as
 `MRN Alo01`, and the kiosk has no selectable text.
 
+**Icons on the pixel path, and the local grounding model.** A template match
+compares the recorded crop with the live frame pixel for pixel, so an icon is
+not found at another display scale, zoom, font size or theme, or through a
+lossy codec. The optional local grounding model (`--local-grounding`, off by
+default) finds it again: a small open vision model (DINOv2-small, Apache-2.0,
+run in process) scores every place that looks like the recorded crop, and the
+step continues only when one place qualifies, alone or singled out by every
+landmark that OCR can locate. Two qualifying places stop the step. On a
+Chromium-drawn clinic screen
+([`benchmark/pixel_grounding`](../benchmark/pixel_grounding/README.md)) it
+found the two toolbar and form icons under 21 of 26 conditions where the
+template matcher found 8, abstained on the other 5, and picked no wrong
+target among 65 click targets. A query takes 133 ms (p95 139 ms) on a 1080p
+frame and about 310 ms (p95 up to 374 ms) at 4K on an M2 Max CPU; Apple's
+Neural Engine, through onnxruntime's CoreML provider, is slower. It does not change what a whole run
+does there: the same 4 of 39 runs saved in both arms, because other checks
+stop the run first. The layout check stops a zoomed or larger-font screen at
+its first step. The identity template of a banner does not match a dark
+theme. On a scaled screen the look-alike census counts the record's name in
+both the banner and the worklist row, and stops. The model only locates: a
+target with a text label is left to OCR, a crop of blank input field (whose
+look-alikes overlap) is left to the rest of the ladder, and identity, census,
+risk gate and postconditions apply to its point as to any other. The fixture
+is not a live Citrix ICA/HDX or RDP session, and the rung's thresholds were set
+on it.
+
 ### 2. A postcondition verifies only what it observes
 
 The compiler mines visual and, where available, structural changes from one

@@ -358,12 +358,34 @@ def bound_fields(effects: Any) -> dict[str, str]:
     return out
 
 
+def bound_maps(effects: Any) -> dict[str, dict[str, str]]:
+    """Parameter name -> the value map its field declares (label -> code).
+
+    The map comes from the same binding :func:`bound_fields` picks for the
+    parameter (the first one), so a map is never applied to another field.
+    """
+
+    first: dict[str, Any] = {}
+    for effect in effects:
+        for expr in effect.match.values():
+            if expr.param is not None:
+                first.setdefault(expr.param, expr)
+        if effect.field and effect.value is not None and effect.value.param:
+            first.setdefault(effect.value.param, effect.value)
+    return {
+        param: dict(expr.map)
+        for param, expr in first.items()
+        if getattr(expr, "map", None)
+    }
+
+
 def round_trip(
     provenance: ProvenanceFile,
     record: Optional[Mapping[str, Any]],
     fields: Mapping[str, str],
     documents: Mapping[str, Any],
     second: Extractor,
+    maps: Optional[Mapping[str, Mapping[str, str]]] = None,
 ) -> RoundTrip:
     """Compare ``record`` (as read back) with the source of each value.
 
@@ -398,9 +420,20 @@ def round_trip(
             checks.append(FieldCheck(name, "no_document"))
             continue
         source_value = second.read(document, name, prov.source)
+        mapping = (maps or {}).get(name)
+        if mapping is not None and source_value is not None:
+            # The document shows the label, the record stores its code (a
+            # state's name and "MA", a provider's name and their id).
+            source_value = mapping.get(source_value.strip())
         stored = "" if record.get(record_field) is None else str(record[record_field])
         if source_value is None:
             checks.append(FieldCheck(name, "missing", stored))
+        elif mapping is not None:
+            # A code is the exact stored value, as ``field_equals`` compares
+            # it: "PR1a" is not "pr1A", the label's kind doesn't apply, and an
+            # empty code agrees only with an empty (or unsaved) field.
+            result = "agree" if stored == source_value else "disagree"
+            checks.append(FieldCheck(name, result, stored, source_value))
         elif same_value(stored, source_value, _kind(prov, source_value)):
             checks.append(FieldCheck(name, "agree", stored, source_value))
         else:
