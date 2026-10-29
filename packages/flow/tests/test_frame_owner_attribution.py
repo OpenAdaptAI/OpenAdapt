@@ -44,6 +44,7 @@ INSERT INTO users VALUES (3, 'clinic3', 'uu-3', '2026-01-01 00:00:00');
 INSERT INTO users_secure VALUES (1, 'clinic2', 'hash1');
 INSERT INTO user_settings VALUES (1, 'gacl_protect', '1');
 INSERT INTO user_settings VALUES (3, 'gacl_protect', '1');
+INSERT INTO user_settings VALUES (0, 'gacl_protect', '1');
 INSERT INTO recent_patients VALUES (1, 1, NULL, '1');
 INSERT INTO recent_patients VALUES (2, 1, 9, '9');
 INSERT INTO user_prefs VALUES ('clinic2', 'theme', 'light');
@@ -314,7 +315,13 @@ def test_a_row_moved_to_another_user_is_not_excused(tmp_path: Path) -> None:
 
 
 def test_a_contract_may_restate_a_profile_owner(tmp_path: Path) -> None:
-    owners = {"user_settings": {"column": "setting_user", "by": "user_id"}}
+    owners = {
+        "user_settings": {
+            "column": "setting_user",
+            "by": "user_id",
+            "default": {"value": "0", "same": ["setting_label"]},
+        }
+    }
     result = _run(tmp_path, _entry("clinic2", "update"), CHANGE_OWN, owners=owners)
     assert _frame(result) == ("held", 1)
 
@@ -331,9 +338,13 @@ def test_a_contract_may_restate_a_profile_owner(tmp_path: Path) -> None:
         ({"contact": {"column": "foreign_id", "by": "user_id"}}, "reviewed"),
         ({"user_prefs": {"column": "owner_name", "by": "username"}}, "reviewed"),
         ({"patient_data": {"column": "email", "by": "username"}}, "reviewed"),
-        # A profile table, another way.
+        # A profile table, another way, or without its default rows.
         (
             {"user_settings": {"column": "setting_value", "by": "username"}},
+            "differs from the app profile",
+        ),
+        (
+            {"user_settings": {"column": "setting_user", "by": "user_id"}},
             "differs from the app profile",
         ),
     ],
@@ -372,3 +383,135 @@ def test_owners_need_a_table_field_a_database_and_a_profile() -> None:
     del doc["frame"]["database"]["profile_sha256"]
     with pytest.raises(Exception, match="profile"):
         parse_verify_config(doc)
+
+
+# OpenEMR's default rows. The first time anyone saves a label,
+# setUserSetting(..., createDefault=true) also inserts the global default for
+# it: a row with setting_user = 0 and the same setting_label. Seen on the
+# 8.0.0.3 fixture: a second user's one setting added rows for users 0 and 8.
+
+ADD_OWN = "INSERT INTO user_settings VALUES (1, 'dem_expand', '1')"
+ADD_DEFAULT = "INSERT INTO user_settings VALUES (0, 'dem_expand', '1')"
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [
+        # OpenEMR logs both inserts under the user, or (other configurations)
+        # only theirs: either way their row explains the default beside it.
+        (_entry("clinic2", "insert"), _entry("clinic2", "insert")),
+        (_entry("clinic2", "insert"),),
+    ],
+)
+def test_a_default_row_added_beside_a_users_first_save_is_theirs(
+    tmp_path: Path, entries: tuple[str, ...]
+) -> None:
+    result = _run(tmp_path, *entries, ADD_OWN, ADD_DEFAULT)
+    assert _frame(result) == ("held", 2), result["evidence"]["frame"]
+
+
+def test_the_bots_first_use_of_a_setting_is_its_own_bookkeeping(
+    tmp_path: Path,
+) -> None:
+    # The bot's own row is the profile's own_rows bookkeeping, and so is the
+    # default OpenEMR adds beside it. Its entries are filed under its chart.
+    result = _run(
+        tmp_path,
+        _entry("bot", "insert", pid="2"),
+        _entry("bot", "insert", pid="2"),
+        "INSERT INTO user_settings VALUES (2, 'dem_expand', '1')",
+        ADD_DEFAULT,
+    )
+    assert _frame(result) == ("held", 0), result["evidence"]["frame"]
+    used = result["evidence"]["frame"]["database"]["profile"]["rules_used"]
+    assert "user-settings" in used
+
+
+@pytest.mark.parametrize(
+    ("sql", "why"),
+    [
+        # A default row added alone, with or without an entry.
+        ((ADD_DEFAULT,), UNEXPLAINED),
+        ((_entry("clinic2", "insert"), ADD_DEFAULT), UNEXPLAINED),
+        # A default row changed or removed, even beside their own change to
+        # that label.
+        (
+            (
+                _entry("clinic2", "update"),
+                _entry("clinic2", "update"),
+                CHANGE_OWN,
+                "UPDATE user_settings SET setting_value = '0' WHERE setting_user = 0",
+            ),
+            UNEXPLAINED,
+        ),
+        (
+            (
+                _entry("clinic2", "delete"),
+                "DELETE FROM user_settings WHERE setting_user = 0",
+            ),
+            UNEXPLAINED,
+        ),
+        # Beside an explained row of another label.
+        (
+            (
+                _entry("clinic2", "insert"),
+                "INSERT INTO user_settings VALUES (1, 'fax_expand', '1')",
+                ADD_DEFAULT,
+            ),
+            UNEXPLAINED,
+        ),
+        # Beside a row nothing explains: both stay unexplained.
+        (
+            ("INSERT INTO user_settings VALUES (3, 'dem_expand', '1')", ADD_DEFAULT),
+            ("refuted", 2, 2),
+        ),
+        # Beside a row that is the bot's (its entry for the table): the
+        # partner refutes as the bot's, the default stays unexplained.
+        (
+            (
+                _entry("clinic2", "insert"),
+                _entry("bot", "insert", pid="2"),
+                ADD_OWN,
+                ADD_DEFAULT,
+            ),
+            ("refuted", 2, 1),
+        ),
+        # One explained row explains one default row: a second user's own
+        # row and its default, plus a lone default of another label.
+        (
+            (
+                _entry("clinic2", "insert"),
+                ADD_OWN,
+                ADD_DEFAULT,
+                "INSERT INTO user_settings VALUES (0, 'fax_expand', '1')",
+            ),
+            UNEXPLAINED,
+        ),
+    ],
+)
+def test_a_default_row_is_explained_only_beside_an_explained_row(
+    tmp_path: Path, sql: tuple[str, ...], why: tuple[str, int, int]
+) -> None:
+    assert _why(_run(tmp_path, *sql)) == why, sql
+
+
+@pytest.mark.parametrize(
+    "owner",
+    [
+        # A default row is for per-user state only, never a column rule's.
+        {"rule": "users-secure-sign-in", "default": {"value": "0", "same": ["id"]}},
+        # Its partner can't be matched by the owner column itself.
+        {"rule": "user-settings", "default": {"value": "0", "same": ["setting_user"]}},
+    ],
+)
+def test_a_profile_default_owner_is_for_own_rows_and_another_column(
+    owner: dict,
+) -> None:
+    from openadapt_flow.app_profiles import AppProfile
+
+    base = load_profile("openemr").model_dump(mode="json")
+    for rule in base["rules"]:
+        if rule["id"] == owner["rule"]:
+            rule["owner"]["default"] = owner["default"]
+    with pytest.raises(ValueError, match="default owner|same"):
+        AppProfile.model_validate(base)

@@ -4,8 +4,10 @@ While the bot saves a made-up patient through OpenEMR's Standard REST API (the
 fixture's ``actor`` OAuth client), a second real OpenEMR user, signed in to the
 OpenEMR web UI in their own browser session, changes one of their own UI
 settings. OpenEMR writes that setting to ``user_settings`` (owned by
-``setting_user``) and logs the write under that user. The frame must
-attribute the change to them and the save must verify. Two controls change
+``setting_user``) and, the first time anyone saves the label, the label's
+global default beside it (``setting_user = 0``), and logs the writes under
+that user. The frame must attribute both rows to them and the save must
+verify. Two controls change
 the second user's setting as the bot instead, and the frame must refute.
 
 What is real and what is not:
@@ -406,11 +408,17 @@ def test_the_second_users_own_setting_is_theirs(
     )
     owner = _user_id(openemr, SECOND_USER)
     rows = [r for r in _settings(openemr) if r["setting_label"] == target]
-    assert [r["setting_user"] for r in rows] == [owner], (
-        "OpenEMR did not write the second user's own setting"
+    # OpenEMR writes two rows: the user's own, and, since nobody has saved
+    # this label before, the global default (setting_user = 0) that
+    # setUserSetting(..., createDefault=true) adds beside it.
+    assert sorted(r["setting_user"] for r in rows) == sorted(["0", owner]), (
+        "OpenEMR did not write the second user's setting and its default"
     )
     assert verdict.status == "held", verdict.reason
-    assert len(verdict.concurrent) == 1, verdict.reason
+    # Both are theirs: their own row by their entry, the default beside it.
+    assert sorted(c.key for c in verdict.concurrent) == sorted(
+        [f"0:{target}", f"{owner}:{target}"]
+    ), verdict.reason
 
 
 def test_the_bot_changing_the_second_users_setting_refutes(
@@ -421,10 +429,12 @@ def test_the_bot_changing_the_second_users_setting_refutes(
 
     def during(pid: str) -> None:
         # The second user sets their own setting through OpenEMR (their
-        # entry for user_settings), then the bot changes that same row. One
-        # row, owned by the second user, with the second user's entry: only
-        # the rule that the bot's own entry for the table makes every row of
-        # it the bot's can refute. OpenEMR lets a user write only their own
+        # entry for user_settings; OpenEMR adds the label's default row
+        # beside it), then the bot changes the second user's row. That row
+        # is the second user's, with the second user's entry: only the rule
+        # that the bot's own entry for the table makes every row of it the
+        # bot's can refute it, and then the default row has no explained
+        # row beside it. OpenEMR lets a user write only their own
         # settings, so the bot's write is SQL, with the audit row OpenEMR
         # would write, filed under the chart the bot just saved (so the
         # audit-only check passes it).
@@ -445,11 +455,16 @@ def test_the_bot_changing_the_second_users_setting_refutes(
 
     verdict = _save_and_judge(openemr, during)
     assert verdict.status == "refuted", verdict.reason
-    # Refuted by that rule: one row, the bot's, none unexplained, and no
-    # audit-only entry.
-    assert [(c.surface, c.attribution, c.audit_only) for c in verdict.collateral] == [
-        ("user_settings", "self", False)
-    ], verdict.reason
+    # Refuted by that rule: the second user's row is the bot's, the default
+    # beside it unexplained, and no audit-only entry.
+    assert sorted(
+        (c.surface, str(c.key), c.attribution, c.audit_only) for c in verdict.collateral
+    ) == sorted(
+        [
+            ("user_settings", f"{owner}:{target}", "self", False),
+            ("user_settings", f"0:{target}", "unattributed", False),
+        ]
+    ), verdict.reason
     assert verdict.concurrent == [], verdict.reason
 
 

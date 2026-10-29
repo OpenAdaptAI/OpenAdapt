@@ -1008,21 +1008,41 @@ def judge_frame(
         before: Optional[Mapping[str, Any]],
         after: Optional[Mapping[str, Any]],
         fields: list[str],
-    ) -> bool:
-        """Is this row change the app's own bookkeeping (its profile)?"""
+    ) -> Optional[list[str]]:
+        """The app profile rules that make this row change the app's own
+        bookkeeping, or None."""
 
         if excuse is None or name not in hashers:
-            return False
+            return None
         rules = excuse(name, before, after, fields)
         if rules:
             excused_by.update(rules)
-            return True
-        return False
+            return list(rules)
+        return None
 
     # Each other actor's entry explains at most one row: a colleague's one
     # insert can't cover two stray rows.
     used: set[int] = set()
     owners = spec.owners()
+
+    def default_owner(name: str) -> Optional[Owner]:
+        """The table's owner, when it declares the app's default rows."""
+
+        table = table_of(name)
+        owner = owners.get(table_name(table)) if table else None
+        return owner if owner is not None and owner.default is not None else None
+
+    def default_row(name: str, record: Mapping[str, Any], hashed: bool) -> bool:
+        """Is this row one of the app's default rows (its owner value)?"""
+
+        owner = default_owner(name)
+        if owner is None or owner.default is None:
+            return False
+        held = record.get(owner.column)
+        hasher = hashers.get(name)
+        if hashed and hasher is not None:
+            return held == hasher(owner.column, owner.default.value)
+        return held is not None and str(held) == owner.default.value
 
     def owner_scoped(
         name: str,
@@ -1065,6 +1085,10 @@ def judge_frame(
         hashed = hasher is not None and before is not None
         held = record.get(col)
         if held in (None, "") or (hashed and held == hasher(col, None)):  # type: ignore[misc]
+            return "unattributed"
+        if default_row(name, record, hashed):
+            # The app's default row: no user owns it. Only an addition beside
+            # an explained row of the same label is explained (see below).
             return "unattributed"
 
         def owns(value: str) -> bool:
@@ -1319,6 +1343,41 @@ def judge_frame(
                     )
                 into[key] = dict(record)
         compared += len(set(before_map) | set(after_map))
+        #: Explained rows of a table with default rows: their ``same``
+        #: columns, how they were explained, and the profile rules that did.
+        partners: list[tuple[dict[str, str], str, list[str]]] = []
+        #: Default rows added in the window, judged once their partners are.
+        deferred: list[tuple[Any, dict[str, Any]]] = []
+
+        def partner(
+            before: Optional[Mapping[str, Any]],
+            after: Mapping[str, Any],
+            how: str,
+            rules: Sequence[str] = (),
+        ) -> None:
+            owner = default_owner(name)
+            if (
+                owner is None
+                or owner.default is None
+                or default_row(name, after, False)
+            ):
+                return
+            same = owner.default.same
+            if any(after.get(c) in (None, "") for c in same):
+                return
+            if before is not None:
+                # A changed partner must keep its ``same`` columns: a row
+                # relabelled in the window is no partner.
+                for c in same:
+                    if c not in before:
+                        return
+                    if (
+                        before.get(c) != hasher(c, after.get(c))
+                        if hasher is not None
+                        else not _same(before.get(c), after.get(c))
+                    ):
+                        return
+            partners.append(({c: str(after.get(c)) for c in same}, how, list(rules)))
 
         for key in set(before_map) | set(after_map):
             before = before_map.get(key)
@@ -1430,7 +1489,12 @@ def judge_frame(
                         declared_keys.add(str(side_ref))
                     new_row(name, key, after, (side.link_field,))
                     continue
-                if bookkeeping(name, None, after, []):
+                if default_row(name, after, False):
+                    deferred.append((key, after))
+                    continue
+                rules = bookkeeping(name, None, after, [])
+                if rules:
+                    partner(None, after, "bookkeeping", rules)
                     continue
                 theirs_side = False
                 extra_side = False
@@ -1455,6 +1519,8 @@ def judge_frame(
                     key=key,
                 )
                 note(change)
+                if change.attribution == "other":
+                    partner(None, after, "other")
                 view = views_of.get(name)
                 if change.attribution == "other" and view and spec.identity_field:
                     # The same record as its surface names it, for checks
@@ -1470,18 +1536,54 @@ def judge_frame(
                 )
             elif before is not None and after is not None:
                 fields = changed(name, before, after)
-                if fields and bookkeeping(name, before, after, fields):
+                rules = bookkeeping(name, before, after, fields) if fields else None
+                if rules:
+                    partner(before, after, "bookkeeping", rules)
                     continue
                 if fields:
-                    note(
-                        FrameChange(
-                            name,
-                            "changed",
-                            attribute(name, key, before, after),
-                            fields,
-                            key=key,
-                        )
+                    change = FrameChange(
+                        name,
+                        "changed",
+                        attribute(name, key, before, after),
+                        fields,
+                        key=key,
                     )
+                    note(change)
+                    if change.attribution == "other":
+                        partner(before, after, "other")
+
+        # A default row added in the window is the app's, written beside one
+        # explained row with the same ``same`` columns: another user's (then
+        # it is theirs too) or the bot's own bookkeeping. One partner each;
+        # with none it is unexplained.
+        for key, after in deferred:
+            owner = default_owner(name)
+            same = owner.default.same if owner and owner.default else []
+            found = next(
+                (
+                    i
+                    for i, (values, _how, _rules) in enumerate(partners)
+                    if all(str(after.get(c)) == values[c] for c in same)
+                ),
+                None,
+            )
+            fields = sorted(_without(after, ignore_for(name)))
+            if found is None:
+                note(
+                    FrameChange(
+                        name,
+                        "added",
+                        attribute(name, key, None, after),
+                        fields,
+                        key=key,
+                    )
+                )
+                continue
+            _values, how, rules = partners.pop(found)
+            if how == "bookkeeping":
+                excused_by.update(rules)
+                continue
+            note(FrameChange(name, "added", "other", fields, key=key))
 
     for table, why in unread_changes:
         # Moved in a way no row comparison explains: nothing can say which

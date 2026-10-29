@@ -146,6 +146,17 @@ column; `by: user_id` looks the actor's id up in the profile's `users`
 table. Table names compare lower-cased and without a schema, so an entry
 naming `USER_SETTINGS` or `openemr.user_settings` names `user_settings`.
 
+Some apps write a global default row beside a user's row. The first time
+anyone saves a label, OpenEMR's `setUserSetting` also inserts the label's
+default, a `user_settings` row with `setting_user = 0`. The profile declares
+it on the owner (`default: {value: "0", same: [setting_label]}`). A default
+row added in the window is explained only beside one explained row of the
+same table with equal `same` columns: another user's row (then the default
+is theirs too) or the bot's own row (then it is the bot's bookkeeping). Each
+explained row explains one default row. A default row changed or removed,
+added beside a row of another label, or added beside a row nothing
+explains, stays unexplained.
+
 `attribution.owners` can restate a profile table's owner in a contract, in
 the same shape. It can't add one: a table outside the profile's reviewed
 bookkeeping tables, or one that an append-only or column rule names (such
