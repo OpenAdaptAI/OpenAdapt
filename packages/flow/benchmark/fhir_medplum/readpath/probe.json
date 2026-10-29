@@ -1,22 +1,23 @@
 {
   "audit_lag_s": {
     "C": {
-      "max": 0.034,
-      "median": 0.005
+      "max": 0.043,
+      "median": 0.036
     },
     "D": {
-      "max": 0.034,
-      "median": 0.005
+      "max": 0.049,
+      "median": 0.036
     },
     "U": {
-      "max": 0.048,
-      "median": 0.005
+      "max": 0.043,
+      "median": 0.031
     }
   },
   "audit_names_the_user_profile": true,
   "audit_seen_on_an_immediate_read": [
     "C by bot",
     "C by bot",
+    "D by bot",
     "U by other"
   ],
   "audit_writes_are_logged": false,
@@ -39,7 +40,6 @@
     "C Patient by bot",
     "C Patient by bot",
     "C Patient by bot",
-    "C Patient by bot",
     "D Patient by bot",
     "D Patient by bot",
     "D Patient by bot",
@@ -51,7 +51,6 @@
     "D Patient by bot",
     "D Patient by bot",
     "D Patient by bot",
-    "U Patient by ['Practitioner/ef5bba41-50a5-4de7-9be1-3d7571089d75']",
     "U Patient by bot",
     "U Patient by bot",
     "U Patient by bot",
@@ -66,7 +65,7 @@
   "date_header": true,
   "delete_in_history": true,
   "meta_author_returned": false,
-  "policy": "AccessPolicy/34da6b2d-08c2-4c74-886a-5c4028cc0a82",
+  "policy": "AccessPolicy/f348be14-df4d-47cc-a49b-1f45e08dd554",
   "restricted_bot_audit_read_only": true,
   "restricted_bot_audit_writes": {
     "create": "HTTP 403",

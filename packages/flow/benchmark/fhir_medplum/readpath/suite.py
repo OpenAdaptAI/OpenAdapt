@@ -281,7 +281,9 @@ def run_case(
     names: dict[str, str] = {}
     for seed in case.get("seed") or []:
         write(fx, actors, "setup", {"op": "create", **seed}, names)
-    time.sleep(1.5)  # seeds fall before the window start (to the second)
+    # The window opens a second before the server's clock, which is to the
+    # second: setup writes (seeds, the agent's access policy) must be 2 s old.
+    time.sleep(2.5)
     os.environ["MEDPLUM_RECORD_TOKEN"] = fx.client_token("record-check")
     t0 = time.monotonic()
     baseline = capture_baseline(contract, params)

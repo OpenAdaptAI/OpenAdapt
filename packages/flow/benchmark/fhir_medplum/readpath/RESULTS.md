@@ -85,6 +85,27 @@ A review of the branch after these rounds found fail-open paths the suites
 didn't exercise (REVIEW.md). The fixes change the verifier, so the numbers
 above are for the verifier before them.
 
+All three suites were run again on the fixed verifier, against a fresh
+Medplum 5.2.8. Not blind: every suite had been seen.
+
+| Suite | Right | Fault passed as verified |
+| --- | --- | --- |
+| Round 1 (`5c1742e8`) | 18 of 18 | 0 |
+| Round 2 (`803b34c6`) | 20 of 20 | 0 |
+| Round 3 (`153d7899`) | 19 of 20 | 0 |
+
+Round 3's miss is the same clean create with `use` codes, for the same
+reason. The fixes cost no right answers on these suites.
+
+The first rerun found a harness fault. The verifier's window opens up to
+2 s before its first read, because it starts a second before the server's
+clock and that clock is reported to the second. The runner paused only 1.5 s
+after setup, so the first case's window held the runner's own setup write
+(the agent's access policy). The verifier couldn't read that resource's
+history and sent the case to review, which is the safe answer for the wrong
+reason. The pause is now 2.5 s. The numbers above are from the run after
+that change.
+
 ## What the rounds cover, and what they don't
 
 The suites exercise what the brief describes: existing and duplicate
