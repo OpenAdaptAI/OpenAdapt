@@ -839,3 +839,35 @@ def test_a_page_cannot_pass_for_guarded_from_its_start(
     assert again is not None and "answered for" in again, again
     assert held is None
     assert _messages(server, before) == []
+
+
+def test_a_page_cannot_pass_on_a_guarded_frames_answer(server: _Server) -> None:
+    """A document opened before the guard puts a function under the guard's
+    name that hands each call to the guard of an iframe loaded since (which
+    is guarded from its start) and returns its answer: the same document
+    answers twice, so the save is refused and the browser holds no more."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    with sync_api.sync_playwright() as playwright:
+        browser, page = _browser_page(playwright, guarded=False)
+        try:
+            page.goto(f"{server.url}?v=fetch")
+            backend = PlaywrightBackend(page)  # guards the context from now on
+            page.evaluate(
+                """(k) => new Promise((done) => {
+                  const f = document.createElement('iframe');
+                  f.src = '/newticket?v=plain'; f.onload = () => done(true);
+                  document.body.appendChild(f);
+                  Object.defineProperty(window, k, {
+                    value: (a, o) => f.contentWindow[k](a, o),
+                    writable: false, configurable: false });
+                })""",
+                backend._ws_guard_key,
+            )
+            refusal = backend._arm_wire_check(_expected(server))
+            armed = backend.form_submit_guard_armed
+        finally:
+            browser.close()
+    assert not armed
+    assert refusal is not None and "answered for the WebSocket guard" in refusal

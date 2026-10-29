@@ -2733,6 +2733,7 @@ class PlaywrightBackend:
 
         sockets = workers = sends = late = unreached = 0
         options = {"id": self._ws_hold, **options}
+        docs: set[str] = set()
         try:
             pages = list(self.page.context.pages)
         except Exception:  # noqa: BLE001 - the context is gone
@@ -2760,9 +2761,10 @@ class PlaywrightBackend:
                     continue
                 if not (
                     isinstance(count, list)
-                    and len(count) == 5
+                    and len(count) == 6
                     and all(isinstance(n, int) and n >= 0 for n in count[:3])
                     and isinstance(count[3], bool)
+                    and isinstance(count[5], str)
                 ):
                     if had:
                         # Something else is under the guard's name.
@@ -2772,7 +2774,11 @@ class PlaywrightBackend:
                 sockets += count[0]
                 workers += count[1]
                 sends += count[2]
-                if count[4] != (
+                # An answer passed on from another document's guard names
+                # that document twice in one pass.
+                relayed = count[5] in docs
+                docs.add(count[5])
+                if relayed or count[4] != (
                     self._ws_guard_proof if count[3] else self._ws_guard_late
                 ):
                     # Something other than the guard answered: it was handed
@@ -4840,7 +4846,8 @@ from openadapt_flow.backends._browser_process import (  # noqa: E402
 # A document is held while it has any hold id: ``hold``/``release`` add and
 # remove one in an open document, and ``armed``/``released`` init scripts do
 # so for documents loaded during a hold. Returns ``[sockets, workers, sends,
-# early, proof]`` for hold ``id``, or -1 when the guard can't be kept here.
+# early, proof, document]`` for hold ``id``, or -1 when the guard can't be
+# kept here.
 _WS_GUARD_JS = r"""(key, auth, proof, o) => {
   const g = globalThis;
   if (key in g) {
@@ -4859,6 +4866,9 @@ _WS_GUARD_JS = r"""(key, auth, proof, o) => {
   const hasOwn = Object.prototype.hasOwnProperty;
   const DOMEx = g.DOMException, TypeErr = TypeError;
   const early = !!o.start && typeof proof === 'string';
+  // Names this document in answers: an answer passed on from another
+  // document's guard shows that document's name a second time.
+  const doc = String(Math.random()).slice(2) + String(Date.now());
   const holds = Object.create(null);
   const counts = Object.create(null);
   const guarded = Object.create(null);
@@ -4957,7 +4967,7 @@ _WS_GUARD_JS = r"""(key, auth, proof, o) => {
     drop(free);
     const c = (typeof id === 'string' && counts[id]) || [0, 0, 0];
     if (typeof free === 'string') delete counts[free];
-    return [c[0], c[1], c[2], early, proof];
+    return [c[0], c[1], c[2], early, proof, doc];
   };
   try {
     define(g, key, {
