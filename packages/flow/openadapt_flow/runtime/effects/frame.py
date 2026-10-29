@@ -1012,6 +1012,18 @@ def judge_frame(
     #: state (an ``own_rows`` rule, or a default row beside such a row).
     own_written: set[str] = set()
 
+    def same_table(entry_table: Any, table: str) -> bool:
+        """Does an entry's table name this snapshot table, exactly? Case
+        aside, an unqualified name means the frame's own schema; a qualified
+        one must name the table as the snapshot does, so a table in a schema
+        the frame doesn't read is never this one."""
+
+        named = str(entry_table).lower()
+        mine = table.lower()
+        if named == mine:
+            return True
+        return "." not in named and "." in mine and mine.rsplit(".", 1)[1] == named
+
     def bookkeeping(
         name: str,
         before: Optional[Mapping[str, Any]],
@@ -1028,7 +1040,7 @@ def judge_frame(
             excused_by.update(rules)
             here = table_name(name)
             if set(rules) & own_rules.get(here, set()):
-                own_written.add(here)
+                own_written.add(name)
             return list(rules)
         return None
 
@@ -1119,8 +1131,15 @@ def judge_frame(
         ]
         if any(str(get_path(e, attribution.actor_field)) in self_ids for e in entries):
             # The bot wrote this table in the window, and its entry names no
-            # row: any row of the table may be its change.
+            # row: any row of the table may be its change. (Matched loosely,
+            # by unqualified name: the stricter the match, the more it misses.)
             return "self"
+        # Only an entry that names this very table explains a row of it.
+        entries = [
+            e
+            for e in entries
+            if same_table(get_path(e, attribution.table_field), table)
+        ]
         change = (
             "added" if before is None else "removed" if after is None else "changed"
         )
@@ -1585,7 +1604,7 @@ def judge_frame(
             if how == "bookkeeping":
                 excused_by.update(rules)
                 if table_of(name):
-                    own_written.add(table_name(str(table_of(name))))
+                    own_written.add(str(table_of(name)))
                 continue
             note(FrameChange(name, "added", "other", fields, key=key))
 
@@ -1652,7 +1671,9 @@ def judge_frame(
                     if attribution is not None and attribution.table_field
                     else None
                 )
-                if table not in (None, "") and table_name(str(table)) in own_written:
+                if table not in (None, "") and any(
+                    same_table(table, t) for t in own_written
+                ):
                     # The bot's write to its own per-user state (its UI
                     # settings, its recent charts): the whole-database diff
                     # judged that table row by row, and the profile excused

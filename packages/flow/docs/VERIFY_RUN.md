@@ -182,7 +182,14 @@ Fail closed:
 - The bot's own per-user rows stay the profile's bookkeeping when its entry
   names the table, and that entry is not counted as a write the contract
   doesn't cover, because the whole-database diff judged the table row by row. A bot
-  entry for such a table with none of its own rows excused still refutes.
+  entry for such a table with none of its own rows excused still refutes, and
+  so does one that names the table in a schema the frame doesn't read. An
+  entry's table matches a snapshot table only by its exact name (case
+  aside), or by its unqualified name when the entry names no schema.
+- That leaves a limit: in such a table, a change the bot makes and reverts
+  within the window, such as setting another user's row and setting it
+  back, leaves the same table before and after. Its entry is passed over,
+  so nothing refutes it, as with any comparison of two snapshots.
 - A table with no declared owner, an actor the users table doesn't know, a
   row with no owner, or an audit log that can't be read leaves the change
   unexplained.

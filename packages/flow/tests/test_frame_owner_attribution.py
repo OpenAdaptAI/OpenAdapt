@@ -250,6 +250,11 @@ BOTS = ("refuted", 1, 0)
         ),
         # No entry.
         ((CHANGE_OWN,), UNEXPLAINED),
+        # Their entry for this table in another schema.
+        (
+            (_entry("clinic2", "update", "other.user_settings"), CHANGE_OWN),
+            UNEXPLAINED,
+        ),
         # An entry for another table, or a view of this one.
         ((_entry("clinic2", "update", "patient_data"), CHANGE_OWN), UNEXPLAINED),
         ((_entry("clinic2", "view"), CHANGE_OWN), UNEXPLAINED),
@@ -473,6 +478,16 @@ def test_the_bots_entry_for_its_own_per_user_row_is_its_bookkeeping(
                 CHANGE_OWN,
             ),
             BOTS,
+        ),
+        # Its entry for the same table in a schema the frame doesn't read
+        # (review of #1637, probe S9): a write there escapes the diff, so the
+        # entry is still the bot's write the contract doesn't cover.
+        (
+            (
+                "INSERT INTO user_settings VALUES (2, 'gacl_protect', '0')",
+                _entry("bot", "update", "other.USER_SETTINGS", pid="1"),
+            ),
+            ("refuted", 1, 0),
         ),
         # Its entry for one per-user table doesn't cover another.
         (
