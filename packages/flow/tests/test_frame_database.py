@@ -104,7 +104,10 @@ def _doc(db: Path, frame: Optional[dict] = None, **database: Any) -> dict[str, A
             **database,
         },
     }
-    spec.update(frame or {})
+    frame = dict(frame or {})
+    if "record_keys" in frame:  # the attribution's per-table record keys
+        spec["attribution"]["record_keys"] = frame.pop("record_keys")
+    spec.update(frame)
     return {
         "schema_version": "openadapt.verify/v1",
         "verifier": {
@@ -527,7 +530,11 @@ def test_a_side_row_of_another_users_new_chart_is_theirs(tmp_path: Path) -> None
             "('clinic2', 0, 'insert', 'contact')"
         )
 
-    frame = {"side_records": [history, contact]}
+    # The contact row names its chart by foreign_id: its record key.
+    frame = {
+        "side_records": [history, contact],
+        "record_keys": {"contact": "foreign_id"},
+    }
     assert _frame(_run(tmp_path / "a", colleague, save=save, frame=frame)) == "held"
     # A contact row for a chart nobody created in the window still refutes.
     stray = "INSERT INTO contact (foreign_id) VALUES (1)"
