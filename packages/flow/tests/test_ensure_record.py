@@ -863,7 +863,16 @@ def test_void_compares_json_values_in_lists():
 
 @pytest.mark.parametrize(
     "entry",
-    ["status", '="x"', "status=entered-in-error", 'patient.reference="Patient/p1"'],
+    [
+        "status",
+        '="x"',
+        "status=entered-in-error",
+        'patient.reference="Patient/p1"',
+        'status ="entered-in-error"',
+        'status[x="y"="z"',
+        'status=["entered-in-error"]',
+        'patient[type=Patient].reference="Patient/p1"',
+    ],
 )
 def test_a_void_entry_must_be_a_path_and_a_json_value_off_identity(entry):
     with pytest.raises(ValueError):
@@ -882,3 +891,51 @@ def test_find_matches_leaves_out_void_records():
     c = vax_contract()
     matches, seen = find_matches(c, FhirReader(c, get=get), VAX_PARAMS)
     assert set(matches) == {"x"} and seen == 2
+
+
+# -- the adversarial review's findings (REVIEW_VOID.md) ---------------------------
+
+
+def test_review_1_an_existing_record_voided_in_the_window_is_not_found():
+    a, now = vax("a"), vax("a", "entered-in-error")
+    changes = ch("Immunization/a", "U", by=OTHER)
+    r = judge(vax_contract(), VAX_PARAMS, base(a), changes, {}, None, now)
+    assert r.outcome == "needs_review"
+    assert any("asserts nothing" in reason for reason in r.reasons)
+
+
+def test_review_2_void_values_compare_as_json_not_python_equality():
+    from openadapt_flow.ensure_record import is_void
+
+    assert not is_void(
+        vax_contract(void=["primarySource=true"]), vax("s") | {"primarySource": 1}
+    )
+    assert not is_void(
+        vax_contract(void=["doseQuantity.value=0"]),
+        vax("s") | {"doseQuantity": {"value": False}},
+    )
+    assert is_void(
+        vax_contract(void=["primarySource=true"]), vax("s") | {"primarySource": True}
+    )
+
+
+def test_review_4_a_void_path_may_filter_a_list():
+    from openadapt_flow.ensure_record import is_void
+
+    c = vax_contract(void=['identifier[system=urn:x].value="void"'])
+    hit = vax("i") | {
+        "identifier": [
+            {"system": "urn:y", "value": "void"},
+            {"system": "urn:x", "value": "void"},
+        ]
+    }
+    miss = vax("i") | {"identifier": [{"system": "urn:y", "value": "void"}]}
+    assert is_void(c, hit) and not is_void(c, miss)
+
+
+def test_review_6_an_unvalidated_bad_entry_reads_as_unreadable():
+    from openadapt_flow.ensure_record import is_void
+
+    c = vax_contract().model_copy(update={"void": ["status=entered-in-error"]})
+    with pytest.raises(Unreadable):
+        is_void(c, vax("x"))

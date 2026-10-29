@@ -174,18 +174,12 @@ class EnsureContract(BaseModel):
                 raise ValueError(f"identity names unknown fields: {missing}")
             if not any(p in self.search for p in rule):
                 raise ValueError(f"identity rule {rule} has no search parameter")
-        identity_paths = {self.fields[p].path for rule in self.identity for p in rule}
+        identity_paths = {
+            _bare(self.fields[p].path) for rule in self.identity for p in rule
+        }
         for entry in self.void:
-            path, eq, value = entry.partition("=")
-            if not path or not eq:
-                raise ValueError(f"void entry {entry!r} needs a path and a value")
-            try:
-                json.loads(value)
-            except ValueError as exc:
-                raise ValueError(
-                    f"void entry {entry!r}: the value is not JSON"
-                ) from exc
-            if path in identity_paths:
+            path, value = _void_entry(entry)
+            if _bare(path) in identity_paths:
                 raise ValueError(f"void entry {entry!r} names an identity field")
         return self
 
@@ -289,13 +283,58 @@ def extract_all(node: Any, path: str) -> list[Any]:
     return extract_all(child, rest) if child is not None else []
 
 
+#: A void path: dotted FHIR element names, each with an optional
+#: ``[name=value]`` filter, as ``fields`` paths take.
+_VOID_PATH = re.compile(
+    r"[A-Za-z][A-Za-z0-9_]*(\[[^\[\]\s=]+=[^\[\]\s]+\])?"
+    r"(\.[A-Za-z][A-Za-z0-9_]*(\[[^\[\]\s=]+=[^\[\]\s]+\])?)*"
+)
+
+
+def _bare(path: str) -> str:
+    """A path with its list filters dropped (``telecom.value``)."""
+
+    return re.sub(r"\[[^\]]*\]", "", path)
+
+
+def _void_entry(entry: str) -> tuple[str, Any]:
+    """``path=value`` split at the first ``=`` outside a filter, checked."""
+
+    depth = 0
+    for i, ch in enumerate(entry):
+        depth += {"[": 1, "]": -1}.get(ch, 0)
+        if ch == "=" and depth == 0:
+            path, raw = entry[:i], entry[i + 1 :]
+            break
+    else:
+        raise ValueError(f"void entry {entry!r} needs a path and a value")
+    if not _VOID_PATH.fullmatch(path):
+        raise ValueError(f"void entry {entry!r}: {path!r} is not an element path")
+    try:
+        value = json.loads(raw)
+    except ValueError as exc:
+        raise ValueError(f"void entry {entry!r}: the value is not JSON") from exc
+    if not isinstance(value, (str, int, float, bool)):
+        raise ValueError(f"void entry {entry!r}: the value must be one JSON scalar")
+    return path, value
+
+
 def is_void(contract: EnsureContract, resource: Mapping[str, Any]) -> bool:
-    """True when the resource holds a value that makes it assert nothing."""
+    """True when the resource holds a value that makes it assert nothing.
+
+    Values compare as JSON, so ``1`` is not ``true`` and ``0`` is not ``0.0``.
+    """
 
     for entry in contract.void:
-        path, _, want = entry.partition("=")
-        wanted = json.loads(want)
-        if any(value == wanted for value in extract_all(resource, path)):
+        try:
+            path, wanted = _void_entry(entry)
+        except ValueError as exc:  # a contract built without validation
+            raise Unreadable(str(exc)) from exc
+        want = json.dumps(wanted, ensure_ascii=False)
+        if any(
+            json.dumps(value, ensure_ascii=False) == want
+            for value in extract_all(resource, path)
+        ):
             return True
     return False
 
@@ -798,6 +837,10 @@ def judge(
             if dupes:
                 return _review(
                     [f"{len(dupes)} other record(s) are now also the person"], evidence
+                )
+            if existing_now is not None and is_void(contract, existing_now):
+                return _review(
+                    ["the existing record now asserts nothing (void)"], evidence
                 )
             if rid in after_matches or (
                 existing_now is not None and str(existing_now.get("id")) == rid
