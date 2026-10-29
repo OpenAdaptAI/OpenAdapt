@@ -640,8 +640,26 @@ def test_run_checks_the_deployments_app_address(tmp_path, monkeypatch):
 def test_an_emitted_mcp_server_refuses_another_instance(tmp_path, monkeypatch):
     import importlib.util
     import inspect
+    import sys
+    import types
 
     from openadapt_flow.emit.mcp_tool import emit_mcp_server
+
+    # The emitted server's own guard is under test, not the mcp package, whose
+    # 2.x line renamed FastMCP; stand in for it as test_emit does.
+    fastmcp = types.ModuleType("mcp.server.fastmcp")
+
+    class _FakeFastMCP:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def tool(self):  # noqa: ANN202 - mirrors FastMCP's decorator factory
+            return lambda func: func
+
+    fastmcp.FastMCP = _FakeFastMCP  # type: ignore[attr-defined]
+    for name in ("mcp", "mcp.server"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp)
 
     dest = _qualified(tmp_path, monkeypatch)
     server = emit_mcp_server(dest, tmp_path / "mcp" / "server.py")
