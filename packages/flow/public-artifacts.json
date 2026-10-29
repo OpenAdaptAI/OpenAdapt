@@ -343,6 +343,8 @@
     "benchmark/safety_gallery/results.json",
     "benchmark/silent_wrong_action/results.json",
     "benchmark/silent_wrong_action/silent_wrong_action.png",
+    "benchmark/skill_cache/apps/trac.verify.yaml",
+    "benchmark/skill_cache/results/mockmed/summary.json",
     "benchmark/structural_action/structural_action.json",
     "benchmark/ui_readback/results.json",
     "benchmark/undo_proposal/results/mockloan-fee-row.json",
