@@ -2378,6 +2378,11 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
     task's first screen before starting it; any other screen fails step 1's
     checks before input. Leaving the context only drops the DevTools
     connection. Every refusal raises :class:`SystemExit` before any input.
+
+    The tab was opened before this run attached, so its page loaded before
+    the WebSocket guard (:func:`~openadapt_flow.backends.playwright_backend.prepare_ws_guard`)
+    and a create-form save on it refuses to hold. The guard is installed on
+    attach: a document the tab loads after that (reload it) can hold one.
     """
 
     from openadapt_flow.interactive_recorder import (
@@ -2421,6 +2426,10 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
             )
         except BrowserAttachError as exc:
             raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Documents the tab loads from now on are guarded from their start.
+        prepare_ws_guard(page)
         recorded = getattr(workflow, "viewport", None)
         if recorded:
             try:

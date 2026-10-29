@@ -736,3 +736,106 @@ def test_holds_on_a_reloading_frame_release_every_frame(server: _Server) -> None
     assert sorted(_messages(server, before)) == [
         f"frame{i}" for i in range(len(opened))
     ]
+
+
+# A page that knows about the guard tries to end the hold or to pass for a
+# guarded page (the #1644 review's probes).
+_TAMPER_JS = """([U, M]) => {
+  const tried = [];
+  for (const k of Object.getOwnPropertyNames(window)) {
+    if (!k.startsWith('__oaflow_ws_')) continue;
+    const v = window[k];
+    try { if (v.holds) { v.holds.clear(); tried.push('holds'); } } catch (e) {}
+    try { v.early = true; } catch (e) {}
+    for (const o of [{release: 'x'}, {released: 'x'}, {}]) {
+      try { tried.push(JSON.stringify(v(undefined, o))); } catch (e) {}
+      try { tried.push(JSON.stringify(v('guess', o))); } catch (e) {}
+    }
+    try { delete window[k]; } catch (e) {}
+    try { window[k] = () => [0, 0, 0, true, 'x']; } catch (e) {}
+    try { Object.defineProperty(window, k, {value: 1}); } catch (e) {}
+  }
+  try {
+    const s = new WebSocket(U);
+    s.onopen = () => s.send(M);
+    return ['constructed', tried];
+  } catch (e) { return ['refused', tried]; }
+}"""
+
+
+def test_a_page_cannot_end_the_hold_through_the_guard(server: _Server) -> None:
+    """The guard's state is out of the page's reach: what the page can find
+    is a fixed function that answers -1 without the secret."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    before = len(server.received)
+    with sync_api.sync_playwright() as playwright:
+        browser, page = _browser_page(playwright)
+        try:
+            page.goto(f"{server.url}?v=fetch")
+            backend = PlaywrightBackend(page)
+            _hold(backend, server)
+            opened, tried = page.evaluate(_TAMPER_JS, [_ws_url(server), "tamper"])
+            refusal = backend.form_submit_guard_refusal(disarm=True)
+            page.wait_for_timeout(800)
+        finally:
+            browser.close()
+    assert opened == "refused", tried
+    assert all(t == "-1" for t in tried if t != "holds"), tried
+    assert "holds" not in tried
+    assert refusal is not None and "WebSocket" in refusal, refusal
+    assert _leaked(server, before, "tamper") == []
+
+
+@pytest.mark.parametrize(
+    "fake",
+    [
+        "() => [0, 0, 0, true, 'not the proof']",
+        "() => [0, 0, 0, true, null]",
+        "() => [0, 0, 0, false, null]",
+        "() => -1",
+        "({early: true, holds: new Set(), counts: new Map()})",
+        "({early: true, holds: new Set(), counts: new Map(), guarded: {},"
+        " patched: []})",
+    ],
+)
+def test_a_page_cannot_pass_for_guarded_from_its_start(
+    server: _Server, fake: str
+) -> None:
+    """A document opened before the guard defines the guard's name (as a
+    page that learned it could) before the backend reaches it: the save is
+    refused, and since anything under that name may have been handed the
+    secret, the browser refuses every later hold too, even reloaded."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    before = len(server.received)
+    with sync_api.sync_playwright() as playwright:
+        browser, page = _browser_page(playwright, guarded=False)
+        try:
+            page.goto(f"{server.url}?v=fetch")
+            backend = PlaywrightBackend(page)  # guards the context from now on
+            page.evaluate(
+                f"""(k) => Object.defineProperty(window, k, {{
+                  value: ({fake}), writable: false, configurable: false }})""",
+                backend._ws_guard_key,
+            )
+            refusal = backend._arm_wire_check(_expected(server))
+            assert not backend.form_submit_guard_armed
+            page.reload()
+            # Reloaded, the document is guarded from its start.
+            again = backend._arm_wire_check(_expected(server))
+            held = (
+                page.evaluate(_REACH_JS, [_ws_url(server), "held", "new WebSocket(U)"])
+                if again is None
+                else None
+            )
+            backend.form_submit_guard_refusal(disarm=True)
+            page.wait_for_timeout(800)
+        finally:
+            browser.close()
+    assert refusal is not None and "answered for the WebSocket guard" in refusal
+    assert again is not None and "answered for" in again, again
+    assert held is None
+    assert _messages(server, before) == []

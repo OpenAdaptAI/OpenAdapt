@@ -1721,9 +1721,9 @@ class PlaywrightBackend:
         Args:
             page: A Playwright page.
             ws_guard: What :func:`prepare_ws_guard` returned for the page's
-                context. Optional: the backend looks it up (or prepares it)
-                itself; documents opened before it was prepared can't hold a
-                create-form save.
+                context (kept for callers; the backend looks the guard up on
+                the context, or prepares it). Documents opened before it was
+                prepared can't hold a create-form save.
             native_fill: Insert typed text in one call when the focused
                 element is an ordinary text field. Off by default; the
                 ``fast`` speed profile (``runtime/speed.py``) turns it on
@@ -1803,7 +1803,12 @@ class PlaywrightBackend:
         # script so documents loaded from now on are guarded from their
         # start. A page opened before it (``launch`` and the CLI prepare
         # theirs first) can't hold a save.
-        self._ws_guard_key = ws_guard or prepare_ws_guard(self.page)
+        (
+            self._ws_guard_key,
+            self._ws_guard_auth,
+            self._ws_guard_proof,
+            self._ws_guard_late,
+        ) = _ws_guard_secrets(self.page)
         self._ws_hold: Optional[str] = None
         self._ws_hold_script: Any = None
         self._held_pages: list[tuple[Any, Callable[[Any], None]]] = []
@@ -2669,12 +2674,19 @@ class PlaywrightBackend:
         try:
             self._ws_hold_script = context.add_init_script(
                 f"({_WS_GUARD_JS})({json.dumps(self._ws_guard_key)}, "
+                f"{json.dumps(self._ws_guard_auth)}, null, "
                 f"{{armed: {json.dumps(hold)}}})"
             )
         except Exception:  # noqa: BLE001
             self._disarm_wire_check()
             return "could not hold the page's WebSockets"
         (_counts, late), unheld = self._ws_guard_frames({"hold": hold})
+        if self._ws_guard_tampered:
+            self._disarm_wire_check()
+            return (
+                "a page answered for the WebSocket guard, so saves in this "
+                "browser can't be held"
+            )
         if unheld:
             self._disarm_wire_check()
             return (
@@ -2691,6 +2703,24 @@ class PlaywrightBackend:
                 "exists (reload it)"
             )
         return None
+
+    @property
+    def _ws_guard_tampered(self) -> bool:
+        """Whether a page on this context answered for the guard. The
+        secret may have reached page code, so no save on the context can be
+        held from then on."""
+
+        try:
+            return getattr(self.page.context, "_oaflow_ws_guard_tampered", 0) is True
+        except Exception:  # noqa: BLE001 - the context is gone
+            return True
+
+    @_ws_guard_tampered.setter
+    def _ws_guard_tampered(self, value: bool) -> None:
+        try:
+            self.page.context._oaflow_ws_guard_tampered = bool(value)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _ws_guard_frames(
         self, options: dict[str, Any]
@@ -2715,25 +2745,42 @@ class PlaywrightBackend:
                 continue
             for frame in frames:
                 try:
-                    count = frame.evaluate(
-                        f"([k, o]) => ({_WS_GUARD_JS})(k, o)",
-                        [self._ws_guard_key, options],
+                    had, count = frame.evaluate(
+                        "([k, a, l, o]) => [k in globalThis, "
+                        f"({_WS_GUARD_JS})(k, a, l, o)]",
+                        [
+                            self._ws_guard_key,
+                            self._ws_guard_auth,
+                            self._ws_guard_late,
+                            options,
+                        ],
                     )
                 except Exception:  # noqa: BLE001 - detached or closing
                     unreached += 1
                     continue
-                if (
+                if not (
                     isinstance(count, list)
-                    and len(count) == 4
+                    and len(count) == 5
                     and all(isinstance(n, int) and n >= 0 for n in count[:3])
                     and isinstance(count[3], bool)
                 ):
-                    sockets += count[0]
-                    workers += count[1]
-                    sends += count[2]
-                    late += not count[3]
-                else:
+                    if had:
+                        # Something else is under the guard's name.
+                        self._ws_guard_tampered = True
                     unreached += 1
+                    continue
+                sockets += count[0]
+                workers += count[1]
+                sends += count[2]
+                if count[4] != (
+                    self._ws_guard_proof if count[3] else self._ws_guard_late
+                ):
+                    # Something other than the guard answered: it was handed
+                    # the secret, so no save on this browser can be held.
+                    self._ws_guard_tampered = True
+                    late += 1
+                elif not count[3]:
+                    late += 1
         return ((sockets, workers, sends), late), unreached
 
     def _ws_guard_notes(self) -> list[str]:
@@ -2772,6 +2819,7 @@ class PlaywrightBackend:
                 # later one marks this hold released for new documents.
                 context.add_init_script(
                     f"({_WS_GUARD_JS})({json.dumps(self._ws_guard_key)}, "
+                    f"{json.dumps(self._ws_guard_auth)}, null, "
                     f"{{released: {json.dumps(hold)}}})"
                 )
         except Exception:  # noqa: BLE001 - the context is gone
@@ -4770,114 +4818,153 @@ from openadapt_flow.backends._browser_process import (  # noqa: E402
     shared_browser,  # noqa: F401 - re-exported
 )
 
-# The page-side guard, run as ``(key, options)`` at the start of every
-# document (an init script, ``start``) and in every open frame when a save
-# is held. It wraps the page's WebSocket, WebTransport, RTCPeerConnection,
-# Worker and SharedWorker constructors so one constructed while the document
-# is held is refused there and never created, and it drops what is sent on a
-# WebSocket or RTCDataChannel while held. No ``prototype.constructor`` on a
-# wrapped chain leads back to the unwrapped constructor, and the wrapper's
-# own prototype is EventTarget. A document is held while any hold id is in
-# ``holds``: ``hold``/``release`` add and remove one in an open document,
-# and ``armed``/``released`` init scripts do so for documents loaded during
-# a hold. Returns ``[sockets, workers, sends, early]`` for hold ``id``
-# (``early``: the guard ran before any page script), or -1 when the guard
-# can't be kept here.
-_WS_GUARD_JS = r"""(key, o) => {
+# The page-side guard, run as ``(key, auth, proof, options)`` at the start of
+# every document (an init script, ``start``) and in every open frame when a
+# save is held. It wraps the page's WebSocket, WebTransport,
+# RTCPeerConnection, Worker and SharedWorker constructors so one constructed
+# while the document is held is refused there and never created, and it
+# drops what is sent on a WebSocket or RTCDataChannel while held. No
+# ``prototype.constructor`` on a wrapped chain leads back to the unwrapped
+# constructor, and the wrapper's own prototype is EventTarget.
+#
+# Its state lives in a closure. The page sees only ``globalThis[key]``, a
+# non-writable, non-configurable function that does nothing unless called
+# with ``auth``, a secret only Python and the init script hold. A document
+# where ``key`` is already defined when the guard installs gets no guard
+# (-1), so holding refuses. Each guard answers with the ``proof`` it was
+# installed with and never receives later: the init script's for a document
+# guarded from its start, another for one guarded late. Something else the
+# page put under ``key`` can show neither, so Python knows it was handed
+# ``auth`` and stops holding saves on that browser.
+#
+# A document is held while it has any hold id: ``hold``/``release`` add and
+# remove one in an open document, and ``armed``/``released`` init scripts do
+# so for documents loaded during a hold. Returns ``[sockets, workers, sends,
+# early, proof]`` for hold ``id``, or -1 when the guard can't be kept here.
+_WS_GUARD_JS = r"""(key, auth, proof, o) => {
   const g = globalThis;
-  let s = Object.prototype.hasOwnProperty.call(g, key) ? g[key] : null;
-  if (!s || typeof s !== 'object') {
-    s = {early: !!o.start, holds: new Set(), counts: new Map(),
-         guarded: {}, patched: []};
-    try {
-      Object.defineProperty(g, key, {value: s, enumerable: false});
-    } catch (e) { return -1; }
+  if (key in g) {
+    if (o.start) return -1;  // defined before the guard: never trust it
+    const control = g[key];
+    if (typeof control !== 'function') return -1;
+    try { return control(auth, o); } catch (e) { return -1; }
   }
-  const held = () => s.holds.size > 0;
+  // Only the start of a document or Python's own call installs a guard.
+  if (typeof proof !== 'string') return -1;
+  // Captured now: later page changes to these don't reach the guard.
+  const construct = Reflect.construct, apply = Reflect.apply;
+  const define = Object.defineProperty, own = Object.getOwnPropertyNames;
+  const describe = Object.getOwnPropertyDescriptor;
+  const protoOf = Object.getPrototypeOf, setProto = Object.setPrototypeOf;
+  const hasOwn = Object.prototype.hasOwnProperty;
+  const DOMEx = g.DOMException, TypeErr = TypeError;
+  const early = !!o.start && typeof proof === 'string';
+  const holds = Object.create(null);
+  const counts = Object.create(null);
+  const guarded = Object.create(null);
+  const patched = [];
+  let held = 0;
   const bump = (i) => {
-    for (const h of s.holds) {
-      const c = s.counts.get(h) || [0, 0, 0];
+    for (const h in holds) {
+      const c = counts[h] || (counts[h] = [0, 0, 0]);
       c[i] += 1;
-      s.counts.set(h, c);
     }
   };
   const base = typeof g.EventTarget === 'function' ? g.EventTarget : null;
   const stop = base ? base.prototype : Object.prototype;
+  const seen = (q) => {
+    for (let i = 0; i < patched.length; i++) if (patched[i] === q) return true;
+    return false;
+  };
   const patchSend = (q) => {
-    if (!q || !Object.prototype.hasOwnProperty.call(q, 'send') ||
-        s.patched.includes(q)) return true;
+    if (!q || !apply(hasOwn, q, ['send']) || seen(q)) return true;
     const send = q.send;
     if (typeof send !== 'function') return true;
     try {
-      Object.defineProperty(q, 'send', {
+      define(q, 'send', {
         value: function send_(...args) {
-          if (held()) { bump(2); return undefined; }
-          return Reflect.apply(send, this, args);
+          if (held > 0) { bump(2); return undefined; }
+          return apply(send, this, args);
         }, writable: true, configurable: true, enumerable: true,
       });
     } catch (e) { return false; }
-    s.patched.push(q);
+    patched[patched.length] = q;
     return true;
   };
   const wrap = (name, slot) => {
     const inner = g[name];
-    if (typeof inner !== 'function' || inner === s.guarded[name]) return true;
+    if (typeof inner !== 'function' || inner === guarded[name]) return true;
     const Guarded = {[name]: function (...args) {
       if (!new.target) {
-        throw new TypeError("Failed to construct '" + name + "': " +
+        throw new TypeErr("Failed to construct '" + name + "': " +
           "Please use the 'new' operator");
       }
-      if (held()) {
+      if (held > 0) {
         bump(slot);
-        throw new DOMException(
+        throw new DOMEx(
           'A ' + name + ' cannot start while a checked save is held',
           'SecurityError');
       }
-      return Reflect.construct(
+      return construct(
         inner, args, new.target === Guarded ? inner : new.target);
     }}[name];
     Guarded.prototype = inner.prototype;
-    if (base) Object.setPrototypeOf(Guarded, base);
-    for (const k of Object.getOwnPropertyNames(inner)) {
+    if (base) setProto(Guarded, base);
+    const names = own(inner);
+    for (let i = 0; i < names.length; i++) {
+      const k = names[i];
       if (k === 'prototype' || k === 'length' || k === 'name') continue;
-      const d = Object.getOwnPropertyDescriptor(inner, k);
-      try { Object.defineProperty(Guarded, k, d); } catch (e) { return false; }
+      try { define(Guarded, k, describe(inner, k)); } catch (e) { return false; }
     }
     // No prototype's constructor leads back to the unguarded one.
     for (let q = inner.prototype; q && q !== stop && q !== Object.prototype;
-         q = Object.getPrototypeOf(q)) {
+         q = protoOf(q)) {
       try {
-        Object.defineProperty(q, 'constructor', {
+        define(q, 'constructor', {
           value: Guarded, writable: true, configurable: true, enumerable: false,
         });
       } catch (e) { return false; }
       if (name === 'WebSocket' && !patchSend(q)) return false;
     }
     try {
-      Object.defineProperty(g, name, {
+      define(g, name, {
         value: Guarded, writable: true, configurable: true, enumerable: false,
       });
     } catch (e) { return false; }
-    s.guarded[name] = Guarded;
+    guarded[name] = Guarded;
     return true;
   };
-  const kept = [
-    ['WebSocket', 0], ['WebTransport', 0], ['RTCPeerConnection', 0],
-    ['webkitRTCPeerConnection', 0], ['Worker', 1], ['SharedWorker', 1],
-  ].every(([name, slot]) => wrap(name, slot));
-  if (!kept || (g.RTCDataChannel && !patchSend(g.RTCDataChannel.prototype))) {
-    return -1;
-  }
-  if (typeof o.armed === 'string') s.holds.add(o.armed);
-  if (typeof o.released === 'string') s.holds.delete(o.released);
-  if (typeof o.hold === 'string') {
-    s.holds.add(o.hold);
-    s.counts.set(o.hold, [0, 0, 0]);
-  }
-  if (typeof o.release === 'string') s.holds.delete(o.release);
-  const c = (typeof o.id === 'string' && s.counts.get(o.id)) || [0, 0, 0];
-  if (typeof o.release === 'string') s.counts.delete(o.release);
-  return [c[0], c[1], c[2], s.early];
+  const kept = wrap('WebSocket', 0) && wrap('WebTransport', 0) &&
+    wrap('RTCPeerConnection', 0) && wrap('webkitRTCPeerConnection', 0) &&
+    wrap('Worker', 1) && wrap('SharedWorker', 1) &&
+    (!g.RTCDataChannel || patchSend(g.RTCDataChannel.prototype));
+  if (!kept) return -1;
+  const add = (h) => {
+    if (typeof h === 'string' && !(h in holds)) { holds[h] = true; held += 1; }
+  };
+  const drop = (h) => {
+    if (typeof h === 'string' && h in holds) { delete holds[h]; held -= 1; }
+  };
+  const control = function (a, p) {
+    if (a !== auth || typeof auth !== 'string' || !p || typeof p !== 'object') {
+      return -1;
+    }
+    const arm = p.armed, release = p.released, hold = p.hold, id = p.id,
+      free = p.release;
+    add(arm);
+    drop(release);
+    if (typeof hold === 'string') { add(hold); counts[hold] = [0, 0, 0]; }
+    drop(free);
+    const c = (typeof id === 'string' && counts[id]) || [0, 0, 0];
+    if (typeof free === 'string') delete counts[free];
+    return [c[0], c[1], c[2], early, proof];
+  };
+  try {
+    define(g, key, {
+      value: control, writable: false, configurable: false, enumerable: false,
+    });
+  } catch (e) { return -1; }
+  return control(auth, o);
 }"""
 
 
@@ -4889,19 +4976,40 @@ def prepare_ws_guard(target: Any) -> str:
     before it can't hold a create-form save. It changes nothing while no
     save is held. Never raises: if it can't install, holding refuses."""
 
+    return _ws_guard_secrets(target)[0]
+
+
+def _ws_guard_secrets(target: Any) -> tuple[str, str, str, str]:
+    """The context's guard key and its secrets, installing the guard on
+    first use: ``auth`` lets Python drive the guard, and a guard shows
+    ``proof`` when installed at a document's start, ``late`` otherwise."""
+
     context = target
     if not hasattr(target, "new_page"):  # a page: guard its context
         context = getattr(target, "context", None)
-    key = getattr(context, "_oaflow_ws_guard_key", None)
-    if isinstance(key, str):
-        return key
-    key = f"__oaflow_ws_{uuid.uuid4().hex}"
+    known = getattr(context, "_oaflow_ws_guard", None)
+    if (
+        isinstance(known, tuple)
+        and len(known) == 4
+        and all(isinstance(part, str) for part in known)
+    ):
+        return known
+    secrets = (
+        f"__oaflow_ws_{uuid.uuid4().hex}",
+        uuid.uuid4().hex + uuid.uuid4().hex,
+        uuid.uuid4().hex + uuid.uuid4().hex,
+        uuid.uuid4().hex + uuid.uuid4().hex,
+    )
+    key, auth, proof, _late = secrets
     try:
-        context.add_init_script(f"({_WS_GUARD_JS})({json.dumps(key)}, {{start: true}})")
-        context._oaflow_ws_guard_key = key
+        context.add_init_script(
+            f"({_WS_GUARD_JS})({json.dumps(key)}, {json.dumps(auth)}, "
+            f"{json.dumps(proof)}, {{start: true}})"
+        )
+        context._oaflow_ws_guard = secrets
     except Exception:  # noqa: BLE001 - a stand-in context; holding refuses
         pass
-    return key
+    return secrets
 
 
 def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:
