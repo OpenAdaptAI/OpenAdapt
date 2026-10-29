@@ -180,11 +180,11 @@ class LazyLLMQualificationProposer:
         if client is None:
             import anthropic
 
-            from openadapt_flow.benchmark.agent_baseline import load_api_key
+            from openadapt_flow.anthropic_defaults import load_api_key
 
             client = anthropic.Anthropic(api_key=load_api_key())
         if model is None:
-            from openadapt_flow.benchmark.agent_baseline import MODEL as DEFAULT_MODEL
+            from openadapt_flow.anthropic_defaults import MODEL as DEFAULT_MODEL
 
             model = DEFAULT_MODEL
         from openadapt_flow import privacy

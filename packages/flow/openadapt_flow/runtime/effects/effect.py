@@ -56,6 +56,35 @@ from pydantic import (
 )
 from pydantic_core import to_jsonable_python
 
+ValueKind = Literal["phone", "date", "email"]
+
+
+def kind_form(
+    kind: Optional[str], value: Any, date_order: Optional[str] = None
+) -> Optional[str]:
+    """``value`` in the canonical form of a declared value kind, or None when
+    it can't be read as one (which then matches nothing). The one normalizer
+    is :mod:`openadapt_flow.runtime.effects.readback_values`, shared with the
+    on-screen read-back:
+
+    - ``phone``: the digits, with an extension kept apart; a value with
+      anything but digits, ``( ) + - . /``, spaces and one trailing extension
+      isn't a phone number;
+    - ``date``: ISO ``YYYY-MM-DD`` (a stored date-time keeps its date; nothing
+      else may follow); a numeric date needs ``date_order``, or it is
+      ambiguous;
+    - ``email``: one address, case folded.
+    """
+
+    from openadapt_flow.runtime.effects.readback_values import normalize_value
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if kind is None:
+        return text
+    return normalize_value(text, kind, date_order=date_order)  # type: ignore[arg-type]
+
 
 class ValueExpr(BaseModel):
     """A single effect-contract value: either a static ``literal`` or a
@@ -91,6 +120,19 @@ class ValueExpr(BaseModel):
     #: reads the entered value back as its code. A value the map doesn't name
     #: resolves to nothing, so the check matches nothing and fails closed.
     map: Optional[dict[str, str]] = None
+    #: For a ``param`` the system of record stores transformed: how it stores
+    #: what was entered (OpenEMR's New Patient form saves street and city in
+    #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
+    #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). The check stays exact:
+    #: it expects the stored form, not any casing.
+    stored: Optional[Literal["upper", "lower"]] = None
+    #: A declared value kind (:func:`kind_form`): the expected value and the
+    #: stored one are compared in canonical form, so formatting alone never
+    #: refutes, and a different value always does. Never inferred.
+    kind: Optional[ValueKind] = None
+    #: ``kind: date`` only: how a numeric date entered for this value reads.
+    date_order: Optional[Literal["mdy", "dmy"]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
@@ -102,6 +144,10 @@ class ValueExpr(BaseModel):
             raise ValueError("effect parameter name must not be empty")
         if self.map is not None and (self.param is None or not self.map):
             raise ValueError("a value map needs a parameter and at least one entry")
+        if self.stored is not None and self.param is None:
+            raise ValueError("a stored form applies to a parameter")
+        if self.date_order is not None and self.kind != "date":
+            raise ValueError("date_order applies to kind: date")
         return self
 
     @model_serializer(mode="wrap")
@@ -109,8 +155,10 @@ class ValueExpr(BaseModel):
         # A value without a map serializes exactly as before, so existing
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
-        if isinstance(data, dict) and data.get("map") is None:
-            data.pop("map", None)
+        if isinstance(data, dict):
+            for key in ("map", "stored", "kind", "date_order"):
+                if data.get(key) is None:
+                    data.pop(key, None)
         return data
 
     def resolve(self, params: Mapping[str, object]) -> Optional[str]:
@@ -129,14 +177,36 @@ class ValueExpr(BaseModel):
             from openadapt_flow.runtime.authorization import runtime_param_text
 
             entered = runtime_param_text(params[self.param])  # type: ignore[arg-type]
-            if self.map is not None:
-                return self.map.get(entered)
-            return entered
+            return self.stored_form(entered)
         return self.literal
+
+    def stored_form(self, entered: str) -> Optional[str]:
+        """What the system of record stores for ``entered``: its code under
+        :attr:`map` (None when the map doesn't name it), then :attr:`stored`."""
+
+        value: Optional[str] = entered
+        if self.map is not None:
+            value = self.map.get(entered)
+        if value is not None and self.stored == "upper":
+            value = value.upper()
+        elif value is not None and self.stored == "lower":
+            value = value.lower()
+        return value
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
         """Return a pure-literal copy of this expression bound to ``params``."""
-        return ValueExpr(literal=self.resolve(params))
+        return ValueExpr(
+            literal=self.resolve(params), kind=self.kind, date_order=self.date_order
+        )
+
+    def matches(self, stored: Any) -> bool:
+        """Does a stored value equal this (resolved) value? In canonical form
+        when a kind is declared, as text otherwise."""
+
+        if self.kind is None:
+            return str(stored) == str(self)
+        want = kind_form(self.kind, self.literal, self.date_order)
+        return want is not None and kind_form(self.kind, stored) == want
 
     # -- transparent str-compatibility (back-compat with the v1 plain-string
     #    form): a literal ValueExpr compares, hashes, stringifies, and reprs
@@ -652,6 +722,22 @@ class Effect(BaseModel):
     #: Which record field carries the idempotency key (substrate-specific;
     #: the MockMed system-of-record uses ``"key"``).
     key_field: str = "key"
+    #: ``record_written`` only: a duplicate (idempotency) key made of several
+    #: fields, such as OpenEMR's ``{lname, fname, DOB}``. Field -> value, each
+    #: a :class:`ValueExpr` like :attr:`match`. The count reads only records
+    #: whose key fields all match, and the check also REFUTES when more than
+    #: one record in the read set carries the key, counting records that
+    #: existed before the action as well as new ones (so ``count_new_only``
+    #: cannot hide a second chart for the same person). Those other records
+    #: are compared loosely (case, spacing, a date read back as a datetime),
+    #: the save's own record exactly. The read must therefore cover the key:
+    #: filtered by key fields only, or complete (no row limit, or a paged
+    #: read with a total). A one-field composite key is allowed and differs
+    #: from :attr:`idempotency_key` in counting pre-existing records.
+    #: ``expected_count`` must be 0 or 1. Use either this or
+    #: :attr:`idempotency_key`, not both. Bound into the contract hash and
+    #: serialized only when set, so existing digests hold.
+    composite_key: dict[str, ValueExpr] = Field(default_factory=dict)
     #: Cross-cutting duplicate-write / idempotency guard (kit). When True, a
     #: ``record_written`` count considers ONLY records that are NEW relative to
     #: the pre-action snapshot (by :func:`stable_id`): with the default
@@ -740,7 +826,7 @@ class Effect(BaseModel):
             return ValueExpr(literal=v)
         return v
 
-    @field_validator("match", mode="before")
+    @field_validator("match", "composite_key", mode="before")
     @classmethod
     def _coerce_match(cls, v: Any) -> Any:
         if isinstance(v, dict):
@@ -801,7 +887,45 @@ class Effect(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.forbid_collateral_change:
             data.pop("forbid_collateral_change", None)
+        if not self.composite_key:
+            data.pop("composite_key", None)
         return data
+
+    @model_validator(mode="after")
+    def _composite_key_shape(self) -> "Effect":
+        """A composite duplicate key is a ``record_written`` guard that
+        replaces the single-field key; refuse a contract that mixes them."""
+        if not self.composite_key:
+            return self
+        if self.kind is not EffectKind.RECORD_WRITTEN:
+            raise ValueError("composite_key applies only to record_written effects")
+        if self.idempotency_key is not None:
+            raise ValueError(
+                "give the duplicate key as idempotency_key (one field) or "
+                "composite_key (several fields), not both"
+            )
+        if any(not name.strip() for name in self.composite_key):
+            raise ValueError("composite_key field names must not be blank")
+        if self.expected_count > 1:
+            # Every one of the expected records would carry the key, so the
+            # duplicate rule would refute each correct save.
+            raise ValueError(
+                "composite_key identifies one record; it cannot be combined "
+                f"with expected_count {self.expected_count}"
+            )
+        return self
+
+    def key_selector(self) -> dict[str, ValueExpr]:
+        """The duplicate key as a ``field -> value`` selector.
+
+        ``{key_field: idempotency_key}`` for the single-field form, the
+        :attr:`composite_key` for the several-field form, empty without a key.
+        """
+        if self.composite_key:
+            return dict(self.composite_key)
+        if self.idempotency_key is not None:
+            return {self.key_field: self.idempotency_key}
+        return {}
 
     @model_validator(mode="after")
     def _exact_new_set_shape(self) -> "Effect":
@@ -879,6 +1003,9 @@ class Effect(BaseModel):
                     else self.idempotency_key.resolved(params)
                 ),
                 "readback": _resolve_readback(self.readback, params),
+                "composite_key": {
+                    k: v.resolved(params) for k, v in self.composite_key.items()
+                },
             },
         )
         resolved._contract_hash_override = self.resolved_contract_hash(
@@ -953,6 +1080,10 @@ class Effect(BaseModel):
                 for selector in self.new_records
             ]
             payload["identity_field"] = self.identity_field
+        if self.composite_key:
+            payload["composite_key"] = {
+                k: value(v) for k, v in sorted(self.composite_key.items())
+            }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -964,6 +1095,7 @@ class Effect(BaseModel):
         expressions = [
             *self.match.values(),
             *(expr for selector in self.new_records for expr in selector.values()),
+            *self.composite_key.values(),
             self.value,
             self.idempotency_key,
         ]
@@ -1023,6 +1155,11 @@ class Effect(BaseModel):
                 for selector in self.new_records
             ]
             payload["identity_field"] = self.identity_field
+        # Bound ONLY when set, so every single-key contract keeps its digest.
+        if self.composite_key:
+            payload["composite_key"] = {
+                k: str(v) for k, v in sorted(self.composite_key.items())
+            }
         # A value that reads an entered label back as a stored code binds its
         # map: a changed map is a different contract. Included only when a
         # value has one, so every other contract keeps its exact digest.
@@ -1034,6 +1171,9 @@ class Effect(BaseModel):
             expr = getattr(self, name)
             if isinstance(expr, ValueExpr) and expr.map is not None:
                 maps[name] = dict(sorted(expr.map.items()))
+        for key, expr in sorted(self.composite_key.items()):
+            if isinstance(expr, ValueExpr) and expr.map is not None:
+                maps[f"composite_key.{key}"] = dict(sorted(expr.map.items()))
         for index, selector in enumerate(self.new_records):
             for key, expr in sorted(selector.items()):
                 if isinstance(expr, ValueExpr) and expr.map is not None:
@@ -1210,7 +1350,10 @@ def record_matches(record: dict[str, Any], selector: dict[str, str]) -> bool:
     An empty selector matches every record (used by absence checks).
     """
     for key, want in selector.items():
-        if str(record.get(key, None)) != str(want):
+        if isinstance(want, ValueExpr) and want.kind is not None:
+            if not want.matches(record.get(key, None)):
+                return False
+        elif str(record.get(key, None)) != str(want):
             return False
     return True
 

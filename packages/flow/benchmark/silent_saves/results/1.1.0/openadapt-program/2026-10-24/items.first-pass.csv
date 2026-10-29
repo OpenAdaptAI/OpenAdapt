@@ -1,0 +1,118 @@
+item,fault,kind,expect,release,drift,executor,claimed_success,readback_confirmed,reported_success,store_verdict,store_changed,outcome,outcome_alone,model_calls,cost_usd,item_s,readback_s,host_load_1m,human_events,human_minutes,final_text,error
+1,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,26.685,,238.58,,0,VERIFIED,
+2,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,10.744,,215.58,,0,VERIFIED,
+3,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,10.368,,191.27,,0,VERIFIED,
+4,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,12.547,,164.54,,0,VERIFIED,
+5,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,18.168,,135.07,,0,VERIFIED,
+6,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,17.278,,116.26,,0,VERIFIED,
+7,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,36.773,,92.91,,0,VERIFIED,
+8,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,37.465,,130.88,,0,VERIFIED,
+9,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,20.659,,252.83,,0,VERIFIED,
+10,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,26.148,,290.78,,0,VERIFIED,
+11,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,27.619,,314.34,,0,VERIFIED,
+12,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,32.817,,320.97,,0,VERIFIED,
+13,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,36.659,,331.12,,0,VERIFIED,
+14,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,46.49,,377.96,,0,VERIFIED,
+15,ok,control,save,baseline,,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,31.439,,401.58,,0,VERIFIED,
+16,ok,change,save,renamed controls,rename,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,48.379,,389.92,,0,,DurableAuthorityBusy: the external durable authority is unavailable
+17,ok,change,save,renamed controls,rename,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,50.704,,406.33,,0,,DurableAuthorityBusy: the external durable authority is unavailable
+18,ok,change,save,renamed controls,rename,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,30.052,,431.19,,0,,DurableAuthorityBusy: the external durable authority is unavailable
+19,ok,change,save,renamed controls,rename,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,69.911,,428.7,,0,VERIFIED,
+20,no_persist,fault,save,renamed controls,rename,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,74.58,,479.37,,0,"System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+21,ok,change,save,renamed controls,rename,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,27.91,,461.12,,0,VERIFIED,
+22,ok,change,save,renamed controls,rename,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,14.951,,463.94,,0,VERIFIED,
+23,ok,change,save,renamed controls,rename,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,22.21,,472.5,,0,VERIFIED,
+24,ok,change,save,renamed controls,rename,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,30.739,,445.93,,0,VERIFIED,
+25,ok,change,save,renamed controls,rename,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,44.667,,431.54,,0,VERIFIED,
+26,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,37.2,,428.98,,0,VERIFIED,
+27,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,41.101,,409.93,,0,VERIFIED,
+28,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,50.643,,423.17,,0,VERIFIED,
+29,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,49.281,,457.24,,0,VERIFIED,
+30,wrong_record,fault,save,display scaling,zoom,openadapt-program,False,,False,wrong_record,True,flagged_wrong,flagged_wrong,0,0.0,46.472,,467.01,,0,"System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+31,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,28.822,,447.13,,0,VERIFIED,
+32,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,53.306,,470.24,,0,VERIFIED,
+33,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,46.822,,491.01,,0,VERIFIED,
+34,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,69.166,,525.17,,0,VERIFIED,
+35,ok,change,save,display scaling,zoom,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,69.585,,553.23,,0,VERIFIED,
+36,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,50.381,,608.33,,0,VERIFIED,
+37,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,60.955,,563.7,,0,VERIFIED,
+38,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,30.308,,501.1,,0,VERIFIED,
+39,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,22.241,,477.38,,0,VERIFIED,
+40,partial,fault,save,moved controls,move,openadapt-program,False,,False,partial,True,flagged_wrong,flagged_wrong,0,0.0,32.3,,483.04,,0,"System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+41,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,46.223,,500.04,,0,VERIFIED,
+42,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,23.121,,505.73,,0,VERIFIED,
+43,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,19.774,,496.13,,0,VERIFIED,
+44,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,36.056,,464.32,,0,VERIFIED,
+45,ok,change,save,moved controls,move,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,28.707,,439.95,,0,VERIFIED,
+46,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,23.913,,478.86,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+47,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,18.047,,485.96,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+48,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,25.921,,483.32,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+49,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,29.318,,495.18,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+50,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,24.082,,499.04,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+51,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,26.136,,496.6,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+52,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,27.647,,475.04,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+53,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,54.682,,468.85,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+54,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,56.799,,484.14,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+55,ok,change,save,new interstitial,notice,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,28.626,,495.97,,0,Could not resolve target for step 'step_000' (click 'Open'): all resolution rungs failed,
+56,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,44.153,,498.6,,0,VERIFIED,
+57,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,24.692,,517.23,,0,VERIFIED,
+58,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,32.539,,510.04,,0,VERIFIED,
+59,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,43.542,,513.33,,0,VERIFIED,
+60,duplicate,fault,save,latency,slow,openadapt-program,False,,False,duplicate,True,flagged_wrong,flagged_wrong,0,0.0,53.094,,544.3,,0,"System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): record_written refuted against the rest system of record and could not be reconciled (escalated) — [rest] record_written: 0 records match the target selector, expected 1 (missing / phantom / rejected write -- the screen may show success but nothing landed) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+61,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,27.414,,543.78,,0,VERIFIED,
+62,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,45.608,,532.26,,0,VERIFIED,
+63,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,62.121,,485.5,,0,VERIFIED,
+64,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,45.343,,480.91,,0,VERIFIED,
+65,ok,change,save,latency,slow,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,47.718,,499.13,,0,VERIFIED,
+66,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,43.787,,507.01,,0,VERIFIED,
+67,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,75.313,,500.36,,0,VERIFIED,
+68,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,41.798,,529.7,,0,VERIFIED,
+69,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,70.052,,522.9,,0,VERIFIED,
+70,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,22.392,,511.88,,0,VERIFIED,
+71,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,41.803,,478.21,,0,VERIFIED,
+72,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,20.793,,461.51,,0,VERIFIED,
+73,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,27.951,,476.89,,0,VERIFIED,
+74,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,26.767,,445.28,,0,VERIFIED,
+75,ok,trap,save,reordered queue,sort,openadapt-program,True,,True,correct,True,correct,correct,0,0.0,23.974,,449.69,,0,VERIFIED,
+76,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,41.904,,456.8,,0,Structural safety refusal for step 'step_001' (click 'New Encounter'): visual point is not an identity-bearing actionable DOM element — no action was admitted,
+77,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,15.824,,498.31,,0,Structural safety refusal for step 'step_001' (click 'New Encounter'): visual point is not an identity-bearing actionable DOM element — no action was admitted,
+78,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,29.733,,495.27,,0,Structural safety refusal for step 'step_001' (click 'New Encounter'): visual point is not an identity-bearing actionable DOM element — no action was admitted,
+79,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,16.312,,504.84,,0,Structural safety refusal for step 'step_001' (click 'New Encounter'): visual point is not an identity-bearing actionable DOM element — no action was admitted,
+80,optimistic,fault,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,25.384,,486.45,,0,Structural safety refusal for step 'step_001' (click 'New Encounter'): visual point is not an identity-bearing actionable DOM element — no action was admitted,
+81,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,18.8,,483.02,,0,Structural safety refusal for step 'step_001' (click 'New Encounter'): visual point is not an identity-bearing actionable DOM element — no action was admitted,
+82,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,31.084,,481.35,,0,Structural safety refusal for step 'step_001' (click 'New Encounter'): visual point is not an identity-bearing actionable DOM element — no action was admitted,
+83,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,300.05,,471.88,,0,,item timed out after 300 s; the browser driver was stopped. Exception: Browser.new_page: Connection closed while reading from the driver
+84,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.018,,91.26,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+85,ok,change,save,renamed and moved New Encounter,relink,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.012,,91.26,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+86,ok,trap,save,look-alike referral,lookalike,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,91.26,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+87,ok,trap,save,look-alike referral,lookalike,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,91.26,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+88,ok,trap,save,look-alike referral,lookalike,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.012,,91.26,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+89,ok,trap,save,look-alike referral,lookalike,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,84.51,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+90,ok,trap,save,look-alike referral,lookalike,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,84.51,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+91,ok,trap,save,relabeled and reordered type,typelabel,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,84.51,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+92,ok,trap,save,relabeled and reordered type,typelabel,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,84.51,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+93,ok,trap,save,relabeled and reordered type,typelabel,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.012,,84.51,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+94,ok,trap,save,relabeled and reordered type,typelabel,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.012,,78.07,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+95,ok,trap,save,relabeled and reordered type,typelabel,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,78.07,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+96,ok,trap,stop,target referral gone,missing,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.012,,78.07,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+97,ok,trap,stop,target referral gone,missing,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.012,,78.07,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+98,ok,trap,stop,target referral gone,missing,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,78.07,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+99,ok,trap,stop,target referral gone,missing,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.011,,72.21,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
+100,ok,trap,stop,target referral gone,missing,openadapt-program,False,,False,missing,False,safe_stop,safe_stop,0,0.0,0.012,,72.21,,0,,"Error: It looks like you are using Playwright Sync API inside the asyncio loop.
+Please use the Async API instead."
