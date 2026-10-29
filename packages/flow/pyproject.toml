@@ -130,6 +130,9 @@ dev = [
     # The Windows real-app row census drives a WPF list through UI Automation
     # (tests/test_native_census_real_apps.py).
     "uiautomation>=2.0.20; sys_platform == 'win32'",
+    # The registry's Sigstore attestation tests; see the `registry` extra.
+    # Python 3.11+: on 3.10 it pulls dnspython 2.8, which has an open advisory.
+    "sigstore>=4.5,<5; python_version >= '3.11'",
 ]
 grounder = ["anthropic>=0.40"]
 # PRIMARY grounding rung: OCR text-anchoring via openadapt-grounding
@@ -207,6 +210,10 @@ linux = [
 # (legacy EMR over RDP). Lazily imported by AardwolfTransport — never
 # needed for the mock-tested adapter, only for the real/live transport.
 rdp = ["aardwolf==0.2.14"]
+# `pull` from the skills registry: verifies the release workflow's Sigstore
+# attestation of the index (openadapt_flow.registry_attest), offline against
+# the pinned trusted root. Only `pull` of a remote index needs it.
+registry = ["sigstore>=4.5,<5; python_version >= '3.11'"]
 # PHI/PII scrubbing on persist/log paths (Presidio-backed). Optional: the
 # runtime imports openadapt_flow.privacy unconditionally, but it degrades to a
 # no-op when this extra is absent (OPENADAPT_FLOW_SCRUB=auto). A regulated
@@ -457,6 +464,18 @@ patch_tags = ["fix", "perf"]
 # --------------------------------------------------------------------------
 # Lint + format (ruff). Real, enforced gates — see .github/workflows/ci.yml.
 # --------------------------------------------------------------------------
+[tool.uv]
+# Wheel-only dependencies drop old Pythons (onnxruntime 1.24 has no cp310
+# wheel and no sdist), and a universal lock does not notice: it locked 1.24.3
+# for Python 3.10, which no 3.10 interpreter can install. These environments
+# make the resolver keep a version with a wheel for the oldest supported
+# Python on each platform CI runs.
+required-environments = [
+    "python_version == '3.10' and sys_platform == 'linux'",
+    "python_version == '3.10' and sys_platform == 'darwin'",
+    "python_version == '3.10' and sys_platform == 'win32'",
+]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 88
