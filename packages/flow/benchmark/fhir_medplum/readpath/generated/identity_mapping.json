@@ -1,0 +1,33 @@
+{
+  "mapping": {
+    "schema_version": "openadapt.identity-mapping/v1",
+    "template": "patient-identity/1",
+    "record": {
+      "fname": "name.given",
+      "lname": "name.family",
+      "dob": "birthDate",
+      "phone": "telecom.value",
+      "street": "address.line",
+      "record_id": "id"
+    },
+    "want": {
+      "fname": "fname",
+      "lname": "lname",
+      "DOB": "DOB",
+      "phone_home": "phone_home",
+      "street": "street"
+    },
+    "dob_format": null,
+    "notes": []
+  },
+  "demos_agree": {
+    "fname": 3,
+    "lname": 3,
+    "DOB": 3,
+    "phone_home": 3,
+    "street": 3
+  },
+  "demos": 3,
+  "suite": null,
+  "note": "template patient-identity/1 needs openadapt_flow.runtime.checks.duplicate_record: the perturbation suite was not run"
+}

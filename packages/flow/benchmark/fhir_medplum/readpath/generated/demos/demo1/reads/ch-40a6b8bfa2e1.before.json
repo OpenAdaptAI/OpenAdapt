@@ -1,0 +1,17 @@
+[
+ {
+  "address.city": "Lowell",
+  "address.line": "9 Elm Row",
+  "address.postalCode": "01852",
+  "address.state": "MA",
+  "birthDate": "1962-04-18",
+  "gender": "female",
+  "id": "b4edf81c-f6ef-40aa-afd9-34e91d5705f5",
+  "meta.versionId": "37734fcc-9135-4617-b40c-286d4a7a92f5",
+  "name.family": "Paley",
+  "name.given": "Imogen",
+  "resourceType": "Patient",
+  "telecom.system": "phone",
+  "telecom.value": "978-555-0101"
+ }
+]

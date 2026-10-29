@@ -109,15 +109,35 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
 
     A segment that lands on a list takes the list's first element (the common
     ``component[0]`` / single-coding case), so ``code.coding.code`` reads the
-    first coding's code. Returns ``None`` when any segment is missing.
+    first coding's code. A segment may filter a list first:
+    ``telecom[system=email].value`` reads the first telecom whose ``system``
+    is ``email`` (a Patient keeps its phone and its email in one list).
+    Returns ``None`` when any segment is missing or no element matches.
     """
     node: Any = resource
     for seg in dotted.split("."):
+        name, want = seg, None
+        if seg.endswith("]") and "[" in seg:
+            name, _, cond = seg[:-1].partition("[")
+            key, eq, value = cond.partition("=")
+            if not eq or not key:
+                return None
+            want = (key, value)
         if isinstance(node, list):
             node = node[0] if node else None
         if not isinstance(node, dict):
             return None
-        node = node.get(seg)
+        node = node.get(name)
+        if want is not None:
+            items = node if isinstance(node, list) else [node]
+            node = next(
+                (
+                    item
+                    for item in items
+                    if isinstance(item, dict) and str(item.get(want[0])) == want[1]
+                ),
+                None,
+            )
     if isinstance(node, list):
         node = node[0] if node else None
     return node

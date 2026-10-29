@@ -1,0 +1,29 @@
+[
+  {
+    "origin": "fhir search Patient",
+    "section": {
+      "kind": "fhir",
+      "base_url": "http://localhost:9410/fhir/R4",
+      "resource_type": "Patient",
+      "search_params": {
+        "_count": "200"
+      },
+      "access_token_env": "MEDPLUM_RECORD_TOKEN",
+      "field_paths": {
+        "address.city": "address.city",
+        "address.line": "address.line",
+        "address.postalCode": "address.postalCode",
+        "address.state": "address.state",
+        "birthDate": "birthDate",
+        "gender": "gender",
+        "id": "id",
+        "meta.versionId": "meta.versionId",
+        "name.family": "name.family",
+        "name.given": "name.given",
+        "resourceType": "resourceType",
+        "telecom.system": "telecom.system",
+        "telecom.value": "telecom.value"
+      }
+    }
+  }
+]
