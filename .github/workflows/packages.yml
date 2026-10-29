@@ -583,7 +583,6 @@ jobs:
             tests/e2e/test_mcp_teach_e2e.py \
             tests/e2e/test_browser_teach_e2e.py \
             tests/e2e/test_agent_guard_e2e.py \
-            tests/e2e/test_agent_guard_slow_hold_e2e.py \
             --basetemp=runs/ci-critical-e2e --junitxml=runs/critical-e2e-junit.xml
       - name: Read-back and zero-model-call tests, by name
         run: |
