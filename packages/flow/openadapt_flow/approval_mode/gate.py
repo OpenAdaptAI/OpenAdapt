@@ -280,6 +280,9 @@ class ApprovalGate:
     #: Whether a ``delete`` compensation counts as an undo here
     #: (``rollback.allow_delete``).
     undo_allows_delete: bool = False
+    #: Whether only an API-only compensation can run here (an attached
+    #: browser gets no fresh session for a screen compensation).
+    undo_api_only: bool = False
 
     def __init__(
         self,
@@ -1311,7 +1314,12 @@ class ApprovalGate:
             )
         from openadapt_flow.rollback import undoable
 
-        if undoable(ctx.workflow, ctx.step.id, allow_delete=self.undo_allows_delete):
+        if undoable(
+            ctx.workflow,
+            ctx.step.id,
+            allow_delete=self.undo_allows_delete,
+            api_only=self.undo_api_only,
+        ):
             return (
                 CheckOutcome(
                     code="each_item",

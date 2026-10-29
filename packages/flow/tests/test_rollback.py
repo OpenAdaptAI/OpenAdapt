@@ -1680,3 +1680,38 @@ def test_a_step_with_no_declared_effect_is_judged_by_the_whole_database(tmp_path
     collection = settle(ListReader(rows))
     assert collection.status == "not_rolled_back"
     assert "may have written" in collection.reason
+
+
+# ---------------------------------------------------------------------------
+# Review of #1634, round 7
+# ---------------------------------------------------------------------------
+
+
+def test_a_screen_compensation_isnt_an_undo_without_a_fresh_session():
+    # An attached browser gets no fresh session, so only an API-only
+    # compensation can run: a save with a screen compensation waits for a
+    # person, or the run is refused.
+    from openadapt_flow.__main__ import _require_undo_or_person
+    from openadapt_flow.rollback import saves_without_undo, undoable
+
+    workflow = _clinic_workflow()
+    plan = RollbackPlan(ListReader([]), allow_delete=True)
+    assert undoable(workflow, "create_patient", allow_delete=True)
+    assert not undoable(workflow, "create_patient", allow_delete=True, api_only=True)
+    assert saves_without_undo(workflow, allow_delete=True, api_only=True) == [
+        "create_patient"
+    ]
+    with pytest.raises(SystemExit, match="create_patient"):
+        _require_undo_or_person(workflow, plan, None, api_only=True)
+
+
+def test_a_late_write_hands_over_the_store_as_it_is(tmp_path):
+    # The nurse edits the run's patient while its delete runs: the store is
+    # back, but her write is gone. The diff names the rows she wrote.
+    report = _run_clinic(tmp_path, attribution="audit", during_undo="edit_patient")
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert "as the stop left them" in rollback.reason
+    assert rollback.diff_path
+    diff = json.loads((tmp_path / "run" / rollback.diff_path).read_text())
+    assert "patients" in diff["tables"]

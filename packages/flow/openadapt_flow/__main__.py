@@ -922,7 +922,9 @@ def _build_and_run_replayer(
         replayer.api_steps_off_reason = api_steps_off_reason
     _refuse_rollback_durable(rollback_plan, durable)
     if rollback_plan is not None:
-        _require_undo_or_person(workflow, rollback_plan, approval_gate)
+        _require_undo_or_person(
+            workflow, rollback_plan, approval_gate, api_only=fresh_session is None
+        )
     before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
     if rollback_plan is not None and before is None:
         # Without the first read nothing after a stop can be proven, and the
@@ -1014,7 +1016,9 @@ def _refuse_rollback_unwired(cfg, where: str) -> None:
         )
 
 
-def _require_undo_or_person(workflow, rollback_plan, approval_gate) -> None:
+def _require_undo_or_person(
+    workflow, rollback_plan, approval_gate, *, api_only: bool = False
+) -> None:
     """With rollback on, every save is either undoable or approved by a person
     before it runs (docs/ROLLBACK.md).
 
@@ -1028,9 +1032,12 @@ def _require_undo_or_person(workflow, rollback_plan, approval_gate) -> None:
     if approval_gate is not None:
         approval_gate.undo_or_person = True
         approval_gate.undo_allows_delete = bool(rollback_plan.allow_delete)
+        approval_gate.undo_api_only = api_only
         if getattr(approval_gate, "mode", None) is not ApprovalMode.NOT_GATED:
             return
-    missing = saves_without_undo(workflow, allow_delete=rollback_plan.allow_delete)
+    missing = saves_without_undo(
+        workflow, allow_delete=rollback_plan.allow_delete, api_only=api_only
+    )
     if missing:
         raise SystemExit(
             "REFUSED before the run: rollback is on, and these saves have no "

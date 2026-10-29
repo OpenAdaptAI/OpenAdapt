@@ -182,21 +182,29 @@ rollback:
   exclusive: false                  # true only for a declared test copy no one else writes
   profile: openemr                  # the app's own bookkeeping (app_profiles)
   actor_names: [openadapt_bot]      # who the run signs in as, for the profile
-  attribution:                      # who changed a row (needed to compensate)
-    kind: audit_read                # the app's audit log (required)
-    read:                           # a second read-only read, as in verify.yaml
-      kind: sql
-      sql_driver: pymysql
-      sql_query: SELECT id, user, event, tbl, pid FROM log
+  attribution:                      # OpenEMR's audit log (VERIFY_RUN.md, Records outside the target)
+    kind: audit_read                # required: the app's audit log
     actor_field: user
     self: [openadapt_bot]
-    record_field: pid
+    record_field: patient_id
     record_key: pid
-    event_field: event
+    event_field: kind
     write_events: [insert, update, delete]
     insert_events: [insert]
     delete_events: [delete]
     table_field: tbl
+    read:                           # the table and write kind, derived from the log
+      kind: sql
+      sql_driver: pymysql
+      sql_query: >-
+        SELECT l.id, l.user, l.patient_id,
+          SUBSTRING_INDEX(l.event, '-', -1) AS kind,
+          CASE WHEN IFNULL(e.encrypt, 'No') = 'Yes' THEN NULL ELSE
+            LOWER(REPLACE(REGEXP_SUBSTR(l.comments,
+              '(?i)(?<=insert into |update |delete from |replace into )[`a-z0-9_.]+'),
+              '`', ''))
+          END AS tbl
+        FROM log l LEFT JOIN log_comment_encrypt e ON e.log_id = l.id
 ```
 
 Both lists are a person's reviewed decision for one app. The report records

@@ -249,15 +249,23 @@ def _judge_declared(
 KIND_ORDER = ("discard_draft", "restore", "void", "delete")
 
 
-def undoable(workflow: Workflow, step_id: str, *, allow_delete: bool) -> bool:
-    """Has this save an approved compensation the deployment lets run?"""
+def undoable(
+    workflow: Workflow, step_id: str, *, allow_delete: bool, api_only: bool = False
+) -> bool:
+    """Has this save an approved compensation the deployment lets run here?
+    ``api_only``: no fresh session (an attached browser), so only a
+    compensation that acts through the API alone can run."""
     undo = approved_undo(workflow, step_id)
     if undo is None:
+        return False
+    if api_only and not is_api_only(undo_workflow(workflow, undo)):
         return False
     return allow_delete or (undo.kind or "delete") != "delete"
 
 
-def saves_without_undo(workflow: Workflow, *, allow_delete: bool) -> list[str]:
+def saves_without_undo(
+    workflow: Workflow, *, allow_delete: bool, api_only: bool = False
+) -> list[str]:
     """The consequential steps a rollback couldn't undo: each needs a
     person's approval before it runs."""
     from openadapt_flow.run_gate import is_consequential
@@ -267,7 +275,9 @@ def saves_without_undo(workflow: Workflow, *, allow_delete: bool) -> list[str]:
         step.id
         for step in iter_workflow_steps(workflow)
         if is_consequential(step, workflow, require_current_risk_certification=False)
-        and not undoable(workflow, step.id, allow_delete=allow_delete)
+        and not undoable(
+            workflow, step.id, allow_delete=allow_delete, api_only=api_only
+        )
     ]
 
 
@@ -562,7 +572,7 @@ def roll_back(
     #: move by that many once compensations delete them.
     added_by_run: dict[str, int] = {}
     for c in run_changes:
-        if c[2] is None:
+        if c[2] is None and c[1] != UNREAD_KEY:
             added_by_run[c[0]] = added_by_run.get(c[0], 0) + 1
 
     from openadapt_flow.after_stop import _has_loop
@@ -773,7 +783,7 @@ def roll_back(
                 "not_rolled_back",
                 "the audit log couldn't be read after the rollback, so another "
                 "user's write can't be ruled out; a person checks the record",
-                landed,
+                _with_rows(remaining, evidence),
             )
         # Another user's write to a run row while the compensations ran: it
         # may be gone with the row now. The diff shows the run's rows.
@@ -789,8 +799,8 @@ def roll_back(
                 "not_rolled_back",
                 f"another user wrote {len(late)} row(s) the run touched (or their "
                 "record) while the rollback ran; a person checks that their "
-                "change isn't lost",
-                landed,
+                "change isn't lost (the diff names those rows as the stop left them)",
+                _with_rows(_with_rows(remaining, evidence), keep_rows(landed, late)),
             )
     if stop_reason is not None:
         # The rollback stopped short: never "rolled back", whatever the
@@ -891,14 +901,6 @@ def roll_back(
             + (
                 f", apart from {kept} voided record row(s) kept as the app requires"
                 if kept
-                else ""
-            )
-            + (
-                "; a last-writer field can't show an edit another user made "
-                "while a compensation ran"
-                if attributor is not None
-                and attributor.spec.kind == "record_field"
-                and not exclusive
                 else ""
             ),
         )
