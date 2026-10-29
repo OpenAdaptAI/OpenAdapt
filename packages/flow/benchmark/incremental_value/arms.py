@@ -431,8 +431,9 @@ class ArmB(ArmA):
     # and the late recheck (#1639) -------------------------------------------
 
     def _run2(self) -> bool:
-        return bool(getattr(self.contract().frame, "database", None)
-                    and getattr(self.contract().frame.database, "recheck_after_s", None))
+        frame = getattr(self.contract().config, "frame", None)
+        database = getattr(frame, "database", None)
+        return bool(database is not None and getattr(database, "recheck_after_s", None))
 
     def _ledger(self) -> Any:
         import os
