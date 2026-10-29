@@ -215,15 +215,8 @@ def _contract(fx: Any, lname: str) -> Any:
     }
     frame: dict[str, Any] = {
         "identity_field": "pid",
-        # OpenEMR's patient insert writes one history_data row for the chart.
-        "side_records": [
-            {
-                "surface": "history_data",
-                "link_field": "pid",
-                "of_surface": "patient_data",
-                "of_field": "pid",
-            }
-        ],
+        # No side record: OpenEMR 8.0.0.3's REST patient insert writes no
+        # history_data row (the UI's new-patient form does).
         # Other users' writes, and the bot's own per-user bookkeeping (the
         # profile's own-row rules need its sign-in name), through OpenEMR's
         # audit log, read on the frame's own read-only connection.
@@ -254,6 +247,7 @@ def _contract(fx: Any, lname: str) -> Any:
             # What OpenEMR's patient insert fills on its own.
             "new_row_fields": {
                 "patient_data": [
+                    "id",
                     "pid",
                     "pubpid",
                     "uuid",
@@ -264,7 +258,6 @@ def _contract(fx: Any, lname: str) -> Any:
                     "last_updated",
                     "state",
                 ],
-                "history_data": ["id", "pid", "uuid", "date", "created_by"],
             },
             # A live OpenEMR moves on its own (a UI session polling): a test
             # value, as recheck_after_s is.
