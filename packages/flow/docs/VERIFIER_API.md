@@ -111,13 +111,38 @@ The read path comes from each verifier's substrate: `sql` is `database`;
 
 `not_covered` always lists:
 
-- writes after `read_at` (delayed or queued writes);
+- writes after `read_at` (delayed or queued writes). When the contract
+  sets `frame.database.recheck_after_s` and the result is `CONFIRMED`, this
+  line names the recheck's due time instead: the result is provisional
+  until the recheck runs;
 - stores the contract doesn't read, by name when known: email, other
   services, files;
 - for a contract with no `frame.database`, tables outside the read set.
 
 `result.to_dict()` is the JSON reply for agents and the CLI. It holds closed
 fields only: no record values.
+
+## Writes that land after the result
+
+With `frame.database.recheck_after_s`, a `CONFIRMED` result has
+`recheck_due_at` (also in the receipt), and `result.recheck` holds the private
+state the recheck compares with. `verify_write` saves it as `recheck.json` in
+the write's folder, beside `baseline.json` and `effect-receipt.json` (mode
+0600, keyed hashes only), and records it as issued under the verifier's state
+directory.
+
+```python
+late = recheck(contract, result, params=params, actor=actor,
+               excused_by=[later_result, ...])   # later writes, any outcome
+late.outcome   # CONFIRMED, REFUTED (late) or UNCERTAIN
+```
+
+The caller can schedule it from `recheck_due_at` and keep working: before
+then, `recheck` raises `RecheckNotDue` (`wait=True` sleeps instead). It reads
+the whole database again and judges every change since the post-save read.
+A later write passed in `excused_by` accounts only for what changed in its
+own window. A change that may be what refuted that later write gives
+`UNCERTAIN`. See [VERIFY_RUN.md](VERIFY_RUN.md#writes-that-land-later).
 
 ## Before the write
 
