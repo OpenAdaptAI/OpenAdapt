@@ -1,0 +1,18 @@
+{
+  "benchmark": "silent-saves",
+  "version": "1.1.0",
+  "protocol": "silent-saves/2026-10-19.2",
+  "app": "mockmed",
+  "executor": "openadapt-program",
+  "agent_spec": "openadapt-program:~/.cache/silent-saves/program-2026-10-18-a",
+  "readback": false,
+  "arm": "program",
+  "arm_cap_usd": null,
+  "items": 100,
+  "per_fault": null,
+  "faults": null,
+  "git_head": "23c135ff8664fbf393a5eadaed21f554f03394b1",
+  "machine": "arm64 Darwin 24.6.0",
+  "python": "3.12.13",
+  "written_at": "2026-10-24T13:18:14-0400"
+}
