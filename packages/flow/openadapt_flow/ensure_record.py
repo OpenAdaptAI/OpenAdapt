@@ -1,0 +1,638 @@
+"""Check an "ensure this record exists" write through a FHIR read path only.
+
+The task: make sure one person (or other entity) has a record. If one is
+already there, report it and write nothing; otherwise create exactly one,
+with the given values. The agent's report is a claim. This module reads the
+server before and after and gives one of three outcomes:
+
+- ``found_existing``: exactly one record was already the person, it is the
+  reported id, and the agent wrote nothing anywhere;
+- ``created_verified``: no record was the person, the agent created exactly
+  one, it holds every value, the agent wrote nothing else, nobody else
+  changed it, and it is now the only record that is the person;
+- ``needs_review``: anything else, with the reasons.
+
+It reads only what a FHIR server offers a client: searches, ``_history`` and
+``AuditEvent``, never the database. What that read path can see, and what it
+can't, is stated in ``docs/ENSURE_RECORD.md``:
+
+- **Who wrote what in the window** comes from the server's audit trail
+  (``AuditEvent`` searched by date). Each written resource's ``_history``
+  gives its versions in the window and their ``meta.author``, which the
+  server sets. The audit and the history must name the same actor, or the
+  change is unattributed.
+- **A sweep** (optional) searches the declared resource types by
+  ``_lastUpdated``, so a create or update the audit trail missed still shows.
+  A sweep can't see a delete.
+- A change no source attributes counts as the agent's own: a change nobody
+  can explain is never assumed to be someone else's.
+
+Fail-closed: an unreadable read, a page past the limit, a next link to
+another origin, a resource with no id or a server time that can't be read
+gives ``needs_review`` with ``unreadable``, never an outcome that proves
+something.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import time
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from pathlib import Path
+from typing import Any, Literal, Optional
+from urllib.parse import urlsplit
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+Outcome = Literal["found_existing", "created_verified", "needs_review"]
+Compare = Literal["exact", "casefold", "digits", "date"]
+
+#: A search longer than this many pages reads as unreadable.
+MAX_PAGES = 50
+#: FHIR AuditEvent ``action`` codes that write (create, update, delete).
+WRITE_ACTIONS = ("C", "U", "D")
+
+
+class EnsureRecordError(ValueError):
+    """The contract can't be loaded or bound (never a failed check)."""
+
+
+class Unreadable(RuntimeError):
+    """A read the judgment needs did not give a complete answer."""
+
+
+# -- the contract ----------------------------------------------------------------
+
+
+class FieldRule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: Dotted path into the resource; a segment may filter a list
+    #: (``telecom[system=email].value``), as in ``effects/fhir.py``.
+    path: str = Field(min_length=1)
+    compare: Compare = "exact"
+    #: Printed form -> stored form (``Massachusetts: MA``).
+    map: dict[str, str] = Field(default_factory=dict)
+
+
+class AuditRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resource_type: str = "AuditEvent"
+    #: The search parameter that takes the event time (``date`` in R4).
+    since_param: str = "date"
+    actor_path: str = "agent.who.reference"
+    entity_path: str = "entity.what.reference"
+    action_path: str = "action"
+
+
+class ChangeFeed(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    audit: Optional[AuditRead] = Field(default_factory=AuditRead)
+    #: Read each written resource's ``_history`` for its window versions.
+    history: bool = True
+    #: Resource types searched by ``_lastUpdated`` as a second source.
+    sweep_types: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _some_source(self) -> "ChangeFeed":
+        if self.audit is None and not self.sweep_types:
+            raise ValueError("the change feed needs an audit read or a sweep")
+        return self
+
+
+class EnsureContract(BaseModel):
+    """``openadapt.ensure-record/v1``: what one ensure-record write must do."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    schema_version: Literal["openadapt.ensure-record/v1"] = (
+        "openadapt.ensure-record/v1"
+    )
+    resource_type: str = Field(min_length=1)
+    base_url: str = Field(min_length=1)
+    access_token_env: Optional[str] = None
+    #: The agent's own actor references (``Practitioner/<id>``).
+    self_actors: list[str] = Field(alias="self", min_length=1)
+    #: Task parameter -> where and how the record stores it.
+    fields: dict[str, FieldRule] = Field(min_length=1)
+    #: Each entry is one way to be the same person: every parameter equal.
+    identity: list[list[str]] = Field(min_length=1)
+    #: Task parameter -> FHIR search parameter, to find candidates.
+    search: dict[str, str] = Field(min_length=1)
+    change_feed: ChangeFeed = Field(default_factory=ChangeFeed)
+    #: Wait this long after the write before reading, for the audit trail.
+    settle_s: float = Field(default=2.0, ge=0, le=120)
+    timeout_s: float = Field(default=15.0, gt=0, le=300)
+
+    @model_validator(mode="after")
+    def _bound(self) -> "EnsureContract":
+        for rule in self.identity:
+            if not rule:
+                raise ValueError("an identity rule names no parameter")
+            missing = [p for p in rule if p not in self.fields]
+            if missing:
+                raise ValueError(f"identity names unknown fields: {missing}")
+            if not any(p in self.search for p in rule):
+                raise ValueError(f"identity rule {rule} has no search parameter")
+        return self
+
+
+def load_contract(path: str | Path) -> EnsureContract:
+    import yaml
+
+    from openadapt_flow.qualify.config import _expand
+
+    source = Path(path)
+    try:
+        data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise EnsureRecordError(f"cannot read {source}: {exc}") from exc
+    missing: list[str] = []
+    data = _expand(dict(data), missing)
+    if missing:
+        raise EnsureRecordError(
+            "environment variable(s) not set: " + ", ".join(sorted(set(missing)))
+        )
+    try:
+        return EnsureContract.model_validate(data)
+    except Exception as exc:
+        raise EnsureRecordError(f"invalid {source}: {exc}") from exc
+
+
+# -- values ----------------------------------------------------------------------
+
+
+def extract(resource: Mapping[str, Any], path: str) -> Any:
+    from openadapt_flow.runtime.effects.fhir import extract_path
+
+    return extract_path(dict(resource), path)
+
+
+def normalize(value: Any, rule: FieldRule) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    text = rule.map.get(text, text)
+    if rule.compare == "casefold":
+        return text.casefold()
+    if rule.compare == "digits":
+        return re.sub(r"\D", "", text)
+    if rule.compare == "date":
+        return text[:10]
+    return text
+
+
+def same(contract: EnsureContract, name: str, stored: Any, wanted: Any) -> bool:
+    rule = contract.fields[name]
+    a, b = normalize(stored, rule), normalize(wanted, rule)
+    return a is not None and b is not None and a == b
+
+
+def is_person(
+    contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
+) -> bool:
+    """True when the resource meets any identity rule for these values."""
+
+    return any(
+        all(
+            same(contract, p, extract(resource, contract.fields[p].path), params.get(p))
+            for p in rule
+        )
+        for rule in contract.identity
+    )
+
+
+def wrong_fields(
+    contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
+) -> list[str]:
+    return sorted(
+        name
+        for name, rule in contract.fields.items()
+        if name in params and not same(contract, name, extract(resource, rule.path), params[name])
+    )
+
+
+# -- the read path ---------------------------------------------------------------
+
+Getter = Callable[[str, Optional[Mapping[str, str]]], tuple[int, Mapping[str, str], Any]]
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+class FhirReader:
+    """Read-only FHIR client: every page of a search, or :class:`Unreadable`.
+
+    ``get`` is injectable for tests: ``get(url, params) -> (status, headers,
+    json)``. The default uses ``httpx`` with the contract's bearer token.
+    """
+
+    def __init__(self, contract: EnsureContract, get: Optional[Getter] = None) -> None:
+        self.base_url = contract.base_url.rstrip("/")
+        self.timeout_s = contract.timeout_s
+        self._token_env = contract.access_token_env
+        self._get = get or self._httpx_get
+        self._client: Any = None
+
+    def _httpx_get(
+        self, url: str, params: Optional[Mapping[str, str]]
+    ) -> tuple[int, Mapping[str, str], Any]:
+        import httpx
+
+        if self._client is None:
+            self._client = httpx.Client(timeout=self.timeout_s, follow_redirects=False)
+        headers = {"Accept": "application/fhir+json"}
+        if self._token_env:
+            token = os.environ.get(self._token_env)
+            if not token:
+                raise Unreadable(f"no access token in {self._token_env}")
+            headers["Authorization"] = f"Bearer {token}"
+        resp = self._client.get(url, params=dict(params or {}), headers=headers)
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        return resp.status_code, dict(resp.headers), body
+
+    def fetch(
+        self, url: str, params: Optional[Mapping[str, str]] = None
+    ) -> tuple[Mapping[str, str], Any]:
+        try:
+            status, headers, body = self._get(url, params)
+        except Unreadable:
+            raise
+        except Exception as exc:  # noqa: BLE001 - transport failure is unreadable
+            raise Unreadable(f"GET {url} failed: {type(exc).__name__}") from exc
+        if status // 100 != 2:
+            raise Unreadable(f"GET {url} returned HTTP {status}")
+        return headers, body
+
+    def bundle(
+        self, path: str, params: Optional[Mapping[str, str]] = None
+    ) -> list[dict[str, Any]]:
+        """Every entry of a search or history Bundle, across all pages."""
+
+        url: Optional[str] = f"{self.base_url}/{path}"
+        query: Optional[Mapping[str, str]] = params
+        entries: list[dict[str, Any]] = []
+        for _ in range(MAX_PAGES):
+            assert url is not None
+            _, body = self.fetch(url, query)
+            if not isinstance(body, dict) or body.get("resourceType") != "Bundle":
+                raise Unreadable(f"{path}: the reply is not a Bundle")
+            page = body.get("entry") or []
+            if not isinstance(page, list):
+                raise Unreadable(f"{path}: entry is not a list")
+            entries += [e for e in page if isinstance(e, dict)]
+            nxt = next(
+                (
+                    link.get("url")
+                    for link in body.get("link") or []
+                    if isinstance(link, dict) and link.get("relation") == "next"
+                ),
+                None,
+            )
+            if not nxt:
+                total = body.get("total")
+                if isinstance(total, int) and body.get("type") == "searchset":
+                    found = sum(
+                        1
+                        for e in entries
+                        if (e.get("search") or {}).get("mode", "match") == "match"
+                    )
+                    if total > found:
+                        raise Unreadable(f"{path}: total {total} but read {found}")
+                return entries
+            if _origin(nxt) != _origin(self.base_url):
+                raise Unreadable(f"{path}: next page on another origin")
+            url, query = nxt, None
+        raise Unreadable(f"{path}: more than {MAX_PAGES} pages")
+
+    def resources(
+        self, path: str, params: Optional[Mapping[str, str]] = None
+    ) -> list[dict[str, Any]]:
+        out = []
+        for entry in self.bundle(path, params):
+            if (entry.get("search") or {}).get("mode", "match") != "match":
+                continue
+            res = entry.get("resource")
+            if not isinstance(res, dict) or not res.get("id"):
+                raise Unreadable(f"{path}: an entry has no resource id")
+            out.append(res)
+        return out
+
+    def server_time(self) -> datetime:
+        """The server's clock, from the ``Date`` header of a metadata read."""
+
+        headers, _ = self.fetch(f"{self.base_url}/metadata", {"_summary": "true"})
+        raw = {k.lower(): v for k, v in headers.items()}.get("date")
+        if not raw:
+            raise Unreadable("the server sent no Date header")
+        try:
+            return parsedate_to_datetime(raw).astimezone(timezone.utc)
+        except (TypeError, ValueError) as exc:
+            raise Unreadable("the server's Date header can't be read") from exc
+
+
+def _instant(when: datetime) -> str:
+    return when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _when(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+# -- snapshots -------------------------------------------------------------------
+
+
+@dataclass
+class Baseline:
+    """What was true before the write: the window start and the matches."""
+
+    started: datetime
+    #: id -> resource, every record that was the person before the write.
+    matches: dict[str, dict[str, Any]]
+    #: The candidate searches' result count (for evidence only).
+    candidates: int = 0
+
+
+@dataclass
+class Change:
+    """One write in the window, by resource."""
+
+    ref: str  # "Type/id"
+    actions: set[str] = field(default_factory=set)
+    #: Actors who wrote it, from history (server-set) and the audit trail.
+    authors: set[str] = field(default_factory=set)
+    attributed: bool = True
+    #: True when only the sweep saw it (the audit trail did not log it).
+    unlogged: bool = False
+
+
+def find_matches(
+    contract: EnsureContract, reader: FhirReader, params: Mapping[str, Any]
+) -> tuple[dict[str, dict[str, Any]], int]:
+    """Every live record that is the person, by each identity rule's search."""
+
+    seen: dict[str, dict[str, Any]] = {}
+    for rule in contract.identity:
+        query = {
+            contract.search[p]: str(params[p])
+            for p in rule
+            if p in contract.search and params.get(p) not in (None, "")
+        }
+        if not query:
+            raise Unreadable(f"identity rule {rule} has no value to search by")
+        query["_count"] = "200"
+        for res in reader.resources(contract.resource_type, query):
+            seen[str(res["id"])] = res
+    matches = {i: r for i, r in seen.items() if is_person(contract, r, params)}
+    return matches, len(seen)
+
+
+def capture_baseline(
+    contract: EnsureContract, params: Mapping[str, Any], reader: Optional[FhirReader] = None
+) -> Baseline:
+    reader = reader or FhirReader(contract)
+    # One second before the server's clock: an instant search is to the second.
+    started = reader.server_time() - timedelta(seconds=1)
+    matches, candidates = find_matches(contract, reader, params)
+    return Baseline(started=started, matches=matches, candidates=candidates)
+
+
+def read_changes(
+    contract: EnsureContract, reader: FhirReader, since: datetime
+) -> dict[str, Change]:
+    """Every resource written since ``since``, with who wrote it."""
+
+    feed = contract.change_feed
+    changes: dict[str, Change] = {}
+    if feed.audit is not None:
+        a = feed.audit
+        for event in reader.resources(
+            a.resource_type, {a.since_param: f"ge{_instant(since)}", "_count": "200"}
+        ):
+            action = extract(event, a.action_path)
+            if action not in WRITE_ACTIONS:
+                continue
+            ref = extract(event, a.entity_path)
+            if not isinstance(ref, str) or "/" not in ref:
+                # A write the log can't tie to a resource: the window can't be
+                # read completely.
+                raise Unreadable("an audit write names no resource")
+            ref = "/".join(ref.split("/")[-2:])
+            change = changes.setdefault(ref, Change(ref=ref))
+            change.actions.add(str(action))
+            actor = extract(event, a.actor_path)
+            if isinstance(actor, str) and actor:
+                change.authors.add(actor)
+            else:
+                change.attributed = False
+    for rtype in feed.sweep_types:
+        for res in reader.resources(
+            rtype, {"_lastUpdated": f"ge{_instant(since)}", "_count": "200"}
+        ):
+            ref = f"{rtype}/{res['id']}"
+            if ref not in changes:
+                changes[ref] = Change(ref=ref, actions={"U"}, unlogged=True)
+    if feed.history:
+        for ref, change in changes.items():
+            authors: set[str] = set()
+            for entry in reader.bundle(f"{ref}/_history", {"_count": "200"}):
+                res = entry.get("resource")
+                req = entry.get("request") or {}
+                if isinstance(res, dict):
+                    meta = res.get("meta") or {}
+                    when = _when(meta.get("lastUpdated"))
+                    if when is None or when < since:
+                        continue
+                    who = (meta.get("author") or {}).get("reference")
+                    if isinstance(who, str) and who:
+                        authors.add(who)
+                    else:
+                        change.attributed = False
+                elif str(req.get("method", "")).upper() == "DELETE":
+                    change.actions.add("D")
+            if authors:
+                if change.authors and change.authors != authors:
+                    # The log and the record disagree on who wrote it.
+                    change.attributed = False
+                change.authors |= authors
+            elif change.unlogged:
+                change.attributed = False
+    return changes
+
+
+# -- the judgment ----------------------------------------------------------------
+
+
+@dataclass
+class EnsureResult:
+    outcome: Outcome
+    record_id: Optional[str]
+    reasons: list[str]
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "outcome": self.outcome,
+            "id": self.record_id,
+            "reasons": list(self.reasons),
+            "evidence": dict(self.evidence),
+        }
+
+
+def _review(reasons: list[str], evidence: dict[str, Any]) -> EnsureResult:
+    return EnsureResult("needs_review", None, reasons, evidence)
+
+
+def judge(
+    contract: EnsureContract,
+    params: Mapping[str, Any],
+    baseline: Baseline,
+    changes: Mapping[str, Change],
+    after_matches: Mapping[str, Mapping[str, Any]],
+    created: Optional[Mapping[str, Any]],
+) -> EnsureResult:
+    """Decide the outcome from the snapshots. Reads nothing itself.
+
+    ``created`` is the current version of the one resource the agent
+    created (or None when it created none, or more than one).
+    """
+
+    selfs = set(contract.self_actors)
+    mine = {
+        ref: c
+        for ref, c in changes.items()
+        if not c.attributed or not c.authors or c.authors & selfs
+    }
+    others = {ref: c for ref, c in changes.items() if ref not in mine}
+    evidence: dict[str, Any] = {
+        "before_matches": len(baseline.matches),
+        "after_matches": len(after_matches),
+        "agent_writes": len(mine),
+        "other_writes": len(others),
+        "unattributed_writes": sum(1 for c in mine.values() if not c.attributed or not c.authors),
+        "unlogged_writes": sum(1 for c in changes.values() if c.unlogged),
+        "agent_write_types": sorted({r.split("/")[0] for r in mine}),
+    }
+    own_type = contract.resource_type
+    if not mine:
+        if len(baseline.matches) == 1:
+            (rid,) = baseline.matches
+            if rid in after_matches:
+                return EnsureResult(
+                    "found_existing", rid, ["one record was already the person"], evidence
+                )
+            return _review(["the existing record is gone or no longer matches"], evidence)
+        if not baseline.matches:
+            return _review(["no record is the person and the agent created none"], evidence)
+        return _review(
+            [f"{len(baseline.matches)} records were already the person"], evidence
+        )
+    reasons: list[str] = []
+    if baseline.matches:
+        reasons.append(
+            f"{len(baseline.matches)} record(s) were already the person, "
+            "and the agent wrote anyway"
+        )
+    creates = [r for r, c in mine.items() if r.startswith(own_type + "/") and "C" in c.actions]
+    if len(creates) != 1:
+        reasons.append(f"the agent created {len(creates)} {own_type} records, not one")
+    unexplained = [r for r, c in mine.items() if not c.attributed or not c.authors]
+    if unexplained:
+        reasons.append(f"{len(unexplained)} write(s) no source attributes")
+    target = creates[0] if len(creates) == 1 else None
+    extra = sorted(r for r in mine if r != target)
+    if extra:
+        types = sorted({r.split("/")[0] for r in extra})
+        reasons.append(f"the agent wrote {len(extra)} other resource(s): {', '.join(types)}")
+    if target is not None:
+        tid = target.split("/", 1)[1]
+        if set(mine[target].actions) - {"C"}:
+            reasons.append("the agent changed or deleted the record after creating it")
+        if target in others or (changes[target].authors - selfs):
+            reasons.append("someone else changed the created record")
+        if created is None or str(created.get("id")) != tid:
+            reasons.append("the created record can't be read back")
+        else:
+            wrong = wrong_fields(contract, created, params)
+            if wrong:
+                reasons.append("wrong or missing: " + ", ".join(wrong))
+            if not is_person(contract, created, params):
+                reasons.append("the created record is not the person")
+        dupes = sorted(set(after_matches) - {tid})
+        if dupes:
+            reasons.append(f"{len(dupes)} other record(s) are now also the person")
+        if tid not in after_matches and created is not None:
+            reasons.append("the created record does not come back from a search")
+        if not reasons:
+            return EnsureResult(
+                "created_verified", tid, ["created once, every value read back"], evidence
+            )
+    return _review(reasons, evidence)
+
+
+def verify_ensure(
+    contract: EnsureContract,
+    params: Mapping[str, Any],
+    baseline: Baseline,
+    *,
+    reader: Optional[FhirReader] = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> EnsureResult:
+    """Read the server after the write and judge it against ``baseline``."""
+
+    reader = reader or FhirReader(contract)
+    if contract.settle_s:
+        sleep(contract.settle_s)
+    try:
+        changes = read_changes(contract, reader, baseline.started)
+        after_matches, _ = find_matches(contract, reader, params)
+        selfs = set(contract.self_actors)
+        own = [
+            r
+            for r, c in changes.items()
+            if r.startswith(contract.resource_type + "/")
+            and "C" in c.actions
+            and (not c.authors or c.authors & selfs or not c.attributed)
+        ]
+        created = None
+        if len(own) == 1:
+            try:
+                _, created = reader.fetch(f"{reader.base_url}/{own[0]}")
+            except Unreadable:
+                created = None  # gone (deleted) or unreadable: judged below
+    except Unreadable as exc:
+        return _review([f"unreadable: {exc}"], {"unreadable": True})
+    return judge(contract, params, baseline, changes, after_matches, created)
+
+
+__all__ = [
+    "Baseline",
+    "Change",
+    "EnsureContract",
+    "EnsureRecordError",
+    "EnsureResult",
+    "FhirReader",
+    "Unreadable",
+    "capture_baseline",
+    "find_matches",
+    "judge",
+    "load_contract",
+    "read_changes",
+    "verify_ensure",
+]

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "generated_for": "OpenAdapt second-installation benchmark: Medplum (FHIR R4) with synthetic patients",
+  "license": "Apache-2.0 (Medplum); images pulled at run time, never stored in this repository",
+  "services": {
+    "server": "medplum/medplum-server:5.2.8@sha256:d70ee91bcf15aa5302c91ad3875f96a6f547f01c2e24c3499d9203f084321c0a",
+    "app": "medplum/medplum-app:5.2.8@sha256:4a4a4d411e28260e83d8f2802ea24b57156aa53096f5013813969af48b8a886d",
+    "postgres": "postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97",
+    "redis": "redis:7@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b"
+  },
+  "platforms": "every image publishes linux/arm64 and linux/amd64",
+  "project": "openadapt-si-medplum"
+}
