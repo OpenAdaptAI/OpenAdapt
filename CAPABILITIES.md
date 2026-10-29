@@ -164,6 +164,7 @@ improvising or retrying when something is off.
 | Keep the server's own answer to a save as lower-level evidence on the receipt | On main ([#1298](https://github.com/OpenAdaptAI/OpenAdapt/pull/1298)) | Synthetic | receipts |
 | A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | On main ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |
 | Propose an undo for each saving step (another recording, captured traffic, or the old value), keep it only if a test copy shows every record restored, and offer it after a stop once a person approves it | On main ([#1346](https://github.com/OpenAdaptAI/OpenAdapt/pull/1346)) | Synthetic (MockMed, MockLoan, live browser) | `openadapt-flow undo propose`, `undo accept`; [AFTER_A_STOP.md](packages/flow/docs/AFTER_A_STOP.md) |
+| Leave the screen clean after an item that halted before any write: close dialogs and cancel forms with the recordings' own controls, re-enter, confirm the start screen and read the records back before the session takes another item. A session that doesn't come back is marked dirty and takes no more items; a cleanup that changed a record makes the item's write uncertain and stops the run. `cleanup qualify` tries the cleanup after every step on a test copy and refuses one that changes a record | On main ([#1607](https://github.com/OpenAdaptAI/OpenAdapt/pull/1607)) | Synthetic (scripted three-screen app through the real replayer and pool) and real app (pinned OpenEMR: a halted New Patient item left the confirmation dialog open; re-entry closed it, the form was empty, no patient row changed and the next item's first steps ran with no model calls; a signed-out screen was marked dirty; [results](packages/flow/benchmark/halt_cleanup/results/openemr.json)) | `openadapt-flow cleanup qualify`; [HALT_CLEANUP.md](packages/flow/docs/HALT_CLEANUP.md) |
 
 ## Approvals
 
@@ -361,6 +362,7 @@ A test fails when a command has no file or this list is out of date.
 
 **Repair and learn from halts:**
 
+- `cleanup`: A clean screen after a halted item; `cleanup qualify` tries the halt cleanup on a test copy after every step and stores it when the start screen always comes back and no record changes.
 - `fleet`
 - `repair`
 - `teach-branch`
