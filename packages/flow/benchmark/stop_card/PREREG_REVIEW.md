@@ -108,3 +108,14 @@ Words per row are counted from the rendered card text, values included.
 These are modelled seconds from published operators and timed machine
 steps, not a timed person. Run 3's own pre-registration decides whether to
 use this model; this file only fixes how the model is built and measured.
+
+## Deviations
+
+1. **2026-10-29, before any card was built or timed: what Undo leaves
+   undone.** Undo keeps the agent's created record only if the card's check
+   of that record passes: right values, closed, and the only match. When
+   that holds, the task stands done after Undo. When Undo removes the
+   created record as well, the task is not done, and the stop is also
+   charged V1's redo of 180 s, scaled with the other person steps. The
+   original text didn't say what an Undo that removes the task's own record
+   costs.

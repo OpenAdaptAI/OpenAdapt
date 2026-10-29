@@ -138,6 +138,11 @@ def run_case(
     for op in case.get("run") or []:
         runner.write(fx, actors, op["actor"], op, names)
     result = verify_ensure(contract, params, baseline)
+    card_row = (
+        stop_card(fx, actors, contract, params, baseline)
+        if (result.outcome == "needs_review")
+        else None
+    )
     expected = case["expected"]
     want_id = names.get(expected.get("id") or "", "").split("/")[-1] or None
     id_right = expected["outcome"] == "needs_review" or result.record_id == want_id
@@ -153,6 +158,73 @@ def run_case(
         and result.outcome == "needs_review",
         "reasons": result.reasons,
         "seconds": round(time.monotonic() - t0, 2),
+        "card": card_row,
+    }
+
+
+def stop_card(
+    fx: MedplumFixture,
+    actors: runner.Actors,
+    contract: Any,
+    params: dict[str, Any],
+    baseline: Any,
+) -> dict[str, Any]:
+    """Build the stop card from fresh reads, run its action, time it."""
+
+    from benchmark.stop_card import card as cards
+    from openadapt_flow.ensure_record import FhirReader, Unreadable
+
+    reader = FhirReader(contract)
+    token = actors.token("setup")
+
+    def write(method: str, url: str, body: Optional[dict[str, Any]]) -> Any:
+        return _http(method, url, body=body, token=token)
+
+    t0 = time.monotonic()
+    try:
+        card = cards.build(contract, params, baseline, reader)
+    except Unreadable as exc:
+        return {"category": "open", "error": f"unreadable: {exc}"}
+    built_s = round(time.monotonic() - t0, 3)
+    try:
+        done = cards.act(card, contract, params, reader, write)
+    except (Unreadable, FixtureError) as exc:
+        done = cards.ActionResult(
+            False, round(time.monotonic() - t0, 3), False, [str(exc)[:200]]
+        )
+    wait = done.seconds if done else 0.0
+    person = card.person_seconds(1.0, wait)
+    if done is not None and not done.ok:
+        person += cards.FALLBACK_S
+    elif card.category == "undo" and done is not None and not done.task_done:
+        person += cards.REDO_S
+    return {
+        "category": card.category,
+        "rows": len(card.rows),
+        "row_kinds": sorted({r.kind for r in card.rows}),
+        "words": card.words(),
+        "build_s": built_s,
+        "action_s": done.seconds if done else None,
+        "action_ok": done.ok if done else None,
+        "task_done": done.task_done if done else None,
+        "problems": done.problems if done else [],
+        "person_s": {
+            str(f): round(
+                card.person_seconds(f, wait)
+                + (cards.FALLBACK_S * f if done is not None and not done.ok else 0)
+                + (
+                    cards.REDO_S * f
+                    if card.category == "undo"
+                    and done is not None
+                    and done.ok
+                    and not done.task_done
+                    else 0
+                ),
+                1,
+            )
+            for f in (0.5, 1.0, 2.0)
+        },
+        "person_s_x1": round(person, 1),
     }
 
 
@@ -195,6 +267,19 @@ def cmd_suite(args: argparse.Namespace) -> int:
         print(
             json.dumps({k: row.get(k) for k in ("id", "expected", "actual", "right")})
         )
+    # PREREG_REVIEW.md: each machine step timed at least 5 times. Re-run
+    # stopped cases of a category, in suite order, until it has 5.
+    timing = [r["card"] for r in rows if r.get("card") and r["card"].get("action_s")]
+    by_id = {c["id"]: c for c in suite["cases"]}
+    for category in ("undo", "fix"):
+        pool = [
+            r["id"] for r in rows if (r.get("card") or {}).get("category") == category
+        ]
+        n = sum(1 for t in timing if t["category"] == category)
+        for i in range(max(0, args.timing_min - n) if pool else 0):
+            again = run_case(fx, actors, contract, by_id[pool[i % len(pool)]], types)
+            if again.get("card") and again["card"].get("action_s") is not None:
+                timing.append({**again["card"], "case": again["id"], "repeat": True})
     summary = {
         "suite_sha256": digest,
         "cases": len(rows),
@@ -206,7 +291,7 @@ def cmd_suite(args: argparse.Namespace) -> int:
         "errors": sum(1 for r in rows if "error" in r),
         "agent_access_policy": f"AccessPolicy/{policy}",
     }
-    _dump(Path(args.out), {"summary": summary, "cases": rows})
+    _dump(Path(args.out), {"summary": summary, "cases": rows, "timing": timing})
     print(json.dumps(summary))
     return 0
 
@@ -222,6 +307,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     s.add_argument("--sha256", required=True)
     s.add_argument("--contract", required=True)
     s.add_argument("--out", required=True)
+    s.add_argument("--timing-min", type=int, default=5)
     args = ap.parse_args(argv)
     return cmd_teach(args) if args.cmd == "teach" else cmd_suite(args)
 
