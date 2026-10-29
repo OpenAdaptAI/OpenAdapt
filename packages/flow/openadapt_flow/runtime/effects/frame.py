@@ -1002,6 +1002,15 @@ def judge_frame(
         )
 
     excused_by: set[str] = set()
+    #: Profile ``own_rows`` rule ids, by the table they name.
+    app_profile = database.loaded_profile() if database is not None else None
+    own_rules: dict[str, set[str]] = {}
+    for rule in app_profile.rules if app_profile is not None else []:
+        if rule.mode == "own_rows":
+            own_rules.setdefault(table_name(rule.table), set()).add(rule.id)
+    #: Tables in which a row was excused as the acting user's own per-user
+    #: state (an ``own_rows`` rule, or a default row beside such a row).
+    own_written: set[str] = set()
 
     def bookkeeping(
         name: str,
@@ -1017,6 +1026,9 @@ def judge_frame(
         rules = excuse(name, before, after, fields)
         if rules:
             excused_by.update(rules)
+            here = table_name(name)
+            if set(rules) & own_rules.get(here, set()):
+                own_written.add(here)
             return list(rules)
         return None
 
@@ -1363,20 +1375,10 @@ def judge_frame(
             ):
                 return
             same = owner.default.same
-            if any(after.get(c) in (None, "") for c in same):
+            if any(c not in after or after.get(c) is None for c in same):
                 return
-            if before is not None:
-                # A changed partner must keep its ``same`` columns: a row
-                # relabelled in the window is no partner.
-                for c in same:
-                    if c not in before:
-                        return
-                    if (
-                        before.get(c) != hasher(c, after.get(c))
-                        if hasher is not None
-                        else not _same(before.get(c), after.get(c))
-                    ):
-                        return
+            # The partner's ``same`` columns as they are now: the default row
+            # was written with them (OpenEMR copies the label and the value).
             partners.append(({c: str(after.get(c)) for c in same}, how, list(rules)))
 
         for key in set(before_map) | set(after_map):
@@ -1582,6 +1584,8 @@ def judge_frame(
             _values, how, rules = partners.pop(found)
             if how == "bookkeeping":
                 excused_by.update(rules)
+                if table_of(name):
+                    own_written.add(table_name(str(table_of(name))))
                 continue
             note(FrameChange(name, "added", "other", fields, key=key))
 
@@ -1642,6 +1646,19 @@ def judge_frame(
                 if actor is None or str(actor) not in self_ids:
                     continue
                 if str(ref) in declared_keys or str(ref) in logged or names_moved(ref):
+                    continue
+                table = (
+                    get_path(entry, attribution.table_field)  # type: ignore[union-attr]
+                    if attribution is not None and attribution.table_field
+                    else None
+                )
+                if table not in (None, "") and table_name(str(table)) in own_written:
+                    # The bot's write to its own per-user state (its UI
+                    # settings, its recent charts): the whole-database diff
+                    # judged that table row by row, and the profile excused
+                    # the bot's own rows. Any other row of it the bot moved
+                    # is collateral there. Without such a row, the entry
+                    # still refutes.
                     continue
                 logged.add(str(ref))
                 collateral.append(

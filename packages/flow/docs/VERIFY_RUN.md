@@ -148,8 +148,10 @@ naming `USER_SETTINGS` or `openemr.user_settings` names `user_settings`.
 
 Some apps write a global default row beside a user's row. The first time
 anyone saves a label, OpenEMR's `setUserSetting` also inserts the label's
-default, a `user_settings` row with `setting_user = 0`. The profile declares
-it on the owner (`default: {value: "0", same: [setting_label]}`). A default
+default, a `user_settings` row with `setting_user = 0` and the same label
+and value. The profile declares it on the owner
+(`default: {value: "0", same: [setting_label, setting_value]}`), so a
+default row with a value nobody saved is never explained. A default
 row added in the window is explained only beside one explained row of the
 same table with equal `same` columns: another user's row (then the default
 is theirs too) or the bot's own row (then it is the bot's bookkeeping). Each
@@ -177,6 +179,10 @@ Fail closed:
 - If the bot's own entry names the table in the window, every changed row of
   that table is collateral: the entry names no row, so any of them may be the
   bot's change.
+- The bot's own per-user rows stay the profile's bookkeeping when its entry
+  names the table, and that entry is not counted as a write the contract
+  doesn't cover, because the whole-database diff judged the table row by row. A bot
+  entry for such a table with none of its own rows excused still refutes.
 - A table with no declared owner, an actor the users table doesn't know, a
   row with no owner, or an audit log that can't be read leaves the change
   unexplained.

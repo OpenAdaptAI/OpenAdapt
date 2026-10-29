@@ -11,7 +11,7 @@
 # excused.
 schema_version: openadapt.app-profile/v2
 app: openemr
-version: openemr-frame-profile/2026-10-29.3
+version: openemr-frame-profile/2026-10-29.4
 bookkeeping_tables: [log, log_comment_encrypt, api_log, extended_log, audit_master,
   audit_details, clinical_rules_log, uuid_registry, uuid_mapping, contact,
   session_tracker, ip_tracking, background_services, sequences,
@@ -45,13 +45,16 @@ rules:
   # Per-user UI state: the acting user's own rows only.
   # The first time any user saves a label, OpenEMR's setUserSetting(...,
   # createDefault=true) also inserts the global default for it, a row with
-  # setting_user = 0 and the same setting_label (seen on the 8.0.0.3 fixture,
-  # 2026-10-29). Such a row is explained only when added beside an explained
-  # row with that label; a default row changed, removed or added alone is not.
+  # setting_user = 0 and the same setting_label and setting_value (seen on the
+  # 8.0.0.3 fixture, 2026-10-29; UserSettingsService::setUserSetting calls
+  # itself for user 0 with the same value and overwrite off). Such a row is
+  # explained only when added beside an explained row with that label and
+  # value, so a default can't carry a value nobody saved; a default row
+  # changed, removed or added alone is not.
   - id: user-settings
     table: user_settings
     mode: own_rows
-    owner: {column: setting_user, by: user_id, default: {value: "0", same: [setting_label]}}
+    owner: {column: setting_user, by: user_id, default: {value: "0", same: [setting_label, setting_value]}}
     reason: "the acting user's own UI settings, and the global default OpenEMR adds beside a label's first save"
   - {id: recent-patients, table: recent_patients, mode: own_rows, owner: {column: user_id, by: user_id}, reason: "the acting user's own list of charts opened"}
   # Backfills: a system uuid filled from NULL, never swapped, overwritten or cleared.

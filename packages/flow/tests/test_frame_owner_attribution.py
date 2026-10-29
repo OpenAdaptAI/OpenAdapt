@@ -319,7 +319,7 @@ def test_a_contract_may_restate_a_profile_owner(tmp_path: Path) -> None:
         "user_settings": {
             "column": "setting_user",
             "by": "user_id",
-            "default": {"value": "0", "same": ["setting_label"]},
+            "default": {"value": "0", "same": ["setting_label", "setting_value"]},
         }
     }
     result = _run(tmp_path, _entry("clinic2", "update"), CHANGE_OWN, owners=owners)
@@ -410,21 +410,85 @@ def test_a_default_row_added_beside_a_users_first_save_is_theirs(
     assert _frame(result) == ("held", 2), result["evidence"]["frame"]
 
 
+@pytest.mark.parametrize("pid", ["2", "NULL", "0"])
 def test_the_bots_first_use_of_a_setting_is_its_own_bookkeeping(
-    tmp_path: Path,
+    tmp_path: Path, pid: str
 ) -> None:
     # The bot's own row is the profile's own_rows bookkeeping, and so is the
-    # default OpenEMR adds beside it. Its entries are filed under its chart.
+    # default OpenEMR adds beside it. OpenEMR files the bot's entries under
+    # the chart it has open, or under no chart (NULL or 0).
     result = _run(
         tmp_path,
-        _entry("bot", "insert", pid="2"),
-        _entry("bot", "insert", pid="2"),
+        _entry("bot", "insert", pid=pid),
+        _entry("bot", "insert", pid=pid),
         "INSERT INTO user_settings VALUES (2, 'dem_expand', '1')",
         ADD_DEFAULT,
     )
     assert _frame(result) == ("held", 0), result["evidence"]["frame"]
     used = result["evidence"]["frame"]["database"]["profile"]["rules_used"]
     assert "user-settings" in used
+
+
+@pytest.mark.parametrize("pid", ["NULL", "0"])
+@pytest.mark.parametrize(
+    "sql",
+    [
+        (
+            _entry("bot", "update", "recent_patients", pid="{pid}"),
+            "INSERT INTO recent_patients VALUES (3, 2, NULL, '2')",
+        ),
+        (
+            _entry("bot", "update", "user_settings", pid="{pid}"),
+            "INSERT INTO user_settings VALUES (2, 'gacl_protect', '0')",
+        ),
+    ],
+)
+def test_the_bots_entry_for_its_own_per_user_row_is_its_bookkeeping(
+    tmp_path: Path, sql: tuple[str, str], pid: str
+) -> None:
+    # Calibration on OpenEMR 8.0.0.3 (#1637): a clean save refuted when the
+    # audit read also returned the bot's entries that name no chart, for
+    # its own recent_patients and user_settings rows. The row is excused as
+    # the bot's own; its entry is not "written by this run" collateral.
+    statements = tuple(x.replace("{pid}", pid) for x in sql)
+    result = _run(tmp_path, *statements)
+    assert _why(result) == ("held", 0, 0), result["evidence"]["frame"]
+    rules = set(result["evidence"]["frame"]["database"]["profile"]["rules_used"])
+    assert rules & {"recent-patients", "user-settings"}
+
+
+@pytest.mark.parametrize(
+    ("sql", "why"),
+    [
+        # The bot's entry for a per-user table where nothing of its own
+        # moved: still collateral, written by this run per the log.
+        ((_entry("bot", "update", "user_settings"),), ("refuted", 1, 0)),
+        # Its own row and another user's row: the other row is the bot's
+        # (its entry for the table names no row), its own row excused.
+        (
+            (
+                _entry("bot", "update", "user_settings"),
+                _entry("clinic2", "update"),
+                "INSERT INTO user_settings VALUES (2, 'gacl_protect', '0')",
+                CHANGE_OWN,
+            ),
+            BOTS,
+        ),
+        # Its entry for one per-user table doesn't cover another.
+        (
+            (
+                _entry("bot", "update", "recent_patients"),
+                _entry("bot", "update", "user_settings"),
+                "INSERT INTO recent_patients VALUES (3, 2, NULL, '2')",
+            ),
+            ("refuted", 1, 0),
+        ),
+    ],
+)
+def test_the_bots_entry_covers_only_its_own_rows_in_that_table(
+    tmp_path: Path, sql: tuple[str, ...], why: tuple[str, int, int]
+) -> None:
+    assert _why(_run(tmp_path, *sql)) == why, sql
 
 
 @pytest.mark.parametrize(
@@ -448,6 +512,16 @@ def test_the_bots_first_use_of_a_setting_is_its_own_bookkeeping(
             (
                 _entry("clinic2", "delete"),
                 "DELETE FROM user_settings WHERE setting_user = 0",
+            ),
+            UNEXPLAINED,
+        ),
+        # Beside an explained row of that label with another value: OpenEMR
+        # copies the value, so a different one is planted, not its default.
+        (
+            (
+                _entry("clinic2", "insert"),
+                ADD_OWN,
+                "INSERT INTO user_settings VALUES (0, 'dem_expand', 'planted')",
             ),
             UNEXPLAINED,
         ),
