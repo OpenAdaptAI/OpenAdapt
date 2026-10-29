@@ -19,7 +19,7 @@
 
 ### Features
 
-- A write that lands after the verdict can now be caught. With `frame.database.recheck_after_s`, a verified write's receipt says when a recheck is due (`recheck_due_at`), and `openadapt_flow.verifier.recheck` reads the whole database again at or after that time. It judges every change since the post-save read with the frame's rules: the app profile's bookkeeping, other users' writes the audit log attributes, and what later writes by the same actor under the same contract account for (`excused_by`, any outcome). Anything else turns the earlier result into `REFUTED` (late). A database that can't be read, or a saved state that doesn't match its receipt, gives `UNCERTAIN`. The saved state holds keyed hashes, not values. Without the setting, nothing changes ([#PR](https://github.com/OpenAdaptAI/OpenAdapt/pull/PR)).
+- A write that lands after the verdict can now be caught. With `frame.database.recheck_after_s`, a verified write's receipt says when a recheck is due (`recheck_due_at`), and `openadapt_flow.verifier.recheck` reads the whole database again at or after that time. It judges every change since the post-save read with the frame's rules: the app profile's bookkeeping, other users' writes the audit log attributes, and what later writes by the same actor under the same contract account for (`excused_by`, any outcome). Anything else turns the earlier result into `REFUTED` (late). A database that can't be read, or a saved state that doesn't match its receipt, gives `UNCERTAIN`. The saved state holds keyed hashes, not values. Without the setting, nothing changes ([#1639](https://github.com/OpenAdaptAI/OpenAdapt/pull/1639)).
 
 ## v2.4.1 (2026-10-28)
 
