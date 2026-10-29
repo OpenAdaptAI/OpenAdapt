@@ -41,6 +41,27 @@ PERTURBATIONS = (
     "timeout_after_save",
 )
 PER_PERTURBATION = 4
+#: Run 2 (PREREGISTRATION_2.md): run 1's mix at N = 300 with 80 fault cases.
+RUN2 = {"seed": 2029, "n_ordinary": 168, "per_perturbation": 13}
+#: Run 2's non-blocking slice: 30 items at run 1's density, 8 fault cases drawn
+#: from the set by the seed, and 5 perturbations (the 4 kinds, then the first).
+SLICE = {"seed": 2030, "n_ordinary": 17, "n_faults": 8, "n_perturbations": 5}
+
+
+def build_slice(fault_ids: list[str], faultset_sha256: Optional[str] = None) -> "Stream":
+    """The non-blocking slice's stream (PREREGISTRATION_2.md)."""
+
+    rng = random.Random(SLICE["seed"])
+    picked = rng.sample(sorted(fault_ids), SLICE["n_faults"])
+    s = build(picked, faultset_sha256, SLICE["seed"], n_ordinary=SLICE["n_ordinary"], per_perturbation=2)
+    pert = [i for i in s.items if i.kind == "perturbation"]
+    keep = [next(i for i in pert if i.label == name and i.variant == 0) for name in PERTURBATIONS]
+    keep.append(next(i for i in pert if i.label == PERTURBATIONS[0] and i.variant == 1))
+    items = [i for i in s.items if i.kind != "perturbation" or i in keep]
+    for n, it in enumerate(items, 1):
+        it.seq = n
+        it.item_id = f"sl-{n:03d}"
+    return Stream(seed=SLICE["seed"], items=items, existing=s.existing, faultset_sha256=faultset_sha256)
 
 
 @dataclass
@@ -87,19 +108,26 @@ class Stream:
         return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def build(fault_ids: list[str], faultset_sha256: Optional[str] = None, seed: int = SEED) -> Stream:
-    wl = generate(seed, 400, 1)
+def build(
+    fault_ids: list[str],
+    faultset_sha256: Optional[str] = None,
+    seed: int = SEED,
+    *,
+    n_ordinary: int = N_ORDINARY,
+    per_perturbation: int = PER_PERTURBATION,
+) -> Stream:
+    wl = generate(seed, max(400, 4 * (n_ordinary + len(fault_ids) + 4 * per_perturbation)), 1)
     ordinary: list[Item] = []
     spare: list[dict[str, Any]] = []
     for w in wl.items:
         t = wl.truth[w.item_id]
-        if t.exception in ORDINARY_KINDS and len(ordinary) < N_ORDINARY:
+        if t.exception in ORDINARY_KINDS and len(ordinary) < n_ordinary:
             ordinary.append(
                 Item(0, "", "ordinary", t.exception, dict(w.params), w.source_text, dict(t.person), t.intended)
             )
         elif t.exception == "clean":
             spare.append({"person": dict(t.person)})
-    need = len(fault_ids) + len(PERTURBATIONS) * PER_PERTURBATION
+    need = len(fault_ids) + len(PERTURBATIONS) * per_perturbation
     if len(spare) < need:
         raise RuntimeError("not enough spare people for the stream")
     rest: list[Item] = []
@@ -108,7 +136,7 @@ def build(fault_ids: list[str], faultset_sha256: Optional[str] = None, seed: int
         rest.append(Item(0, "", "fault", case_id, dict(p), _source_text(p), dict(p), dict(p)))
     k = len(fault_ids)
     for name in PERTURBATIONS:
-        for v in range(PER_PERTURBATION):
+        for v in range(per_perturbation):
             p = spare[k]["person"]
             k += 1
             rest.append(Item(0, "", "perturbation", name, dict(p), _source_text(p), dict(p), dict(p), variant=v))

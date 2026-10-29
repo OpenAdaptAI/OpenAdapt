@@ -27,13 +27,56 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
-from lifecycle.arm import Env, OperatorDecision, OperatorRequest
 from lifecycle.apps import OpenEMRApp
+from lifecycle.arm import Env, OperatorDecision, OperatorRequest
 
 from . import faults, workload
-from .oracle import DbOracle, judge, root_sql
+from .oracle import DbOracle, judge, load_form_defaults, root_sql
 
 HERE = Path(__file__).resolve().parent
+
+#: Run 2's frozen inputs (PREREGISTRATION_2; openadapt-internal
+#: qualification/incremental-value-2/CONTRACT_FREEZE.md). A run 2 or slice
+#: item never starts on anything else.
+RUN2_FILES = {
+    "contract": ("contract_2.yaml", "8460b719b2e7862cf8fd94391fcf790dca49668bdac80db01b4d27a5d0a997ca"),
+    "audit_sql": ("audit_query_2.sql", "bd1156e85f104fdf2fd5b3729d0d9f6837f5387941499f88e765f9ecaa325a00"),
+    "form_defaults": ("form_defaults_2.json", "b53a409f2ad995a9156c27ef6a5e779492520125604aa7262807e9d0cc68d3b7"),
+}
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def run2_settings(run: str, arm: str) -> dict[str, str]:
+    """Set run 2's (or its slice's) contract, audit view, form defaults and
+    recheck mode from ``--run``, and check each frozen file's sha256. An
+    environment value that names another file, or another mode, stops."""
+
+    want = {
+        "INCREMENTAL_VALUE_CONTRACT": str(HERE / RUN2_FILES["contract"][0]),
+        "INCREMENTAL_VALUE_AUDIT_SQL": RUN2_FILES["audit_sql"][0],
+        "INCREMENTAL_VALUE_FORM_DEFAULTS": str(HERE / RUN2_FILES["form_defaults"][0]),
+        "INCREMENTAL_VALUE_RECHECK_MODE": "boundary" if run == "slice" else "blocking",
+    }
+    for k, v in want.items():
+        have = os.environ.get(k)
+        same = have == v or any(Path(x).resolve() == Path(v).resolve() for x in (have, HERE / have)) if have else True
+        if have and not same and not (k.endswith("_AUDIT_SQL") and (HERE / have).resolve() == (HERE / v).resolve()):
+            raise SystemExit(f"run {run}: {k} is {have!r}, not {v!r}")
+        os.environ[k] = v
+    shas = {}
+    for name, pinned in RUN2_FILES.values():
+        got = _sha256(HERE / name)
+        if got != pinned:
+            raise SystemExit(f"run {run}: {name} sha256 {got} is not the frozen {pinned}")
+        shas[name] = got
+    if arm == "B" and not os.environ.get("INCREMENTAL_VALUE_LEDGER_DIR"):
+        raise SystemExit(f"run {run}: set INCREMENTAL_VALUE_LEDGER_DIR to a fresh directory for B")
+    return shas
 BOT = "openadapt_actor"
 OTHER = "clinician2"
 READER = "oa_iv_reader"
@@ -137,7 +180,7 @@ class Fixture:
         )
         self.sql(
             "CREATE DATABASE IF NOT EXISTS oa_audit; CREATE OR REPLACE SQL SECURITY DEFINER VIEW oa_audit.writes AS "
-            + (HERE / "audit_query.sql").read_text().strip().rstrip(";")
+            + (HERE / os.environ.get("INCREMENTAL_VALUE_AUDIT_SQL", "audit_query.sql")).read_text().strip().rstrip(";")
             + ";"
         )
         targets: dict[str, Any] = {
@@ -209,15 +252,32 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--only", default="")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--no-reset", action="store_true")
+    ap.add_argument("--run", choices=["1", "2", "slice"], default="1", help="the pre-registered stream")
+    ap.add_argument("--chunk", type=int, default=0,
+                    help="run 2: run only items iv-(50k-49)..iv-50k (PREREGISTRATION_2's fixed chunks)")
     a = ap.parse_args(argv)
+    if a.chunk and not (a.run == "2" and 1 <= a.chunk <= 6):
+        raise SystemExit("--chunk is 1 to 6, for --run 2 only")
+    frozen = run2_settings(a.run, a.arm) if a.run in ("2", "slice") else {}
+    defaults_path = os.environ.get("INCREMENTAL_VALUE_FORM_DEFAULTS", "")
+    form_defaults = load_form_defaults(defaults_path) if defaults_path else None
+    if form_defaults is None and frozen:
+        raise SystemExit(f"run {a.run} needs the oracle's form defaults ({defaults_path})")
 
     cases_list, sha, ops = faults.load_cases()
     cases = {c["id"]: c for c in cases_list}
     stream_path = a.stream or (a.out / "stream.json")
+    ids = [c["id"] for c in cases_list]
+    if a.run == "slice":
+        built = workload.build_slice(ids, sha)
+    else:
+        built = workload.build(ids, sha, **(workload.RUN2 if a.run == "2" else {}))
     if stream_path.exists():
         stream = workload.load(stream_path)
+        if frozen and stream.sha256() != built.sha256():
+            raise SystemExit(f"{stream_path} is not run {a.run}'s pre-registered stream")
     else:
-        stream = workload.build([c["id"] for c in cases_list], sha)
+        stream = built
         a.out.mkdir(parents=True, exist_ok=True)
         workload.save(stream, stream_path)
     if stream.faultset_sha256 != sha:
@@ -227,9 +287,23 @@ def main(argv: Optional[list[str]] = None) -> int:
     out = a.out / arm.name
     out.mkdir(parents=True, exist_ok=True)
     ledger = out / "ledger.jsonl"
+    ldir = os.environ.get("INCREMENTAL_VALUE_LEDGER_DIR")
+    if a.arm == "B" and ldir and Path(ldir).is_dir() and any(Path(ldir).iterdir()) and not ledger.exists():
+        # A ledger left from another run would answer AlreadyWritten for
+        # the same seed, ids and values.
+        raise SystemExit(f"{ldir} holds another run's write ledger; use a fresh INCREMENTAL_VALUE_LEDGER_DIR")
+    # B's late rechecks land after their item's row: one line per recheck.
+    arm.late_path = out / "late.jsonl"
+    # An item is done once it has a row that isn't an infrastructure error,
+    # or (runs 2 and slice) two rows: the pre-registered single retry.
     done = set()
     if ledger.exists():
-        done = {json.loads(ln)["item_id"] for ln in ledger.read_text().splitlines() if ln.strip()}
+        tries: dict[str, list[bool]] = {}
+        for ln in ledger.read_text().splitlines():
+            if ln.strip():
+                r = json.loads(ln)
+                tries.setdefault(r["item_id"], []).append(bool(r.get("infra_error") or r.get("result") is None))
+        done = {i for i, t in tries.items() if not all(t) or len(t) >= (2 if frozen else 1)}
 
     fx = Fixture()
     app = fx.app
@@ -252,9 +326,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     rec = Recorder()
     with (out / "arm.json").open("w") as fh:
         json.dump({"describe": arm.describe(), "stream_sha256": stream.sha256(), "faultset_sha256": sha, "targets": targets,
-                   "engine_commit": os.popen("git rev-parse HEAD").read().strip()}, fh, indent=1)
+                   "engine_commit": os.popen("git rev-parse HEAD").read().strip(), "run": a.run,
+                   "frozen_sha256": frozen, "recheck_mode": os.environ.get("INCREMENTAL_VALUE_RECHECK_MODE")}, fh, indent=1)
+    if form_defaults is None:
+        print("warning: no INCREMENTAL_VALUE_FORM_DEFAULTS; the oracle checks only the referral's fields", flush=True)
     setup = arm.setup(env, rec)
     only = set(filter(None, a.only.split(",")))
+    if a.chunk:
+        only |= {f"iv-{n:03d}" for n in range(50 * a.chunk - 49, 50 * a.chunk + 1)}
     n = 0
     with ledger.open("a") as fh:
         for item in stream.items:
@@ -262,7 +341,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 continue
             if a.limit and n >= a.limit:
                 break
-            gate = float(os.environ.get("INCREMENTAL_VALUE_LOAD_GATE", "40"))
+            gate = float(os.environ.get("INCREMENTAL_VALUE_LOAD_GATE", "40" if a.run == "1" else "60"))
             while load1() > gate:
                 print(f"[{arm.name}] load {load1():.0f}; waiting", flush=True)
                 time.sleep(30)
@@ -296,9 +375,20 @@ def main(argv: Optional[list[str]] = None) -> int:
                 infra = f"{type(exc).__name__}: {exc}"[:500]
                 res = None
             quiet = ctx.wait_background(ctx.max_delay(hooks) + 120)
+            # B's later recheck runs at the time its contract declares, not
+            # when the harness knows the background writes are done.
+            if res is not None and infra is None:
+                try:
+                    arm.after_item(ctx, res)
+                except Exception as exc:  # noqa: BLE001 - never lose the item's row
+                    print(f"[{arm.name}] after_item failed: {type(exc).__name__}: {exc}", flush=True)
+                    # A recheck that could not run never passes.
+                    if hasattr(arm, "recheck_failed"):
+                        arm.recheck_failed(item.item_id, exc)
             time.sleep(3)
             diffs = oracle.advance()
-            verdict = judge(oracle, diffs, intended=ctx.intended, person=item.person, legit=ctx.legit)
+            verdict = judge(oracle, diffs, intended=ctx.intended, person=item.person, legit=ctx.legit,
+                            form_defaults=form_defaults)
             row = {
                 "item_id": item.item_id,
                 "seq": item.seq,
@@ -306,12 +396,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "label": item.label,
                 "variant": item.variant,
                 "intended": ctx.intended is not None,
+                "expect": cases[item.label].get("expect") if item.kind == "fault" else None,
                 "hooks": faults.describe(hooks),
                 "prepare_error": prep_err,
                 "prepare_tables": sorted(pre),
                 "events": ctx.events,
                 "background_done": quiet,
                 "legit_rows": len(ctx.legit.keys),
+                "faults_landed": ctx.faults_landed,
                 "infra_error": infra,
                 "result": asdict(res) if res is not None else None,
                 "operator_requests": list(rec.requests),

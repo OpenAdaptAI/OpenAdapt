@@ -276,6 +276,15 @@ class ArmA(AgentToolsArm):
         self._warm_tokens()
         return None
 
+    def after_item(self, ctx: Ctx, result: ItemResult) -> Optional[dict[str, Any]]:
+        """Work the arm does once the item's own run is over, before the
+        oracle judges it. A checks nothing later."""
+
+        return None
+
+    def _on_restart(self) -> None:
+        """A keeps nothing across the restart but the agent's own reading."""
+
     def _on_finish(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
         """A trusts its own read-back: the claim stands."""
 
@@ -309,6 +318,7 @@ class ArmA(AgentToolsArm):
                 except Restart:
                     restarts += 1
                     self._restarted = True
+                    self._on_restart()
                     trace.append({"restart": True, "t": round(time.time(), 2)})
                     self.session.close()
                     self._new_session(env)
@@ -384,6 +394,11 @@ class ArmB(ArmA):
         self._contract: Any = None
         self._before: Any = None
         self._params: dict[str, str] = {}
+        self._pending: Any = None
+        self._ledger_result: Optional[dict[str, Any]] = None
+        self._ledger_block: Optional[str] = None
+        self.recheck_queue: list[dict[str, Any]] = []
+        self.late_path = Path(options.get("late_path", "late.jsonl"))
 
     def describe(self) -> dict[str, Any]:
         import hashlib
@@ -412,15 +427,67 @@ class ArmB(ArmA):
             self._contract = Contract.load(str(self.contract_path))
         return self._contract
 
+    # -- run 2: begin_write / verify_write with the durable ledger (#1643),
+    # and the late recheck (#1639) -------------------------------------------
+
+    def _run2(self) -> bool:
+        frame = getattr(self.contract().config, "frame", None)
+        database = getattr(frame, "database", None)
+        return bool(database is not None and getattr(database, "recheck_after_s", None))
+
+    def _ledger(self) -> Any:
+        import os
+
+        from openadapt_flow.write_ledger import FileLedger
+
+        ldir = os.environ.get("INCREMENTAL_VALUE_LEDGER_DIR")
+        if not ldir:
+            raise SystemExit("run 2: set INCREMENTAL_VALUE_LEDGER_DIR to a fresh directory")
+        return FileLedger(Path(ldir))
+
+    def _actor(self) -> Any:
+        from openadapt_flow.verifier import Actor
+
+        return Actor("agent", "openadapt_actor")
+
     def _before_item(self, item: WorkItem, evidence: Path) -> Optional[str]:
         from openadapt_flow.verifier import BaselineUnreadable, capture
 
         self._warm_tokens()
         self._params = normalise(item.params)
+        self._item_id = item.item_id
+        self._evidence = evidence
         t0 = time.time()
         self._fresh_token()
         # OpenEMR writes its OAuth bookkeeping after the token response.
         time.sleep(2.0)
+        if self._run2():
+            from openadapt_flow.verifier import (
+                AlreadyWritten,
+                WriteBlocked,
+                begin_write,
+            )
+
+            self._ledger_result = None
+            self._ledger_block = None
+            try:
+                self._pending = begin_write(
+                    self.contract(), self._params, actor=self._actor(),
+                    ledger=self._ledger(), write_key=item.item_id, workdir=evidence,
+                )
+            except AlreadyWritten as exc:
+                # A rerun of an item whose write the ledger already resolved
+                # (a crash before the row was written): never send it again.
+                self._pending = None
+                self._ledger_result = dict(exc.result)
+                self.saves_sent = 1
+                self._capture_s = round(time.time() - t0, 2)
+                return None
+            except WriteBlocked as exc:
+                self._pending = None
+                return f"OpenAdapt: the write can't start ({exc}); nothing was written"
+            self._capture_s = round(time.time() - t0, 2)
+            return None
         try:
             self._before = capture(self.contract(), self._params)
         except BaselineUnreadable as exc:
@@ -431,7 +498,180 @@ class ArmB(ArmA):
         self._capture_s = round(time.time() - t0, 2)
         return None
 
+    def _on_restart(self) -> None:
+        """The adapter process died: everything it held in memory is gone,
+        including whether its save request was sent. Only the ledger
+        remembers the open attempt."""
+
+        if not self._run2() or getattr(self, "_pending", None) is None:
+            return
+        from openadapt_flow.verifier import AlreadyWritten, WriteBlocked, begin_write
+
+        self._pending.release()
+        self._pending = None
+        # The fresh adapter asks the ledger before its next send, so the hold
+        # stays on: a resend is refused while the earlier attempt is open.
+        # (No new OAuth token here: minting one inside the write's window adds
+        # token rows the frame rightly reports.)
+        try:
+            self._pending = begin_write(
+                self.contract(), self._params, actor=self._actor(), ledger=self._ledger(),
+                write_key=self._item_id, workdir=self._evidence / "after-restart",
+            )
+            self.saves_sent = 0  # a new attempt: its first save may go
+        except AlreadyWritten as exc:
+            self._ledger_result = dict(exc.result)
+            self.saves_sent = 1  # hold every resend
+        except WriteBlocked as exc:
+            self._ledger_block = str(exc)
+            self.saves_sent = 1
+
     def _on_finish(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
+        if self._run2():
+            return self._on_finish_2(claim, item, evidence)
+        return self._on_finish_1(claim, item, evidence)
+
+    def _on_finish_2(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
+        from openadapt_flow.verifier import verify_write
+
+        said_saved = claim is not None and claim.get("result") == "SAVED"
+        # The item's token, minted before the baseline, is still valid: a new
+        # one now would write OAuth rows inside the window.
+        if self._ledger_block is not None:
+            return {"claimed": "stopped", "status": f"OpenAdapt: held by the ledger ({self._ledger_block})",
+                    "verifier": {"ledger": self._ledger_block[:300]}}
+        if self._ledger_result is not None:
+            r = self._ledger_result
+            out = self._verdict_2(r, said_saved, evidence, via="ledger")
+            # The reconciled attempt's own recheck state, beside its receipt
+            # (verify_write's <workdir>/<write_id>/recheck.json).
+            receipt = r.get("receipt_path")
+            state = Path(receipt).parent / "recheck.json" if receipt else evidence / "recheck.json"
+            self._queue_recheck(item.item_id, r, state)
+            return out
+        attempted = said_saved or self.saves_sent > 0
+        result = verify_write(self._pending, write_attempted=attempted)
+        self._pending = None
+        r = result.to_dict()
+        out = self._verdict_2(r, said_saved, evidence, via="verify_write")
+        path = result.recheck.path if result.recheck is not None else None
+        self._queue_recheck(item.item_id, r, Path(path) if path is not None else evidence / "no-recheck-state")
+        return out
+
+    def _queue_recheck(self, item_id: str, r: dict[str, Any], state_path: Path) -> None:
+        """Every result with a recheck state goes in the queue: the verified
+        ones are rechecked, and all of them excuse their own window for the
+        earlier writes' rechecks (any outcome, #1639)."""
+
+        if not state_path.is_file():
+            if r.get("outcome") == "CONFIRMED":
+                # A confirmed write in run 2 always has a recheck due; with no
+                # state to recheck, it never passes (a late UNCERTAIN).
+                q = {"item_id": item_id, "verdict_at": time.time()}
+                self._late_row(q, {"outcome": "UNCERTAIN", "reasons": [f"no recheck state at {state_path.name}"]}, 0.0, 0.0)
+            return
+        self.recheck_queue.append({
+            "item_id": item_id, "state_path": str(state_path), "params": dict(self._params),
+            "due_at": r.get("recheck_due_at"), "verified": r.get("outcome") == "CONFIRMED",
+            "verdict_at": time.time(),
+        })
+
+    def _verdict_2(self, r: dict[str, Any], said_saved: bool, evidence: Path, *, via: str) -> dict[str, Any]:
+        (evidence / "result.json").write_text(json.dumps(r, indent=1, default=str)[:400_000])
+        outcome = str(r.get("outcome") or "")
+        v = {"outcome": outcome, "via": via, "reasons": list(r.get("reasons") or [])[:6],
+             "capture_s": getattr(self, "_capture_s", None), "recheck_due_at": r.get("recheck_due_at")}
+        if outcome == "CONFIRMED":
+            return {"claimed": "done", "status": f"OpenAdapt: confirmed ({via})", "verifier": v}
+        if outcome == "REFUTED" and r.get("retry_safe") and not said_saved:
+            reason = "nothing moved"
+            return {"claimed": "stopped", "status": f"RESULT: NOT SAVED (OpenAdapt: {reason})", "verifier": v}
+        return {"claimed": "stopped", "status": f"OpenAdapt: {outcome}: {'; '.join(v['reasons'])[:300]}", "verifier": v}
+
+    def after_item(self, ctx: Ctx, result: ItemResult) -> Optional[dict[str, Any]]:
+        """Run every recheck that is due, at this item boundary, when the
+        harness has let the item's background writes finish. In blocking
+        mode, wait for this item's own recheck first."""
+
+
+        if not self._run2():
+            return None
+        self.run_rechecks(wait=self._mode() == "blocking")
+        return None
+
+    def run_rechecks(self, *, wait: bool) -> None:
+        from openadapt_flow.verifier import RecheckNotDue, RecheckState, recheck
+
+        # The item's token is reused: a new one would write OAuth rows after
+        # the post-save read, inside every recheck's window.
+        remaining = []
+        states = []
+        for q in self.recheck_queue:
+            try:
+                states.append((q, RecheckState.load(Path(q["state_path"]), params=q["params"])))
+            except Exception as exc:  # noqa: BLE001 - recorded as a late UNCERTAIN
+                if q["verified"]:
+                    self._late_row(q, {"outcome": "UNCERTAIN", "reasons": [f"state unreadable: {exc}"[:300]]}, 0.0, 0.0)
+        for i, (q, state) in enumerate(states):
+            if not q["verified"]:
+                continue  # kept only to excuse its own window for earlier writes
+            later = [s for _, s in states[i + 1 :]]
+            t0 = time.time()
+            due = _epoch(q.get("due_at"))
+            waited = max(0.0, due - t0) if (wait and due) else 0.0
+            try:
+                late = recheck(self.contract(), state, params=q["params"], actor=self._actor(),
+                               excused_by=later, wait=wait)
+            except RecheckNotDue:
+                remaining.append(q)
+                continue
+            except Exception as exc:  # noqa: BLE001 - a recheck that can't run never passes
+                self._late_row(q, {"outcome": "UNCERTAIN", "reasons": [f"{type(exc).__name__}: {exc}"[:300]]},
+                               waited, time.time() - t0 - waited)
+                continue
+            self._late_row(q, {"outcome": late.outcome, "reasons": list(late.reasons)[:6], "due_at": late.due_at,
+                               "read_at": late.read_at, "excused": late.excused},
+                           waited, time.time() - t0 - waited)
+        # A rechecked entry is kept only as an excuse for earlier entries
+        # still waiting; nothing before the first waiting one is needed.
+        for q, _ in states:
+            if q["verified"] and q not in remaining:
+                q["verified"] = False
+        waiting = [i for i, q in enumerate(self.recheck_queue) if q in remaining]
+        self.recheck_queue = self.recheck_queue[waiting[0]:] if waiting else []
+
+    def recheck_failed(self, item_id: str, exc: Exception) -> None:
+        """Every queued, unrechecked verified write is UNCERTAIN: the
+        recheck loop itself failed (the harness keeps going)."""
+
+        for q in self.recheck_queue:
+            if q["verified"]:
+                self._late_row(q, {"outcome": "UNCERTAIN", "reasons": [f"recheck failed: {type(exc).__name__}: {exc}"[:300]]},
+                               0.0, 0.0)
+                q["verified"] = False
+
+    def _late_row(self, q: dict[str, Any], late: dict[str, Any], waited: float, read_s: float) -> None:
+        row = {"item_id": q["item_id"], **late, "mode": self._mode(),
+               # PREREGISTRATION_2: the wait for the recheck to fall due, the
+               # recheck's own read, and first verdict -> recheck verdict.
+               "wait_s": round(waited, 2), "recheck_s": round(read_s, 2),
+               "latency_s": round(time.time() - q["verdict_at"], 2)}
+        with self.late_path.open("a") as fh:
+            fh.write(json.dumps(row, default=str) + "\n")
+
+    @staticmethod
+    def _mode() -> str:
+        import os
+
+        # run.py sets it from --run: blocking for run 2, boundary for the slice.
+        return os.environ.get("INCREMENTAL_VALUE_RECHECK_MODE", "blocking")
+
+    def close(self) -> None:
+        if getattr(self, "recheck_queue", None):
+            self.run_rechecks(wait=True)
+        super().close()
+
+    def _on_finish_1(self, claim: Optional[dict[str, Any]], item: WorkItem, evidence: Path) -> dict[str, Any]:
         from openadapt_flow.verifier import Actor, VerifierError, verify_write
 
         said_saved = claim is not None and claim.get("result") == "SAVED"
@@ -467,6 +707,17 @@ class ArmB(ArmA):
             return {"claimed": "stopped", "status": f"RESULT: NOT SAVED: {reason} (OpenAdapt: nothing moved)", "verifier": v}
         label = "REFUTED" if result.status == "refuted" else "RECONCILIATION_REQUIRED"
         return {"claimed": "stopped", "status": f"OpenAdapt: {label}: {'; '.join(result.reasons)[:300]}", "verifier": v}
+
+
+def _epoch(stamp: Any) -> float:
+    """An ISO-8601 UTC stamp as epoch seconds, or 0.0."""
+
+    from datetime import datetime
+
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
 
 
 def factory_a(options: dict[str, Any]) -> ArmA:

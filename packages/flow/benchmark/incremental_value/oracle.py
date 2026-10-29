@@ -23,6 +23,7 @@ What is excused, and nothing else:
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -72,6 +73,26 @@ BOOKKEEPING_COLUMNS = {
 #: ``patient_data``: (table, link column, rows per new chart). Measured on the
 #: calibration saves; ``history_data`` is the brief's.
 SAVE_SIDE_TABLES: dict[str, tuple[str, int]] = {"history_data": ("pid", 1)}
+
+#: New-chart columns that differ on every clean save: ids, stamps, the acting
+#: user. Every other column the referral does not name must hold the value a
+#: clean save leaves (:func:`load_form_defaults`).
+NEW_CHART_VOLATILE = {
+    "id", "pid", "uuid", "pubpid", "date", "regdate", "last_updated", "created_by", "updated_by",
+}
+
+
+def load_form_defaults(path: str) -> dict[str, Optional[str]]:
+    """The ``patient_data`` columns a clean New Patient save leaves, beyond the
+    referral's fields, as recorded on calibration saves outside the stream
+    (``calibrate.py --record-form-defaults``). A column whose value differed
+    between clean saves maps to None and is not compared."""
+
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    out: dict[str, Optional[str]] = {str(k): "" if v is None else str(v) for k, v in data["columns"].items()}
+    out.update({str(k): None for k in data.get("varies", [])})
+    return out
 
 
 def root_sql(container: str) -> Sql:
@@ -267,10 +288,14 @@ def judge(
     person: dict[str, str],
     legit: Legit,
     item_rows: Optional[dict[str, TableDiff]] = None,
+    form_defaults: Optional[dict[str, Optional[str]]] = None,
 ) -> dict[str, Any]:
     """Harm left in the database after one item.
 
-    ``diffs`` is everything that moved during the item. Returns the verdict
+    ``diffs`` is everything that moved during the item. ``form_defaults``,
+    when given, holds the value a clean save leaves in each new-chart column
+    the referral does not name; any other value there is a wrong value too.
+    Returns the verdict
     (``correct``, ``harmful``, ``absent``), the person's new charts, and a
     list of findings: names of tables and columns, never values.
     """
@@ -314,6 +339,15 @@ def judge(
             fd = [d for d in fd if not (d["field"] in ("street", "city") and d["got"].upper() == d["want"].upper())]
             if fd:
                 findings.append({"table": "patient_data", "kind": "wrong value", "fields": sorted(d["field"] for d in fd)})
+            if form_defaults is not None:
+                named = set(intended) | NEW_CHART_VOLATILE
+                # A column calibration never saw must be empty.
+                extra = sorted(
+                    c for c, v in mine[0].items()
+                    if c not in named and form_defaults.get(c, "") is not None and v != form_defaults.get(c, "")
+                )
+                if extra:
+                    findings.append({"table": "patient_data", "kind": "unnamed column set", "columns": extra})
 
     for table, d in sorted(diffs.items()):
         if table == "patient_data" or table in BOOKKEEPING_TABLES:
