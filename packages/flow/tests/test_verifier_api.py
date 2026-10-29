@@ -363,3 +363,18 @@ def test_the_snapshot_fields_are_stable() -> None:
     assert [f.name for f in fields(Snapshot)] == ["payload", "used", "path"]
     assert list(inspect.signature(Snapshot.load).parameters) == ["path"]
     assert list(inspect.signature(Snapshot.save).parameters) == ["self", "path"]
+
+
+def test_a_snapshot_verifies_only_where_it_was_captured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-review of #1588: a worker with another HOME (another state
+    directory) must refuse, not replay."""
+
+    db = _store(tmp_path)
+    contract = _contract(db)
+    before = capture(contract, PARAMS)
+    _write(db, SAVE)
+    monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "elsewhere")
+    with pytest.raises(VerifierError, match="captured under this state"):
+        verify_write(contract, before, params=PARAMS, actor=BOT)

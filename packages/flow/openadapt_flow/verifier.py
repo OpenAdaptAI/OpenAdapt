@@ -150,8 +150,7 @@ class Snapshot:
 
     payload: dict[str, Any] = field(repr=False)
     used: bool = False
-    #: The file :meth:`load` read, so verify-run's own single-use marker
-    #: applies to it.
+    #: The file :meth:`load` read, if any (for the caller's reference).
     path: Optional[Path] = field(default=None, repr=False)
 
     def save(self, path: str | Path) -> Path:
@@ -161,8 +160,8 @@ class Snapshot:
 
     @classmethod
     def load(cls, path: str | Path) -> "Snapshot":
-        """Read a saved snapshot. Verifying it writes ``<path>.used`` beside
-        it, and the file is read again then: its contents are what's judged."""
+        """Read a snapshot :meth:`save` wrote. Its contents as read now are
+        what's judged; it verifies only where :func:`capture` recorded it."""
 
         source = Path(path)
         return cls(json.loads(source.read_text()), path=source)
@@ -172,33 +171,79 @@ class Snapshot:
 #: fresh salt, so a copy or a reload of a used snapshot is refused too.
 _CONSUMED: set[str] = set()
 _CONSUMED_LOCK = threading.Lock()
-#: Where a used snapshot's salt is recorded for every process of this user (a
-#: copied file, or a snapshot pickled to a worker): one file per salt digest.
-USED_DIR = Path.home() / ".cache" / "openadapt" / "verifier-used"
+#: Where :func:`capture` records each snapshot it issues, as an empty file
+#: named by its salt's digest; :func:`verify_write` removes it, and only one
+#: caller can. A snapshot not issued here (another HOME, host or container, a
+#: wiped cache, a copy whose record is gone) is refused, never replayed. Set
+#: ``OPENADAPT_VERIFIER_STATE_DIR`` to give every worker one directory.
+USED_DIR: Optional[Path] = None
 
 
-def _consume(payload: Any) -> None:
-    """Mark ``payload``'s snapshot used, once, in this process and on disk."""
+def _issued_dir() -> Path:
+    root = USED_DIR or Path(
+        os.environ.get("OPENADAPT_VERIFIER_STATE_DIR")
+        or Path.home() / ".cache" / "openadapt" / "verifier"
+    )
+    issued = Path(root) / "issued"
+    try:
+        issued.mkdir(mode=0o700, parents=True, exist_ok=True)
+        info = os.lstat(issued)
+    except OSError as exc:
+        raise VerifierError(f"can't keep the snapshot record: {exc}") from exc
+    if (
+        not os.path.isdir(issued)
+        or os.path.islink(issued)
+        or info.st_uid != os.geteuid()
+        or info.st_mode & 0o077
+    ):
+        # Another user could remove records (replay) or plant them.
+        raise VerifierError(f"{issued} must be a private directory owned by this user")
+    return issued
 
+
+def _salt_digest(payload: Any) -> tuple[str, str]:
     if not isinstance(payload, dict):
         raise VerifierError("a snapshot's payload must be the dict capture made")
     salt = payload.get("salt")
     if not isinstance(salt, str) or not salt:
         raise VerifierError("the snapshot has no salt; capture again")
-    digest = hashlib.sha256(salt.encode("utf-8")).hexdigest()
+    try:
+        canonical = bytes.fromhex(salt).hex()  # one name per salt, any case
+    except ValueError as exc:
+        raise VerifierError("the snapshot's salt is not hex") from exc
+    return canonical, hashlib.sha256(canonical.encode("ascii")).hexdigest()
+
+
+def _issue(payload: Any) -> None:
+    """Record a new snapshot as issued (see :data:`USED_DIR`)."""
+
+    _salt, digest = _salt_digest(payload)
+    try:
+        fd = os.open(
+            _issued_dir() / digest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+        )
+    except OSError as exc:
+        raise VerifierError(f"can't record the snapshot: {exc}") from exc
+    os.close(fd)
+
+
+def _consume(payload: Any) -> None:
+    """Use ``payload``'s snapshot, once: remove its issued record."""
+
+    salt, digest = _salt_digest(payload)
     with _CONSUMED_LOCK:
         if salt in _CONSUMED:
             raise VerifierError("this snapshot was already used; capture again")
         _CONSUMED.add(salt)
     try:
-        USED_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-        fd = os.open(USED_DIR / digest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        raise VerifierError("this snapshot was already used; capture again") from None
+        os.unlink(_issued_dir() / digest)
+    except FileNotFoundError:
+        raise VerifierError(
+            "this snapshot was already used, or wasn't captured under this "
+            "state directory; capture again"
+        ) from None
     except OSError as exc:
-        # Nowhere to record the use: refuse rather than allow a replay.
         raise VerifierError(f"can't record the snapshot's use: {exc}") from exc
-    os.close(fd)
 
 
 @dataclass(frozen=True)
@@ -250,7 +295,9 @@ def capture(contract: Contract, params: Mapping[str, object]) -> Snapshot:
     database = contract.config.frame.database if contract.config.frame else None
     if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
         raise BaselineUnreadable("the database could not be read for the frame")
-    return Snapshot(dict(payload))
+    snapshot = Snapshot(dict(payload))
+    _issue(snapshot.payload)
+    return snapshot
 
 
 def _status(checked: Mapping[str, str], evidence: Mapping[str, Any]) -> str:
@@ -345,11 +392,9 @@ def verify_write(
         except (VerifyRunError, OSError) as exc:
             raise VerifierError(str(exc)) from exc
 
-    if before.path is not None:
-        result = run(before.path)  # its .used marker records this use
-    else:
-        with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
-            result = run(before.save(Path(tmp) / "baseline.json"))
+    # Judge the payload whose salt was just used, never the file as it is now.
+    with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
+        result = run(before.save(Path(tmp) / "baseline.json"))
     receipt = dict(result["receipt"])
     evidence = dict(result["evidence"])
     outcome = str(receipt.get("terminal_outcome") or receipt.get("outcome") or "")
