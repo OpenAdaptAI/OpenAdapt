@@ -2179,23 +2179,37 @@ def _build_effect_verifier_unredacted(
         if not cfg.sql_query:
             raise ValueError("effects.kind 'sql' requires effects.sql_query")
         from openadapt_flow.runtime.effects import SqlRecordVerifier
+        from openadapt_flow.runtime.effects.sql import (
+            READ_ONLY_DRIVERS,
+            read_only_connection,
+        )
 
         connect: Callable[[], Any]
         if cfg.sqlite_database:
             import sqlite3
 
             database = cfg.sqlite_database
-            connect = lambda: sqlite3.connect(database)  # noqa: E731
+            connect = lambda: read_only_connection(  # noqa: E731
+                sqlite3.connect(database), "sqlite3"
+            )
         elif cfg.sql_driver:
             import importlib
 
-            module = importlib.import_module(cfg.sql_driver)
+            driver = cfg.sql_driver
+            module = importlib.import_module(driver)
             connect_args = dict(cfg.sql_connect_args)
             if cfg.sql_password_env:
                 connect_args["password"] = _require_env(
                     cfg.sql_password_env, "effects.sql_password_env"
                 )
-            connect = lambda: module.connect(**connect_args)  # noqa: E731
+            # The read-back never writes: where the driver can, its session
+            # is read-only, so a query that would write is refused there.
+            if driver in READ_ONLY_DRIVERS:
+                connect = lambda: read_only_connection(  # noqa: E731
+                    module.connect(**connect_args), driver
+                )
+            else:
+                connect = lambda: module.connect(**connect_args)  # noqa: E731
         else:
             raise ValueError(
                 "effects.kind 'sql' requires effects.sqlite_database or "

@@ -59,6 +59,112 @@ def test_a_query_that_is_not_one_read_only_select_is_refused(query, message):
     assert any(__import__("re").search(message, p) for p in problems), problems
 
 
+ECHO_PARAMS = {"email": {"param": "email"}, "name": {"param": "name"}}
+
+
+@pytest.mark.parametrize(
+    "query, message",
+    [
+        # Writes a sequence: setval and nextval are not the word "set".
+        (
+            "SELECT setval(%(name)s::regclass, 1) AS id, "
+            "nextval(%(email)s::regclass) AS email",
+            "plain column names",
+        ),
+        # Changes a session setting.
+        ("SELECT set_config(%(name)s, %(email)s, false) AS id", "plain column names"),
+        # Runs SQL taken from a typed input.
+        (
+            "SELECT query_to_xml(%(name)s, true, true, %(email)s)::text AS id",
+            "plain column names",
+        ),
+        # Echoes the inputs as the stored fields: any write would match.
+        (
+            "SELECT id::text AS id, %(name)s AS name, %(email)s AS email "
+            "FROM res_partner WHERE id = (SELECT max(id) FROM res_partner)",
+            "plain column names",
+        ),
+        (
+            "SELECT name FROM res_partner, query_to_xml(%(name)s, true, true, "
+            "%(email)s) WHERE email = %(email)s",
+            "only after WHERE",
+        ),
+        (
+            "SELECT name FROM lower(%(name)s) WHERE email = %(email)s",
+            "not functions",
+        ),
+        ("SELECT name, email", "SELECT <columns> FROM <table>"),
+    ],
+)
+def test_a_query_whose_effect_is_not_a_plain_read_is_refused(query, message):
+    problems = skills.shipped_sql_problems(query, ECHO_PARAMS)
+    assert any(__import__("re").search(message, p) for p in problems), problems
+
+
+def test_the_read_back_runs_on_a_read_only_connection(tmp_path):
+    """Whatever the query says, the driver refuses a write from the read-back."""
+
+    import sqlite3
+
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+
+    db = tmp_path / "sor.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, who TEXT)")
+    conn.commit()
+    conn.close()
+    verifier = build_effect_verifier(
+        EffectsConfig(
+            kind="sql", sql_query="SELECT id, who FROM t", sqlite_database=str(db)
+        )
+    )
+    read_back = verifier._connect()
+    with pytest.raises(sqlite3.OperationalError, match="readonly"):
+        read_back.execute("INSERT INTO t (who) VALUES ('x')")
+    read_back.close()
+
+
+def test_every_shipped_driver_has_a_read_only_session():
+    from openadapt_flow.runtime.effects.sql import (
+        READ_ONLY_DRIVERS,
+        read_only_connection,
+    )
+
+    assert skills.SHIPPED_SQL_DRIVERS <= READ_ONLY_DRIVERS
+    with pytest.raises(ValueError, match="no driver-level read-only"):
+        read_only_connection(object(), "pymssql")
+
+
+@pytest.mark.parametrize(
+    "driver, expected",
+    [
+        ("psycopg2", [("set_session", {"readonly": True})]),
+        ("pymysql", [("execute", "SET SESSION TRANSACTION READ ONLY")]),
+    ],
+)
+def test_the_driver_is_asked_for_a_read_only_session(driver, expected):
+    from openadapt_flow.runtime.effects.sql import read_only_connection
+
+    calls = []
+
+    class Cursor:
+        def execute(self, sql):
+            calls.append(("execute", sql))
+
+        def close(self):
+            pass
+
+    class Conn:
+        def set_session(self, **kw):
+            calls.append(("set_session", kw))
+
+        def cursor(self):
+            return Cursor()
+
+    read_only_connection(Conn(), driver)
+    assert calls == expected
+
+
 def test_a_bound_value_must_be_a_typed_input():
     problems = skills.shipped_sql_problems(ODOO_SELECT, {"email": "x@y.z"})
     assert any("must be {param: ...}" in p for p in problems)

@@ -11,7 +11,7 @@ synthetic.
 | `qualify_hooks.py` | Signs the dedicated user in, opens a new contact, archives contacts between cases, and writes a signed-in browser state (what a registry user binds as `SIGNED_IN_STATE`). |
 | `demo.py` | The scripted demonstration (choose Individual, fill name, street, city, ZIP, phone and email, save), then compile. |
 | `verify.yaml` | The record check: one parameterized, read-only SELECT of the typed fields from `res_partner`, keyed by email. |
-| `results/2026-10-28-click-teach/` | The compiled bundle and the qualification evidence. |
+| `results/2026-10-28-click-teach/qualification/` | The qualification evidence. The compiled bundle isn't committed; `demo.py compile` rebuilds it. |
 
 ```bash
 cd packages/flow
@@ -54,9 +54,6 @@ a page heuristic here.
 - A plain internal user can't create contacts, and Odoo then shows no save
   button. The dedicated user needs Contact Creation
   (`base.group_partner_manager`).
-- The shared Podman VM's disk was full. It was grown from 35 to 45 GB
-  (`podman machine set --disk-size 45`, `growpart`, `xfs_growfs /var`).
-  Nothing else was removed.
 
 Effort: about 0.8 hours of lease time, from bring-up to the refused
 qualification.

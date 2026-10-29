@@ -33,7 +33,7 @@ PROJECT = "openadapt-si-odoo"
 WEB_PORT = 9412
 DB_PORT = 9413
 DATABASE = "oa"
-DEFAULT_STATE = Path.home() / "oa/scratch/second-installation/odoo-state"
+DEFAULT_STATE = Path.home() / ".openadapt" / "fixtures" / "odoo-state"
 ACTOR_LOGIN = "openadapt.actor@example.invalid"
 RECORD_ROLE = "oa_record_check"
 

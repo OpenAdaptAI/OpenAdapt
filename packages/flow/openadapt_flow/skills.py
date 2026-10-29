@@ -458,9 +458,10 @@ _PATH_KEYS = frozenset({"storage_state", "sqlite_database", "root"})
 #: The read-back kinds a shipped contract may use: each reads a system the
 #: user's binding names, and none loads a plugin.
 SHIPPED_VERIFIER_KINDS = ("rest", "fhir", "sql", "graphql")
-#: DB-API drivers a shipped SQL check may name (``sql_driver`` imports it).
+#: DB-API drivers a shipped SQL check may name (``sql_driver`` imports it):
+#: those whose session the read-back can make read-only at the driver.
 SHIPPED_SQL_DRIVERS = frozenset(
-    {"psycopg", "psycopg2", "pymysql", "MySQLdb", "mysql.connector", "pymssql"}
+    {"psycopg", "psycopg2", "pymysql", "MySQLdb", "mysql.connector"}
 )
 
 
@@ -474,6 +475,44 @@ _SQL_FORBIDDEN = re.compile(
     re.IGNORECASE,
 )
 _SQL_PLACEHOLDER = re.compile(r"%\(([A-Za-z_][A-Za-z0-9_]*)\)s")
+#: One select-list item: a plain column, optionally qualified, cast to text
+#: and renamed. No function call, expression, literal or placeholder.
+_SQL_COLUMN = re.compile(
+    r"(?i)^(?:[a-z_][a-z0-9_]*\.)?[a-z_][a-z0-9_]*"
+    r"(?:::(?:text|varchar))?(?:\s+as\s+[a-z_][a-z0-9_]*)?$"
+)
+_SQL_SHAPE = re.compile(r"(?is)^select\s+(.*?)(?:\s+from\s+(.*))?$")
+_SQL_CALL = re.compile(r"[A-Za-z0-9_\"]\s*\(")
+
+
+def _sql_shape_problems(text: str) -> list[str]:
+    """The query's shape: plain columns, from tables, inputs only after WHERE.
+
+    This judges what the query reads, not its words: a select list that
+    echoes the inputs, or calls a function, would make any save match.
+    """
+
+    shape = _SQL_SHAPE.match(text)
+    if shape is None:
+        return ["verifier.sql_query must be SELECT <columns> FROM <table>"]
+    columns, rest = shape.groups()
+    problems = []
+    if rest is None:
+        problems.append("verifier.sql_query must be SELECT <columns> FROM <table>")
+        rest = ""
+    for item in columns.split(","):
+        if not _SQL_COLUMN.match(item.strip()):
+            problems.append(
+                f"verifier.sql_query selects {item.strip()!r}: select only plain "
+                "column names (optionally ::text and AS)"
+            )
+    where = re.search(r"(?i)\bwhere\b", rest)
+    source = rest[: where.start()] if where else rest
+    if _SQL_PLACEHOLDER.search(source):
+        problems.append("verifier.sql_query binds inputs only after WHERE")
+    if _SQL_CALL.search(source) or "(" in source:
+        problems.append("verifier.sql_query reads tables, not functions or subqueries")
+    return problems
 
 
 def shipped_sql_problems(query: Any, params: Any) -> list[str]:
@@ -501,6 +540,7 @@ def shipped_sql_problems(query: Any, params: Any) -> list[str]:
         problems.append(
             f"verifier.sql_query is read-only, and may not use {', '.join(forbidden)}"
         )
+    problems.extend(_sql_shape_problems(text))
     bound = params if isinstance(params, dict) else {}
     for name in _SQL_PLACEHOLDER.findall(text):
         if name not in bound:

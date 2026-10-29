@@ -11,4 +11,3 @@ qualify REFUSED: REFUSE: workflow 'odoo-new-contact' under 'standard' profile vs
          steps: templates/identifiers/step_003.png, templates/identifiers/step_007.png, templates/identifiers/step_011.png, templates/layout_fingerprint.json, templates/step_000.png, templates/step_000_expect.png, templates/step_001.png, templates/step_001_expect.png, ... (+10 more)
   [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest 3750eaac9ddb9659..., compiler 2.4.0)
   -> RUN REFUSED (fail-closed): Certification, Identity coverage. Nothing was executed.
-Evidence so far: ~/oa/scratch/second-installation/odoo/qual-1
