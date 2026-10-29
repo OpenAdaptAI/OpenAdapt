@@ -1116,14 +1116,14 @@ def judge_frame(
             ref, field = ref_of(name, key, before, after)
             if window_entries is None:
                 return "unattributed"
-            if ref is None:
-                return owner_scoped(name, before, after)
             if (
                 before is not None
                 and after is not None
                 and key_moved(name, before, after)
             ):
                 return "unattributed"  # the row moved between charts
+            if ref is None:
+                return owner_scoped(name, before, after)
             if actors(name, ref, field) & self_ids:
                 return "self"
             change = (
