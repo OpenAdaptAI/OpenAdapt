@@ -65,6 +65,9 @@ from openadapt_flow.rollback_state import (
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot
 
 ROLLBACK_DIRNAME = "rollback"
+#: Written before the first compensation runs: from then on the run's store
+#: may have changed, and the run is never resumed (runtime.durable.resume).
+COMPENSATED_MARKER = f"{ROLLBACK_DIRNAME}/compensated"
 DIFF_FILENAME = "diff.json"
 
 
@@ -325,6 +328,14 @@ def _unseen_writes(
     return None
 
 
+def _fingerprint(snapshot: Snapshot, row: tuple[str, str]) -> Optional[str]:
+    """A row's contents fingerprint in a read (columns the app profile
+    leaves out aside), or None when the row isn't there."""
+    table = snapshot.tables.get(row[0])
+    entry = table.rows.get(row[1]) if table is not None else None
+    return entry[0] if entry else None
+
+
 def residue_of(diff: StateDiff, keys: set[tuple[str, str]]) -> list[Change]:
     """The rows of ``diff`` among ``keys``."""
     return [c for c in changes(diff) if c[:2] in keys]
@@ -469,6 +480,14 @@ def roll_back(
             or attributor.others_on_record(change, window)
         ):
             conflicts.append(change)
+        elif (
+            attributor is not None
+            and not exclusive
+            and not attributor.speaks(change, window)
+        ):
+            # Attribution can't say who wrote this row: unknown, never
+            # "no one else".
+            conflicts.append(change)
         run_changes.append(change)
     others = len(set_aside)
     record.other_actor_rows = others
@@ -502,10 +521,10 @@ def roll_back(
         return finish(
             "not_rolled_back",
             f"another actor wrote {len(conflicts)} row(s) the run may have "
-            "written (or a record those rows belong to), so their change can't "
-            "be told from the run's; nothing was compensated, so it isn't "
-            "lost. A person decides. Different now: "
-            + keep_rows(landed, run_changes).describe(),
+            "written (or a record those rows belong to), or attribution can't "
+            "say who wrote them, so their change can't be told from the run's; "
+            "nothing was compensated, so it isn't lost. A person decides. "
+            "Different now: " + keep_rows(landed, run_changes).describe(),
             keep_rows(landed, run_changes),
         )
 
@@ -538,7 +557,8 @@ def roll_back(
     retained: set[tuple[str, str, str]] = set()
     #: Each run row as the stop left it: a kept void row must have changed.
     at_stop = {(t, k): new for t, k, _old, new in run_changes}
-    checked_since_stop = False
+    #: The latest read: after the stop, then after each compensation.
+    last = after_stop
     for entry in entries if stop_reason is None else []:
         step_record = RollbackStepRecord(
             step_id=entry.step_id,
@@ -591,31 +611,28 @@ def roll_back(
             )
             stop_reason = f"step {entry.step_id}: {step_record.reason}"
             break
-        if not checked_since_stop:
-            # Right before the first compensation: has anyone changed a row
-            # the run touched since the stop? Then don't overwrite it.
-            checked_since_stop = True
-            try:
-                now = reader.read(before=after_stop)
-            except StateUnreadable as exc:
-                step_record.reason = f"the read before compensating failed ({exc})"
-                stop_reason = step_record.reason
-                break
-            moved = [
-                c
-                for c in changes(
-                    diff_states(after_stop, now, excuse=_excuser(reader, now))
-                )
-                if (c[0], c[1]) in run_keys
-            ]
-            if moved:
-                record.conflicts = len(moved)
-                step_record.reason = (
-                    f"{len(moved)} record(s) the run wrote changed again after the "
-                    "stop; not compensated, so that change isn't lost"
-                )
-                stop_reason = step_record.reason
-                break
+        # Right before each compensation: has anyone changed a row the run
+        # touched since the last read (the stop, or the last compensation)?
+        # Then don't overwrite it.
+        try:
+            now = reader.read(before=after_stop)
+        except StateUnreadable as exc:
+            step_record.reason = f"the read before compensating failed ({exc})"
+            stop_reason = step_record.reason
+            break
+        moved = [
+            c
+            for c in changes(diff_states(last, now, excuse=_excuser(reader, now)))
+            if (c[0], c[1]) in run_keys
+        ]
+        if moved:
+            record.conflicts = len(moved)
+            step_record.reason = (
+                f"{len(moved)} record(s) the run wrote changed again after the "
+                "stop; not compensated, so that change isn't lost"
+            )
+            stop_reason = step_record.reason
+            break
         try:
             undo_params = resolve_undo_params(undo, run_dir, params, read_records)
         except UndoRefused as exc:
@@ -623,6 +640,8 @@ def roll_back(
             stop_reason = f"step {entry.step_id}: {step_record.reason}"
             break
         sub_dir = run_dir / ROLLBACK_DIRNAME / undo.id
+        # From here the store may change: the run can't be resumed.
+        (run_dir / COMPENSATED_MARKER).touch()
         try:
             undo_report = runner.run(
                 undo_workflow(workflow, undo),
@@ -651,6 +670,14 @@ def roll_back(
         if kind == "void" and undo.locate is not None:
             located = str(undo_params.get(undo.locate.param, ""))
             retained |= {(table, undo.locate.field, located) for table in undo.retains}
+        try:
+            # What this compensation left: the next one is checked against it.
+            last = reader.read(before=after_stop)
+        except StateUnreadable as exc:
+            stop_reason = (
+                f"the read after compensating step {entry.step_id} failed ({exc})"
+            )
+            break
 
     try:
         final = reader.read(before=before)
@@ -663,6 +690,16 @@ def roll_back(
     record.final_sha256 = snapshot_sha256(final)
     remaining = diff_states(before, final, excuse=_excuser(reader, final))
     final_window = attributor.window() if attributor is not None else None
+    if attributor is not None and attributor.sets_aside and final_window is None:
+        return finish(
+            "not_rolled_back",
+            "the audit log couldn't be read after the rollback, so other users' "
+            "writes can't be told apart; a person checks the record",
+            remaining,
+        )
+    final_moved = {
+        (t.table, k): cols for t in remaining.tables for k, _b, _a, cols in t.changed
+    }
     residue: list[Change] = []
     kept = 0
     #: Rows left on purpose (another actor's, or a void), per table and kind.
@@ -675,11 +712,20 @@ def roll_back(
 
     final_rows = {c[:2]: c for c in changes(remaining)}
     # A row set aside at the stop must be exactly as the stop left it.
-    disturbed = [
-        c
-        for k, c in set_aside.items()
-        if k not in final_rows or final_rows[k][3] != c[3]
-    ]
+
+    def undisturbed(k: tuple[str, str]) -> bool:
+        if k not in final_rows:
+            return False
+        if _fingerprint(after_stop, k) == _fingerprint(final, k):
+            return True
+        # Changed again since the stop: fine only when that same other user's
+        # writes explain it, and none of ours.
+        return attributor is not None and (
+            attributor.attribute(final_rows[k], final_window, final_moved.get(k, ()))
+            == "other"
+        )
+
+    disturbed = [c for k, c in set_aside.items() if not undisturbed(k)]
     if disturbed:
         record.conflicts = len(disturbed)
         return finish(
@@ -723,7 +769,12 @@ def roll_back(
             not mine
             and attributor is not None
             and attributor.sets_aside
-            and (attributor.attribute(change, final_window) == "other")
+            and (
+                attributor.attribute(
+                    change, final_window, final_moved.get((table, key), ())
+                )
+                == "other"
+            )
         ):
             explain(change)
             continue
@@ -793,6 +844,12 @@ def roll_back(
             + (
                 f"; {others} row(s) another actor changed were set aside"
                 if others
+                else ""
+            )
+            + (
+                "; a last-writer field can't show an edit another user made "
+                "while a compensation ran"
+                if attributor is not None and not attributor.sets_aside
                 else ""
             ),
         )
@@ -967,7 +1024,8 @@ class RollbackPlan:
         self.attributor: Optional[Attributor] = None
 
     def arm(self, params: Optional[dict[str, Any]] = None) -> Optional[Snapshot]:
-        """The read from before the run, or None when the store can't be read.
+        """The read from before the run, or None when the store (or, with
+        audit attribution, its audit log) can't be read.
 
         With attribution, the audit log is read here too. Attribution whose
         own actors can't be resolved from ``params`` is left off, so every
@@ -977,8 +1035,10 @@ class RollbackPlan:
             self.attributor = Attributor.from_spec(
                 self.attribution, params or {}, self.audit_read
             )
-            if self.attributor is not None:
-                self.attributor.start()
+            if self.attributor is not None and not self.attributor.start():
+                # An unreadable audit log would attribute nothing: as unsafe
+                # as an unreadable store.
+                return None
         try:
             return self.reader.read()
         except StateUnreadable:

@@ -4362,11 +4362,10 @@ def _resume_approval_gate(
 
 
 def _was_rolled_back(run_dir: Path) -> bool:
-    """Did a compensating rollback run after this run stopped? Its records
-    directory is made whenever one does, sealed run or not."""
-    from openadapt_flow.rollback import ROLLBACK_DIRNAME
+    """Did a compensating rollback start undoing this run?"""
+    from openadapt_flow.runtime.durable.resume import was_compensated
 
-    return (run_dir / ROLLBACK_DIRNAME).exists()
+    return was_compensated(run_dir)
 
 
 def _cmd_resume(args: argparse.Namespace) -> int:

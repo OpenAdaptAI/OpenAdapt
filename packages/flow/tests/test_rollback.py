@@ -302,6 +302,9 @@ CREATE TABLE history (id INTEGER PRIMARY KEY, patient_id INTEGER, smoker TEXT,
 CREATE TABLE log (id INTEGER PRIMARY KEY, event TEXT);
 CREATE TABLE notes (id INTEGER PRIMARY KEY, patient_id INTEGER, body TEXT,
     modified_by TEXT);
+CREATE TABLE contacts (id INTEGER PRIMARY KEY, pid INTEGER, relation TEXT,
+    modified_by TEXT);
+CREATE TABLE allergies (id INTEGER PRIMARY KEY, patient_id INTEGER, substance TEXT);
 """
 
 
@@ -393,6 +396,38 @@ class ClinicBackend(FakeBackend):
                 (pid,),
             )
             self._log("nurse", "insert", "notes", pid)
+        elif key == "F2" and self.colleague == "contact":
+            # The run's patient gets a contact row (keyed by ``pid``, not
+            # ``patient_id``: OpenEMR mixes both), and the nurse completes it.
+            (pid,) = conn.execute(
+                "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO contacts (pid, relation, modified_by) "
+                "VALUES (?, '', 'bot')",
+                (pid,),
+            )
+            conn.execute(
+                "UPDATE contacts SET relation = 'mother', modified_by = 'nurse'"
+            )
+            self._log("nurse", "update", "contacts", pid)
+        elif key == "F2" and self.colleague == "allergy":
+            # A table with no last-writer column.
+            (pid,) = conn.execute(
+                "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO allergies (patient_id, substance) VALUES (?, 'penicillin')",
+                (pid,),
+            )
+            self._log("nurse", "insert", "allergies", pid)
+        elif key == "F2" and self.colleague == "register":
+            # The nurse registers her own patient.
+            other = conn.execute(
+                "INSERT INTO patients (name, dob, modified_by) "
+                "VALUES ('Bo Synthetic', '1990-01-01', 'nurse')"
+            )
+            self._log("nurse", "insert", "patients", other.lastrowid)
         elif key == "F2" and self.colleague == "edit_note":
             # The nurse edits a note that was there before the run.
             conn.execute(
@@ -431,6 +466,15 @@ class ClinicBackend(FakeBackend):
                     (row[0],),
                 )
                 self._log("nurse", "update", "patients", row[0])
+            if self.during_undo == "edit_other":
+                # The nurse keeps working on her own patient.
+                conn.execute(
+                    "UPDATE patients SET dob = '1990-01-02' WHERE name = 'Bo Synthetic'"
+                )
+                (bo,) = conn.execute(
+                    "SELECT id FROM patients WHERE name = 'Bo Synthetic'"
+                ).fetchone()
+                self._log("nurse", "update", "patients", bo)
             if self.during_undo == "wipe_notes":
                 # The app's delete takes a colleague's unrelated note with it.
                 conn.execute("DELETE FROM notes WHERE modified_by = 'nurse'")
@@ -552,6 +596,7 @@ def _run_clinic(
     allow_tables=("log",),
     exclusive: Optional[bool] = None,
     during_undo: Optional[str] = None,
+    audit_down: Optional[str] = None,
 ) -> RunReport:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
@@ -570,6 +615,8 @@ def _run_clinic(
         profile=profile,
     )
     audit: list[dict[str, str]] = []
+    # ``audit_down``: the audit log can't be read at "arm" or "after" it.
+    audit_up = {"before": audit_down != "arm", "after": audit_down != "after"}
     spec = None
     if attribution == "audit":
         spec = FrameAttribution(
@@ -597,7 +644,11 @@ def _run_clinic(
         reader,
         read_records=records_reader(_sql_verifier(db)),
         attribution=spec,
-        audit_read=lambda: [dict(e) for e in audit],
+        audit_read=lambda: (
+            [dict(e) for e in audit]
+            if audit_up["before" if not audit_up.get("armed") else "after"]
+            else None
+        ),
         allow_delete=allow_delete,
         # Without attribution the clinic stands for a test copy only the run
         # writes; with it, other users may write.
@@ -605,6 +656,7 @@ def _run_clinic(
     )
     params = {"name": "Ada Synthetic"}
     before = plan.arm(params)
+    audit_up["armed"] = True
 
     def replayer() -> Replayer:
         return Replayer(
@@ -1348,3 +1400,81 @@ def test_a_rolled_back_run_is_never_resumed(tmp_path):
     report = _run_clinic(tmp_path / "c")
     assert report.rollback.status == "rolled_back", report.rollback.reason
     assert _was_rolled_back(tmp_path / "c" / "run")
+
+
+# ---------------------------------------------------------------------------
+# Review of #1634, round 3: silence is never "no one else"
+# ---------------------------------------------------------------------------
+
+
+def test_an_unreadable_audit_log_refuses_the_run_or_compensates_nothing(tmp_path):
+    # At arm: no first read, as with an unreadable store (the CLI refuses).
+    armed = _run_clinic(
+        tmp_path / "a", colleague="edit", attribution="audit", audit_down="arm"
+    )
+    assert armed.rollback.status == "unarmed"
+    # After the stop: attribution can't speak for any row.
+    late = _run_clinic(
+        tmp_path / "b", colleague="edit", attribution="audit", audit_down="after"
+    )
+    assert late.rollback.status == "not_rolled_back", late.rollback.reason
+    assert late.rollback.steps == []
+    conn = sqlite3.connect(tmp_path / "b" / "clinic.db")
+    assert conn.execute(
+        "SELECT dob FROM patients WHERE name = 'Ada Synthetic'"
+    ).fetchall() == [("1980-02-04",)]
+
+
+def test_a_row_the_audit_log_cant_name_is_a_conflict(tmp_path):
+    # ``contacts`` names its patient in ``pid``, not ``patient_id``.
+    report = _run_clinic(tmp_path, colleague="contact", attribution="audit")
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert rollback.steps == []
+    assert "can't say who wrote" in rollback.reason
+
+
+def test_a_row_without_a_last_writer_is_a_conflict(tmp_path):
+    report = _run_clinic(tmp_path, colleague="allergy", attribution=True)
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert rollback.steps == []
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute("SELECT substance FROM allergies").fetchall() == [
+        ("penicillin",)
+    ]
+
+
+def test_a_colleague_may_keep_working_on_her_own_row(tmp_path):
+    report = _run_clinic(
+        tmp_path, colleague="register", attribution="audit", during_undo="edit_other"
+    )
+    rollback = report.rollback
+    assert rollback.status == "rolled_back", rollback.reason
+    assert rollback.other_actor_rows == 1
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute(
+        "SELECT dob FROM patients WHERE name = 'Bo Synthetic'"
+    ).fetchall() == [("1990-01-02",)]
+
+
+def test_a_run_nothing_was_undone_for_stays_resumable(tmp_path):
+    from openadapt_flow.runtime.durable.resume import was_compensated
+
+    record, runner = _uncertain(tmp_path, [])
+    assert record.status == "nothing_landed"
+    assert not was_compensated(tmp_path)
+
+
+def test_the_attended_console_never_continues_a_rolled_back_run(tmp_path):
+    from types import SimpleNamespace
+
+    from openadapt_flow.rollback import COMPENSATED_MARKER
+    from openadapt_flow.runtime.durable.attended import _refuse_rolled_back
+
+    capability = SimpleNamespace(step_id="save", expected_next_transition=None)
+    assert _refuse_rolled_back(tmp_path, capability) is None
+    (tmp_path / COMPENSATED_MARKER).parent.mkdir()
+    (tmp_path / COMPENSATED_MARKER).touch()
+    refused = _refuse_rolled_back(tmp_path, capability)
+    assert refused is not None and refused.status == "refused"

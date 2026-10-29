@@ -559,10 +559,30 @@ class Attributor:
             return None
         return cls(spec, self_actors=actors, audit_read=audit_read)
 
-    def start(self) -> None:
-        """Read the audit log before the run (``audit_read`` only)."""
-        if self.spec.kind == "audit_read" and self.audit_read is not None:
+    def start(self) -> bool:
+        """Read the audit log before the run (``audit_read`` only). False when
+        it can't be read: attribution would then say nothing."""
+        if self.spec.kind != "audit_read":
+            return True
+        if self.audit_read is not None:
             self._before = self.audit_read()
+        return self._before is not None
+
+    def speaks(self, change: Change, window: Optional[list[dict[str, Any]]]) -> bool:
+        """Can attribution say who wrote this row? An audit log needs a
+        window and the row's record value; a last-writer field needs its
+        value on the row. Silence is never read as "no one else"."""
+        from openadapt_flow.runtime.effects.frame import get_path
+
+        table, key, before, after = change
+        if self.spec.kind == "audit_read":
+            return (
+                window is not None and self._ref(table, key, before, after) is not None
+            )
+        return after is not None and get_path(after, self.spec.actor_field) not in (
+            None,
+            "",
+        )
 
     def window(self) -> Optional[list[dict[str, Any]]]:
         """Audit entries since :meth:`start`; None when either read failed."""

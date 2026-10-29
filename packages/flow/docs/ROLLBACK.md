@@ -42,8 +42,8 @@ Flow reads the whole system of record:
   The report says `scope: collection`, because rows in other places aren't
   seen.
 
-If that read fails, the run is refused before it starts: nothing after a stop
-could be proven.
+If that read fails, or the audit log that attribution reads can't be read, the
+run is refused before it starts: nothing after a stop could be proven.
 
 ### After a stop
 
@@ -84,8 +84,11 @@ could be proven.
    written, in any table, or wrote anything about a record those rows
    belong to (the same patient, in another table), Flow compensates nothing
    and ends `RECONCILIATION_REQUIRED` with the diff, so their change isn't
-   overwritten. The same happens if a row the run touched changes between
-   the stop and the first compensation. Without `rollback.attribution`,
+   overwritten. The same happens if a row the run touched changes before a
+   compensation runs (Flow reads again before each one). A row attribution
+   can't speak for (the audit log can't be read, the row has no record
+   value, or no last-writer value) counts the same way: silence is never
+   read as "no one else". Without `rollback.attribution`,
    another user's edit can't be told from the run's, so Flow compensates
    nothing at all (except on a test copy the deployment declares only the
    run writes: `test_copy.declared` and `rollback.exclusive`).
@@ -108,9 +111,10 @@ could be proven.
      agree: it may see changes only in tables where a row was set aside or
      kept by a void, or the run isn't called rolled back. A kept void row
      must have changed since the stop. Every row set aside as another
-     user's must be exactly as the stop left it, and the audit log must
-     show no other user's write to a run row while the compensations ran;
-     otherwise a person checks that their change isn't lost.
+     user's must be as the stop left it, or changed since only by that
+     user, and the audit log must show no other user's write to a run row
+     while the compensations ran; otherwise a person checks that their
+     change isn't lost.
    - Anything else: `RECONCILIATION_REQUIRED`. `report.json` holds a summary
      with counts and column names only. `<run-dir>/rollback/diff.json`
      (owner-only) holds every added, removed and changed row, with the values
@@ -295,8 +299,15 @@ profile as `app/version` (`profile_id`).
   once. A compensation runs with the run's base parameters.
 - **Single web runs only, for now.** A desktop, RDP or worklist-pool run
   with rollback on is refused before it starts.
-- **A rolled-back run isn't resumed.** A run that paused for a person and
-  was rolled back is over: `resume` refuses it, because its earlier writes
-  are undone. Start a new run.
+- **A rolled-back run isn't resumed.** Once a compensation has started on a
+  run that paused for a person, the run is over: `resume`, the attended
+  console and its relay all refuse it, because its earlier writes may be
+  undone. A pause where nothing was compensated (nothing landed, or a
+  conflict left for a person) stays resumable.
+- **Another user's own UI state counts as the run's.** Per-user rows such as
+  OpenEMR's recent-patient list or sign-in counters have no patient value,
+  so when a colleague's row moves during the run, the run ends
+  `RECONCILIATION_REQUIRED`. The app profile excuses only the acting user's
+  own rows.
 - **The idempotency key stays used.** A rolled-back run doesn't free its key
   for a retry; a person starts the next run.
