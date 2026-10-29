@@ -50,7 +50,7 @@ of qualifying the app; a deployment has its own project and its own clerk.
 | --- | --- | --- |
 | App-specific lines written by hand | about 234 on the base path, about 350 with the whole-database contract and its reader | 16 contract lines and one access policy |
 | Agent wall-clock on app-specific contract work | about 6.7 h (base contract 1.2 h, whole-database contract 1.5 h, bookkeeping profile 4 h), plus 3 days of review fixes | about 43 minutes (8 on the contract, 35 on the read path) |
-| Blind held-out rounds | 4, the last all right (14/17, 16/17, 14/17, 17/17) | 2, neither all right: 17/18 with one fault passed as verified, then 17/20 with none passed (the three misses were clean records sent to review) |
+| Blind held-out rounds | 4, the last all right (14/17, 16/17, 14/17, 17/17) | 3, none all right: 17/18 with one fault passed as verified, then 17/20 and 19/20 with none passed (every later miss was a clean record sent to review) |
 
 What makes the difference, and what doesn't carry over:
 

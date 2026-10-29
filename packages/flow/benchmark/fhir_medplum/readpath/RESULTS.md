@@ -55,8 +55,29 @@ at `5ce6e6b26`.
 | Round 1 (`5c1742e8`) | 18 of 18 | 0 |
 | Round 2 (`803b34c6`) | 20 of 20 | 0 |
 
-A third suite, written blind against this version, is what would show
-whether these fixes generalize; it hasn't been run.
+## Round 3, blind, on the final version
+
+Suite `153d7899d16388af25b272356e4dcc6684def1ff7aafc6c6c023a0172f0503b2`,
+20 cases from a third author who was asked to be adversarial within the
+brief (duplicate 3, look-alike 4, wrong field 4, collateral 2, timeout 3,
+concurrent 4; right answers: needs_review 15, created_verified 3,
+found_existing 2). Verifier and contract at `5ce6e6b26`, unchanged since.
+
+**19 of 20 right; no fault passed as verified.**
+
+The miss was a clean create sent to `needs_review`: the record carried
+optional `use` codes (`name.use: official`, `address.use: home`,
+`telecom.use`), which the closed record refuses. A contract that should
+accept them lists them in `allow`; this one was left as it was, so the
+number above stays a blind one.
+
+## Across the three rounds
+
+No fault was passed as verified after round 1's state-map bug was fixed: 0
+of 31 faults in rounds 2 and 3. Of 9 clean runs in those rounds, 5 were
+judged right; the 4 others were sent to review because the record carried
+an element the task didn't give (`active`, `use`). The closed record errs
+toward review, and each such element is one line of contract.
 
 ## What the rounds cover, and what they don't
 
