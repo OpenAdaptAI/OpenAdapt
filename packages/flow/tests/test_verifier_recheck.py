@@ -298,18 +298,137 @@ def test_a_later_write_excuses_only_its_own_rows(tmp_path: Path, due_now: None) 
     assert late.outcome == "REFUTED"
 
 
-def test_a_later_refuted_write_accounts_for_what_it_reported(
+def test_what_refuted_a_later_write_leaves_the_earlier_one_uncertain(
     tmp_path: Path, due_now: None
 ) -> None:
     contract, db, first = _first(tmp_path)
     stray = "UPDATE patient_data SET phone_cell = '555-0102' WHERE pid = 1"
     second = _save(contract, db, 3, stray)
     assert second.status == "refuted"  # reported, and stopped, against it
+    # Without the later write, its rows and the stray refute the earlier one.
+    assert _recheck(contract, first).outcome == "REFUTED"
+    # With it, the stray is what refuted the later write, so it doesn't also
+    # refute the earlier one; but the harm may be the earlier write's.
     late = _recheck(contract, first, excused_by=[second])
-    assert late.outcome == "CONFIRMED", late.reasons
+    assert late.outcome == "UNCERTAIN", late.reasons
+    assert "may be what refuted it" in late.reasons[0]
     # A change no later write accounts for still refutes the earlier one.
     _sql(db, "INSERT INTO calendar (pid, title) VALUES (1, 'Follow-up')")
     assert _recheck(contract, first, excused_by=[second]).outcome == "REFUTED"
+
+
+def test_p1_a_duplicate_after_the_later_writes_window_refutes(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert second.verified
+    # After the later write's verdict: a delayed duplicate chart that
+    # matches its selector. Its window never saw it.
+    p = _params(3)
+    _sql(
+        db,
+        "INSERT INTO patient_data (id, pid, fname, lname, email, regdate) VALUES "
+        f"(30, 3, '{p['fname']}', '{p['lname']}', '{p['email']}', '2026-10-29')",
+    )
+    assert _recheck(contract, first, excused_by=[second]).outcome == "REFUTED"
+
+
+def test_p2_a_later_write_that_landed_late_excuses_nothing(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    before = capture(contract, _params(3))
+    second = verify_write(contract, before, params=_params(3), actor=BOT)
+    assert second.status == "unconfirmed"  # its save didn't land in its window
+    assert second.recheck is not None
+    _sql(db, *_save_sql(3))  # its rows land after its window
+    assert _recheck(contract, first, excused_by=[second]).outcome == "REFUTED"
+    with pytest.raises(VerifierError):
+        recheck(contract, second, params=_params(3), actor=BOT)
+
+
+def test_p3_the_earlier_writes_late_harm_inside_a_later_window_is_uncertain(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    before = capture(contract, _params(3))
+    # The first write's background job lands while the second write runs.
+    harm = "UPDATE history_data SET tobacco = 'Current' WHERE pid = 2"
+    _sql(db, *_save_sql(3), harm)
+    second = verify_write(contract, before, params=_params(3), actor=BOT)
+    assert second.status == "refuted"
+    late = _recheck(contract, first, excused_by=[second])
+    assert late.outcome == "UNCERTAIN", late.reasons
+
+
+def test_p4_a_removal_a_later_window_reported_is_uncertain(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    before = capture(contract, _params(3))
+    _sql(db, *_save_sql(3), "DELETE FROM history_data WHERE pid = 1")
+    second = verify_write(contract, before, params=_params(3), actor=BOT)
+    assert second.status == "refuted"
+    late = _recheck(contract, first, excused_by=[second])
+    assert late.outcome == "UNCERTAIN", late.reasons
+
+
+def test_a_removal_a_verified_later_window_explained_is_excused(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    before = capture(contract, _params(3))
+    _sql(
+        db,
+        *_save_sql(3),
+        "DELETE FROM history_data WHERE pid = 1",
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        "VALUES ('nurse', 1, 'delete', 'history_data')",
+    )
+    second = verify_write(contract, before, params=_params(3), actor=BOT)
+    assert second.verified, second.reasons  # the nurse's delete, attributed
+    assert _recheck(contract, first).outcome == "REFUTED"
+    late = _recheck(contract, first, excused_by=[second])
+    assert late.outcome == "CONFIRMED", late.reasons
+
+
+def test_a_removal_no_later_window_recorded_refutes(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert second.verified
+    _sql(db, "DELETE FROM history_data WHERE pid = 1")  # after its window
+    assert _recheck(contract, first, excused_by=[second]).outcome == "REFUTED"
+
+
+def test_a_state_not_issued_here_is_uncertain_and_never_excuses(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert first.recheck is not None and second.recheck is not None
+    # Another state directory: no issuance record for either state.
+    monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "elsewhere")
+    late = _recheck(contract, first)
+    assert late.outcome == "UNCERTAIN"
+    assert "not issued" in late.reasons[0]
+    monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "used")
+    assert _recheck(contract, first, excused_by=[second]).outcome == "CONFIRMED"
+    record = tmp_path / "used" / "rechecks"
+    (record / verifier._state_digest(second.recheck.payload)).unlink()
+    with pytest.raises(VerifierError, match="not issued"):
+        _recheck(contract, first, excused_by=[second])
+
+
+def test_the_due_time_is_never_early(tmp_path: Path) -> None:
+    from openadapt_flow.runtime.effects.late_write import due_at
+
+    # The read time is truncated to the second; the read may be up to a
+    # second later, so the due time adds that second.
+    assert due_at("2026-10-29T12:00:00Z", 60) == "2026-10-29T12:01:01Z"
+    assert due_at("2026-10-29T12:00:00Z", 0.5) == "2026-10-29T12:00:02Z"
 
 
 def test_a_row_changed_again_after_the_later_write_is_not_excused(

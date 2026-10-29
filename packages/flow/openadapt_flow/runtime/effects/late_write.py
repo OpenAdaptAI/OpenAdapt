@@ -65,6 +65,8 @@ COMPARES = "database_since_post_save"
 POST_STATE_LABEL = "recheck_post_state"
 #: The rule name a change gets when a later write's own window covers it.
 LATER_WRITE_RULE = "later_write_window"
+#: The same, when the change may be what refuted that later write.
+LATER_WRITE_DISPUTED = "later_write_window_disputed"
 
 #: ``CONFIRMED``: nothing unexplained moved since the post-save read.
 #: ``REFUTED``: something did (late collateral). ``UNCERTAIN``: the database,
@@ -87,10 +89,11 @@ def format_time(when: datetime) -> str:
 
 
 def due_at(read_at: str, after_s: float) -> str:
-    """When the recheck is due: ``after_s`` after the post-save read,
-    rounded up to the whole second, so it is never early."""
+    """When the recheck is due: ``after_s`` after the post-save read, never
+    early. ``read_at`` is truncated to the second, so the read happened up
+    to a second after it: one second is added before rounding up."""
 
-    return format_time(parse_time(read_at) + timedelta(seconds=math.ceil(after_s)))
+    return format_time(parse_time(read_at) + timedelta(seconds=math.ceil(after_s + 1)))
 
 
 def seconds_until(due: str, now: Optional[datetime] = None) -> float:
@@ -177,14 +180,23 @@ class LaterWindow:
     changed between its baseline and its settled post-save read, and every
     audit entry logged in that window.
 
-    Such a change was either explained by that write's frame (it was
-    verified) or reported against it (it was refuted), so it must not also
-    refute an earlier write's recheck. A row counts only while it still
-    holds the value that write's post-save read saw; a row changed again
-    since is judged as any other. The snapshots hold keyed MACs under that
-    write's own key, so the row as read now is hashed with that key to look
-    it up. A row removed in that window can't be matched without its values,
-    so it stays unexplained (fail-closed).
+    A change there was judged by that write's frame: explained, if that
+    write was verified; otherwise it may be what refuted it. An earlier
+    write's recheck therefore treats a change in a later write's window as
+    that write's (``clean``) only when the later write was verified, or when
+    the change was neither its reported collateral nor possibly behind a
+    failed delta. Otherwise the change is ``disputed``: it doesn't refute the
+    earlier write, but it doesn't confirm it either, since the harm may be
+    the earlier write's.
+
+    Only the window counts. A row that matches the later write's selector
+    but lands after its post-save read, or a row changed again since, is
+    judged like any other. A row counts while it still holds the value the
+    post-save read saw (matched by key and contents MAC under the later
+    write's own key); a removal counts when that write's window recorded it
+    (matched by the row's link MAC, ``db_snapshot.link_key``). A table
+    without a primary key (rows keyed by a content fingerprint) is never
+    excused this way.
     """
 
     def __init__(
@@ -193,6 +205,11 @@ class LaterWindow:
         baseline: Mapping[str, Any],
         post: Mapping[str, Any],
         *,
+        verified: bool,
+        delta_held: bool,
+        collateral_rows: set[tuple[str, str]],
+        collateral_entries: set[str],
+        unmapped: bool,
         audit_before: Optional[set[str]] = None,
         audit_after: Optional[set[str]] = None,
         entry_id: Optional[Any] = None,
@@ -202,37 +219,86 @@ class LaterWindow:
         self.key = key
         self.baseline = Snapshot.from_json(baseline)
         self.post = Snapshot.from_json(post)
+        self.verified = verified
+        self.delta_held = delta_held
+        self.collateral_rows = collateral_rows
+        self.collateral_entries = collateral_entries
+        self.unmapped = unmapped
         self.audit_before = audit_before
         self.audit_after = audit_after
         self.entry_id = entry_id
+        self._base_links = {
+            name: {link: k for k, link in t.links.items()}
+            for name, t in self.baseline.tables.items()
+        }
+        self._post_links = {
+            name: set(t.links.values()) for name, t in self.post.tables.items()
+        }
 
-    def covers_row(self, table: str, row: Mapping[str, Any], skip: list[str]) -> bool:
-        """Did this row reach its present value inside the window?"""
+    def _status(self, collateral: bool) -> str:
+        if self.verified:
+            return "clean"
+        if collateral or self.unmapped or not self.delta_held:
+            return "disputed"
+        return "clean"
+
+    def row(
+        self,
+        table: str,
+        before: Optional[Mapping[str, Any]],
+        after: Optional[Mapping[str, Any]],
+        skip: list[str],
+        links: Mapping[str, str],
+    ) -> Optional[str]:
+        """``clean`` or ``disputed`` when this row reached its present state
+        (or its removal) inside the window; None when it didn't.
+
+        ``before``/``after``: the row as the recheck's judge sees it (the
+        earlier write's post-save MACs with ``KEY``, the plain row now).
+        ``links``: the earlier post-save snapshot's link MACs of ``table``.
+        """
 
         from openadapt_flow.runtime.effects.db_snapshot import (
+            KEY,
+            ROW,
             canonical,
             row_hash,
             row_key_hash,
         )
 
-        after = self.post.tables.get(table)
-        if after is None or after.mode != "compare" or not after.primary_key:
-            return False  # no key to look the row up by: judged as usual
-        text = "|".join(canonical(row.get(c)) for c in after.primary_key)
-        k = row_key_hash(self.key, text, table)
-        stored = after.rows.get(k)
-        if stored is None or stored[0] != row_hash(self.key, table, row, skip):
-            return False  # changed again since that write's post-save read
-        before = self.baseline.tables.get(table)
-        old = None if before is None else before.rows.get(k)
-        return old is None or old[0] != stored[0]
+        now = self.post.tables.get(table)
+        if now is None or now.mode != "compare" or not now.primary_key:
+            return None  # no key to look the row up by: judged as usual
+        old = self.baseline.tables.get(table)
+        if after is not None:
+            row = {c: v for c, v in after.items() if c not in (KEY, ROW)}
+            text = "|".join(canonical(row.get(c)) for c in now.primary_key)
+            k = row_key_hash(self.key, text, table)
+            stored = now.rows.get(k)
+            if stored is None or stored[0] != row_hash(self.key, table, row, skip):
+                return None  # not what that write's post-save read saw
+            was = None if old is None else old.rows.get(k)
+            if was is not None and was[0] == stored[0]:
+                return None  # unchanged in that window
+        else:
+            if before is None:
+                return None
+            link = links.get(str(before.get(KEY)))
+            found = self._base_links.get(table, {}).get(link) if link else None
+            if found is None or link in self._post_links.get(table, set()):
+                return None  # that window didn't record this removal
+            k = found
+        return self._status((table, k) in self.collateral_rows)
 
-    def covers_entry(self, entry: Mapping[str, Any]) -> bool:
-        """Was this audit entry logged inside the window?"""
+    def entry(self, entry: Mapping[str, Any]) -> Optional[str]:
+        """``clean`` or ``disputed`` when this audit entry was logged inside
+        the window; None when it wasn't (or the log wasn't read there)."""
 
         if self.audit_before is None or self.audit_after is None:
-            return False
+            return None
         if self.entry_id is None:
-            return False
+            return None
         h = self.entry_id(entry, self.key)
-        return h in self.audit_after and h not in self.audit_before
+        if h not in self.audit_after or h in self.audit_before:
+            return None
+        return self._status(h in self.collateral_entries)

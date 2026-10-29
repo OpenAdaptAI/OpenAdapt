@@ -242,38 +242,63 @@ frame:
 When it is set and the run is verified:
 
 - The receipt has `recheck_due_at` (whole-second UTC): `recheck_after_s`
-  after the second read, rounded up. A caller can schedule the recheck
-  without waiting on it.
+  after the second read, never early (the read time is truncated to the
+  second, so one second is added before rounding up). A caller can schedule
+  the recheck without waiting on it.
+- A verified receipt that carries `recheck_due_at` is provisional until the
+  recheck runs: a write that lands in the window can still refute it.
 - `evidence.frame.recheck` says what the recheck compares
   (`database_since_post_save`), when the post-save read was taken, and a
   salted digest of the state it compares with.
 - The caller keeps that state privately (`WriteResult.recheck`, saved with
-  `RecheckState.save`, mode 0600). It holds the post-save snapshot as keyed
-  MACs (no values, as the baseline does), the audit entries seen then as
-  keyed hashes, and the run's salt.
+  `RecheckState.save`, mode 0600). It holds the run's baseline and its
+  post-save snapshot as keyed MACs (no values, as the baseline does), the
+  audit entries seen then as keyed hashes, what the run's frame reported as
+  collateral (row key MACs and entry hashes), and the run's salt.
+- `verify_write` records each state it issues under the verifier's state
+  directory (`OPENADAPT_VERIFIER_STATE_DIR`, in `rechecks/`, named by the
+  state's digest). A state's salt and digests can be recomputed by whoever
+  can write the file, so a state without that record is never used: as the
+  write being rechecked it gives `UNCERTAIN`, and as an excuse it is
+  refused. As with snapshots, the writer being judged must not be able to
+  write the state directory.
 
 `openadapt_flow.verifier.recheck` reads the whole database at or after the
 due time (twice, `settle_s` apart) and judges every change since the
 post-save read with the frame's own rules: the profile's bookkeeping, and a
-write that the audit log attributes to another actor. Later writes under
-the same contract by the same actor, passed as `excused_by` with any
-outcome, account for their declared effects and side records. Where a later
-write's own frame was judged, they also account for every row and audit
-entry in its own window: a VERIFIED write explained them, and a REFUTED
-write already reported them. So the caller can keep working on the next
-item while the window runs.
+write that the audit log attributes to another actor.
+
+Later writes under the same contract by the same actor can be passed as
+`excused_by`, with any outcome, so the caller can keep working on the next
+item while the window runs. A later write accounts only for its own window,
+the time between its baseline and its post-save read, where its own frame
+judged every change:
+
+- A row that changed in that window, and still holds what that write's
+  post-save read saw, is the later write's. A row that matches its
+  selector but lands after its window (a delayed duplicate, or a save that
+  landed late), or a row changed again since, is judged like any other.
+- A removal counts when that window recorded it, matched by the row's link
+  MAC: a per-host keyed hash of the row key, kept only when
+  `recheck_after_s` is set.
+- An audit entry logged in that window is the later write's.
+- When the later write was not verified and the change is one its frame
+  reported as collateral, or its delta failed, the change may be what
+  refuted it, and the harm may be the earlier write's. It doesn't refute
+  the earlier write, but the recheck gives `UNCERTAIN`: reconcile both.
 
 | Since the post-save read | Recheck `outcome` |
 |---|---|
 | Nothing moved that these rules don't explain | `CONFIRMED`: the verdict stands |
 | A row moved that nothing explains | `REFUTED`: the earlier `verified` no longer stands (late) |
-| The database couldn't be read or was still moving, or the state doesn't match its receipt, the contract, the actor or the params | `UNCERTAIN`: never a pass |
+| A change lies in a later write's window and may be what refuted it | `UNCERTAIN` |
+| The database couldn't be read or was still moving, or the state wasn't issued here or doesn't match its receipt, the contract, the actor or the params | `UNCERTAIN`: never a pass |
 
 A recheck before the due time raises `RecheckNotDue`; `wait=True` sleeps
 until then instead. Limits:
 
-- A row that a later write removed in its own window can't be matched to
-  that write without its values, so it refutes the earlier write.
+- A row of a table without a primary key (its rows are keyed by a content
+  fingerprint) is never excused by a later write's window.
 - A later write under another contract doesn't excuse anything.
 - A later write whose database never settled after its save has no state,
   so it can't be passed as `excused_by`. Reconcile it first.

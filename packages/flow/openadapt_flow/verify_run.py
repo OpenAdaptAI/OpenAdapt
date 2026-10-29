@@ -542,6 +542,7 @@ def _read_database(
             ref_columns=_ref_columns(cfg),
             schemas=database.schemas,
             optional_modes=database.profile_modes(),  # type: ignore[arg-type]
+            links=database.recheck_after_s is not None,
         )
     except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
         return None
@@ -602,6 +603,8 @@ class _DatabaseFrame:
     #: recheck compares with (``recheck_after_s``).
     post: Any = None
     post_read_at: str = ""
+    #: The snapshot the rows are judged against.
+    old: Any = None
 
 
 def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
@@ -703,7 +706,7 @@ def _database_frame(
         return blind
     key = mac_key(salt)
     out = _DatabaseFrame({}, {}, [], {}, (old.clock, new.clock), {}, None)
-    out.post, out.post_read_at = again, again_at
+    out.post, out.post_read_at, out.old = again, again_at, old
     if "audit" in new.extra:
         out.audit_after = list(new.extra["audit"])
     if old.objects != new.objects:
@@ -783,6 +786,34 @@ def _database_frame(
 
         out.excuse = excuse
     return out
+
+
+def _later_status(found: Sequence[Optional[str]]) -> Optional[str]:
+    """``clean`` when a later write's window covers a change and none calls
+    it disputed; ``disputed`` when one does; None when none covers it."""
+
+    hits = [f for f in found if f is not None]
+    if not hits:
+        return None
+    return "disputed" if "disputed" in hits else "clean"
+
+
+def _collateral_record(verdict: FrameVerdict, db: Any, salt: bytes) -> dict[str, Any]:
+    rows: list[list[str]] = []
+    entries: list[Mapping[str, Any]] = []
+    unmapped = False
+    for change in verdict.collateral:
+        if change.audit_only and isinstance(change.entry, Mapping):
+            entries.append(change.entry)
+        elif change.surface in db.slices and isinstance(change.key, str):
+            rows.append([change.surface, change.key])
+        else:
+            unmapped = True  # a change a recheck can't match by key
+    return {
+        "rows": sorted(rows),
+        "entries": sorted(_audit_ids_each(entries, salt)),
+        "unmapped": unmapped or bool(verdict.collateral and not db.slices),
+    }
 
 
 def _read_audit(verifier: Any) -> Optional[list[dict[str, Any]]]:
@@ -911,6 +942,8 @@ def judge_run_frame(
         else None
     )
     entries_now: Optional[list[dict[str, Any]]] = None
+    #: A change a later write's window covers that may be what refuted it.
+    disputed: list[bool] = []
     if isinstance(stored, dict):
         entries_now = (
             db.audit_after
@@ -923,11 +956,15 @@ def judge_run_frame(
                 # The window: entries now that the baseline didn't hold.
                 seen = set(stored["ids"])
                 audit_before = []
-                audit_after = [
-                    e
-                    for e, h in zip(entries_now, _audit_ids_each(entries_now, salt))
-                    if h not in seen and not any(w.covers_entry(e) for w in later)
-                ]
+                audit_after = []
+                for e, h in zip(entries_now, _audit_ids_each(entries_now, salt)):
+                    if h in seen:
+                        continue
+                    status = _later_status([w.entry(e) for w in later])
+                    if status == "disputed":
+                        disputed.append(True)
+                    if status is None:
+                        audit_after.append(e)
             else:
                 audit_before = list(stored.get("records", []))
                 audit_after = entries_now
@@ -946,17 +983,24 @@ def judge_run_frame(
         db.colleagues = (active, {db.users_map[n] for n in active if n in db.users_map})
     excuse = None if db is None else db.excuse
     if db is not None and later and spec.database is not None:
-        from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW
+        from openadapt_flow.runtime.effects.db_snapshot import KEY
 
         db_spec = spec.database
         profile_excuse = db.excuse
 
+        old_tables = db.old.tables if db.old is not None else {}
+
         def excuse(name: str, before: Any, after: Any, fields: list[str]) -> Any:
-            if after is not None:
-                row = {c: v for c, v in after.items() if c not in (KEY, ROW)}
-                skip = db_spec.ignore_columns_for(name)
-                if any(w.covers_row(name, row, skip) for w in later):
-                    return [late_write.LATER_WRITE_RULE]
+            skip = db_spec.ignore_columns_for(name)
+            table = old_tables.get(name)
+            links = table.links if table is not None else {}
+            status = _later_status(
+                [w.row(name, before, after, skip, links) for w in later]
+            )
+            if status == "disputed":
+                disputed.append(True)
+            if status is not None:
+                return [late_write.LATER_WRITE_RULE]
             if profile_excuse is None:
                 return None
             return profile_excuse(name, before, after, fields)
@@ -986,6 +1030,8 @@ def judge_run_frame(
             (set(profile["rules_used"]) | verdict.excused_by)
             - {late_write.LATER_WRITE_RULE}
         )
+    if disputed:
+        verdict.excused_by.add(late_write.LATER_WRITE_DISPUTED)
     database = spec.database
     if (
         db is not None
@@ -998,6 +1044,10 @@ def judge_run_frame(
         verdict.post_state = {
             "snapshot": db.post.to_json(),
             "read_at": db.post_read_at,
+            # What this run's frame reported, as row key MACs and keyed
+            # entry hashes: a later recheck of an earlier write can tell a
+            # change this run was refuted for from one it explained.
+            "collateral": _collateral_record(verdict, db, salt),
             "audit": None
             if not isinstance(stored, dict)
             else {
@@ -2048,8 +2098,12 @@ def _later_window(state: Mapping[str, Any]) -> Optional[Any]:
     refuted); None when its frame wasn't checked, so nothing in its window
     was reported and nothing there is excused."""
 
-    frame = (state["evidence"].get("frame") or {}).get("status")
+    evidence = state["evidence"]
+    frame = (evidence.get("frame") or {}).get("status")
     if frame not in ("held", "refuted"):
+        return None
+    record = state["post_state"].get("collateral")
+    if not isinstance(record, Mapping):
         return None
     detail = (state["baseline"].get("state") or {}).get("detail") or {}
     snapshot = detail.get(FRAME_DB_DETAIL)
@@ -2071,6 +2125,11 @@ def _later_window(state: Mapping[str, Any]) -> Optional[Any]:
             _mac_key(bytes.fromhex(str(state["salt"]))),
             snapshot,
             post["snapshot"],
+            verified=state["receipt"].get("outcome") == "verified",
+            delta_held=(evidence.get("checked") or {}).get("delta") == "held",
+            collateral_rows={(str(t), str(k)) for t, k in record.get("rows") or []},
+            collateral_entries={str(h) for h in record.get("entries") or []},
+            unmapped=bool(record.get("unmapped", True)),
             audit_before=ids_before,
             audit_after=ids_after,
             entry_id=_entry_id,
@@ -2092,19 +2151,22 @@ def recheck_run(
     ``state`` must have passed :func:`recheck_problem`. ``excused``: the
     recheck states and params of later writes under this contract by this
     executor, of any outcome, each begun after ``state``'s post-save read
-    (each is checked here as ``state`` was). Each one's declared effects and
-    side records explain its own rows; and where its frame was judged (held
-    or refuted), every row and audit entry in its own window is accounted
-    for by it, so collateral it already reported doesn't refute this write
-    too. The database is read twice, ``settle_s`` apart, as after the save.
-    Returns the frame verdict and when the database was read.
+    (each is checked here as ``state`` was). Where a later write's frame
+    was judged (held or refuted), each row and audit entry that changed in
+    its own window, between its baseline and its post-save read, and still
+    holds what that read saw, is accounted for by it
+    (``late_write.LaterWindow``): its declared effects and side rows as they
+    landed then, never a row matching its selector that lands later. A
+    change that may be what refuted that later write is ``disputed``: the
+    verdict's ``excused_by`` then holds ``LATER_WRITE_DISPUTED``. The
+    database is read twice, ``settle_s`` apart, as after the save. Returns
+    the frame verdict and when the database was read.
 
     Raises :class:`VerifyRunError` for an excuse that doesn't qualify.
     """
 
     post = dict(state["post_state"])
     since = late_write.parse_time(str(post["read_at"]))
-    bound: list[Effect] = []
     windows: list[Any] = []
     for i, (other, other_params) in enumerate(excused):
         problem = recheck_problem(
@@ -2123,10 +2185,6 @@ def recheck_run(
             raise VerifyRunError(
                 f"excused_by[{i}] started before this write's post-save read"
             )
-        try:
-            bound.extend(effect.resolve(other_params) for effect in cfg.effects)
-        except (KeyError, ValueError) as exc:
-            raise VerifyRunError(f"excused_by[{i}] can't bind: {exc}") from exc
         window = _later_window(other)
         if window is not None:
             windows.append(window)
@@ -2140,7 +2198,7 @@ def recheck_run(
         cfg,
         verifier,
         before,
-        bound,
+        [],  # no declared delta: only the later writes' windows excuse rows
         params,
         audit_verifier=_audit_verifier(cfg, params),
         run_actors=[str(run_record.get("executor_id") or "")],

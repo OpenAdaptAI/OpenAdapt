@@ -469,6 +469,8 @@ class FrameChange:
     other_on_target: bool = False
     #: In memory only, for the operator's console; never put in a receipt.
     key: Any = None
+    #: In memory only: the audit entry behind an ``audit_only`` change.
+    entry: Any = None
 
 
 @dataclass
@@ -1381,7 +1383,9 @@ def judge_frame(
                     continue
                 logged.add(str(ref))
                 collateral.append(
-                    FrameChange("", "changed", "self", audit_only=True, key=ref)
+                    FrameChange(
+                        "", "changed", "self", audit_only=True, key=ref, entry=entry
+                    )
                 )
 
     verdict = FrameVerdict(

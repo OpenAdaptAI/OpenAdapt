@@ -53,7 +53,8 @@ and judges every change since the post-save read with the frame's rules.
 Before the due time it raises :class:`RecheckNotDue` (``wait=True`` sleeps
 until then instead). Its outcome is ``CONFIRMED``, ``REFUTED`` (late: the
 earlier VERIFIED no longer stands) or ``UNCERTAIN`` (the database or the
-state couldn't be read or doesn't match: never a pass).
+state couldn't be read or doesn't match: never a pass). A verified result
+that carries ``recheck_due_at`` is provisional until the recheck runs.
 
 The public names are ``Contract``, ``Snapshot``, ``Source``, ``capture``,
 ``verify_write``, ``WriteResult``, ``recheck``, ``RecheckState``,
@@ -79,6 +80,7 @@ from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnaps
 from openadapt_flow.runtime.effects.db_snapshot import TableDiff, diff, take_snapshot
 from openadapt_flow.runtime.effects.late_write import (
     EVIDENCE_KEY,
+    LATER_WRITE_DISPUTED,
     LateOutcome,
     seconds_until,
     state_problem,
@@ -221,12 +223,12 @@ _CONSUMED_LOCK = threading.Lock()
 USED_DIR: Optional[Path] = None
 
 
-def _issued_dir() -> Path:
+def _issued_dir(name: str = "issued") -> Path:
     root = USED_DIR or Path(
         os.environ.get("OPENADAPT_VERIFIER_STATE_DIR")
         or Path.home() / ".cache" / "openadapt" / "verifier"
     )
-    issued = Path(root) / "issued"
+    issued = Path(root) / name
     try:
         issued.mkdir(mode=0o700, parents=True, exist_ok=True)
         Path(root).chmod(0o700)  # created above, or already this user's own
@@ -292,6 +294,33 @@ def _consume(payload: Any) -> None:
         raise VerifierError(f"can't record the snapshot's use: {exc}") from exc
 
 
+def _state_digest(payload: Any) -> str:
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _issue_recheck(payload: Mapping[str, Any]) -> None:
+    """Record a recheck state as issued here: an empty file named by the
+    digest of its whole payload, under the state directory's ``rechecks``.
+    A state is used only when its record is there, so one written by hand
+    (whose salt and digests anyone holding the file could recompute) is
+    never taken for a verified write's."""
+
+    path = _issued_dir("rechecks") / _state_digest(payload)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
+    except OSError as exc:
+        raise VerifierError(f"can't record the recheck state: {exc}") from exc
+    os.close(fd)
+
+
+def _recheck_issued(payload: Any) -> bool:
+    try:
+        return (_issued_dir("rechecks") / _state_digest(payload)).is_file()
+    except (VerifierError, TypeError, ValueError):
+        return False
+
+
 @dataclass(frozen=True)
 class Source:
     """Where the written values came from: provenance and the documents."""
@@ -341,7 +370,10 @@ class RecheckState:
 
     Private, like a :class:`Snapshot`: it holds the salt, so :meth:`save`
     writes it with mode 0600, and the writer being judged must not be able
-    to write it. ``params`` (the write's inputs) stay in memory only; a
+    to write it. Its salt and digests can be recomputed by whoever writes
+    the file, so :func:`verify_write` records each state it issues under
+    the state directory (``rechecks/``, by digest), and :func:`recheck` uses
+    only a state with that record. ``params`` (the write's inputs) stay in memory only; a
     loaded state needs them back (:meth:`load`) to excuse a write
     (``excused_by``).
     """
@@ -561,6 +593,8 @@ def verify_write(
     status = "verified" if verified else _status(checked, evidence)
     late = recheck_state(before.payload, result, post_state)
     state = None if late is None else RecheckState(late, params=dict(params))
+    if late is not None:
+        _issue_recheck(late)
     return WriteResult(
         verified=verified,
         status=status,
@@ -595,13 +629,15 @@ def recheck(
         params: The write's inputs, as given to :func:`verify_write`.
         actor: Who made the write.
         excused_by: Later writes under this contract by the same actor,
-            each begun after this write's post-save read, of any outcome.
-            Each one's declared effects and side records explain its own
-            rows, so the caller can keep working while the window runs. Where
-            its own frame was judged (held or refuted), every row and audit
-            entry in its window is its own: what it already reported against
-            itself doesn't refute this write too. A loaded state needs its
-            params (:meth:`RecheckState.load`).
+            each begun after this write's post-save read, of any outcome,
+            so the caller can keep working while the window runs. Where its
+            own frame was judged (held or refuted), a row or audit entry
+            that changed in its own window (between its baseline and its
+            post-save read) and still holds what that read saw is its own;
+            a row matching its selector that lands later is not. A change
+            that may be what refuted it gives ``UNCERTAIN``. Each must have
+            been issued by :func:`verify_write` under this state directory;
+            a loaded state needs its params (:meth:`RecheckState.load`).
         wait: Before the due time, sleep until it instead of raising
             :class:`RecheckNotDue`.
 
@@ -639,7 +675,11 @@ def recheck(
         if isinstance(post, dict)
         else "",
     )
-    problem = recheck_problem(cfg, state.payload, params=params, run_record=run_record)
+    problem = (
+        None
+        if _recheck_issued(state.payload)
+        else "the recheck state was not issued under this state directory"
+    ) or recheck_problem(cfg, state.payload, params=params, run_record=run_record)
     if problem is not None:
         return _replace(base, reasons=[f"{problem}, so the write can't be rechecked"])
     wait_s = seconds_until(state.due_at)
@@ -655,6 +695,10 @@ def recheck(
                 f"excused_by[{i}] has no recheck state: its database didn't "
                 "settle after its save, so what it wrote can't be told apart; "
                 "reconcile it before rechecking this write"
+            )
+        if not _recheck_issued(later.payload):
+            raise VerifierError(
+                f"excused_by[{i}] was not issued under this state directory"
             )
         if later.params is None:
             raise VerifierError(
@@ -675,17 +719,26 @@ def recheck(
         )
     evidence = verdict.evidence(spec) if spec is not None else {}
     reasons: list[str] = []
-    if verdict.status == "refuted":
+    status = verdict.status
+    if status == "held" and LATER_WRITE_DISPUTED in verdict.excused_by:
+        # A change in a later write's window may be what refuted that write;
+        # the harm may be this write's, so this verdict can't stand as is.
+        status = "not_checked"
+        reasons.append(
+            "a change since the verdict lies in a later write that was not "
+            "verified and may be what refuted it; reconcile both"
+        )
+    if status == "refuted":
         kinds = ", ".join(sorted({c.change for c in verdict.collateral}))
         reasons.append(
             f"{len(verdict.collateral)} record(s) moved after the verdict that "
             f"nothing explains ({kinds}); the earlier VERIFIED no longer stands"
         )
-    elif verdict.status != "held":
+    elif status != "held" and not reasons:
         reasons.append(verdict.reason or "the database could not be judged again")
     return _replace(
         base,
-        outcome=_late_outcome(verdict.status),
+        outcome=_late_outcome(status),
         frame=verdict.status,
         reasons=reasons,
         read_at=read_at,

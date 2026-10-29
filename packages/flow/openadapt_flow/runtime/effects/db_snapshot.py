@@ -145,6 +145,17 @@ def _mac(key: bytes, text: str) -> str:
     ).hexdigest()
 
 
+def link_key() -> bytes:
+    """The host's row-link key: one per host, never per run, derived from
+    the host secret (not in any snapshot). A row's link MAC
+    (:attr:`Table.links`) is the same in every snapshot taken on this host,
+    which shows that two snapshots hold the same row key and nothing else."""
+
+    return hashlib.blake2b(
+        b"openadapt:row-link/v1", key=_host_secret()[:64], digest_size=32
+    ).digest()
+
+
 def cell_hash(key: bytes, value: Any, table: str = "", column: str = "") -> str:
     """A cell's keyed MAC, bound to its table and column, so equal values in
     different places don't share one."""
@@ -209,6 +220,12 @@ class Table:
     values: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     #: The engine keeps no snapshot isolation for it (MyISAM, MEMORY).
     non_transactional: bool = False
+    #: Row key MAC -> the row key's link MAC (:func:`link_key`), for a table
+    #: with a primary key, when the read asked for links (a late-write
+    #: recheck). One row has one link MAC in every snapshot on this host, so
+    #: two runs' snapshots can tell they hold the same row (a removal one of
+    #: them saw) without values. Empty otherwise.
+    links: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -248,6 +265,7 @@ class Snapshot:
                     "cell_columns": t.cell_columns,
                     "rows": t.rows,
                     "non_transactional": t.non_transactional,
+                    **({"links": t.links} if t.links else {}),
                 }
                 for name, t in self.tables.items()
             },
@@ -276,6 +294,7 @@ class Snapshot:
                     cell_columns=list(t.get("cell_columns", [])),
                     rows={k: list(v) for k, v in (t.get("rows") or {}).items()},
                     non_transactional=bool(t.get("non_transactional")),
+                    links={str(k): str(v) for k, v in (t.get("links") or {}).items()},
                 )
                 for name, t in data["tables"].items()
             },
@@ -595,6 +614,7 @@ def take_snapshot(
     ref_columns: Sequence[str] = (),
     schemas: Sequence[str] = (),
     optional_modes: Mapping[str, TableMode] = {},
+    links: bool = False,
 ) -> Snapshot:
     """Read every table in one read-only transaction.
 
@@ -616,6 +636,7 @@ def take_snapshot(
         optional_modes: Like ``modes``, for tables an app profile names that
             this database may not have (a profile covers several versions).
             ``ignore`` may name ``*`` for every table.
+        links: Keep each keyed row's link MAC (:attr:`Table.links`).
 
     Raises:
         SnapshotError: the database can't be read as the frame needs it.
@@ -637,6 +658,7 @@ def take_snapshot(
             ref_columns,
             schemas,
             optional_modes,
+            link_key() if links else None,
         )
     except SnapshotError:
         raise
@@ -657,6 +679,7 @@ def _snapshot(
     ref_columns: Sequence[str],
     schemas: Sequence[str],
     optional_modes: Mapping[str, TableMode] = {},
+    links: Optional[bytes] = None,
 ) -> Snapshot:
     dialect = s.dialect
     counters: dict[str, int] = {}
@@ -761,7 +784,10 @@ def _snapshot(
         skip = [*ignore.get(t, ()), *ignore.get("*", ())]
         seen_keys: dict[str, int] = {}
         for row in _read_rows(s, t, d) if table.count else []:
-            k = row_key_hash(key, _row_key(d, row, seen_keys, skip), t)
+            text = _row_key(d, row, seen_keys, skip)
+            k = row_key_hash(key, text, t)
+            if links is not None and d.primary_key and mode == "compare":
+                table.links[k] = row_key_hash(links, text, t)
             mac = row_hash(key, t, row, skip)
             table.rows[k] = [
                 mac,
