@@ -2780,6 +2780,31 @@ class BundleProvenance(BaseModel):
     )
 
 
+class RegistryOrigin(BaseModel):
+    """Where a bundle pulled from the skills registry came from.
+
+    Part of the workflow content, so the content digest covers it: a bundle
+    that says it came from the registry runs only with a certification bound
+    to its own digest and environment (``openadapt_flow.skills``). Removing
+    it makes a different, unverified local bundle.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=3, max_length=200)
+    version: Optional[str] = Field(default=None, max_length=64)
+    index_url: str = Field(max_length=2048)
+    #: SHA-256 of the signed entry statement (``registry.entry_statement``).
+    entry_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    #: Who attested the index: the release workflow's certificate identity,
+    #: ``test:...`` for the local test signer, or None for a local index with
+    #: no attestation.
+    signed_by: Optional[str] = Field(default=None, max_length=256)
+    #: The bundle's content digest as the registry published it.
+    published_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    pulled_at: str
+
+
 class BundleManifest(BaseModel):
     """Integrity + provenance manifest for a compiled bundle (schema v2).
 
@@ -3063,6 +3088,8 @@ class Workflow(BaseModel):
     # review, canary or admission pins. None for every other bundle, and
     # omitted from its serialized bytes.
     origin: Optional[Literal["agent_run"]] = None
+    #: Set by ``openadapt-flow pull``: the registry entry this bundle came from.
+    registry: Optional[RegistryOrigin] = None
     # Narration that suggested a certified guard, keyed by the program state
     # (or step) id the guard sits on. Explanation only: the runtime never reads
     # it. Empty for every bundle without narrated guards, and then omitted
@@ -3117,6 +3144,8 @@ class Workflow(BaseModel):
             data.pop("surfaces", None)
         if self.origin is None:
             data.pop("origin", None)
+        if self.registry is None:
+            data.pop("registry", None)
         if not self.guard_sources:
             data.pop("guard_sources", None)
         if not self.undo_steps:
