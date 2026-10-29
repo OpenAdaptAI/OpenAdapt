@@ -474,3 +474,20 @@ def test_a_record_holding_the_printed_state_instead_of_the_code_is_wrong():
     r = judge(contract(), PARAMS, base(), ch("Patient/x", "C"), {"x": x}, x)
     assert r.outcome == "needs_review"
     assert any("state" in reason for reason in r.reasons)
+
+
+@pytest.mark.parametrize(
+    "active,outcome",
+    [(True, "created_verified"), (False, "needs_review"), ("true", "needs_review")],
+)
+def test_an_allowed_element_must_hold_the_allowed_value(active, outcome):
+    x = patient("x", active=active)
+    r = judge(
+        contract(closed=True, allow=["active=true"]),
+        PARAMS,
+        base(),
+        ch("Patient/x", "C"),
+        {"x": x},
+        x,
+    )
+    assert r.outcome == outcome

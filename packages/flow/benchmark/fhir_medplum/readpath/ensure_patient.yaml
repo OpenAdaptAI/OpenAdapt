@@ -35,8 +35,10 @@ identity:
 # HAND: the FHIR search parameter for each identity value.
 search: {fname: given, lname: family, DOB: birthdate, email: email}
 
-# HAND: the created record holds only what the task gave.
+# HAND: the created record holds only what the task gave, plus
+# active: true, which FHIR clients commonly send (added after blind round 2).
 closed: true
+allow: [active=true]
 
 # HAND, once per server: Medplum keeps AuditEvents (saveAuditEvents) and
 # never returns meta.author, so the audit trail alone says who wrote; it logs

@@ -35,6 +35,7 @@ something.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -138,8 +139,9 @@ class EnsureContract(BaseModel):
     #: The created record may hold only what ``fields`` describe, one value
     #: each: an element the task didn't give (a second given name, a fax
     #: number, a district) is a wrong field. ``allow`` names extra leaf paths
-    #: the application adds on its own (``id``, ``meta`` and
-    #: ``resourceType`` always are).
+    #: a correct record may carry, alone (``address.use``) or with the one
+    #: value allowed, as JSON (``active=true``, ``address.use="home"``).
+    #: ``id``, ``meta`` and ``resourceType`` always are.
     closed: bool = False
     allow: list[str] = Field(default_factory=list)
     #: The audit trail is written a little after the save (Medplum: up to
@@ -244,14 +246,24 @@ def wrong_fields(
     )
 
 
-def leaf_paths(node: Any, prefix: str = "") -> list[str]:
-    """Every value's path, list positions dropped (``telecom.value`` twice)."""
+def leaves(node: Any, prefix: str = "") -> list[tuple[str, Any]]:
+    """Every value with its path, list positions dropped (``telecom.value`` twice)."""
 
     if isinstance(node, dict):
-        return [p for k, v in node.items() for p in leaf_paths(v, f"{prefix}{k}.")]
+        return [x for k, v in node.items() for x in leaves(v, f"{prefix}{k}.")]
     if isinstance(node, list):
-        return [p for v in node for p in leaf_paths(v, prefix)]
-    return [prefix[:-1]]
+        return [x for v in node for x in leaves(v, prefix)]
+    return [(prefix[:-1], node)]
+
+
+def _allowed(contract: EnsureContract, path: str, value: Any) -> bool:
+    for entry in contract.allow:
+        name, eq, want = entry.partition("=")
+        # The value is compared as JSON: ``active=true`` is the boolean, and a
+        # string is quoted (``address.use="home"``).
+        if name == path and (not eq or json.dumps(value) == want):
+            return True
+    return False
 
 
 def _expected_leaves(contract: EnsureContract) -> Counter[str]:
@@ -273,8 +285,8 @@ def extra_elements(contract: EnsureContract, resource: Mapping[str, Any]) -> lis
     always = ("id", "resourceType", "meta")
     have = Counter(
         p
-        for p in leaf_paths(dict(resource))
-        if p.split(".")[0] not in always and p not in contract.allow
+        for p, value in leaves(dict(resource))
+        if p.split(".")[0] not in always and not _allowed(contract, p, value)
     )
     return sorted((have - _expected_leaves(contract)).elements())
 
