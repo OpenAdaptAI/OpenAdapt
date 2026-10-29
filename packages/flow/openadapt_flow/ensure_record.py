@@ -309,12 +309,12 @@ def _expected_leaves(
     for name, rule in contract.fields.items():
         if params is not None and params.get(name) in (None, ""):
             continue  # the task didn't give it, so the record mustn't hold it
-        parts = []
+        parts: list[str] = []
         for seg in rule.path.split("."):
-            name, _, cond = seg.partition("[")
+            key, _, cond = seg.partition("[")
             if cond:
-                want[".".join(parts + [name, cond.split("=", 1)[0]])] += 1
-            parts.append(name)
+                want[".".join(parts + [key, cond.split("=", 1)[0]])] += 1
+            parts.append(key)
         want[".".join(parts)] += 1
     return want
 
@@ -618,10 +618,10 @@ def read_changes(
         for ref, change in changes.items():
             authors: set[str] = set()
             for entry in reader.bundle(f"{ref}/_history", {"_count": "200"}):
-                res = entry.get("resource")
+                version = entry.get("resource")
                 req = entry.get("request") or {}
-                if isinstance(res, dict):
-                    meta = res.get("meta") or {}
+                if isinstance(version, dict):
+                    meta = version.get("meta") or {}
                     when = _when(meta.get("lastUpdated"))
                     if when is None or when < since or (until and when > until):
                         continue
