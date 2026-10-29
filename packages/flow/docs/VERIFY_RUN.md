@@ -135,6 +135,37 @@ Only evidence the bot can't write counts:
   `reconciliation_required` (`evidence.frame.target_changed_by_other`). Only
   changes outside the declared delta can be concurrent edits.
 
+Some rows belong to a user rather than a record, such as a user's own UI
+settings, so no log entry names them by record. With `frame.database` and
+an audit log that names the table each entry wrote (`table_field`), such a
+change is another user's when their own write entry in the window names the
+table and the row is theirs. The tables come from the app profile's
+`own_rows` rules (OpenEMR's `user_settings` and `recent_patients`) and from
+`attribution.owners`, in the profile's `owner` shape:
+
+```yaml
+  attribution:
+    # ... audit_read with event_field, write_events and table_field
+    owners:
+      user_prefs: {column: owner_name, by: username}  # or by: user_id
+```
+
+`by: username` compares the entry's actor with the column; `by: user_id`
+looks the actor's id up in the profile's `users` table. A contract may not
+give a profile table a different owner. Fail closed:
+
+- Each entry explains one row, of the kind it wrote (insert, update or
+  delete), owned by that entry's actor. A row of another user, or a row whose
+  owner changed, is collateral.
+- If the bot's own entry names the table in the window, every changed row of
+  that table is collateral: the entry names no row, so any of them may be the
+  bot's change.
+- A table with no declared owner, an actor the users table doesn't know, a
+  row with no owner, or an audit log that can't be read leaves the change
+  unexplained.
+- What the log can't show stays a limit: a change the app writes without
+  logging it can't be told from another user's.
+
 Without `attribution`, every change outside the delta is collateral. A
 change is not proof that the executor made it: another user may have edited
 the record during the run. A person checks the record before anything is

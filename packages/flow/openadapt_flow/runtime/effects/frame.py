@@ -41,7 +41,16 @@ With ``frame.database``, another actor's entry explains a row only when it
 is a write of the matching kind (insert for an added row, delete for a
 removed one, update for a changed one) on the same table, naming the record
 as it was before the change; each entry explains at most one row, and a row
-whose record key changed is never explained. What the log can't show stays a
+whose record key changed is never explained.
+
+A row of a per-user table names no record (OpenEMR's ``user_settings``,
+owned by ``setting_user``). Owner-scoped attribution covers it: for a table
+whose rows carry an owner (``attribution.owners``, and the app profile's
+``own_rows`` tables), another user's write entry of the matching kind that
+names the table explains one changed row they own. It never explains a row
+of anyone else, a row whose owner changed, or any row of a table the bot also
+wrote in the window: its entry names no row, so any of them may be its own
+change. An owner that can't be read or resolved explains nothing. What the log can't show stays a
 limit: an entry the app files under the wrong record (a write logged against
 the chart the bot has open), or one colleague insert whose own row never
 landed, still reads as that colleague's. List every app account the bot
@@ -62,6 +71,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from openadapt_flow.app_profiles import Owner, table_name
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
@@ -139,6 +149,14 @@ class FrameAttribution(BaseModel):
     #: an entry attributes a change only to a row of that table. Required
     #: with ``frame.database``.
     table_field: Optional[str] = None
+    #: ``audit_read`` only, with ``frame.database``: table -> the column
+    #: naming the user each row belongs to (the app profile's ``owner``
+    #: shape). A change to such a row that no entry names by record is
+    #: another user's when one of their write entries in the window names
+    #: the table and the row is theirs (``owner.by`` resolves the entry's
+    #: actor to the column's value). The app profile's ``own_rows`` tables
+    #: are added to these.
+    owners: dict[str, Owner] = Field(default_factory=dict)
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
     #: ``record_field`` only: the record fields this app sets on the server
@@ -175,9 +193,14 @@ class FrameAttribution(BaseModel):
                 self.write_events
             ):
                 raise ValueError("insert_events and delete_events must be write_events")
-        elif self.record_keys or self.write_events or self.table_field:
+            if self.owners and not (self.table_field and self.write_events):
+                raise ValueError(
+                    "owners need table_field and write_events: only a write "
+                    "entry that names the table can say whose row changed"
+                )
+        elif self.record_keys or self.write_events or self.table_field or self.owners:
             raise ValueError(
-                "record_keys, write_events and table_field apply to audit_read"
+                "record_keys, write_events, table_field and owners apply to audit_read"
             )
         else:
             if self.read is not None or self.record_field is not None:
@@ -323,6 +346,20 @@ class FrameDatabase(BaseModel):
 
         return None if self.profile is None else load_profile(self.profile)
 
+    def profile_owners(self) -> dict[str, Owner]:
+        """The profile's per-user UI tables (``own_rows``) and their owner
+        columns. Never a column rule's owner: credentials stay on the acting
+        user's row."""
+
+        profile = self.loaded_profile()
+        if profile is None:
+            return {}
+        return {
+            table_name(r.table): r.owner
+            for r in profile.rules
+            if r.mode == "own_rows" and r.owner is not None
+        }
+
     def profile_modes(self) -> dict[str, str]:
         """The profile's tables: append-only, or skipped (session state)."""
 
@@ -391,6 +428,36 @@ class FrameSpec(BaseModel):
                 "attributes a change"
             )
         return self
+
+    @model_validator(mode="after")
+    def _owners(self) -> "FrameSpec":
+        a = self.attribution
+        if a is None or not a.owners:
+            return self
+        if self.database is None:
+            raise ValueError(
+                "attribution.owners name tables: they apply with frame.database"
+            )
+        theirs = self.database.profile_owners()
+        for table, owner in a.owners.items():
+            known = theirs.get(table_name(table))
+            if known is not None and known != owner:
+                raise ValueError(
+                    f"attribution.owners[{table!r}] differs from the app "
+                    f"profile's owner for that table ({known.column}, {known.by})"
+                )
+        return self
+
+    def owners(self) -> dict[str, Owner]:
+        """Table (as :func:`table_name` names it) -> its rows' owner column,
+        for owner-scoped attribution: the profile's ``own_rows`` tables and
+        the contract's ``attribution.owners``."""
+
+        if self.attribution is None or self.attribution.kind != "audit_read":
+            return {}
+        out = self.database.profile_owners() if self.database is not None else {}
+        out.update({table_name(t): o for t, o in self.attribution.owners.items()})
+        return out
 
     @model_validator(mode="after")
     def _identity_for_audit(self) -> "FrameSpec":
@@ -613,6 +680,7 @@ def judge_frame(
             Optional[list[str]],
         ]
     ] = None,
+    user_ids: Optional[Mapping[str, str]] = None,
 ) -> FrameVerdict:
     """Judge the frame of ``effects`` over ``slices``.
 
@@ -645,6 +713,8 @@ def judge_frame(
         excuse: (table, before, after, changed fields) -> the app profile
             rules that make this row change the app's own bookkeeping, or
             None. Applied to rows no effect declares.
+        user_ids: Sign-in name -> user id, for owner columns that hold a
+            user id (``owner.by: user_id``). An actor not in it owns no row.
     """
 
     from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW, is_default
@@ -930,6 +1000,81 @@ def judge_frame(
     # Each other actor's entry explains at most one row: a colleague's one
     # insert can't cover two stray rows.
     used: set[int] = set()
+    owners = spec.owners()
+
+    def owner_scoped(
+        name: str,
+        before: Optional[Mapping[str, Any]],
+        after: Optional[Mapping[str, Any]],
+    ) -> Attribution:
+        """A row no entry names by record, in a table whose rows carry an
+        owner: another user's when their write entry in the window names the
+        table and the row is theirs. Fail closed: no declared owner, an owner
+        that can't be read or resolved, a row whose owner moved, or any entry
+        by the bot for the table leaves it unexplained (or the bot's)."""
+
+        table = table_of(name)
+        owner = owners.get(table_name(table)) if table else None
+        if (
+            owner is None
+            or window_entries is None
+            or attribution is None
+            or not attribution.table_field
+            or not attribution.write_events
+        ):
+            return "unattributed"
+        col = owner.column
+        hasher = hashers.get(name)
+        record = before if before is not None else after
+        if record is None or col not in record:
+            return "unattributed"
+        if before is not None and after is not None:
+            # The row moved to another user: no entry by either explains it.
+            moved = (
+                before.get(col) != hasher(col, after.get(col))
+                if hasher is not None
+                else not _same(before.get(col), after.get(col))
+            )
+            if moved:
+                return "unattributed"
+        hashed = hasher is not None and before is not None
+        held = record.get(col)
+        if held in (None, "") or (hashed and held == hasher(col, None)):  # type: ignore[misc]
+            return "unattributed"
+
+        def owns(value: str) -> bool:
+            if hashed:
+                return held == hasher(col, value)  # type: ignore[misc]
+            return str(held) == value
+
+        entries = [
+            e
+            for e in window_entries
+            if str(get_path(e, attribution.table_field)) == table
+            and get_path(e, attribution.actor_field) not in (None, "")
+        ]
+        if any(str(get_path(e, attribution.actor_field)) in self_ids for e in entries):
+            # The bot wrote this table in the window, and its entry names no
+            # row: any row of the table may be its change.
+            return "self"
+        change = (
+            "added" if before is None else "removed" if after is None else "changed"
+        )
+        kinds = event_kinds(change)
+        for e in entries:
+            if id(e) in used:
+                continue
+            if kinds is not None and (
+                str(get_path(e, attribution.event_field or "")) not in kinds
+            ):
+                continue
+            actor = str(get_path(e, attribution.actor_field))
+            value = actor if owner.by == "username" else (user_ids or {}).get(actor)
+            if value in (None, "") or not owns(str(value)):
+                continue
+            used.add(id(e))
+            return "other"
+        return "unattributed"
 
     def attribute(
         name: str,
@@ -941,8 +1086,10 @@ def judge_frame(
             return "unattributed"
         if attribution.kind == "audit_read":
             ref, field = ref_of(name, key, before, after)
-            if window_entries is None or ref is None:
+            if window_entries is None:
                 return "unattributed"
+            if ref is None:
+                return owner_scoped(name, before, after)
             if (
                 before is not None
                 and after is not None
@@ -964,7 +1111,7 @@ def judge_frame(
                 if attribution.write_events:
                     used.add(id(e))
                 return "other"
-            return "unattributed"
+            return owner_scoped(name, before, after)
         # record_field: the record says who last changed it.
         if after is None:
             return "unattributed"  # a removed record can't say who removed it

@@ -14,9 +14,11 @@ app's own:
   (only when that column was backfilled in the same row) or ``owner`` (only
   on the acting user's own row).
 - ``own_rows``: per-user UI state. The acting user's own rows may be added,
-  changed or removed, and so may those of another user who wrote in the
-  window (their own work); everyone else's are compared. Credentials never
-  use this: their column rules stay on the acting user's row.
+  changed or removed; everyone else's are compared. Another user's change to
+  their own row is not excused here: the frame attributes it to them only
+  when their own write entry in the audit window names the table
+  (owner-scoped attribution, ``FrameSpec.owners``). Credentials never use
+  this: their column rules stay on the acting user's row.
 
 A rule may name only a table in the profile's reviewed ``bookkeeping_tables``
 (lower-cased, unqualified), so anything else, patient data included, is
@@ -207,7 +209,6 @@ class AppProfile(BaseModel):
         hasher: Callable[[str, Any], str],
         names: set[str],
         ids: set[str],
-        colleagues: tuple[set[str], set[str]] = (set(), set()),
     ) -> Optional[list[str]]:
         """The rules that make this row change the app's own, or None.
 
@@ -215,8 +216,7 @@ class AppProfile(BaseModel):
         for a column of this table); ``after`` holds plain values. A row
         added has no ``before``, a row removed no ``after``; ``fields`` are
         the columns that changed. ``names`` and ``ids`` are the acting
-        user's; ``colleagues`` the names and ids of other users who wrote in
-        the window (for ``own_rows`` only).
+        user's.
         """
 
         name = table_name(table)
@@ -225,10 +225,6 @@ class AppProfile(BaseModel):
         def owned(rule: ProfileRule) -> bool:
             assert rule.owner is not None
             who = names if rule.owner.by == "username" else ids
-            if rule.mode == "own_rows":
-                who = who | (
-                    colleagues[0] if rule.owner.by == "username" else colleagues[1]
-                )
             col = rule.owner.column
             if after is not None:
                 return str(after.get(col)) in who
