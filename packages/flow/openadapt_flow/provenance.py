@@ -426,12 +426,12 @@ def round_trip(
             # state's name and "MA", a provider's name and their id).
             source_value = mapping.get(source_value.strip())
         stored = "" if record.get(record_field) is None else str(record[record_field])
-        if source_value is None or (mapping is not None and source_value == ""):
-            # No code, or an empty one: nothing to compare an unsaved field with.
+        if source_value is None:
             checks.append(FieldCheck(name, "missing", stored))
         elif mapping is not None:
             # A code is the exact stored value, as ``field_equals`` compares
-            # it: "PR1a" is not "pr1A", and the label's kind doesn't apply.
+            # it: "PR1a" is not "pr1A", the label's kind doesn't apply, and an
+            # empty code agrees only with an empty (or unsaved) field.
             result = "agree" if stored == source_value else "disagree"
             checks.append(FieldCheck(name, result, stored, source_value))
         elif same_value(stored, source_value, _kind(prov, source_value)):

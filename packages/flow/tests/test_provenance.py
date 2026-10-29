@@ -432,8 +432,9 @@ def test_a_mapped_code_is_compared_exactly() -> None:
         == "refuted"
     )
     empty = _equals("sex", {"Unknown": ""})
-    assert _mapped_round_trip("Sex: Unknown", {"sex": None}, [written, empty]) == (
-        "not_checked"
+    assert _mapped_round_trip("Sex: Unknown", {"sex": None}, [written, empty]) == "held"
+    assert _mapped_round_trip("Sex: Unknown", {"sex": "F"}, [written, empty]) == (
+        "refuted"
     )
 
 
