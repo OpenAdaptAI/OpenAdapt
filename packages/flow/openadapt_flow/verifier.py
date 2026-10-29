@@ -1,0 +1,1833 @@
+"""Check one write against the system of record: the one public verifier API.
+
+    from openadapt_flow.verifier import Actor, Contract, begin_write, verify_write
+
+    contract = Contract.load("verify.yaml")
+    pending = begin_write(contract, params, actor=Actor("agent", "intake-bot"))
+    ...                                      # the agent, skill or program writes
+    result = verify_write(pending)
+    result.outcome                           # CONFIRMED, REFUTED or UNCERTAIN
+    result.scope                             # what the result establishes
+
+Every adapter, the MCP verify tools and ``openadapt verify`` call this
+module. It wraps ``verify_run`` and checks exactly what verify-run checks:
+
+- **delta:** the declared records were written with the declared values;
+- **frame:** nothing else changed, except what the audit trail attributes to
+  another user and the contract's reviewed bookkeeping tables;
+- **source** (when a :class:`Source` is given): the saved values match the
+  document they came from.
+
+:func:`begin_write` consults the uncertain-write ledger
+(:mod:`openadapt_flow.write_ledger`) before anything is read or sent, so a
+restart or a second worker can't resend a write whose outcome is unknown; it
+raises a :class:`WriteBlocked` when the write must not be sent.
+:func:`verify_write` records each outcome there. A failed check never raises.
+No model calls. See ``docs/VERIFIER_API.md``.
+"""
+
+from __future__ import annotations
+
+import enum
+import hashlib
+import json
+import os
+import re
+import secrets
+import tempfile
+import threading
+import time
+import warnings
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Iterator, Optional, Union
+
+from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
+from openadapt_flow.runtime.effects.db_snapshot import TableDiff, diff, take_snapshot
+from openadapt_flow.verify_run import (
+    FRAME_DB_DETAIL,
+    VerifyConfig,
+    VerifyRunError,
+    _write_private,
+    capture_baseline,
+    parse_verify_config,
+    receipt_sha256,
+    verify_run,
+    write_result,
+)
+from openadapt_flow.write_ledger import (
+    Attempt,
+    FileLedger,
+    Ledger,
+    LedgerBackend,
+    LedgerError,
+    MemoryLedger,
+    default_ledger,
+    prune,
+)
+
+__all__ = [
+    "Actor",
+    "AlreadyWritten",
+    "BaselineUnreadable",
+    "Contract",
+    "DatabaseSnapshot",
+    "FileLedger",
+    "Ledger",
+    "LedgerBackend",
+    "LedgerError",
+    "MemoryLedger",
+    "Outcome",
+    "PendingWrite",
+    "Scope",
+    "Snapshot",
+    "Source",
+    "TableDiff",
+    "VerifierError",
+    "Window",
+    "WriteBlocked",
+    "WriteHeld",
+    "WriteResult",
+    "begin_write",
+    "capture",
+    "capture_database",
+    "diff_database",
+    "reconcile",
+    "verified_write",
+    "verify_write",
+]
+
+DEFAULT_WORKDIR = "~/.openadapt/verify"
+_OPAQUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
+
+#: The receipt's executor kinds, with the names callers also use.
+_KINDS = {
+    "program": "flow_replay",
+    "flow_replay": "flow_replay",
+    "agent": "agent",
+    "script": "script",
+    "person": "human",
+    "human": "human",
+}
+
+#: Each verifier substrate's read path.
+READ_PATHS = {
+    "sql": "database",
+    "database": "database",
+    "rest": "api",
+    "graphql": "api",
+    "fhir": "fhir",
+    "onscreen": "screen",
+    "ui_readback": "screen",
+    "fresh_session": "screen",
+    "desktop_readback": "screen",
+    "file": "file",
+    "fs": "file",
+    "document": "file",
+    "email": "email",
+}
+
+
+#: Who declared the values: one name for all (``"agent"``), or each value's
+#: name mapped to who set it (``{"clinic": "operator", "note": "agent"}``).
+#: Names only, never values.
+DeclaredBy = Union[str, Mapping[str, str]]
+
+
+class Outcome(str, enum.Enum):
+    """Does the system of record show the declared write, and only it?"""
+
+    #: Every declared effect was read back from the system of record, and
+    #: nothing else in the read set moved that the frame doesn't excuse.
+    CONFIRMED = "CONFIRMED"
+    #: The store shows something other than the declared write: a wrong
+    #: value, another record, a duplicate, a change outside it. Never resend.
+    REFUTED = "REFUTED"
+    #: The store doesn't show the write, couldn't be read, or was read too
+    #: weakly to certify it. It may still land: reconcile before any resend.
+    UNCERTAIN = "UNCERTAIN"
+
+
+class VerifierError(ValueError):
+    """The contract can't be loaded or bound, or a call is misused."""
+
+
+class WriteBlocked(VerifierError):
+    """Don't send the write. ``reason`` says why, in a plain sentence."""
+
+    def __init__(self, reason: str, *, key: str = "") -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.key = key
+
+
+class BaselineUnreadable(WriteBlocked):
+    """The system of record can't be read before the write, so nothing
+    could verify it afterwards."""
+
+
+class WriteHeld(WriteBlocked):
+    """An earlier attempt of this write is in flight in another worker,
+    ``UNCERTAIN``, or ``REFUTED`` and not yet released by a person."""
+
+
+class AlreadyWritten(WriteBlocked):
+    """This write was already made and checked; its reply never reached the
+    caller. ``result`` is that earlier reply. Nothing is sent again."""
+
+    def __init__(self, reason: str, *, key: str, result: Mapping[str, Any]) -> None:
+        super().__init__(reason, key=key)
+        self.result = dict(result)
+
+
+@dataclass(frozen=True)
+class Actor:
+    """Who writes: ``program`` (a compiled replay), ``agent``, ``script`` or
+    ``person``, and an id. Its own changes are never excused as another
+    user's. ``build`` (strings only) is digested into the receipt."""
+
+    kind: str
+    id: str
+    build: Optional[Mapping[str, str]] = None
+
+    def run_record(self) -> dict[str, Any]:
+        kind = _KINDS.get(self.kind)
+        if kind is None:
+            raise VerifierError(
+                f"actor kind {self.kind!r} is not one of " + ", ".join(sorted(_KINDS))
+            )
+        record: dict[str, Any] = {"executor_kind": kind, "executor_id": self.id}
+        if self.build is not None:
+            record["executor_build"] = dict(self.build)
+        return record
+
+
+class Contract:
+    """A parsed ``verify.yaml`` (``openadapt.verify/v1``).
+
+    ``writes`` (optional, ``"METHOD /path"``) are the requests a taught
+    program under this contract may send; any other write is stopped before
+    it is sent.
+    """
+
+    def __init__(
+        self, config: VerifyConfig, *, name: str = "", writes: Sequence[str] = ()
+    ) -> None:
+        self.config = config
+        self.name = name
+        self.writes = tuple(_parse_write(w) for w in writes)
+
+    @classmethod
+    def load(cls, path: Union[str, Path]) -> "Contract":
+        import yaml
+
+        path = Path(path)
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            raise VerifierError(f"{path.name}: {exc}") from exc
+        if not isinstance(data, Mapping):
+            raise VerifierError(f"{path.name}: a contract is a YAML mapping")
+        contract = cls.from_dict(data, name=path.stem)
+        contract.config._base_dir = path.resolve().parent
+        return contract
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any], *, name: str = "") -> "Contract":
+        data = dict(data)
+        writes = data.pop("writes", None) or ()
+        if isinstance(writes, str) or not isinstance(writes, (list, tuple)):
+            raise VerifierError('writes is a list of "METHOD /path" strings')
+        try:
+            config = parse_verify_config(data, source=name or "contract")
+        except VerifyRunError as exc:
+            raise VerifierError(str(exc)) from exc
+        return cls(config, name=name, writes=[str(w) for w in writes])
+
+    @property
+    def digest(self) -> str:
+        """SHA-256 of the contract as parsed: part of a write's identity."""
+
+        body = json.dumps(
+            {
+                "config": self.config.model_dump(mode="json"),
+                "writes": list(self.writes),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+    @property
+    def store(self) -> str:
+        """SHA-256 of which system of record the contract writes to: the
+        verifier's kind and location and the ``environment_id``. Timings and
+        credentials are left out, and a loopback host is one host."""
+
+        return _digest(
+            {
+                "environment": self.config.environment_id,
+                "verifier": _strip(
+                    self.config.verifier.model_dump(mode="json"), drop_secrets=True
+                ),
+            }
+        )
+
+    @property
+    def shape(self) -> str:
+        """SHA-256 of the effects, the verifier kind, the ``environment_id``
+        and the hosts (or database files) the verifier reads: the same write
+        to the same named environment and host, however the address is
+        split or spelled. Used only to hold, never to hand back."""
+
+        hosts: set[str] = set()
+
+        def walk(value: Any, name: str = "") -> None:
+            if isinstance(value, Mapping):
+                for k, v in value.items():
+                    walk(v, str(k))
+            elif isinstance(value, (list, tuple)):
+                for v in value:
+                    walk(v, name)
+            elif isinstance(value, str) and _URL.match(value):
+                hosts.add(_location(value).split("://", 1)[1].split("/", 1)[0])
+            elif name.endswith(("database", "_env")) or name in _HOST_KEYS:
+                # A database file or server, or the credential that picks
+                # a tenant: each tells one store from another.
+                hosts.add(f"{name}={_location(str(value)).lower()}")
+
+        verifier = self.config.verifier.model_dump(mode="json")
+        walk(verifier)
+        return _digest(
+            {
+                "effects": [
+                    _strip(e.model_dump(mode="json")) for e in self.config.effects
+                ],
+                "kind": verifier.get("kind"),
+                "environment": self.config.environment_id,
+                "hosts": sorted(hosts),
+            }
+        )
+
+    @property
+    def identity(self) -> str:
+        """SHA-256 of what the write is and where: each effect's kind, target
+        and values, unbound, and :attr:`store`. Timings, the window and the
+        frame are left out, so editing them between a crash and a restart
+        can't make the same write look new."""
+
+        return _digest(
+            {
+                "effects": [
+                    _strip(e.model_dump(mode="json")) for e in self.config.effects
+                ],
+                "store": self.store,
+            }
+        )
+
+    @property
+    def params(self) -> list[str]:
+        """Every ``{"param": name}`` the contract's reads and effects bind."""
+
+        found: set[str] = set()
+
+        def walk(value: Any) -> None:
+            if isinstance(value, Mapping):
+                name = value.get("param")
+                if isinstance(name, str) and name:
+                    found.add(name)
+                for item in value.values():
+                    walk(item)
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    walk(item)
+
+        walk(self.config.model_dump(mode="json"))
+        return sorted(found)
+
+
+#: Settings that change how long a read waits, never what is written.
+_TIMINGS = frozenset(
+    {"timeout_s", "poll_interval_s", "approval_wait_s", "max_execution_window_s"}
+)
+#: Keys whose values are secrets themselves. ``*_env`` keys name an
+#: environment variable, which tells tenants apart and holds no secret.
+_SECRET = re.compile(r"password|secret|token|cookie|header|credential|value$", re.I)
+_HOST_KEYS = frozenset({"host", "hostname", "port", "dbname", "db", "unix_socket"})
+_URL = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+_DEFAULT_PORTS = {"http": 80, "https": 443, "mysql": 3306, "postgresql": 5432}
+
+
+def _location(value: str) -> str:
+    """One spelling per address: scheme and host lower case, a loopback host
+    as ``loopback``, no default port, no trailing slash."""
+
+    if not _URL.match(value):
+        return value.rstrip("/") if value.endswith("/") and len(value) > 1 else value
+    from urllib.parse import urlsplit, urlunsplit
+
+    try:
+        parts = urlsplit(value)
+        port = parts.port
+    except ValueError:
+        return value
+    scheme = parts.scheme.lower()
+    host = (parts.hostname or "").lower()
+    if host in _LOOPBACK:
+        host = "loopback"
+    if port is not None and port != _DEFAULT_PORTS.get(scheme):
+        host = f"{host}:{port}"
+    return urlunsplit((scheme, host, parts.path.rstrip("/"), parts.query, ""))
+
+
+def _strip(value: Any, *, drop_secrets: bool = False) -> Any:
+    if isinstance(value, Mapping):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            name = str(k)
+            if name in _TIMINGS:
+                continue
+            secret = (
+                drop_secrets
+                and not name.endswith("_env")
+                and not isinstance(v, (Mapping, list, tuple))
+                and _SECRET.search(name)
+            )
+            if not secret:
+                out[name] = _strip(v, drop_secrets=drop_secrets)
+        return out
+    if isinstance(value, (list, tuple)):
+        return [_strip(v, drop_secrets=drop_secrets) for v in value]
+    if isinstance(value, str):
+        return _location(value)
+    return value
+
+
+def _digest(value: Any) -> str:
+    body = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _parse_write(text: str) -> str:
+    method, _, path = text.strip().partition(" ")
+    method = method.upper()
+    path = path.strip()
+    if method not in ("POST", "PUT", "PATCH", "DELETE") or not path.startswith("/"):
+        raise VerifierError(
+            f'writes entry {text!r}: use "METHOD /path" (POST, PUT, PATCH or DELETE)'
+        )
+    return f"{method} {path}"
+
+
+@dataclass(frozen=True)
+class Source:
+    """Where the written values came from: provenance and the documents."""
+
+    provenance: Any
+    documents: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class Window:
+    """When the store was read: before the write, and after it."""
+
+    baseline_read_at: Optional[str]
+    read_at: Optional[str]
+    max_execution_window_s: Optional[int]
+
+
+@dataclass(frozen=True)
+class Scope:
+    """What a result establishes, and what it says nothing about."""
+
+    #: ``database``, ``api``, ``fhir``, ``audit_log``, ``screen``, ``file``.
+    read_paths: tuple[str, ...]
+    #: Each store that was read: the verifier's substrates, ``frame.database``
+    #: and ``audit``.
+    stores: tuple[str, ...]
+    #: Stores the contract names that couldn't be read this time.
+    unread: tuple[str, ...]
+    window: Window
+    #: ``independent_system_of_record``, ``independent_session`` or
+    #: ``unchecked``.
+    strength: str
+    #: Plain sentences: what the result does not cover.
+    not_covered: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "read_paths": list(self.read_paths),
+            "stores": list(self.stores),
+            "unread": list(self.unread),
+            "window": {
+                "baseline_read_at": self.window.baseline_read_at,
+                "read_at": self.window.read_at,
+                "max_execution_window_s": self.window.max_execution_window_s,
+            },
+            "strength": self.strength,
+            "not_covered": list(self.not_covered),
+        }
+
+
+#: The old names, for ``to_dict()``'s ``verdict`` and ``openadapt_flow.verify``.
+_VERDICTS = {
+    Outcome.CONFIRMED: "VERIFIED",
+    Outcome.REFUTED: "REFUTED",
+    Outcome.UNCERTAIN: "RECONCILIATION_REQUIRED",
+}
+_STATUSES = {
+    Outcome.CONFIRMED: "verified",
+    Outcome.REFUTED: "refuted",
+    Outcome.UNCERTAIN: "unconfirmed",
+}
+
+
+@dataclass(frozen=True)
+class WriteResult:
+    #: ``CONFIRMED``, ``REFUTED`` or ``UNCERTAIN``.
+    outcome: Outcome
+    #: What was read, when, and what this result doesn't cover.
+    scope: Scope
+    #: ``{"delta", "frame", "source"}``: ``held``, ``refuted`` or
+    #: ``not_checked`` (``source`` is ``instruction`` when none was given).
+    checked: dict[str, Any] = field(default_factory=dict)
+    #: Plain sentences, without record values.
+    reasons: list[str] = field(default_factory=list)
+    #: True only when the caller said the write was never sent and the store
+    #: shows nothing landed.
+    retry_safe: bool = False
+    #: The verify-run receipt's ``outcome`` (``verified``,
+    #: ``reconciliation_required``...), or "" when no receipt was issued.
+    receipt_outcome: str = ""
+    #: ``present``, ``absent``, ``conflicting`` or ``unknown``.
+    observed: str = "unknown"
+    receipt: dict[str, Any] = field(default_factory=dict, repr=False)
+    receipt_sha256: str = ""
+    receipt_path: Optional[str] = None
+    evidence: dict[str, Any] = field(default_factory=dict, repr=False)
+    write_id: str = ""
+    #: The write's ledger key (an HMAC, no values), or "" without a ledger.
+    write_key: str = ""
+    declared_by: DeclaredBy = "agent"
+    authorization: str = "unbound"
+    seal: str = "off"
+    seal_path: Optional[str] = None
+    #: Not confirmed, but the store holds the declared records: the write is
+    #: never sent again, and it isn't held for a person.
+    landed: bool = False
+    #: A person should look at the store: shown by ``openadapt verify ledger
+    #: list`` until released, though it doesn't stop a retry being handed back.
+    review: bool = False
+
+    @property
+    def verified(self) -> bool:
+        return self.outcome is Outcome.CONFIRMED
+
+    @property
+    def verdict(self) -> str:
+        """The outcome under its old name (``VERIFIED``, ``REFUTED``,
+        ``RECONCILIATION_REQUIRED``)."""
+
+        return _VERDICTS[self.outcome]
+
+    @property
+    def status(self) -> str:
+        """The outcome under #1588's names: ``verified``, ``refuted`` or
+        ``unconfirmed``."""
+
+        return _STATUSES[self.outcome]
+
+    @property
+    def reason(self) -> str:
+        return "; ".join(self.reasons)
+
+    def to_dict(self) -> dict[str, Any]:
+        """The reply an agent or the CLI reads: closed fields only."""
+
+        return {
+            "verified": self.verified,
+            "outcome": self.outcome.value,
+            "verdict": self.verdict,
+            "retry_safe": self.retry_safe,
+            "reason": self.reason,
+            "checked": {k: v for k, v in self.checked.items() if k != "coverage"},
+            "observed": self.observed,
+            "scope": self.scope.to_dict(),
+            "write_id": self.write_id,
+            "write_key": self.write_key,
+            "receipt_outcome": self.receipt_outcome,
+            "receipt_sha256": self.receipt_sha256 or None,
+            "receipt_path": self.receipt_path,
+            "values_declared_by": self.declared_by
+            if isinstance(self.declared_by, str)
+            else dict(self.declared_by),
+            "authorization": self.authorization,
+            "seal": self.seal,
+            "seal_path": self.seal_path,
+            "landed": self.landed,
+            "review": self.review,
+        }
+
+
+_NO_LEDGER: Any = object()  # sentinel: the caller passed no ``ledger``
+
+
+@dataclass
+class PendingWrite:
+    """A write that may now be sent: the store was read before it, and the
+    ledger holds its lease. Single use: :func:`verify_write` consumes it."""
+
+    contract: Contract = field(repr=False)
+    params: Mapping[str, Any] = field(repr=False)
+    actor: Actor
+    write_id: str
+    workdir: Path
+    authorization_ref: str = field(repr=False)
+    #: An operator's authorization reference was given (not defaulted).
+    authorized: bool = False
+    declared_by: DeclaredBy = "agent"
+    write_key: str = ""
+    values_key: str = field(default="", repr=False)
+    #: When the baseline read began (epoch seconds): the window's start.
+    started: float = field(default=0.0, repr=False)
+    ledger: Optional[Ledger] = field(default=None, repr=False)
+    write_key_bound: bool = False
+    used: bool = False
+    _lease: Any = field(default=None, repr=False)
+
+    @property
+    def baseline_path(self) -> Path:
+        return self.workdir / "baseline.json"
+
+    def release(self) -> None:
+        """Give up the ledger lease without verifying (the process keeps
+        running but abandons the write). The attempt stays open, so the next
+        caller reconciles it before any resend."""
+
+        lease, self._lease = self._lease, None
+        if lease is not None:
+            lease.release()
+
+
+def _resolve_ledger(ledger: Any) -> Optional[Ledger]:
+    if ledger is _NO_LEDGER:
+        return default_ledger()
+    if ledger is None or isinstance(ledger, Ledger):
+        return ledger
+    return Ledger(ledger)  # a LedgerBackend
+
+
+def begin_write(
+    contract: Contract,
+    params: Mapping[str, Any],
+    *,
+    actor: Actor,
+    ledger: Any = _NO_LEDGER,
+    write_key: Optional[str] = None,
+    authorization_ref: str = "",
+    workdir: Union[str, Path, None] = None,
+    declared_by: DeclaredBy = "agent",
+) -> PendingWrite:
+    """Consult the ledger, then read the system of record before the write.
+
+    Args:
+        contract: What the write must do (and, with a frame, must not do).
+        params: The values the write will save, and any that name the record.
+        actor: Who writes. Its own changes are never excused as another
+            user's.
+        ledger: The uncertain-write ledger: a :class:`Ledger`, a
+            :class:`LedgerBackend`, or None to turn it off (only for a
+            sandbox that resets between runs). Default: :class:`FileLedger`
+            in ``OPENADAPT_LEDGER_DIR`` or ``~/.openadapt/ledger``.
+        write_key: The caller's id for this one write (a task id). With it,
+            a confirmed write is never made again under the same key;
+            without it, two writes with the same values are the same write
+            only while the first one's outcome is open.
+        authorization_ref: An opaque reference to what authorized the write;
+            only its salted digest enters the receipt.
+        workdir: Where this write's private folder goes (default: the
+            ledger's, or ``~/.openadapt/verify`` without one).
+        declared_by: Who declared the values, for the reply: a name, or each
+            value's name mapped to who set it (operator-pinned or agent).
+            To bind it into the receipt too, put it in ``actor.build``.
+
+    Raises :class:`WriteBlocked` (:class:`BaselineUnreadable`,
+    :class:`WriteHeld` or :class:`AlreadyWritten`) when the write must not
+    be sent, and :class:`VerifierError` for a value the contract needs that
+    ``params`` lacks.
+    """
+
+    actor.run_record()  # an unknown kind fails before anything is read
+    if authorization_ref and not _OPAQUE.match(authorization_ref):
+        raise VerifierError(
+            "authorization_ref must be an opaque id (8-128 of A-Za-z0-9._:-)"
+        )
+    names = contract.params
+    missing = [n for n in names if n not in params]
+    if missing:
+        raise VerifierError(f"values missing for: {', '.join(missing)}")
+    values = {n: params[n] for n in names}
+    try:
+        led = _resolve_ledger(ledger)
+    except LedgerError as exc:
+        raise WriteHeld(f"the write ledger can't be used ({exc})") from exc
+    write_id = f"write-{secrets.token_hex(12)}"
+    if led is None:
+        folder = _new_folder(Path(workdir or DEFAULT_WORKDIR), write_id)
+        return _capture(
+            contract, params, actor, write_id, folder, authorization_ref, declared_by
+        )
+    try:
+        key = led.key_for(contract.identity, values, write_key)
+        values_key = led.key_for(contract.identity, values, None)
+        shape_key = led.key_for(contract.shape, values, write_key)
+        lease = led.backend.lease(key)
+    except LedgerError as exc:
+        raise WriteHeld(f"the write ledger can't be used ({exc})") from exc
+    if lease is None:
+        raise WriteHeld(
+            "this write is in flight in another worker; wait for its result",
+            key=key,
+        )
+    try:
+        _settle(led, key, contract, params, actor)
+        _hold_elsewhere(led, key, shape_key)
+        folder = (
+            _new_folder(Path(workdir), write_id)
+            if workdir is not None
+            else led.backend.attempt_dir(write_id)
+        )
+        started = time.time()  # before the baseline: this attempt's window opens
+        pending = _capture(
+            contract, params, actor, write_id, folder, authorization_ref, declared_by
+        )
+        pending.started = started
+        _write_private(
+            folder / "attempt.json",
+            {"values": values, "authorization_ref": pending.authorization_ref},
+        )
+        led.begun(
+            key,
+            write_id,
+            folder=str(folder),
+            contract=contract.identity,
+            values_key=values_key,
+            store=contract.store,
+            shape_key=shape_key,
+            t0=started,
+            records=sum(int(e.expected_count or 1) for e in contract.config.effects),
+            actor_kind=actor.kind,
+            actor_id=actor.id,
+            write_key_bound=write_key is not None,
+            authorized=pending.authorized,
+            declared_by=declared_by
+            if isinstance(declared_by, str)
+            else {str(k): str(v) for k, v in declared_by.items()},
+        )
+    except LedgerError as exc:
+        lease.release()
+        raise WriteHeld(f"the write ledger can't be used ({exc})", key=key) from exc
+    except BaseException:
+        lease.release()
+        raise
+    pending.ledger = led
+    pending.write_key = key
+    pending.values_key = values_key
+    pending.write_key_bound = write_key is not None
+    pending._lease = lease
+    return pending
+
+
+def _new_folder(root: Path, write_id: str) -> Path:
+    folder = root.expanduser() / write_id
+    folder.mkdir(parents=True, exist_ok=False)
+    folder.chmod(0o700)
+    return folder
+
+
+def _capture(
+    contract: Contract,
+    params: Mapping[str, Any],
+    actor: Actor,
+    write_id: str,
+    folder: Path,
+    authorization_ref: str,
+    declared_by: DeclaredBy,
+) -> PendingWrite:
+    pending = PendingWrite(
+        contract=contract,
+        params=dict(params),
+        actor=actor,
+        write_id=write_id,
+        workdir=folder,
+        authorization_ref=authorization_ref or write_id,
+        authorized=bool(authorization_ref),
+        declared_by=declared_by,
+    )
+    try:
+        payload = capture_baseline(
+            contract.config, pending.params, pending.baseline_path
+        )
+    except Exception as exc:  # a store that can't be reached, a bad binding
+        raise BaselineUnreadable(
+            "the system of record could not be read before the write "
+            f"({type(exc).__name__})"
+        ) from None
+    state = payload.get("state") or {}
+    if not state.get("reachable"):
+        raise BaselineUnreadable(
+            "the system of record could not be read before the write"
+        )
+    database = contract.config.frame.database if contract.config.frame else None
+    if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
+        raise BaselineUnreadable("the database could not be read for the frame")
+    return pending
+
+
+def _settle(
+    led: Ledger,
+    key: str,
+    contract: Contract,
+    params: Mapping[str, Any],
+    actor: Actor,
+) -> None:
+    """With the lease held: resolve the key's earlier attempt, or raise."""
+
+    attempt = led.latest(key)
+    if attempt is not None and attempt.state in ("open", "uncertain"):
+        # Open with a free lease: its owner died between the send and the
+        # read-back. Read back before anything is sent.
+        _reconcile(led, key, attempt, contract, params)
+        attempt = led.latest(key)
+    state = led.state(attempt)
+    if state == "free":
+        return
+    if state == "undelivered":
+        assert attempt is not None and attempt.resolved is not None
+        result = dict(attempt.resolved.get("result") or {})
+        result["not_sent_again"] = True
+        if not attempt.delivered:
+            led.delivered(key, attempt.attempt_id)
+        raise AlreadyWritten(
+            (
+                "this write was already made: the store holds it, though it "
+                "wasn't confirmed; its result is attached, and it was not sent "
+                "again"
+                if result.get("landed")
+                else "this write was already made and checked; its result is "
+                "attached, and it was not sent again"
+            ),
+            key=key,
+            result=result,
+        )
+    if state == "held":
+        raise WriteHeld(
+            "an earlier attempt of this write was refuted; a person must check "
+            "the record and release it (openadapt verify ledger release)",
+            key=key,
+        )
+    raise WriteHeld(
+        "an earlier attempt of this write may still land; the store doesn't "
+        "show it yet, so it is held until a read-back finds it or a person "
+        "releases it",
+        key=key,
+    )
+
+
+def _hold_elsewhere(led: Ledger, key: str, shape_key: str) -> None:
+    """Hold when the same write, under another store address (an edited
+    contract, an alias), is open or unresolved: a hold beats a resend."""
+
+    for other, begun, _resolved in led.attempts():
+        if other == key or begun.get("shape_key") != shape_key:
+            continue
+        attempt = led.latest(other)
+        if attempt is None or attempt.attempt_id != begun.get("attempt"):
+            continue
+        if led.state(attempt) != "free":
+            raise WriteHeld(
+                "the same write, under another address for the store, is in "
+                "flight, unresolved or already made; a person checks which "
+                "store it went to (openadapt verify ledger list)",
+                key=key,
+            )
+
+
+def _reconcile(
+    led: Ledger,
+    key: str,
+    attempt: Attempt,
+    contract: Contract,
+    params: Optional[Mapping[str, Any]] = None,
+) -> None:
+    """Resolve ``attempt`` by reading back. The caller holds the lease.
+
+    The attempt is judged against its own baseline, so a record that was
+    there before it is never taken for its write. A baseline a check already
+    used is copied for this read: it is the same write, and the lease keeps
+    any other attempt of it from being sent meanwhile. Past the contract's
+    window the baseline proves nothing, and the attempt stays uncertain.
+    """
+
+    folder = attempt.folder
+    baseline = folder / "baseline.json"
+    try:
+        saved = json.loads((folder / "attempt.json").read_text(encoding="utf-8"))
+        payload = json.loads(baseline.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return  # nothing to judge with: stays as it is, for a person
+    workdir = folder
+    if baseline.with_name(baseline.name + ".used").exists():
+        workdir = folder / f"reconcile-{secrets.token_hex(6)}"
+        workdir.mkdir(mode=0o700)
+        _write_private(workdir / "baseline.json", payload)
+    previous = (attempt.resolved or {}).get("receipt_sha256")
+    pending = PendingWrite(
+        contract=contract,
+        params={**(saved.get("values") or {}), **dict(params or {})},
+        actor=Actor(
+            str(attempt.begun.get("actor_kind") or "agent"),
+            str(attempt.begun.get("actor_id") or "unidentified"),
+        ),
+        write_id=attempt.attempt_id,
+        workdir=workdir,
+        authorization_ref=str(saved.get("authorization_ref") or attempt.attempt_id),
+        authorized=bool(attempt.begun.get("authorized")),
+        declared_by=attempt.begun.get("declared_by") or "agent",
+        write_key=key,
+    )
+    result = _judge(
+        pending,
+        write_attempted=True,
+        source=None,
+        seal=True,
+        remediates=f"sha256:{previous}" if previous else None,
+    )
+    result = _check_overlap(
+        led,
+        key,
+        attempt.attempt_id,
+        str(attempt.begun.get("values_key") or ""),
+        str(attempt.begun.get("store") or ""),
+        float(attempt.begun.get("t0") or 0.0),
+        result,
+    )
+    if (
+        result.outcome is not Outcome.UNCERTAIN
+        or attempt.resolved is None
+        or _landed(result)
+    ):
+        _record(
+            led,
+            key,
+            attempt.attempt_id,
+            result,
+            delivered=False,
+            via="reconcile",
+            write_key_bound=bool(attempt.begun.get("write_key_bound")),
+            folder=folder,
+        )
+    if (
+        result.outcome is Outcome.UNCERTAIN
+        and result.observed == "absent"
+        and led.settle_s is not None
+        and _age_s(attempt) >= led.settle_s
+    ):
+        led.resolved(
+            key,
+            attempt.attempt_id,
+            outcome=Outcome.UNCERTAIN.value,
+            retry_safe=True,
+            delivered=True,
+            via="settled",
+            reason=f"the store showed nothing {int(led.settle_s)}s after the attempt",
+        )
+
+
+def _age_s(attempt: Attempt) -> float:
+    import calendar
+
+    try:
+        began = calendar.timegm(
+            time.strptime(str(attempt.begun.get("at")), "%Y-%m-%dT%H:%M:%SZ")
+        )
+    except ValueError:
+        return 0.0
+    return time.time() - began
+
+
+def verify_write(
+    pending: Union[PendingWrite, Contract],
+    before: Optional["Snapshot"] = None,
+    *,
+    write_attempted: bool = True,
+    source: Optional[Source] = None,
+    seal: bool = True,
+    delivered: bool = True,
+    params: Optional[Mapping[str, object]] = None,
+    actor: Optional[Actor] = None,
+    authorization_ref: str = "verify_write",
+) -> WriteResult:
+    """Read the system of record now and judge the write against the
+    baseline :func:`begin_write` took. Never resends the write.
+
+    Args:
+        pending: From :func:`begin_write`. Single use.
+        write_attempted: False only when the caller knows the write was
+            never sent (a stop before the save); then a store that shows
+            nothing makes the result ``retry_safe``. When it can't know (a
+            tool raised before or while acting), leave it True: a store
+            that shows nothing is then ``UNCERTAIN``, never retry_safe.
+        source: The written values' provenance and documents, to compare the
+            saved record with its source.
+        seal: Sign a confirmed receipt with this computer's Seal key.
+        delivered: False when the reply won't reach the caller (a
+            cancelled tool call, a timeout); the next identical call then
+            raises :class:`AlreadyWritten` with this result instead of a
+            resend. The caller decides this, not the verifier.
+
+    Deprecated form (#1588): ``verify_write(contract, before, params=...,
+    actor=...)`` with a :func:`capture` snapshot judges the write the same
+    way, without the ledger; ``authorization_ref`` belongs to it only.
+    """
+
+    if isinstance(pending, Contract):
+        if before is None or params is None or actor is None:
+            raise VerifierError(
+                "verify_write(contract, before, params=..., actor=...) needs all three"
+            )
+        return _verify_snapshot(
+            pending,
+            before,
+            params=params,
+            actor=actor,
+            source=source,
+            authorization_ref=authorization_ref,
+            write_attempted=write_attempted,
+        )
+    if before is not None or params is not None or actor is not None:
+        raise VerifierError(
+            "verify_write(pending) takes no snapshot, params or actor: "
+            "begin_write bound them"
+        )
+    if pending.used:
+        raise VerifierError("this write was already checked; begin a new one")
+    pending.used = True
+    # Without the lease (released), another worker may be reconciling this
+    # attempt: judge, but leave the ledger to it.
+    holds_lease = pending.ledger is not None and pending._lease is not None
+    try:
+        result = _judge(
+            pending, write_attempted=write_attempted, source=source, seal=seal
+        )
+        if holds_lease and pending.ledger is not None:
+            result = _check_overlap(
+                pending.ledger,
+                pending.write_key,
+                pending.write_id,
+                pending.values_key,
+                pending.contract.store,
+                pending.started,
+                result,
+            )
+            _record(
+                pending.ledger,
+                pending.write_key,
+                pending.write_id,
+                result,
+                delivered=delivered,
+                via="verify_write",
+                write_key_bound=pending.write_key_bound,
+                folder=pending.workdir,
+            )
+    finally:
+        pending.release()
+    return result
+
+
+def _record(
+    led: Ledger,
+    key: str,
+    attempt_id: str,
+    result: WriteResult,
+    *,
+    delivered: bool,
+    via: str,
+    write_key_bound: bool,
+    folder: Optional[Path] = None,
+) -> None:
+    led.resolved(
+        key,
+        attempt_id,
+        outcome=result.outcome.value,
+        retry_safe=result.retry_safe,
+        landed=result.landed,
+        review=result.review,
+        delivered=delivered,
+        via=via,
+        write_key_bound=write_key_bound,
+        receipt_sha256=result.receipt_sha256 or None,
+        result=result.to_dict(),
+    )
+    if folder is not None and _landed(result):
+        prune(folder)
+
+
+def _landed(result: WriteResult) -> bool:
+    """Resolved for good: nothing will read this attempt back again."""
+
+    return result.outcome is not Outcome.UNCERTAIN or result.landed or result.retry_safe
+
+
+def _downgrade(
+    result: WriteResult, reason: str, *, landed: bool = False, review: bool = False
+) -> WriteResult:
+    import dataclasses
+
+    return dataclasses.replace(
+        result,
+        outcome=Outcome.UNCERTAIN,
+        reasons=[*result.reasons, reason],
+        retry_safe=False,
+        landed=landed,
+        review=review,
+    )
+
+
+def _overlapping(
+    led: Ledger, own_key: str, since: float, until: float, window_s: float
+) -> list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]]:
+    """Attempts of other keys whose write could have landed between
+    ``since`` (this attempt's baseline read began) and ``until`` (its
+    read-back ended). The same key's earlier attempts resolved before this
+    one began: its lease orders them. An attempt still open counts while its
+    owner is alive, or for ``window_s`` after it began (its owner died, and
+    a write it sent may still land); a released one is closed."""
+
+    out: list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]] = []
+    for key, begun, resolved in led.attempts():
+        began = float(begun.get("t0") or begun.get("t") or 0.0)
+        if key == own_key or began > until:
+            continue
+        if resolved is not None and resolved.get("event") == "released":
+            continue  # released before any outcome: a person found nothing sent
+        if resolved is not None:
+            if float(resolved.get("t") or until) >= since:
+                out.append((key, begun, resolved))
+        elif began >= since - window_s or _live(led, key):
+            out.append((key, begun, resolved))
+    return out
+
+
+def _live(led: Ledger, key: str) -> bool:
+    """Another caller holds ``key``'s lease right now."""
+
+    try:
+        lease = led.backend.lease(key)
+    except LedgerError:
+        return True
+    if lease is None:
+        return True
+    lease.release()
+    return False
+
+
+def _check_overlap(
+    led: Ledger,
+    key: str,
+    attempt_id: str,
+    values_key: str,
+    store: str,
+    since: float,
+    result: WriteResult,
+) -> WriteResult:
+    """Judge a result against the other attempts open during its window.
+
+    - Same values: one record can't prove two writes, so a ``CONFIRMED`` is
+      ``UNCERTAIN`` for a person (it may be the other attempt's record, or
+      this attempt's send may have stored nothing).
+    - A frame breach of only added records, no more than other attempts on
+      the same store wrote in the window (read back as landed, or live
+      now): the declared write landed and the extras are most likely
+      theirs. ``UNCERTAIN`` with ``landed`` (never resent, not held) and
+      ``review`` (a person looks, since a count can't name the records).
+    """
+
+    window_s = float(result.scope.window.max_execution_window_s or 3600)
+    others = _overlapping(led, key, since, time.time(), window_s)
+    if result.outcome is Outcome.CONFIRMED:
+        if values_key and any(
+            b.get("values_key") == values_key for _k, b, _r in others
+        ):
+            return _downgrade(
+                result,
+                "another attempt with the same values was open during this "
+                "write, so the record may be that write; a person checks "
+                "which one landed",
+            )
+        return result
+    if result.outcome is not Outcome.REFUTED or result.checked.get("delta") != "held":
+        return result
+    if result.checked.get("source") == "refuted":
+        return result
+    frame = result.evidence.get("frame") or {}
+    kinds = set(frame.get("collateral_kinds") or [])
+    if frame.get("status") != "refuted" or not kinds or kinds - {"added"}:
+        return result
+    written = 0
+    for key, begun, resolved in others:
+        if not store or begun.get("store") != store:
+            continue  # another system of record can't explain this one's rows
+        if resolved is not None:
+            if resolved.get("outcome") == "CONFIRMED" or resolved.get("landed"):
+                written += int(begun.get("records") or 1)
+        elif _live(led, key):
+            written += int(begun.get("records") or 1)
+    if not written or int(frame.get("collateral_count") or 0) > written:
+        return result
+    return _downgrade(
+        result,
+        "the declared records landed; the records added beside them could be "
+        "other writes made on the same store in the same window, so this "
+        "write isn't confirmed or sent again, and a person checks the extras",
+        landed=True,
+        review=True,
+    )
+
+
+def _judge(
+    pending: PendingWrite,
+    *,
+    write_attempted: bool,
+    source: Optional[Source],
+    seal: bool,
+    remediates: Optional[str] = None,
+) -> WriteResult:
+    run_record = pending.actor.run_record()
+    base: dict[str, Any] = {
+        "write_id": pending.write_id,
+        "write_key": pending.write_key,
+        "declared_by": pending.declared_by,
+        "authorization": "operator" if pending.authorized else "unbound",
+    }
+    try:
+        doc = verify_run(
+            pending.contract.config,
+            params=pending.params,
+            run_record=run_record,
+            authorization_ref=pending.authorization_ref,
+            baseline_path=pending.baseline_path,
+            private_dir=pending.workdir,
+            correlation_id=pending.write_id,
+            remediates=remediates,
+            write_attempted=write_attempted,
+            provenance=None if source is None else source.provenance,
+            documents=None if source is None else source.documents,
+        )
+        path: Optional[str] = str(write_result(doc, pending.workdir))
+    except Exception as exc:  # noqa: BLE001 - unreadable store, timeout, used baseline
+        return WriteResult(
+            outcome=Outcome.UNCERTAIN,
+            scope=_scope(pending.contract, {}),
+            reasons=[
+                "the system of record could not be read back "
+                f"({type(exc).__name__}); the write may still land"
+            ],
+            **base,
+        )
+    receipt = dict(doc["receipt"])
+    evidence = dict(doc["evidence"])
+    receipt_outcome = str(receipt.get("outcome") or "")
+    checked = dict(receipt.get("checked") or {})
+    outcome, retry_safe = classify(receipt_outcome, checked, evidence)
+    seal_path, seal_state = None, "off"
+    if outcome is Outcome.CONFIRMED and seal and path:
+        seal_path, seal_state = _seal(path, pending.write_id)
+    return WriteResult(
+        outcome=outcome,
+        scope=_scope(pending.contract, evidence, receipt),
+        checked=checked,
+        reasons=_reasons(evidence, receipt_outcome),
+        retry_safe=retry_safe,
+        receipt_outcome=receipt_outcome,
+        observed=_observed(evidence),
+        receipt=receipt,
+        receipt_sha256=receipt_sha256(receipt),
+        receipt_path=path,
+        evidence=evidence,
+        seal=seal_state,
+        seal_path=seal_path,
+        **base,
+    )
+
+
+def classify(
+    receipt_outcome: str, checked: Mapping[str, Any], evidence: Mapping[str, Any]
+) -> tuple[Outcome, bool]:
+    """A verify-run receipt's outcome as (:class:`Outcome`, retry_safe)."""
+
+    if receipt_outcome == "verified":
+        return Outcome.CONFIRMED, False
+    if receipt_outcome == "halted_before_effect":
+        # The caller never sent it, and the store shows nothing landed.
+        return Outcome.REFUTED, True
+    if receipt_outcome == "rejected_policy":
+        return Outcome.REFUTED, False  # landed, but approved by its own executor
+    if receipt_outcome != "reconciliation_required":
+        return Outcome.UNCERTAIN, False
+    if checked.get("frame") == "refuted" or checked.get("source") == "refuted":
+        return Outcome.REFUTED, False
+    if checked.get("delta") != "refuted":
+        return Outcome.UNCERTAIN, False
+    rows = (evidence.get("readback") or {}).get("effects") or []
+    failed = [
+        r for r in rows if isinstance(r, Mapping) and r.get("verdict") != "CONFIRMED"
+    ]
+    if failed and all(r.get("observed_effect") == "absent" for r in failed):
+        return Outcome.UNCERTAIN, False
+    return Outcome.REFUTED, False
+
+
+def _observed(evidence: Mapping[str, Any]) -> str:
+    rows = (evidence.get("readback") or {}).get("effects") or []
+    seen = {str(r.get("observed_effect")) for r in rows if isinstance(r, Mapping)}
+    if (evidence.get("frame") or {}).get("status") == "refuted":
+        seen.add("conflicting")
+    if not seen or "unknown" in seen or "None" in seen:
+        return "unknown"
+    if "conflicting" in seen or seen == {"absent", "present"}:
+        return "conflicting"
+    return "absent" if "absent" in seen else "present"
+
+
+def _scope(
+    contract: Contract,
+    evidence: Mapping[str, Any],
+    receipt: Optional[Mapping[str, Any]] = None,
+) -> Scope:
+    cfg = contract.config
+    readback = evidence.get("readback") or {}
+    rows = [r for r in readback.get("effects") or [] if isinstance(r, Mapping)]
+    frame = evidence.get("frame") or {}
+    frame_read = bool(frame) and frame.get("status") != "not_checked"
+    stores: list[str] = []
+    unread: list[str] = []
+    for row in rows:
+        name = str(row.get("substrate") or cfg.verifier.kind)
+        target = unread if row.get("unavailable") or row.get("stale") else stores
+        if name not in target:
+            target.append(name)
+    if not rows:
+        unread.append(cfg.verifier.kind)
+    spec = cfg.frame
+    if spec is not None and getattr(spec, "database", None) is not None:
+        (stores if frame_read and "database" in frame else unread).append(
+            "frame.database"
+        )
+    attribution = getattr(spec, "attribution", None) if spec is not None else None
+    if attribution is not None and attribution.kind == "audit_read":
+        (stores if frame_read else unread).append("audit")
+    paths: list[str] = []
+    for name in stores:
+        path = (
+            "database"
+            if name == "frame.database"
+            else "audit_log"
+            if name == "audit"
+            else READ_PATHS.get(name, name)
+        )
+        if path not in paths:
+            paths.append(path)
+    contracts = (receipt or {}).get("contracts") or {}
+    strength = str(contracts.get("observed_effect_strength") or "unchecked")
+    not_covered = [
+        "writes that land after read_at (delayed or queued writes)",
+        "stores the contract doesn't read: email, other services, files",
+        "whether the write was authorized; the verifier doesn't judge it",
+    ]
+    if spec is None or getattr(spec, "database", None) is None:
+        not_covered.append("records outside the read set (no frame.database)")
+    return Scope(
+        read_paths=tuple(paths),
+        stores=tuple(stores),
+        unread=tuple(unread),
+        window=Window(
+            baseline_read_at=readback.get("baseline_read_at"),
+            read_at=readback.get("read_at"),
+            max_execution_window_s=readback.get("max_execution_window_s"),
+        ),
+        strength=strength,
+        not_covered=tuple(not_covered),
+    )
+
+
+def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
+    out: list[str] = []
+    for row in (evidence.get("readback") or {}).get("effects") or []:
+        if not isinstance(row, Mapping) or str(row.get("verdict")) == "CONFIRMED":
+            continue
+        out.append(
+            f"{row.get('kind')} was {str(row.get('verdict')).lower()}: observed "
+            f"{row.get('observed_effect')}, {row.get('observed_count')} of "
+            f"{row.get('expected_count')} expected record(s)"
+        )
+    frame = evidence.get("frame") or {}
+    if frame.get("status") == "refuted":
+        kinds = ", ".join(frame.get("collateral_kinds") or [])
+        out.append(
+            f"{frame.get('collateral_count', 0)} record(s) outside the declared "
+            f"write moved ({kinds}); "
+            f"{frame.get('unattributed_count', 0)} of them no actor explains"
+        )
+    elif frame.get("status") == "not_checked":
+        out.append("what else changed could not be read, so the frame is not checked")
+    source = evidence.get("source") or {}
+    if isinstance(source, Mapping) and source.get("status") == "refuted":
+        fields = ", ".join(source.get("mismatched_fields") or [])
+        out.append(f"the saved record differs from its source in {fields}")
+    if receipt_outcome == "rejected_policy":
+        out.append("the write's approver is its own executor")
+    if not out and receipt_outcome not in ("verified", ""):
+        out.append(
+            "the read was too weak to certify the write "
+            f"({(evidence.get('readback') or {}).get('verification_tier')})"
+        )
+    return out
+
+
+def _seal(receipt_path: str, write_id: str) -> tuple[Optional[str], str]:
+    """Sign the receipt file with this computer's Seal key. Returns the Seal's
+    path and ``sealed``; or no path and ``off`` (Seals turned off) or
+    ``unsealed: <why>``. The outcome stands either way: the Seal attests who
+    issued the receipt, not the write."""
+
+    from openadapt_flow import offline_seal
+
+    if not offline_seal.mode_enabled():
+        return None, "off"
+    try:
+        sealed = offline_seal.sign_file(
+            Path(receipt_path), subject_kind="record", run_id=write_id
+        )
+        out = Path(receipt_path).with_name("receipt.seal.json")
+        _write_private(out, sealed.model_dump(mode="json"))
+    except Exception as exc:  # noqa: BLE001 - say why, never fail the write
+        return (
+            None,
+            f"unsealed: this computer's Seal key couldn't be used ({type(exc).__name__})",
+        )
+    return str(out), "sealed"
+
+
+# The deprecated #1588 form: capture() and verify_write(contract, before, ...).
+# Kept as #1588 shipped it, so a snapshot verifies once and only under the
+# state directory it was captured in; results are the one WriteResult.
+
+
+@dataclass
+class Snapshot:
+    """The system of record before the write. Private and single-use.
+
+    It holds raw records and the run salt, so it stays on this machine:
+    :meth:`save` writes it with mode 0600. One snapshot verifies at most one
+    write, as verify-run's baseline does.
+    """
+
+    payload: dict[str, Any] = field(repr=False)
+    used: bool = False
+    #: The file :meth:`load` read, if any (for the caller's reference).
+    path: Optional[Path] = field(default=None, repr=False)
+
+    def save(self, path: str | Path) -> Path:
+        out = Path(path)
+        _write_private(out, self.payload)
+        return out
+
+    @classmethod
+    def load(cls, path: str | Path) -> "Snapshot":
+        """Read a snapshot :meth:`save` wrote. Its contents as read now are
+        what's judged; it verifies only where :func:`capture` recorded it."""
+
+        source = Path(path)
+        return cls(json.loads(source.read_text()), path=source)
+
+
+#: The salt of every snapshot this process has used. Each capture draws a
+#: fresh salt, so a copy or a reload of a used snapshot is refused too.
+_CONSUMED: set[str] = set()
+_CONSUMED_LOCK = threading.Lock()
+#: Where :func:`capture` records each snapshot it issues, as an empty file
+#: named by its salt's digest; :func:`verify_write` removes it, and only one
+#: caller can. A snapshot not issued here (another HOME, host or container, a
+#: wiped cache, a copy whose record is gone) is refused, never replayed. Set
+#: ``OPENADAPT_VERIFIER_STATE_DIR`` to give every worker one directory.
+USED_DIR: Optional[Path] = None
+
+
+def _issued_dir() -> Path:
+    root = USED_DIR or Path(
+        os.environ.get("OPENADAPT_VERIFIER_STATE_DIR")
+        or Path.home() / ".cache" / "openadapt" / "verifier"
+    )
+    issued = Path(root) / "issued"
+    try:
+        issued.mkdir(mode=0o700, parents=True, exist_ok=True)
+        Path(root).chmod(0o700)  # created above, or already this user's own
+    except OSError as exc:
+        raise VerifierError(f"can't keep the snapshot record: {exc}") from exc
+    for path in (Path(root), issued):
+        info = os.lstat(path)
+        if (
+            not os.path.isdir(path)
+            or os.path.islink(path)
+            or info.st_uid != os.geteuid()
+            or info.st_mode & 0o077
+        ):
+            # Another user could remove records (replay) or plant them.
+            raise VerifierError(
+                f"{path} must be a private directory owned by this user"
+            )
+    return issued
+
+
+def _salt_digest(payload: Any) -> tuple[str, str]:
+    if not isinstance(payload, dict):
+        raise VerifierError("a snapshot's payload must be the dict capture made")
+    salt = payload.get("salt")
+    if not isinstance(salt, str) or not salt:
+        raise VerifierError("the snapshot has no salt; capture again")
+    try:
+        canonical = bytes.fromhex(salt).hex()  # one name per salt, any case
+    except ValueError as exc:
+        raise VerifierError("the snapshot's salt is not hex") from exc
+    return canonical, hashlib.sha256(canonical.encode("ascii")).hexdigest()
+
+
+def _issue(payload: Any) -> None:
+    """Record a new snapshot as issued (see :data:`USED_DIR`)."""
+
+    _salt, digest = _salt_digest(payload)
+    try:
+        fd = os.open(
+            _issued_dir() / digest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+        )
+    except OSError as exc:
+        raise VerifierError(f"can't record the snapshot: {exc}") from exc
+    os.close(fd)
+
+
+def _consume(payload: Any) -> None:
+    """Use ``payload``'s snapshot, once: remove its issued record."""
+
+    salt, digest = _salt_digest(payload)
+    with _CONSUMED_LOCK:
+        if salt in _CONSUMED:
+            raise VerifierError("this snapshot was already used; capture again")
+        _CONSUMED.add(salt)
+    try:
+        os.unlink(_issued_dir() / digest)
+    except FileNotFoundError:
+        raise VerifierError(
+            "this snapshot was already used, or wasn't captured under this "
+            "state directory; capture again"
+        ) from None
+    except OSError as exc:
+        raise VerifierError(f"can't record the snapshot's use: {exc}") from exc
+
+
+def capture(contract: Contract, params: Mapping[str, object]) -> Snapshot:
+    """Deprecated (#1588): read the system of record before the write.
+
+    Use :func:`begin_write`, which also holds the write in the uncertain-write
+    ledger; a snapshot doesn't, so a restart can't tell it was sent.
+    """
+
+    warnings.warn(
+        "verifier.capture is deprecated; use begin_write",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
+        try:
+            payload = capture_baseline(
+                contract.config, params, Path(tmp) / "baseline.json"
+            )
+        except VerifyRunError as exc:
+            raise BaselineUnreadable(str(exc)) from exc
+    state = payload.get("state") or {}
+    if not state.get("reachable"):
+        raise BaselineUnreadable("the system of record could not be read")
+    database = contract.config.frame.database if contract.config.frame else None
+    if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
+        raise BaselineUnreadable("the database could not be read for the frame")
+    snapshot = Snapshot(dict(payload))
+    _issue(snapshot.payload)
+    return snapshot
+
+
+def _verify_snapshot(
+    contract: Contract,
+    before: Snapshot,
+    *,
+    params: Mapping[str, object],
+    actor: Actor,
+    source: Optional[Source],
+    authorization_ref: str,
+    write_attempted: bool,
+) -> WriteResult:
+    run_record = actor.run_record()
+    if before.used:
+        raise VerifierError("this snapshot was already used; capture again")
+    before.used = True
+    _consume(before.payload)
+    # Judge the payload whose salt was just used, never the file as it is now.
+    with tempfile.TemporaryDirectory(prefix="openadapt-verify-") as tmp:
+        try:
+            doc = verify_run(
+                contract.config,
+                params=params,
+                run_record=run_record,
+                write_attempted=write_attempted,
+                authorization_ref=authorization_ref,
+                baseline_path=before.save(Path(tmp) / "baseline.json"),
+                provenance=None if source is None else source.provenance,
+                documents=None if source is None else source.documents,
+            )
+        except (VerifyRunError, OSError) as exc:
+            raise VerifierError(str(exc)) from exc
+    receipt = dict(doc["receipt"])
+    evidence = dict(doc["evidence"])
+    receipt_outcome = str(receipt.get("outcome") or "")
+    checked = dict(receipt.get("checked") or {})
+    outcome, retry_safe = classify(receipt_outcome, checked, evidence)
+    return WriteResult(
+        outcome=outcome,
+        scope=_scope(contract, evidence, receipt),
+        checked=checked,
+        reasons=_reasons(evidence, receipt_outcome),
+        retry_safe=retry_safe,
+        receipt_outcome=receipt_outcome,
+        observed=_observed(evidence),
+        receipt=receipt,
+        receipt_sha256=receipt_sha256(receipt),
+        evidence=evidence,
+    )
+
+
+@dataclass
+class WriteBlock:
+    """What :func:`verified_write` yields; ``result`` is set after the block."""
+
+    pending: PendingWrite
+    write_attempted: bool = True
+    result: Optional[WriteResult] = None
+
+
+@contextmanager
+def verified_write(
+    contract: Contract,
+    params: Mapping[str, Any],
+    *,
+    actor: Actor,
+    **options: Any,
+) -> Iterator[WriteBlock]:
+    """``with verified_write(...) as w: send()`` then read ``w.result``.
+
+    ``options`` go to :func:`begin_write`. If the block raises before the
+    write is sent, set ``w.write_attempted = False`` first; the read-back
+    runs either way, because a half-sent write may have landed.
+    """
+
+    block = WriteBlock(begin_write(contract, params, actor=actor, **options))
+    try:
+        yield block
+    finally:
+        block.result = verify_write(
+            block.pending, write_attempted=block.write_attempted
+        )
+
+
+def reconcile(
+    contract: Contract,
+    key: str,
+    *,
+    ledger: Any = _NO_LEDGER,
+) -> Optional[str]:
+    """Resolve the key's open or uncertain attempt by reading back.
+
+    Returns the attempt's state afterwards (``free``, ``undelivered``,
+    ``uncertain``, ``held``, ``open``), or None when the key has no
+    attempt. Raises :class:`WriteHeld` when another worker holds the key.
+    """
+
+    led = _resolve_ledger(ledger)
+    if led is None:
+        raise VerifierError("reconcile needs a ledger")
+    lease = led.backend.lease(key)
+    if lease is None:
+        raise WriteHeld("this write is in flight in another worker", key=key)
+    try:
+        attempt = led.latest(key)
+        if attempt is None:
+            return None
+        if attempt.state in ("open", "uncertain"):
+            _reconcile(led, key, attempt, contract)
+            attempt = led.latest(key)
+        return attempt.state if attempt is not None else None
+    finally:
+        lease.release()
+
+
+# -- the database frame, without a contract (from #1588) ----------------------
+
+#: The key the snapshots of this process share, when the caller gives none:
+#: two captures taken in one process compare. Saved snapshots need an
+#: explicit ``key``.
+_PROCESS_KEY = secrets.token_bytes(32)
+
+
+def capture_database(
+    read: Mapping[str, Any] | Callable[[], Any],
+    dialect: str,
+    *,
+    allow_tables: Sequence[str] = (),
+    max_rows: int = 2000,
+    key: Optional[bytes] = None,
+    profile: Optional[str] = None,
+    before: Optional[DatabaseSnapshot] = None,
+    actor_names: Sequence[str] = (),
+) -> DatabaseSnapshot:
+    """Snapshot every table of a database, in one read-only transaction.
+
+    ``read`` is a read-only connection, as in ``frame.database.read``
+    (``sqlite_database``, or ``sql_driver`` with ``sql_connect_args`` and
+    ``sql_password_env``), or a function that opens one DB-API connection
+    (to read through ``podman exec``, say). It talks to the database over
+    that connection only; no application code is imported. The snapshot
+    holds keyed MACs, never values: ``key`` keys them (default: one key per
+    process). ``allow_tables`` are kept append-only.
+
+    ``profile`` (``openemr``) applies an app profile's bookkeeping rules, the
+    same ones the frame uses (``openadapt_flow.app_profiles``); its own-row
+    rules need the acting user's sign-in names (``actor_names``), whose ids
+    are read in the same transaction. ``before``: a snapshot taken earlier
+    with the same key, so this one keeps the plain values of the rows that
+    differ from it, in memory only. Raises :class:`BaselineUnreadable`.
+    """
+
+    from openadapt_flow.verify_run import _db_connect
+
+    if dialect not in ("sqlite", "mysql"):
+        raise VerifierError(f"dialect {dialect!r} is not sqlite or mysql")
+    connect = read if callable(read) else _db_connect(read)
+    extra: dict[str, str] = {}
+    if profile is not None:
+        from openadapt_flow.app_profiles import load_profile
+
+        query = load_profile(profile).actor_ids_query(list(actor_names), dialect)
+        if query:
+            extra["actor_ids"] = query
+    try:
+        return take_snapshot(
+            connect,
+            dialect,  # type: ignore[arg-type]
+            key=key or _PROCESS_KEY,
+            modes=dict.fromkeys(allow_tables, "append_only"),
+            max_rows=max_rows,
+            before=before,
+            extra_queries=extra,
+            **_profile_args(profile),
+        )
+    except Exception as exc:  # noqa: BLE001 - any read failure is unreadable
+        raise BaselineUnreadable(f"the database could not be read: {exc}") from exc
+
+
+def _profile_args(profile: Optional[str]) -> dict[str, Any]:
+    if profile is None:
+        return {}
+    from openadapt_flow.app_profiles import load_profile
+
+    p = load_profile(profile)
+    return {
+        "optional_modes": {t["table"]: t["mode"] for t in p.allow_tables()},
+        "ignore": p.ignore_columns(),
+        "ref_columns": p.ref_columns(),
+    }
+
+
+def diff_database(
+    before: DatabaseSnapshot,
+    after: DatabaseSnapshot,
+    *,
+    allow_tables: Sequence[str] = (),
+    key: Optional[bytes] = None,
+    profile: Optional[str] = None,
+    actor_names: Sequence[str] = (),
+) -> dict[str, TableDiff]:
+    """Every table that moved, with counts of rows added, removed and changed
+    and the changed column names, never values. Empty when the database is
+    back where it was (a compensation that undid everything). Append-only
+    tables whose existing rows moved, changed definitions or code, and a row
+    written then removed all show, under ``unread``.
+
+    With ``profile`` (captured with the same profile and ``actor_names``, and
+    ``after`` captured with ``before=``), a row change the profile's
+    conditional rules call the app's own (the acting user's sign-in
+    counters, a uuid backfill) is left out, as the frame leaves it out.
+    """
+
+    from openadapt_flow.runtime.effects.db_snapshot import cell_hash, unpack
+
+    k = key or _PROCESS_KEY
+    moved = diff(before, after, key=k, allow_tables=allow_tables)
+    if profile is None:
+        return moved
+    from openadapt_flow.app_profiles import load_profile
+
+    p = load_profile(profile)
+    names = set(actor_names)
+    ids = {str(r.get("id")) for r in after.extra.get("actor_ids", [])}
+    out: dict[str, TableDiff] = {}
+    for name, d in moved.items():
+        a, b = before.tables.get(name), after.tables.get(name)
+        if d.unread or a is None or b is None or a.cell_columns != b.cell_columns:
+            out[name] = d
+            continue
+        hasher = (lambda t: lambda col, v: cell_hash(k, v, t, col))(name)
+        kept = TableDiff()
+        columns: set[str] = set()
+        for row_key in a.rows.keys() | b.rows.keys():
+            old, new = a.rows.get(row_key), b.rows.get(row_key)
+            if old is not None and new is not None and old[0] == new[0]:
+                continue
+            was = None if old is None else unpack(a.cell_columns, old[1])
+            now = None if new is None else b.values.get(row_key)
+            if new is not None and now is None:
+                kept.changed += 1  # no plain values to judge: keep it
+                continue
+            fields = (
+                []
+                if was is None or now is None
+                else sorted(
+                    c for c in a.cell_columns if was[c] != hasher(c, now.get(c))
+                )
+                or ["(columns not compared)"]
+            )
+            if p.excuse(name, was, now, fields, hasher, names, ids):
+                continue
+            if was is None:
+                kept.added += 1
+            elif now is None:
+                kept.removed += 1
+            else:
+                kept.changed += 1
+                columns.update(fields)
+        kept.changed_columns = sorted(columns)
+        if kept.added or kept.removed or kept.changed:
+            out[name] = kept
+    return out

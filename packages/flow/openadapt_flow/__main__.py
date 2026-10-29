@@ -476,6 +476,8 @@ def _deployment_runtime(
         cfg.runtime.allow_model_grounding
         or getattr(args, "allow_model_grounding", False)
     )
+    if getattr(args, "local_grounding", False):
+        cfg.runtime = cfg.runtime.model_copy(update={"local_grounding": True})
     return cfg, effect_verifier, api_actuator, durable, allow_egress
 
 
@@ -2545,6 +2547,10 @@ def _build_surface_backends(surface_cfgs, *, page) -> dict:
                 if browser is None:
                     raise
                 opened = browser.new_page(viewport=page.viewport_size)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(opened)
             opened.goto(url)
             try:
                 opened.wait_for_load_state("load")
@@ -2567,6 +2573,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow.ir import Workflow
 
     bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle, target_url=getattr(args, "url", None))
     refuse_replay_composition(bundle)
     refuse_replay_process(bundle)
     from openadapt_flow.cli_variants import refuse_replay_variants
@@ -2693,6 +2702,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     headed = args.headed or cfg.backend.headed
     url = args.url or cfg.backend.url
+    refuse_unqualified_skill(bundle, target_url=url)
     if url and args.drift:
         raise SystemExit(
             "--drift only applies to the bundled MockMed demo app; "
@@ -2799,6 +2809,10 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                 page = context.new_page()
             else:
                 page = browser.new_page(viewport=_VIEWPORT, service_workers="block")
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(url)
             try:
                 report = run_on_page(page, entry_url=url)
@@ -3620,6 +3634,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.runtime.authorization import runtime_inputs_digest
 
     bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle)
     if is_composition_artifact(bundle):
         from openadapt_flow.cli_compose import cmd_run_composition
 
@@ -3719,6 +3736,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 2
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
+    # A pulled skill runs only on the instance it was qualified on: the
+    # deployment's app address, not only an explicit --url.
+    refuse_unqualified_skill(
+        bundle,
+        target_url=getattr(args, "url", None) or getattr(backend_cfg, "url", None),
+    )
     will_actuate = not bool(getattr(args, "dry_run", False))
     authority_file = getattr(args, "qualification_authority_file", None)
     dispatch_file = getattr(args, "managed_dispatch_file", None)
@@ -4511,6 +4534,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=not headed)
                     page = browser.new_page(viewport=_VIEWPORT)
+                    from openadapt_flow.backends.playwright_backend import (
+                        prepare_ws_guard,
+                    )
+
+                    # Guard the page's WebSockets from its first document (wire check).
+                    prepare_ws_guard(page)
                     page.goto(url)
                     try:
                         report = _resume_with(build_backend(backend_cfg, page=page))
@@ -5027,6 +5056,10 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         with sync_playwright() as p:
             browser = launch_chromium(p.chromium, headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(target_url)
             try:
                 yield PlaywrightBackend(page)
@@ -6517,7 +6550,9 @@ def _cmd_disambiguate(args: argparse.Namespace) -> int:
 
 def _cmd_emit_skill(args: argparse.Namespace) -> int:
     from openadapt_flow.emit.skill import emit_skill
+    from openadapt_flow.skills import refuse_unqualified_skill
 
+    refuse_unqualified_skill(args.bundle)
     skill_dir = emit_skill(Path(args.bundle), Path(args.out))
     print(f"Skill written to {skill_dir}")
     return 0
@@ -6525,7 +6560,9 @@ def _cmd_emit_skill(args: argparse.Namespace) -> int:
 
 def _cmd_emit_mcp(args: argparse.Namespace) -> int:
     from openadapt_flow.emit.mcp_tool import emit_mcp_server
+    from openadapt_flow.skills import refuse_unqualified_skill
 
+    refuse_unqualified_skill(args.bundle)
     server_path = emit_mcp_server(Path(args.bundle), Path(args.out))
     print(f"MCP server written to {server_path}")
     return 0
@@ -9059,6 +9096,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
         "--allow-model-grounding",
         action="store_true",
         help=(
@@ -9145,6 +9192,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "JSON object of parameter bindings; keeps values out of process "
             "arguments for managed execution"
+        ),
+    )
+    p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
         ),
     )
     p.add_argument(
@@ -9785,8 +9842,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_silent_saves)
 
     from openadapt_flow.registry import add_parser as _add_pull_parser
+    from openadapt_flow.skills import add_parser as _add_skill_parser
 
     _add_pull_parser(sub)
+    _add_skill_parser(sub)
 
     from openadapt_flow.intake.cli import add_parser as _add_intake_parser
 
@@ -11557,6 +11616,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
         "--allow-model-grounding",
         action="store_true",
         help=(
@@ -11862,7 +11931,13 @@ def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
             "effects": effects_cfg,
             "actuation": actuation_cfg,
             "runtime": cfg.runtime.model_copy(
-                update={"allow_model_grounding": allow_egress}
+                update={
+                    "allow_model_grounding": allow_egress,
+                    "local_grounding": bool(
+                        cfg.runtime.local_grounding
+                        or getattr(args, "local_grounding", False)
+                    ),
+                }
             ),
         }
     )

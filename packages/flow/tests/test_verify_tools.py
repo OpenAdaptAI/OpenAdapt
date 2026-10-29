@@ -90,8 +90,17 @@ def test_an_agent_wraps_its_writes(sor: str, tmp_path: Path) -> None:
         out["good"] = await call("verify_check", {"write_id": begun["write_id"]})
         out["again"] = await call("verify_check", {"write_id": begun["write_id"]})
 
-        begun = await call("verify_begin", {"contract": "referral", "values": values})
-        agent.click_save("p1", NOTE, fault="wrong_record")
+        # The agent's retry of the same write (its reply was lost): handed
+        # back, never sent again.
+        out["retry"] = await call(
+            "verify_begin", {"contract": "referral", "values": values}
+        )
+        other = {"patient_id": "p1", "note": NOTE + " (second)"}
+        begun = await call(
+            "verify_begin",
+            {"contract": "referral", "values": other, "write_key": "ticket-2"},
+        )
+        agent.click_save("p1", other["note"], fault="wrong_record")
         out["bad"] = await call("verify_check", {"write_id": begun["write_id"]})
         out["missing"] = await call(
             "verify_begin", {"contract": "referral", "values": {"patient_id": "p1"}}
@@ -106,8 +115,12 @@ def test_an_agent_wraps_its_writes(sor: str, tmp_path: Path) -> None:
     assert out["good"]["verified"] is True and out["good"]["verdict"] == "VERIFIED"
     assert len(out["good"]["receipt_sha256"]) == 64
     assert "checked once" in out["again"]["_error"]
+    assert out["retry"]["ok_to_write"] is False
+    assert out["retry"]["earlier_result"]["outcome"] == "CONFIRMED"
     assert out["bad"]["verified"] is False
-    assert out["bad"]["verdict"] == "RECONCILIATION_REQUIRED"
+    # The note landed on another patient: the store shows a different write.
+    assert out["bad"]["verdict"] == "REFUTED"
+    assert out["bad"]["outcome"] == "REFUTED"
     assert out["bad"]["retry_safe"] is False
     assert "values missing for: note" in out["missing"]["_error"]
 

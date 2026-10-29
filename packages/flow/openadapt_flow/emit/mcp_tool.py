@@ -60,11 +60,27 @@ def {func_name}(url: str{param_sig}) -> dict:
         record before you call this tool again.
     """
     params = {params_dict}
+    from openadapt_flow.skills import pulled_skill_refusal
+
+    # A skill pulled from the registry runs only on the instance it was
+    # qualified on; the bundle copy carries that qualification.
+    refusal = pulled_skill_refusal(BUNDLE_DIR, target_url=url)
+    if refusal is not None:
+        return {{
+            "success": False,
+            "outcome": "REFUSED",
+            "transaction_outcome": None,
+            "production_eligible": False,
+            "detail": refusal,
+        }}
     from playwright.sync_api import sync_playwright
 
     from openadapt_flow._browser_setup import launch_chromium
 
-    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.backends.playwright_backend import (
+        PlaywrightBackend,
+        prepare_ws_guard,
+    )
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 
@@ -73,6 +89,7 @@ def {func_name}(url: str{param_sig}) -> dict:
     with sync_playwright() as p:
         browser = launch_chromium(p.chromium, headless=True)
         page = browser.new_page(viewport={{"width": 1280, "height": 800}})
+        prepare_ws_guard(page)
         page.goto(url)
         try:
             backend = PlaywrightBackend(page)

@@ -43,6 +43,7 @@ from typing import Any, Awaitable, Callable, Mapping, Optional, Union
 
 from openadapt_flow.agent.verify_tools import contract_params
 from openadapt_flow.verify import (
+    AlreadyWritten,
     BaselineUnreadable,
     WriteContract,
     begin_write,
@@ -168,8 +169,20 @@ class WriteGuard:
             except _Cancelled as stop:
                 pending, refusal = stop.value
                 if refusal is None:
-                    # The store was read, nothing was written.
-                    pending[0].baseline_path.unlink(missing_ok=True)
+                    # The store was read and nothing was sent: close the
+                    # attempt as never sent, so the write ledger doesn't hold
+                    # an identical retry as possibly still landing.
+                    try:
+                        verify_write(
+                            pending[0],
+                            executor=self._executor(),
+                            write_attempted=False,
+                            # This agent sent nothing: never sign a receipt
+                            # for what another writer may have saved.
+                            seal=False,
+                        )
+                    except Exception:  # noqa: BLE001 - the cancellation goes on
+                        pass
                 raise asyncio.CancelledError from None
             if refusal is not None:
                 return refusal
@@ -212,27 +225,41 @@ class WriteGuard:
             )
         try:
             pending = begin_write(self.contract, values, self.workdir)
+        except AlreadyWritten as exc:
+            # The write ledger has this write's result from an earlier call
+            # (in this process or another) whose reply never arrived.
+            reply = dict(exc.result)
+            reply["not_sent_again"] = True
+            reply["next"] = (
+                "This write was already made once, and its result is above; "
+                "it was not sent again."
+            )
+            return None, reply
         except BaselineUnreadable as exc:
             return None, _not_written(str(exc))
         return (pending, key), None
 
-    def _finish(self, pending: Any, output: Any, attempted: bool) -> dict:
-        pending, key = pending
-        declared_by = {
+    def _declared_by(self) -> dict[str, str]:
+        return {
             name: ("operator" if name in self.pinned else "agent")
             for name in self.params
         }
+
+    def _executor(self) -> dict[str, str]:
+        return {
+            "kind": "agent",
+            "id": self.agent_id,
+            # Enters the receipt as a digest: which values the operator
+            # pinned and which the agent's tool call declared.
+            "build": "values-declared-by:"
+            + json.dumps(self._declared_by(), sort_keys=True),
+        }
+
+    def _finish(self, pending: Any, output: Any, attempted: bool) -> dict:
+        pending, key = pending
+        declared_by = self._declared_by()
         result = verify_write(
-            pending,
-            executor={
-                "kind": "agent",
-                "id": self.agent_id,
-                # Enters the receipt as a digest: which values the operator
-                # pinned and which the agent's tool call declared.
-                "build": "values-declared-by:"
-                + json.dumps(declared_by, sort_keys=True),
-            },
-            write_attempted=attempted,
+            pending, executor=self._executor(), write_attempted=attempted
         )
         reply = result.to_dict()
         reply["values_declared_by"] = declared_by

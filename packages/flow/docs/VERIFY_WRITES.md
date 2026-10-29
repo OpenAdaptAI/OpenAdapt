@@ -31,16 +31,19 @@ The contract belongs to whoever runs the agent. The agent can't change what it i
 In Python, wrap your agent's own write function. The same code works as a tool in the Claude Agent SDK, OpenAI Agents, LangGraph, or a plain script:
 
 ```python
-from openadapt.verify import WriteContract, verified_write
+from openadapt.verify import Actor, Contract, WriteBlocked, verified_write
 
-contract = WriteContract.load("contracts/order.yaml")
+contract = Contract.load("contracts/order.yaml")
+AGENT = Actor("agent", "orders-agent")
 
 def save_order(customer: str, product: str, units: str) -> dict:
     values = {"customer": customer, "product": product, "units": units}
-    with verified_write(contract, values, "~/.openadapt/verify",
-                        executor={"kind": "agent", "id": "orders-agent"}) as write:
-        my_orders_api.create(**values)        # however your agent writes
-    return write.result.to_dict()             # verified, or a refusal
+    try:
+        with verified_write(contract, values, actor=AGENT) as write:
+            my_orders_api.create(**values)    # however your agent writes
+    except WriteBlocked as stop:              # held, or the store can't be read
+        return {"written": False, "reason": stop.reason}
+    return write.result.to_dict()             # CONFIRMED, or a refusal
 ```
 
 For the Claude Agent SDK, OpenAI Agents SDK, LangGraph and CrewAI, `verified(tool, contract=...)` wraps an existing tool in one line: [AGENT_FRAMEWORKS.md](AGENT_FRAMEWORKS.md).
@@ -61,10 +64,12 @@ The agent calls `verify_begin` before the write, makes the write its own way, th
 
 | Result | What it means | What to do |
 | --- | --- | --- |
-| `verified: true` | The system of record shows exactly the declared write. The result carries a receipt (`receipt_sha256`). | Nothing more. |
-| `REFUTED` | The store shows a different write: a wrong value, or a duplicate. | Don't retry. A person fixes the record. |
-| `RECONCILIATION_REQUIRED` | The store doesn't show the write, or couldn't be read. It may still land. | Don't retry, or it could save twice. A person checks. |
-| `ok_to_write: false` (from `verify_begin`) | The store couldn't be read before the write. | Don't make the write. |
+| `outcome: CONFIRMED` (`verified: true`) | The system of record shows exactly the declared write. The result carries a receipt (`receipt_sha256`). | Nothing more. |
+| `outcome: REFUTED` | The store shows a different write: a wrong value, another record, or a duplicate. | Don't retry. A person fixes the record. |
+| `outcome: UNCERTAIN` (`verdict: RECONCILIATION_REQUIRED`) | The store doesn't show the write, or couldn't be read. It may still land. | Don't retry, or it could save twice. The ledger holds it until a read-back finds it or a person checks. |
+| `ok_to_write: false` (from `verify_begin`), or `WriteBlocked` | The store couldn't be read before the write, or the ledger holds an earlier attempt of the same write. | Don't make the write. |
+
+Every result also says what it establishes (`scope`): the read path (database, API, FHIR, audit log or screen), the stores read, the time window, and what it doesn't cover, such as email, other services, and writes that land after the read. The ledger keeps a write that may have landed from being sent again, also after a restart or by another worker (`openadapt verify ledger list`). See [VERIFIER_API.md](VERIFIER_API.md).
 
 A verified result proves the system of record holds what was declared. It doesn't prove the write was authorized: `values_declared_by` says who declared the values (the agent), and `authorization` is `unbound` unless you pass an operator's authorization reference to `begin_write`. The receipt is sealed with this computer's Seal key (`seal_path`; manage the key with `openadapt-flow local-seal key`, or turn Seals off with `OPENADAPT_LOCAL_SEAL=off`), so someone else can check it was issued here and not written by the agent. `seal` says `sealed`, `off`, or `unsealed:` with why the key couldn't be used.
 

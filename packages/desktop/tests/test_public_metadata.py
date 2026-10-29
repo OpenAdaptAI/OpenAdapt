@@ -191,10 +191,11 @@ def test_monorepo_engine_release_publishes_only_a_green_reviewed_version() -> No
         "    branches: [main]" in triggers
     )
     assert "  push:" not in triggers
-    # The subject is classified first, so an unrelated commit never reaches
-    # the release-state check.
+    # The subject is chosen first: the newest first-parent commit that changed
+    # Desktop, whichever Packages run started the release.
     assert subject < state < wait < unchanged
-    assert 'subject="${PACKAGES_HEAD_SHA}"' in gate
+    assert 'subject="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"' in gate
+    assert "--raw-field status=success" in gate
     assert "https://pypi.org/pypi/openadapt-desktop/${version}/json" in gate
     assert "partly published" in gate
     assert "actions/workflows/packages.yml/runs" in gate
@@ -295,7 +296,7 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
     flow_dependencies = [
         dependency for dependency in build_dependencies if dependency.startswith("openadapt-flow")
     ]
-    assert flow_dependencies == ["openadapt-flow[browser,console]==2.4.0"]
+    assert flow_dependencies == ["openadapt-flow[browser,console]==2.4.1"]
     # At or above the floor the bundled Flow declares for its ``capture``
     # extra; ``tests/test_capture_runtime_contract.py`` compares the two
     # authoritatively. Never below 1.2.1, because 1.2.0 and every release
@@ -306,8 +307,8 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
     assert "openadapt-privacy>=1.0.0" in dependencies
     assert not any(item.startswith("Development Status ::") for item in classifiers)
     assert "Development Status :: 2 - Pre-Alpha" not in classifiers
-    assert bundled_flow_version() == "2.4.0"
-    assert bundled_flow_banner() == "openadapt-flow 2.4.0"
+    assert bundled_flow_version() == "2.4.1"
+    assert bundled_flow_banner() == "openadapt-flow 2.4.1"
     assert 'name = "playwright"\nversion = "1.61.0"' in lock
     assert flow_dependencies[0] in notes
     assert "playwright==1.61.0" in notes
