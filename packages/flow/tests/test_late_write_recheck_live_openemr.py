@@ -99,6 +99,8 @@ def _state_dir(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     from openadapt_flow import verifier
 
     monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "verifier-state")
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / "ledger"))
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
 
 
 def _lname() -> str:
@@ -203,14 +205,12 @@ def _create(fx: Any, actor: Any, body: dict[str, str]) -> None:
 
 
 def _verified_save(fx: Any, actor: Any, contract: Any, body: dict[str, str]) -> Any:
-    from openadapt_flow.verifier import Actor, capture, verify_write
+    from openadapt_flow.verifier import Actor, begin_write, verify_write
 
     params = {name: body[name] for name in FIELDS}
-    before = capture(contract, params)
+    pending = begin_write(contract, params, actor=Actor("script", ACTOR_ID))
     _create(fx, actor, body)
-    return verify_write(
-        contract, before, params=params, actor=Actor("script", ACTOR_ID)
-    )
+    return verify_write(pending)
 
 
 def _recheck(contract: Any, result: Any, body: dict[str, str], **kw: Any) -> Any:

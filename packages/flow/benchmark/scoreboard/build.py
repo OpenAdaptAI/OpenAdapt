@@ -174,6 +174,7 @@ def build() -> dict[str, Any]:
         else None,
         "tasks": {},
         "claims": claims(),
+        "lifecycle": lifecycle(),
     }
     for task, arms in sorted(tasks.items()):
         out["tasks"][task] = {}
@@ -326,6 +327,78 @@ THREE_BARS = (
         "worklist-std-2026-10-19",
     ),
 )
+
+
+LIFECYCLE_RESULTS = HERE.parent / "lifecycle" / "results"
+
+
+def lifecycle(results: Path = LIFECYCLE_RESULTS) -> dict[str, Any]:
+    """Total lifecycle cost per 1,000 verified items, per arm, from each
+    committed comparison run (``lifecycle/arms/compare.py``). Only runs with a
+    REPORT.md beside economics.json are listed."""
+
+    runs: dict[str, Any] = {}
+    for econ in sorted(results.glob("*/economics.json")):
+        if not (econ.parent / "REPORT.md").is_file():
+            continue
+        data = json.loads(econ.read_text())
+        plan_path = econ.parent / "plan.json"
+        plan = json.loads(plan_path.read_text()) if plan_path.is_file() else {}
+        runs[econ.parent.name] = {
+            "plan": {k: plan.get(k) for k in ("seed", "items", "days", "app")},
+            "prices_as_of": data.get("prices_as_of"),
+            "cost_model": data.get("cost_model"),
+            "arms": [
+                {
+                    "arm": a["arm"],
+                    "model": (a.get("describe") or {}).get("model"),
+                    "items": a["items"],
+                    "verified": a["verified"],
+                    "automated": a["automated"],
+                    "silent_wrong": a["silent_wrong"],
+                    "false_stop": a["false_stop"],
+                    "false_stop_denominator": a["false_stop_denominator"],
+                    **{f"per_1000_{k}": v for k, v in a["per_1000_verified"].items()},
+                }
+                for a in data["arms"]
+            ],
+            "winners": data.get("winners", []),
+        }
+    return runs
+
+
+def _lifecycle_markdown(lc: dict[str, Any]) -> list[str]:
+    if not lc:
+        return []
+    lines = [
+        "## OpenEMR: total lifecycle cost per 1,000 verified items",
+        "",
+        "Every arm ran one seeded worklist with the same UI changes and faults, "
+        "judged by the same oracle and the same scripted operator "
+        "(`benchmark/lifecycle`). Setup once, per-item costs scaled to 1,000 "
+        "verified items, maintenance at the assumed UI-change rate. People's "
+        "time is priced at an assumed rate; the full report gives every "
+        "component in minutes and the bands.",
+        "",
+    ]
+    for run, r in lc.items():
+        lines += [
+            f"### `{run}` (seed {r['plan'].get('seed')}, {r['plan'].get('items')} items; "
+            f"prices {r['prices_as_of']}; [report](../lifecycle/results/{run}/REPORT.md))",
+            "",
+            "| Arm | Model | Verified of items | Automated | Silent wrong | False stops | Setup $ | Model $ | Operator min | Maint. $ | Total $ |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for a in r["arms"]:
+            lines.append(
+                f"| {a['arm']} | {a['model'] or '-'} | {a['verified']} of {a['items']} | "
+                f"{a['automated']} | {a['silent_wrong']} | {a['false_stop']} of "
+                f"{a['false_stop_denominator']} | {_fmt(a['per_1000_setup_usd'])} | "
+                f"{_fmt(a['per_1000_item_model_usd'])} | {_fmt(a['per_1000_operator_min'])} | "
+                f"{_fmt(a['per_1000_maintenance_usd'])} | {_fmt(a['per_1000_total_usd'])} |"
+            )
+        lines.append("")
+    return lines
 
 
 def _three_bars_markdown(sb: dict[str, Any]) -> list[str]:
@@ -562,6 +635,7 @@ def markdown(sb: dict[str, Any]) -> str:
         lines.append("")
     lines += _three_bars_markdown(sb)
     lines += _claims_markdown(sb.get("claims", {}))
+    lines += _lifecycle_markdown(sb.get("lifecycle", {}))
     lines.append(
         f"Claude API spend so far: ${sb['spend_usd']}."
         if sb["spend_usd"] is not None

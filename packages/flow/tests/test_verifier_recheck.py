@@ -29,7 +29,7 @@ from openadapt_flow.verifier import (
     RecheckState,
     VerifierError,
     WriteResult,
-    capture,
+    begin_write,
     recheck,
     verify_write,
 )
@@ -57,6 +57,10 @@ def _params(n: int) -> dict[str, str]:
 
 @pytest.fixture(autouse=True)
 def _used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Each test keeps its ledger, Seal key and issuance records apart."""
+
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / "ledger"))
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
     used = tmp_path / "used"
     monkeypatch.setattr(verifier, "USED_DIR", used)
     return used
@@ -160,9 +164,9 @@ def _save_sql(n: int) -> list[str]:
 
 
 def _save(contract: Contract, db: Path, n: int, *stray: str) -> WriteResult:
-    before = capture(contract, _params(n))
+    before = begin_write(contract, _params(n), actor=BOT)
     _sql(db, *_save_sql(n), *stray)
-    return verify_write(contract, before, params=_params(n), actor=BOT)
+    return verify_write(before)
 
 
 def _first(tmp_path: Path, **doc: Any) -> tuple[Contract, Path, WriteResult]:
@@ -338,8 +342,8 @@ def test_p2_a_later_write_that_landed_late_excuses_nothing(
     tmp_path: Path, due_now: None
 ) -> None:
     contract, db, first = _first(tmp_path)
-    before = capture(contract, _params(3))
-    second = verify_write(contract, before, params=_params(3), actor=BOT)
+    before = begin_write(contract, _params(3), actor=BOT)
+    second = verify_write(before)
     assert second.status == "unconfirmed"  # its save didn't land in its window
     assert second.recheck is not None
     _sql(db, *_save_sql(3))  # its rows land after its window
@@ -352,11 +356,11 @@ def test_p3_the_earlier_writes_late_harm_inside_a_later_window_is_uncertain(
     tmp_path: Path, due_now: None
 ) -> None:
     contract, db, first = _first(tmp_path)
-    before = capture(contract, _params(3))
+    before = begin_write(contract, _params(3), actor=BOT)
     # The first write's background job lands while the second write runs.
     harm = "UPDATE history_data SET tobacco = 'Current' WHERE pid = 2"
     _sql(db, *_save_sql(3), harm)
-    second = verify_write(contract, before, params=_params(3), actor=BOT)
+    second = verify_write(before)
     assert second.status == "refuted"
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
@@ -366,9 +370,9 @@ def test_p4_a_removal_a_later_window_reported_is_uncertain(
     tmp_path: Path, due_now: None
 ) -> None:
     contract, db, first = _first(tmp_path)
-    before = capture(contract, _params(3))
+    before = begin_write(contract, _params(3), actor=BOT)
     _sql(db, *_save_sql(3), "DELETE FROM history_data WHERE pid = 1")
-    second = verify_write(contract, before, params=_params(3), actor=BOT)
+    second = verify_write(before)
     assert second.status == "refuted"
     late = _recheck(contract, first, excused_by=[second])
     assert late.outcome == "UNCERTAIN", late.reasons
@@ -378,7 +382,7 @@ def test_a_removal_a_verified_later_window_explained_is_excused(
     tmp_path: Path, due_now: None
 ) -> None:
     contract, db, first = _first(tmp_path)
-    before = capture(contract, _params(3))
+    before = begin_write(contract, _params(3), actor=BOT)
     _sql(
         db,
         *_save_sql(3),
@@ -386,7 +390,7 @@ def test_a_removal_a_verified_later_window_explained_is_excused(
         "INSERT INTO log (user, patient_id, event, tbl) "
         "VALUES ('nurse', 1, 'delete', 'history_data')",
     )
-    second = verify_write(contract, before, params=_params(3), actor=BOT)
+    second = verify_write(before)
     assert second.verified, second.reasons  # the nurse's delete, attributed
     assert _recheck(contract, first).outcome == "REFUTED"
     late = _recheck(contract, first, excused_by=[second])
@@ -575,23 +579,23 @@ def test_an_excuse_that_began_before_the_post_save_read_is_refused(
 ) -> None:
     db = _db(tmp_path)
     contract = Contract.from_dict(_doc(db))
-    early = capture(contract, _params(3))  # before the first write's verdict
+    early = begin_write(
+        contract, _params(3), actor=BOT
+    )  # before the first write's verdict
     time.sleep(1.1)  # whole-second times: a clear second apart
     first = _save(contract, db, 2)
     assert first.verified
     _sql(db, *_save_sql(3))
-    second = verify_write(contract, early, params=_params(3), actor=BOT)
+    second = verify_write(early)
     with pytest.raises(VerifierError, match="started before"):
         _recheck(contract, first, excused_by=[second])
 
 
 def test_an_excuse_by_another_actor_is_refused(tmp_path: Path, due_now: None) -> None:
     contract, db, first = _first(tmp_path)
-    before = capture(contract, _params(3))
+    before = begin_write(contract, _params(3), actor=Actor("agent", "other-bot"))
     _sql(db, *_save_sql(3))
-    theirs = verify_write(
-        contract, before, params=_params(3), actor=Actor("agent", "other-bot")
-    )
+    theirs = verify_write(before)
     assert theirs.recheck is not None
     with pytest.raises(VerifierError, match="different actor"):
         _recheck(contract, first, excused_by=[theirs])
@@ -612,3 +616,43 @@ def test_frame_digest_is_unchanged_without_the_field() -> None:
     )
     assert spec.digest() != with_field.digest()
     assert "recheck_after_s" not in json.dumps(spec.model_dump())
+
+
+def test_the_state_is_saved_beside_the_writes_ledger_folder(tmp_path: Path) -> None:
+    _, _, result = _first(tmp_path)
+    assert result.recheck is not None and result.recheck.path is not None
+    assert result.recheck.path.name == "recheck.json"
+    assert result.receipt_path is not None
+    assert result.recheck.path.parent == Path(result.receipt_path).parent
+    assert os.stat(result.recheck.path).st_mode & 0o777 == 0o600
+    assert result.to_dict()["recheck_due_at"] == result.recheck_due_at
+    # The scope says the result is provisional until the recheck runs.
+    assert any(
+        f"recheck due at {result.recheck_due_at}" in line
+        for line in result.scope.not_covered
+    )
+
+
+def test_without_a_recheck_the_scope_keeps_delayed_writes_uncovered(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db, recheck_after_s=None))
+    result = _save(contract, db, 2)
+    assert "writes that land after read_at (delayed or queued writes)" in (
+        result.scope.not_covered
+    )
+
+
+def test_the_deprecated_capture_form_schedules_a_recheck_too(
+    tmp_path: Path, due_now: None
+) -> None:
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db))
+    with pytest.warns(DeprecationWarning):
+        before = verifier.capture(contract, _params(2))
+    _sql(db, *_save_sql(2))
+    result = verify_write(contract, before, params=_params(2), actor=BOT)
+    assert result.verified and result.recheck is not None
+    _sql(db, "UPDATE patient_data SET email = 'x@example.test' WHERE pid = 1")
+    assert _recheck(contract, result).outcome == "REFUTED"

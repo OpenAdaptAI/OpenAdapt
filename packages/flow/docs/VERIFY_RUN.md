@@ -250,8 +250,10 @@ When it is set and the run is verified:
 - `evidence.frame.recheck` says what the recheck compares
   (`database_since_post_save`), when the post-save read was taken, and a
   salted digest of the state it compares with.
-- The caller keeps that state privately (`WriteResult.recheck`, saved with
-  `RecheckState.save`, mode 0600). It holds the run's baseline and its
+- The caller keeps that state privately (`WriteResult.recheck`). Through
+  `begin_write` and `verify_write`, it is saved as `recheck.json` in the
+  write's folder, beside `baseline.json` (mode 0600); `RecheckState.save`
+  writes it elsewhere. It holds the run's baseline and its
   post-save snapshot as keyed MACs (no values, as the baseline does), the
   audit entries seen then as keyed hashes, what the run's frame reported as
   collateral (row key MACs and entry hashes), and the run's salt.

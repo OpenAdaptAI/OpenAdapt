@@ -47,6 +47,8 @@ Flow runs without its benchmark package and accepts a pinned config with Windows
 - `frame.database.profile: openemr` applies a versioned profile of the bookkeeping OpenEMR writes on its own (`openadapt_flow.app_profiles`). A rule may not excuse a patient-data table, and the receipt names the profile version and the rules it used ([#1604](https://github.com/OpenAdaptAI/OpenAdapt/pull/1604)).
 - `openadapt_flow.verifier` is a stable Python API for checking one write: `capture` reads the baseline before the write, and `verify_write` returns `verified`, `refuted` or `unconfirmed` with the checks and the receipt digest ([#1588](https://github.com/OpenAdaptAI/OpenAdapt/pull/1588)).
 - Skills can be pulled from an attested registry, bound to the user's own instance and qualified there before they run. A shipped SQL read-back runs on a read-only session and may only be a plain `SELECT` ([#1623](https://github.com/OpenAdaptAI/OpenAdapt/pull/1623), [#1624](https://github.com/OpenAdaptAI/OpenAdapt/pull/1624)).
+- A contract value can declare how the store saves what was entered (`stored: upper` or `lower`), so the check expects exactly that stored form, for example a street saved in capitals ([#1586](https://github.com/OpenAdaptAI/OpenAdapt/pull/1586)).
+- A contract value can declare its kind (`phone`, `date` or `email`), and record matching, `field_equals`, the frame and the source round trip compare it in that kind's canonical form. A value that can't be read in its kind, such as a numeric date with no `date_order`, matches nothing ([#1597](https://github.com/OpenAdaptAI/OpenAdapt/pull/1597)).
 
 ## v2.4.0 (2026-10-25)
 

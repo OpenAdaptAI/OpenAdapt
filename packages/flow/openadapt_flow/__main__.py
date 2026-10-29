@@ -2800,10 +2800,11 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                     viewport=_VIEWPORT,
                     record_video_dir=video_dir,
                     record_video_size=_VIEWPORT,
+                    service_workers="block",
                 )
                 page = context.new_page()
             else:
-                page = browser.new_page(viewport=_VIEWPORT)
+                page = browser.new_page(viewport=_VIEWPORT, service_workers="block")
             page.goto(url)
             try:
                 report = run_on_page(page, entry_url=url)
