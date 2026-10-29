@@ -47,7 +47,8 @@ A row of a per-user table names no record (OpenEMR's ``user_settings``,
 owned by ``setting_user``). Owner-scoped attribution covers it: for a table
 whose rows carry an owner (``attribution.owners``, and the app profile's
 ``own_rows`` tables), another user's write entry of the matching kind that
-names the table explains one changed row they own. It never explains a row
+names the table explains one changed row they own, when the row names no
+record (its record key is empty). It never explains a row
 of anyone else, a row whose owner changed, or any row of a table the bot also
 wrote in the window: its entry names no row, so any of them may be its own
 change. An owner that can't be read or resolved explains nothing. What the log can't show stays a
@@ -155,7 +156,10 @@ class FrameAttribution(BaseModel):
     #: another user's when one of their write entries in the window names
     #: the table and the row is theirs (``owner.by`` resolves the entry's
     #: actor to the column's value). The app profile's ``own_rows`` tables
-    #: are added to these.
+    #: are added to these. Only a row with no record (its ``record_key`` or
+    #: ``record_keys`` value empty) is judged this way, and a contract may
+    #: name only a per-user table the profile reviewed: a bookkeeping table
+    #: no column or append-only rule names (credentials never).
     owners: dict[str, Owner] = Field(default_factory=dict)
     #: ``record_field`` only: a version, revision or ETag on each record.
     version_field: Optional[str] = None
@@ -438,9 +442,27 @@ class FrameSpec(BaseModel):
             raise ValueError(
                 "attribution.owners name tables: they apply with frame.database"
             )
+        profile = self.database.loaded_profile()
+        if profile is None:
+            raise ValueError(
+                "attribution.owners need frame.database.profile: only a reviewed "
+                "bookkeeping table may name its rows' owner"
+            )
+        reviewed = {table_name(t) for t in profile.bookkeeping_tables}
+        # Credentials and other column rules stay on the acting user's row:
+        # a table any non-own_rows rule names never gets an owner here.
+        ruled = {table_name(r.table) for r in profile.rules if r.mode != "own_rows"}
         theirs = self.database.profile_owners()
         for table, owner in a.owners.items():
-            known = theirs.get(table_name(table))
+            name = table_name(table)
+            if name not in reviewed or name in ruled:
+                raise ValueError(
+                    f"attribution.owners[{table!r}]: only a reviewed per-user "
+                    "table of the app profile (an own_rows table, or a "
+                    "bookkeeping table no column or append-only rule names) "
+                    "may name an owner; credentials never do"
+                )
+            known = theirs.get(name)
             if known is not None and known != owner:
                 raise ValueError(
                     f"attribution.owners[{table!r}] differs from the app "
@@ -1014,7 +1036,10 @@ def judge_frame(
         by the bot for the table leaves it unexplained (or the bot's)."""
 
         table = table_of(name)
-        owner = owners.get(table_name(table)) if table else None
+        if table is None:
+            return "unattributed"
+        here = table_name(table)
+        owner = owners.get(here)
         if (
             owner is None
             or window_entries is None
@@ -1047,10 +1072,13 @@ def judge_frame(
                 return held == hasher(col, value)  # type: ignore[misc]
             return str(held) == value
 
+        # Compared as the profile names tables (lower-cased, no schema), on
+        # both sides: an entry naming ``USER_SETTINGS`` names this table.
         entries = [
             e
             for e in window_entries
-            if str(get_path(e, attribution.table_field)) == table
+            if get_path(e, attribution.table_field) not in (None, "")
+            and table_name(str(get_path(e, attribution.table_field))) == here
             and get_path(e, attribution.actor_field) not in (None, "")
         ]
         if any(str(get_path(e, attribution.actor_field)) in self_ids for e in entries):
@@ -1111,7 +1139,21 @@ def judge_frame(
                 if attribution.write_events:
                     used.add(id(e))
                 return "other"
-            return owner_scoped(name, before, after)
+            # The row names a record and no entry names it: an entry for
+            # another record of the same owner never explains it. A baseline
+            # MAC of an empty record key names no record.
+            hasher = hashers.get(name) if field else None
+            if (
+                hasher is not None
+                and field
+                and ref
+                in (
+                    hasher(field, None),
+                    hasher(field, ""),
+                )
+            ):
+                return owner_scoped(name, before, after)
+            return "unattributed"
         # record_field: the record says who last changed it.
         if after is None:
             return "unattributed"  # a removed record can't say who removed it

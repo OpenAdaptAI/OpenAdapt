@@ -21,9 +21,13 @@ What is real and what is not:
   records only when the ``audit_events_other`` global is on. The module turns
   it on before the baseline and restores the previous value afterwards.
 - In the controls, the bot's change to the second user's row is SQL, because
-  OpenEMR lets a user change only their own settings. The first control adds
-  the audit row OpenEMR would write for it (event ``other-update`` under the
-  bot's user name, the statement in ``comments``). The second adds none.
+  OpenEMR lets a user change only their own settings. In the first, the
+  second user sets their own setting through OpenEMR and the bot then changes
+  that same row, adding the audit row OpenEMR would write for it (event
+  ``other-update`` under the bot's user name, the statement in ``comments``)
+  filed under the chart it just saved. Only the rule that the bot's own entry
+  for a table makes every row of it the bot's refutes that. The second adds
+  no audit row at all.
 - The fixture's database isn't reachable from the host, so this module reads
   it with ``SELECT`` statements through the fixture's own ``docker compose
   exec`` channel and calls the frame judge (``judge_frame``) on the result,
@@ -323,9 +327,10 @@ def _lname() -> str:
     return "Ownerattr" + letters
 
 
-def _save_and_judge(fx: Any, during: Callable[[], None]) -> FrameVerdict:
-    """The bot saves a patient through the API while ``during`` runs; the
-    frame is judged over patient_data and user_settings."""
+def _save_and_judge(fx: Any, during: Callable[[str], None]) -> FrameVerdict:
+    """The bot saves a patient through the API, then ``during`` runs with
+    the saved chart's pid; the frame is judged over patient_data and
+    user_settings."""
 
     actor_name = _actor(fx)
     lname = _lname()
@@ -354,7 +359,11 @@ def _save_and_judge(fx: Any, during: Callable[[], None]) -> FrameVerdict:
     assert response.status_code == 201, (
         f"OpenEMR refused the patient write: HTTP {response.status_code}"
     )
-    during()
+    saved = _lines(
+        fx, f"SELECT pid FROM {DB}.patient_data WHERE lname = {_quote(lname)}"
+    )
+    assert len(saved) == 1, "the bot's save did not land exactly once"
+    during(saved[0])
 
     effect = Effect(
         kind=EffectKind.RECORD_WRITTEN,
@@ -391,7 +400,9 @@ def test_the_second_users_own_setting_is_theirs(
     openemr: Any, second_user: _SecondUser
 ) -> None:
     target = _target()
-    verdict = _save_and_judge(openemr, lambda: second_user.set_own_setting(target, 1))
+    verdict = _save_and_judge(
+        openemr, lambda _pid: second_user.set_own_setting(target, 1)
+    )
     owner = _user_id(openemr, SECOND_USER)
     rows = [r for r in _settings(openemr) if r["setting_label"] == target]
     assert [r["setting_user"] for r in rows] == [owner], (
@@ -405,29 +416,40 @@ def test_the_bot_changing_the_second_users_setting_refutes(
     openemr: Any, second_user: _SecondUser
 ) -> None:
     owner = _user_id(openemr, SECOND_USER)
-    own, theirs = _target(), _target()
+    target = _target()
 
-    def during() -> None:
-        # The second user changes their own setting through OpenEMR, and the
-        # bot writes another setting of theirs. OpenEMR lets a user write only
-        # their own settings, so the bot's write is SQL, with the audit row
-        # OpenEMR writes for it.
-        second_user.set_own_setting(own, 1)
+    def during(pid: str) -> None:
+        # The second user sets their own setting through OpenEMR (their
+        # entry for user_settings), then the bot changes that same row. One
+        # row, owned by the second user, with the second user's entry: only
+        # the rule that the bot's own entry for the table makes every row of
+        # it the bot's can refute. OpenEMR lets a user write only their own
+        # settings, so the bot's write is SQL, with the audit row OpenEMR
+        # would write, filed under the chart the bot just saved (so the
+        # audit-only check passes it).
+        second_user.set_own_setting(target, 1)
         statement = (
-            f"INSERT INTO user_settings (setting_user, setting_label, "
-            f"setting_value) VALUES ({owner}, '{theirs}', '1')"
+            f"UPDATE user_settings SET setting_value = '0' "
+            f"WHERE setting_user = {owner} AND setting_label = '{target}'"
         )
         _sql(
             openemr,
-            f"INSERT INTO {DB}.user_settings (setting_user, setting_label, "
-            f"setting_value) VALUES ({owner}, {_quote(theirs)}, '1');"
+            f"UPDATE {DB}.user_settings SET setting_value = '0' "
+            f"WHERE setting_user = {owner} AND setting_label = {_quote(target)};"
             f"INSERT INTO {DB}.log (date, event, user, groupname, comments, "
-            "patient_id, success) VALUES (NOW(), 'other-insert', "
-            f"{_quote(_actor(openemr))}, 'Default', {_quote(statement)}, 0, 1);",
+            "patient_id, success) VALUES (NOW(), 'other-update', "
+            f"{_quote(_actor(openemr))}, 'Default', {_quote(statement)}, "
+            f"{int(pid)}, 1);",
         )
 
     verdict = _save_and_judge(openemr, during)
     assert verdict.status == "refuted", verdict.reason
+    # Refuted by that rule: one row, the bot's, none unexplained, and no
+    # audit-only entry.
+    assert [(c.surface, c.attribution, c.audit_only) for c in verdict.collateral] == [
+        ("user_settings", "self", False)
+    ], verdict.reason
+    assert verdict.concurrent == [], verdict.reason
 
 
 def test_an_unlogged_change_to_the_second_users_setting_refutes(
@@ -437,10 +459,13 @@ def test_an_unlogged_change_to_the_second_users_setting_refutes(
     target = _target()
     verdict = _save_and_judge(
         openemr,
-        lambda: _sql(
+        lambda _pid: _sql(
             openemr,
             f"INSERT INTO {DB}.user_settings (setting_user, setting_label, "
             f"setting_value) VALUES ({owner}, {_quote(target)}, '1')",
         ),
     )
     assert verdict.status == "refuted", verdict.reason
+    assert [(c.surface, c.attribution) for c in verdict.collateral] == [
+        ("user_settings", "unattributed")
+    ], verdict.reason

@@ -139,21 +139,27 @@ Some rows belong to a user rather than a record, such as a user's own UI
 settings, so no log entry names them by record. With `frame.database` and
 an audit log that names the table each entry wrote (`table_field`), such a
 change is another user's when their own write entry in the window names the
-table and the row is theirs. The tables come from the app profile's
-`own_rows` rules (OpenEMR's `user_settings` and `recent_patients`) and from
-`attribution.owners`, in the profile's `owner` shape:
+table and the row is theirs. The tables are the app profile's `own_rows`
+tables (OpenEMR's `user_settings` and `recent_patients`), each with its
+`owner` (`{column, by}`). `by: username` compares the entry's actor with the
+column; `by: user_id` looks the actor's id up in the profile's `users`
+table. Table names compare lower-cased and without a schema, so an entry
+naming `USER_SETTINGS` or `openemr.user_settings` names `user_settings`.
 
-```yaml
-  attribution:
-    # ... audit_read with event_field, write_events and table_field
-    owners:
-      user_prefs: {column: owner_name, by: username}  # or by: user_id
-```
+`attribution.owners` can restate a profile table's owner in a contract, in
+the same shape. It can't add one: a table outside the profile's reviewed
+bookkeeping tables, or one that an append-only or column rule names (such
+as `users_secure`, whose owner is only for the acting user's sign-in
+counters), is refused, and so is a different owner for a profile table.
+Credentials never get an owner here.
 
-`by: username` compares the entry's actor with the column; `by: user_id`
-looks the actor's id up in the profile's `users` table. A contract may not
-give a profile table a different owner. Fail closed:
+Fail closed:
 
+- Only a row that names no record is judged by its owner: a row whose
+  `record_key` (or `record_keys`) value is empty, or a table without that
+  column. A row that names a chart is judged by its chart, and another
+  entry by the same user doesn't explain it. Without `record_key`, every
+  row names itself, and no row is judged by its owner.
 - Each entry explains one row, of the kind it wrote (insert, update or
   delete), owned by that entry's actor. A row of another user, or a row whose
   owner changed, is collateral.
@@ -165,6 +171,41 @@ give a profile table a different owner. Fail closed:
   unexplained.
 - What the log can't show stays a limit: a change the app writes without
   logging it can't be told from another user's.
+
+OpenEMR's `log` table has no table column, so the audit read takes the table
+from the statement OpenEMR logs in `comments`, and the write kind from the
+end of `event` (`patient-record-update`, `other-insert`). OpenEMR logs a
+`user_settings` or `recent_patients` write as an `other` event, which it
+records only when the `audit_events_other` global is on; with it off, such a
+change has no entry and stays unexplained. An encrypted comment
+(`log_comment_encrypt.encrypt = 'Yes'`) yields no table, so its entry
+explains nothing. On MariaDB:
+
+```yaml
+  attribution:
+    kind: audit_read
+    actor_field: user
+    self: [{param: bot_user}]
+    record_field: patient_id
+    record_key: pid
+    event_field: kind
+    write_events: [insert, update, delete]
+    insert_events: [insert]
+    delete_events: [delete]
+    table_field: tbl
+    read:
+      kind: sql
+      sql_driver: pymysql
+      sql_query: >-
+        SELECT l.id, l.user, l.patient_id,
+          SUBSTRING_INDEX(l.event, '-', -1) AS kind,
+          CASE WHEN IFNULL(e.encrypt, 'No') = 'Yes' THEN NULL ELSE
+            LOWER(REPLACE(REGEXP_SUBSTR(l.comments,
+              '(?i)(?<=insert into |update |delete from |replace into )[`a-z0-9_.]+'),
+              '`', ''))
+          END AS tbl
+        FROM log l LEFT JOIN log_comment_encrypt e ON e.log_id = l.id
+```
 
 Without `attribution`, every change outside the delta is collateral. A
 change is not proof that the executor made it: another user may have edited
