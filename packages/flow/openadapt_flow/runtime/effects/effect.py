@@ -91,6 +91,13 @@ class ValueExpr(BaseModel):
     #: reads the entered value back as its code. A value the map doesn't name
     #: resolves to nothing, so the check matches nothing and fails closed.
     map: Optional[dict[str, str]] = None
+    #: For a ``param`` the system of record stores transformed: how it stores
+    #: what was entered (OpenEMR's New Patient form saves street and city in
+    #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
+    #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). The check stays exact:
+    #: it expects the stored form, not any casing.
+    stored: Optional[Literal["upper", "lower"]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
@@ -102,6 +109,8 @@ class ValueExpr(BaseModel):
             raise ValueError("effect parameter name must not be empty")
         if self.map is not None and (self.param is None or not self.map):
             raise ValueError("a value map needs a parameter and at least one entry")
+        if self.stored is not None and self.param is None:
+            raise ValueError("a stored form applies to a parameter")
         return self
 
     @model_serializer(mode="wrap")
@@ -109,8 +118,10 @@ class ValueExpr(BaseModel):
         # A value without a map serializes exactly as before, so existing
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
-        if isinstance(data, dict) and data.get("map") is None:
-            data.pop("map", None)
+        if isinstance(data, dict):
+            for key in ("map", "stored"):
+                if data.get(key) is None:
+                    data.pop(key, None)
         return data
 
     def resolve(self, params: Mapping[str, object]) -> Optional[str]:
@@ -129,10 +140,21 @@ class ValueExpr(BaseModel):
             from openadapt_flow.runtime.authorization import runtime_param_text
 
             entered = runtime_param_text(params[self.param])  # type: ignore[arg-type]
-            if self.map is not None:
-                return self.map.get(entered)
-            return entered
+            return self.stored_form(entered)
         return self.literal
+
+    def stored_form(self, entered: str) -> Optional[str]:
+        """What the system of record stores for ``entered``: its code under
+        :attr:`map` (None when the map doesn't name it), then :attr:`stored`."""
+
+        value: Optional[str] = entered
+        if self.map is not None:
+            value = self.map.get(entered)
+        if value is not None and self.stored == "upper":
+            value = value.upper()
+        elif value is not None and self.stored == "lower":
+            value = value.lower()
+        return value
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
         """Return a pure-literal copy of this expression bound to ``params``."""

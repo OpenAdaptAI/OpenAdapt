@@ -345,37 +345,47 @@ class RoundTrip:
         }
 
 
-def bound_fields(effects: Any) -> dict[str, str]:
-    """Parameter name -> record field, from the effects' selectors and values."""
+def bindings(effects: Any) -> dict[str, tuple[str, Any]]:
+    """Parameter name -> (record field, value expression), each pair taken
+    from one place in one effect, so a field's transform is never another
+    field's. A parameter bound two different ways is left out: its round
+    trip can't be compared, so it stays unchecked."""
 
-    out: dict[str, str] = {}
+    out: dict[str, tuple[str, Any]] = {}
+    ambiguous: set[str] = set()
+
+    def add(param: str, record_field: str, expr: Any) -> None:
+        seen = out.get(param)
+        transform = (expr.map, expr.stored)
+        if seen is None:
+            out[param] = (record_field, expr)
+        elif seen[0] != record_field or (seen[1].map, seen[1].stored) != transform:
+            ambiguous.add(param)
+
     for effect in effects:
         for record_field, expr in effect.match.items():
             if expr.param is not None:
-                out.setdefault(expr.param, record_field)
+                add(expr.param, record_field, expr)
         if effect.field and effect.value is not None and effect.value.param:
-            out.setdefault(effect.value.param, effect.field)
-    return out
+            add(effect.value.param, effect.field, effect.value)
+    return {k: v for k, v in out.items() if k not in ambiguous}
 
 
-def bound_maps(effects: Any) -> dict[str, dict[str, str]]:
-    """Parameter name -> the value map its field declares (label -> code).
+def bound_fields(effects: Any) -> dict[str, str]:
+    """Parameter name -> record field (:func:`bindings`)."""
 
-    The map comes from the same binding :func:`bound_fields` picks for the
-    parameter (the first one), so a map is never applied to another field.
-    """
+    return {param: field for param, (field, _expr) in bindings(effects).items()}
 
-    first: dict[str, Any] = {}
-    for effect in effects:
-        for expr in effect.match.values():
-            if expr.param is not None:
-                first.setdefault(expr.param, expr)
-        if effect.field and effect.value is not None and effect.value.param:
-            first.setdefault(effect.value.param, effect.value)
+
+def bound_maps(effects: Any) -> dict[str, Any]:
+    """Parameter name -> the value expression that says how its field stores
+    what was entered: a label's code (``map``), a stored form (``stored``).
+    From the same effect as the field (:func:`bindings`)."""
+
     return {
-        param: dict(expr.map)
-        for param, expr in first.items()
-        if getattr(expr, "map", None)
+        param: expr
+        for param, (_field, expr) in bindings(effects).items()
+        if expr.map or expr.stored
     }
 
 
@@ -385,7 +395,7 @@ def round_trip(
     fields: Mapping[str, str],
     documents: Mapping[str, Any],
     second: Extractor,
-    maps: Optional[Mapping[str, Mapping[str, str]]] = None,
+    maps: Optional[Mapping[str, Any]] = None,
 ) -> RoundTrip:
     """Compare ``record`` (as read back) with the source of each value.
 
@@ -423,12 +433,20 @@ def round_trip(
         mapping = (maps or {}).get(name)
         if mapping is not None and source_value is not None:
             # The document shows the label, the record stores its code (a
-            # state's name and "MA", a provider's name and their id).
-            source_value = mapping.get(source_value.strip())
+            # state's name and "MA", a provider's name and their id), or a
+            # stored form (a street in capitals).
+            source_value = (
+                mapping.get(source_value.strip())
+                if isinstance(mapping, Mapping)
+                else mapping.stored_form(source_value.strip())
+            )
         stored = "" if record.get(record_field) is None else str(record[record_field])
+        coded = mapping is not None and (
+            isinstance(mapping, Mapping) or getattr(mapping, "map", None) is not None
+        )
         if source_value is None:
             checks.append(FieldCheck(name, "missing", stored))
-        elif mapping is not None:
+        elif coded:
             # A code is the exact stored value, as ``field_equals`` compares
             # it: "PR1a" is not "pr1A", the label's kind doesn't apply, and an
             # empty code agrees only with an empty (or unsaved) field.
