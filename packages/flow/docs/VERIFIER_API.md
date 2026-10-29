@@ -145,8 +145,19 @@ outcome isn't known.
 - an optional caller `write_key`.
 
 Timeouts, the window and the frame are left out of the identity, so editing
-them between a crash and a restart can't make the same write look new. The
-same write to another store is its own write.
+them between a crash and a restart can't make the same write look new. An
+address is spelled one way:
+
+- scheme and host lower case;
+- a loopback host as `loopback`;
+- no default port;
+- no trailing slash.
+
+Environment variable names (`*_env`, for example the token that picks a
+tenant) stay in the identity; secret values don't. The same write to another
+store is its own write. But if the same effects and values are open or
+unresolved under another store address, `begin_write` holds the write: a
+hold beats a resend.
 
 The HMAC key is a secret in the ledger folder (mode 0600), so the ledger
 never holds values or plain digests of them. A landed write without a
@@ -228,8 +239,20 @@ from just before its baseline read to the end of its read-back.
   Then the result is `UNCERTAIN` with `landed: true` and `review: true`. It
   isn't confirmed, and it's never sent again. It stays listed in `openadapt
   verify ledger list` until a person releases it, since a count can't name
-  the records. A stale or abandoned attempt, or one on another store, never
-  excuses anything, and a breach nothing explains stays `REFUTED`.
+  the records. While it's under review, an identical call is handed back
+  even after `repeat_s`, so no later attempt hides it. An abandoned attempt,
+  or one on another store, never excuses anything, and a breach nothing
+  explains stays `REFUTED`.
+- **Which open attempts count.** An attempt still open counts while its
+  owner holds the lease, or for the contract's window after it began, since
+  a write it sent before its owner died may still land. Once a person
+  releases an attempt, it's closed. Two concurrent tasks with the same
+  values and different write keys both end `UNCERTAIN` and wait for a
+  person. That's the conservative call.
+- **Lease checks.** Checking whether another key's owner is alive takes
+  that key's lease for an instant. A `begin_write` for that key at the same
+  moment is refused as in flight. The refusal is safe, but the caller sees
+  it.
 
 **What's kept on disk.** While an attempt may still need a read-back, its
 baseline and values stay in its private folder (mode 0700, files 0600) next
@@ -238,7 +261,7 @@ good (landed, refuted, retry-safe or released), they're removed. Receipts
 stay; they hold no record values.
 
 **People.** `openadapt verify ledger list` shows open and held keys (no
-values). `release KEY --reason TEXT` appends a `released` event after a
+values). `release KEY --by NAME --reason TEXT` appends a `released` event after a
 person checked the record. `reconcile [KEY]` reads back.
 
 ## Modules

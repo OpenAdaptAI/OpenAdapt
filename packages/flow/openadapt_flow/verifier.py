@@ -271,6 +271,13 @@ class Contract:
         )
 
     @property
+    def shape(self) -> str:
+        """SHA-256 of the effects alone, without the store: the same write,
+        wherever it is sent. Used only to hold, never to hand back."""
+
+        return _digest([_strip(e.model_dump(mode="json")) for e in self.config.effects])
+
+    @property
     def identity(self) -> str:
         """SHA-256 of what the write is and where: each effect's kind, target
         and values, unbound, and :attr:`store`. Timings, the window and the
@@ -311,21 +318,56 @@ class Contract:
 _TIMINGS = frozenset(
     {"timeout_s", "poll_interval_s", "approval_wait_s", "max_execution_window_s"}
 )
-_SECRET = re.compile(r"password|secret|token|auth|header|cookie|credential", re.I)
-_LOOPBACK = re.compile(r"(?<=//)(localhost|127\.0\.0\.1|\[::1\])(?=[:/]|$)", re.I)
+#: Keys whose values are secrets themselves. ``*_env`` keys name an
+#: environment variable, which tells tenants apart and holds no secret.
+_SECRET = re.compile(r"password|secret|token|cookie|header|credential|value$", re.I)
+_URL = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+_DEFAULT_PORTS = {"http": 80, "https": 443, "mysql": 3306, "postgresql": 5432}
+
+
+def _location(value: str) -> str:
+    """One spelling per address: scheme and host lower case, a loopback host
+    as ``loopback``, no default port, no trailing slash."""
+
+    if not _URL.match(value):
+        return value.rstrip("/") if value.endswith("/") and len(value) > 1 else value
+    from urllib.parse import urlsplit, urlunsplit
+
+    try:
+        parts = urlsplit(value)
+        port = parts.port
+    except ValueError:
+        return value
+    scheme = parts.scheme.lower()
+    host = (parts.hostname or "").lower()
+    if host in _LOOPBACK:
+        host = "loopback"
+    if port is not None and port != _DEFAULT_PORTS.get(scheme):
+        host = f"{host}:{port}"
+    return urlunsplit((scheme, host, parts.path.rstrip("/"), parts.query, ""))
 
 
 def _strip(value: Any, *, drop_secrets: bool = False) -> Any:
     if isinstance(value, Mapping):
-        return {
-            str(k): _strip(v, drop_secrets=drop_secrets)
-            for k, v in value.items()
-            if str(k) not in _TIMINGS and not (drop_secrets and _SECRET.search(str(k)))
-        }
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            name = str(k)
+            if name in _TIMINGS:
+                continue
+            secret = (
+                drop_secrets
+                and not name.endswith("_env")
+                and not isinstance(v, (Mapping, list, tuple))
+                and _SECRET.search(name)
+            )
+            if not secret:
+                out[name] = _strip(v, drop_secrets=drop_secrets)
+        return out
     if isinstance(value, (list, tuple)):
         return [_strip(v, drop_secrets=drop_secrets) for v in value]
     if isinstance(value, str):
-        return _LOOPBACK.sub("loopback", value)
+        return _location(value)
     return value
 
 
@@ -594,6 +636,7 @@ def begin_write(
     try:
         key = led.key_for(contract.identity, values, write_key)
         values_key = led.key_for(contract.identity, values, None)
+        shape_key = led.key_for(contract.shape, values, write_key)
         lease = led.backend.lease(key)
     except LedgerError as exc:
         raise WriteHeld(f"the write ledger can't be used ({exc})") from exc
@@ -604,6 +647,7 @@ def begin_write(
         )
     try:
         _settle(led, key, contract, params, actor)
+        _hold_elsewhere(led, key, shape_key)
         folder = (
             _new_folder(Path(workdir), write_id)
             if workdir is not None
@@ -625,6 +669,7 @@ def begin_write(
             contract=contract.identity,
             values_key=values_key,
             store=contract.store,
+            shape_key=shape_key,
             t0=started,
             records=sum(int(e.expected_count or 1) for e in contract.config.effects),
             actor_kind=actor.kind,
@@ -743,6 +788,25 @@ def _settle(
         "releases it",
         key=key,
     )
+
+
+def _hold_elsewhere(led: Ledger, key: str, shape_key: str) -> None:
+    """Hold when the same write, under another store address (an edited
+    contract, an alias), is open or unresolved: a hold beats a resend."""
+
+    for other, begun, _resolved in led.attempts():
+        if other == key or begun.get("shape_key") != shape_key:
+            continue
+        attempt = led.latest(other)
+        if attempt is None or attempt.attempt_id != begun.get("attempt"):
+            continue
+        if led.state(attempt) in ("open", "uncertain", "held"):
+            raise WriteHeld(
+                "the same write, under another address for the store, is in "
+                "flight or unresolved; a person checks which store it went to "
+                "(openadapt verify ledger list)",
+                key=key,
+            )
 
 
 def _reconcile(
@@ -960,20 +1024,26 @@ def _downgrade(
 
 
 def _overlapping(
-    led: Ledger, own_key: str, since: float, until: float
+    led: Ledger, own_key: str, since: float, until: float, window_s: float
 ) -> list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]]:
     """Attempts of other keys whose write could have landed between
     ``since`` (this attempt's baseline read began) and ``until`` (its
     read-back ended). The same key's earlier attempts resolved before this
-    one began: its lease orders them."""
+    one began: its lease orders them. An attempt still open counts while its
+    owner is alive, or for ``window_s`` after it began (its owner died, and
+    a write it sent may still land); a released one is closed."""
 
-    return [
-        (key, begun, resolved)
-        for key, begun, resolved in led.attempts()
-        if key != own_key
-        and float(begun.get("t0") or begun.get("t") or 0.0) <= until
-        and (resolved is None or float(resolved.get("t") or until) >= since)
-    ]
+    out: list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]] = []
+    for key, begun, resolved in led.attempts():
+        began = float(begun.get("t0") or begun.get("t") or 0.0)
+        if key == own_key or began > until:
+            continue
+        if resolved is not None:
+            if float(resolved.get("t") or until) >= since:
+                out.append((key, begun, resolved))
+        elif began >= since - window_s or _live(led, key):
+            out.append((key, begun, resolved))
+    return out
 
 
 def _live(led: Ledger, key: str) -> bool:
@@ -1010,7 +1080,8 @@ def _check_overlap(
       ``review`` (a person looks, since a count can't name the records).
     """
 
-    others = _overlapping(led, key, since, time.time())
+    window_s = float(result.scope.window.max_execution_window_s or 3600)
+    others = _overlapping(led, key, since, time.time(), window_s)
     if result.outcome is Outcome.CONFIRMED:
         if values_key and any(
             b.get("values_key") == values_key for _k, b, _r in others

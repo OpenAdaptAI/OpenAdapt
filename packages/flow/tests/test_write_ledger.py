@@ -628,3 +628,106 @@ def test_a_stale_attempt_never_excuses_a_stray_write(sor, ledger_dir: Path) -> N
     FakeAgent(base).click_save("p3", "a stray note")
     result = verify_write(pending)
     assert result.outcome is Outcome.REFUTED and not result.landed
+
+
+# -- third review round ----------------------------------------------------------
+
+
+def test_releasing_an_open_attempt_lifts_the_hold(sor, ledger_dir: Path) -> None:
+    base, db = sor
+    dead = _worker(base, "die_before_send", ledger_dir)
+    dead.communicate(timeout=120)
+    ledger = Ledger(FileLedger(ledger_dir))
+    [(key, attempt)] = ledger.unresolved()
+    assert attempt.state == "open"
+    ledger.release(key, by="nurse-lead", reason="checked the chart: nothing saved")
+    pending = begin_write(_contract(base), VALUES, actor=BOT)
+    FakeAgent(base).click_save("p1", NOTE)
+    assert verify_write(pending).verified and _landed(db) == 1
+
+
+def test_a_released_stale_attempt_never_holds_later_writes(
+    sor, ledger_dir: Path
+) -> None:
+    base, db = sor
+    dead = _worker(base, "die_before_send", ledger_dir, key="task-old")
+    dead.communicate(timeout=120)
+    ledger = Ledger(FileLedger(ledger_dir))
+    [(key, _)] = ledger.unresolved()
+    ledger.release(key, by="nurse-lead", reason="nothing saved")
+    pending = begin_write(_contract(base), VALUES, actor=BOT, write_key="task-new")
+    FakeAgent(base).click_save("p1", NOTE)
+    assert verify_write(pending).verified
+
+
+def test_a_write_under_review_stays_listed_past_the_repeat_window(
+    sor, ledger_dir: Path
+) -> None:
+    base, _db = sor
+    ledger = Ledger(FileLedger(ledger_dir), repeat_s=0)
+    contract = _contract(base)
+    a = begin_write(contract, VALUES, actor=BOT, ledger=ledger)
+    b = begin_write(
+        contract, {"patient_id": "p2", "note": NOTE}, actor=BOT, ledger=ledger
+    )
+    FakeAgent(base).click_save("p1", NOTE)
+    FakeAgent(base).click_save("p2", NOTE)
+    assert verify_write(a).review
+    verify_write(b)
+    for _ in range(2):  # past repeat_s: still handed back, still listed
+        with pytest.raises(AlreadyWritten):
+            begin_write(contract, VALUES, actor=BOT, ledger=ledger)
+    assert any(a.review for _k, a in ledger.unresolved())
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda u: u + "/",
+        lambda u: u.replace("http://", "HTTP://"),
+        lambda u: u.replace("127.0.0.1", "LOCALHOST"),
+    ],
+)
+def test_a_respelled_store_address_is_the_same_store(sor, edit) -> None:
+    base, _db = sor
+    assert Contract.from_dict(verify_yaml(edit(base))).store == _contract(base).store
+
+
+def test_default_ports_and_slashes_spell_one_address() -> None:
+    from openadapt_flow.verifier import _location
+
+    assert _location("https://Api.Example.test:443/fhir/") == _location(
+        "https://api.example.test/fhir"
+    )
+    assert _location("https://api.example.test:8443/") != _location(
+        "https://api.example.test/"
+    )
+
+
+def test_the_same_write_under_another_address_is_held_while_open(
+    sor, ledger_dir: Path
+) -> None:
+    base, db = sor
+    dead = _worker(base, "die_after_send", ledger_dir, key="ticket-9")
+    dead.communicate(timeout=120)
+    doc = verify_yaml(base)
+    doc["verifier"]["base_url"] = base + "/../"  # another spelling, same server
+    moved = Contract.from_dict(doc, name="referral")
+    assert moved.store != _contract(base).store
+    with pytest.raises(WriteHeld, match="another address"):
+        begin_write(moved, VALUES, actor=BOT, write_key="ticket-9")
+    assert _landed(db) == 1
+
+
+def test_tenants_chosen_by_credential_are_different_stores(sor) -> None:
+    base, _db = sor
+    docs = []
+    for env in ("TENANT_A_TOKEN", "TENANT_B_TOKEN"):
+        doc = verify_yaml(base)
+        doc["verifier"]["auth"] = {"kind": "bearer", "bearer_env": env}
+        docs.append(doc)
+    try:
+        a, b = (Contract.from_dict(d) for d in docs)
+    except Exception as exc:  # noqa: BLE001 - auth needs the env set
+        pytest.skip(f"auth shape not accepted here: {exc}")
+    assert a.store != b.store

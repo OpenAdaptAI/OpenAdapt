@@ -310,13 +310,17 @@ class Attempt:
         key names one write, made once: it is handed back for good.
         """
 
+        if self.released:
+            return "free"  # a person checked the record
         r = self.resolved
         if r is None:
             return "open"
-        if self.released or r.get("retry_safe"):
+        if r.get("retry_safe"):
             return "free"
         if r.get("outcome") == "CONFIRMED" or r.get("landed"):
-            if r.get("write_key_bound") or not self.delivered:
+            if r.get("write_key_bound") or r.get("review") or not self.delivered:
+                # Under review: handed back until a person releases it, so
+                # no later attempt hides it from the list.
                 return "undelivered"
             return "free" if _age(r.get("at")) >= repeat_s else "undelivered"
         if r.get("outcome") == "REFUTED":
@@ -453,7 +457,10 @@ class Ledger:
         return "free" if attempt is None else attempt.state_with(self.repeat_s)
 
     def attempts(self) -> list[tuple[str, dict[str, Any], Optional[dict[str, Any]]]]:
-        """Every attempt in the ledger: (key, begun event, resolved event)."""
+        """Every attempt in the ledger: (key, begun event, resolved event).
+
+        A released attempt counts as resolved when a person released it.
+        """
 
         out = []
         for key in self.backend.keys():
@@ -463,7 +470,7 @@ class Ledger:
                 attempt = str(event.get("attempt"))
                 if event.get("event") == "begun":
                     begun[attempt] = dict(event)
-                elif event.get("event") == "resolved":
+                elif event.get("event") in ("resolved", "released"):
                     resolved.setdefault(attempt, dict(event))
             out += [(key, b, resolved.get(a)) for a, b in begun.items()]
         return out
@@ -522,6 +529,7 @@ class Ledger:
                     "event": "released",
                     "attempt": attempt.attempt_id,
                     "at": _now(),
+                    "t": time.time(),
                     "by": by.strip()[:128],
                     "reason": reason.strip()[:500],
                 },

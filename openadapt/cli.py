@@ -1303,8 +1303,9 @@ def verify_ledger_list(ledger_dir: Optional[str]) -> None:
         return
     for key, attempt in rows:
         outcome = (attempt.resolved or {}).get("outcome", "-")
+        state = "review" if attempt.review else ledger.state(attempt)
         click.echo(
-            f"{key}  {attempt.state:<9}  began {attempt.begun.get('at')}  "
+            f"{key}  {state:<11}  began {attempt.begun.get('at')}  "
             f"outcome {outcome}  by {attempt.begun.get('actor_kind')}:"
             f"{attempt.begun.get('actor_id')}"
         )
