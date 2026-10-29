@@ -791,10 +791,12 @@ def cmd_pull(args: Any) -> int:
         print(
             "Status: example, not certified. Rehearse it on a test copy of the app first."
         )
+    from openadapt_flow.cli_hints import command
+
     print(
         "It won't run until it is qualified on your instance:\n"
-        f"  openadapt-flow skill bind {dest} ...\n"
-        f"  openadapt-flow skill qualify {dest} --certify clinical-write"
+        f"  {command('skill bind')} {dest} ...\n"
+        f"  {command('skill qualify')} {dest} --certify clinical-write"
     )
     params = entry.raw.get("params") or []
     if params:
