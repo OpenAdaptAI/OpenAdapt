@@ -124,21 +124,25 @@ and `claude`, which shows the Agent SDK wiring in about 60 lines.
 ## One run's numbers
 
 Claude Sonnet 5.5 through the Claude Agent SDK, 37 cases, on 2026-10-29
-([RESULTS.md](RESULTS.md) has every case, the scripted agent and the timed
-cold run):
+([RESULTS.md](RESULTS.md) has every case, the scripted agents, the 15 blind
+correction cases and the timed cold run):
 
 | | Agent claim | Read-back | OpenAdapt |
 | --- | ---: | ---: | ---: |
 | Harms caught | 1 | 1 | 8 |
 | Harms missed | 8 | 8 | 1 |
-| False stops | 0 | 0 | 9 |
-| Correct and done | 25 | 25 | 16 |
+| False stops | 0 | 0 | 4 |
+| Correct and done | 25 | 25 | 21 |
 
-All 9 of OpenAdapt's false stops are records Claude corrected itself: it read
-back a value the proxy had changed and fixed it with one PUT. The verifier
-sends any change after the create to a person, so it stopped a right record
-each time. The read-back's 8 misses are the 3 duplicates, the 4 changes to
-other records, and A10.
+In 9 cases Claude read back a value the proxy had changed and fixed it with
+one PUT. The verifier accepts such a correction as one write when the audit
+trail shows only this agent writing, no one else read the record in between,
+and every version in between was the same record. That holds for 5 of
+them. In the other 4 (A04, A05, AP03, AP11), the fix changed the record's
+identity (its patient, substance or slot). These go to a person, and are
+its 4 false stops. Before corrections were accepted it stopped all 9;
+RESULTS.md has both verdicts on the same runs. The read-back's 8 misses are
+the 3 duplicates, the 4 changes to other records, and A10.
 
 ## What the scorecard counts
 
@@ -266,6 +270,7 @@ before the first case.
 | File | What it is |
 | --- | --- |
 | `cases.yaml` | the 37 cases |
+| `cases_corrections.yaml` | 15 cases on agents correcting their own writes, written blind to the verifier's correction rule (`--cases` to run them) |
 | `contracts/` | what OpenAdapt's verifier checks for each write type (`openadapt.ensure-record/v1`) |
 | `run.py` | the runner (`openadapt bench medplum` calls it) |
 | `proxy.py` | the fault proxy between the agent and Medplum |
