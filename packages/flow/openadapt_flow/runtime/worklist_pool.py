@@ -414,19 +414,49 @@ def _stops_run(state: str, detail: Mapping[str, Any], on_halt: str) -> bool:
     return True
 
 
-def _clean_after_halt(worker: Any, item_dir: Path) -> Optional[str]:
-    """Run the worker's halt cleanup; None when its session is clean.
+def _cleans_after(state: str, detail: Mapping[str, Any], on_halt: str) -> bool:
+    """Clean up only when this session will take another item: the item
+    halted before any write and that doesn't stop the run. After a stop, or
+    after any other outcome, the screen is left as it is (it is the evidence
+    a person needs)."""
+    return state not in SUCCESS_STATES and not _stops_run(state, detail, on_halt)
 
-    A worker without one keeps today's behavior (the next item re-enters from
-    the entry page). A cleanup that raises leaves the session dirty.
+
+def _clean_after_halt(
+    worker: Any, item_dir: Path
+) -> tuple[Optional[str], Optional[str]]:
+    """Run the worker's halt cleanup: ``(dirty, record_changed)``.
+
+    ``dirty`` is why the session can't take another item (None when clean).
+    ``record_changed`` is set when the records changed during the cleanup, or
+    whether they did is unknown: the item's write is then uncertain. A worker
+    without a cleanup keeps today's behavior (the next item re-enters from
+    the entry page). A cleanup that raises leaves the session dirty and the
+    write uncertain.
     """
     clean = getattr(worker, "clean_after_halt", None)
     if not callable(clean):
+        return None, None
+    try:
+        result: Any = clean(item_dir / "halt-cleanup")
+    except Exception as exc:  # noqa: BLE001 - a failed cleanup is a dirty session
+        reason = f"the cleanup raised {type(exc).__name__}"
+        return reason, f"{reason}; whether it changed the records is unknown"
+    if result is None or isinstance(result, str):
+        return result, None
+    return getattr(result, "dirty", None), getattr(result, "record_changed", None)
+
+
+def _check_start(worker: Any, check_dir: Path) -> Optional[str]:
+    """The worker's start check on its fresh session; None when it passes or
+    the worker has none."""
+    check = getattr(worker, "check_start", None)
+    if not callable(check):
         return None
     try:
-        reason: Optional[str] = clean(item_dir / "halt-cleanup")
-    except Exception as exc:  # noqa: BLE001 - a failed cleanup is a dirty session
-        return f"the cleanup raised {type(exc).__name__}"
+        reason: Optional[str] = check(check_dir)
+    except Exception as exc:  # noqa: BLE001 - a failed check refuses the pool
+        return f"the start check raised {type(exc).__name__}"
     return reason
 
 
@@ -439,8 +469,11 @@ class WorkerSummary:
     open_s: float = 0.0
     error: Optional[str] = None
     #: Why this worker's session took no more items after a halt: the
-    #: cleanup didn't bring back the start screen (docs/HALT_CLEANUP.md).
+    #: cleanup didn't bring back the start screen, or it changed the records
+    #: (docs/HALT_CLEANUP.md).
     dirty: Optional[str] = None
+    #: Why the start screen didn't show on this worker's fresh session.
+    start_check: Optional[str] = None
 
 
 @dataclass
@@ -529,6 +562,8 @@ class PoolReport:
             states = ", ".join(f"{k} {v}" for k, v in sorted(w.states.items())) or "-"
             if w.error:
                 states += f" (worker error: {w.error})"
+            if w.dirty:
+                states += f" (dirty: {w.dirty})"
             lines.append(
                 f"| {w.name} | {len(w.items)} | {states} | {w.busy_s:.1f} | {w.open_s:.1f} |"
             )
@@ -601,6 +636,7 @@ def run_worklist_pool(
     go = threading.Event()
     abort = threading.Event()
     fingerprints: dict[str, Optional[str]] = {}
+    dirty_workers: set[str] = set()
 
     def stop(reason: str, worker: str, idx: Optional[int]) -> None:
         queue.request_stop(reason, worker=worker, idx=idx)
@@ -631,6 +667,15 @@ def run_worklist_pool(
         except Exception as exc:  # noqa: BLE001 - recorded, run aborted
             summary.error = f"sign-in failed: {type(exc).__name__}"
             abort.set()
+        else:
+            if policy.on_halt == ON_HALT_SKIP_UNWRITTEN:
+                # The session will be cleaned and checked after a halted item;
+                # a start screen that doesn't show on a fresh session would
+                # leave every worker dirty mid-run. Refuse before any item.
+                reason = _check_start(worker, run_dir / "start-check" / worker.name)
+                if reason is not None:
+                    summary.start_check = reason
+                    abort.set()
         summary.open_s = time.monotonic() - t0
         try:
             opened.wait()
@@ -720,19 +765,56 @@ def run_worklist_pool(
                     fut.add_done_callback(_stop_early)
                     pending.append((idx, fut, []))
                 else:
-                    finish(worker, idx, out.state, detail)
-                    if out.state not in SUCCESS_STATES:
-                        # The halted item may have left a dialog open or a
-                        # form half filled. Clean the screen and confirm the
-                        # start screen before this session takes another item.
-                        dirty = _clean_after_halt(worker, item_dir)
-                        if dirty is not None:
-                            summary.dirty = dirty
-                            say(
-                                f"{worker.name}: session dirty after item {idx} "
-                                f"({dirty}); it takes no more items"
+                    dirty: Optional[str] = None
+                    if _cleans_after(out.state, detail, policy.on_halt) and (
+                        queue.stop_reason() is None
+                    ):
+                        # The item halted before any write and this session
+                        # takes the next one: close what it left open and
+                        # confirm the start screen first. The cleanup runs
+                        # before the item is recorded, so a cleanup that
+                        # saved (a "Close" that autosaves) changes the
+                        # outcome: the write is uncertain, never "unwritten".
+                        dirty, changed = _clean_after_halt(worker, item_dir)
+                        if changed is not None:
+                            detail = {
+                                **detail,
+                                "transaction_outcome": "RECONCILIATION_REQUIRED",
+                                "uncertainty": "effect_uncertain",
+                                "halt_reason": (
+                                    f"item {idx}: the records changed during the "
+                                    f"halt cleanup ({changed}); the write is "
+                                    "uncertain, so the item must not be retried "
+                                    "before a person reconciles it"
+                                ),
+                                "halt_cleanup": {"record_changed": changed},
+                            }
+                            state = RECONCILIATION_REQUIRED
+                        else:
+                            state = out.state
+                            if dirty is not None:
+                                detail = {**detail, "halt_cleanup": {"dirty": dirty}}
+                        finish(worker, idx, state, detail)
+                    else:
+                        finish(worker, idx, out.state, detail)
+                    if dirty is not None:
+                        summary.dirty = dirty
+                        say(
+                            f"{worker.name}: session dirty after item {idx} "
+                            f"({dirty}); it takes no more items"
+                        )
+                        with lock:
+                            dirty_workers.add(worker.name)
+                            last = len(dirty_workers) == len(workers)
+                        if last and any(i["state"] == PENDING for i in queue.items()):
+                            stop(
+                                "every worker's session is dirty after a halted "
+                                f"item (last: {dirty}); the remaining items "
+                                "were not run",
+                                worker.name,
+                                idx,
                             )
-                            break
+                        break
             while pending:
                 settle(pending.popleft())
         except Exception as exc:  # noqa: BLE001 - never leave peers running blind
@@ -777,6 +859,15 @@ def run_worklist_pool(
         for t in threads:
             t.join()
         failed = [s.name for s in summaries.values() if s.error]
+        unchecked = [s for s in summaries.values() if s.start_check]
+        if not failed and unchecked:
+            raise PoolRefusal(
+                "the start screen isn't showing on a fresh session ("
+                + "; ".join(f"{s.name}: {s.start_check}" for s in unchecked)
+                + "). With on_halt: skip_unwritten each worker must reach the "
+                "bundle's start screen from its entry page; set worklist.entry_url "
+                "or entry_bundle, or use on_halt: stop. Nothing was executed"
+            )
         raise PoolRefusal(
             f"sign-in failed for {', '.join(failed)}; nothing was executed"
         )

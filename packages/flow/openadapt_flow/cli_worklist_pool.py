@@ -206,9 +206,13 @@ class WebPoolWorker:
     sign_in: Optional[Callable[[Any], None]] = None
     #: How to reach the item's start page; default ``page.goto(entry_url)``.
     open_entry: Optional[Callable[[Any], None]] = None
-    #: After a halted item: clean the screen and check the start screen
-    #: (``halt_cleanup.run_cleanup``). Returns None when clean, else why not.
-    clean: Optional[Callable[[Any, Path], Optional[str]]] = None
+    #: After an item that halted before any write, when the session takes
+    #: another item: clean the screen, check the start screen and read the
+    #: records back (``halt_cleanup.run_cleanup``; returns a CleanupResult).
+    clean: Optional[Callable[[Any, Path], Any]] = None
+    #: On the fresh session, before any item: the start check alone. Returns
+    #: None when the start screen shows, else why not.
+    start_check: Optional[Callable[[Any, Path], Optional[str]]] = None
     cdp_endpoint: Optional[str] = None
     headed: bool = False
     readback_window: int = 0
@@ -258,10 +262,15 @@ class WebPoolWorker:
         report = self.run_item_on_page(self._page, idx, row, item_dir, self._pipeline)
         return _item_run(report, self._pipeline)
 
-    def clean_after_halt(self, cleanup_dir: Path) -> Optional[str]:
+    def clean_after_halt(self, cleanup_dir: Path) -> Any:
         if self.clean is None:
             return None
         return self.clean(self._page, cleanup_dir)
+
+    def check_start(self, check_dir: Path) -> Optional[str]:
+        if self.start_check is None:
+            return None
+        return self.start_check(self._page, check_dir)
 
     def close(self) -> None:
         try:
@@ -289,18 +298,26 @@ class BackendPoolWorker:
     run_item_on_backend: RunItem
     fingerprint: Optional[str] = None
     readback_window: int = 0
-    #: After a halted item: clean the screen and check the start screen.
-    clean: Optional[Callable[[Any, Path], Optional[str]]] = None
+    #: After a halted item: clean the screen, check the start screen and
+    #: read the records back (returns a CleanupResult).
+    clean: Optional[Callable[[Any, Path], Any]] = None
+    #: On the fresh session, before any item: the start check alone.
+    start_check: Optional[Callable[[Any, Path], Optional[str]]] = None
     _pipeline: Optional[ReadbackPipeline] = None
 
     def open(self) -> None:
         if self.readback_window > 0:
             self._pipeline = ReadbackPipeline()
 
-    def clean_after_halt(self, cleanup_dir: Path) -> Optional[str]:
+    def clean_after_halt(self, cleanup_dir: Path) -> Any:
         if self.clean is None:
             return None
         return self.clean(self.backend, cleanup_dir)
+
+    def check_start(self, check_dir: Path) -> Optional[str]:
+        if self.start_check is None:
+            return None
+        return self.start_check(self.backend, check_dir)
 
     def session_fingerprint(self) -> Optional[str]:
         return self.fingerprint
@@ -411,6 +428,8 @@ def print_pool_report(report: PoolReport, run_dir: Path) -> int:
     for w in report.per_worker:
         states = ", ".join(f"{k} {v}" for k, v in sorted(w.states.items())) or "nothing"
         print(f"  {w.name}: {len(w.items)} items ({states})")
+        if w.dirty:
+            print(f"    dirty: {w.dirty}; this session took no more items")
     if report.stop:
         print(
             f"STOPPED by {report.stop.get('worker')} at item {report.stop.get('idx')}: "

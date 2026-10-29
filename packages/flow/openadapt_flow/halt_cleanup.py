@@ -14,10 +14,16 @@ it would start on that screen. This module gives a workflow a
   (after every step but the last), one fresh session runs the steps up to
   the halt point, then the cleanup, then the start-state check. The cleanup is qualified only if every halt point
   reaches the start screen.
-- **Run** (:func:`run_cleanup`). After a halted item, the pool worker runs the
-  cleanup, returns to the entry, and checks the start state. If the check
-  fails, the session is dirty and the worker takes no more items: the next
-  item never runs on a poisoned session.
+  Each halt point also runs once without the cleanup, and the test copy's
+  records must be the same both ways: a "Close" that saves (autosave on
+  leave) fails qualification.
+- **Run** (:func:`run_cleanup`). After an item that halted before any write,
+  when the session will take another item, the pool worker reads the
+  records, runs the cleanup, returns to the entry, checks the start state and
+  reads the records again. If the check fails, the session is dirty and the
+  worker takes no more items. If the records changed (or can't be read), the
+  item's write is uncertain: it is never reported as unwritten, and the run
+  stops.
 
 Navigation only. A record the halted item saved is the compensating
 rollback's job (docs/ROLLBACK.md), not this one's.
@@ -47,11 +53,16 @@ from openadapt_flow.ir import (
     Workflow,
 )
 
-#: Labels of controls that leave a dialog or form without saving.
+#: Labels of controls that leave a dialog or form without saving. Not
+#: "back" or "exit": those leave a page, and an app that saves on leave
+#: (autosave) commits the form. "Close" can too; qualification and the
+#: run-time read-back catch that.
 CANCEL_WORDS = re.compile(
-    r"\b(cancel|close|discard|dismiss|don'?t save|back|exit|abandon)\b|^\s*[x×✕]\s*$",
+    r"\b(cancel|close|discard|dismiss|don'?t save|abandon)\b|^\s*[x×✕]\s*$",
     re.I,
 )
+#: Reads every record the system of record shows; None when unreadable.
+RecordsRead = Callable[[], Optional[list[dict[str, Any]]]]
 CHECK_STEP_ID = "cleanup.start_state"
 
 
@@ -242,6 +253,46 @@ def _halt_reason(report: Optional[RunReport]) -> str:
     return f"cleanup step {failed.step_id} failed: {(failed.error or '')[:160]}"
 
 
+def records_change(
+    before: list[dict[str, Any]], after: list[dict[str, Any]]
+) -> Optional[str]:
+    """None when ``after`` holds exactly the records of ``before``; otherwise
+    what differs, in counts and field names only (never values)."""
+    from openadapt_flow.undo_proposal import _canonical_records, _differing_keys
+
+    if _canonical_records(before, frozenset()) == _canonical_records(
+        after, frozenset()
+    ):
+        return None
+    added, removed, changed = _differing_keys(before, after, frozenset())
+    parts = []
+    if added:
+        parts.append(f"{len(added)} record(s) added")
+    if removed:
+        parts.append(f"{len(removed)} record(s) removed")
+    if changed:
+        fields = sorted({f for names in changed.values() for f in names})
+        parts.append(f"{len(changed)} record(s) changed (fields: {', '.join(fields)})")
+    return "; ".join(parts) or "the record sets differ"
+
+
+@dataclass
+class CleanupResult:
+    """What a cleanup after a halted item found."""
+
+    #: Why the session can't take another item; None when the start screen
+    #: shows and the records didn't change.
+    dirty: Optional[str] = None
+    #: Set when the records changed during the cleanup, or couldn't be read
+    #: after it: whatever the item left may have been saved, so the item's
+    #: write is uncertain and it must not be retried as unwritten.
+    record_changed: Optional[str] = None
+
+    @property
+    def clean(self) -> bool:
+        return self.dirty is None and self.record_changed is None
+
+
 def run_cleanup(
     replayer_factory: Callable[[], Any],
     workflow: Workflow,
@@ -250,14 +301,28 @@ def run_cleanup(
     bundle_dir: Path,
     run_dir: Path,
     reenter: Optional[Callable[[], None]] = None,
-) -> Optional[str]:
-    """Clean the screen after a halted item. None when the start screen shows;
-    otherwise why not (the session is dirty).
+    read_records: Optional[RecordsRead] = None,
+) -> CleanupResult:
+    """Clean the screen after a halted item.
 
     Runs the cleanup steps, then ``reenter`` (back to the entry: a web
     worker's entry URL or entry bundle), then the start-state check. Never
     raises: a failure is a dirty session.
+
+    With ``read_records`` (the system of record's read-back), the records are
+    read before and after. A cleanup that changed them (a "Close" that saved
+    the form, or re-entry that triggered an autosave) sets ``record_changed``.
+    If the first read fails, nothing runs and the session is dirty.
     """
+    before: Optional[list[dict[str, Any]]] = None
+    if read_records is not None:
+        before = _read(read_records)
+        if before is None:
+            return CleanupResult(
+                dirty="the records couldn't be read before the cleanup, so it "
+                "didn't run"
+            )
+    reason: Optional[str]
     try:
         if cleanup.steps:
             replayer_factory().run(
@@ -277,10 +342,53 @@ def run_cleanup(
             run_dir=run_dir / "check",
         )
     except Exception as exc:  # noqa: BLE001 - a failed cleanup is a dirty session
-        return f"the cleanup raised {type(exc).__name__}"
-    if report is not None and report.success:
+        reason = f"the cleanup raised {type(exc).__name__}"
+    else:
+        reason = None if report is not None and report.success else _halt_reason(report)
+    if read_records is None or before is None:
+        return CleanupResult(dirty=reason)
+    after = _read(read_records)
+    changed = (
+        "the records couldn't be read after the cleanup"
+        if after is None
+        else records_change(before, after)
+    )
+    if changed is None:
+        return CleanupResult(dirty=reason)
+    return CleanupResult(
+        dirty=reason or f"the records changed during the cleanup ({changed})",
+        record_changed=changed,
+    )
+
+
+def _read(read_records: RecordsRead) -> Optional[list[dict[str, Any]]]:
+    try:
+        records = read_records()
+    except Exception:  # noqa: BLE001 - an unreadable store is not a guess
         return None
-    return _halt_reason(report)
+    return [dict(r) for r in records] if records is not None else None
+
+
+def check_start(
+    replayer_factory: Callable[[], Any],
+    workflow: Workflow,
+    cleanup: HaltCleanup,
+    *,
+    bundle_dir: Path,
+    run_dir: Path,
+    reenter: Optional[Callable[[], None]] = None,
+) -> Optional[str]:
+    """The start check alone, on a fresh session before any item runs: None
+    when the start screen shows after ``reenter``, else why not."""
+    check_only = cleanup.model_copy(update={"steps": [], "qualification": None})
+    return run_cleanup(
+        replayer_factory,
+        workflow,
+        check_only,
+        bundle_dir=bundle_dir,
+        run_dir=run_dir,
+        reenter=reenter,
+    ).dirty
 
 
 def runnable_cleanup(workflow: Workflow) -> Optional[HaltCleanup]:
@@ -336,13 +444,21 @@ def qualify_cleanup(
     points: Optional[Sequence[int]] = None,
 ) -> tuple[Optional[HaltCleanupQualification], list[HaltPointResult]]:
     """Run each halt point in a fresh session on ``target``: the steps up to
-    it, the cleanup, the start check. Qualified only when every point passes.
+    it, the cleanup, the start check. Then run the steps up to it alone, and
+    compare the test copy's records both ways: the cleanup must add or change
+    nothing. Qualified only when every point passes.
 
-    ``target`` is a declared test copy (``reset()``, ``run(workflow,
-    bundle_dir=, run_dir=, params=)``), as for ``undo propose``.
+    ``target`` is a declared test copy (``reset()``, ``snapshot()``,
+    ``run(workflow, bundle_dir=, run_dir=, params=)``), as for
+    ``undo propose``.
     """
     if workflow.program is not None:
         raise ValueError("cleanup qualify works on straight-line bundles")
+    if not callable(getattr(target, "snapshot", None)):
+        raise ValueError(
+            "the test copy can't read its records, so a cleanup that saves "
+            "couldn't be caught"
+        )
     own_tmp = work_dir is None
     work = Path(tempfile.mkdtemp(prefix="cleanup-qualify-")) if own_tmp else work_dir
     assert work is not None
@@ -374,7 +490,20 @@ def qualify_cleanup(
                 )
                 continue
             if report is not None and report.success:
-                results.append(HaltPointResult(after, True, "the start screen shows"))
+                changed = _cleanup_changed_records(
+                    workflow,
+                    k,
+                    target=target,
+                    bundle_dir=bundle_dir,
+                    work=work,
+                    params=params,
+                )
+                if changed is not None:
+                    results.append(HaltPointResult(after, False, changed))
+                else:
+                    results.append(
+                        HaltPointResult(after, True, "the start screen shows")
+                    )
                 continue
             failed = (
                 next((r for r in report.results if not r.ok), None) if report else None
@@ -407,6 +536,51 @@ def qualify_cleanup(
     )
 
 
+def _cleanup_changed_records(
+    workflow: Workflow,
+    k: int,
+    *,
+    target: Any,
+    bundle_dir: Path,
+    work: Path,
+    params: dict[str, Any],
+) -> Optional[str]:
+    """After the trial with the cleanup: None when the test copy's records
+    match a run of the same steps without it; else what the cleanup changed.
+
+    Called right after the trial run, so the first snapshot is the
+    with-cleanup state; then the copy is reset and the halt prefix runs alone.
+    """
+    with_cleanup = _read(target.snapshot)
+    if with_cleanup is None:
+        return "the test copy's records couldn't be read after the cleanup"
+    prefix = workflow.model_copy(
+        update={
+            "steps": [s.model_copy(deep=True) for s in workflow.steps[:k]],
+            "program": None,
+            "subflows": {},
+            "undo_steps": [],
+            "halt_cleanup": None,
+            "qualification": None,
+            "manifest": None,
+        }
+    )
+    try:
+        target.reset()
+        target.run(
+            prefix, bundle_dir=bundle_dir, run_dir=work / f"halt-{k:03d}", params=params
+        )
+    except Exception as exc:  # noqa: BLE001 - recorded
+        return f"the steps up to the halt point raised {type(exc).__name__} alone"
+    halted = _read(target.snapshot)
+    if halted is None:
+        return "the test copy's records couldn't be read at the halt point"
+    changed = records_change(halted, with_cleanup)
+    if changed is None:
+        return None
+    return f"the cleanup changed the records ({changed}); it must only navigate"
+
+
 def write_cleanup(
     bundle_dir: Path | str,
     cleanup: HaltCleanup,
@@ -434,14 +608,17 @@ def write_cleanup(
 
 __all__ = [
     "CANCEL_WORDS",
+    "CleanupResult",
     "DerivedCleanup",
     "HaltPointResult",
+    "check_start",
     "check_step",
     "cleanup_sha256",
     "cleanup_workflow",
     "derive_cleanup",
     "halt_points",
     "qualify_cleanup",
+    "records_change",
     "run_cleanup",
     "runnable_cleanup",
     "start_state_of",

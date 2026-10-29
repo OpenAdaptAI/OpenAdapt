@@ -16,6 +16,7 @@ from typing import Optional
 import pytest
 
 from openadapt_flow.halt_cleanup import (
+    CANCEL_WORDS,
     cleanup_sha256,
     derive_cleanup,
     qualify_cleanup,
@@ -176,28 +177,29 @@ def _bundle(tmp_path: Path) -> Path:
 
 def test_a_dialog_left_open_is_closed_and_the_start_screen_confirmed(tmp_path):
     app = App("dialog")
-    reason = run_cleanup(
+    result = run_cleanup(
         lambda: _replayer(app),
         _workflow(),
         _cleanup(tmp_path),
         bundle_dir=_bundle(tmp_path),
         run_dir=tmp_path / "cleanup",
     )
-    assert reason is None
+    assert result.clean
     assert app.screen == "start"
     assert app.saves == 0  # the dialog's Confirm was never pressed
 
 
 def test_a_screen_the_cleanup_cannot_recover_leaves_the_session_dirty(tmp_path):
     app = App("dialog", cancel_works=False)
-    reason = run_cleanup(
+    result = run_cleanup(
         lambda: _replayer(app),
         _workflow(),
         _cleanup(tmp_path),
         bundle_dir=_bundle(tmp_path),
         run_dir=tmp_path / "cleanup",
     )
-    assert reason == "the start screen isn't showing"
+    assert result.dirty == "the start screen isn't showing"
+    assert result.record_changed is None
 
 
 def test_re_entering_counts_only_if_the_start_screen_then_shows(tmp_path):
@@ -212,7 +214,7 @@ def test_re_entering_counts_only_if_the_start_screen_then_shows(tmp_path):
             bundle_dir=_bundle(tmp_path),
             run_dir=tmp_path / "a",
             reenter=lambda: setattr(app, "screen", "start"),
-        )
+        ).dirty
         is None
     )
     app.screen = "stuck"
@@ -224,9 +226,57 @@ def test_re_entering_counts_only_if_the_start_screen_then_shows(tmp_path):
             bundle_dir=_bundle(tmp_path),
             run_dir=tmp_path / "b",
             reenter=lambda: None,
-        )
+        ).dirty
         == "the start screen isn't showing"
     )
+
+
+def _records(app: App) -> list[dict]:
+    return [{"id": i} for i in range(app.saves)]
+
+
+def test_a_cleanup_that_saves_makes_the_write_uncertain(tmp_path):
+    # Re-entry saves the form (autosave on leave): the read-back sees it.
+    app = App("form")
+
+    def reenter() -> None:
+        app.saves += 1
+        app.screen = "start"
+
+    result = run_cleanup(
+        lambda: _replayer(app),
+        _workflow(),
+        _cleanup(tmp_path),
+        bundle_dir=_bundle(tmp_path),
+        run_dir=tmp_path / "cleanup",
+        reenter=reenter,
+        read_records=lambda: _records(app),
+    )
+    assert result.record_changed == "1 record(s) added"
+    assert result.dirty is not None  # and the session takes no more items
+
+
+def test_records_that_cannot_be_read_stop_the_cleanup_before_it_runs(tmp_path):
+    app = App("dialog")
+    result = run_cleanup(
+        lambda: _replayer(app),
+        _workflow(),
+        _cleanup(tmp_path),
+        bundle_dir=_bundle(tmp_path),
+        run_dir=tmp_path / "cleanup",
+        read_records=lambda: None,
+    )
+    assert result.dirty.startswith("the records couldn't be read before")
+    assert result.record_changed is None
+    assert app.screen == "dialog"  # nothing ran
+
+
+def test_back_and_exit_are_not_cancel_words():
+    # Leaving a page can autosave the form; these aren't safe to derive.
+    for label in ("Back", "Exit", "Go back"):
+        assert not CANCEL_WORDS.search(label), label
+    for label in ("Cancel", "Close", "Discard changes", "Don't save", "×"):
+        assert CANCEL_WORDS.search(label), label
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +295,10 @@ class AppCopy:
 
     def reset(self) -> None:
         pass
+
+    def snapshot(self):
+        # The records of the latest session's app (each run is a fresh copy).
+        return _records(self.apps[-1]) if self.apps else []
 
     def run(self, workflow, *, bundle_dir, run_dir, params):
         app = App("start", cancel_works=self.cancel_works)
@@ -276,6 +330,56 @@ def test_a_cleanup_that_fails_a_halt_point_is_not_qualified(tmp_path):
     assert qualification is None
     assert not results[-1].passed  # stopped in the dialog: Cancel doesn't work
     assert results[-1].reason == "the start screen isn't showing"
+
+
+def test_a_cleanup_click_that_saves_does_not_qualify(tmp_path, monkeypatch):
+    # The review's probe: the form's "Close" saves the record on the way out,
+    # as Odoo's autosave on leave does. The screen comes back; the record
+    # check catches it.
+    monkeypatch.setitem(SCREENS, "form", ["Create", "Close"])
+    monkeypatch.setitem(POINTS, "Close", (90, 90))
+    monkeypatch.setitem(GOES_TO, "Close", "start")
+    orig = AppBackend.click
+
+    def click(self, x, y, *, double=False):
+        if (x, y) == (90, 90) and self.app.screen == "form":
+            self.app.saves += 1
+        return orig(self, x, y, double=double)
+
+    monkeypatch.setattr(AppBackend, "click", click)
+    rec = tmp_path / "close-rec"
+    Workflow(name="close", steps=[_click("close", "Close")]).save(rec)
+    derived = derive_cleanup(_workflow(), recordings=[_cancel_recording(tmp_path), rec])
+    copy = AppCopy()
+    qual, results = qualify_cleanup(
+        _workflow(), derived.cleanup, target=copy, bundle_dir=_bundle(tmp_path)
+    )
+    assert sum(a.saves for a in copy.apps) >= 1
+    assert qual is None
+    by_point = {r.after_step: r for r in results}
+    assert not by_point["open_form"].passed
+    assert "the cleanup changed the records (1 record(s) added)" in (
+        by_point["open_form"].reason
+    )
+
+
+def test_qualify_refuses_a_test_copy_that_cannot_read_its_records(tmp_path):
+    class Blind:
+        name = "blind"
+
+        def reset(self):
+            pass
+
+        def run(self, *a, **k):
+            raise AssertionError("nothing should run")
+
+    with pytest.raises(ValueError, match="can't read its records"):
+        qualify_cleanup(
+            _workflow(),
+            _cleanup(tmp_path),
+            target=Blind(),
+            bundle_dir=_bundle(tmp_path),
+        )
 
 
 def test_a_pool_runs_cleanup_steps_only_from_a_qualified_cleanup(tmp_path):
@@ -321,11 +425,23 @@ def test_write_stores_the_cleanup_and_its_crops(tmp_path):
 class CleanupWorker:
     """A pool worker whose items halt, with a scripted cleanup verdict."""
 
-    def __init__(self, name: str, verdicts: list[Optional[str]], *, halt: bool = True):
+    def __init__(
+        self,
+        name: str,
+        verdicts: list,
+        *,
+        halt: bool = True,
+        outcome: str = "HALTED_BEFORE_EFFECT",
+        start: Optional[str] = None,
+    ):
         self.name = name
         self.verdicts = verdicts
         self.halt = halt
+        self.outcome = outcome
+        self.start = start
         self.ran: list[int] = []
+        self.cleans = 0
+        self.start_checks = 0
 
     def open(self) -> None:
         pass
@@ -333,23 +449,28 @@ class CleanupWorker:
     def session_fingerprint(self):
         return self.name
 
+    def check_start(self, check_dir):
+        self.start_checks += 1
+        return self.start
+
     def run_item(self, idx, row, item_dir):
         from openadapt_flow.runtime.worklist_pool import HALTED, ItemRun
 
         self.ran.append(idx)
         return ItemRun(
             state=HALTED if self.halt else "verified",
-            detail={"transaction_outcome": "HALTED_BEFORE_EFFECT"},
+            detail={"transaction_outcome": self.outcome},
         )
 
     def clean_after_halt(self, cleanup_dir):
+        self.cleans += 1
         return self.verdicts.pop(0) if self.verdicts else None
 
     def close(self) -> None:
         pass
 
 
-def _pool(tmp_path, workers, rows=4):
+def _pool(tmp_path, workers, rows=4, on_halt=None):
     from openadapt_flow.runtime.worklist_pool import (
         ON_HALT_SKIP_UNWRITTEN,
         PoolPolicy,
@@ -362,7 +483,7 @@ def _pool(tmp_path, workers, rows=4):
         run_dir=tmp_path / "pool",
         policy=PoolPolicy(
             workers=len(workers),
-            on_halt=ON_HALT_SKIP_UNWRITTEN,
+            on_halt=on_halt or ON_HALT_SKIP_UNWRITTEN,
             items_independent=True,
         ),
         fingerprint_salt="s",
@@ -373,11 +494,103 @@ def test_a_clean_session_takes_the_next_item(tmp_path):
     worker = CleanupWorker("w1", [None, None, None, None])
     _pool(tmp_path, [worker])
     assert worker.ran == [0, 1, 2, 3]
+    assert worker.start_checks == 1  # once, on the fresh session
 
 
 def test_a_dirty_session_takes_no_more_items(tmp_path):
+    from openadapt_flow.halt_cleanup import CleanupResult
+
+    dirty = CleanupResult(dirty="the start screen isn't showing")
+    w1 = CleanupWorker("w1", [dirty])
+    w2 = CleanupWorker("w2", [None] * 6)
+    report = _pool(tmp_path, [w1, w2], rows=6)
+    assert len(w1.ran) <= 1  # dirty after its first item: no more on it
+    assert sorted(w1.ran + w2.ran) == list(range(6))  # w2 carried on
+    assert report.stop is None  # one clean worker left: no stop
+    summary = {s.name: s for s in report.per_worker}
+    if w1.ran:
+        assert summary["w1"].dirty == "the start screen isn't showing"
+
+
+def test_when_the_last_clean_worker_goes_dirty_the_run_says_why(tmp_path, capsys):
+    from openadapt_flow.cli_worklist_pool import print_pool_report
+
     worker = CleanupWorker("w1", [None, "the start screen isn't showing"])
     report = _pool(tmp_path, [worker])
-    assert worker.ran == [0, 1]  # dirty after item 1: items 2 and 3 never ran on it
+    assert worker.ran == [0, 1]  # dirty after item 1: items 2 and 3 never ran
     [summary] = report.per_worker
     assert summary.dirty == "the start screen isn't showing"
+    assert report.stop is not None
+    assert "every worker's session is dirty" in report.stop["reason"]
+    assert [i["state"] for i in report.items][2:] == ["pending", "pending"]
+    print_pool_report(report, tmp_path / "pool")
+    out = capsys.readouterr().out
+    assert "dirty: the start screen isn't showing" in out
+    assert "every worker's session is dirty" in out
+    assert (
+        "dirty: the start screen isn't showing"
+        in (tmp_path / "pool" / "WORKLIST.md").read_text()
+    )
+
+
+def test_no_cleanup_once_the_run_has_stopped(tmp_path):
+    # The review's probe: under on_halt=stop the first halt ends the run, so
+    # the screen is left as it is for the person who reads it.
+    from openadapt_flow.runtime.worklist_pool import ON_HALT_STOP
+
+    w = CleanupWorker("w1", [], outcome="EFFECT_UNCERTAIN")
+    report = _pool(tmp_path, [w], rows=2, on_halt=ON_HALT_STOP)
+    assert report.stop is not None and w.ran == [0]
+    assert w.cleans == 0
+    assert w.start_checks == 0  # the start check only matters when it cleans
+
+
+def test_no_cleanup_after_an_uncertain_write(tmp_path):
+    w = CleanupWorker("w1", [], outcome="RECONCILIATION_REQUIRED")
+    report = _pool(tmp_path, [w], rows=2)
+    assert report.stop is not None and w.ran == [0]
+    assert w.cleans == 0
+
+
+def test_a_cleanup_that_changed_the_record_makes_the_item_uncertain(tmp_path):
+    from openadapt_flow.halt_cleanup import CleanupResult
+    from openadapt_flow.runtime.worklist_pool import RECONCILIATION_REQUIRED
+
+    w = CleanupWorker(
+        "w1",
+        [CleanupResult(dirty="records changed", record_changed="1 record(s) added")],
+    )
+    report = _pool(tmp_path, [w], rows=3)
+    assert w.ran == [0]  # not retried, and nothing after it ran
+    item = report.items[0]
+    assert item["state"] == RECONCILIATION_REQUIRED
+    result = item["result"]
+    assert result["transaction_outcome"] == "RECONCILIATION_REQUIRED"
+    assert result["transaction_outcome"] != "HALTED_BEFORE_EFFECT"
+    assert result["uncertainty"] == "effect_uncertain"
+    assert report.stop is not None
+    assert "the records changed during the halt cleanup" in report.stop["reason"]
+    assert [i["state"] for i in report.items][1:] == ["pending", "pending"]
+
+
+def test_a_cleanup_that_raises_makes_the_item_uncertain(tmp_path):
+    from openadapt_flow.runtime.worklist_pool import RECONCILIATION_REQUIRED
+
+    class Raises(CleanupWorker):
+        def clean_after_halt(self, cleanup_dir):
+            raise RuntimeError("boom")
+
+    w = Raises("w1", [])
+    report = _pool(tmp_path, [w], rows=2)
+    assert w.ran == [0]
+    assert report.items[0]["state"] == RECONCILIATION_REQUIRED
+
+
+def test_a_start_screen_missing_on_a_fresh_session_refuses_the_pool(tmp_path):
+    from openadapt_flow.runtime.worklist_pool import PoolRefusal
+
+    w1 = CleanupWorker("w1", [])
+    w2 = CleanupWorker("w2", [], start="the start screen isn't showing")
+    with pytest.raises(PoolRefusal, match="w2: the start screen isn't showing"):
+        _pool(tmp_path, [w1, w2])
+    assert w1.ran == [] and w2.ran == []
