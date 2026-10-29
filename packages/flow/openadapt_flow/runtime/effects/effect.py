@@ -722,6 +722,22 @@ class Effect(BaseModel):
     #: Which record field carries the idempotency key (substrate-specific;
     #: the MockMed system-of-record uses ``"key"``).
     key_field: str = "key"
+    #: ``record_written`` only: a duplicate (idempotency) key made of several
+    #: fields, such as OpenEMR's ``{lname, fname, DOB}``. Field -> value, each
+    #: a :class:`ValueExpr` like :attr:`match`. The count reads only records
+    #: whose key fields all match, and the check also REFUTES when more than
+    #: one record in the read set carries the key, counting records that
+    #: existed before the action as well as new ones (so ``count_new_only``
+    #: cannot hide a second chart for the same person). Those other records
+    #: are compared loosely (case, spacing, a date read back as a datetime),
+    #: the save's own record exactly. The read must therefore cover the key:
+    #: filtered by key fields only, or complete (no row limit, or a paged
+    #: read with a total). A one-field composite key is allowed and differs
+    #: from :attr:`idempotency_key` in counting pre-existing records.
+    #: ``expected_count`` must be 0 or 1. Use either this or
+    #: :attr:`idempotency_key`, not both. Bound into the contract hash and
+    #: serialized only when set, so existing digests hold.
+    composite_key: dict[str, ValueExpr] = Field(default_factory=dict)
     #: Cross-cutting duplicate-write / idempotency guard (kit). When True, a
     #: ``record_written`` count considers ONLY records that are NEW relative to
     #: the pre-action snapshot (by :func:`stable_id`): with the default
@@ -810,7 +826,7 @@ class Effect(BaseModel):
             return ValueExpr(literal=v)
         return v
 
-    @field_validator("match", mode="before")
+    @field_validator("match", "composite_key", mode="before")
     @classmethod
     def _coerce_match(cls, v: Any) -> Any:
         if isinstance(v, dict):
@@ -871,7 +887,45 @@ class Effect(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.forbid_collateral_change:
             data.pop("forbid_collateral_change", None)
+        if not self.composite_key:
+            data.pop("composite_key", None)
         return data
+
+    @model_validator(mode="after")
+    def _composite_key_shape(self) -> "Effect":
+        """A composite duplicate key is a ``record_written`` guard that
+        replaces the single-field key; refuse a contract that mixes them."""
+        if not self.composite_key:
+            return self
+        if self.kind is not EffectKind.RECORD_WRITTEN:
+            raise ValueError("composite_key applies only to record_written effects")
+        if self.idempotency_key is not None:
+            raise ValueError(
+                "give the duplicate key as idempotency_key (one field) or "
+                "composite_key (several fields), not both"
+            )
+        if any(not name.strip() for name in self.composite_key):
+            raise ValueError("composite_key field names must not be blank")
+        if self.expected_count > 1:
+            # Every one of the expected records would carry the key, so the
+            # duplicate rule would refute each correct save.
+            raise ValueError(
+                "composite_key identifies one record; it cannot be combined "
+                f"with expected_count {self.expected_count}"
+            )
+        return self
+
+    def key_selector(self) -> dict[str, ValueExpr]:
+        """The duplicate key as a ``field -> value`` selector.
+
+        ``{key_field: idempotency_key}`` for the single-field form, the
+        :attr:`composite_key` for the several-field form, empty without a key.
+        """
+        if self.composite_key:
+            return dict(self.composite_key)
+        if self.idempotency_key is not None:
+            return {self.key_field: self.idempotency_key}
+        return {}
 
     @model_validator(mode="after")
     def _exact_new_set_shape(self) -> "Effect":
@@ -949,6 +1003,9 @@ class Effect(BaseModel):
                     else self.idempotency_key.resolved(params)
                 ),
                 "readback": _resolve_readback(self.readback, params),
+                "composite_key": {
+                    k: v.resolved(params) for k, v in self.composite_key.items()
+                },
             },
         )
         resolved._contract_hash_override = self.resolved_contract_hash(
@@ -1023,6 +1080,10 @@ class Effect(BaseModel):
                 for selector in self.new_records
             ]
             payload["identity_field"] = self.identity_field
+        if self.composite_key:
+            payload["composite_key"] = {
+                k: value(v) for k, v in sorted(self.composite_key.items())
+            }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -1034,6 +1095,7 @@ class Effect(BaseModel):
         expressions = [
             *self.match.values(),
             *(expr for selector in self.new_records for expr in selector.values()),
+            *self.composite_key.values(),
             self.value,
             self.idempotency_key,
         ]
@@ -1093,6 +1155,11 @@ class Effect(BaseModel):
                 for selector in self.new_records
             ]
             payload["identity_field"] = self.identity_field
+        # Bound ONLY when set, so every single-key contract keeps its digest.
+        if self.composite_key:
+            payload["composite_key"] = {
+                k: str(v) for k, v in sorted(self.composite_key.items())
+            }
         # A value that reads an entered label back as a stored code binds its
         # map: a changed map is a different contract. Included only when a
         # value has one, so every other contract keeps its exact digest.
@@ -1104,6 +1171,9 @@ class Effect(BaseModel):
             expr = getattr(self, name)
             if isinstance(expr, ValueExpr) and expr.map is not None:
                 maps[name] = dict(sorted(expr.map.items()))
+        for key, expr in sorted(self.composite_key.items()):
+            if isinstance(expr, ValueExpr) and expr.map is not None:
+                maps[f"composite_key.{key}"] = dict(sorted(expr.map.items()))
         for index, selector in enumerate(self.new_records):
             for key, expr in sorted(selector.items()):
                 if isinstance(expr, ValueExpr) and expr.map is not None:

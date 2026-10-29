@@ -405,3 +405,48 @@ def test_an_unregistered_component_keeps_its_check_and_a_registered_one_does_not
         assert backend.focus_identity() is None
     finally:
         close()
+
+
+# -- follow-up: no check for an element without a name ------------------------------------
+
+
+def test_an_id_or_testid_without_a_role_and_name_is_not_a_check():
+    for after in (
+        _focus(tag="div", role=None, name=None, id="pane-3", id_count=1),
+        _focus(tag="div", role="generic", name=None, testid="pane", testid_count=1),
+    ):
+        assert _focus_postcondition(BEFORE, after) is None
+    bare = Postcondition(
+        kind=PostconditionKind.FOCUS_ON, focus_by="id", focus_value="pane-3"
+    )
+    assert not focus_identity_is_specific(bare)
+    assert is_vacuous(_key_step([bare])) is True
+
+
+def test_a_plain_host_with_a_closed_shadow_root_gets_no_check():
+    backend, close = _launch(
+        "<div id=host tabindex=-1></div><script>"
+        "window._root = document.getElementById('host').attachShadow({mode: 'closed'});"
+        "window._root.innerHTML = '<button>One</button><button>Two</button>';</script>"
+    )
+    try:
+        backend.page.evaluate("window._root.querySelectorAll('button')[1].focus()")
+        seen = backend.focus_identity()
+        # The page sees the host, which has an id but no role and name.
+        assert seen is not None and seen["id"] == "host"
+        assert _focus_postcondition(BEFORE, seen) is None
+    finally:
+        close()
+
+
+def test_an_unnamed_div_whose_id_shifts_gets_no_check():
+    backend, close = _launch(
+        "<div id=pane-3 tabindex=0>3</div><div id=pane-4 tabindex=0>4</div>"
+    )
+    try:
+        backend.page.locator("#pane-3").focus()
+        seen = backend.focus_identity()
+        assert seen is not None and seen["id"] == "pane-3"
+        assert _focus_postcondition(BEFORE, seen) is None
+    finally:
+        close()
