@@ -51,6 +51,18 @@ SCHEMA = "openadapt.network-capture/1"
 MAX_REQUEST_BYTES = 256 * 1024
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _page_of(request: Any) -> Any:
+    """The page a request came from, or None (a service worker has none)."""
+
+    try:
+        return request.frame.page
+    except Exception:  # noqa: BLE001 - service-worker and detached-frame requests
+        return None
+
+
 _SKIP_TYPES = frozenset(
     {"image", "font", "stylesheet", "script", "media", "manifest", "texttrack"}
 )
@@ -97,9 +109,14 @@ class NetworkCapture:
         self._lines: list[dict[str, Any]] = []
         self._lock = threading.Lock()
         self._attached = False
+        # Writes the browser has sent and not seen finish or fail, with when
+        # they were sent. A save the agent guard holds stays here until the
+        # guard sends or refuses it.
+        self._pending_writes: dict[Any, float] = {}
 
     def start(self) -> "NetworkCapture":
         if not self._attached:
+            self._context.on("request", self._on_request)
             self._context.on("requestfinished", self._on_finished)
             self._context.on("requestfailed", self._on_failed)
             self._attached = True
@@ -108,6 +125,7 @@ class NetworkCapture:
     def stop(self) -> None:
         if self._attached:
             for event, handler in (
+                ("request", self._on_request),
                 ("requestfinished", self._on_finished),
                 ("requestfailed", self._on_failed),
             ):
@@ -122,14 +140,57 @@ class NetworkCapture:
         with self._lock:
             return len(self._lines)
 
+    def pending_writes(
+        self,
+        pages: Optional[Iterable[Any]] = None,
+        *,
+        max_age_s: Optional[float] = None,
+    ) -> list[Any]:
+        """Writes (any method but GET, HEAD or OPTIONS) still in flight.
+
+        ``pages`` keeps only requests from those pages, so another tab's
+        long-poll in an attached browser is never waited for. ``max_age_s``
+        drops requests sent longer ago than that: a request whose finish
+        Playwright never reports (a beacon from a closing popup) must not
+        stall the rest of a recording.
+        """
+
+        now = time.monotonic()
+        with self._lock:
+            pending = list(self._pending_writes.items())
+        wanted = None if pages is None else list(pages)
+        found = []
+        for request, sent in pending:
+            if max_age_s is not None and now - sent > max_age_s:
+                continue
+            if wanted is not None:
+                page = _page_of(request)
+                if page is None or not any(page is p for p in wanted):
+                    continue
+            found.append(request)
+        return found
+
     # -- Playwright callbacks ------------------------------------------------
 
+    def _on_request(self, request: Any) -> None:
+        if request.resource_type in _SKIP_TYPES:
+            return
+        if str(request.method).upper() not in _READ_METHODS:
+            with self._lock:
+                self._pending_writes[request] = time.monotonic()
+
+    def _settled(self, request: Any) -> None:
+        with self._lock:
+            self._pending_writes.pop(request, None)
+
     def _on_failed(self, request: Any) -> None:
+        self._settled(request)
         if request.resource_type in _SKIP_TYPES:
             return
         self._append(self._request_line(request) | {"status": None, "failed": True})
 
     def _on_finished(self, request: Any) -> None:
+        self._settled(request)
         if request.resource_type in _SKIP_TYPES:
             return
         line = self._request_line(request)
