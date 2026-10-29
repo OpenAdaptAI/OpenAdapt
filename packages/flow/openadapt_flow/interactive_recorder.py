@@ -2298,6 +2298,10 @@ class InteractiveRecorder:
             settle_interval_s=settle_interval_s,
         )
         self._pyq: list[dict[str, Any]] = []
+        #: Browser events whose after-frame this recording has kept. An action
+        #: that arrives before its predecessor is kept refuses the recording,
+        #: so a harness driving the browser can wait for this to catch up.
+        self.events_kept = 0
         self._pending_type: Optional[dict[str, Any]] = None
         self._pending_scroll: Optional[dict[str, Any]] = None
         self._pending_click: Optional[dict[str, Any]] = None
@@ -3870,6 +3874,7 @@ class InteractiveRecorder:
                 )
             self._validate_event_batch([event, *self._pyq])
             self._assert_no_new_pages()
+            self.events_kept += 1
         if self._listener_error is not None:
             raise self._listener_error
         return bool(batch) or rebased
