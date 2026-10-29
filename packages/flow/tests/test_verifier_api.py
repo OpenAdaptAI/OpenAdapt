@@ -8,6 +8,7 @@ store. Records are made up.
 from __future__ import annotations
 
 import inspect
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,16 @@ from openadapt_flow.verifier import (
 
 BOT = Actor(kind="agent", id="bot")
 
+
+@pytest.fixture(autouse=True)
+def _used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Each test records used snapshots in its own directory."""
+
+    used = tmp_path / "used"
+    monkeypatch.setattr(verifier, "USED_DIR", used)
+    return used
+
+
 PARAMS = {"fname": "Ada", "lname": "Quill", "email": "ada@example.test"}
 
 
@@ -46,23 +57,25 @@ def _store(tmp_path: Path) -> Path:
     return path
 
 
+def _doc(db: Path) -> dict[str, Any]:
+    return {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {
+            "kind": "sql",
+            "sqlite_database": str(db),
+            "sql_query": "SELECT * FROM patient",
+        },
+        "record": {
+            "name": "patient",
+            "match": ["email", "lname"],
+            "fields": {"fname": "fname", "lname": "lname", "email": "email"},
+        },
+        "frame": {"identity_field": "id"},
+    }
+
+
 def _contract(db: Path) -> Contract:
-    return Contract.from_dict(
-        {
-            "schema_version": "openadapt.verify/v1",
-            "verifier": {
-                "kind": "sql",
-                "sqlite_database": str(db),
-                "sql_query": "SELECT * FROM patient",
-            },
-            "record": {
-                "name": "patient",
-                "match": ["email", "lname"],
-                "fields": {"fname": "fname", "lname": "lname", "email": "email"},
-            },
-            "frame": {"identity_field": "id"},
-        }
-    )
+    return Contract.from_dict(_doc(db))
 
 
 def _write(db: Path, *statements: str) -> None:
@@ -300,3 +313,53 @@ def test_a_snapshot_repr_shows_no_values_or_salt(tmp_path: Path) -> None:
     snapshot = capture(_contract(_store(tmp_path)), PARAMS)
     assert str(snapshot.payload["salt"]) not in repr(snapshot)
     assert "Wendell" not in repr(snapshot)
+
+
+def test_a_used_snapshot_is_refused_in_another_process(
+    tmp_path: Path, _used_dir: Path
+) -> None:
+    """Re-review of #1588: a copied file, or a snapshot pickled to a worker,
+    must not verify a second write in a new process."""
+
+    import shutil
+    import subprocess
+    import sys
+
+    db = _store(tmp_path)
+    contract = _contract(db)
+    first = capture(contract, PARAMS)
+    path = first.save(tmp_path / "before.json")
+    _write(db, SAVE)
+    assert verify_write(
+        contract, Snapshot.load(path), params=PARAMS, actor=BOT
+    ).verified
+    copy = tmp_path / "copy.json"
+    shutil.copy(path, copy)
+    script = (
+        "import sys; from pathlib import Path\n"
+        "from openadapt_flow import verifier as v\n"
+        "v.USED_DIR = Path(sys.argv[3])\n"
+        "c = v.Contract.from_dict(__import__('json').loads(sys.argv[2]))\n"
+        "try:\n"
+        "    v.verify_write(c, v.Snapshot.load(sys.argv[1]),"
+        " params={'fname': 'Ada', 'lname': 'Quill', 'email': 'ada@example.test'},"
+        " actor=v.Actor(kind='agent', id='bot'))\n"
+        "    print('verified')\n"
+        "except v.VerifierError:\n"
+        "    print('refused')\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", script, str(copy), json.dumps(_doc(db)), str(_used_dir)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert out.stdout.strip() == "refused"
+
+
+def test_the_snapshot_fields_are_stable() -> None:
+    from dataclasses import fields
+
+    assert [f.name for f in fields(Snapshot)] == ["payload", "used", "path"]
+    assert list(inspect.signature(Snapshot.load).parameters) == ["path"]
+    assert list(inspect.signature(Snapshot.save).parameters) == ["self", "path"]

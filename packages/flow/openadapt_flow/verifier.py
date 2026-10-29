@@ -22,9 +22,11 @@ Fail-closed: an unreadable read or a missing or stale baseline gives
 ``verified=False`` with that part ``not_checked``. A failed check never
 raises. :class:`VerifierError` is raised for a contract that can't be loaded
 or bound (an unbound parameter), a snapshot taken for another contract, and a
-snapshot that already verified a write. A refused call still uses up its
-snapshot. Whoever can write a snapshot controls the verdict, so the writer
-being judged must never have access to it. No model calls.
+snapshot that was already used. Any call uses up its snapshot: a refused one,
+and one whose write is ``unconfirmed`` (reconcile, then capture again; don't
+re-verify). Whoever can write a snapshot controls the verdict (its records,
+and its salt, which is what single use is keyed on), so the writer being
+judged must never have access to it. No model calls.
 
 The public names are ``Contract``, ``Snapshot``, ``Source``, ``capture``,
 ``verify_write``, ``WriteResult`` and ``VerifierError``
@@ -33,9 +35,12 @@ The public names are ``Contract``, ``Snapshot``, ``Source``, ``capture``,
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import secrets
 import tempfile
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -156,14 +161,44 @@ class Snapshot:
 
     @classmethod
     def load(cls, path: str | Path) -> "Snapshot":
+        """Read a saved snapshot. Verifying it writes ``<path>.used`` beside
+        it, and the file is read again then: its contents are what's judged."""
+
         source = Path(path)
         return cls(json.loads(source.read_text()), path=source)
 
 
-#: The salt of every snapshot this process has verified a write with. Each
-#: capture draws a fresh salt, so a copy or a reload of a used snapshot is
-#: refused too.
+#: The salt of every snapshot this process has used. Each capture draws a
+#: fresh salt, so a copy or a reload of a used snapshot is refused too.
 _CONSUMED: set[str] = set()
+_CONSUMED_LOCK = threading.Lock()
+#: Where a used snapshot's salt is recorded for every process of this user (a
+#: copied file, or a snapshot pickled to a worker): one file per salt digest.
+USED_DIR = Path.home() / ".cache" / "openadapt" / "verifier-used"
+
+
+def _consume(payload: Any) -> None:
+    """Mark ``payload``'s snapshot used, once, in this process and on disk."""
+
+    if not isinstance(payload, dict):
+        raise VerifierError("a snapshot's payload must be the dict capture made")
+    salt = payload.get("salt")
+    if not isinstance(salt, str) or not salt:
+        raise VerifierError("the snapshot has no salt; capture again")
+    digest = hashlib.sha256(salt.encode("utf-8")).hexdigest()
+    with _CONSUMED_LOCK:
+        if salt in _CONSUMED:
+            raise VerifierError("this snapshot was already used; capture again")
+        _CONSUMED.add(salt)
+    try:
+        USED_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd = os.open(USED_DIR / digest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise VerifierError("this snapshot was already used; capture again") from None
+    except OSError as exc:
+        # Nowhere to record the use: refuse rather than allow a replay.
+        raise VerifierError(f"can't record the snapshot's use: {exc}") from exc
+    os.close(fd)
 
 
 @dataclass(frozen=True)
@@ -290,11 +325,10 @@ def verify_write(
     """
 
     run_record = actor.run_record()
-    token = str(before.payload.get("salt") or "")
-    if before.used or not token or token in _CONSUMED:
-        raise VerifierError("this snapshot already verified a write; capture again")
+    if before.used:
+        raise VerifierError("this snapshot was already used; capture again")
     before.used = True
-    _CONSUMED.add(token)
+    _consume(before.payload)
 
     def run(path: Path) -> dict[str, Any]:
         try:
@@ -308,7 +342,7 @@ def verify_write(
                 provenance=None if source is None else source.provenance,
                 documents=None if source is None else source.documents,
             )
-        except VerifyRunError as exc:
+        except (VerifyRunError, OSError) as exc:
             raise VerifierError(str(exc)) from exc
 
     if before.path is not None:
