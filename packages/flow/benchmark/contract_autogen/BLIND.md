@@ -85,3 +85,8 @@ suite.
    so the person edited the contract (2 lines) and the clock stopped at the
    generator's self-check of the edit, not at an admission. The contract was
    not admitted by the generator. `results/PERSON_LOG.md` has the log.
+3. **2026-10-29, after the run: type annotations only.** mypy in CI flagged
+   the generator. The fix renames two loop variables, narrows one type and
+   adds one type ignore. The generator's report on the blind teach
+   directory is byte-identical before and after. The measured bytes are
+   those at `504eb7bab`.

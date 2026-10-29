@@ -92,7 +92,7 @@ class Teach:
     resource_type: str
     demos: list[Demo]
     capability: Mapping[str, Any]
-    search_parameters: list[Mapping[str, Any]]
+    search_parameters: Sequence[Mapping[str, Any]]
     facts: Mapping[str, Any]
     deployment: Mapping[str, Any]
     confirmed: set[str] = field(default_factory=set)
@@ -511,8 +511,8 @@ def generate(teach: Teach) -> Generated:
     made: list[tuple[Demo, dict[str, Any]]] = []
     for demo in teach.demos:
         resource, why = created_resource(demo, rtype)
-        if why:
-            refusals.append(why)
+        if why or resource is None:
+            refusals.append(why or f"{demo.name}: no created resource")
         else:
             made.append((demo, resource))
     if len(made) < 2:
@@ -554,7 +554,7 @@ def generate(teach: Teach) -> Generated:
                 kind, _ = compare_for(s.path, values_at[s.path])
                 rule = FieldRule(
                     path=s.path,
-                    compare=kind,
+                    compare=kind,  # type: ignore[arg-type]
                     map=map_for(s.plain, values_at[s.path]) or {},
                 )
                 if _matches(s.value, wanted, rule):
@@ -620,22 +620,22 @@ def generate(teach: Teach) -> Generated:
             and len(vals) == len(per_demo)
             and all(v == vals[0] for v in vals)
         ):
-            entry = f"{sample.plain}={json.dumps(vals[0], ensure_ascii=False)}"
-            if entry not in seen:
-                seen.add(entry)
-                allow.append(entry)
-                prov[f"allow.{entry}"] = "the same value in every demonstration"
+            allowed = f"{sample.plain}={json.dumps(vals[0], ensure_ascii=False)}"
+            if allowed not in seen:
+                seen.add(allowed)
+                allow.append(allowed)
+                prov[f"allow.{allowed}"] = "the same value in every demonstration"
         else:
             refusals.append(
                 f"{path}: the record holds values no task parameter explains "
                 f"({', '.join(sorted({json.dumps(v) for v in vals}))})"
             )
     for name, value in tables.DEFAULT_MEANING.get(rtype, {}).items():
-        entry = f"{name}={json.dumps(value)}"
-        if entry not in seen:
-            seen.add(entry)
-            allow.append(entry)
-            prov[f"allow.{entry}"] = "FHIR R4: the value its absence means"
+        allowed = f"{name}={json.dumps(value)}"
+        if allowed not in seen:
+            seen.add(allowed)
+            allow.append(allowed)
+            prov[f"allow.{allowed}"] = "FHIR R4: the value its absence means"
 
     # Identity: the reviewed template, or a proposed rule a person confirms.
     index = search_index(teach)
@@ -643,10 +643,10 @@ def generate(teach: Teach) -> Generated:
     identity: list[list[str]] = []
     template = tables.IDENTITY_TEMPLATES.get(rtype)
     if template is not None:
-        for rule in template:
-            if all(path in param_at for path in rule):
-                identity.append([param_at[path] for path in rule])
-                prov[f"identity.{'+'.join(rule)}"] = f"reviewed template for {rtype}"
+        for paths in template:
+            if all(path in param_at for path in paths):
+                identity.append([param_at[path] for path in paths])
+                prov[f"identity.{'+'.join(paths)}"] = f"reviewed template for {rtype}"
         if not identity:
             refusals.append(
                 f"no rule of the {rtype} identity template is bound by the demonstrations"
