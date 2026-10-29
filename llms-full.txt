@@ -543,6 +543,7 @@ improvising or retrying when something is off.
 | Judge any executor's write, including an agent's or a script's, from the system of record | Released | Synthetic | `openadapt-flow verify-run`, [VERIFY_RUN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFY_RUN.md) |
 | Judge an "ensure the record exists" write (found, created once with every value, or needs review) through a FHIR server's read path only: searches, AuditEvent and `_history`, never the database; the coverage claim names that read path | On main ([#1640](https://github.com/OpenAdaptAI/OpenAdapt/pull/1640)) | Real app (Medplum 5.2.8; three blind fault suites: 17/18, 17/20, 19/20; no fault passed in the last two) | `openadapt_flow/ensure_record.py`, [ENSURE_RECORD.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/ENSURE_RECORD.md) |
 | Check a patient registration on a commercial EHR through its public FHIR sandbox: Epic (open.epic, R4), read through FHIR search and read with SMART backend auth; the frame is the search set, since the sandbox has no AuditEvent or `_history` | On main ([#1656](https://github.com/OpenAdaptAI/OpenAdapt/pull/1656)) | Real app (Epic public sandbox, August 2026 release; blind round 12/13 with none passed as verified, the miss a false refusal fixed in the contract; caught Epic dropping the phone on a 201 create) | `benchmark/commercial_ehr/`, [FINDINGS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/commercial_ehr/FINDINGS.md) |
+| A public benchmark a vendor reruns with their own agent: `openadapt bench medplum --agent <scripted|claude|cmd:...|py:...>` runs 37 written-for-it cases (Patient, AllergyIntolerance, Appointment) against a local Medplum through a fault proxy, and scores the agent's claim, a read-back and OpenAdapt's verifier against an end-state oracle | On main ([#1652](https://github.com/OpenAdaptAI/OpenAdapt/pull/1652)) | Real app (Medplum 5.2.8; Claude Sonnet 5.5: OpenAdapt missed 1 of 9 harms with 9 false stops on records the agent had corrected itself, against 8 missed by the claim and the read-back; cold run from clone to scorecard 5 min) | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/fhir_medplum/public/README.md), [RESULTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/fhir_medplum/public/RESULTS.md) |
 | Prove that nothing outside the declared change moved (frame conditions), and attribute concurrent edits by other users through the app's audit log (by record, or by owner for a user's own rows such as their UI settings) or a modified-by field; the receipt signs which parts were checked | On main | Synthetic (MockMed, SQLite audit log) | `verify-run`, [VERIFICATION_COVERAGE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/VERIFICATION_COVERAGE.md) |
 | Admit a record check only after a fault suite written to a store copy shows it catches every fault class it claims, including writes outside its read (another table, a side row for the saved record), and sign each class's result into the receipt | On main | Synthetic (in-memory REST store, SQLite copy); OpenEMR stand-in built from the pinned fixture's dump | `openadapt_flow/fault_gate.py`, `scaffold-verifier --fault-gate`, `verify-run` `admission:` |
 | Check that the saved record matches its source document, not only the parameters: intake keeps each value's line, a second reading must agree before a guarded save, and a round trip compares the read-back with the document | On main | Synthetic (MockMed, text referral) | `openadapt_flow/provenance.py`, `intake`, `verify-run --provenance`, guarded save |
@@ -562,6 +563,7 @@ improvising or retrying when something is off.
 | Keep the server's own answer to a save as lower-level evidence on the receipt | On main ([#1298](https://github.com/OpenAdaptAI/OpenAdapt/pull/1298)) | Synthetic | receipts |
 | A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | On main ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |
 | Propose an undo for each saving step (another recording, captured traffic, or the old value), keep it only if a test copy shows every record restored, and offer it after a stop once a person approves it | On main ([#1346](https://github.com/OpenAdaptAI/OpenAdapt/pull/1346)) | Synthetic (MockMed, MockLoan, live browser) | `openadapt-flow undo propose`, `undo accept`; [AFTER_A_STOP.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/AFTER_A_STOP.md) |
+| Leave the screen clean after an item that halted before any write: close dialogs and cancel forms with the recordings' own controls, re-enter, confirm the start screen and read the records back before the session takes another item. A session that doesn't come back is marked dirty and takes no more items; a cleanup that changed a record makes the item's write uncertain and stops the run. `cleanup qualify` tries the cleanup after every step on a test copy and refuses one that changes a record | On main ([#1607](https://github.com/OpenAdaptAI/OpenAdapt/pull/1607)) | Synthetic (scripted three-screen app through the real replayer and pool) and real app (pinned OpenEMR: a halted New Patient item left the confirmation dialog open; re-entry closed it, the form was empty, no patient row changed and the next item's first steps ran with no model calls; a signed-out screen was marked dirty; [results](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/halt_cleanup/results/openemr.json)) | `openadapt-flow cleanup qualify`; [HALT_CLEANUP.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HALT_CLEANUP.md) |
 
 ## Approvals
 
@@ -759,6 +761,7 @@ A test fails when a command has no file or this list is out of date.
 
 **Repair and learn from halts:**
 
+- `cleanup`: A clean screen after a halted item; `cleanup qualify` tries the halt cleanup on a test copy after every step and stores it when the start screen always comes back and no record changes.
 - `fleet`
 - `repair`
 - `teach-branch`
@@ -1995,6 +1998,17 @@ The limits of that:
   tell whether a later check depends on an earlier write.
 - Duplicate-write compensation (`effects.compensation`) is the only automatic
   repair, and only where a deployment has implemented and verified it.
+
+A halted item can also leave the screen dirty (a dialog open, a form half
+filled). Under `on_halt: skip_unwritten`, a worklist pool worker cleans up,
+confirms the start screen and reads the records back before it takes another
+item, and stops when it can't ([`HALT_CLEANUP.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HALT_CLEANUP.md)). The
+start check confirms the start screen's first control shows, not that every
+field on it is empty. Cleanup qualification halts only after steps that
+succeeded, so it doesn't try the screens a failed step leaves (a validation
+banner, an error dialog). A cleanup that changed the records makes the item's
+write uncertain, and the run stops; the read-back can't tell that apart from
+another user's change at the same moment.
 
 Before resuming or teaching a halted consequential workflow, reconcile prior
 effects, confirm the current entity and application state, and ensure the bundle

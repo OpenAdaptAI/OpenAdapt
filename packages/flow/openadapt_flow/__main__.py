@@ -3013,6 +3013,60 @@ def _replay_worklist_pool(
     wirings = [_deployment_runtime(args, params=params) for _ in accounts]
     salt = getattr(getattr(workflow, "manifest", None), "content_digest", "") or ""
 
+    # After an item that halted before any write, when the session takes the
+    # next one, clean the screen, confirm the start screen and read the
+    # records back (docs/HALT_CLEANUP.md). Without a qualified halt_cleanup,
+    # the default only re-enters and checks.
+    from openadapt_flow import halt_cleanup as _hc
+    from openadapt_flow.after_stop import records_reader as _records_reader
+    from openadapt_flow.runtime import Replayer as _Replayer
+
+    item_cleanup = _hc.runnable_cleanup(workflow)
+
+    def _reenter(source, open_entry):
+        def reenter() -> None:
+            if open_entry is not None:
+                open_entry(source)
+            else:
+                source.goto(entry_url)
+
+        return reenter
+
+    def clean_session(source, cleanup_dir, *, wiring, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        read_records = _records_reader(wiring[1])
+        if read_records is None:
+            # Without a read-back, a cleanup that saves (autosave on leave)
+            # would go unseen and the item would count as unwritten.
+            return _hc.CleanupResult(
+                dirty="the deployment's effect verifier can't read the records "
+                "back, so a cleanup can't be shown to save nothing"
+            )
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.run_cleanup(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=cleanup_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+            read_records=read_records,
+        )
+
+    def start_check(source, check_dir, *, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.check_start(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=check_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+        )
+
     if kind == "web":
         workers = []
         for i, account in enumerate(accounts):
@@ -3046,6 +3100,15 @@ def _replay_worklist_pool(
                     run_item_on_page=partial(run_item, wirings[i], page_mode=True),
                     sign_in=sign_in,
                     open_entry=open_entry,
+                    clean=partial(
+                        clean_session,
+                        wiring=wirings[i],
+                        page_mode=True,
+                        open_entry=open_entry,
+                    ),
+                    start_check=partial(
+                        start_check, page_mode=True, open_entry=open_entry
+                    ),
                     cdp_endpoint=account.browser_cdp_endpoint if account else None,
                     headed=bool(args.headed or cfg.backend.headed),
                     readback_window=policy.readback_window,
@@ -3080,6 +3143,8 @@ def _replay_worklist_pool(
                     backend_cfg, rdp_transport=session, rdp_connect=False
                 ),
                 run_item_on_backend=partial(run_item, wirings[i], page_mode=False),
+                clean=partial(clean_session, wiring=wirings[i], page_mode=False),
+                start_check=partial(start_check, page_mode=False),
                 fingerprint=hashlib.sha256(
                     f"{backend_cfg.rdp_host}|{account.rdp_username}".encode()
                 ).hexdigest(),
@@ -11867,6 +11932,10 @@ def build_parser() -> argparse.ArgumentParser:
             _add_deployment_flags,
         ),
     )
+
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+
+    _register_cleanup(sub)
 
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 

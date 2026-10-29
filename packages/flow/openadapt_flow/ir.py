@@ -1176,6 +1176,80 @@ def predicate_contract_sha256(predicate: Optional[Predicate]) -> str:
     return hashlib.sha256(canonical).hexdigest()
 
 
+class HaltCleanupQualification(BaseModel):
+    """The test-copy evidence that a halt cleanup reaches the start screen."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    test_copy: str = Field(min_length=1)
+    #: Halt points tried (one fresh session each) and how many reached the
+    #: start screen after the cleanup.
+    halt_points: int = Field(ge=1)
+    passed: int = Field(ge=0)
+    qualified_at: str
+    #: SHA-256 of the cleanup it qualified (steps and start state).
+    cleanup_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class HaltCleanup(BaseModel):
+    """What a stopped item does to the app's screen before the next item.
+
+    A halted item can leave a dialog open, a form half filled or another page
+    in front. Before the next item runs on the same session, the cleanup's
+    ``steps`` run (each one only when its control is on screen), and then the
+    ``start_state`` must hold. If it doesn't, the session is dirty and takes
+    no more items (docs/HALT_CLEANUP.md).
+
+    Navigation only: no step may save, declare an effect, call an API or type
+    text. A record the item saved is rollback's job, not this one's.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Close, cancel and discard actions, in order. Each click is guarded to
+    #: run only when its control is on screen.
+    steps: list[Step] = Field(default_factory=list)
+    #: The screen each item starts on.
+    start_state: Predicate
+    #: ``recording``: derived from the recordings. ``declared``: written by an
+    #: author.
+    source: Literal["recording", "declared"] = "recording"
+    qualification: Optional[HaltCleanupQualification] = None
+
+    @model_validator(mode="after")
+    def _navigation_only(self) -> "HaltCleanup":
+        allowed = {
+            ActionKind.CLICK,
+            ActionKind.DOUBLE_CLICK,
+            ActionKind.KEY,
+            ActionKind.HOTKEY,
+            ActionKind.WAIT,
+            ActionKind.SCROLL,
+        }
+        for step in self.steps:
+            if step.action not in allowed:
+                raise ValueError(
+                    f"cleanup step {step.id!r} {step.action.value}s; a cleanup only "
+                    "closes, cancels, discards and navigates"
+                )
+            if (
+                step.effects
+                or step.api_binding is not None
+                or step.risk == "irreversible"
+            ):
+                raise ValueError(
+                    f"cleanup step {step.id!r} could save; a cleanup only navigates"
+                )
+            if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK) and (
+                step.guard is None or step.guard.on_unmet != "skip"
+            ):
+                raise ValueError(
+                    f"cleanup click {step.id!r} needs a guard that skips it when "
+                    "its control isn't on screen"
+                )
+        return self
+
+
 class Interstitial(BaseModel):
     """A KNOWN recurring interstitial that can appear at a step's entry frame
     and would otherwise block the run (docs/LIMITS.md "state dependency").
@@ -3151,6 +3225,9 @@ class Workflow(BaseModel):
     # content digest when present; omitted from the serialized bytes when
     # empty, so a bundle that declares none keeps its digest.
     undo_steps: list[UndoStep] = Field(default_factory=list)
+    #: What a halted item does to the screen before the next item on the same
+    #: session (docs/HALT_CLEANUP.md). None (and omitted) otherwise.
+    halt_cleanup: Optional[HaltCleanup] = None
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -3201,6 +3278,8 @@ class Workflow(BaseModel):
             data.pop("guard_sources", None)
         if not self.undo_steps:
             data.pop("undo_steps", None)
+        if self.halt_cleanup is None:
+            data.pop("halt_cleanup", None)
         return data
 
     @model_validator(mode="after")

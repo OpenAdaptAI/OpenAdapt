@@ -1220,6 +1220,59 @@ def setup(dry_run: bool, undo: bool, only: tuple[str, ...]) -> None:
     sys.exit(1 if run.failures else 0)
 
 
+@main.group("bench")
+def bench() -> None:
+    """Public benchmarks you can rerun with your own agent."""
+
+
+def _flow_checkout() -> Optional[Path]:
+    """``packages/flow`` of the OpenAdapt checkout this runs from, if any.
+
+    The benchmarks need their compose files and case sets, which live in the
+    repository, not in the installed package.
+    """
+    here = Path(__file__).resolve().parents[1]
+    for root in (here, *Path.cwd().resolve().parents, Path.cwd().resolve()):
+        flow = root / "packages" / "flow"
+        if (flow / "benchmark" / "fhir_medplum" / "public" / "run.py").is_file():
+            return flow
+    return None
+
+
+@bench.command(
+    "medplum",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    add_help_option=False,
+)
+@click.pass_context
+def bench_medplum(ctx: click.Context) -> None:
+    """Your agent writes to a local Medplum; OpenAdapt checks every write.
+
+    Options go to the runner; `openadapt bench medplum --help` lists them.
+    Needs Docker and an OpenAdapt checkout (see
+    packages/flow/benchmark/fhir_medplum/public/README.md).
+    """
+    import subprocess
+
+    _require_supported_python()
+    flow = _flow_checkout()
+    if flow is None:
+        click.echo(
+            "Error: run this from an OpenAdapt checkout "
+            "(git clone https://github.com/OpenAdaptAI/OpenAdapt).",
+            err=True,
+        )
+        sys.exit(1)
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            p for p in (str(flow), os.environ.get("PYTHONPATH", "")) if p
+        ),
+    }
+    cmd = [sys.executable, "-m", "benchmark.fhir_medplum.public.run", *ctx.args]
+    sys.exit(subprocess.run(cmd, env=env).returncode)
+
+
 @main.group("verify")
 def verify() -> None:
     """Verify writes against the system of record, for any agent.

@@ -825,6 +825,17 @@ The limits of that:
 - Duplicate-write compensation (`effects.compensation`) is the only automatic
   repair, and only where a deployment has implemented and verified it.
 
+A halted item can also leave the screen dirty (a dialog open, a form half
+filled). Under `on_halt: skip_unwritten`, a worklist pool worker cleans up,
+confirms the start screen and reads the records back before it takes another
+item, and stops when it can't ([`HALT_CLEANUP.md`](HALT_CLEANUP.md)). The
+start check confirms the start screen's first control shows, not that every
+field on it is empty. Cleanup qualification halts only after steps that
+succeeded, so it doesn't try the screens a failed step leaves (a validation
+banner, an error dialog). A cleanup that changed the records makes the item's
+write uncertain, and the run stops; the read-back can't tell that apart from
+another user's change at the same moment.
+
 Before resuming or teaching a halted consequential workflow, reconcile prior
 effects, confirm the current entity and application state, and ensure the bundle
 and approval still match the paused run. A report that accurately names the
