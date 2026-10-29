@@ -61,6 +61,9 @@ services:
       MEDPLUM_VM_CONTEXT_BOTS_ENABLED: "false"
       MEDPLUM_ALLOWED_ORIGINS: "http://localhost:${MEDPLUM_APP_PORT}"
       MEDPLUM_INTROSPECTION_ENABLED: "true"
+      # The read-path verifier reads the audit trail (AuditEvent); Medplum
+      # keeps it as resources only when asked to.
+      MEDPLUM_SAVE_AUDIT_EVENTS: "true"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:8103/healthcheck').then(r => r.ok || process.exit(1)).catch(() => process.exit(1))"]
       interval: 10s
