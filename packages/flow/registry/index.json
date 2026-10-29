@@ -3,6 +3,7 @@
   "workflows": [
     {
       "app": "OpenEMR 8.0.0.3 (GPL-3.0), local test copy with made-up patients",
+      "app_license": "GPL-3.0",
       "certification": null,
       "evidence": "On 2026-10-11 this bundle ran over 8 made-up referrals on a local OpenEMR test copy. 7 saved and a separate REST and SQL read matched 12 of 12 fields; the duplicate-name case stopped at OpenEMR's duplicate check. Engine certification was off for those runs.",
       "files": {
@@ -68,6 +69,10 @@
         "country_code"
       ],
       "path": "bundles/openemr/new-referral",
+      "screens": {
+        "data": "synthetic",
+        "source": "benchmark/openemr_local (made-up patients)"
+      },
       "status": "example",
       "title": "Create the patient chart from a new referral in OpenEMR",
       "usage": "Start signed in to OpenEMR on Patient > New (/interface/new/new_comprehensive.php) at 1280x800. benchmark/openemr_local in this repository brings up a matching synthetic copy."
