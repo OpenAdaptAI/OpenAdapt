@@ -104,6 +104,9 @@ def _record(tmp_path: Path) -> tuple[Path, Any]:
             )
         )
         registration.wait_for(state="hidden", timeout=30_000)
+        # Think time: the next snapshot must come a real gap later
+        # (MIN_STORE_SETTLE_GAP_S).
+        time.sleep(1.5)
         spec = SyntheticPatientSpec()
 
         def text_field(name: str, value: str, *, param: str) -> None:
@@ -156,7 +159,7 @@ def test_openemr_dismiss_gets_no_record_written_and_the_save_keeps_it(tmp_path):
         if line.strip()
     ]
     # The real store did not change across the dismiss.
-    assert store_unchanged_through_next(events, 0) is True
+    assert store_unchanged_through_next({e["i"]: e for e in events}, 0) is True
 
     wf = compile_recording(
         recording,

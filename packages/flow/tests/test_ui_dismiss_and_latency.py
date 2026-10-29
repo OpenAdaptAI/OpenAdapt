@@ -31,13 +31,16 @@ import pytest
 from PIL import Image
 
 from openadapt_flow.compiler.effect_mining import (
+    MIN_STORE_SETTLE_GAP_S,
     SOR_AFTER_KEY,
     SOR_BEFORE_KEY,
+    SOR_T_AFTER_KEY,
+    SOR_T_BEFORE_KEY,
     mine_step_effects,
     store_unchanged_through_next,
 )
 from openadapt_flow.ir import ActionKind, Anchor, Step, StructuralLocator
-from openadapt_flow.recorder import Recorder, _phash
+from openadapt_flow.recorder import Recorder, _phash, _pixels
 from openadapt_flow.runtime.effects import EffectKind
 
 CHART = [{"id": "e1", "type": "Encounter", "patient_id": "p1", "note": "x"}]
@@ -46,47 +49,99 @@ CHART = [{"id": "e1", "type": "Encounter", "patient_id": "p1", "note": "x"}]
 # -- #1377: the store-unchanged proof ---------------------------------------------------------
 
 
-def _ev(i: int, before: Any, after: Any) -> dict[str, Any]:
-    return {"i": i, SOR_BEFORE_KEY: before, SOR_AFTER_KEY: after}
+def _ev(i: int, before: Any, after: Any, t: float = 0.0) -> dict[str, Any]:
+    # t: when the before snapshot was read; the after one 0.2 s later.
+    return {
+        "i": i,
+        SOR_BEFORE_KEY: before,
+        SOR_AFTER_KEY: after,
+        SOR_T_BEFORE_KEY: t,
+        SOR_T_AFTER_KEY: t + 0.2,
+    }
+
+
+def _proof(*events: dict[str, Any]) -> Optional[bool]:
+    return store_unchanged_through_next({e["i"]: e for e in events}, 0)
 
 
 def test_the_store_is_unchanged_only_with_all_three_snapshots_equal():
-    assert store_unchanged_through_next([_ev(0, [], []), _ev(1, [], CHART)], 0)
+    assert _proof(_ev(0, [], []), _ev(1, [], CHART, t=3.0))
     # The write landed after the step's own snapshot, before the next action.
-    assert (
-        store_unchanged_through_next([_ev(0, [], []), _ev(1, CHART, CHART)], 0) is False
-    )
-    assert (
-        store_unchanged_through_next([_ev(0, [], CHART), _ev(1, CHART, [])], 0) is False
-    )
+    assert _proof(_ev(0, [], []), _ev(1, CHART, CHART, t=3.0)) is False
+    assert _proof(_ev(0, [], CHART), _ev(1, CHART, [], t=3.0)) is False
 
 
 def test_no_proof_without_every_snapshot():
-    assert store_unchanged_through_next([_ev(0, [], [])], 0) is None
-    assert store_unchanged_through_next([_ev(0, None, []), _ev(1, [], [])], 0) is None
-    assert store_unchanged_through_next([_ev(0, [], []), {"i": 1}], 0) is None
+    assert _proof(_ev(0, [], [])) is None
+    assert _proof(_ev(0, None, []), _ev(1, [], [], t=3.0)) is None
+    assert _proof(_ev(0, [], []), {"i": 1}) is None
 
 
-def _dismiss_step() -> Step:
+def test_no_proof_without_a_real_gap_before_the_next_snapshot():
+    # A scripted demonstration acts again at once, and an interactive one
+    # reuses the after snapshot: a late write would not show yet.
+    assert MIN_STORE_SETTLE_GAP_S >= 1.0
+    assert _proof(_ev(0, [], []), _ev(1, [], [], t=0.5)) is None
+    untimed = {"i": 1, SOR_BEFORE_KEY: [], SOR_AFTER_KEY: []}
+    assert _proof(_ev(0, [], []), untimed) is None
+
+
+def _dismiss_step(label: str = "Continue to tasks") -> Step:
     return Step(
         id="step_000",
-        intent="click Continue to tasks",
+        intent=f"click {label}",
         action=ActionKind.CLICK,
         anchor=Anchor(
             template="templates/0.png",
             region=(0, 0, 10, 10),
             click_point=(5, 5),
             structural=StructuralLocator(
-                selector="#notice-continue", role="button", name="Continue to tasks"
+                selector="#notice-continue", role="button", name=label
             ),
         ),
         risk="irreversible",
     )
 
 
-def test_a_consequential_step_that_left_the_store_alone_gets_no_record_written():
+def test_a_dismiss_that_left_the_store_alone_gets_no_record_written():
     mined = mine_step_effects(_ev(0, [], []), _dismiss_step(), store_unchanged=True)
     assert mined.disposition == "none" and mined.effects == []
+    assert "no network capture" in mined.reason
+    assert "no write request" not in mined.reason
+    captured = mine_step_effects(
+        _ev(0, [], []), _dismiss_step(), store_unchanged=True, write_requests=False
+    )
+    assert "no write request in the step's window" in captured.reason
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Save Encounter",
+        "Submit",
+        "Sign note",
+        "Continue to checkout",
+        "Continue and save",
+    ],
+)
+def test_a_write_shaped_step_keeps_its_placeholder_whatever_the_store_shows(label):
+    # The reader may not see every write (another table, an older row, a
+    # same-value save): only a dismiss may lose its placeholder.
+    mined = mine_step_effects(
+        _ev(0, [], []), _dismiss_step(label), store_unchanged=True
+    )
+    assert mined.placeholder
+    assert mined.effects[0].kind is EffectKind.RECORD_WRITTEN
+
+
+@pytest.mark.parametrize(
+    "label", ["Close", "OK", "Got it", "Dismiss", "Ask again later", "Skip", "Not now"]
+)
+def test_dismiss_shaped_labels(label):
+    mined = mine_step_effects(
+        _ev(0, [], []), _dismiss_step(label), store_unchanged=True
+    )
+    assert mined.disposition == "none"
 
 
 def test_without_the_proof_the_placeholder_stays():
@@ -124,6 +179,8 @@ def _recording(tmp_path: Path, *, late_write: bool, post_at: Optional[float]) ->
             },
             SOR_BEFORE_KEY: [],
             SOR_AFTER_KEY: [],
+            SOR_T_BEFORE_KEY: 0.8,
+            SOR_T_AFTER_KEY: 1.2,
             **page,
         },
         {
@@ -139,6 +196,8 @@ def _recording(tmp_path: Path, *, late_write: bool, post_at: Optional[float]) ->
             },
             SOR_BEFORE_KEY: CHART if late_write else [],
             SOR_AFTER_KEY: CHART,
+            SOR_T_BEFORE_KEY: 2.9,
+            SOR_T_AFTER_KEY: 3.3,
             **page,
         },
     ]
@@ -234,14 +293,14 @@ def test_a_late_screen_after_a_route_change_is_waited_for(tmp_path):
 def test_without_the_wait_the_old_screen_is_kept(tmp_path):
     # The race #1378 hit: two identical frames of the old screen.
     after = _after_frame(tmp_path, _SlowRoute(1.5), settle_pending_timeout_s=0.0)
-    assert _phash(after) == _phash(_png("white"))
+    assert _pixels(after) == _pixels(_png("white"))
 
 
 def test_the_wait_is_bounded_and_keeps_the_old_frame_on_timeout(tmp_path):
     started = time.monotonic()
     after = _after_frame(tmp_path, _SlowRoute(30.0), settle_pending_timeout_s=1.0)
     assert time.monotonic() - started < 5.0
-    assert _phash(after) == _phash(_png("white"))
+    assert _pixels(after) == _pixels(_png("white"))
 
 
 def test_a_click_that_starts_nothing_settles_at_once(tmp_path):
@@ -254,14 +313,75 @@ class _BusyPage(_SlowRoute):
     """No URL change; the page reports a request in flight until the screen
     arrives (a slow server behind a same-URL update)."""
 
+    busy_before = False
+
     def page_quiescent(self, window_s: float) -> Optional[bool]:
-        assert self.clicked_at is not None
+        if self.clicked_at is None:
+            return not self.busy_before
         return time.monotonic() - self.clicked_at >= self.delay_s
 
 
 def test_a_request_in_flight_is_waited_for(tmp_path):
     after = _after_frame(tmp_path, _BusyPage(1.5, changes_url=False))
     assert _phash(after) == _phash(_png("navy"))
+
+
+def test_a_page_busy_before_the_action_does_not_extend_the_wait(tmp_path):
+    # Keepalive polling, a spinner, a chat widget: busy before and after.
+    page = _BusyPage(1.5, changes_url=False)
+    page.busy_before = True
+    started = time.monotonic()
+    after = _after_frame(tmp_path, page)
+    assert time.monotonic() - started < 1.4
+    assert _pixels(after) == _pixels(_png("white"))
+
+
+def test_page_activity_alone_waits_less_than_a_route_change(tmp_path):
+    from openadapt_flow.recorder import SETTLE_PENDING_PROBE_ONLY_S
+
+    started = time.monotonic()
+    _after_frame(tmp_path, _BusyPage(30.0, changes_url=False))
+    took = time.monotonic() - started
+    assert SETTLE_PENDING_PROBE_ONLY_S - 0.5 < took < SETTLE_PENDING_PROBE_ONLY_S + 2
+
+
+class _HashLink(_SlowRoute):
+    def click(self, x: int, y: int) -> None:
+        self.clicked_at = time.monotonic()
+        self.url = self.url.split("#")[0] + "#"
+
+
+def test_a_bare_hash_link_is_not_a_route_change(tmp_path):
+    # href="#": waiting would adopt whatever changes next (a fading toast).
+    page = _HashLink(30.0)
+    page.url = "http://app/list"
+    started = time.monotonic()
+    _after_frame(tmp_path, page)
+    assert time.monotonic() - started < 2.0
+
+
+def _png_with_row(row: int) -> bytes:
+    image = Image.new("RGB", (640, 480), "white")
+    for x in range(20, 620):
+        image.putpixel((x, 100 + row), (0, 0, 0))
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class _SameLayout(_SlowRoute):
+    """Next page of a list: same chrome, one line moved, rendered at once."""
+
+    def screenshot(self) -> bytes:
+        return _png_with_row(1 if self.clicked_at is not None else 0)
+
+
+def test_a_small_change_the_phash_misses_is_not_the_old_screen(tmp_path):
+    assert _phash(_png_with_row(0)) == _phash(_png_with_row(1))
+    started = time.monotonic()
+    after = _after_frame(tmp_path, _SameLayout(0.0))
+    assert time.monotonic() - started < 2.0
+    assert _pixels(after) == _pixels(_png_with_row(1))
 
 
 # -- MockMed in a real browser ----------------------------------------------------------------
@@ -317,7 +437,7 @@ def test_mockmed_slow_open_click_records_the_patient_screen(mockmed, tmp_path):
     # The after frame is the patient screen, not the task list two seconds
     # before it rendered: the compiler mines visual checks from it, as it does
     # without the delay, and does not fall back to a bare url_changed.
-    assert _phash(after) != _phash(before)
+    assert _pixels(after) != _pixels(before)
 
 
 def test_mockmed_notice_dismiss_gets_no_record_written(mockmed, tmp_path):
@@ -336,6 +456,8 @@ def test_mockmed_notice_dismiss_gets_no_record_written(mockmed, tmp_path):
             system_of_record_reader=lambda: db.snapshot()["records"],
         )
         rec.click(*_center(page, "#notice-continue"))
+        # Think time: the next snapshot must come a real gap later.
+        time.sleep(1.2)
         rec.click(*_center(page, ".open-btn"))
         page.wait_for_selector("#new-encounter")
         rec.click(*_center(page, "#new-encounter"))

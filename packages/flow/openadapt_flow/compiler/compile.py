@@ -3201,20 +3201,26 @@ def _compile_recording(
         from openadapt_flow.compiler.effect_mining import store_unchanged_through_next
         from openadapt_flow.compiler.local_edit import _no_write
 
+        events_by_i = {e.get("i"): e for e in events}
+        positions = {e.get("i"): k for k, e in enumerate(events)}
         for step, _sb, _sa, event in pending:
             # The step wrote nothing when the record store stayed the same
-            # across it and until the next action, and the network capture
-            # (when there is one) shows no write request in its window (#1377).
-            unchanged = store_unchanged_through_next(events, int(event["i"]))
+            # across it and until the next action (a real gap later), and the
+            # network capture, when there is one, shows no write request in
+            # its window (#1377). Effect mining uses it for dismiss-shaped
+            # steps only.
+            unchanged = store_unchanged_through_next(events_by_i, int(event["i"]))
+            write_requests: Optional[bool] = None
             if unchanged is True and network_lines is not None:
-                position = next(
-                    (k for k, e in enumerate(events) if e.get("i") == event["i"]),
-                    None,
+                position = positions.get(event["i"])
+                no_write = (
+                    None
+                    if position is None
+                    else _no_write(events, position, network_lines)
                 )
-                if (
-                    position is None
-                    or _no_write(events, position, network_lines) is not True
-                ):
+                if no_write is True:
+                    write_requests = False
+                else:
                     unchanged = None
             mined = mine_step_effects(
                 event,
@@ -3222,10 +3228,15 @@ def _compile_recording(
                 exclude_texts=exclude_texts,
                 param_bindings=bindings or None,
                 store_unchanged=unchanged,
+                write_requests=write_requests,
             )
             if mined.effects:
                 step.effects = mined.effects
-            log = logger.info if mined.disposition != "none" else logger.debug
+            log = (
+                logger.info
+                if mined.disposition != "none" or unchanged is True
+                else logger.debug
+            )
             log("effect-mining %s: %s", step.id, mined.reason)
             i_event = int(event["i"])
             if _sa is not None:

@@ -163,11 +163,11 @@ def _record_login(
 
 
 def _frames_differ(out: Path) -> bool:
-    from openadapt_flow.recorder import _phash
+    from openadapt_flow.recorder import _pixels
 
     before = (out / "frames" / "0000_before.png").read_bytes()
     after = (out / "frames" / "0000_after.png").read_bytes()
-    return _phash(before) != _phash(after)
+    return _pixels(before) != _pixels(after)
 
 
 def test_without_the_wait_the_login_click_records_the_old_screen(proxied, tmp_path):
