@@ -632,7 +632,7 @@ jobs:
         # GHSA-36p7-vc44-83pf; revisit when one ships), and current releases
         # need mcp<2 and openai<3. The adapter is tested against this one
         # version, in this job only.
-        run: uv pip install "crewai==1.6.1"
+        run: uv pip install --require-hashes -r ci/crewai-1.6.1.txt
       - name: Test
         env:
           CREWAI_DISABLE_TELEMETRY: "true"
