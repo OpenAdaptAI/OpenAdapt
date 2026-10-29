@@ -476,3 +476,34 @@ def test_heal_recontext_keeps_dob_lines_and_drops_clocks(bundle, run_dir):
     heal = report.results[0].heal
     assert heal is not None
     assert heal.new_anchor.context_text == "Jane Sample DOB 1980-01-01"
+
+
+def test_heal_keeps_a_dialog_target_band_inside_the_dialog():
+    """A healed dialog step re-reads its band on the dialog alone (#1347)."""
+    import cv2
+    import numpy as np
+
+    step = ocr_anchored_step()
+    assert step.anchor is not None
+    step.anchor.dialog_region = (60, 40, 180, 120)
+    old_click = step.anchor.click_point
+    frames: list[bytes] = []
+
+    class RecordingVision(FakeVision):
+        def ocr(self, png, region=None):
+            frames.append(png)
+            return super().ocr(png, region=region)
+
+    vision = RecordingVision()
+    resolution = Resolution(
+        rung="template_global",
+        point=(old_click[0] + 10, old_click[1] + 5),
+        confidence=0.99,
+        elapsed_ms=1.0,
+    )
+    event, _crop = build_heal_event(
+        step, resolution, (100, 140, 50, 20), make_png(VIEWPORT, (0, 0, 0)), vision
+    )
+    assert event.new_anchor.dialog_region == (70, 45, 180, 120)
+    full = cv2.imdecode(np.frombuffer(frames[-1], np.uint8), cv2.IMREAD_COLOR)
+    assert (full[:45] == 255).all() and (full[45:165, 70:250] == 0).all()

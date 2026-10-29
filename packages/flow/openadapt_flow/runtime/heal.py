@@ -203,6 +203,15 @@ def build_heal_event(
             iw,
             ih,
         )
+    translated_dialog_region = None
+    if old_anchor.dialog_region is not None:
+        dx, dy, dw, dh = old_anchor.dialog_region
+        translated_dialog_region = (
+            dx + resolution.point[0] - old_anchor.click_point[0],
+            dy + resolution.point[1] - old_anchor.click_point[1],
+            dw,
+            dh,
+        )
     if (
         old_anchor.context_text is None
         and old_anchor.identity_template is not None
@@ -213,9 +222,17 @@ def build_heal_event(
         # identity evidence. Do not add live plaintext to the healed anchor.
         new_context = None
     else:
+        context_png = frame_png
+        if translated_dialog_region is not None:
+            # A target in a dialog keeps its band read on the dialog alone, as
+            # the compiler read it; replay masks the live frame the same way.
+            context_png = (
+                identity_mod.mask_outside(frame_png, translated_dialog_region)
+                or frame_png
+            )
         new_context = _recontext(
             vision,
-            frame_png,
+            context_png,
             new_region,
             resolution.point,
             frame,
@@ -228,6 +245,7 @@ def build_heal_event(
             "ocr_text": new_text if new_text is not None else old_anchor.ocr_text,
             "context_text": new_context,
             "identifier_region": translated_identifier_region,
+            "dialog_region": translated_dialog_region,
         }
     )
     event = HealEvent(

@@ -401,6 +401,21 @@ def regions_intersect(a: Region, b: Region) -> bool:
 _intersects = regions_intersect
 
 
+def centered_in(region: Region, scope: Region) -> bool:
+    """Whether ``region``'s center lies inside ``scope``.
+
+    Scopes the identity band to the active dialog: a line belongs to the
+    dialog when its center is inside the dialog's box, so a form label beside
+    the dialog (OpenEMR's "County:" left of "Confirm Create New Patient") is
+    not identity evidence, while a line the dialog's edge only clips is judged
+    by where most of it sits.
+    """
+    x, y, w, h = region
+    sx, sy, sw, sh = scope
+    cx, cy = x + w // 2, y + h // 2
+    return sx <= cx < sx + sw and sy <= cy < sy + sh
+
+
 def lines_near_point(lines: Iterable[Any], point_y: int) -> list[Any]:
     """Filter OCR lines to the single text row containing ``point_y``.
 
@@ -473,6 +488,7 @@ def context_from_lines(
     point: Optional[Point] = None,
     min_confidence: float = 0.5,
     reference_date: Optional[date] = None,
+    scope: Optional[Region] = None,
 ) -> Optional[str]:
     """Extract the context-band text from full-frame OCR lines.
 
@@ -497,6 +513,8 @@ def context_from_lines(
         reference_date: The recording date, enabling the near/far date
             split; when None every date-bearing line is dropped (heal-time
             re-extraction has no recording date).
+        scope: The active dialog's box when the target sits in one; lines
+            centered outside it (the page behind the dialog) are dropped.
 
     Returns:
         The joined band text, or None when the surviving text is too short
@@ -509,6 +527,7 @@ def context_from_lines(
         point=point,
         min_confidence=min_confidence,
         reference_date=reference_date,
+        scope=scope,
     )
     if not kept:
         return None
@@ -563,6 +582,7 @@ def _kept_context_lines(
     point: Optional[Point],
     min_confidence: float,
     reference_date: Optional[date],
+    scope: Optional[Region] = None,
 ) -> list[tuple[int, Any, str]]:
     """The confident, in-band, non-excluded, non-volatile identity lines.
 
@@ -579,6 +599,8 @@ def _kept_context_lines(
         lx, ly, lw, lh = line.region
         center_y = ly + lh // 2
         if not (band_y <= center_y < band_y + band_h):
+            continue
+        if scope is not None and not centered_in(line.region, scope):
             continue
         if _intersects(line.region, exclude_region):
             continue
@@ -599,6 +621,7 @@ def context_region_from_lines(
     point: Optional[Point] = None,
     min_confidence: float = 0.5,
     reference_date: Optional[date] = None,
+    scope: Optional[Region] = None,
 ) -> Optional[Region]:
     """Bounding box of the identity lines :func:`context_from_lines` keeps.
 
@@ -618,6 +641,7 @@ def context_region_from_lines(
         point=point,
         min_confidence=min_confidence,
         reference_date=reference_date,
+        scope=scope,
     )
     if not kept:
         return None
@@ -2415,6 +2439,34 @@ def crop_region(frame_png: bytes, region: Region) -> Optional[bytes]:
     if x1 <= x0 or y1 <= y0:
         return None
     ok, buf = cv2.imencode(".png", img[y0:y1, x0:x1])
+    return buf.tobytes() if ok else None
+
+
+def mask_outside(frame_png: bytes, region: Region) -> Optional[bytes]:
+    """Blank every pixel of a PNG frame outside ``region`` (x, y, w, h).
+
+    The identity band of a target inside a dialog is read on this frame, at
+    record and at replay time, so the page behind the dialog cannot reach the
+    OCR at all: a label beside the dialog is neither read nor merged into a
+    line with the dialog's own text. The fill is flat white, which OCR reads
+    as no text. Returns None when the frame cannot be decoded or the region
+    is empty.
+    """
+    import cv2
+    import numpy as np
+
+    img = cv2.imdecode(np.frombuffer(frame_png, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    h, w = img.shape[:2]
+    x0, y0 = max(0, int(region[0])), max(0, int(region[1]))
+    x1 = min(w, int(region[0]) + int(region[2]))
+    y1 = min(h, int(region[1]) + int(region[3]))
+    if x1 <= x0 or y1 <= y0:
+        return None
+    out = np.full_like(img, 255)
+    out[y0:y1, x0:x1] = img[y0:y1, x0:x1]
+    ok, buf = cv2.imencode(".png", out)
     return buf.tobytes() if ok else None
 
 

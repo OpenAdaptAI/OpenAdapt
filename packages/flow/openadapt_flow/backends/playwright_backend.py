@@ -1466,6 +1466,82 @@ _FRAME_SELECTOR_JS = r"""(el) => {
     return null;
 }"""
 
+# The active modal dialog holding the element under a viewport point. Walks the
+# hit-tested chain from the top document down through same-origin frames; the
+# first dialog met is the outermost one, and hit testing already follows the
+# stacking order, so a dialog painted over another wins. The box is the
+# dialog's first element (from the dialog down toward the hit) that does not
+# cover the viewport, so a Bootstrap ``.modal`` overlay yields its
+# ``.modal-dialog``. Answers ``{status: "dialog", box}``, ``{status: "none"}``,
+# or ``{status: "unknown"}`` when a frame on the chain is cross-origin or
+# transformed and the chain cannot be followed.
+_DIALOG_AT_JS = r"""([x, y]) => {
+    // Modal dialogs only: a popover or date picker with role="dialog" leaves
+    // the page behind live, and its rows stay identity evidence.
+    const SELECTOR = 'dialog:modal, [aria-modal="true"], [role="alertdialog"], ' +
+        '.modal.show';
+    const visible = (el, win) => {
+        const style = win.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (parseFloat(style.opacity) < 0.05) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    };
+    let doc = document;
+    let win = window;
+    let ox = 0, oy = 0;
+    let px = x, py = y;
+    for (let depth = 0; depth < 9; depth++) {
+        const hit = doc.elementFromPoint(px, py);
+        if (!hit) return {status: 'none'};
+        const dialog = hit.closest(SELECTOR);
+        if (dialog && visible(dialog, win)) {
+            const chain = [];
+            for (let node = hit; node; node = node.parentElement) {
+                chain.push(node);
+                if (node === dialog) break;
+            }
+            const vw = win.innerWidth, vh = win.innerHeight;
+            let box = null;
+            for (let i = chain.length - 1; i >= 0; i--) {
+                const r = chain[i].getBoundingClientRect();
+                if (r.width <= 0 || r.height <= 0) continue;
+                if (r.width >= 0.95 * vw && r.height >= 0.95 * vh) continue;
+                box = r;
+                break;
+            }
+            if (!box) box = dialog.getBoundingClientRect();
+            const left = Math.max(0, box.left), top = Math.max(0, box.top);
+            const right = Math.min(vw, box.right), bottom = Math.min(vh, box.bottom);
+            if (right <= left || bottom <= top) return {status: 'unknown'};
+            return {status: 'dialog', box: [
+                Math.floor(left + ox), Math.floor(top + oy),
+                Math.ceil(right - left), Math.ceil(bottom - top),
+            ]};
+        }
+        const tag = hit.localName;
+        if (tag !== 'iframe' && tag !== 'frame') return {status: 'none'};
+        let child;
+        try { child = hit.contentDocument; } catch (_) { child = null; }
+        if (!child || !hit.contentWindow) return {status: 'unknown'};
+        const r = hit.getBoundingClientRect();
+        if (!(hit.offsetWidth > 0 && hit.offsetHeight > 0)) return {status: 'unknown'};
+        if (Math.abs(r.width / hit.offsetWidth - 1) > 0.01 ||
+                Math.abs(r.height / hit.offsetHeight - 1) > 0.01) {
+            return {status: 'unknown'};
+        }
+        const style = win.getComputedStyle(hit);
+        const dx = r.left + hit.clientLeft + (parseFloat(style.paddingLeft) || 0);
+        const dy = r.top + hit.clientTop + (parseFloat(style.paddingTop) || 0);
+        ox += dx; oy += dy;
+        px -= dx; py -= dy;
+        doc = child;
+        win = hit.contentWindow;
+    }
+    return {status: 'unknown'};
+}"""
+
+
 _PROJECT_FRAME_POINT_JS = r"""(el, point) => {
     const [px, py] = point;
     if (document.elementFromPoint(px, py) !== el) return null;
@@ -2127,6 +2203,43 @@ class PlaywrightBackend:
         except Exception:
             return None
         return result or None
+
+    def dialog_region_at(
+        self, x: int, y: int
+    ) -> tuple[str, Optional[tuple[int, int, int, int]]]:
+        """The box of the active dialog holding viewport pixel (x, y).
+
+        Returns ``("dialog", (x, y, w, h))`` when the element under the point
+        sits in an open modal dialog (a modal ``dialog``, ``aria-modal``, an
+        ``alertdialog``, or a shown Bootstrap modal), the outermost one along the frame
+        chain; ``("none", None)`` when the chain was followed and no dialog
+        holds the point; ``("unknown", None)`` when it could not be followed
+        (a cross-origin or transformed frame, an evaluation error). Callers
+        that need a dialog treat ``unknown`` as a failed check. Never raises.
+        """
+        try:
+            result = self.page.evaluate(_DIALOG_AT_JS, [int(x), int(y)])
+        except Exception:
+            return ("unknown", None)
+        if not isinstance(result, dict):
+            return ("unknown", None)
+        status = result.get("status")
+        if status == "none":
+            return ("none", None)
+        box = result.get("box")
+        if (
+            status == "dialog"
+            and isinstance(box, list)
+            and len(box) == 4
+            and all(isinstance(v, (int, float)) for v in box)
+            and box[2] > 0
+            and box[3] > 0
+        ):
+            bx, by, bw, bh = (int(v) for v in box)
+            if not (bx <= int(x) < bx + bw and by <= int(y) < by + bh):
+                return ("unknown", None)
+            return ("dialog", (bx, by, bw, bh))
+        return ("unknown", None)
 
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Census of the rows that show the same record identity as (x, y).

@@ -71,6 +71,7 @@ from openadapt_flow.runtime.identity import (
     context_region_from_lines,
     coverage,
     identifier_text_from_lines,
+    mask_outside,
 )
 from openadapt_flow.vision import imgops
 from openadapt_flow.vision.hashing import phash_distance, phash_png
@@ -1527,6 +1528,26 @@ def _clamp_to_frame(region: Region, frame_size: tuple[int, int]) -> Optional[Reg
     return (x0, y0, x1 - x0, y1 - y0)
 
 
+def _event_dialog_region(
+    event: dict[str, Any], frame_size: tuple[int, int]
+) -> Optional[Region]:
+    """The recorded dialog box holding the click target, clamped to the frame.
+
+    The recorder stores ``dialog_region`` on a pointer event whose target sat
+    in an open dialog (``PlaywrightBackend.dialog_region_at``). A malformed
+    value or one off the frame is ignored: the band then stays full width.
+    """
+    value = event.get("dialog_region")
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+        return None
+    x, y, w, h = (int(v) for v in value)
+    if w <= 0 or h <= 0:
+        return None
+    return _clamp_to_frame((x, y, w, h), frame_size)
+
+
 def _marked_identifier_region(value: object, *, source: str) -> Optional[Region]:
     """Validate an explicitly marked identifier region from the recording.
 
@@ -1615,6 +1636,7 @@ def _emit_identifier_crop(
     crop_region: Region,
     click: Point,
     reference_date: Optional[date],
+    scope: Optional[Region] = None,
 ) -> tuple[Optional[str], Optional[Region], Optional[str]]:
     """Emit the pixel identifier crop for one click step, or say why not.
 
@@ -1666,10 +1688,11 @@ def _emit_identifier_crop(
         band_box = context_region_from_lines(
             frame_lines,
             exclude_region=crop_region,
-            band=band_region(click, crop_region[3], frame_size),
-            point=click,
+            band=scope or band_region(click, crop_region[3], frame_size),
+            point=None if scope is not None else click,
             min_confidence=MIN_OCR_CONFIDENCE,
             reference_date=reference_date,
+            scope=scope,
         )
         region = _clamp_to_frame(band_box, frame_size) if band_box else None
         if region is None:
@@ -2380,18 +2403,34 @@ def _compile_recording(
             # (a table row's discriminative name column sits outside the
             # 160x64 template — see runtime.identity). Verified against the
             # live band before every click at replay time.
+            # A target inside a dialog: read its identity band on the frame
+            # with everything outside the dialog blanked, so a label of the
+            # page behind it (OpenEMR's "County:" beside "Confirm Create New
+            # Patient") is not frozen into the identity (#1347).
+            dialog_region = _event_dialog_region(
+                event, (frame.shape[1], frame.shape[0])
+            )
+            identity_lines = frame_lines
+            if dialog_region is not None:
+                masked = mask_outside(before_png, dialog_region)
+                identity_lines = (
+                    cached_lines(i, "dialog", masked) if masked is not None else []
+                )
+            # In a dialog the band is the whole dialog (its title, its result
+            # text, its buttons), not the button's row: the row of a dialog
+            # button often holds nothing but the other buttons.
             context_text = context_from_lines(
-                frame_lines,
+                identity_lines,
                 exclude_region=crop_region,
-                band=band_region(
-                    click, crop_region[3], (frame.shape[1], frame.shape[0])
-                ),
+                band=dialog_region
+                or band_region(click, crop_region[3], (frame.shape[1], frame.shape[0])),
                 # Row refinement: record only the click point's OWN text
                 # row, matching what replay-time verification reads (the
                 # 64px band spans 2-3 rows of a dense table).
-                point=click,
+                point=None if dialog_region is not None else click,
                 min_confidence=MIN_OCR_CONFIDENCE,
                 reference_date=reference_date,
+                scope=dialog_region,
             )
             # Structured identity (DOM / a11y text of the clicked row),
             # captured by the recorder when the recording backend exposed it
@@ -2448,10 +2487,11 @@ def _compile_recording(
                     ),
                     context_text=context_text,
                     structured_identity=structured_identity,
-                    frame_lines=frame_lines,
+                    frame_lines=identity_lines,
                     crop_region=crop_region,
                     click=click,
                     reference_date=reference_date,
+                    scope=dialog_region,
                 )
             )
             # The OCR fallback must compare like-for-like evidence. Derive the
@@ -2463,7 +2503,7 @@ def _compile_recording(
             cropped_context: Optional[str] = None
             if identifier_region is not None:
                 cropped_context = identifier_text_from_lines(
-                    frame_lines,
+                    identity_lines,
                     region=identifier_region,
                     min_confidence=MIN_OCR_CONFIDENCE,
                     reference_date=reference_date,
@@ -2525,6 +2565,7 @@ def _compile_recording(
                 landmarks=anchor_landmarks,
                 identifier_crop=identifier_crop_rel,
                 identifier_region=identifier_region,
+                dialog_region=dialog_region,
             )
             drag_end_anchor: Optional[Anchor] = None
             if kind == "drag":
@@ -2580,7 +2621,7 @@ def _compile_recording(
             unarmed_reason: Optional[str] = None
             if not identity_armed:
                 unarmed_reason = _identity_unarmed_reason(
-                    frame_lines,
+                    identity_lines,
                     band=band_region(
                         click,
                         crop_region[3],
