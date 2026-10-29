@@ -1,17 +1,19 @@
 """How a Desktop release chooses its commit and the checks that decide it.
 
 A release starts when Packages finishes successfully for a push to main
-(workflow_run). It used to start on the push and poll for that commit's
-Packages run for 60 minutes; under CI congestion the run sat queued longer than
-that and release run 39368396653 refused 0.22.0 (2026-10-20).
+(workflow_run), on a schedule, or on a dispatch. It used to start on the push
+and poll for that commit's Packages run for 60 minutes; under CI congestion the
+run sat queued longer than that and release run 39368396653 refused 0.22.0
+(2026-10-20).
 
-The Packages head commit is the subject: its checks decide the release.
-GitHub runs a workflow_run workflow, and signs its attestations, at main's tip,
-so the release builds the tip and requires its packages/desktop tree to equal
-the subject's. A dispatch picks the newest first-parent commit that changed
-Desktop. Only commits on main's first-parent history get a Packages push run;
-choosing one from inside a merged branch made the gate wait for a run that
-could not exist (2026-10-20, 0.21.1).
+Every event takes the same subject: the newest first-parent commit that
+changed Desktop, up to the tip the run builds. Its latest successful Packages
+push run decides the release, whichever run started this one. The subject used
+to be the commit of the run that started the release, so when a newer push
+cancelled the Desktop commit's run, no later run released it (0.23.0 and
+0.24.1, 2026-10-25). Only commits on main's first-parent history get a Packages
+push run; choosing one from inside a merged branch made the gate wait for a run
+that could not exist (2026-10-20, 0.21.1).
 """
 
 from __future__ import annotations
@@ -49,8 +51,10 @@ FRESH_STEP = "Require that main has not changed Desktop since that commit"
 def test_a_release_starts_when_packages_completes_on_main() -> None:
     trigger = _workflow()[True]
     # No push trigger: a push-triggered run had to wait for Packages, and its
-    # queue time could fail the release.
-    assert set(trigger) == {"workflow_run", "workflow_dispatch"}
+    # queue time could fail the release. The schedule picks up a Desktop commit
+    # whose Packages run passed only on a re-run.
+    assert set(trigger) == {"workflow_run", "schedule", "workflow_dispatch"}
+    assert trigger["schedule"] == [{"cron": "41 */3 * * *"}]
     assert trigger["workflow_run"] == {
         "workflows": ["Packages"],
         "types": ["completed"],
@@ -62,6 +66,7 @@ def test_only_a_successful_push_run_on_this_repositorys_main_can_release() -> No
     condition = " ".join(_gate()["if"].split())
     assert condition.startswith("github.ref == 'refs/heads/main' && (")
     assert "github.event_name == 'workflow_dispatch' ||" in condition
+    assert "github.event_name == 'schedule' ||" in condition
     for clause in (
         "github.event_name == 'workflow_run'",
         "github.event.workflow_run.conclusion == 'success'",
@@ -82,18 +87,20 @@ def test_a_pending_release_is_queued_not_cancelled() -> None:
     }
 
 
-def test_the_subject_is_the_packages_head_commit_never_mains_tip() -> None:
+def test_every_event_takes_the_newest_first_parent_desktop_commit() -> None:
     gate = _gate()
     assert (
         gate["env"]["PACKAGES_HEAD_SHA"] == "${{ github.event.workflow_run.head_sha }}"
     )
-    assert gate["env"]["PACKAGES_RUN_ID"] == "${{ github.event.workflow_run.id }}"
+    assert "PACKAGES_RUN_ID" not in gate["env"]
     run = _gate_steps()[SUBJECT_STEP]["run"]
-    workflow_run, _ = run.split("\nelse\n", 1)
-    assert 'subject="${PACKAGES_HEAD_SHA}"' in workflow_run
+    # One subject rule for every event, never the run that started this one.
+    assert run.count('subject="$(git log') == 1
+    assert 'subject="$(git log -1 --first-parent --format=%H "${GITHUB_SHA}" -- .)"' in run
+    assert 'subject="${PACKAGES_HEAD_SHA}"' not in run
     assert 'subject="${GITHUB_SHA}"' not in run
-    # The subject must be on main's history under the tip that is built.
-    assert 'git merge-base --is-ancestor "${subject}" "${GITHUB_SHA}"' in workflow_run
+    # The run that started this one must still be on the history that is built.
+    assert 'git merge-base --is-ancestor "${PACKAGES_HEAD_SHA}" "${GITHUB_SHA}"' in run
     assert "head_branch" not in run
 
 
@@ -108,23 +115,38 @@ def test_dispatch_subject_follows_first_parent_history() -> None:
         assert "--first-parent" in line, line
 
 
-def test_a_commit_that_does_not_change_desktop_is_quietly_no_release() -> None:
+def test_only_a_history_without_desktop_changes_is_not_a_candidate() -> None:
     steps = list(_gate_steps())
-    # Classify first, so an unrelated commit never reaches the release state
-    # check (which refuses a partly published version loudly).
+    # Classify first, so a run without a subject never reaches the release
+    # state check (which refuses a partly published version loudly).
     assert steps.index(SUBJECT_STEP) < steps.index(STATE_STEP)
     run = _gate_steps()[SUBJECT_STEP]["run"]
-    assert 'git diff --quiet "${subject}^1" "${subject}" -- .' in run
-    assert 'git diff --quiet "${subject}" "${GITHUB_SHA}" -- .' in run
-    assert run.count('echo "candidate=false" >> "${GITHUB_OUTPUT}"') == 2
+    assert run.count('echo "candidate=false" >> "${GITHUB_OUTPUT}"') == 1
     assert "No release:" in run
     assert (
         _gate_steps()[STATE_STEP]["if"] == "steps.subject.outputs.candidate == 'true'"
     )
-    for name in (ORDER_STEP, PACKAGES_STEP, FRESH_STEP):
+    for name in (ORDER_STEP, PACKAGES_STEP):
         assert _gate_steps()[name]["if"] == "steps.state.outputs.release == 'true'", (
             name
         )
+    assert _gate_steps()[FRESH_STEP]["if"] == (
+        "steps.state.outputs.release == 'true' && steps.packages.outputs.ready == 'true'"
+    )
+
+
+def test_a_partly_published_version_warns_on_unrelated_runs() -> None:
+    run = _gate_steps()[STATE_STEP]["run"]
+    assert _gate_steps()[STATE_STEP]["env"]["SUBJECT"] == "${{ steps.subject.outputs.sha }}"
+    # Warns on another commit's Packages run or a schedule; still fails a
+    # dispatch and the Desktop commit's own run.
+    quiet = (
+        'if [ "${EVENT_NAME}" != workflow_dispatch ] && '
+        '[ "${PACKAGES_HEAD_SHA:-}" != "${SUBJECT}" ]; then'
+    )
+    warned, loud = run.split(quiet, 1)[1].split("\n  fi\n", 1)
+    assert "::warning::" in warned and 'echo "release=false"' in warned
+    assert "exit 1" in loud
 
 
 def test_an_already_released_version_is_quietly_no_release() -> None:
@@ -153,24 +175,31 @@ def test_version_changelog_and_tag_order_still_gate_the_release() -> None:
         assert check in run, check
 
 
-def test_workflow_run_reads_back_the_packages_run_that_started_it() -> None:
-    run = _gate_steps()[PACKAGES_STEP]["run"]
-    workflow_run = run.split('if [ "${EVENT_NAME}" = workflow_run ]; then', 1)[1]
-    workflow_run = workflow_run.split("\nfi\n", 1)[0]
-    assert 'actions/runs/${PACKAGES_RUN_ID}"' in workflow_run
-    for binding in (
-        '"${workflow_id}" != "${packages_workflow}"',
-        '"${head_sha}" != "${SUBJECT}"',
-        '"${event}" != push',
-        '"${branch}" != main',
-        '"${repository}" != "${GITHUB_REPOSITORY}"',
-        '"${status}" != completed',
-        '"${conclusion}" != success',
+def test_the_subjects_latest_successful_push_run_decides() -> None:
+    step = _gate_steps()[PACKAGES_STEP]
+    assert step["id"] == "packages"
+    run = step["run"]
+    lookup = run.split('passed="$(gh api', 1)[1].split(")\"", 1)[0]
+    for clause in (
+        'head_sha="${SUBJECT}"',
+        "event=push",
+        "status=success",
+        ".head_sha == env.SUBJECT",
+        '.event == "push"',
+        '.head_branch == "main"',
+        '.conclusion == "success"',
+        ".head_repository.full_name == env.GITHUB_REPOSITORY",
     ):
-        assert binding in workflow_run, binding
-    assert 'require_desktop_jobs "${PACKAGES_RUN_ID}"' in workflow_run
-    # Nothing waits on a workflow_run: Packages has already finished.
-    assert "sleep" not in workflow_run
+        assert clause in lookup, clause
+    assert 'require_desktop_jobs "${passed}"' in run
+    assert run.count('echo "ready=true" >> "${GITHUB_OUTPUT}"') == 2
+    # Without a successful run, a workflow_run or schedule stops quietly and a
+    # later one releases; it never waits.
+    quiet = run.split('if [ "${EVENT_NAME}" != workflow_dispatch ]; then', 1)[1]
+    quiet = quiet.split("\nfi\n", 1)[0]
+    assert 'echo "ready=false" >> "${GITHUB_OUTPUT}"' in quiet
+    assert "::warning::" in quiet
+    assert "sleep" not in quiet
 
 
 def test_the_desktop_test_and_build_jobs_must_have_passed() -> None:
@@ -192,10 +221,10 @@ def test_a_newer_desktop_change_on_main_stops_the_older_release() -> None:
     run = _gate_steps()[FRESH_STEP]["run"]
     assert "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main" in run
     assert 'for later in refs/remotes/origin/main "${GITHUB_SHA}"; do' in run
-    # Quiet for workflow_run, whose newer commit releases itself; loud for a
-    # dispatch, which a person is watching.
+    # Quiet for workflow_run and schedule, whose newer commit releases itself;
+    # loud for a dispatch, which a person is watching.
     quiet, loud = run.split('echo "release=false" >> "${GITHUB_OUTPUT}"', 1)
-    assert 'if [ "${EVENT_NAME}" = workflow_run ]; then' in quiet
+    assert 'if [ "${EVENT_NAME}" != workflow_dispatch ]; then' in quiet
     assert "exit 1" in loud
     assert run.rstrip().endswith('echo "release=true" >> "${GITHUB_OUTPUT}"')
 

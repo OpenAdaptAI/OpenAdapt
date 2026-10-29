@@ -27,7 +27,10 @@ every lexical check. The REAL enforcement is the database role: run this
 verifier under a dedicated READ-ONLY account (no INSERT/UPDATE/DELETE, no
 EXECUTE on writing functions, no sequence privileges), as
 ``docs/EFFECT_KIT.md`` instructs. The filter then guards against config
-mistakes; the role guards against everything.
+mistakes; the role guards against everything. In between,
+:func:`read_only_connection` asks the driver itself for a read-only session
+(``PRAGMA query_only``, a ``READ ONLY`` transaction), so a write is refused
+even when the account could make one.
 
 Driver-neutral: the caller supplies a zero-arg ``connect`` callable returning
 a DB-API 2.0 connection (``sqlite3.connect`` in tests and CI; ``pymysql`` /
@@ -86,6 +89,37 @@ _LEADING_SQL = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 #: escaped: the audit runs with read credentials, but identifier smuggling
 #: must still be impossible.
 _TABLE_NAME = re.compile(r"^[A-Za-z0-9_ ]+$")
+
+
+#: Drivers :func:`read_only_connection` can make read-only, and how.
+READ_ONLY_DRIVERS = frozenset(
+    {"sqlite3", "psycopg", "psycopg2", "pymysql", "MySQLdb", "mysql.connector"}
+)
+
+
+def read_only_connection(conn: Any, driver: str) -> Any:
+    """``conn`` with the driver's own read-only session switched on.
+
+    Every transaction the read-back opens is then read-only on the server,
+    whatever the query says. Raises ``ValueError`` for a driver this can't
+    do for, so a caller that needs it fails closed.
+    """
+
+    if driver == "sqlite3":
+        conn.execute("PRAGMA query_only = ON")
+    elif driver == "psycopg2":
+        conn.set_session(readonly=True)
+    elif driver == "psycopg":
+        conn.read_only = True
+    elif driver in ("pymysql", "MySQLdb", "mysql.connector"):
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SET SESSION TRANSACTION READ ONLY")
+        finally:
+            cursor.close()
+    else:
+        raise ValueError(f"no driver-level read-only session for {driver!r}")
+    return conn
 
 
 def assert_read_only_sql(query: str) -> str:

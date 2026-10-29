@@ -1,0 +1,51 @@
+# OpenEMR's own bookkeeping: what it writes for any signed-in user, whatever
+# a run does. The whole-database frame, the rollback check and the RL grader
+# load this one profile. Measured on the pinned OpenEMR 8.0.0.3 fixture
+# (synthetic patients): the RL environment's calibration episodes and the
+# frame's live witness (2026-10-28). Each rule is the narrowest that held.
+#
+# Every table here is compared. Credentials and access: users_secure excuses
+# only sign-in counters and timestamps on the acting user's own row; keys,
+# MFA registrations and the OAuth tables are compared in full. A rule may name only a table listed in
+# bookkeeping_tables; every other table, patient data included, is never
+# excused.
+schema_version: openadapt.app-profile/v2
+app: openemr
+version: openemr-frame-profile/2026-10-29.2
+bookkeeping_tables: [log, log_comment_encrypt, api_log, extended_log, audit_master,
+  audit_details, clinical_rules_log, uuid_registry, uuid_mapping, contact,
+  session_tracker, ip_tracking, background_services, sequences,
+  users_secure, user_settings, recent_patients, users]
+system_columns: [uuid]
+users: {table: users, id_column: id, name_column: username}
+rules:
+  # Logs and id maps: rows are added, never changed or removed.
+  - {id: log, table: log, mode: append_only, reason: "audit log"}
+  - {id: log-comment-encrypt, table: log_comment_encrypt, mode: append_only, reason: "audit log checksums"}
+  - {id: api-log, table: api_log, mode: append_only, reason: "API audit log"}
+  - {id: extended-log, table: extended_log, mode: append_only, reason: "activity log"}
+  - {id: audit-master, table: audit_master, mode: append_only, reason: "audit log"}
+  - {id: audit-details, table: audit_details, mode: append_only, reason: "audit log"}
+  - {id: clinical-rules-log, table: clinical_rules_log, mode: append_only, reason: "the reminder widget's log, written when a chart is shown"}
+  - {id: uuid-registry, table: uuid_registry, mode: append_only, reason: "system id map, written with any new record or a uuid backfill"}
+  - {id: uuid-mapping, table: uuid_mapping, mode: append_only, reason: "system id map"}
+  - {id: contact, table: contact, mode: append_only, reason: "a link row (table name and record id, no address) created when a chart is first opened"}
+  # Session and scheduler state: only the columns that move.
+  - {id: session-tracker, table: session_tracker, mode: append_only, columns: [last_updated, number_scripts], reason: "one row per sign-in session, its counters updated while it lasts"}
+  - {id: ip-tracking, table: ip_tracking, mode: append_only, columns: [total_ip_login_fail_counter, ip_login_fail_counter, ip_last_login_fail], reason: "sign-in failure counters per address"}
+  - {id: background-services, table: background_services, mode: columns, columns: [next_run, running], reason: "the scheduler's next run and busy flag; enabling or disabling a service is not excused"}
+  - {id: sequences, table: sequences, mode: columns, columns: [id], reason: "one id counter row"}
+  # Credentials: only sign-in counters and timestamps, on the acting user's row.
+  - id: users-secure-sign-in
+    table: users_secure
+    mode: columns
+    columns: [last_update, last_challenge_response, total_login_fail_counter, login_fail_counter, last_login_fail, auto_block_emailed]
+    owner: {column: username, by: username}
+    reason: "the acting user's own sign-in bookkeeping; a password or its history is never excused"
+  # Per-user UI state: the acting user's own rows only.
+  - {id: user-settings, table: user_settings, mode: own_rows, owner: {column: setting_user, by: user_id}, reason: "the acting user's own UI settings"}
+  - {id: recent-patients, table: recent_patients, mode: own_rows, owner: {column: user_id, by: user_id}, reason: "the acting user's own list of charts opened"}
+  # Backfills: a system uuid filled from NULL, never swapped, overwritten or cleared.
+  - {id: users-uuid-backfill, table: users, mode: columns, columns: [uuid], fill_only: true, reason: "uuid backfill on a user row"}
+  - {id: users-last-updated, table: users, mode: columns, columns: [last_updated], with_fill: uuid, reason: "the ON UPDATE stamp a uuid backfill bumps"}
+  - {id: uuid-backfill, table: "*", mode: columns, columns: [uuid], fill_only: true, reason: "a row's system uuid, backfilled when a record is first opened"}
