@@ -702,6 +702,11 @@ What it does provide ([`AFTER_A_STOP.md`](AFTER_A_STOP.md)):
   proposal, only when every record afterwards matches the read-back from
   before the save. A person approves a proposal once (`undo accept`), and
   each run still needs approval after the stop.
+- With `rollback:` turned on in a deployment, a stopped run rolls itself
+  back ([`ROLLBACK.md`](ROLLBACK.md)): the compensation a person approved for
+  each change, latest first, then a read of the whole database that must
+  match the read taken before the run. Equal is `ROLLED_BACK`; anything else
+  is `RECONCILIATION_REQUIRED` with the exact rows in a private file.
 
 The limits of that:
 
@@ -728,8 +733,15 @@ The limits of that:
   one iteration's record.
 - The write-ordering check covers straight-line bundles only, and it can't
   tell whether a later check depends on an earlier write.
-- Duplicate-write compensation (`effects.compensation`) is the only automatic
-  repair, and only where a deployment has implemented and verified it.
+- A rollback undoes only what a person approved, and only proves what it
+  reads: without `rollback.database` it reads one collection. Without
+  `rollback.attribution`, another user's write between the first and final
+  reads makes the run `RECONCILIATION_REQUIRED`; with it, their writes are set
+  aside, and a record both changed is left for a person. A hard delete runs
+  only with `rollback.allow_delete`. Rollback is armed on web runs only, and
+  never in a workflow with a loop.
+- Duplicate-write compensation (`effects.compensation`) repairs a duplicate
+  on its own, only where a deployment has implemented and verified it.
 
 Before resuming or teaching a halted consequential workflow, reconcile prior
 effects, confirm the current entity and application state, and ensure the bundle
