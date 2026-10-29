@@ -829,16 +829,16 @@ The limits of that:
   tell whether a later check depends on an earlier write.
 - A rollback undoes only what a person approved, and only proves what it
   reads: without `rollback.database` it reads one collection. Without
-  `rollback.attribution` it compensates nothing outside a declared test
-  copy, and it compensates only while every change in the store is
-  positively the run's own: any other user's write during the run, or a
-  row attribution can't vouch for, goes to a person with the diff. That
-  suits a quiet store, not a busy one. A save that removes a row isn't
-  rolled back outside a test copy, and a last-writer field vouches only
-  for a run with one write. Nothing is read during a compensation, so a
-  colleague's write to the run's record in that window can be lost; an
-  audit log shows it afterward. The Standard and Regulated profiles
-  require durable runs, so rollback doesn't run under them yet. A hard delete runs only with
+  the app's audit log (`rollback.attribution`, `audit_read`) it
+  compensates nothing outside a declared test copy, and it compensates only
+  while every change in the store is positively the run's own: any other
+  user's write during the run, or a row the log can't vouch for, goes to a
+  person with the diff. That suits a quiet store, not a busy one. A save
+  that removes a row isn't rolled back outside a test copy. Nothing is read
+  during a compensation, so a colleague's write to the run's record in that
+  window can be lost; the audit log shows it afterward. The Standard and
+  Regulated profiles require durable runs, so rollback doesn't run under
+  them yet. A hard delete runs only with
   `rollback.allow_delete`. Rollback runs on single web runs only (a desktop,
   RDP, pool or durable run with it on is refused), and never in a workflow
   with a loop.

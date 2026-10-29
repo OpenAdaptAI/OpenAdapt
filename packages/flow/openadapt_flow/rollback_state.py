@@ -570,26 +570,22 @@ class Attributor:
         window: Optional[list[dict[str, Any]]],
         moved: Sequence[str] = (),
     ) -> bool:
-        """Is this row positively the run's own? With an audit log: the
-        window holds the run's write for this row's record and table, and no
-        other user's write to the row or its record. With a last-writer
-        field: the row carries a self actor. Silence (no window, no record
-        value, no writer, a removed row) is never "the run's"."""
-        from openadapt_flow.runtime.effects.frame import get_path
-
+        """Is this row positively the run's own? The audit log's window holds
+        the run's write for this row's record and table, and no other user's
+        write to the row or its record. Silence (no window, no record value, a
+        removed row) is never "the run's", and a last-writer field never
+        vouches: it can't show another user's edit between two of the run's
+        writes."""
         table, key, before, after = change
-        if self.spec.kind == "audit_read":
-            if window is None or self._ref(table, key, before, after) is None:
-                return False
-            return (
-                self.attribute(change, window, moved) == "self"
-                and not self.others_touched(change, window)
-                and not self.others_on_record(change, window)
-            )
-        if after is None:
+        if self.spec.kind != "audit_read":
             return False
-        actor = get_path(after, self.spec.actor_field)
-        return actor not in (None, "") and str(actor) in self.self_actors
+        if window is None or self._ref(table, key, before, after) is None:
+            return False
+        return (
+            self.attribute(change, window, moved) == "self"
+            and not self.others_touched(change, window)
+            and not self.others_on_record(change, window)
+        )
 
     def window(self) -> Optional[list[dict[str, Any]]]:
         """Audit entries since :meth:`start`; None when either read failed."""

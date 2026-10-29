@@ -125,9 +125,9 @@ Rolled back: the system of record matches the read from before the run.
 
 A rollback isn't a transaction: a colleague can save something while the run
 is going. So a rollback runs only on a store that holds nothing but the run's
-own changes, and attribution (`rollback.attribution`, the same shape as
-`frame.attribution` in `verify.yaml`) must show that each changed row is the
-run's:
+own changes, and the app's audit log (`rollback.attribution`, the same shape
+as `frame.attribution` in `verify.yaml`, `kind: audit_read`) must show that
+each changed row is the run's:
 
 - **The app's audit log** (`audit_read`): the log holds the run's own write
   for the row's record and table, and no other user's write to the row or
@@ -140,13 +140,12 @@ run's:
   is not a write. The run's logged inserts must account for its new rows:
   two new rows on one record and table need two of its inserts. This rests
   on the app logging every user's write under the record it touches.
-- **A last-writer field** (`record_field`): the row's server-set modified-by
-  value is the run's own user. It shows only the last writer, so it vouches
-  only for a run with one write: with two, another user's edit between them
-  would be hidden, and the rollback goes to a person.
-- **Silence is never "the run's":** a row with no record value, no
-  last-writer value, in a table the audit log doesn't cover, or one that was
-  removed (the first read keeps no values to name it by), goes to a person.
+- **No last-writer field.** A server-set modified-by value (`record_field`)
+  shows only the last writer: another user's edit between two of the run's
+  writes to a row (a save and a later step that also writes) would be
+  hidden. Rollback refuses it.
+- **Silence is never "the run's":** a row with no record value, in a table
+  the audit log doesn't cover, or one that was removed (the first read keeps no values to name it by), goes to a person.
   So does everything when the audit log can't be read.
 
 Any other user's write during the run, anywhere in the store, sends the
@@ -161,8 +160,7 @@ each compensation, but not during one. A colleague's write to the run's
 record while a compensation runs can be lost with it: an edit to a run row
 the compensation then deletes, a new row the app's delete takes with the
 record, or an edit a restore overwrites. An audit log shows such a write
-afterward (`RECONCILIATION_REQUIRED`); it doesn't prevent it. A last-writer
-field can't show it at all.
+afterward (`RECONCILIATION_REQUIRED`); it doesn't prevent it.
 
 ## Turn it on
 
@@ -181,7 +179,7 @@ rollback:
   profile: openemr                  # the app's own bookkeeping (app_profiles)
   actor_names: [openadapt_bot]      # who the run signs in as, for the profile
   attribution:                      # who changed a row (needed to compensate)
-    kind: audit_read                # the app's audit log; record_field: last writer
+    kind: audit_read                # the app's audit log (required)
     read:                           # a second read-only read, as in verify.yaml
       kind: sql
       sql_driver: pymysql
@@ -307,9 +305,9 @@ profile as `app/version` (`profile_id`).
   Standard and Regulated execution profiles require durable runs, so
   rollback doesn't run under them yet.
 - **Database-numbered ids move on.** A delete compensation can't wind back
-  an id counter (MySQL `AUTO_INCREMENT`, SQLite `AUTOINCREMENT`); the final
-  read accepts a counter that moved by no more than the rows the run's
-  compensations deleted.
+  an id counter (MySQL `AUTO_INCREMENT`, SQLite `AUTOINCREMENT`); each read
+  accepts a counter that moved, with no row left behind, by no more than the
+  rows the run added to that table.
 - **A rolled-back run isn't resumed.** Durable runs are refused with
   rollback on; and as a second guard, once a compensation has started,
   `resume`, the attended console and its relay all refuse the run.

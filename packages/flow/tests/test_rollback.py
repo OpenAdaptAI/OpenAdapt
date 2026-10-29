@@ -663,13 +663,6 @@ def _run_clinic(
             table_field="tbl",
             read={"kind": "in_memory"},  # the plan reads ``audit`` below
         )
-    elif attribution:
-        spec = FrameAttribution(
-            kind="record_field",
-            actor_field="modified_by",
-            self=["bot"],
-            server_set=["modified_by"],
-        )
     plan = RollbackPlan(
         reader,
         read_records=records_reader(_sql_verifier(db)),
@@ -1003,7 +996,7 @@ def test_another_users_write_anywhere_stops_the_rollback(tmp_path):
     # A compensation runs only while the store holds nothing but the run's
     # own changes. The nurse's note on another patient is hers, by any
     # attribution: nothing is compensated, and she loses nothing.
-    for name, attribution in (("audit", "audit"), ("last_writer", True)):
+    for name, attribution in (("audit", "audit"),):
         report = _run_clinic(tmp_path / name, colleague="note", attribution=attribution)
         rollback = report.rollback
         assert rollback.status == "not_rolled_back", rollback.reason
@@ -1024,10 +1017,10 @@ def test_another_users_write_anywhere_stops_the_rollback(tmp_path):
 
 
 def test_a_record_another_actor_changed_after_the_run_is_not_compensated(tmp_path):
-    report = _run_clinic(tmp_path, colleague="edit", attribution=True)
+    report = _run_clinic(tmp_path, colleague="edit", attribution="audit")
     rollback = report.rollback
     assert rollback.status == "not_rolled_back"
-    assert rollback.conflicts == 1
+    assert rollback.conflicts >= 1
     assert "no one's change is lost" in rollback.reason
     assert rollback.steps == []
     # The patient, with the nurse's change, is still there.
@@ -1274,7 +1267,7 @@ def test_the_profile_excuses_only_the_acting_users_own_sign_in(tmp_path):
     assert [c[0] for c in left] == ["users_secure"]
 
 
-@pytest.mark.parametrize("attribution", ["audit", True])
+@pytest.mark.parametrize("attribution", ["audit"])
 def test_a_colleagues_edit_to_a_side_row_the_run_created_is_a_conflict(
     tmp_path, attribution
 ):
@@ -1401,7 +1394,7 @@ def test_a_colleagues_edit_while_the_compensation_runs_is_reported(tmp_path):
 
 
 def test_a_colleagues_edit_to_an_existing_row_stops_the_rollback(tmp_path):
-    for name, attribution in (("last_writer", True), ("audit", "audit")):
+    for name, attribution in (("audit", "audit"),):
         report = _run_clinic(
             tmp_path / name, colleague="edit_note", attribution=attribution
         )
@@ -1464,15 +1457,22 @@ def test_a_row_the_audit_log_cant_name_is_a_conflict(tmp_path):
     assert "aren't positively the run's own" in rollback.reason
 
 
-def test_a_row_without_a_last_writer_is_a_conflict(tmp_path):
-    report = _run_clinic(tmp_path, colleague="allergy", attribution=True)
-    rollback = report.rollback
-    assert rollback.status == "not_rolled_back", rollback.reason
-    assert rollback.steps == []
-    conn = sqlite3.connect(tmp_path / "clinic.db")
-    assert conn.execute("SELECT substance FROM allergies").fetchall() == [
-        ("penicillin",)
-    ]
+def test_a_last_writer_field_is_refused_for_rollback(tmp_path):
+    # Round 6: a last-writer field can't show another user's edit between
+    # two of the run's writes (a ledger save and a reversible step, say).
+    from openadapt_flow.deployment import RollbackSection
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
+    spec = FrameAttribution(
+        kind="record_field",
+        actor_field="modified_by",
+        self=["bot"],
+        server_set=["modified_by"],
+    )
+    with pytest.raises(ValueError, match="audit log"):
+        RollbackPlan(ListReader([]), attribution=spec)
+    with pytest.raises(ValueError, match="audit_read"):
+        RollbackSection(enabled=True, attribution=spec)
 
 
 def test_a_colleagues_new_patient_stops_the_rollback(tmp_path):
@@ -1527,7 +1527,7 @@ def _nurse_note_on_run_patient(db: Path) -> None:
     conn.close()
 
 
-@pytest.mark.parametrize("attribution", [True, "audit"])
+@pytest.mark.parametrize("attribution", ["audit"])
 def test_a_write_between_the_stop_and_the_compensation_stops_it(tmp_path, attribution):
     # Reads: 1 before the run, 2 after the stop, 3 right before the
     # compensation. The nurse writes just before read 3; the app's patient
@@ -1552,12 +1552,18 @@ def test_attribution_whose_own_user_cant_be_resolved_arms_nothing():
     from openadapt_flow.runtime.effects.frame import FrameAttribution
 
     spec = FrameAttribution(
-        kind="record_field",
-        actor_field="modified_by",
+        kind="audit_read",
+        actor_field="actor",
         self=[{"param": "bot_user"}],
-        server_set=["modified_by"],
+        record_field="record",
+        record_key="patient_id",
+        event_field="event",
+        write_events=["insert"],
+        insert_events=["insert"],
+        table_field="tbl",
+        read={"kind": "in_memory"},
     )
-    plan = RollbackPlan(ListReader([]), attribution=spec)
+    plan = RollbackPlan(ListReader([]), attribution=spec, audit_read=lambda: [])
     assert plan.arm({}) is None
 
 
@@ -1576,7 +1582,7 @@ def test_a_delete_on_a_database_numbered_table_rolls_back(tmp_path):
     assert "counter moved" in more.rollback.reason
 
 
-def test_a_last_writer_field_never_vouches_for_two_writes(tmp_path):
+def test_roll_back_never_compensates_on_a_last_writer_field(tmp_path):
     from openadapt_flow.runtime.effects.frame import FrameAttribution
 
     spec = FrameAttribution(
@@ -1602,8 +1608,9 @@ def test_a_last_writer_field_never_vouches_for_two_writes(tmp_path):
         attributor=attributor,
         allow_delete=True,
     )
+    # roll_back itself, past the plan's refusal, compensates nothing.
     assert record.status == "not_rolled_back"
-    assert "between two of them" in record.reason
+    assert "only the app's audit log" in record.reason
     assert runner.runs == []
 
 

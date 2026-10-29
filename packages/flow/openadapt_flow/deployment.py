@@ -1045,11 +1045,23 @@ class RollbackSection(BaseModel):
     #: only this run writes: compensations then run without attribution. Off
     #: by default; a shared QA copy where testers also write must not set it.
     exclusive: bool = False
-    #: Who changed a row (``frame.attribution`` in ``verify.yaml``): the app's
-    #: audit log (``audit_read``) or a last-writer field (``record_field``).
-    #: A compensation runs only while every changed row is positively the
-    #: run's own by it. Without it, nothing is compensated.
+    #: Who changed a row: the app's audit log (``frame.attribution`` in
+    #: ``verify.yaml``, ``kind: audit_read``). A compensation runs only while
+    #: every changed row is positively the run's own by it. Without it,
+    #: nothing is compensated. A last-writer field (``record_field``) is
+    #: refused: it can't show another user's edit between two of the run's
+    #: writes.
     attribution: Optional[FrameAttribution] = None
+
+    @model_validator(mode="after")
+    def _audit_log_only(self) -> "RollbackSection":
+        if self.attribution is not None and self.attribution.kind != "audit_read":
+            raise ValueError(
+                "rollback.attribution must be the app's audit log (kind: "
+                "audit_read); a last-writer field can't show which changes are "
+                "the run's own (docs/ROLLBACK.md, Other users)"
+            )
+        return self
 
 
 #: Sentinel written by ``config init`` for fields the operator must fill.

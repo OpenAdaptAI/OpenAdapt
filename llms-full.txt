@@ -563,7 +563,7 @@ improvising or retrying when something is off.
 | Keep the server's own answer to a save as lower-level evidence on the receipt | On main ([#1298](https://github.com/OpenAdaptAI/OpenAdapt/pull/1298)) | Synthetic | receipts |
 | A ledger of what changed before a stop, a write-ordering lint, and undo steps a person approves | On main ([#1263](https://github.com/OpenAdaptAI/OpenAdapt/pull/1263)) | Synthetic (MockMed) | change ledger |
 | Propose an undo for each saving step (another recording, captured traffic, or the old value), keep it only if a test copy shows every record restored, and offer it after a stop once a person approves it | On main ([#1346](https://github.com/OpenAdaptAI/OpenAdapt/pull/1346)) | Synthetic (MockMed, MockLoan, live browser) | `openadapt-flow undo propose`, `undo accept`; [AFTER_A_STOP.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/AFTER_A_STOP.md) |
-| Roll a stopped run back on its own: the approved compensation for each change, latest first, an uncertain write only when a fresh read shows it landed, then a read of the whole database: every row the run touched back as it was and nothing else changed (`ROLLED_BACK`), or the exact rows a person repairs (`RECONCILIATION_REQUIRED`). A compensation runs only while every change in the store is positively the run's own by its audit log or last-writer field, so another user's work is never compensated away, and a hard delete runs only where the deployment allows it (void, restore or discard otherwise). `rollback qualify` stops the run before and after every save on a test copy and keeps only compensations that restore the whole store | On main ([#1634](https://github.com/OpenAdaptAI/OpenAdapt/pull/1634)) | MockMed, live browser through the CLI; SQLite whole-database tests | `openadapt-flow rollback qualify`, `rollback:` in deployment.yaml; [ROLLBACK.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/ROLLBACK.md) |
+| Roll a stopped run back on its own: the approved compensation for each change, latest first, an uncertain write only when a fresh read shows it landed, then a read of the whole database: every row the run touched back as it was and nothing else changed (`ROLLED_BACK`), or the exact rows a person repairs (`RECONCILIATION_REQUIRED`). A compensation runs only while every change in the store is positively the run's own by the app's audit log, so another user's work is never compensated away, and a hard delete runs only where the deployment allows it (void, restore or discard otherwise). `rollback qualify` stops the run before and after every save on a test copy and keeps only compensations that restore the whole store | On main ([#1634](https://github.com/OpenAdaptAI/OpenAdapt/pull/1634)) | MockMed, live browser through the CLI; SQLite whole-database tests | `openadapt-flow rollback qualify`, `rollback:` in deployment.yaml; [ROLLBACK.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/ROLLBACK.md) |
 | Leave the screen clean after an item that halted before any write: close dialogs and cancel forms with the recordings' own controls, re-enter, confirm the start screen and read the records back before the session takes another item. A session that doesn't come back is marked dirty and takes no more items; a cleanup that changed a record makes the item's write uncertain and stops the run. `cleanup qualify` tries the cleanup after every step on a test copy and refuses one that changes a record | On main ([#1607](https://github.com/OpenAdaptAI/OpenAdapt/pull/1607)) | Synthetic (scripted three-screen app through the real replayer and pool) and real app (pinned OpenEMR: a halted New Patient item left the confirmation dialog open; re-entry closed it, the form was empty, no patient row changed and the next item's first steps ran with no model calls; a signed-out screen was marked dirty; [results](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/halt_cleanup/results/openemr.json)) | `openadapt-flow cleanup qualify`; [HALT_CLEANUP.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/HALT_CLEANUP.md) |
 
 ## Approvals
@@ -2005,16 +2005,16 @@ The limits of that:
   tell whether a later check depends on an earlier write.
 - A rollback undoes only what a person approved, and only proves what it
   reads: without `rollback.database` it reads one collection. Without
-  `rollback.attribution` it compensates nothing outside a declared test
-  copy, and it compensates only while every change in the store is
-  positively the run's own: any other user's write during the run, or a
-  row attribution can't vouch for, goes to a person with the diff. That
-  suits a quiet store, not a busy one. A save that removes a row isn't
-  rolled back outside a test copy, and a last-writer field vouches only
-  for a run with one write. Nothing is read during a compensation, so a
-  colleague's write to the run's record in that window can be lost; an
-  audit log shows it afterward. The Standard and Regulated profiles
-  require durable runs, so rollback doesn't run under them yet. A hard delete runs only with
+  the app's audit log (`rollback.attribution`, `audit_read`) it
+  compensates nothing outside a declared test copy, and it compensates only
+  while every change in the store is positively the run's own: any other
+  user's write during the run, or a row the log can't vouch for, goes to a
+  person with the diff. That suits a quiet store, not a busy one. A save
+  that removes a row isn't rolled back outside a test copy. Nothing is read
+  during a compensation, so a colleague's write to the run's record in that
+  window can be lost; the audit log shows it afterward. The Standard and
+  Regulated profiles require durable runs, so rollback doesn't run under
+  them yet. A hard delete runs only with
   `rollback.allow_delete`. Rollback runs on single web runs only (a desktop,
   RDP, pool or durable run with it on is refused), and never in a workflow
   with a loop.
