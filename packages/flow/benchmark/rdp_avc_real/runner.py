@@ -28,9 +28,16 @@ RESULTS = ROOT / "results"
 CREDS = ROOT / "secret" / "creds.json"
 HERE = Path(__file__).resolve().parent
 
-# Two cmdkey targets so the two session users never share a credential:
-# OpenEMR sessions connect by IP, Patient Notes sessions by host name.
-TARGETS = {"emr": ("10.30.1.7", "emruser"), "pn": ("vm-rdhost", "pnuser")}
+# One cmdkey target per session user, so no two users share a credential:
+# OpenEMR sessions connect by IP, Patient Notes by host name, the read-back
+# session by the fully qualified host name.
+READER_TARGET = "vm-rdhost.x3hkkcl3scte1kfhx4qhkg0tta.bx.internal.cloudapp.net"
+TARGETS = {
+    "emr": ("10.30.1.7", "emruser"),
+    "pn": ("vm-rdhost", "pnuser"),
+    # Read-back: its own logon, under the host's fully qualified name.
+    "pnread": (READER_TARGET, "pnreader"),
+}
 
 
 def _set_resolution(width: int = 1920, height: int = 1080) -> None:
@@ -74,21 +81,28 @@ def _set_resolution(width: int = 1920, height: int = 1080) -> None:
     ctypes.windll.user32.ChangeDisplaySettingsW(ctypes.byref(dm), 0)
 
 
-def _prepare_client() -> None:
-    # Self-signed host certificate: connect without the warning dialog.
-    key = winreg.CreateKey(
-        winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Terminal Server Client"
-    )
-    winreg.SetValueEx(key, "AuthenticationLevelOverride", 0, winreg.REG_DWORD, 0)
+def store_credentials() -> None:
+    """Store any session passwords left in the secret file, then delete it."""
     if CREDS.exists():
         creds = json.loads(CREDS.read_text(encoding="utf-8-sig"))
         for target, user in TARGETS.values():
+            if user not in creds:
+                continue
             subprocess.run(
                 ["cmdkey", f"/generic:TERMSRV/{target}", f"/user:vm-rdhost\\{user}",
                  f"/pass:{creds[user]}"],
                 check=True, capture_output=True,
             )
         CREDS.unlink()
+
+
+def _prepare_client() -> None:
+    # Self-signed host certificate: connect without the warning dialog.
+    key = winreg.CreateKey(
+        winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Terminal Server Client"
+    )
+    winreg.SetValueEx(key, "AuthenticationLevelOverride", 0, winreg.REG_DWORD, 0)
+    store_credentials()
 
 
 def main() -> int:

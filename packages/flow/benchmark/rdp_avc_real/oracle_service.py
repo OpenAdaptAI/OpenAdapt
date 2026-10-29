@@ -65,6 +65,18 @@ def edge_restart() -> dict:
     return {"restarted": True}
 
 
+def pn_set_note(pid: str, note: str) -> dict:
+    """Write a note straight into the record: read-back ground truth."""
+    import base64
+
+    if not pid.isdigit() or not TOKEN_RE.match(note):
+        raise ValueError("bad note")
+    b64 = base64.b64encode(note.encode()).decode()
+    out = subprocess.run([PY, PN_DB, "save", pid, b64], check=True,
+                         capture_output=True, text=True).stdout
+    return json.loads(out)
+
+
 def pn_all() -> list:
     out = subprocess.run([PY, PN_DB, "all"], check=True, capture_output=True, text=True).stdout
     return json.loads(out)
@@ -86,6 +98,11 @@ def emr_patients(token: str) -> list[dict]:
         "SELECT pid, fname, lname, DOB, sex FROM patient_data "
         f"WHERE fname LIKE '%{token}%' OR lname LIKE '%{token}%' ORDER BY pid"
     )
+
+
+def emr_all() -> list[dict]:
+    """Every patient row: the record check's whole read set."""
+    return emr_query("SELECT pid, fname, lname, DOB, sex FROM patient_data ORDER BY pid")
 
 
 def emr_cleanup(prefix: str) -> dict:
@@ -116,7 +133,9 @@ class Handler(BaseHTTPRequestHandler):
             ("pn", "/reset"): lambda: pn_reset(q.get("drift", "none")),
             ("pn", "/all"): pn_all,
             ("pn", "/edge_restart"): edge_restart,
+            ("pn", "/set_note"): lambda: pn_set_note(q["id"], q["note"]),
             ("emr", "/patients"): lambda: emr_patients(q["token"]),
+            ("emr", "/all"): emr_all,
             ("emr", "/cleanup"): lambda: emr_cleanup(q["prefix"]),
         }
         return routes[(self.mode, url.path)]()

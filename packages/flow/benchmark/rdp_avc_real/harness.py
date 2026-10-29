@@ -28,6 +28,8 @@ from openadapt_flow.backends.remote_display import RemoteDisplayBackend
 APPS = {
     "emr": {"target": "10.30.1.7"},
     "pn": {"target": "vm-rdhost"},
+    # The read-back session: its own RDP logon (pnreader), own mstsc window.
+    "pnread": {"target": "vm-rdhost.x3hkkcl3scte1kfhx4qhkg0tta.bx.internal.cloudapp.net"},
 }
 DESKTOP = (1280, 800)
 
@@ -256,6 +258,38 @@ def zip_dir(src: Path, dest: Path) -> None:
                 zf.write(f, f.relative_to(src))
 
 
+def record_check_config(spec: dict):
+    """The merged record check (verify-run): effect contract plus whole-read frame."""
+    from openadapt_flow.verify_run import parse_verify_config
+
+    return parse_verify_config(spec["verify"], source=f"{spec['name']} verify")
+
+
+def record_check(cfg, params: dict, run_dir: Path, report_path: Path, baseline: Path) -> dict:
+    """Judge the trial's write from the system of record, as verify-run does."""
+    from openadapt_flow.verify_run import verify_run
+
+    run_record = {"executor_kind": "flow_replay"}
+    if report_path.exists():
+        run_record["report_sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+    try:
+        result = verify_run(
+            cfg, params=params, run_record=run_record,
+            authorization_ref=f"lab-{run_dir.name}",
+            baseline_path=baseline if baseline.exists() else None,
+            private_dir=run_dir / "record_check",
+        )
+    except Exception as exc:  # noqa: BLE001 -- a refused check is reported, not hidden
+        return {"effect_verdict": None, "outcome": "refused", "error": repr(exc)}
+    receipt = result["receipt"]
+    return {
+        "effect_verdict": receipt.get("effect_verdict"),
+        "outcome": receipt.get("outcome"),
+        "verification_tier": receipt.get("verification_tier"),
+        "checked_how": receipt.get("checked_how"),
+    }
+
+
 def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
     """Record once, compile, then replay every condition; judge from the record.
 
@@ -277,6 +311,7 @@ def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
     record_s = time.monotonic() - t0
     zip_dir(work / "bundle", out / f"{app}_bundle.zip")
 
+    check_cfg = record_check_config(spec) if job.get("record_check") else None
     trials = []
     session = (32, DESKTOP)
     for cond in job["conditions"]:
@@ -293,11 +328,17 @@ def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
             token = f"Oa{job['id'][-4:]}{len(trials):03d}{name[:4]}".replace("-", "")
             run_dir = work / f"run_{len(trials):03d}_{name}"
             first = backend_for(app).screenshot()
+            params = spec["params"](token)
+            baseline = work / f"baseline_{len(trials):03d}.json"
+            if check_cfg is not None:
+                from openadapt_flow.verify_run import capture_baseline
+
+                capture_baseline(check_cfg, params, baseline)
             t = time.monotonic()
             error, extra = None, {}
             try:
                 report = Replayer(backend_for(app), poll_interval_s=0.3).run(
-                    workflow, params=spec["params"](token), bundle_dir=work / "bundle",
+                    workflow, params=params, bundle_dir=work / "bundle",
                     run_dir=run_dir,
                 )
                 success, model_calls = bool(report.success), report.model_calls
@@ -315,6 +356,10 @@ def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
                 error = repr(exc)
             elapsed = time.monotonic() - t
             db_outcome, detail = spec["judge"](token)
+            if check_cfg is not None:
+                detail["record_check"] = record_check(
+                    check_cfg, params, run_dir, run_dir / "report.json", baseline
+                )
             must_save = name in spec["must_save"]
             frames = sorted(run_dir.rglob("*.png"))
             trial = {
@@ -334,6 +379,10 @@ def run_campaign(job: dict, out: Path, app: str, spec: dict) -> dict:
             if i == 0:
                 trial["first_frame"] = save_frame(first, out, f"{app}_{name}_first")
                 zip_dir(run_dir, out / f"{app}_run_{name}.zip")
+            elif trial["class"] != "verified_save" and not any(
+                t["condition"] == name and t["class"] == trial["class"] for t in trials
+            ):
+                zip_dir(run_dir, out / f"{app}_run_{name}_{trial['class']}.zip")
             trials.append(trial)
             (out / "trials.json").write_text(json.dumps(trials, indent=2), encoding="utf-8")
     return {"app": app, "record_s": round(record_s, 2), "trials": trials}
@@ -355,6 +404,14 @@ def pn_campaign(job: dict, out: Path) -> dict:
         "params": lambda token: {"note": token},
         "judge": judge,
         "must_save": PN_MUST_SAVE,
+        "verify": {
+            "environment_id": "rdp-avc444-lab-patient-notes",
+            "verifier": {"kind": "rest", "base_url": PN_ORACLE, "records_path": "/all",
+                         "records_key": None},
+            "effects": [{"kind": "field_equals", "match": {"first": {"literal": "Neil"},
+                                                       "last": {"literal": "Sorenson"}},
+                         "field": "note", "value": {"param": "note"}}],
+        },
     })
 
 
@@ -435,7 +492,13 @@ def emr_judge(token: str):
 
 
 def emr_campaign(job: dict, out: Path) -> dict:
+    prefix = "Oa" + job["id"][-4:].replace("-", "")
+
     def reset(_drift: str) -> None:
+        # Each trial starts from a record with none of this job's patients:
+        # an earlier trial's patient would raise OpenEMR's duplicate warning.
+        oracle(EMR_ORACLE, f"/cleanup?prefix={prefix}")
+        oracle(EMR_ORACLE, "/cleanup?prefix=Recorded")
         oracle(PN_ORACLE, "/edge_restart")
         time.sleep(4)
 
@@ -448,10 +511,107 @@ def emr_campaign(job: dict, out: Path) -> dict:
                                      "first_name": token},
             "judge": emr_judge,
             "must_save": EMR_MUST_SAVE,
+            "verify": {
+                "environment_id": "rdp-avc444-lab-openemr",
+                "verifier": {"kind": "rest", "base_url": EMR_ORACLE, "records_path": "/all",
+                             "records_key": None},
+                "effects": [
+                    {"kind": "record_written", "match": {"fname": {"param": "first_name"}}},
+                    {"kind": "field_equals", "match": {"fname": {"param": "first_name"}},
+                     "field": "lname", "value": {"literal": EMR_LAST}},
+                    {"kind": "field_equals", "match": {"fname": {"param": "first_name"}},
+                     "field": "DOB", "value": {"literal": EMR_DOB}},
+                    {"kind": "field_equals", "match": {"fname": {"param": "first_name"}},
+                     "field": "sex", "value": {"literal": "Female"}},
+                ],
+                "frame": {"identity_field": "pid"},
+            },
         })
     finally:
         oracle(EMR_ORACLE, "/cleanup?prefix=Oa" + job["id"][-4:].replace("-", ""))
         oracle(EMR_ORACLE, "/cleanup?prefix=Recorded")
+
+
+# --- Separate-session read-back (desktop_readback) --------------------------------
+
+PN_READBACK_SPEC = {
+    "session": {"kind": "rdp", "rdp_window": "mstsc",
+                "rdp_window_title": window_title("pnread")},
+    "search": {"box": {"region": [20, 43, 480, 24]}, "query": {"literal": "Neil"},
+               "submit": {"text": "Search"}},
+    "open": {"results": {"region": [20, 125, 590, 175]}},
+    "ready": {"text": "Clinical note:"},
+    "identity": {"reader": {"text": "Patient:", "at": "right"},
+                 "value": {"literal": "Neil Sorenson"}, "field": "patient"},
+    "fields": {"note": {"control": {"text": "Clinical note:", "at": "below"}}},
+    "navigation_timeout_s": 20.0,
+    "settle_s": 1.0,
+}
+
+
+def pn_readback(job: dict, out: Path) -> dict:
+    """Score the read-back verifier against notes written straight to the record.
+
+    Each case writes ``stored`` to Neil Sorenson's note, then asks the
+    verifier whether the note equals ``expected``. Truth: CONFIRMED when they
+    match, REFUTED when they do not; INDETERMINATE is a stop, never a pass.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from runner import store_credentials
+
+    from openadapt_flow.runtime.effects.desktop_readback import (
+        DesktopReadbackSpec,
+        DesktopSessionFacts,
+    )
+    from openadapt_flow.runtime.effects.desktop_readback_sessions import (
+        BackendSessionDriver,
+        build_desktop_readback_verifier,
+    )
+    from openadapt_flow.runtime.effects.effect import Effect, EffectKind, ValueExpr
+
+    store_credentials()
+    spec = DesktopReadbackSpec.model_validate(PN_READBACK_SPEC)
+
+    def open_backend(_user: str, _password: str):
+        open_session("pnread")
+        wait_steady("pnread")
+        facts = DesktopSessionFacts(own_session=True, fresh_session=False,
+                                    signed_in=False, path="ocr")
+        return backend_for("pnread"), facts
+
+    driver = BackendSessionDriver(open_backend, settle_s=spec.settle_s)
+    verifier = build_desktop_readback_verifier(spec, {}, driver=driver, timeout_s=0.0)
+    oracle(PN_ORACLE, "/reset?drift=none")
+    cases = []
+    for i in range(job["n"]):
+        stored = f"Rb{i:03d}note"
+        match = i % 2 == 0
+        expected = stored if match else f"Rb{i:03d}other"
+        oracle(PN_ORACLE, f"/set_note?id={PN_TARGET_ID}&note={stored}")
+        effect = Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match={"patient": ValueExpr(literal="Neil Sorenson")},
+            field="note", value=ValueExpr(literal=expected), timeout_s=0.0,
+        )
+        t = time.monotonic()
+        before = verifier.capture_pre_state()
+        verdict = verifier.verify(effect, before)
+        elapsed = time.monotonic() - t
+        got = getattr(verdict.verdict, "value", str(verdict.verdict))
+        truth = "confirmed" if match else "refuted"
+        cases.append({
+            "case": i + 1, "stored": stored, "expected": expected, "truth": truth,
+            "verdict": got, "correct": got.lower() == truth,
+            "false_confirm": (not match) and got.lower() == "confirmed",
+            "reason": verdict.reason, "assurance": verdict.assurance,
+            "elapsed_s": round(elapsed, 2),
+        })
+        if i < 2:
+            save_frame(backend_for("pnread").screenshot(), out, f"pnread_case{i + 1}")
+        (out / "readback.json").write_text(json.dumps(cases, indent=2), encoding="utf-8")
+    from openadapt_flow.verification import verifier_effect_tier
+
+    return {"tier": str(verifier_effect_tier(verifier)), "cases": cases}
 
 
 def drive(job: dict, out: Path) -> dict:
@@ -491,7 +651,7 @@ def main(job_path: str, out_dir: str) -> int:
     if job.get("fresh"):
         close_sessions()
         time.sleep(3)
-    kinds = {"probe": probe, "diagnose": diagnose, "pn_campaign": pn_campaign, "emr_campaign": emr_campaign, "drive": drive}
+    kinds = {"probe": probe, "diagnose": diagnose, "pn_campaign": pn_campaign, "emr_campaign": emr_campaign, "pn_readback": pn_readback, "drive": drive}
     try:
         result = kinds[job["kind"]](job, out)
         (out / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
