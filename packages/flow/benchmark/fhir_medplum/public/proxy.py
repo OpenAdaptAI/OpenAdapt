@@ -125,6 +125,10 @@ class FaultProxy:
         self._token = ""
         self.after_check: list[dict[str, Any]] = []
         self.log: list[dict[str, Any]] = []
+        #: True once a fault has done what it says: the case tests something.
+        self.delivered = False
+        #: Called once, before the agent's first write is sent on.
+        self.on_first_write: Optional[Callable[[], Any]] = None
         #: Called as side_write(op, refs, token) for a write the fault adds.
         self.side_write: Optional[
             Callable[[dict[str, Any], dict[str, str], str], None]
@@ -154,6 +158,12 @@ class FaultProxy:
             self._token = ""
             self.after_check = []
             self.log = []
+            self.delivered = False
+            self.on_first_write = None
+
+    def _note(self, entry: dict[str, Any]) -> None:
+        with self._lock:
+            self.log.append(entry)
 
     def run_after_check(self) -> None:
         """Make the side writes a fault holds for after the check."""
@@ -164,7 +174,7 @@ class FaultProxy:
         for op in pending:
             if self.side_write is not None and token:
                 self.side_write(op, refs, token)
-                self.log.append({"side_write": op.get("op"), "at": "after_check"})
+                self._note({"side_write": op.get("op"), "at": "after_check"})
 
     # -- the handler --------------------------------------------------------------
 
@@ -197,42 +207,79 @@ class FaultProxy:
         body = h.rfile.read(length) if length else None
         headers = {k: h.headers[k] for k in FORWARDED_HEADERS if h.headers.get(k)}
         method = h.command
-        rtype = rest.lstrip("/").split("?")[0].split("/")[0]
+        parts = rest.lstrip("/").split("?")[0].split("/")
+        rtype = parts[0]
+        # A search or an operation sent by POST is a read, not the write.
+        operation = rtype.startswith("$") or any(
+            p == "_search" or p.startswith("$") for p in parts[1:]
+        )
         faults: list[dict[str, Any]] = []
+        first = False
         with self._lock:
             if headers.get("Authorization"):
                 self._token = headers["Authorization"].split(" ", 1)[-1]
-            if method in WRITE_METHODS and rtype == self._rtype and not self._fired:
-                self._fired = True
+            if (
+                method in WRITE_METHODS
+                and rtype == self._rtype
+                and not operation
+                and not self._fired
+            ):
+                self._fired = first = True
                 faults = self._faults
             refs = dict(self._refs)
-        self.log.append({"method": method, "type": rtype, "faulted": bool(faults)})
+            hook = self.on_first_write
+        if first and hook is not None:
+            hook()
+            self._note({"other_at_write": True})
+        self._note({"method": method, "type": rtype, "faulted": bool(faults)})
         if not faults:
-            self._reply(h, *_send(method, url, headers, body))
+            self._relay(h, *_send(method, url, headers, body))
             return
+        json_type = {"Content-Type": "application/fhir+json"}
         if any(f.get("refuse") for f in faults):
-            self.log.append({"fault": "refuse"})
-            self._reply(
-                h,
-                503,
-                {"Content-Type": "application/fhir+json"},
-                _outcome("transient", "service unavailable"),
-            )
+            self._delivered("refuse")
+            self._reply(h, 503, json_type, _outcome("transient", "service unavailable"))
             return
+        doc: Any = None
         if body:
             try:
                 doc = json.loads(body)
             except ValueError:
                 doc = None
-            if isinstance(doc, dict):
-                for f in faults:
-                    doc = mutate(doc, f, refs)
-                body = json.dumps(doc).encode()
+        if any(f.get("fake_success") for f in faults):
+            # The reply says created; nothing was sent to the server.
+            fake = dict(doc) if isinstance(doc, dict) else {"resourceType": rtype}
+            fake["id"] = "00000000-0000-4000-8000-000000000000"
+            fake["meta"] = {"versionId": "1"}
+            self._delivered("fake_success")
+            self._reply(h, 201, json_type, json.dumps(fake).encode())
+            return
+        mutating = [
+            f
+            for f in faults
+            if f.get("set")
+            or f.get("phone_swap")
+            or f.get("shift_hours")
+            or f.get("replace")
+            or f.get("retarget")
+        ]
+        if isinstance(doc, dict) and mutating:
+            changed = doc
+            for f in mutating:
+                changed = mutate(changed, f, refs)
+            if changed != doc:
+                body = json.dumps(changed).encode()
                 headers["Content-Length"] = str(len(body))
+                self._delivered("mutate")
+            else:
+                self._note({"fault": "mutate", "changed": False})
         status, rheaders, rbody = _send(method, url, headers, body)
         if any(f.get("duplicate") for f in faults):
-            _send(method, url, headers, body)
-            self.log.append({"fault": "duplicate"})
+            again, _, _ = _send(method, url, headers, body)
+            if status // 100 == 2 and again // 100 == 2:
+                self._delivered("duplicate")
+            else:
+                self._note({"fault": "duplicate", "statuses": [status, again]})
         token = headers.get("Authorization", "").split(" ", 1)[-1]
         for f in faults:
             op = f.get("side_write")
@@ -241,19 +288,52 @@ class FaultProxy:
             if op.get("at") == "after_check":
                 with self._lock:
                     self.after_check.append(op)
+                self._delivered("side_write_later")
             elif self.side_write is not None:
                 self.side_write(op, refs, token)
-                self.log.append({"side_write": op.get("op")})
+                self._delivered("side_write")
         if any(f.get("drop_response") for f in faults):
-            self.log.append({"fault": "drop_response", "upstream_status": status})
+            if status // 100 == 2:
+                self._delivered("drop_response")
+            self._note({"fault": "drop_response", "upstream_status": status})
             self._reply(
                 h,
                 504,
-                {"Content-Type": "application/fhir+json"},
+                json_type,
                 _outcome("timeout", "gateway timeout: no reply from the server"),
             )
             return
-        self._reply(h, status, rheaders, rbody)
+        self._relay(h, status, rheaders, rbody)
+
+    def _delivered(self, what: str) -> None:
+        with self._lock:
+            self.delivered = True
+            self.log.append({"fault": what})
+
+    def _relay(
+        self,
+        h: BaseHTTPRequestHandler,
+        status: int,
+        headers: dict[str, str],
+        body: bytes,
+    ) -> None:
+        """Pass the server's reply on, with its links pointing at this proxy.
+
+        Medplum writes its own base into ``Location``, ``fullUrl`` and paging
+        links; an agent that followed them would go around the faults.
+        """
+
+        mine = self.fhir_url.encode()
+        body = body.replace(self.upstream.encode(), mine)
+        headers = {
+            k: (
+                v.replace(self.upstream, self.fhir_url)
+                if k.lower() == "location"
+                else v
+            )
+            for k, v in headers.items()
+        }
+        self._reply(h, status, headers, body)
 
     def _reply(
         self,

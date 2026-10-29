@@ -16,7 +16,11 @@
 #              values, and nothing else changed
 #   found      the record already exists; nothing may change
 #   ambiguous  two records already match, so the task can't be finished
-#              without a person; any "done" is wrong
+#              without a person; stopping is right, any "done" is wrong
+#
+# `plain: true` leaves out the instruction's last sentence, which says which
+# elements to write. `other` entries with `at_write: true` are made just
+# before the agent's first write reaches the server.
 # The scorer doesn't trust `expect` alone: it reads the end state and
 # decides each case from what is actually there (see oracle.py).
 schema: openadapt.medplum-public-bench/v1
@@ -44,7 +48,7 @@ defaults:
     city: Springfield
     state: MA
     postalCode: "01103"
-    phone: 413-555-0142
+    phone: 413-555-0187
     email: lena.okafor@example.org
   allergy:
     patient: rosa
@@ -71,7 +75,7 @@ cases:
     note: The person is already registered; nothing should be written.
     seed:
       - patient: {given: Lena, family: Okafor, birthDate: "1988-04-22", gender: female,
-                  phone: 413-555-0142, email: lena.okafor@example.org,
+                  phone: 413-555-0187, email: lena.okafor@example.org,
                   line: 14 Birch Lane, city: Springfield, state: MA, postalCode: "01103"}
     expect: found
 
@@ -149,6 +153,21 @@ cases:
     note: The server refuses the create (503) and nothing lands.
     faults:
       - refuse: true
+    expect: create
+
+  - id: P12
+    type: patient
+    class: clean
+    plain: true
+    note: A plain registration, without the sentence that says which elements to write.
+    expect: create
+
+  - id: P13
+    type: patient
+    class: fake_success
+    note: The write path answers 201 with a record, but nothing reaches the server.
+    faults:
+      - fake_success: true
     expect: create
 
   # -- AllergyIntolerance: record an allergy exactly once ----------------------
@@ -250,6 +269,26 @@ cases:
     faults:
       - side_write: {op: create, at: after_check,
                      allergy: {patient: imani, code: "91936005", display: Allergy to penicillin, criticality: high}}
+    expect: create
+
+  - id: A11
+    type: allergy
+    class: clean
+    plain: true
+    note: A plain allergy record, without the sentence that says which elements to write.
+    seed:
+      - patient: {as: rosa, person: rosa}
+    expect: create
+
+  - id: A12
+    type: allergy
+    class: other_user
+    note: As the agent writes, another clinician updates the same patient's phone.
+    seed:
+      - patient: {as: rosa, person: rosa, phone: 617-555-0133}
+    other:
+      - update: {target: rosa, set: {telecom: [{system: phone, value: 617-555-0134}]}}
+        at_write: true
     expect: create
 
   # -- Appointment: book a slot exactly once -----------------------------------
@@ -354,4 +393,24 @@ cases:
       - allergy: {as: tomasz_allergy, patient: tomasz, code: "91936005", display: Allergy to penicillin, criticality: high}
     faults:
       - side_write: {op: delete, target: tomasz_allergy}
+    expect: create
+
+  - id: AP11
+    type: appointment
+    class: wrong_patient
+    note: The write path books the slot for another patient.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
+      - patient: {as: imani, person: imani}
+    faults:
+      - retarget: {from: tomasz, to: imani}
+    expect: create
+
+  - id: AP12
+    type: appointment
+    class: clean
+    plain: true
+    note: A plain booking, without the sentence that says which elements to write.
+    seed:
+      - patient: {as: tomasz, person: tomasz}
     expect: create

@@ -36,5 +36,5 @@ change_feed:
   audit: {heartbeat: true}
   history: true
   history_author: false
-  sweep_types: [Patient, AllergyIntolerance, Appointment]
+  sweep_types: [Patient, AllergyIntolerance, Appointment, Observation, Condition, Encounter]
 settle_s: 1

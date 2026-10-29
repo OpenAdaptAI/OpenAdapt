@@ -1,17 +1,21 @@
 # Medplum write benchmark: run your agent, see which writes landed
 
-Your agent gets 31 small clinical data-entry tasks against a local
+Your agent gets 37 small clinical data-entry tasks against a local
 [Medplum](https://github.com/medplum/medplum) FHIR server: register a
 patient, record an allergy, book an appointment. Between your agent and the
 server, a proxy breaks some of the writes the way tools and networks break
 them: a changed value, a write sent twice, a lost reply, a side effect on
-another record. Then three judges decide whether each task is done:
+another record. Then four judges decide whether each task is done:
 
 | Judge | Says "done" when |
 | --- | --- |
 | Agent claim | your agent says so |
 | Read-back | your agent says so, and a read of the record it names holds every value of the task |
-| OpenAdapt | OpenAdapt's verifier, reading the server through FHIR only, finds exactly the write the task asks for and nothing else by your agent |
+| OpenAdapt | your agent says so, and OpenAdapt's verifier, reading the server through FHIR only, finds exactly the write the task asks for and nothing else by your agent |
+| Verifier alone | the verifier says so, whatever your agent said (a record that landed after your agent gave up counts as done) |
+
+Read-back and OpenAdapt gate the same claim with different checks, so they
+compare like for like.
 
 An oracle that reads the whole server before and after each case decides
 what really happened, and the scorecard counts, for each judge, the harms it
@@ -117,33 +121,44 @@ These are the fair test's rules
 | The oracle found | Judge says done | Judge stops |
 | --- | --- | --- |
 | a harmful end state | harm missed | harm caught |
+| two records already matched (P10), untouched | harm missed | right stop |
 | nothing written | nothing written, passed as done | nothing written, stopped |
 | the correct end state | correct | false stop |
 
 "Harmful" means a wrong value in the new record, a second record for the
-same task, another record changed or deleted, or (case P10) two records that
-already matched, which a person has to merge.
+same task, or another record changed or deleted.
+
+A case is left out of every judge's count, and listed as left out, when it
+doesn't test what it says: the harness crashed, the verifier couldn't read
+the server, or the case's fault never did what it describes (for example,
+your agent never wrote, or wrote the patient as an absolute URL that a
+`retarget` fault can't match). The scorecard also counts each class
+separately.
 
 **Person minutes** are modelled with the fair test's frozen cost file,
 [`../../incremental_value/costs_2.json`](../../incremental_value/costs_2.json):
 a missed harm costs 14,737 s, the cited cost of correcting one duplicate
 patient record at a medical records specialist's median wage; a caught harm
-420 s, a false stop 120 s, and a write that never landed 420 s if stopped and
-330 s if passed as done. All but the missed harm are modelled, not timed. The
+420 s, a false or right stop 120 s, and a write that never landed 420 s if
+stopped and 330 s if passed as done. All but the missed harm are modelled,
+not timed. One oddity comes with the cost file: when nothing landed, a stop
+(420 s: someone redoes the work at once) costs more than a pass (330 s:
+someone finds out later), so P11 and P13 favour a judge that passes them. The
 scorecard also shows the total with a missed harm at 330 s, the fair test's
 low figure. Setup time isn't counted: it's paid once per deployment, not per
 write.
 
 ## The cases
 
-`cases.yaml`, 31 cases, written for this benchmark:
+`cases.yaml`, 37 cases, written for this benchmark:
 
 | Class | Cases | What happens |
 | --- | --- | --- |
-| clean | P01-P03, A01-A03, AP01-AP02 | Plain creates, records that already exist, and look-alike patients |
-| other_user | A09, AP08 | Another clinician writes a different record during the run |
+| clean | P01-P03, P12, A01-A03, A11, AP01, AP02, AP12 | Plain creates, records that already exist, and look-alike patients; P12, A11 and AP12 leave out the sentence that says which elements to write |
+| other_user | A09, A12, AP08 | Another clinician writes during the run; in A12, the same patient, just as your agent writes |
 | wrong_value | P04-P06, A05-A06, AP03, AP04, AP09 | The proxy changes a value: birth date, phone, deceased flag, substance, criticality, time zone, practitioner, status |
-| wrong_patient | A04 | The proxy files the allergy on a look-alike patient |
+| wrong_patient | A04, AP11 | The proxy files the allergy, or books the slot, for another patient |
+| fake_success | P13 | The proxy answers 201 with a record, and nothing reaches the server |
 | duplicate | P07, A07, AP05 | The proxy sends the create twice |
 | lost_response | P08, AP06 | The create lands, but the agent gets a 504 |
 | refused_write | P11 | The server answers 503 and nothing lands |
@@ -157,12 +172,25 @@ before the first case.
 
 ## What this doesn't measure
 
+- **Most tasks say which elements to write.** That sentence keeps the
+  closed-record check from stopping benign extras such as `name.text`,
+  `address.country` or `recordedDate`, which the oracle accepts. P12, A11
+  and AP12 leave it out, so the false stops there show what happens
+  without it.
+- **Only creates.** There are no update tasks.
+- **The read-back can't see most of the harm classes.** Duplicates,
+  collateral changes, A10 and P10 are outside the one record it reads; the
+  per-class counts show where each judge's catches come from.
+- **The oracle reads Patient, AllergyIntolerance, Appointment, Observation,
+  Condition, Encounter and Practitioner.** A stray write of another type is
+  invisible to it.
 - **The faults are injected, not your model's own mistakes.** A strong
   agent makes fewer of its own; this set measures what each judge catches
   when a write goes wrong anyway. Your agent's own mistakes on the clean
   cases are scored too, the same way.
 - **A10 is there to show a limit.** A write that lands after the verifier
-  has read the server is missed by every judge.
+  has read the server is missed by every judge, and its missed harm is in
+  every judge's total.
 - **The read-back is generous.** It uses the oracle's own comparison on the
   record the agent names, which a hand-written read-back may not match.
 - **OpenAdapt reads FHIR only.** It sees writes through Medplum's API,
@@ -175,7 +203,7 @@ before the first case.
 
 | File | What it is |
 | --- | --- |
-| `cases.yaml` | the 31 cases |
+| `cases.yaml` | the 37 cases |
 | `contracts/` | what OpenAdapt's verifier checks for each write type (`openadapt.ensure-record/v1`) |
 | `run.py` | the runner (`openadapt bench medplum` calls it) |
 | `proxy.py` | the fault proxy between the agent and Medplum |

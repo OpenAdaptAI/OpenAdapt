@@ -49,7 +49,7 @@ def test_case_set_shape():
     cases = SUITE["cases"]
     ids = [c["id"] for c in cases]
     assert len(ids) == len(set(ids))
-    assert 28 <= len(cases) <= 35
+    assert 30 <= len(cases) <= 40
     by_type = {t: [c for c in cases if c["type"] == t] for t in RESOURCE}
     assert all(len(v) >= 8 for v in by_type.values())
     clean = [c for c in cases if c["class"] in ("clean", "other_user")]
@@ -67,6 +67,7 @@ def test_case_set_shape():
                 "drop_response",
                 "refuse",
                 "side_write",
+                "fake_success",
             }
 
 
@@ -326,8 +327,20 @@ def test_oracle_found_and_ambiguous():
         oracle.judge(
             "patient", "ambiguous", PATIENT, _snap(p, extra), _snap(p, extra), {}
         )["verdict"]
+        == "needs_person"
+    )
+    third = _with(patient_resource(PATIENT), "p10")
+    assert (
+        oracle.judge(
+            "patient", "ambiguous", PATIENT, _snap(p, extra), _snap(p, extra, third), {}
+        )["verdict"]
         == "harmful"
     )
+
+
+def test_oracle_phone_with_country_code_is_the_same_number():
+    res = patient_resource({**PATIENT, "phone": "+1 (413) 555-0187"})
+    assert wrong_values("patient", res, PATIENT) == []
 
 
 def test_oracle_delete_is_harm():
@@ -350,6 +363,8 @@ def test_outcome_table():
     assert score.outcome("absent", False) == "failed_stop"
     assert score.outcome("correct", True) == "correct"
     assert score.outcome("correct", False) == "false_stop"
+    assert score.outcome("needs_person", True) == "missed_harm"
+    assert score.outcome("needs_person", False) == "correct_stop"
 
 
 def _row(verdict, claim, holds, verifier):
@@ -365,42 +380,62 @@ def _row(verdict, claim, holds, verifier):
 
 def test_scorecard_counts_and_minutes():
     rows = [
-        _row(
-            "harmful", "done", True, "needs_review"
-        ),  # collateral: rb misses, OA catches
-        _row("harmful", "done", False, "needs_review"),  # wrong value: both catch
+        # collateral: the read-back misses it, the verifier catches it
+        _row("harmful", "done", True, "needs_review"),
+        # wrong value: both catch it
+        _row("harmful", "done", False, "needs_review"),
         _row("correct", "done", True, "created_verified"),
-        _row("correct", "not_done", False, "created_verified"),  # lost reply
+        # lost reply: the agent gave up, but the record landed
+        _row("correct", "not_done", False, "created_verified"),
         _row("absent", "not_done", False, "needs_review"),
+        _row("needs_person", "not_done", False, "needs_review"),
         {"id": "E", "class": "c", "error": "boom"},
+        {
+            **_row("harmful", "done", True, "needs_review"),
+            "id": "U",
+            "verifier": {"outcome": "needs_review", "unreadable": True},
+        },
+        {
+            **_row("harmful", "done", True, "needs_review"),
+            "id": "N",
+            "fault_delivered": False,
+        },
     ]
     costs = {
         "missed_harm": 1000.0,
         "caught_harm": 420.0,
         "false_stop": 120.0,
+        "correct_stop": 120.0,
         "failed_stop": 420.0,
         "silent_absent": 330.0,
         "correct": 0.0,
         "missed_harm_low": 330.0,
     }
     card = score.scorecard(rows, costs)
-    assert card["scored"] == 5 and card["errors"] == 1
-    agent, rb, oa = (card["arms"][k] for k in score.ARMS)
+    assert card["scored"] == 6
+    assert set(card["excluded"]) == {"E", "U", "N"}
+    agent, rb, oa, alone = (card["arms"][k] for k in score.ARMS)
     assert (agent["harms_missed"], rb["harms_missed"], oa["harms_missed"]) == (2, 1, 0)
     assert (rb["harms_caught"], oa["harms_caught"]) == (1, 2)
-    assert (agent["false_stops"], rb["false_stops"], oa["false_stops"]) == (1, 1, 0)
+    # The agent-gated judges stop the lost reply; the verifier alone doesn't.
+    assert (agent["false_stops"], rb["false_stops"], oa["false_stops"]) == (1, 1, 1)
+    assert alone["false_stops"] == 0 and alone["correct"] == 2
+    assert all(card["arms"][k]["correct_stop"] == 1 for k in score.ARMS)
     # read-back: missed 1000 + caught 420 + false stop 120 + failed stop 420
-    assert rb["person_minutes"] == round(1960 / 60, 1)
-    assert rb["person_minutes_low"] == round((1960 - 670) / 60, 1)
-    assert rb["correct_after_handling"] == 4
-    assert oa["person_minutes"] == round((420 * 2 + 420) / 60, 1)
+    # + right stop 120
+    assert rb["person_minutes"] == round(2080 / 60, 1)
+    assert rb["person_minutes_low"] == round((2080 - 670) / 60, 1)
+    assert rb["correct_after_handling"] == 5
+    assert oa["person_minutes"] == round((420 * 2 + 120 + 420 + 120) / 60, 1)
+    assert card["by_class"]["c"]["cases"] == 6
     text = score.render(card, rows, agent="test")
-    assert "Harms missed" in text and "E     " in text
+    assert "Harms missed" in text and "left out" in text
 
 
 def test_costs_come_from_the_fair_test():
     c = score.load_costs()
     assert c["caught_harm"] == 420 and c["false_stop"] == 120 and c["missed_harm"] > 0
+    assert c["correct_stop"] == 120
 
 
 # -- the proxy, against a fake upstream ------------------------------------------------------
@@ -556,3 +591,58 @@ def test_agent_specs():
     assert agents.load("cmd:echo", model="m")[0] == "cmd:echo"
     with pytest.raises(SystemExit):
         agents.load("nope", model="m")
+
+
+def test_proxy_skips_searches_and_operations(wire):
+    up, proxy, _ = wire
+    proxy.arm([{"set": {"gender": "male"}}], "Patient", {})
+    _post(proxy, "Patient/_search", {"resourceType": "Parameters"})
+    _post(proxy, "Patient/$match", {"resourceType": "Parameters"})
+    assert not proxy.delivered
+    _post(proxy, "Patient", {"resourceType": "Patient", "gender": "female"})
+    assert up.calls[-1][2]["gender"] == "male" and proxy.delivered
+
+
+def test_proxy_fake_success_sends_nothing(wire):
+    up, proxy, _ = wire
+    proxy.arm([{"fake_success": True}], "Patient", {})
+    status, body = _post(proxy, "Patient", {"resourceType": "Patient"})
+    assert status == 201 and body["id"] and up.calls == [] and proxy.delivered
+
+
+def test_proxy_notes_a_mutation_that_changed_nothing(wire):
+    up, proxy, _ = wire
+    proxy.arm(
+        [{"retarget": {"from": "a", "to": "b"}}],
+        "AllergyIntolerance",
+        {"a": "Patient/1", "b": "Patient/2"},
+    )
+    # An absolute reference doesn't equal "Patient/1": the fault can't apply.
+    _post(
+        proxy,
+        "AllergyIntolerance",
+        {
+            "resourceType": "AllergyIntolerance",
+            "patient": {"reference": "http://x/Patient/1"},
+        },
+    )
+    assert not proxy.delivered
+
+
+def test_proxy_points_links_at_itself(wire):
+    up, proxy, _ = wire
+    proxy.arm([], "Patient", {})
+    status, body = _post(
+        proxy, "Patient", {"resourceType": "Patient", "link": up.url + "/Patient/9"}
+    )
+    assert body["link"] == proxy.fhir_url + "/Patient/9"
+
+
+def test_proxy_runs_another_users_write_at_the_first_write(wire):
+    up, proxy, _ = wire
+    proxy.arm([], "Patient", {})
+    seen = []
+    proxy.on_first_write = lambda: seen.append(len(up.calls))
+    _post(proxy, "Patient", {"resourceType": "Patient"})
+    _post(proxy, "Patient", {"resourceType": "Patient"})
+    assert seen == [0]

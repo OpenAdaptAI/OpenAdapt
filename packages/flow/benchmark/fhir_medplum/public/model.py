@@ -17,7 +17,14 @@ RESOURCE = {
     "appointment": "Appointment",
 }
 #: Every type a case may write or seed; the harness empties these per case.
-WIPED = ("Appointment", "AllergyIntolerance", "Patient")
+WIPED = (
+    "Appointment",
+    "AllergyIntolerance",
+    "Observation",
+    "Condition",
+    "Encounter",
+    "Patient",
+)
 SNOMED = "http://snomed.info/sct"
 CLINICAL = "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical"
 VERIFICATION = "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification"
@@ -95,9 +102,25 @@ def task_text(
     v: Mapping[str, Any],
     people: Mapping[str, Any],
     practitioners: Mapping[str, Any],
+    *,
+    plain: bool = False,
 ) -> str:
-    """The instruction the agent gets, in plain words."""
+    """The instruction the agent gets, in plain words.
 
+    The last sentence says which elements to write. ``plain`` leaves it out,
+    so the agent writes the resource the way it would on its own.
+    """
+
+    text, scope = _task_text(kind, v, people, practitioners)
+    return text if plain else f"{text}\n{scope}"
+
+
+def _task_text(
+    kind: str,
+    v: Mapping[str, Any],
+    people: Mapping[str, Any],
+    practitioners: Mapping[str, Any],
+) -> tuple[str, str]:
     if kind == "patient":
         return (
             "Make sure this person has a Patient record on the FHIR server, "
@@ -109,9 +132,10 @@ def task_text(
             f"Sex: {v['gender']}\n"
             f"Address: {v['line']}, {v['city']}, {v['state']} {v['postalCode']}\n"
             f"Home phone: {v['phone']}\n"
-            f"Email: {v['email']}\n"
+            f"Email: {v['email']}"
+        ), (
             "Write only these values (name, birthDate, gender, one address, "
-            "a phone and an email telecom). Use the two-letter state code."
+            "a phone and an email telecom)."
         )
     if kind == "allergy":
         return (
@@ -123,7 +147,8 @@ def task_text(
             f"Allergy: {v['display']} (SNOMED CT {v['code']}, system {SNOMED})\n"
             f"Criticality: {v['criticality']}\n"
             f"Clinical status: active ({CLINICAL})\n"
-            f"Verification status: confirmed ({VERIFICATION})\n"
+            f"Verification status: confirmed ({VERIFICATION})"
+        ), (
             "Write only patient, code, criticality, clinicalStatus and "
             "verificationStatus."
         )
@@ -139,9 +164,8 @@ def task_text(
             "on the server).\n"
             f"Start: {v['start']}\nEnd: {v['end']}\n"
             "Status booked, with two participants (the patient and the "
-            "practitioner), each with status accepted. Write only status, "
-            "start, end and participant."
-        )
+            "practitioner), each with status accepted."
+        ), "Write only status, start, end and participant."
     raise ValueError(f"unknown task type {kind!r}")
 
 
@@ -153,7 +177,10 @@ def _cf(x: Any) -> Optional[str]:
 
 
 def _digits(x: Any) -> str:
-    return "".join(ch for ch in str(x or "") if ch.isdigit())
+    """A phone number's digits; a North American +1 prefix is the same number."""
+
+    digits = "".join(ch for ch in str(x or "") if ch.isdigit())
+    return digits[1:] if len(digits) == 11 and digits.startswith("1") else digits
 
 
 def instant(x: Any) -> Optional[datetime]:

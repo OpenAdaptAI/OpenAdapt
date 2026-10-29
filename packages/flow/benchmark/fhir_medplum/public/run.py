@@ -54,7 +54,7 @@ from benchmark.fhir_medplum.readpath.suite import Actors, audit_is_read_only
 
 HERE = Path(__file__).resolve().parent
 CONTRACTS = {k: HERE / "contracts" / f"{k}.yaml" for k in RESOURCE}
-SNAPSHOT_TYPES = ("Patient", "AllergyIntolerance", "Appointment", "Practitioner")
+SNAPSHOT_TYPES = (*WIPED, "Practitioner")
 PRACTITIONER_ID = "urn:openadapt:bench:practitioner"
 PROJECT = "openadapt-bench-medplum"
 DEFAULT_PORT = 9590
@@ -139,6 +139,25 @@ class Bench:
             refs[v["as"]] = ref
         return ref, str(made["meta"]["versionId"])
 
+    def other_write(
+        self, spec: dict[str, Any], refs: dict[str, str], excused: dict[str, str]
+    ) -> None:
+        """Another user's write; the oracle excuses the version it leaves."""
+
+        if "update" in spec:
+            op = spec["update"]
+            url = f"{self.fx.fhir_url}/{refs[op['target']]}"
+            token = self.actors.token("other")
+            current = _http("GET", url, token=token)
+            current.pop("meta", None)
+            current.update(op["set"])
+            made = _http("PUT", url, body=current, token=token)
+            ref = f"{made['resourceType']}/{made['id']}"
+            version = str(made["meta"]["versionId"])
+        else:
+            ref, version = self.create("other", spec, refs)
+        excused[ref] = version
+
     def side_write(self, op: dict[str, Any], refs: dict[str, str], token: str) -> None:
         """A write a fault adds, made with the agent's own token."""
 
@@ -209,7 +228,7 @@ class Bench:
         kind = case["type"]
         v = {**self.suite["defaults"][kind], **(case.get("task") or {})}
         people, docs = self.suite["people"], self.suite["practitioners"]
-        text = task_text(kind, v, people, docs)
+        text = task_text(kind, v, people, docs, plain=bool(case.get("plain")))
         if kind == "patient":
             values, want, params = dict(v), dict(v), dict(v)
         elif kind == "allergy":
@@ -258,10 +277,15 @@ class Bench:
         rid = str(claim.get("id") or "").strip()
         if claim.get("status") != "done" or not rid:
             return {"holds": False, "why": "no record named"}
-        ref = rid if "/" in rid else f"{RESOURCE[kind]}/{rid}"
-        ref = "/".join(ref.rstrip("/").split("/")[-2:])
-        if not ref.startswith(RESOURCE[kind] + "/"):
-            return {"holds": False, "why": f"names a {ref.split('/')[0]}", "ref": ref}
+        parts = rid.rstrip("/").split("/")
+        if len(parts) == 1:
+            ref = f"{RESOURCE[kind]}/{parts[0]}"
+        elif RESOURCE[kind] in parts[:-1]:
+            # Type/id, an absolute URL, or Type/id/_history/n.
+            at = parts.index(RESOURCE[kind])
+            ref = f"{RESOURCE[kind]}/{parts[at + 1]}"
+        else:
+            return {"holds": False, "why": "names another type", "ref": rid}
         try:
             res = _http(
                 "GET", f"{self.fx.fhir_url}/{ref}", token=self.actors.token("setup")
@@ -306,12 +330,24 @@ class Bench:
             row["verifier"] = {
                 "outcome": "needs_review",
                 "reasons": [f"unreadable: {exc}"],
+                "unreadable": True,
             }
         proxy.arm(case.get("faults") or [], RESOURCE[kind], refs)
         excused: dict[str, str] = {}
-        for spec in case.get("other") or []:
-            ref, version = self.create("other", spec, refs)
-            excused[ref] = version
+        now = [o for o in case.get("other") or [] if not o.get("at_write")]
+        during = [
+            {k: v for k, v in o.items() if k != "at_write"}
+            for o in case.get("other") or []
+            if o.get("at_write")
+        ]
+        for spec in now:
+            self.other_write(spec, refs, excused)
+        # Another user's writes that land just as the agent writes.
+        proxy.on_first_write = (
+            (lambda: [self.other_write(o, refs, excused) for o in during])
+            if during
+            else None
+        )
         t0 = time.monotonic()
         try:
             claim = agent(task, proxy.fhir_url, self.actors.token("bot"))
@@ -331,6 +367,7 @@ class Bench:
                 "id": result.record_id,
                 "reasons": result.reasons,
                 "evidence": result.evidence,
+                "unreadable": bool(result.evidence.get("unreadable")),
             }
         row["verify_s"] = round(time.monotonic() - t1, 1)
         row["readback"] = self.readback(kind, claim, want)
@@ -339,9 +376,9 @@ class Bench:
         after = self.snapshot()
         row["oracle"] = judge(kind, case["expect"], want, before, after, excused)
         row["proxy"] = list(proxy.log)
-        row["fault_delivered"] = not case.get("faults") or any(
-            e.get("faulted") for e in proxy.log
-        )
+        row["fault_delivered"] = proxy.delivered if case.get("faults") else True
+        if during and not any(e.get("other_at_write") for e in proxy.log):
+            row["fault_delivered"] = False  # the agent never wrote
         return row
 
 
@@ -444,9 +481,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     proxy.side_write = bench.side_write
     rows: list[dict[str, Any]] = []
     spent = 0.0
+    stopped_early = False
     try:
         for i, case in enumerate(cases, 1):
             if spent > args.max_usd:
+                stopped_early = True
                 print(f"Stopping: the agent has spent ${spent:.2f}.", flush=True)
                 break
             try:
@@ -486,11 +525,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         "medplum_up_s": round(up_s, 1),
         "wall_s": round(time.monotonic() - started, 1),
         "agent_usd": round(spent, 4),
+        "stopped_early": stopped_early,
         "scorecard": card,
         "cases": rows,
     }
     (out / "results.json").write_text(json.dumps(doc, indent=2, default=str) + "\n")
-    text = render(card, rows, agent=name)
+    text = render(card, rows, agent=name, stopped_early=stopped_early)
     (out / "SCORECARD.txt").write_text(text + "\n")
     print()
     print(text)
