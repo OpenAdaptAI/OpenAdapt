@@ -300,7 +300,8 @@ CREATE TABLE patients (id INTEGER PRIMARY KEY, name TEXT, dob TEXT,
 CREATE TABLE history (id INTEGER PRIMARY KEY, patient_id INTEGER, smoker TEXT,
     modified_by TEXT);
 CREATE TABLE log (id INTEGER PRIMARY KEY, event TEXT);
-CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT, modified_by TEXT);
+CREATE TABLE notes (id INTEGER PRIMARY KEY, patient_id INTEGER, body TEXT,
+    modified_by TEXT);
 """
 
 
@@ -310,7 +311,7 @@ def _make_db(path: Path) -> None:
     conn.execute(
         "INSERT INTO patients (name, dob) VALUES ('Existing Person', '1950-01-01')"
     )
-    conn.execute("INSERT INTO notes (body) VALUES ('keep me')")
+    conn.execute("INSERT INTO notes (patient_id, body) VALUES (1, 'keep me')")
     conn.commit()
     conn.close()
 
@@ -332,8 +333,10 @@ class ClinicBackend(FakeBackend):
         history: bool = True,
         colleague: Optional[str] = None,
         audit: Optional[list[dict[str, str]]] = None,
+        during_undo: Optional[str] = None,
     ):
         super().__init__(viewport=(300, 200))
+        self.during_undo = during_undo
         self.audit = audit if audit is not None else []
         self.path = path
         self.thorough = thorough
@@ -342,7 +345,8 @@ class ClinicBackend(FakeBackend):
         self.colleague = colleague
 
     def _log(self, actor: str, event: str, table: str, record: Any) -> None:
-        # The app's audit log: who did what to which row.
+        # The app's audit log, keyed by patient as OpenEMR's is: who did what,
+        # in which table, for which patient.
         self.audit.append(
             {"actor": actor, "event": event, "tbl": table, "record": str(record)}
         )
@@ -362,19 +366,40 @@ class ClinicBackend(FakeBackend):
                     "VALUES (?, 'no', 'bot')",
                     (cur.lastrowid,),
                 )
-                self._log("bot", "insert", "history", hist.lastrowid)
+                assert hist.lastrowid
+                self._log("bot", "insert", "history", cur.lastrowid)
             conn.execute("INSERT INTO log (event) VALUES ('patient created')")
         elif key == "F2" and self.colleague == "note":
-            note = conn.execute(
-                "INSERT INTO notes (body, modified_by) VALUES ('call back', 'nurse')"
+            # About another patient (Existing Person, id 1).
+            conn.execute(
+                "INSERT INTO notes (patient_id, body, modified_by) "
+                "VALUES (1, 'call back', 'nurse')"
             )
-            self._log("nurse", "insert", "notes", note.lastrowid)
+            self._log("nurse", "insert", "notes", 1)
         elif key == "F2" and self.colleague == "view":
             # The nurse only looks at the run's patient: not a write.
             (pid,) = conn.execute(
                 "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
             ).fetchone()
             self._log("nurse", "view", "patients", pid)
+        elif key == "F2" and self.colleague == "note_on_run_patient":
+            # The nurse adds a note to the patient the run just created.
+            (pid,) = conn.execute(
+                "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO notes (patient_id, body, modified_by) "
+                "VALUES (?, 'allergy: penicillin', 'nurse')",
+                (pid,),
+            )
+            self._log("nurse", "insert", "notes", pid)
+        elif key == "F2" and self.colleague == "edit_note":
+            # The nurse edits a note that was there before the run.
+            conn.execute(
+                "UPDATE notes SET body = 'keep me (read)', modified_by = 'nurse' "
+                "WHERE id = 1"
+            )
+            self._log("nurse", "update", "notes", 1)
         elif key == "F2" and self.colleague == "edit":
             conn.execute(
                 "UPDATE patients SET dob = '1980-02-04', modified_by = 'nurse' "
@@ -386,16 +411,29 @@ class ClinicBackend(FakeBackend):
             self._log("nurse", "update", "patients", pid)
         elif key == "F2" and self.colleague == "edit_history":
             # The nurse edits the side row the run created.
-            (hid,) = conn.execute("SELECT MAX(id) FROM history").fetchone()
+            hid, pid = conn.execute(
+                "SELECT id, patient_id FROM history ORDER BY id DESC LIMIT 1"
+            ).fetchone()
             conn.execute(
                 "UPDATE history SET smoker = 'yes', modified_by = 'nurse' WHERE id = ?",
                 (hid,),
             )
-            self._log("nurse", "update", "history", hid)
+            self._log("nurse", "update", "history", pid)
         elif key == "Delete":
             row = conn.execute(
                 "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
             ).fetchone()
+            if row and row[0] is not None and self.during_undo == "edit_patient":
+                # The nurse edits the patient while the compensation runs.
+                conn.execute(
+                    "UPDATE patients SET dob = '1980-02-05', modified_by = 'nurse' "
+                    "WHERE id = ?",
+                    (row[0],),
+                )
+                self._log("nurse", "update", "patients", row[0])
+            if self.during_undo == "wipe_notes":
+                # The app's delete takes a colleague's unrelated note with it.
+                conn.execute("DELETE FROM notes WHERE modified_by = 'nurse'")
             if row and row[0] is not None:
                 if self.mode == "void":
                     conn.execute(
@@ -513,6 +551,7 @@ def _run_clinic(
     profile=None,
     allow_tables=("log",),
     exclusive: Optional[bool] = None,
+    during_undo: Optional[str] = None,
 ) -> RunReport:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
@@ -538,7 +577,8 @@ def _run_clinic(
             actor_field="actor",
             self=["bot"],
             record_field="record",
-            record_key="id",
+            record_key="patient_id",
+            record_keys={"patients": "id"},
             event_field="event",
             write_events=["insert", "update", "delete"],
             insert_events=["insert"],
@@ -575,6 +615,7 @@ def _run_clinic(
                 history=history,
                 colleague=colleague,
                 audit=audit,
+                during_undo=during_undo,
             ),
             vision=_vision(),
             effect_verifier=_sql_verifier(db),
@@ -1160,7 +1201,8 @@ def test_a_colleagues_edit_to_a_side_row_the_run_created_is_a_conflict(
     report = _run_clinic(tmp_path, colleague="edit_history", attribution=attribution)
     rollback = report.rollback
     assert rollback.status == "not_rolled_back", rollback.reason
-    assert rollback.conflicts == 1
+    # The audit log names the patient, so the patient row conflicts too.
+    assert rollback.conflicts == (2 if attribution == "audit" else 1)
     assert rollback.steps == []
     conn = sqlite3.connect(tmp_path / "clinic.db")
     assert conn.execute("SELECT smoker, modified_by FROM history").fetchall() == [
@@ -1235,3 +1277,74 @@ def test_rollback_refuses_where_it_isnt_wired():
     with pytest.raises(SystemExit, match="Nothing ran"):
         _refuse_rollback_unwired(on, "a worklist pool")
     _refuse_rollback_unwired(SimpleNamespace(rollback=None), "a worklist pool")
+
+
+# ---------------------------------------------------------------------------
+# Review of #1634, round 2
+# ---------------------------------------------------------------------------
+
+
+def test_a_colleagues_row_on_the_runs_record_is_a_conflict(tmp_path):
+    # The nurse adds a note to the run's patient; the app's delete would take
+    # it with the patient. Her write names the run's record: nothing runs.
+    report = _run_clinic(tmp_path, colleague="note_on_run_patient", attribution="audit")
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert rollback.steps == []
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute(
+        "SELECT COUNT(*) FROM notes WHERE modified_by = 'nurse'"
+    ).fetchone() == (1,)
+
+
+def test_a_set_aside_row_that_goes_during_the_rollback_is_reported(tmp_path):
+    report = _run_clinic(
+        tmp_path, colleague="note", attribution="audit", during_undo="wipe_notes"
+    )
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert "changed or went during the rollback" in rollback.reason
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_colleagues_edit_while_the_compensation_runs_is_reported(tmp_path):
+    report = _run_clinic(tmp_path, attribution="audit", during_undo="edit_patient")
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert "while the rollback ran" in rollback.reason
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_last_writer_field_never_sets_a_changed_row_aside(tmp_path):
+    # The nurse edits an existing note. A last-writer field can't tell that
+    # from the run's change and her later one: a conflict. The audit log
+    # can: her note is set aside.
+    last_writer = _run_clinic(tmp_path / "a", colleague="edit_note", attribution=True)
+    assert last_writer.rollback.status == "not_rolled_back"
+    assert last_writer.rollback.conflicts == 1
+    audited = _run_clinic(tmp_path / "b", colleague="edit_note", attribution="audit")
+    assert audited.rollback.status == "rolled_back", audited.rollback.reason
+    assert audited.rollback.other_actor_rows == 1
+
+
+def test_audit_attribution_that_names_no_row_is_refused():
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
+    spec = FrameAttribution(
+        kind="audit_read",
+        actor_field="actor",
+        self=["bot"],
+        record_field="record",
+        read={"kind": "in_memory"},
+    )
+    with pytest.raises(ValueError, match="record_key"):
+        RollbackPlan(ListReader([]), attribution=spec)
+
+
+def test_a_rolled_back_run_is_never_resumed(tmp_path):
+    from openadapt_flow.__main__ import _was_rolled_back
+
+    assert not _was_rolled_back(tmp_path)
+    report = _run_clinic(tmp_path / "c")
+    assert report.rollback.status == "rolled_back", report.rollback.reason
+    assert _was_rolled_back(tmp_path / "c" / "run")

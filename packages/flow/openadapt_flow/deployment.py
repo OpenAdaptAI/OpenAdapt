@@ -1041,9 +1041,15 @@ class RollbackSection(BaseModel):
     #: The sign-in names the run acts as, for the profile's own-row rules
     #: (its own session and login rows). Another user's rows still count.
     actor_names: list[str] = Field(default_factory=list)
-    #: Who changed a row (``frame.attribution`` in ``verify.yaml``). Rows
-    #: another actor changed during the run are set aside; rows nothing
-    #: attributes count as the run's.
+    #: The deployment's target is a declared test copy (``test_copy``) that
+    #: only this run writes: compensations then run without attribution. Off
+    #: by default; a shared QA copy where testers also write must not set it.
+    exclusive: bool = False
+    #: Who changed a row (``frame.attribution`` in ``verify.yaml``). With
+    #: the app's audit log (``audit_read``), rows another actor wrote during
+    #: the run are set aside; a last-writer field (``record_field``) only
+    #: finds conflicts. Rows nothing attributes count as the run's. Without
+    #: it, nothing is compensated.
     attribution: Optional[FrameAttribution] = None
 
 

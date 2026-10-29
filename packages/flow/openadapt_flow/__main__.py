@@ -4361,6 +4361,14 @@ def _resume_approval_gate(
     )
 
 
+def _was_rolled_back(run_dir: Path) -> bool:
+    """Did a compensating rollback run after this run stopped? Its records
+    directory is made whenever one does, sealed run or not."""
+    from openadapt_flow.rollback import ROLLBACK_DIRNAME
+
+    return (run_dir / ROLLBACK_DIRNAME).exists()
+
+
 def _cmd_resume(args: argparse.Namespace) -> int:
     from openadapt_flow import crypto
     from openadapt_flow.runtime.durable import resume, resume_point
@@ -4385,6 +4393,13 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         print(
             "Resume REFUSED: a person declined this save; the item is over. "
             "Nothing was executed."
+        )
+        return 3
+    if _was_rolled_back(run_dir):
+        print(
+            "Resume REFUSED: this run was rolled back after it stopped, so its "
+            "earlier writes are undone and resuming would carry them as done. "
+            "Start a new run. Nothing was executed."
         )
         return 3
     # A governed run's resume takes its approver pin only from the deployment

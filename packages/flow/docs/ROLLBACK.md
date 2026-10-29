@@ -81,13 +81,14 @@ could be proven.
    destructive kind first and never tries a delete the deployment doesn't
    allow.
 5. **Conflicts.** If another user changed any row the run could have
-   written, in any table, Flow compensates nothing and ends
-   `RECONCILIATION_REQUIRED` with the diff, so their change isn't
+   written, in any table, or wrote anything about a record those rows
+   belong to (the same patient, in another table), Flow compensates nothing
+   and ends `RECONCILIATION_REQUIRED` with the diff, so their change isn't
    overwritten. The same happens if a row the run touched changes between
    the stop and the first compensation. Without `rollback.attribution`,
    another user's edit can't be told from the run's, so Flow compensates
-   nothing at all (except on a declared test copy, which only the run
-   writes).
+   nothing at all (except on a test copy the deployment declares only the
+   run writes: `test_copy.declared` and `rollback.exclusive`).
 6. **Each compensation runs in a fresh session** through the normal replayer.
    Identity checks, the risk gate, the deployment's save-approval gate and the
    compensation's own effect check all apply. In the default approval mode, a
@@ -106,7 +107,10 @@ could be proven.
      the verifier's own `diff_database` (`openadapt_flow.verifier`) must
      agree: it may see changes only in tables where a row was set aside or
      kept by a void, or the run isn't called rolled back. A kept void row
-     must have changed since the stop.
+     must have changed since the stop. Every row set aside as another
+     user's must be exactly as the stop left it, and the audit log must
+     show no other user's write to a run row while the compensations ran;
+     otherwise a person checks that their change isn't lost.
    - Anything else: `RECONCILIATION_REQUIRED`. `report.json` holds a summary
      with counts and column names only. `<run-dir>/rollback/diff.json`
      (owner-only) holds every added, removed and changed row, with the values
@@ -127,11 +131,17 @@ is going. With `rollback.attribution` (the same shape as `frame.attribution`
 in `verify.yaml`), Flow learns who changed each row, from the app's audit log
 or a modified-by field only the server sets:
 
-- A row another user changed, that the run didn't touch, is set aside. The
-  report counts it (`other_actor_rows`). A row added or removed is set aside
-  only when the audit log holds that user's insert or delete
-  (`insert_events`, `delete_events`): a later edit never makes a row the run
-  created theirs.
+- With the app's audit log (`audit_read`), a row another user changed, that
+  the run didn't touch, is set aside. The report counts it
+  (`other_actor_rows`). A row added is set aside only when the log holds
+  that user's insert (`insert_events`): a later edit never makes a row the
+  run created theirs. A row removed is never set aside (the first read
+  keeps no values to name it by).
+- The log's record field must name one kind of record in every table (a
+  patient, as OpenEMR's log does): `record_key`, or `record_keys` per
+  table. Rollback refuses an audit attribution without it, or without
+  `event_field`, `write_events`, `insert_events` and `table_field`. A log of
+  per-table row ids makes unrelated writes conflicts.
 - Audit entries count only as the frame counts them: write events
   (`event_field`, `write_events`), for the row's own table (`table_field`).
   A colleague viewing a record never explains a change to it.
@@ -139,11 +149,11 @@ or a modified-by field only the server sets:
   change it can't explain.
 - A row the run could have written that another user also changed is a
   conflict (`conflicts`). Nothing is compensated.
-- A modified-by field (`record_field`) knows only the last writer. A row
-  added during the run is then never set aside: if another user changed
-  it, that is a conflict. And a row the run changed that another user then
-  changed reads as theirs. Use the app's audit log (`audit_read`) where it
-  has one.
+- A modified-by field (`record_field`) knows only the last writer, so it
+  never sets a row aside: any row another user wrote during the run is a
+  conflict, even an unrelated one. It suits a quiet store; on a busy one,
+  use the app's audit log. It also can't see a colleague's edit to a row
+  while a compensation deletes it; the audit log can.
 - Without attribution, nothing is compensated (see step 5).
 
 ## Turn it on
@@ -159,6 +169,7 @@ rollback:
       sql_password_env: APP_READONLY_PASSWORD
     allow_tables: [log, sessions]   # tables the app writes on its own
   allow_delete: false               # the default: no hard deletes
+  exclusive: false                  # true only for a declared test copy no one else writes
   profile: openemr                  # the app's own bookkeeping (app_profiles)
   actor_names: [openadapt_bot]      # who the run signs in as, for the profile
   attribution:                      # who changed a row (needed to compensate)
@@ -284,5 +295,8 @@ profile as `app/version` (`profile_id`).
   once. A compensation runs with the run's base parameters.
 - **Single web runs only, for now.** A desktop, RDP or worklist-pool run
   with rollback on is refused before it starts.
+- **A rolled-back run isn't resumed.** A run that paused for a person and
+  was rolled back is over: `resume` refuses it, because its earlier writes
+  are undone. Start a new run.
 - **The idempotency key stays used.** A rolled-back run doesn't free its key
   for a retry; a person starts the next run.

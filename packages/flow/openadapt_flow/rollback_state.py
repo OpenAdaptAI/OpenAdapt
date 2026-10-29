@@ -610,9 +610,10 @@ class Attributor:
         before: Optional[dict[str, Any]],
         after: Optional[dict[str, Any]],
     ) -> Optional[str]:
-        field = self.spec.record_keys.get(table, self.spec.record_key)
+        field = self._key_field(table)
         if not field:
-            return key
+            # A row key is a keyed MAC no audit entry holds: names nothing.
+            return None
         record = after if after is not None else before
         value = None if record is None else record.get(field)
         return None if value in (None, "") else str(value)
@@ -634,8 +635,10 @@ class Attributor:
                 continue
             if get_path(e, self.spec.actor_field) in (None, ""):
                 continue
-            if self.spec.table_field and not _same_table(
-                get_path(e, self.spec.table_field), table
+            if (
+                table is not None
+                and self.spec.table_field
+                and not _same_table(get_path(e, self.spec.table_field), table)
             ):
                 continue
             if kinds is not None and self._event(e) not in kinds:
@@ -643,8 +646,23 @@ class Attributor:
             out.add(str(get_path(e, self.spec.actor_field)))
         return out
 
-    def attribute(self, change: Change, window: Optional[list[dict[str, Any]]]) -> str:
-        """``self``, ``other`` or ``unattributed`` for one changed row."""
+    @property
+    def sets_aside(self) -> bool:
+        """Can this source set another actor's row aside? Only an audit log:
+        a last-writer field can't tell a row the run wrote and a colleague
+        then changed from the colleague's own, so there every other actor's
+        row is a conflict."""
+        return self.spec.kind == "audit_read"
+
+    def attribute(
+        self,
+        change: Change,
+        window: Optional[list[dict[str, Any]]],
+        moved: Sequence[str] = (),
+    ) -> str:
+        """``self``, ``other`` or ``unattributed`` for one changed row.
+        ``moved``: the row's changed columns; a row whose record column
+        moved is never another actor's (a write can't pick its own excuse)."""
         from openadapt_flow.runtime.effects.frame import _same, get_path
 
         table, key, before, after = change
@@ -653,17 +671,15 @@ class Attributor:
             anyone = self._actors(ref, window, table)
             if anyone & self.self_actors:
                 return "self"
-            if before is None or after is None:
-                # Added or removed: another actor's only through their own
-                # insert or delete, never a later edit.
-                if not self.spec.write_events or (
-                    not (
-                        self.spec.insert_events
-                        if before is None
-                        else self.spec.delete_events
-                    )
-                ):
-                    return "unattributed"
+            if self._key_field(table) in moved:
+                return "unattributed"
+            if after is None:
+                # The first read keeps no values, so a removed row names no
+                # record: never another actor's.
+                return "unattributed"
+            if before is None and not self.spec.insert_events:
+                # Added: another actor's only through their own insert.
+                return "unattributed"
             actors = self._actors(ref, window, table, self._kinds(change))
             return "other" if actors else "unattributed"
         if before is None or after is None:
@@ -684,6 +700,20 @@ class Attributor:
         ):
             return "unattributed"
         return "other"
+
+    def _key_field(self, table: str) -> Optional[str]:
+        return self.spec.record_keys.get(table, self.spec.record_key)
+
+    def others_on_record(
+        self, change: Change, window: Optional[list[dict[str, Any]]]
+    ) -> bool:
+        """Did another actor write anything about this row's record (its
+        ``record_key`` value, a patient say), in any table? (audit only)"""
+        table, key, before, after = change
+        if self.spec.kind != "audit_read":
+            return False
+        ref = self._ref(table, key, before, after)
+        return bool(self._actors(ref, window) - self.self_actors)
 
     def others_touched(
         self, change: Change, window: Optional[list[dict[str, Any]]]

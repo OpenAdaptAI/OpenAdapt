@@ -103,9 +103,16 @@ def approved_undo(workflow: Workflow, step_id: str) -> Optional[UndoStep]:
     )
 
 
+def _private_dir(path: Path) -> None:
+    """An owner-only directory, never through a symlink."""
+    if path.is_symlink():
+        raise OSError(f"{path} is a symlink; nothing is written through it")
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path, 0o700)
+
+
 def _write_private(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
+    _private_dir(path.parent)
     staging = path.with_name(f".{path.name}.{os.getpid()}")
     # A leftover staging file would keep its own mode: start from nothing.
     staging.unlink(missing_ok=True)
@@ -318,6 +325,11 @@ def _unseen_writes(
     return None
 
 
+def residue_of(diff: StateDiff, keys: set[tuple[str, str]]) -> list[Change]:
+    """The rows of ``diff`` among ``keys``."""
+    return [c for c in changes(diff) if c[:2] in keys]
+
+
 def _unsettled(
     pending: list[ChangeLedgerEntry], steps: list[RollbackStepRecord]
 ) -> Optional[str]:
@@ -404,6 +416,11 @@ def roll_back(
         record.finished_at = _now()
         return record
 
+    try:
+        # The compensations' own run directories go here too.
+        _private_dir(run_dir / ROLLBACK_DIRNAME)
+    except OSError as exc:
+        return finish("not_rolled_back", f"no private place for its records ({exc})")
     if before is None:
         return finish(
             "unarmed",
@@ -421,24 +438,39 @@ def roll_back(
     selectors = _run_selectors(report, workflow, params)
     window = attributor.window() if attributor is not None else None
 
-    def whose(change: Change) -> str:
-        return attributor.attribute(change, window) if attributor else "unattributed"
-
     run_changes: list[Change] = []
     conflicts: list[Change] = []
-    others = 0
+    #: Rows set aside as another actor's, as the stop left them: they must
+    #: be exactly so at the final read (a compensation never touches them).
+    set_aside: dict[tuple[str, str], Change] = {}
+    moved_cols = {
+        (t.table, k): cols for t in landed.tables for k, _b, _a, cols in t.changed
+    }
     for change in changes(landed):
-        who = whose(change)
-        if who == "other" and not _is_runs_record(change, selectors):
-            others += 1
+        who = (
+            attributor.attribute(change, window, moved_cols.get(change[:2], ()))
+            if attributor is not None
+            else "unattributed"
+        )
+        if (
+            who == "other"
+            and attributor is not None
+            and attributor.sets_aside
+            and not _is_runs_record(change, selectors)
+        ):
+            set_aside[change[:2]] = change
             continue
         # A row the run could have written, in any table: another actor's
-        # hand on it is a conflict, so their change is never compensated away.
+        # hand on it, or on its record in another table, is a conflict, so
+        # their change is never compensated away.
         if attributor is not None and (
-            who == "other" or attributor.others_touched(change, window)
+            who == "other"
+            or attributor.others_touched(change, window)
+            or attributor.others_on_record(change, window)
         ):
             conflicts.append(change)
         run_changes.append(change)
+    others = len(set_aside)
     record.other_actor_rows = others
     record.after_stop_diff = keep_rows(landed, run_changes).summary()
     run_keys = {(t, k) for t, k, *_rest in run_changes}
@@ -469,9 +501,10 @@ def roll_back(
         record.conflicts = len(conflicts)
         return finish(
             "not_rolled_back",
-            f"another actor changed {len(conflicts)} record(s) the run wrote, "
-            "after the run wrote them; nothing was compensated, so their change "
-            "isn't lost. A person decides. Different now: "
+            f"another actor wrote {len(conflicts)} row(s) the run may have "
+            "written (or a record those rows belong to), so their change can't "
+            "be told from the run's; nothing was compensated, so it isn't "
+            "lost. A person decides. Different now: "
             + keep_rows(landed, run_changes).describe(),
             keep_rows(landed, run_changes),
         )
@@ -632,8 +665,46 @@ def roll_back(
     final_window = attributor.window() if attributor is not None else None
     residue: list[Change] = []
     kept = 0
-    #: Tables where a row is left on purpose (another actor's, or a void).
-    explained: set[str] = set()
+    #: Rows left on purpose (another actor's, or a void), per table and kind.
+    explained: dict[str, list[int]] = {}
+
+    def explain(change: Change) -> None:
+        _t, _k, old, new = change
+        counts = explained.setdefault(change[0], [0, 0, 0])
+        counts[0 if old is None else 1 if new is None else 2] += 1
+
+    final_rows = {c[:2]: c for c in changes(remaining)}
+    # A row set aside at the stop must be exactly as the stop left it.
+    disturbed = [
+        c
+        for k, c in set_aside.items()
+        if k not in final_rows or final_rows[k][3] != c[3]
+    ]
+    if disturbed:
+        record.conflicts = len(disturbed)
+        return finish(
+            "not_rolled_back",
+            f"{len(disturbed)} row(s) another actor wrote changed or went during "
+            "the rollback; a person checks that their change isn't lost",
+            keep_rows(landed, disturbed),
+        )
+    if attributor is not None and final_window is not None:
+        # Another actor's write to a run row while the compensations ran.
+        late = [
+            c
+            for c in run_changes
+            if attributor.others_touched(c, final_window)
+            or attributor.others_on_record(c, final_window)
+        ]
+        if late:
+            record.conflicts = len(late)
+            return finish(
+                "not_rolled_back",
+                f"another actor wrote {len(late)} row(s) the run touched (or "
+                "their record) while the rollback ran; a person checks that "
+                "their change isn't lost",
+                keep_rows(remaining, residue_of(remaining, run_keys)),
+            )
     for change in changes(remaining):
         table, key, _old, new = change
         stop = at_stop.get((table, key))
@@ -645,15 +716,16 @@ def roll_back(
         ):
             # The run's record, kept and changed by its void compensation.
             kept += 1
-            explained.add(table)
+            explain(change)
             continue
         mine = (table, key) in run_keys or _is_runs_record(change, selectors)
         if (
             not mine
             and attributor is not None
+            and attributor.sets_aside
             and (attributor.attribute(change, final_window) == "other")
         ):
-            explained.add(table)
+            explain(change)
             continue
         residue.append(change)
     record.retained_rows = kept
@@ -683,7 +755,23 @@ def roll_back(
                 remaining,
             )
         record.cross_checked = verdict is not None
-        unexplained = sorted(set(verdict or ()) - explained)
+        # It may see no more rows moved in a table than were left on purpose.
+        unexplained = sorted(
+            t
+            for t, d in (verdict or {}).items()
+            if getattr(d, "unread", None)
+            or any(
+                n > m
+                for n, m in zip(
+                    (
+                        getattr(d, "added", 1),
+                        getattr(d, "removed", 1),
+                        getattr(d, "changed", 1),
+                    ),
+                    explained.get(t, [0, 0, 0]),
+                )
+            )
+        )
         if unexplained:
             return finish(
                 "not_rolled_back",
@@ -846,9 +934,31 @@ class RollbackPlan:
         allow_delete: bool = False,
         exclusive: bool = False,
     ) -> None:
-        #: The store is a test copy only this run writes (a harness on a
-        #: declared test copy); a deployment never sets it.
+        #: The store is a test copy only this run writes (``rollback qualify``,
+        #: or a deployment that declares both a test copy and
+        #: ``rollback.exclusive``).
         self.exclusive = exclusive
+        if attribution is not None and attribution.kind == "audit_read":
+            missing = [
+                name
+                for name, ok in (
+                    ("record_key", attribution.record_key or attribution.record_keys),
+                    ("event_field", attribution.event_field),
+                    ("write_events", attribution.write_events),
+                    ("insert_events", attribution.insert_events),
+                    ("table_field", attribution.table_field),
+                )
+                if not ok
+            ]
+            if missing:
+                # Without them an audit entry names no row, or a view or
+                # another table's write excuses a change: attribution would
+                # be silently off.
+                raise ValueError(
+                    "rollback with audit_read attribution needs "
+                    + ", ".join(missing)
+                    + " (docs/ROLLBACK.md, Other users)"
+                )
         self.reader = reader
         self.read_records = read_records
         self.attribution = attribution
@@ -938,9 +1048,9 @@ def plan_from_deployment(cfg: Any, effect_verifier: Any) -> Optional[RollbackPla
         attribution=section.attribution,
         audit_read=audit_read,
         allow_delete=section.allow_delete,
-        # A declared test copy (the gate rollback qualify uses) is written
-        # only by the run; anywhere else, other users may write.
-        exclusive=not probe_target_refusals(cfg),
+        # Only by declaration: a test copy (the gate rollback qualify uses)
+        # that no one else writes, which a reset alone doesn't promise.
+        exclusive=bool(section.exclusive) and not probe_target_refusals(cfg),
     )
 
 

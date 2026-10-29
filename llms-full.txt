@@ -2006,10 +2006,10 @@ The limits of that:
 - A rollback undoes only what a person approved, and only proves what it
   reads: without `rollback.database` it reads one collection. Without
   `rollback.attribution` it compensates nothing outside a declared test
-  copy; with it, other users' writes are set aside, and a row both changed
-  is left for a person. A modified-by field knows only the last writer, so
-  a row the run changed that another user then changed reads as theirs; an
-  audit log tells the two apart. A hard delete runs only with
+  copy; with the app's audit log, other users' writes are set aside, and a
+  row both changed is left for a person. A modified-by field knows only the
+  last writer, so any other user's write during the run is left for a
+  person. A rolled-back run isn't resumed. A hard delete runs only with
   `rollback.allow_delete`. Rollback runs on single web runs only (a desktop,
   RDP or pool run with it on is refused), and never in a workflow with a
   loop.
