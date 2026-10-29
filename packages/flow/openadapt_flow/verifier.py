@@ -33,8 +33,31 @@ directory it was captured under, so not across machines. Capture once per
 write: two snapshots taken before one write each verify it, and a capture
 never verified leaves its record behind. No model calls.
 
+Writes that land later: the frame reads the database twice after the save,
+``settle_s`` apart, so a write the app makes later than that (a background
+job, a trigger-driven integration, a delayed side record) lands after the
+verdict. With ``frame.database.recheck_after_s`` set, a verified result
+carries a private :class:`RecheckState` and says when the recheck is due
+(``WriteResult.recheck_due_at``, the receipt's ``recheck_due_at``)::
+
+    result = verify_write(contract, before, params=params, actor=actor)
+    result.recheck.save("recheck.json")       # private, like a snapshot
+    ...                                       # the caller works on the next item
+    late = recheck(contract, result, params=params, actor=actor,
+                   excused_by=[next_result])  # later writes, any outcome
+    if late.outcome == "REFUTED":             # changed after the verdict
+        print(late.reasons)
+
+:func:`recheck` reads the whole database again at or after the due time
+and judges every change since the post-save read with the frame's rules.
+Before the due time it raises :class:`RecheckNotDue` (``wait=True`` sleeps
+until then instead). Its outcome is ``CONFIRMED``, ``REFUTED`` (late: the
+earlier VERIFIED no longer stands) or ``UNCERTAIN`` (the database or the
+state couldn't be read or doesn't match: never a pass).
+
 The public names are ``Contract``, ``Snapshot``, ``Source``, ``capture``,
-``verify_write``, ``WriteResult`` and ``VerifierError``
+``verify_write``, ``WriteResult``, ``recheck``, ``RecheckState``,
+``RecheckResult``, ``RecheckNotDue`` and ``VerifierError``
 (``tests/test_verifier_api.py`` pins their signatures).
 """
 
@@ -46,6 +69,7 @@ import os
 import secrets
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -53,6 +77,12 @@ from typing import Any, Optional
 
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
 from openadapt_flow.runtime.effects.db_snapshot import TableDiff, diff, take_snapshot
+from openadapt_flow.runtime.effects.late_write import (
+    EVIDENCE_KEY,
+    LateOutcome,
+    seconds_until,
+    state_problem,
+)
 from openadapt_flow.verify_run import (
     FRAME_DB_DETAIL,
     VerifyConfig,
@@ -62,6 +92,9 @@ from openadapt_flow.verify_run import (
     load_verify_config,
     parse_verify_config,
     receipt_sha256,
+    recheck_problem,
+    recheck_run,
+    recheck_state,
     verify_run,
 )
 
@@ -70,6 +103,9 @@ __all__ = [
     "BaselineUnreadable",
     "Contract",
     "DatabaseSnapshot",
+    "RecheckNotDue",
+    "RecheckResult",
+    "RecheckState",
     "Snapshot",
     "Source",
     "TableDiff",
@@ -78,6 +114,7 @@ __all__ = [
     "capture",
     "capture_database",
     "diff_database",
+    "recheck",
     "verify_write",
 ]
 
@@ -286,6 +323,115 @@ class WriteResult:
     receipt: dict[str, Any] = field(default_factory=dict)
     receipt_sha256: str = ""
     evidence: dict[str, Any] = field(default_factory=dict)
+    #: When the contract sets ``frame.database.recheck_after_s`` and the
+    #: database settled after the save: the private state :func:`recheck`
+    #: needs. A verified write's is what its recheck compares with; any
+    #: write's can excuse its own window in an earlier write's recheck.
+    recheck: Optional["RecheckState"] = field(default=None, repr=False, compare=False)
+    #: When a verified write's recheck is due (whole-second UTC), as the
+    #: receipt's ``recheck_due_at`` says; None when no recheck is due.
+    recheck_due_at: Optional[str] = None
+
+
+@dataclass
+class RecheckState:
+    """What a recheck compares with: the settled post-save snapshot as keyed
+    MACs (no values), the audit entries seen then as keyed hashes, the run's
+    salt, and the receipt and evidence it is bound to.
+
+    Private, like a :class:`Snapshot`: it holds the salt, so :meth:`save`
+    writes it with mode 0600, and the writer being judged must not be able
+    to write it. ``params`` (the write's inputs) stay in memory only; a
+    loaded state needs them back (:meth:`load`) to excuse a write
+    (``excused_by``).
+    """
+
+    payload: dict[str, Any] = field(repr=False)
+    params: Optional[Mapping[str, object]] = field(default=None, repr=False)
+    path: Optional[Path] = field(default=None, repr=False)
+
+    @property
+    def due_at(self) -> str:
+        """When the recheck is due (whole-second UTC)."""
+
+        frame = (self.payload.get("evidence") or {}).get("frame") or {}
+        return str((frame.get(EVIDENCE_KEY) or {}).get("due_at") or "")
+
+    def save(self, path: str | Path) -> Path:
+        out = Path(path)
+        _write_private(out, self.payload)
+        return out
+
+    @classmethod
+    def load(
+        cls, path: str | Path, *, params: Optional[Mapping[str, object]] = None
+    ) -> "RecheckState":
+        """Read a state :meth:`save` wrote. Raises :class:`VerifierError`
+        when it can't be read as one; :func:`recheck` checks the rest."""
+
+        source = Path(path)
+        try:
+            payload = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise VerifierError(f"can't read the recheck state: {exc}") from exc
+        problem = state_problem(payload)
+        if problem is not None:
+            raise VerifierError(problem)
+        return cls(payload, params=params, path=source)
+
+
+class RecheckNotDue(VerifierError):
+    """The recheck is not due yet: a read now would end the window early."""
+
+    def __init__(self, due_at: str, wait_s: float) -> None:
+        super().__init__(f"the recheck is due at {due_at}, in {wait_s:.0f} s")
+        self.due_at = due_at
+        self.wait_s = wait_s
+
+
+@dataclass(frozen=True)
+class RecheckResult:
+    #: ``CONFIRMED`` (nothing unexplained moved since the post-save read),
+    #: ``REFUTED`` (something did: the earlier VERIFIED no longer stands), or
+    #: ``UNCERTAIN`` (the database or the state couldn't be read or doesn't
+    #: match; never a pass).
+    outcome: LateOutcome
+    #: The frame since the post-save read: ``held``, ``refuted`` or
+    #: ``not_checked``.
+    frame: str
+    #: Plain sentences, without record values.
+    reasons: list[str] = field(default_factory=list)
+    #: The earlier write's receipt digest.
+    receipt_sha256: str = ""
+    post_save_read_at: str = ""
+    due_at: str = ""
+    #: When the database was read for the recheck ("" when it wasn't).
+    read_at: str = ""
+    #: How many later verified writes explained their own rows.
+    excused: int = 0
+    #: The frame's closed evidence since the post-save read (counts and
+    #: names, no values).
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def verified(self) -> bool:
+        """True only when the earlier verdict still stands."""
+
+        return self.outcome == "CONFIRMED"
+
+    @property
+    def late(self) -> bool:
+        """True when a change after the verdict refutes it."""
+
+        return self.outcome == "REFUTED"
+
+    @property
+    def status(self) -> str:
+        """The outcome under :class:`WriteResult`'s names."""
+
+        return {"CONFIRMED": "verified", "REFUTED": "refuted"}.get(
+            self.outcome, "unconfirmed"
+        )
 
 
 def capture(contract: Contract, params: Mapping[str, object]) -> Snapshot:
@@ -386,6 +532,8 @@ def verify_write(
     before.used = True
     _consume(before.payload)
 
+    post_state: dict[str, Any] = {}
+
     def run(path: Path) -> dict[str, Any]:
         try:
             return verify_run(
@@ -397,6 +545,7 @@ def verify_write(
                 baseline_path=path,
                 provenance=None if source is None else source.provenance,
                 documents=None if source is None else source.documents,
+                post_state_out=post_state,
             )
         except (VerifyRunError, OSError) as exc:
             raise VerifierError(str(exc)) from exc
@@ -410,6 +559,8 @@ def verify_write(
     checked = dict(receipt.get("checked") or {})
     verified = outcome == "verified"
     status = "verified" if verified else _status(checked, evidence)
+    late = recheck_state(before.payload, result, post_state)
+    state = None if late is None else RecheckState(late, params=dict(params))
     return WriteResult(
         verified=verified,
         status=status,
@@ -419,7 +570,140 @@ def verify_write(
         receipt=receipt,
         receipt_sha256=receipt_sha256(receipt),
         evidence=evidence,
+        recheck=state,
+        recheck_due_at=receipt.get("recheck_due_at"),
     )
+
+
+def recheck(
+    contract: Contract,
+    write: WriteResult | RecheckState,
+    *,
+    params: Mapping[str, object],
+    actor: Actor,
+    excused_by: Sequence[WriteResult | RecheckState] = (),
+    wait: bool = False,
+) -> RecheckResult:
+    """Read the whole database again and judge every change since a verified
+    write's post-save read.
+
+    Args:
+        contract: The write's contract; it must set
+            ``frame.database.recheck_after_s``.
+        write: The verified :class:`WriteResult`, or its saved
+            :class:`RecheckState`.
+        params: The write's inputs, as given to :func:`verify_write`.
+        actor: Who made the write.
+        excused_by: Later writes under this contract by the same actor,
+            each begun after this write's post-save read, of any outcome.
+            Each one's declared effects and side records explain its own
+            rows, so the caller can keep working while the window runs. Where
+            its own frame was judged (held or refuted), every row and audit
+            entry in its window is its own: what it already reported against
+            itself doesn't refute this write too. A loaded state needs its
+            params (:meth:`RecheckState.load`).
+        wait: Before the due time, sleep until it instead of raising
+            :class:`RecheckNotDue`.
+
+    Changes the frame excuses after a save are excused here too: the app
+    profile's bookkeeping, and another actor's write the audit log
+    attributes. Anything else unexplained is ``REFUTED`` (late). A state
+    that doesn't match its receipt, the contract, the actor or the params,
+    and a database that can't be read or is still moving, give
+    ``UNCERTAIN``. Raises :class:`VerifierError` when ``write`` scheduled no
+    recheck or an ``excused_by`` entry doesn't qualify, and
+    :class:`RecheckNotDue` before the due time.
+    """
+
+    state = write.recheck if isinstance(write, WriteResult) else write
+    receipt = state.payload.get("receipt") if state is not None else None
+    if (
+        state is None
+        or not isinstance(receipt, dict)
+        or receipt.get("outcome") != "verified"
+    ):
+        raise VerifierError(
+            "this write scheduled no recheck: it was not verified, or the "
+            "contract doesn't set frame.database.recheck_after_s"
+        )
+    run_record = actor.run_record()
+    cfg = contract.config
+    spec = cfg.frame
+    post = state.payload.get("post_state")
+    base = RecheckResult(
+        outcome="UNCERTAIN",
+        frame="not_checked",
+        receipt_sha256=receipt_sha256(receipt),
+        due_at=state.due_at,
+        post_save_read_at=str(post.get("read_at") or "")
+        if isinstance(post, dict)
+        else "",
+    )
+    problem = recheck_problem(cfg, state.payload, params=params, run_record=run_record)
+    if problem is not None:
+        return _replace(base, reasons=[f"{problem}, so the write can't be rechecked"])
+    wait_s = seconds_until(state.due_at)
+    if wait_s > 0:
+        if not wait:
+            raise RecheckNotDue(state.due_at, wait_s)
+        time.sleep(wait_s)
+    excused: list[tuple[Mapping[str, Any], Mapping[str, object]]] = []
+    for i, other in enumerate(excused_by):
+        later = other.recheck if isinstance(other, WriteResult) else other
+        if later is None:
+            raise VerifierError(
+                f"excused_by[{i}] has no recheck state: its database didn't "
+                "settle after its save, so what it wrote can't be told apart; "
+                "reconcile it before rechecking this write"
+            )
+        if later.params is None:
+            raise VerifierError(
+                f"excused_by[{i}] has no params: load it with RecheckState.load"
+                "(path, params=...)"
+            )
+        excused.append((later.payload, later.params))
+    try:
+        verdict, read_at = recheck_run(
+            cfg, state.payload, params=params, run_record=run_record, excused=excused
+        )
+    except VerifyRunError as exc:
+        raise VerifierError(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - an unreadable store is not a pass
+        return _replace(
+            base,
+            reasons=[f"the database could not be read again ({type(exc).__name__})"],
+        )
+    evidence = verdict.evidence(spec) if spec is not None else {}
+    reasons: list[str] = []
+    if verdict.status == "refuted":
+        kinds = ", ".join(sorted({c.change for c in verdict.collateral}))
+        reasons.append(
+            f"{len(verdict.collateral)} record(s) moved after the verdict that "
+            f"nothing explains ({kinds}); the earlier VERIFIED no longer stands"
+        )
+    elif verdict.status != "held":
+        reasons.append(verdict.reason or "the database could not be judged again")
+    return _replace(
+        base,
+        outcome=_late_outcome(verdict.status),
+        frame=verdict.status,
+        reasons=reasons,
+        read_at=read_at,
+        excused=len(excused),
+        evidence=evidence,
+    )
+
+
+def _late_outcome(status: str) -> LateOutcome:
+    from openadapt_flow.runtime.effects.late_write import outcome_of
+
+    return outcome_of(status)
+
+
+def _replace(result: RecheckResult, **changes: Any) -> RecheckResult:
+    import dataclasses
+
+    return dataclasses.replace(result, **changes)
 
 
 #: The key the snapshots of this process share, when the caller gives none:

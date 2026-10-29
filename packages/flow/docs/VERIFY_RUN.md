@@ -218,6 +218,66 @@ Without `--fault-gate` it writes the coverage of its recorded-state test,
 which can't test a wrong value written over the right record or a late
 write, so that record is incomplete and refused by default.
 
+## Writes that land later
+
+With `frame.database`, the database is read twice after the save,
+`frame.database.settle_s` seconds apart (default 1). When the two reads
+differ, the frame is not checked. A write the app makes later than the
+second read, such as a background job, a trigger-driven integration or a
+delayed duplicate side record, lands after the verdict, and that check
+doesn't see it.
+
+Set `frame.database.recheck_after_s` to read the database once more after a
+verified save:
+
+```yaml
+frame:
+  database:
+    dialect: mysql
+    read: {...}
+    settle_s: 1
+    recheck_after_s: 300   # pick it for the app's own jobs; there is no default
+```
+
+When it is set and the run is verified:
+
+- The receipt has `recheck_due_at` (whole-second UTC): `recheck_after_s`
+  after the second read, rounded up. A caller can schedule the recheck
+  without waiting on it.
+- `evidence.frame.recheck` says what the recheck compares
+  (`database_since_post_save`), when the post-save read was taken, and a
+  salted digest of the state it compares with.
+- The caller keeps that state privately (`WriteResult.recheck`, saved with
+  `RecheckState.save`, mode 0600). It holds the post-save snapshot as keyed
+  MACs (no values, as the baseline does), the audit entries seen then as
+  keyed hashes, and the run's salt.
+
+`openadapt_flow.verifier.recheck` reads the whole database at or after the
+due time (twice, `settle_s` apart) and judges every change since the
+post-save read with the frame's own rules: the profile's bookkeeping, and a
+write that the audit log attributes to another actor. Later writes under
+the same contract by the same actor, passed as `excused_by` with any
+outcome, account for their declared effects and side records. Where a later
+write's own frame was judged, they also account for every row and audit
+entry in its own window: a VERIFIED write explained them, and a REFUTED
+write already reported them. So the caller can keep working on the next
+item while the window runs.
+
+| Since the post-save read | Recheck `outcome` |
+|---|---|
+| Nothing moved that these rules don't explain | `CONFIRMED`: the verdict stands |
+| A row moved that nothing explains | `REFUTED`: the earlier `verified` no longer stands (late) |
+| The database couldn't be read or was still moving, or the state doesn't match its receipt, the contract, the actor or the params | `UNCERTAIN`: never a pass |
+
+A recheck before the due time raises `RecheckNotDue`; `wait=True` sleeps
+until then instead. Limits:
+
+- A row that a later write removed in its own window can't be matched to
+  that write without its values, so it refutes the earlier write.
+- A later write under another contract doesn't excuse anything.
+- A later write whose database never settled after its save has no state,
+  so it can't be passed as `excused_by`. Reconcile it first.
+
 ## Verdicts
 
 | What the store shows | `effect_verdict` | `outcome` |
@@ -258,7 +318,8 @@ and still checks.
 every field of the Execute receipt (`openadapt.execute-evidence-receipt/v1`)
 plus `executor_kind`, `executor_ref_sha256`, `effect_verdict`, and
 `verification_tier`, and `checked_how` (and `remediates` and
-`correlation_id` when given),
+`correlation_id` when given, and `recheck_due_at` when a verified run
+schedules a recheck),
 under the schema `openadapt.effect-receipt/v1`. `evidence.readback` lists
 each effect's contract hash, verdict, and counts. `receipt.evidence_digest`
 is the SHA-256 of `evidence`. Neither part holds record values, URLs, or the
