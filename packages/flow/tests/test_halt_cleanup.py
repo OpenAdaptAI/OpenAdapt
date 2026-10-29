@@ -91,7 +91,11 @@ class AppVision(FakeVision):
 
 def _click(step_id: str, text: str, **kw) -> Step:
     step = click_step(step_id, ocr_text=text, **kw)
-    step.anchor.click_point = POINTS[text]
+    # The click lands on the label, inside its locator region; a click point
+    # outside the region is a marked-row offset to the resolver.
+    x, y = POINTS[text]
+    step.anchor.region = (x - 5, y - 5, 10, 10)
+    step.anchor.click_point = (x, y)
     return step
 
 

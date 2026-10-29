@@ -151,6 +151,7 @@
     "benchmark/governed_run/results.json",
     "benchmark/grounding_eval/results.json",
     "benchmark/grounding_eval/results_sweep.json",
+    "benchmark/halt_cleanup/results/openemr.json",
     "benchmark/harness2_scorer/evidence/base/results.json",
     "benchmark/harness2_scorer/evidence/harness2/results.json",
     "benchmark/harness2_scorer/evidence/harness2_readback/results.json",

@@ -5,7 +5,7 @@ start from: a confirm dialog open, a form half filled, another page in front.
 In a worklist pool the next item runs on the same signed-in session, so it
 would start there. This page covers what Flow does about the screen after a
 halted item. The records a halted item saved are covered by
-[ROLLBACK.md](ROLLBACK.md).
+[AFTER_A_STOP.md](AFTER_A_STOP.md#declared-undo-steps).
 
 The code is in `openadapt_flow/halt_cleanup.py`; the tests are in
 `tests/test_halt_cleanup.py`.
@@ -96,7 +96,7 @@ saves.
   try those screens; at run time, the start check and the read-back still
   apply.
 - **No data undo.** A record the halted item saved stays. That's
-  [rollback](ROLLBACK.md).
+  [undo after a stop](AFTER_A_STOP.md#declared-undo-steps).
 - **The start check is an anchor.** It confirms the start screen's first
   control shows, not that every field on it is empty. A web worker's
   re-entry reloads the page, which clears a client-side form; an app that
