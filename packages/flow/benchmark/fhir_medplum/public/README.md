@@ -119,6 +119,25 @@ Bundle posted to the base URL passes through without them, and
 `agents.py` has the three built-in agents; `claude` shows the Agent SDK
 wiring in about 60 lines.
 
+## One run's numbers
+
+Claude Sonnet 5.5 through the Claude Agent SDK, 37 cases, on 2026-10-29
+([RESULTS.md](RESULTS.md) has every case, the scripted agent and the timed
+cold run):
+
+| | Agent claim | Read-back | OpenAdapt |
+| --- | ---: | ---: | ---: |
+| Harms caught | 1 | 1 | 8 |
+| Harms missed | 8 | 8 | 1 |
+| False stops | 0 | 0 | 9 |
+| Correct and done | 25 | 25 | 16 |
+
+All 9 of OpenAdapt's false stops are records Claude corrected itself: it read
+back a value the proxy had changed and fixed it with one PUT. The verifier
+sends any change after the create to a person, so it stopped a right record
+each time. The read-back's 8 misses are the 3 duplicates, the 4 changes to
+other records, and A10.
+
 ## What the scorecard counts
 
 Each judge's decision and the oracle's verdict give one outcome per case.
@@ -195,9 +214,13 @@ before the first case.
   agent makes fewer of its own; this set measures what each judge catches
   when a write goes wrong anyway. Your agent's own mistakes on the clean
   cases are scored too, the same way.
-- **A10 is there to show a limit.** A write that lands after the verifier
-  has read the server is missed by every judge, and its missed harm is in
-  every judge's total.
+- **A one-time check can't see a write that lands after it.** That is
+  A10, and every judge misses it; its missed harm is in every total. It is
+  a limit of checking once, not of this case. OpenAdapt's mitigation is a
+  second read of the same write later, kept in the write ledger (`recheck`
+  in [VERIFIER_API.md](../../../docs/VERIFIER_API.md); today it covers
+  database-backed checks, not this FHIR check). This benchmark doesn't run
+  it.
 - **The read-back is generous.** It uses the oracle's own comparison on the
   record the agent names, which a hand-written read-back may not match.
 - **OpenAdapt reads FHIR only.** It sees writes through Medplum's API,
