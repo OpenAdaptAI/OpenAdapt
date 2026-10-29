@@ -1045,11 +1045,10 @@ class RollbackSection(BaseModel):
     #: only this run writes: compensations then run without attribution. Off
     #: by default; a shared QA copy where testers also write must not set it.
     exclusive: bool = False
-    #: Who changed a row (``frame.attribution`` in ``verify.yaml``). With
-    #: the app's audit log (``audit_read``), rows another actor wrote during
-    #: the run are set aside; a last-writer field (``record_field``) only
-    #: finds conflicts. Rows nothing attributes count as the run's. Without
-    #: it, nothing is compensated.
+    #: Who changed a row (``frame.attribution`` in ``verify.yaml``): the app's
+    #: audit log (``audit_read``) or a last-writer field (``record_field``).
+    #: A compensation runs only while every changed row is positively the
+    #: run's own by it. Without it, nothing is compensated.
     attribution: Optional[FrameAttribution] = None
 
 

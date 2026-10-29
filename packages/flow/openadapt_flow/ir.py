@@ -5300,9 +5300,6 @@ class RollbackRecord(BaseModel):
     #: What still differs at the end and isn't another actor's (empty when
     #: rolled back).
     remaining_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    #: Rows other actors changed during the run, set aside by attribution
-    #: (``rollback.attribution``). Without attribution, none are set aside.
-    other_actor_rows: int = 0
     #: Rows the run touched that another actor also changed: not compensated.
     conflicts: int = 0
     #: Voided records left in place by a ``void`` compensation.

@@ -475,6 +475,10 @@ class ClinicBackend(FakeBackend):
                     "SELECT id FROM patients WHERE name = 'Bo Synthetic'"
                 ).fetchone()
                 self._log("nurse", "update", "patients", bo)
+            if self.during_undo == "wipe_seeded":
+                # The app's delete also takes the note that was there before.
+                conn.execute("DELETE FROM notes WHERE id = 1")
+                self._log("bot", "delete", "notes", 1)
             if self.during_undo == "wipe_notes":
                 # The app's delete takes a colleague's unrelated note with it.
                 conn.execute("DELETE FROM notes WHERE modified_by = 'nurse'")
@@ -597,6 +601,7 @@ def _run_clinic(
     exclusive: Optional[bool] = None,
     during_undo: Optional[str] = None,
     audit_down: Optional[str] = None,
+    on_read: Optional[dict[int, Any]] = None,
 ) -> RunReport:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
@@ -614,6 +619,17 @@ def _run_clinic(
         allow_tables=list(allow_tables),
         profile=profile,
     )
+    if on_read:
+        # Something happens right before the n-th read of the store.
+        plain_read, seen = reader.read, [0]
+
+        def read(before=None):
+            seen[0] += 1
+            if seen[0] in on_read:
+                on_read[seen[0]](db)
+            return plain_read(before=before)
+
+        reader.read = read  # type: ignore[method-assign]
     audit: list[dict[str, str]] = []
     # ``audit_down``: the audit log can't be read at "arm" or "after" it.
     audit_up = {"before": audit_down != "arm", "after": audit_down != "after"}
@@ -969,20 +985,21 @@ def test_a_void_that_leaves_a_side_record_is_not_a_rollback(tmp_path):
     }
 
 
-def test_another_actors_write_is_set_aside_only_with_attribution(tmp_path):
-    attributed = _run_clinic(tmp_path / "a", colleague="note", attribution="audit")
-    assert attributed.rollback.status == "rolled_back", attributed.rollback.reason
-    assert attributed.rollback.other_actor_rows == 1
-    assert "another actor changed were set aside" in attributed.rollback.reason
-    assert attributed.rollback.cross_checked
-
-    # A last-modifier field can't say who created a row: the nurse's note
-    # could be a row the run created and the nurse then edited. Not set
-    # aside, and not compensated.
-    last_writer = _run_clinic(tmp_path / "c", colleague="note", attribution=True)
-    assert last_writer.rollback.status == "not_rolled_back"
-    assert last_writer.rollback.conflicts == 1
-    assert last_writer.rollback.steps == []
+def test_another_users_write_anywhere_stops_the_rollback(tmp_path):
+    # A compensation runs only while the store holds nothing but the run's
+    # own changes. The nurse's note on another patient is hers, by any
+    # attribution: nothing is compensated, and she loses nothing.
+    for name, attribution in (("audit", "audit"), ("last_writer", True)):
+        report = _run_clinic(tmp_path / name, colleague="note", attribution=attribution)
+        rollback = report.rollback
+        assert rollback.status == "not_rolled_back", rollback.reason
+        assert "aren't positively the run's own" in rollback.reason
+        assert rollback.steps == []
+        assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+        conn = sqlite3.connect(tmp_path / name / "clinic.db")
+        assert conn.execute(
+            "SELECT body FROM notes WHERE modified_by = 'nurse'"
+        ).fetchall() == [("call back",)]
 
     plain = _run_clinic(tmp_path / "b", colleague="note", attribution=False)
     assert plain.rollback.status == "not_rolled_back"
@@ -997,7 +1014,7 @@ def test_a_record_another_actor_changed_after_the_run_is_not_compensated(tmp_pat
     rollback = report.rollback
     assert rollback.status == "not_rolled_back"
     assert rollback.conflicts == 1
-    assert "isn't lost" in rollback.reason
+    assert "no one's change is lost" in rollback.reason
     assert rollback.steps == []
     # The patient, with the nurse's change, is still there.
     conn = sqlite3.connect(tmp_path / "clinic.db")
@@ -1026,7 +1043,7 @@ def test_a_change_after_the_stop_blocks_the_compensation(tmp_path):
     )
     [step] = record.steps
     assert step.decision == "refused"
-    assert "changed again after the stop" in step.reason
+    assert "changed since the last read" in step.reason
     assert record.conflicts == 1
     assert runner.runs == []
     assert record.status == "not_rolled_back"
@@ -1349,13 +1366,15 @@ def test_a_colleagues_row_on_the_runs_record_is_a_conflict(tmp_path):
     ).fetchone() == (1,)
 
 
-def test_a_set_aside_row_that_goes_during_the_rollback_is_reported(tmp_path):
-    report = _run_clinic(
-        tmp_path, colleague="note", attribution="audit", during_undo="wipe_notes"
-    )
+def test_a_compensation_that_also_changes_another_row_is_reported(tmp_path):
+    # Review of #1634, round 4: the app's delete also takes a row the run
+    # didn't write (here, the colleague's note it wipes). Caught right after
+    # the compensation, with the diff.
+    report = _run_clinic(tmp_path, attribution="audit", during_undo="wipe_seeded")
     rollback = report.rollback
     assert rollback.status == "not_rolled_back", rollback.reason
-    assert "changed or went during the rollback" in rollback.reason
+    assert "also changed" in rollback.reason
+    assert rollback.diff_path
     assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
 
 
@@ -1367,16 +1386,13 @@ def test_a_colleagues_edit_while_the_compensation_runs_is_reported(tmp_path):
     assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
 
 
-def test_a_last_writer_field_never_sets_a_changed_row_aside(tmp_path):
-    # The nurse edits an existing note. A last-writer field can't tell that
-    # from the run's change and her later one: a conflict. The audit log
-    # can: her note is set aside.
-    last_writer = _run_clinic(tmp_path / "a", colleague="edit_note", attribution=True)
-    assert last_writer.rollback.status == "not_rolled_back"
-    assert last_writer.rollback.conflicts == 1
-    audited = _run_clinic(tmp_path / "b", colleague="edit_note", attribution="audit")
-    assert audited.rollback.status == "rolled_back", audited.rollback.reason
-    assert audited.rollback.other_actor_rows == 1
+def test_a_colleagues_edit_to_an_existing_row_stops_the_rollback(tmp_path):
+    for name, attribution in (("last_writer", True), ("audit", "audit")):
+        report = _run_clinic(
+            tmp_path / name, colleague="edit_note", attribution=attribution
+        )
+        assert report.rollback.status == "not_rolled_back", report.rollback.reason
+        assert report.rollback.steps == []
 
 
 def test_audit_attribution_that_names_no_row_is_refused():
@@ -1431,7 +1447,7 @@ def test_a_row_the_audit_log_cant_name_is_a_conflict(tmp_path):
     rollback = report.rollback
     assert rollback.status == "not_rolled_back", rollback.reason
     assert rollback.steps == []
-    assert "can't say who wrote" in rollback.reason
+    assert "aren't positively the run's own" in rollback.reason
 
 
 def test_a_row_without_a_last_writer_is_a_conflict(tmp_path):
@@ -1445,17 +1461,15 @@ def test_a_row_without_a_last_writer_is_a_conflict(tmp_path):
     ]
 
 
-def test_a_colleague_may_keep_working_on_her_own_row(tmp_path):
-    report = _run_clinic(
-        tmp_path, colleague="register", attribution="audit", during_undo="edit_other"
-    )
+def test_a_colleagues_new_patient_stops_the_rollback(tmp_path):
+    report = _run_clinic(tmp_path, colleague="register", attribution="audit")
     rollback = report.rollback
-    assert rollback.status == "rolled_back", rollback.reason
-    assert rollback.other_actor_rows == 1
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert rollback.steps == []
     conn = sqlite3.connect(tmp_path / "clinic.db")
     assert conn.execute(
-        "SELECT dob FROM patients WHERE name = 'Bo Synthetic'"
-    ).fetchall() == [("1990-01-02",)]
+        "SELECT COUNT(*) FROM patients WHERE name = 'Bo Synthetic'"
+    ).fetchone() == (1,)
 
 
 def test_a_run_nothing_was_undone_for_stays_resumable(tmp_path):
@@ -1478,3 +1492,56 @@ def test_the_attended_console_never_continues_a_rolled_back_run(tmp_path):
     (tmp_path / COMPENSATED_MARKER).touch()
     refused = _refuse_rolled_back(tmp_path, capability)
     assert refused is not None and refused.status == "refused"
+
+
+# ---------------------------------------------------------------------------
+# Review of #1634, round 4: only the run's own changes, at every read
+# ---------------------------------------------------------------------------
+
+
+def _nurse_note_on_run_patient(db: Path) -> None:
+    conn = sqlite3.connect(db)
+    (pid,) = conn.execute(
+        "SELECT MAX(id) FROM patients WHERE name = 'Ada Synthetic'"
+    ).fetchone()
+    conn.execute(
+        "INSERT INTO notes (patient_id, body, modified_by) "
+        "VALUES (?, 'BP 180/110, call MD', 'nurse')",
+        (pid,),
+    )
+    conn.commit()
+    conn.close()
+
+
+@pytest.mark.parametrize("attribution", [True, "audit"])
+def test_a_write_between_the_stop_and_the_compensation_stops_it(tmp_path, attribution):
+    # Reads: 1 before the run, 2 after the stop, 3 right before the
+    # compensation. The nurse writes just before read 3; the app's patient
+    # delete would take her note with it.
+    report = _run_clinic(
+        tmp_path,
+        attribution=attribution,
+        on_read={3: _nurse_note_on_run_patient},
+    )
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    [step] = rollback.steps
+    assert step.decision == "refused"
+    assert "aren't positively the run's own" in step.reason
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute(
+        "SELECT body FROM notes WHERE modified_by = 'nurse'"
+    ).fetchall() == [("BP 180/110, call MD",)]
+
+
+def test_attribution_whose_own_user_cant_be_resolved_arms_nothing():
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
+    spec = FrameAttribution(
+        kind="record_field",
+        actor_field="modified_by",
+        self=[{"param": "bot_user"}],
+        server_set=["modified_by"],
+    )
+    plan = RollbackPlan(ListReader([]), attribution=spec)
+    assert plan.arm({}) is None

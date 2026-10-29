@@ -920,6 +920,13 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
+    if rollback_plan is not None and durable:
+        # A resumed run has no first read to roll back to, and a rollback at
+        # a pause would leave a resumable run half undone.
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and it doesn't run on a "
+            "durable (pausable) run yet. Turn one of them off. Nothing ran."
+        )
     if rollback_plan is not None:
         _require_undo_or_person(workflow, rollback_plan, approval_gate)
     before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
@@ -927,9 +934,9 @@ def _build_and_run_replayer(
         # Without the first read nothing after a stop can be proven, and the
         # undo-or-person rule let undoable saves run without a person.
         raise SystemExit(
-            "REFUSED before the run: rollback is on, but the system of record "
-            "couldn't be read before the run, so a stop couldn't be rolled "
-            "back. Nothing ran."
+            "REFUSED before the run: rollback is on, but the system of record, "
+            "its audit log, or the run's own user for attribution couldn't be "
+            "read before the run, so a stop couldn't be rolled back. Nothing ran."
         )
     report = replayer.run(
         workflow,

@@ -568,21 +568,32 @@ class Attributor:
             self._before = self.audit_read()
         return self._before is not None
 
-    def speaks(self, change: Change, window: Optional[list[dict[str, Any]]]) -> bool:
-        """Can attribution say who wrote this row? An audit log needs a
-        window and the row's record value; a last-writer field needs its
-        value on the row. Silence is never read as "no one else"."""
+    def is_own(
+        self,
+        change: Change,
+        window: Optional[list[dict[str, Any]]],
+        moved: Sequence[str] = (),
+    ) -> bool:
+        """Is this row positively the run's own? With an audit log: the
+        window holds the run's write for this row's record and table, and no
+        other user's write to the row or its record. With a last-writer
+        field: the row carries a self actor. Silence (no window, no record
+        value, no writer, a removed row) is never "the run's"."""
         from openadapt_flow.runtime.effects.frame import get_path
 
         table, key, before, after = change
         if self.spec.kind == "audit_read":
+            if window is None or self._ref(table, key, before, after) is None:
+                return False
             return (
-                window is not None and self._ref(table, key, before, after) is not None
+                self.attribute(change, window, moved) == "self"
+                and not self.others_touched(change, window)
+                and not self.others_on_record(change, window)
             )
-        return after is not None and get_path(after, self.spec.actor_field) not in (
-            None,
-            "",
-        )
+        if after is None:
+            return False
+        actor = get_path(after, self.spec.actor_field)
+        return actor not in (None, "") and str(actor) in self.self_actors
 
     def window(self) -> Optional[list[dict[str, Any]]]:
         """Audit entries since :meth:`start`; None when either read failed."""
@@ -665,14 +676,6 @@ class Attributor:
                 continue
             out.add(str(get_path(e, self.spec.actor_field)))
         return out
-
-    @property
-    def sets_aside(self) -> bool:
-        """Can this source set another actor's row aside? Only an audit log:
-        a last-writer field can't tell a row the run wrote and a colleague
-        then changed from the colleague's own, so there every other actor's
-        row is a conflict."""
-        return self.spec.kind == "audit_read"
 
     def attribute(
         self,

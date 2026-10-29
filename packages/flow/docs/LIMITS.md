@@ -830,13 +830,14 @@ The limits of that:
 - A rollback undoes only what a person approved, and only proves what it
   reads: without `rollback.database` it reads one collection. Without
   `rollback.attribution` it compensates nothing outside a declared test
-  copy; with the app's audit log, other users' writes are set aside, and a
-  row both changed is left for a person. A modified-by field knows only the
-  last writer, so any other user's write during the run is left for a
-  person. A rolled-back run isn't resumed. A hard delete runs only with
+  copy, and it compensates only while every change in the store is
+  positively the run's own: any other user's write during the run, or a
+  row attribution can't vouch for, goes to a person with the diff. That
+  suits a quiet store, not a busy one. A save that removes a row isn't
+  rolled back outside a test copy. A hard delete runs only with
   `rollback.allow_delete`. Rollback runs on single web runs only (a desktop,
-  RDP or pool run with it on is refused), and never in a workflow with a
-  loop.
+  RDP, pool or durable run with it on is refused), and never in a workflow
+  with a loop.
 - Duplicate-write compensation (`effects.compensation`) repairs a duplicate
   on its own, only where a deployment has implemented and verified it.
 
