@@ -927,6 +927,7 @@ def begin_write(
             actor_kind=actor.kind,
             actor_id=actor.id,
             write_key_bound=write_key is not None,
+            null_params=sorted(n for n, v in values.items() if v is None),
             authorized=pending.authorized,
             declared_by=declared_by
             if isinstance(declared_by, str)
@@ -1051,14 +1052,18 @@ def _hold_legacy_null(
     """Hold a write with a null while an attempt keyed the old way stands.
 
     Ledgers once keyed ``None`` as ``""``, so an attempt under that key may
-    be this write (recorded before the upgrade) or a ``""`` write; nothing
-    tells them apart. Anything but a free key stops the write. One a person
-    or a read-back found in the store (``landed``) hands its result back,
-    as :func:`_settle` does, and the write is not sent again. Any other
-    state (open, uncertain, refuted, or a recent ``""`` write confirmed)
-    holds it for a person.
+    be this write (recorded before the upgrade) or a ``""`` write. Which
+    params an attempt wrote as null (names only) tells them apart:
+    :func:`~openadapt_flow.write_ledger.null_params`. Anything but a free key
+    stops the write. An attempt in the store (landed or confirmed) with the
+    same null params hands its result back, as :func:`_settle` does, and
+    the write is not sent again. Any other state, or an attempt whose nulls
+    differ or aren't known (a ``""`` write), holds it for a person.
     """
 
+    from openadapt_flow.write_ledger import null_params
+
+    mine = sorted(n for n, v in values.items() if v is None)
     for digest in (contract.identity, contract.shape):
         legacy = led.key_for(digest, values, write_key, legacy_null=True)
         attempt = led.latest(legacy)
@@ -1069,8 +1074,8 @@ def _hold_legacy_null(
         if (
             state == "undelivered"
             and attempt is not None
-            and resolved.get("landed")
-            and resolved.get("outcome") != "CONFIRMED"
+            and (resolved.get("landed") or resolved.get("outcome") == "CONFIRMED")
+            and null_params(attempt) == mine
         ):
             result = dict(resolved.get("result") or {})
             result["not_sent_again"] = True
@@ -1315,9 +1320,18 @@ def _record(
     write_key_bound: bool,
     folder: Optional[Path] = None,
 ) -> None:
+    from openadapt_flow.write_ledger import null_params
+
+    latest = led.latest(key)
+    nulls = (
+        null_params(latest)
+        if latest is not None and latest.attempt_id == attempt_id
+        else None
+    )
     led.resolved(
         key,
         attempt_id,
+        **({} if nulls is None else {"null_params": nulls}),
         outcome=result.outcome.value,
         retry_safe=result.retry_safe,
         landed=result.landed,

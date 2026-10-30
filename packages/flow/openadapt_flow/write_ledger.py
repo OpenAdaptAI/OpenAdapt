@@ -348,6 +348,34 @@ def _age(at: Any) -> float:
     return time.time() - then
 
 
+def null_params(attempt: Optional["Attempt"]) -> Optional[list[str]]:
+    """The names of the params an attempt wrote as null, or None if unknown.
+
+    Names only, never values. Recorded when the attempt begins and when it
+    resolves; for an attempt begun before they were recorded, read from its
+    ``attempt.json`` while that is still on disk (it is removed only once
+    the attempt resolves for good).
+    """
+
+    if attempt is None:
+        return None
+    for event in (attempt.resolved or {}, attempt.begun):
+        names = event.get("null_params")
+        if isinstance(names, list):
+            return sorted(str(n) for n in names)
+    folder = attempt.folder
+    if not str(folder) or not folder.is_absolute():
+        return None
+    try:
+        saved = json.loads((folder / "attempt.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    values = saved.get("values") if isinstance(saved, Mapping) else None
+    if not isinstance(values, Mapping):
+        return None
+    return sorted(str(k) for k, v in values.items() if v is None)
+
+
 def prune(folder: Path) -> None:
     """Remove an attempt's raw values and baseline once nothing needs them
     (it resolved for good). Receipts stay; they hold no record values."""
@@ -544,11 +572,13 @@ class Ledger:
             ):
                 raise LedgerError("nothing to release for that key")
             if found == "landed":
+                nulls = null_params(attempt)
                 self.backend.append(
                     key,
                     {
                         "event": "resolved",
                         "attempt": attempt.attempt_id,
+                        **({} if nulls is None else {"null_params": nulls}),
                         "at": _now(),
                         "t": time.time(),
                         "outcome": "UNCERTAIN",
