@@ -150,6 +150,8 @@ _STRENGTH_RANK = {
 FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
 #: Where the baseline keeps the whole-database snapshot (``frame.database``).
 FRAME_DB_DETAIL = "openadapt:frame_database"
+#: Why the whole-database snapshot couldn't be read, when it couldn't.
+FRAME_DB_ERROR = "openadapt:frame_database_error"
 #: Where the baseline keeps the target versions read (``frame.versions``), as
 #: keyed MACs.
 FRAME_VERSIONS_DETAIL = "openadapt:frame_versions"
@@ -615,9 +617,13 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
 
 
 def _read_database(
-    cfg: VerifyConfig, salt: bytes, before: Optional[Any] = None
+    cfg: VerifyConfig,
+    salt: bytes,
+    before: Optional[Any] = None,
+    errors: Optional[list[str]] = None,
 ) -> Optional[Any]:
-    """The whole-database snapshot, or None when it can't be read."""
+    """The whole-database snapshot, or None when it can't be read (and then
+    why, appended to ``errors``)."""
 
     from openadapt_flow.runtime.effects.db_snapshot import mac_key, take_snapshot
 
@@ -639,7 +645,9 @@ def _read_database(
             optional_modes=database.profile_modes(),  # type: ignore[arg-type]
             links=database.recheck_after_s is not None,
         )
-    except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
+    except Exception as exc:  # noqa: BLE001 - unreadable -> the frame is not checked
+        if errors is not None:
+            errors.append(f"{type(exc).__name__}: {exc}")
         return None
 
 
@@ -1385,10 +1393,13 @@ def capture_baseline(
     entries: Optional[list[dict[str, Any]]] = None
     snapshot = None
     if cfg.frame is not None and cfg.frame.database is not None:
-        snapshot = _read_database(cfg, salt)
+        why: list[str] = []
+        snapshot = _read_database(cfg, salt, errors=why)
         if snapshot is not None:
             detail[FRAME_DB_DETAIL] = snapshot.to_json()
             entries = snapshot.extra.get("audit")
+        else:
+            detail[FRAME_DB_ERROR] = why[0] if why else "not read"
     audit_verifier = _audit_verifier(cfg, params)
     if audit_verifier is not None:
         if entries is None:

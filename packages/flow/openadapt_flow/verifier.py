@@ -78,6 +78,7 @@ from openadapt_flow.runtime.effects.late_write import (
 )
 from openadapt_flow.verify_run import (
     FRAME_DB_DETAIL,
+    FRAME_DB_ERROR,
     VerifyConfig,
     VerifyRunError,
     _write_private,
@@ -936,7 +937,7 @@ def _capture(
         )
     database = contract.config.frame.database if contract.config.frame else None
     if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
-        raise BaselineUnreadable("the database could not be read for the frame")
+        raise BaselineUnreadable(_frame_db_unread(state))
     return pending
 
 
@@ -1721,6 +1722,12 @@ def _issued_dir(name: str = "issued") -> Path:
     return issued
 
 
+def _frame_db_unread(state: Mapping[str, Any]) -> str:
+    why = (state.get("detail") or {}).get(FRAME_DB_ERROR)
+    text = "the database could not be read for the frame"
+    return f"{text} ({why})" if why else text
+
+
 def _salt_digest(payload: Any) -> tuple[str, str]:
     if not isinstance(payload, dict):
         raise VerifierError("a snapshot's payload must be the dict capture made")
@@ -1839,7 +1846,7 @@ def capture(contract: Contract, params: Mapping[str, object]) -> Snapshot:
         raise BaselineUnreadable("the system of record could not be read")
     database = contract.config.frame.database if contract.config.frame else None
     if database is not None and FRAME_DB_DETAIL not in (state.get("detail") or {}):
-        raise BaselineUnreadable("the database could not be read for the frame")
+        raise BaselineUnreadable(_frame_db_unread(state))
     snapshot = Snapshot(dict(payload))
     _issue(snapshot.payload)
     return snapshot

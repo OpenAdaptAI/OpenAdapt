@@ -244,6 +244,69 @@ file sets them explicitly; the frame covers the rest. Without a baseline,
 `forbid_collateral_change` is turned on as before, though it can't refute
 without a baseline either.
 
+## The whole database
+
+A frame over the read set can't see a record outside it. If the save also
+schedules a call nobody asked for, or posts a note on the account, and the
+contract reads only opportunities, the frame holds. `frame.database` closes
+that gap: it reads every table and column before and after the save, and a
+row added, changed or removed anywhere is collateral unless a declared
+effect, a declared side record, an attributed concurrent write or an
+allow-listed bookkeeping table explains it.
+
+This is the frame of an EspoCRM "create opportunity" contract on MariaDB:
+
+```yaml
+frame:
+  identity_field: id
+  database:
+    dialect: mysql              # or sqlite
+    read:                       # read-only: SELECT, TRIGGER and SHOW VIEW
+      sql_driver: pymysql
+      sql_connect_args: {host: 127.0.0.1, port: 3306, user: frame_ro, database: espocrm}
+      sql_password_env: ESPOCRM_FRAME_RO_PASSWORD
+    allow_tables:               # the app's own logs: rows may only be added
+    - action_history_record
+    - auth_log_record
+    new_row_fields:             # columns a declared or side row may set
+      opportunity: [name, amount, amount_currency, stage, last_stage, probability,
+        close_date, account_id, assigned_user_id, created_at, created_by_id,
+        modified_at, modified_by_id, stream_updated_at, version_number]
+      note: [id, type, data, number, parent_type, super_parent_id,
+        super_parent_type, created_at, created_by_id, modified_at, modified_by_id]
+    ignore_columns:             # columns the app moves on its own
+      account: [stream_updated_at]
+  side_records:                 # rows the save adds beside the new record
+  - surface: opportunity        # a table, when no surface has that name
+    link_field: id
+    of_surface: ""              # the contract's single read
+    of_field: row_id            # the read's column that holds the table key
+  - surface: note               # EspoCRM's own "Create" stream note
+    link_field: parent_id
+    of_surface: ""
+    of_field: row_id
+```
+
+A table row that is the declared record seen from the database (the
+`opportunity` row of a new opportunity) is declared as a side record, linked
+to the new record in the read set. Rows the app adds on its own beside it
+(a stream note for the new record) are side records too, each with its
+`count` (default 1; a second one refutes). Every other new row, such as a
+planned call or a note on the account, is unexplained, and the frame is
+refuted. The read account needs `TRIGGER` and `SHOW VIEW` besides `SELECT`:
+without them a trigger planted in the window can't be seen, and the frame is
+not checked.
+
+Every column type is read, and none is dropped. On MySQL and MariaDB each
+row is read as `JSON_OBJECT`. A type whose value it can't carry as exact text
+is read another way: binary strings, blobs, `BIT`, geometries and vectors as
+the hex of their bytes, `FLOAT` widened to `DOUBLE` (the server prints a
+`FLOAT` with six digits), and `JSON` and `LONGTEXT` as their stored text.
+Numbers parse as `Decimal`, so a `DECIMAL(30,10)` keeps every digit. The read pins its session to UTC, so a `TIMESTAMP` in the hour a daylight-saving zone repeats still shows a change. A value
+that still can't be read exactly makes the database unreadable, and the run
+stops; the error names the table. When the database can't be read at the
+baseline, `begin_write` says why.
+
 ## Lost updates
 
 Two snapshots can't see a lost update. The agent reads a record, another
