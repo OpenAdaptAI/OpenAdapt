@@ -22,7 +22,9 @@ from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
     Verdict,
+    is_null_value,
     record_matches,
+    selector_value,
     stable_id,
 )
 
@@ -93,6 +95,24 @@ def judge_records(
             unavailable=True,
         )
 
+    # A field declared ``absent_is_null`` must appear in some record of the
+    # read. If it appears in none, the key is likely misspelled (or the read
+    # never carries it), and a null there would match every record.
+    unseen = [
+        name
+        for name in effect.absent_is_null_fields()
+        if not any(name in r for r in [*before.records, *current])
+    ]
+    if unseen:
+        return _indeterminate(
+            effect,
+            substrate,
+            "absent_is_null is declared on "
+            + ", ".join(repr(n) for n in unseen)
+            + ", which no record of the read carries: the key may be misspelled, "
+            "so a null there can't be told from a missing field; HALT",
+        )
+
     if effect.kind is EffectKind.EXACT_NEW_SET:
         return _judge_exact_new_set(effect, before, current, substrate)
 
@@ -101,7 +121,10 @@ def judge_records(
         matched = [
             r
             for r in matched
-            if record_matches(r, _matchable({effect.key_field: effect.idempotency_key}))
+            if record_matches(
+                r,
+                _matchable({effect.key_field: effect.idempotency_key}),
+            )
         ]
     key_holders: list[dict[str, Any]] = []
     if effect.composite_key:
@@ -148,7 +171,7 @@ def _key_text(selector: dict[str, Any]) -> dict[str, Any]:
     canonical form; on a ValueExpr without kinds this is plain ``str()``.
     """
 
-    return {k: (v if getattr(v, "kind", None) else str(v)) for k, v in selector.items()}
+    return {k: selector_value(v) for k, v in selector.items()}
 
 
 _WHITESPACE = re.compile(r"\s+")
@@ -191,6 +214,10 @@ def carries_composite_key(record: dict[str, Any], effect: Effect) -> bool:
         return False
     for name, want in effect.composite_key.items():
         observed = record.get(name, None)
+        if is_null_value(want):
+            if observed is not None:
+                return False
+            continue
         if getattr(want, "kind", None):
             if not want.matches(observed):  # type: ignore[attr-defined]
                 return False
@@ -242,7 +269,7 @@ def _matchable(selector: dict[str, Any]) -> dict[str, Any]:
     """A selector for :func:`record_matches`: a value with a declared kind
     stays an expression (compared in canonical form), others become text."""
 
-    return {k: (v if getattr(v, "kind", None) else str(v)) for k, v in selector.items()}
+    return {k: selector_value(v) for k, v in selector.items()}
 
 
 def _judge_exact_new_set(
@@ -301,13 +328,18 @@ def _judge_exact_new_set(
         )
 
     # (2) Per declared member: present exactly as many times as declared.
-    declared: dict[str, tuple[dict[str, Any], int]] = {}
+    declared: dict[tuple[Any, ...], tuple[str, dict[str, Any], int]] = {}
     for selector in effect.new_records:
-        plain = {k: str(v) for k, v in selector.items()}
-        key = _selector_text(plain)
-        found, multiplicity = declared.get(key, (_matchable(selector), 0))
-        declared[key] = (found, multiplicity + 1)
-    for key, (selector, multiplicity) in sorted(declared.items()):
+        # A null value and the text "null" are different members.
+        ident = tuple(
+            sorted((k, None if v.null else str(v)) for k, v in selector.items())
+        )
+        text = _selector_text({k: str(v) for k, v in selector.items()})
+        _text, found, multiplicity = declared.get(
+            ident, (text, _matchable(selector), 0)
+        )
+        declared[ident] = (text, found, multiplicity + 1)
+    for key, selector, multiplicity in sorted(declared.values(), key=lambda d: d[0]):
         observed = sum(1 for r in added if record_matches(r, selector))
         if observed != multiplicity:
             reasons.append(
@@ -579,7 +611,14 @@ def _judge_field_equals(
     record = matched[0]
     observed = "" if record.get(effect.field) is None else str(record.get(effect.field))
     kind = getattr(effect.value, "kind", None)
-    same = effect.value.matches(record.get(effect.field)) if kind else observed == want  # type: ignore[union-attr]
+    if is_null_value(effect.value):
+        # A null expected value: the field must be stored null, never "".
+        same = record_matches(record, {effect.field: effect.value})
+    elif kind:
+        same = effect.value.matches(record.get(effect.field))  # type: ignore[union-attr]
+    else:
+        # A stored null is not "" (nor any text).
+        same = record.get(effect.field) is not None and observed == want
     if same:
         return EffectVerdict(
             verdict=Verdict.CONFIRMED,

@@ -168,6 +168,75 @@ sent. Adapters turn it into a `written: false` reply.
 | `WriteHeld` | An earlier attempt with the same identity is in flight in another worker, `UNCERTAIN`, or `REFUTED` and not yet released by a person. |
 | `AlreadyWritten` | An earlier attempt was `CONFIRMED` but its reply never reached the caller (a cancellation, a timeout, a crash). It carries the earlier result, and the write isn't sent again. |
 
+It raises `VerifierError` when a value the contract needs is missing from
+`params`, or is `None` where a null can't be bound (see below).
+
+### Null values
+
+A parameter set to `None` means the field is left empty. In an effect's
+`match`, `new_records` or `value` it binds to a null value, which matches
+only a field that is present in the record and null: a SQL `NULL`, a JSON
+`null`, or a FHIR path that resolves to nothing.
+
+A missing field is not null. A record without the field matches nothing,
+so a misspelled, nested or unprojected field can't pass for null. When the
+store leaves a field out of a record whose value is null, declare it on
+that field. Redmine's issue JSON leaves out `assigned_to` when no one is
+assigned:
+
+```yaml
+match:
+  subject: {param: subject}
+  assigned_to: {param: assignee, absent_is_null: true}
+```
+
+The record check and the frame read the same declaration, and it is part
+of the contract hash. It is accepted only on a `rest` or `graphql` read
+and only on a top-level key: a SQL row or a FHIR record always carries the
+field, and the REST reader never resolves a dotted key, so there a
+declaration would let any value pass. At least one record of the read must
+carry the declared key; if none does, the key is likely misspelled and the
+check stops (UNCERTAIN).
+
+A null write and a `""` write are different writes in the ledger. Ledgers
+written before keyed `None` as `""`, so a null write also looks at that
+old key. An attempt there may be that null write, made before the upgrade,
+or a `""` write, and the ledger can't tell which. So its result is never
+handed back: while any attempt stands there that isn't free, the null
+write is held (`WriteHeld`, naming the old key).
+
+- In flight, unresolved or refuted: a person checks the store. If the
+  write isn't there, `openadapt verify ledger release KEY --by NAME
+  --reason TEXT --found absent` frees the key, and a retry sends the null
+  write. `--found landed` records that it is there; the null write stays
+  held.
+- In the store (landed or confirmed) and not yet handed back: `release`
+  can't clear it. This is a known limit. Don't retry the null write; a
+  person checks the store and repairs the record by hand if the field must
+  be null.
+
+A null value never matches `""`, the text `"None"`, or any other stored
+value, so a wrong write on a task with empty fields still stops. The
+reverse holds too: a stored null matches no text parameter, `""` included,
+and `field_equals` with `""` no longer passes on a stored `NULL`. `""` and
+`NULL` are different values, and the write ledger keeps them apart too.
+When an app stores an empty field as either one, say so per column in the
+query, for example `NULLIF(description, '') AS description`, and pass
+`None`.
+
+A read that loses information can confirm a null it shouldn't. A FHIR
+field path that never resolves (a typo such as `telecom[system=e-mail]`)
+reads every record as null. So does a column from an outer join that
+filters its rows (`LEFT JOIN users u ON ... AND u.type = 'User'`), for a
+record whose row the join drops. Match a null only on a base column, or on
+a FHIR path that resolves when the value is there.
+
+Anywhere else a null has nothing to send or compare: a query, path or
+search parameter, an idempotency or composite key, a read-back field, the
+frame, or a read of the screen (`ui_readback`, `desktop_readback`), where
+an empty field reads as text. `begin_write` refuses a `None` there with a
+`VerifierError` that names the parameter, before anything is read.
+
 ## The uncertain-write ledger
 
 The ledger stops a restart or a second worker from resending a write whose

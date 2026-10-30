@@ -386,6 +386,39 @@ class Contract:
         walk(self.config.model_dump(mode="json"))
         return sorted(found)
 
+    def null_unsafe_params(self) -> dict[str, str]:
+        """Each parameter that may not be ``None``, with where it is used.
+
+        A null binds only in an effect's ``match``, ``new_records`` and
+        ``value``, where it must equal a stored null. Anywhere else (a query
+        or path parameter, an idempotency or composite key, a read-back
+        field, the frame) a null has no value to send or compare, so
+        :func:`begin_write` refuses it before anything is read.
+        """
+
+        found: dict[str, str] = {}
+
+        def walk(value: Any, where: str) -> None:
+            if isinstance(value, Mapping):
+                name = value.get("param")
+                if isinstance(name, str) and name:
+                    found.setdefault(name, where)
+                for item in value.values():
+                    walk(item, where)
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    walk(item, where)
+
+        dumped = self.config.model_dump(mode="json")
+        for section, body in dumped.items():
+            if section != "effects":
+                walk(body, section)
+        for index, effect in enumerate(dumped.get("effects") or []):
+            for key, body in effect.items():
+                if key not in ("match", "new_records", "value"):
+                    walk(body, f"effects[{index}].{key}")
+        return found
+
 
 #: Settings that change how long a read waits, never what is written.
 _TIMINGS = frozenset(
@@ -823,7 +856,8 @@ def begin_write(
     Raises :class:`WriteBlocked` (:class:`BaselineUnreadable`,
     :class:`WriteHeld` or :class:`AlreadyWritten`) when the write must not
     be sent, and :class:`VerifierError` for a value the contract needs that
-    ``params`` lacks.
+    ``params`` lacks, or that is ``None`` where a null can't be bound
+    (:meth:`Contract.null_unsafe_params`).
     """
 
     actor.run_record()  # an unknown kind fails before anything is read
@@ -836,6 +870,21 @@ def begin_write(
     if missing:
         raise VerifierError(f"values missing for: {', '.join(missing)}")
     values = {n: params[n] for n in names}
+    unsafe = contract.null_unsafe_params()
+    read_kind = str(contract.config.verifier.kind).replace("-", "_")
+    screen = READ_PATHS.get(read_kind) == "screen"
+    nulls = sorted(n for n in names if values[n] is None and (screen or n in unsafe))
+    if screen and nulls:
+        raise VerifierError(
+            "a null value can't be read back from the screen (an empty field "
+            "reads as text): " + ", ".join(nulls)
+        )
+    if nulls:
+        raise VerifierError(
+            "a null value can't be bound for: "
+            + ", ".join(f"{n} (used in {unsafe[n]})" for n in nulls)
+            + "; a null binds only in an effect's match, new_records or value"
+        )
     try:
         led = _resolve_ledger(ledger)
     except LedgerError as exc:
@@ -861,6 +910,8 @@ def begin_write(
     try:
         _settle(led, key, contract, params, actor)
         _hold_elsewhere(led, key, shape_key)
+        if any(v is None for v in values.values()):
+            _hold_legacy_null(led, contract, values, write_key)
         folder = (
             _new_folder(Path(workdir), write_id)
             if workdir is not None
@@ -1001,6 +1052,50 @@ def _settle(
         "releases it",
         key=key,
     )
+
+
+def _hold_legacy_null(
+    led: Ledger,
+    contract: Contract,
+    values: Mapping[str, Any],
+    write_key: Optional[str],
+) -> None:
+    """Hold a write with a null while any attempt keyed the old way stands.
+
+    Ledgers once keyed ``None`` as ``""``, so an attempt under that key may
+    be this write (made before the upgrade) or a ``""`` write, and nothing
+    here tells them apart. So no legacy attempt's result is ever handed
+    back: every state but ``free`` holds the write for a person, whatever
+    the attempt resolved to.
+    """
+
+    for digest in (contract.identity, contract.shape):
+        legacy = led.key_for(digest, values, write_key, legacy_null=True)
+        state = led.state(led.latest(legacy))
+        if state == "free":
+            continue
+        if state in ("open", "uncertain", "held"):
+            clear = (
+                "A person checks the store. If this write is not there, run "
+                f"'openadapt verify ledger release {legacy} --by NAME --reason "
+                "TEXT --found absent' and retry: it is sent. If it is there, "
+                "don't retry it; '--found landed' records that, and this null "
+                "write stays held"
+            )
+        else:
+            clear = (
+                "That attempt is in the store (landed or confirmed) and its "
+                "result hasn't been handed back, so 'openadapt verify ledger "
+                "release' can't clear it (a known limit). Don't retry this "
+                "write; a person checks the store and repairs it by hand if "
+                "the field must be null"
+            )
+        raise WriteHeld(
+            "an earlier attempt under this write's old ledger key (from before "
+            'a null was told apart from "") may be this write or a "" write; '
+            f"it is held, never handed back. {clear}",
+            key=legacy,
+        )
 
 
 def _hold_elsewhere(led: Ledger, key: str, shape_key: str) -> None:

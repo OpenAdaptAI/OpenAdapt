@@ -133,13 +133,31 @@ class ValueExpr(BaseModel):
     kind: Optional[ValueKind] = None
     #: ``kind: date`` only: how a numeric date entered for this value reads.
     date_order: Optional[Literal["mdy", "dmy"]] = None
+    #: ``True`` for a null value: a parameter the run set to ``None`` binds to
+    #: this. It matches a stored null (SQL ``NULL``; for REST, an absent or
+    #: null field) and nothing else: never ``""``, never the text ``"None"``.
+    null: Optional[Literal[True]] = None
+    #: ``True`` when the system of record leaves this field out of a record
+    #: whose value is null (Redmine's issue JSON omits ``assigned_to`` when
+    #: no one is assigned). Then a null value matches a missing field too.
+    #: Without it a missing field matches nothing: a misspelled or
+    #: unprojected field must not pass for null. Declared per field, never
+    #: assumed for a store.
+    absent_is_null: Optional[Literal[True]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
         """Require one unambiguous source for every contract value."""
 
-        if (self.literal is None) == (self.param is None):
-            raise ValueError("exactly one of literal or param must be set")
+        sources = sum(
+            1 for value in (self.literal, self.param, self.null) if value is not None
+        )
+        if sources != 1:
+            raise ValueError("exactly one of literal, param or null must be set")
+        if self.null and (self.map is not None or self.stored is not None):
+            raise ValueError("a null value takes no map or stored form")
+        if self.absent_is_null and self.literal is not None:
+            raise ValueError("absent_is_null applies to a parameter or a null")
         if self.param == "":
             raise ValueError("effect parameter name must not be empty")
         if self.map is not None and (self.param is None or not self.map):
@@ -156,7 +174,14 @@ class ValueExpr(BaseModel):
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("map", "stored", "kind", "date_order"):
+            for key in (
+                "map",
+                "stored",
+                "kind",
+                "date_order",
+                "null",
+                "absent_is_null",
+            ):
                 if data.get(key) is None:
                     data.pop(key, None)
         return data
@@ -167,10 +192,12 @@ class ValueExpr(BaseModel):
         A ``param`` reference reads ``params[param]`` (``None`` when the run did
         not supply it -- fail-safe: an unresolved selector matches nothing, so
         the effect REFUTEs / HALTs rather than silently confirming the wrong
-        record). A pure literal returns its literal unchanged.
+        record). A parameter the run set to ``None`` has no text either and
+        also gives ``None``; only :meth:`resolved` binds it, as a null value.
+        A pure literal returns its literal unchanged.
         """
         if self.param is not None:
-            if self.param not in params:
+            if self.param not in params or params[self.param] is None:
                 return None
             # Keep the authorized JSON scalar typed until this exact
             # string-only effect-verifier boundary.
@@ -194,15 +221,33 @@ class ValueExpr(BaseModel):
         return value
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
-        """Return a pure-literal copy of this expression bound to ``params``."""
+        """Return a pure-literal copy of this expression bound to ``params``.
+
+        A parameter the run set to ``None`` binds to a null value
+        (``null: true``), which matches only a stored null.
+        """
+        if self.null or (
+            self.param is not None
+            and self.param in params
+            and params[self.param] is None
+        ):
+            return ValueExpr(
+                null=True,
+                kind=self.kind,
+                date_order=self.date_order,
+                absent_is_null=self.absent_is_null,
+            )
         return ValueExpr(
             literal=self.resolve(params), kind=self.kind, date_order=self.date_order
         )
 
     def matches(self, stored: Any) -> bool:
         """Does a stored value equal this (resolved) value? In canonical form
-        when a kind is declared, as text otherwise."""
+        when a kind is declared, as text otherwise. A null value equals only
+        a stored ``None``."""
 
+        if self.null:
+            return stored is None
         if self.kind is None:
             return str(stored) == str(self)
         want = kind_form(self.kind, self.literal, self.date_order)
@@ -214,6 +259,10 @@ class ValueExpr(BaseModel):
     #    that treat ``effect.value`` / ``effect.match[k]`` as a string are
     #    unaffected. ---------------------------------------------------------
     def __str__(self) -> str:
+        # Display only: every comparison checks :attr:`null` first, so the
+        # text "null" never equals a null value.
+        if self.null:
+            return "null"
         if self.literal is not None:
             return self.literal
         if self.param is not None:
@@ -224,6 +273,8 @@ class ValueExpr(BaseModel):
         # Mirror ``repr(str)`` for a literal so codegen review comments
         # (``idempotency_key={eff.idempotency_key!r}``) and ``dict`` reprs of a
         # ``match`` selector render as they did when values were plain strings.
+        if self.null:
+            return "None"
         if self.param is None:
             return repr(self.literal)
         return repr("{" + self.param + "}")
@@ -234,10 +285,12 @@ class ValueExpr(BaseModel):
                 self.literal == other.literal
                 and self.param == other.param
                 and self.map == other.map
+                and self.null == other.null
+                and self.absent_is_null == other.absent_is_null
             )
         if isinstance(other, str):
             # A literal expression equals the bare string it stands for.
-            return self.param is None and self.literal == other
+            return self.param is None and not self.null and self.literal == other
         return NotImplemented
 
     def __hash__(self) -> int:
@@ -246,6 +299,8 @@ class ValueExpr(BaseModel):
         # hash/eq invariant given ``__eq__`` treats them as equal). Existing
         # code that keys a set/dict on ``match`` values mixing plain strings
         # and literal expressions then behaves unchanged.
+        if self.null:
+            return hash(("__null__", bool(self.absent_is_null)))
         if self.param is None:
             return hash(self.literal)
         return hash(("__param__", self.param, tuple(sorted((self.map or {}).items()))))
@@ -1089,6 +1144,19 @@ class Effect(BaseModel):
         ).hexdigest()
         return f"sha256:{digest}"
 
+    def absent_is_null_fields(self) -> list[str]:
+        """The record fields this effect declares ``absent_is_null`` on."""
+
+        pairs = [
+            *self.match.items(),
+            *((k, v) for selector in self.new_records for k, v in selector.items()),
+        ]
+        if self.value is not None:
+            pairs.append((self.field or "", self.value))
+        return sorted(
+            {k for k, v in pairs if isinstance(v, ValueExpr) and v.absent_is_null}
+        )
+
     def referenced_params(self) -> set[str]:
         """Return the parameter names that determine this effect contract."""
 
@@ -1180,6 +1248,23 @@ class Effect(BaseModel):
                     maps[f"new_records.{index}.{key}"] = dict(sorted(expr.map.items()))
         if maps:
             payload["value_maps"] = maps
+        # A field the store may leave out when null is a different contract.
+        # Bound only when set, so every other contract keeps its digest.
+        absent = sorted(
+            path
+            for path, expr in [
+                *((f"match.{k}", v) for k, v in self.match.items()),
+                ("value", self.value),
+                *(
+                    (f"new_records.{i}.{k}", v)
+                    for i, selector in enumerate(self.new_records)
+                    for k, v in selector.items()
+                ),
+            ]
+            if isinstance(expr, ValueExpr) and expr.absent_is_null
+        )
+        if absent:
+            payload["absent_is_null"] = absent
         return payload
 
     def _semantic_contract_sha256(self) -> str:
@@ -1342,14 +1427,48 @@ class EffectVerifier(Protocol):
 # -- shared matching helpers (used by every substrate) -----------------------
 
 
-def record_matches(record: dict[str, Any], selector: dict[str, str]) -> bool:
+def is_null_value(value: Any) -> bool:
+    """Whether ``value`` is a bound null (:attr:`ValueExpr.null`)."""
+
+    return isinstance(value, ValueExpr) and bool(value.null)
+
+
+def selector_value(value: Any) -> Any:
+    """A selector value for :func:`record_matches`: a value with a declared
+    kind, or a null value, stays an expression; any other becomes text."""
+
+    if isinstance(value, ValueExpr) and (value.kind is not None or value.null):
+        return value
+    return str(value)
+
+
+def record_matches(record: dict[str, Any], selector: dict[str, Any]) -> bool:
     """Whether ``record`` satisfies every ``field == value`` in ``selector``.
 
     Comparison is on ``str()`` of both sides so a numeric id in JSON (``1``)
     matches a string selector (``"1"``) without the caller tracking types.
     An empty selector matches every record (used by absence checks).
+
+    A null value (:attr:`ValueExpr.null`) matches only a field that is
+    present and ``None``. A missing field matches it only when the contract
+    declares that field :attr:`ValueExpr.absent_is_null`; otherwise it may
+    be a misspelled or unprojected field and matches nothing. The record
+    check and the frame both call this, so they agree.
+    The text ``"None"`` or ``""`` never matches a null value, and a null
+    stored value never matches a text selector.
     """
     for key, want in selector.items():
+        if is_null_value(want):
+            if key in record:
+                if record[key] is not None:
+                    return False
+            elif not want.absent_is_null:
+                return False
+            continue
+        if record.get(key, None) is None:
+            # A stored null (or a missing field) equals no text, not even
+            # "None", and no value of a declared kind.
+            return False
         if isinstance(want, ValueExpr) and want.kind is not None:
             if not want.matches(record.get(key, None)):
                 return False

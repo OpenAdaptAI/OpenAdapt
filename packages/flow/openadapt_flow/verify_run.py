@@ -380,6 +380,23 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
             raise VerifyRunError(
                 "an on-screen read-back effect cannot be verified after the fact"
             )
+        for name in effect.absent_is_null_fields():
+            # Only a JSON body leaves a null field out. A SQL row or a FHIR
+            # record carries every column or path, and the REST reader never
+            # resolves a dotted key: there a declared field would read as
+            # null on every record, whatever was written.
+            if "." in name:
+                raise VerifyRunError(
+                    f"absent_is_null on {name!r}: a dotted key is never read "
+                    "from a REST body, so it can't be declared absent"
+                )
+            json_kinds = ("rest", "graphql")
+            if any((kind or "").strip().lower() not in json_kinds for kind in kinds):
+                raise VerifyRunError(
+                    f"absent_is_null on {name!r}: only a rest or graphql read "
+                    "may leave a null field out; a SQL row or FHIR record "
+                    "always carries it"
+                )
     return cfg
 
 

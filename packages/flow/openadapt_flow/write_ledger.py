@@ -385,19 +385,29 @@ def fold(events: Sequence[Mapping[str, Any]]) -> Optional[Attempt]:
     return latest
 
 
-def _scalar(value: Any) -> Any:
-    """One form per stored value: ``7`` and ``"7"`` are the same write."""
+#: A null's form in a write's identity. Every other leaf becomes text, so no
+#: value can take this form: ``None`` and ``""`` are different writes, as the
+#: record check reads them.
+_NULL = {"__null__": True}
+
+
+def _scalar(value: Any, *, legacy_null: bool = False) -> Any:
+    """One form per stored value: ``7`` and ``"7"`` are the same write.
+
+    ``legacy_null`` gives the form ledgers wrote before nulls were told
+    apart (``None`` as ``""``), so an attempt recorded then is still found.
+    """
 
     if isinstance(value, bool):
         return "true" if value else "false"
     if value is None:
-        return ""
+        return "" if legacy_null else dict(_NULL)
     if isinstance(value, (int, float, str)):
         return str(value)
     if isinstance(value, Mapping):
-        return {str(k): _scalar(v) for k, v in value.items()}
+        return {str(k): _scalar(v, legacy_null=legacy_null) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
-        return [_scalar(v) for v in value]
+        return [_scalar(v, legacy_null=legacy_null) for v in value]
     return str(value)
 
 
@@ -437,14 +447,17 @@ class Ledger:
         contract_digest: str,
         values: Mapping[str, Any],
         write_key: Optional[str] = None,
+        *,
+        legacy_null: bool = False,
     ) -> str:
         """A write's identity: its contract, its bound values, and the
-        caller's ``write_key`` (a task id) when given."""
+        caller's ``write_key`` (a task id) when given. ``legacy_null`` gives
+        the key a ledger wrote before ``None`` and ``""`` were told apart."""
 
         body = _canonical(
             {
                 "contract": contract_digest,
-                "values": _scalar(dict(values)),
+                "values": _scalar(dict(values), legacy_null=legacy_null),
                 "key": write_key,
             }
         )
