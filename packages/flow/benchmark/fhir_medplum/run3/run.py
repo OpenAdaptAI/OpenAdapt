@@ -29,6 +29,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import time
 import urllib.parse
 from datetime import datetime, timezone
@@ -100,10 +101,43 @@ class RestartProxy(FaultProxy):
 
 class Run3(Bench):
     def __init__(
-        self, fx: MedplumFixture, suite: dict[str, Any], contracts: Path
+        self,
+        fx: MedplumFixture,
+        suite: dict[str, Any],
+        contracts: Path,
+        described: Optional[dict[str, Any]] = None,
     ) -> None:
         super().__init__(fx, suite)
         self.contracts = {k: contracts / f"{k}.yaml" for k in RESOURCE}
+        #: The fault set's ``describe:`` cases, implemented with existing ops
+        #: (a private file, written after B's contracts were frozen).
+        self.described = described or {}
+        self._timers: list[threading.Timer] = []
+
+    def side_write(self, op: dict[str, Any], refs: dict[str, str], token: str) -> None:
+        """The public bench's side write, plus ``delay_s`` and ``set_path``."""
+
+        if op.get("delay_s"):
+            later = {k: v for k, v in op.items() if k != "delay_s"}
+            timer = threading.Timer(
+                float(op["delay_s"]), self.side_write, (later, dict(refs), token)
+            )
+            self._timers.append(timer)
+            timer.start()
+            return
+        if op.get("set_path"):
+            url = f"{self.fx.fhir_url}/{refs[op['target']]}"
+            current = _http("GET", url, token=token)
+            current.pop("meta", None)
+            for path, value in op["set_path"].items():
+                *head, last = path.split(".")
+                node: Any = current
+                for part in head:
+                    node = node[int(part)] if part.isdigit() else node[part]
+                node[int(last) if last.isdigit() else last] = value
+            _http("PUT", url, body=current, token=token)
+            return
+        super().side_write(op, refs, token)
 
     def task(
         self, case: dict[str, Any], refs: dict[str, str]
@@ -163,6 +197,17 @@ class Run3(Bench):
         """The oracle's ``expect``, from the seeded state, never the case's."""
 
         rtype = RESOURCE[kind]
+        if kind != "patient":
+            # Two patients with the task's name and date of birth: no one
+            # can tell which is meant without a person.
+            p = self.suite["people"][want["patient"]]
+            twins = sum(
+                1
+                for ref, res in before.items()
+                if ref.startswith("Patient/") and is_the_task("patient", res, p)
+            )
+            if twins > 1:
+                return "ambiguous"
         n = sum(
             1
             for ref, res in before.items()
@@ -191,10 +236,13 @@ class Run3(Bench):
             "load_start": os.getloadavg()[0],
         }
         if case.get("describe"):
-            row["not_run"] = "an op the harness doesn't implement: " + str(
-                case["describe"]
-            )
-            return row
+            ops = self.described.get(case["id"].removeprefix("blind_"))
+            if ops is None:
+                row["not_run"] = "an op the harness doesn't implement: " + str(
+                    case["describe"]
+                )
+                return row
+            case = {**case, "faults": [*(case.get("faults") or []), *ops]}
         refs = dict(self.practitioners)
         self.seen, self.other_sets, self.excused_updates = [], [], {}
         self.wipe()
@@ -257,6 +305,9 @@ class Run3(Bench):
                 self.actors.token("bot"),
                 row,
             )
+        for timer in self._timers:
+            timer.join()
+        self._timers.clear()
         row["agent_s"] = round(time.monotonic() - t0, 1)
         row["claim"] = claim
         for spec in others:
@@ -333,6 +384,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--faultset", required=True)
     ap.add_argument("--sha256", required=True, help="the fault set's frozen digest")
     ap.add_argument("--contracts", required=True, help="B's frozen contracts")
+    ap.add_argument(
+        "--described", help="the private file implementing the describe: cases"
+    )
     ap.add_argument("--out", required=True)
     ap.add_argument("--items", default="", help="e.g. 1-50 (1-based, inclusive)")
     ap.add_argument("--seed", type=int, default=2031)
@@ -379,7 +433,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     if not args.no_up:
         bring_up(fx)
-    bench = Run3(fx, suite, Path(args.contracts))
+    described = (
+        yaml.safe_load(Path(args.described).read_text()) if args.described else {}
+    )
+    described.pop("schema", None)
+    bench = Run3(fx, suite, Path(args.contracts), described)
     bench.setup()
     # The generated contracts name their deployment by these (teach.json).
     os.environ["MEDPLUM_FHIR_URL"] = fx.fhir_url
@@ -391,6 +449,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         "agent": name,
         "commit": _git_commit(),
         "faultset_sha256": digest,
+        "described_sha256": hashlib.sha256(
+            Path(args.described).read_bytes()
+        ).hexdigest()
+        if args.described
+        else None,
         "contracts": {
             k: hashlib.sha256(p.read_bytes()).hexdigest()
             for k, p in bench.contracts.items()

@@ -206,6 +206,43 @@ def _perturbed(i: int, kind: str, what: str, rng: random.Random) -> dict[str, An
     return case
 
 
+def _who(person: Mapping[str, Any]) -> tuple[Any, Any, Any]:
+    return (person.get("given"), person.get("family"), person.get("birthDate"))
+
+
+def resolve_patient(case: dict[str, Any], people: Mapping[str, Any]) -> None:
+    """Point an allergy or appointment task at the seeded record of its person.
+
+    FAULT_BRIEF_3.md names the default patient by person (Rosa Delgado, born
+    1979-06-14), not by a key, so a fault author seeds them under a name of
+    their own. The task's patient is the first seeded record whose name and
+    date of birth are the person's. Two such records make the task ambiguous,
+    which the oracle reads from the server, not from here.
+    """
+
+    if case["type"] == "patient":
+        return
+    task = case.setdefault("task", {})
+    named = task.get("patient") or DEFAULTS[case["type"]]["patient"]
+    target = _who(people.get(named) or PEOPLE.get(named) or {})
+    aliases = []
+    for spec in case.get("seed") or []:
+        ((kind, v),) = spec.items()
+        if kind != "patient" or not v.get("as"):
+            continue
+        person = {**(people.get(v.get("person", "")) or {}), **v}
+        if v["as"] == named or _who(person) == target:
+            aliases.append((v["as"], person))
+    if aliases:
+        alias, person = aliases[0]
+        task["patient"] = alias
+        case.setdefault("people", {})[alias] = {
+            k: person[k]
+            for k in ("given", "family", "gender", "birthDate")
+            if k in person
+        }
+
+
 def build(faultset: Mapping[str, Any], *, seed: int = 2031) -> dict[str, Any]:
     """The whole stream, as a case set the driver runs in order."""
 
@@ -223,6 +260,7 @@ def build(faultset: Mapping[str, Any], *, seed: int = 2031) -> dict[str, Any]:
         blind = copy.deepcopy(case)
         blind["source"] = "blind"
         blind["id"] = f"blind_{case['id']}"
+        resolve_patient(blind, people)
         items.append(blind)
     rng.shuffle(items)
     for k, item in enumerate(items, 1):

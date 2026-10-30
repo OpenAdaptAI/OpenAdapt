@@ -128,3 +128,22 @@ def test_setup_is_reported_with_and_without_qualification():
         with_q - without["setup_min"]
         == COSTS["setup_min"]["B"]["read_path_qualification"]
     )
+
+
+def test_a_blind_default_patient_resolves_to_its_seeded_record():
+    people = {
+        "rosa_d": {"given": "Rosa", "family": "Delgado", "birthDate": "1979-06-14"},
+        "rosa_jr": {"given": "Rosa", "family": "Delgado", "birthDate": "2004-02-11"},
+    }
+    case = {
+        "type": "allergy",
+        "seed": [
+            {"patient": {"as": "jr", "person": "rosa_jr"}},
+            {"patient": {"as": "mom", "person": "rosa_d"}},
+        ],
+    }
+    stream.resolve_patient(case, people)
+    assert case["task"]["patient"] == "mom"
+    named = {"type": "appointment", "task": {"patient": "rosa_d"}, "seed": case["seed"]}
+    stream.resolve_patient(named, people)
+    assert named["task"]["patient"] == "mom"
