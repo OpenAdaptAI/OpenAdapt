@@ -619,6 +619,15 @@ def _copied(
         candidates = here if candidates is None else candidates & here
         if not candidates:
             return None
+    if candidates and len(candidates) > 1:
+        # Several columns of the row it points to hold the same value: keep
+        # the one named like this column (``tva_tx`` from ``tva_tx``, then
+        # ``subprice`` from ``price``), if exactly one is.
+        for test in (lambda c: c[3] == name, lambda c: c[3] in name):
+            named = {c for c in candidates if test(c)}
+            if len(named) == 1:
+                candidates = named
+                break
     if candidates and len(candidates) == 1:
         via, target, ref, source = next(iter(candidates))
         return {"via": via, "table": target, "ref_column": ref, "column": source}
