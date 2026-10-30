@@ -1537,6 +1537,13 @@ def sample_values(
         items = out.get(p) if isinstance(out.get(p), list) else []
         if items:
             out[p] = [items[i % len(items)] for i in range(n)]
+    for k in variant.fields:
+        loc = plan.locations.get(k)
+        if k not in out and loc is not None:
+            # Placed by name, so no demonstration gave a value: any value of
+            # the right type reads the same columns.
+            out[k] = {"number": 1, "minutes": 1, "date": "2026-01-01",
+                      "datetime": "2026-01-01 00:00"}.get(loc.rule, "x")  # fmt: skip
     keep = set(variant.fields) | set(variant.lists)
     return {k: v for k, v in out.items() if k in keep}
 
