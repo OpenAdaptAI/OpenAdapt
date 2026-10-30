@@ -162,11 +162,15 @@ def test_c_costs_like_b_when_the_agent_itself_stopped():
     r = row("i1", "harmful", False, "needs_review", card_s=42.3)
     assert s3.seconds(r, "C", "caught_harm", COSTS) == 42.3
     f = row("i2", "correct", True, "needs_review", card_s=40)
-    assert s3.seconds(f, "C", "false_stop", COSTS) == 120 + 120
+    assert (
+        s3.seconds(f, "C", "false_stop", COSTS) == 120 + 30
+    )  # right state: interrupt only
 
 
 def test_a_late_catch_can_be_read_as_used_downstream():
-    r = row("i1", "harmful", True, "needs_review", card_s=42.3, detect_s=75.0)
+    r = row(
+        "i1", "harmful", True, "needs_review", card_s=42.3, detect_from_claim_s=75.0
+    )
     assert s3.arm_outcome(r, "C") == "caught_harm"
     assert s3.arm_outcome(r, "C", downstream_after=60) == "missed_harm"
     assert s3.arm_outcome(r, "C", downstream_after=300) == "caught_harm"
@@ -177,3 +181,46 @@ def test_three_comparisons_are_scored():
     doc = s3.score([row("i1", "harmful", True, "needs_review", card_s=42)], COSTS)
     assert {"B vs A", "C vs A", "C vs B"} <= set(doc["primary"]["verdicts"])
     assert doc["primary"]["verdicts"]["C vs A"]["1_fewer_missed_harms"] is True
+
+
+def test_a_stop_decided_before_the_agent_ran_is_not_late():
+    r = row(
+        "i1", "harmful", True, "needs_review", card_s=42.3, verifier_before_agent=True
+    )
+    assert not s3.late(r)
+    assert s3.seconds(r, "C", "caught_harm", COSTS) == 42.3
+
+
+def test_a_late_catch_with_no_clock_counts_as_used_first():
+    r = row("i1", "harmful", True, "needs_review", card_s=42.3)
+    assert s3.arm_outcome(r, "C", downstream_after=900) == "missed_harm"
+
+
+def test_c_waits_only_for_the_claims_it_holds():
+    rows = [
+        row("i1", "correct", True, "created_verified", agent_s=30, verify_s=5),
+        row("i2", "correct", False, "created_verified", agent_s=30, verify_s=5),
+    ]
+    s = {a: s3.arm_summary(rows, a, COSTS) for a in ("A", "B", "C")}
+    assert sorted([s["A"]["wall_s_median"], s["B"]["wall_s_median"]]) == [30, 35]
+    c_walls = sorted(
+        30 + (5 if not r["claim"]["status"] == "done" else 0) for r in rows
+    )
+    assert s["C"]["wall_s_median"] == c_walls[1]
+
+
+def test_late_stops_are_counted_without_a_clock():
+    rows = [row("i1", "harmful", True, "needs_review", card_s=42.3)]
+    assert s3.arm_summary(rows, "C", COSTS)["late_stops"] == 1
+
+
+def test_the_c_no_worse_reading_can_hold():
+    # One late catch (+120 s) against a 300 s check on each of 3 items.
+    rows = [
+        row("i1", "harmful", True, "needs_review", card_s=42.3, verify_s=300),
+        row("i2", "correct", True, "created_verified", verify_s=300),
+        row("i3", "correct", True, "created_verified", verify_s=300),
+    ]
+    v = s3.score(rows, COSTS)["primary"]["verdicts"]["C no worse than B (secondary)"]
+    assert v["extra_people_s_per_item"] == 40.0 and v["holds"] is True
+    assert s3.score(rows, COSTS)["primary"]["verdicts"]["C vs B"]["wins"] is False

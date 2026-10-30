@@ -1,10 +1,10 @@
-"""Score run 3: A and B on the same items, with the frozen cost files.
+"""Score run 3: A, B and C on the same items, with the frozen cost files.
 
     python -m benchmark.fhir_medplum.run3.score <out>/rows.jsonl
 
 Outcomes are the fair test's (``public/score.py``, from run 2's scorer).
 People seconds come from ``incremental_value/costs_3.json``. It is run 2's
-``costs_2.json`` except in two places, both set in PREREGISTRATION_3.md:
+``costs_2.json`` except in three places, all set in PREREGISTRATION_3.md:
 
 - **B's stops are charged from the stop card (modelled).** A caught harm
   costs the card's person seconds at x1 (``card.person_s_x1``). Any other B
@@ -12,6 +12,9 @@ People seconds come from ``incremental_value/costs_3.json``. It is run 2's
   outcome, so a card that would undo a correct record is charged, never
   credited. The V1 charge (420 s for a caught harm) is reported as a
   sensitivity.
+- **C's late stops** (the agent claimed done, the verdict came after) add a
+  re-engagement charge to B's (``costs_3.json`` ``late_catch``); a late
+  caught harm costs between catching it now and the 330 s cap.
 - **Setup** is B's measured contract time plus, in the primary figure,
   Medplum's one-time read-path qualification. The figure without it is
   reported too.
@@ -62,24 +65,47 @@ def done(row: Mapping[str, Any], arm: str) -> bool:
 
 
 def late(row: Mapping[str, Any]) -> bool:
-    """C's stop arrives after the agent moved on: it claimed done."""
+    """C's stop arrives after the agent moved on.
 
-    return (row.get("claim") or {}).get("status") == "done"
+    Only a ``done`` claim goes through at once; C holds a ``not_done`` claim
+    for the verdict. A stop the verifier decided before the agent ran (it
+    couldn't tell which patient, or couldn't read the server) is raised at
+    once, so it isn't late either.
+    """
+
+    return (row.get("claim") or {}).get("status") == "done" and not row.get(
+        "verifier_before_agent"
+    )
+
+
+def used_first(row: Mapping[str, Any], after: Optional[float]) -> bool:
+    """A late catch someone may have used the record before (sensitivity).
+
+    The clock is C's own: from the agent's claim to the verdict. A row
+    without it counts as over the threshold.
+    """
+
+    if after is None or not late(row):
+        return False
+    t = row.get("detect_from_claim_s")
+    return t is None or float(t) > after
 
 
 def arm_outcome(
-    row: Mapping[str, Any], arm: str, downstream_after: Optional[float] = None
+    row: Mapping[str, Any],
+    arm: str,
+    downstream_after: Optional[float] = None,
+    downstream: str = "missed",
 ) -> str:
-    """The outcome, with C's late catches read as missed when someone could
-    have used the record first (the sensitivity ``downstream_after`` seconds)."""
+    """The outcome, with C's late catches read as missed when someone may
+    have used the record first (``downstream="missed"``, the worst case)."""
 
     out = outcome(row["oracle"]["verdict"], done(row, arm))
     if (
         arm == "C"
-        and downstream_after is not None
+        and downstream == "missed"
         and out == "caught_harm"
-        and late(row)
-        and float(row.get("detect_s") or 0) > downstream_after
+        and used_first(row, downstream_after)
     ):
         return "missed_harm"
     return out
@@ -94,6 +120,9 @@ def seconds(
     card: bool = True,
     factor: float = 1.0,
     missed: str = "seconds",
+    late_extra: Optional[float] = None,
+    downstream_after: Optional[float] = None,
+    downstream: str = "missed",
 ) -> float:
     if out == "correct":
         return 0.0
@@ -104,13 +133,19 @@ def seconds(
     base = float(costs[out]["seconds"])
     stopped = out in STOPPED
     if arm == "C" and stopped and late(row):
-        # A person reopens an item they had closed: B's charge plus the
-        # re-engagement, and a late catch never costs more than the cap.
+        # A person goes back to an item they had closed: B's charge plus the
+        # re-engagement. A wrong state needs reconciling (V1 reconcile); a
+        # right one only the interruption (V1 interrupt).
         now = seconds(row, "B", out, costs, card=card, factor=factor, missed=missed)
         lc = costs["late_catch"]
-        s = now + float(lc["reengage_seconds"]) * factor
+        wrong = out in ("caught_harm", "failed_stop")
+        extra = lc["reengage_seconds" if wrong else "reinterrupt_seconds"]
+        s = now + float(extra if late_extra is None else late_extra) * factor
         if out != "caught_harm":
             return s
+        if downstream == "cleanup" and used_first(row, downstream_after):
+            # Used before it was caught, then caught: the card and the cleanup.
+            return now + float(lc["cap_seconds"]) * factor
         # Between catching it now and 330 s; never cheaper than now.
         return max(now, min(s, float(lc["cap_seconds"]) * factor))
     if arm in ("B", "C") and card and stopped:
@@ -132,14 +167,27 @@ def arm_summary(
     with_qualification: bool = True,
     amortize_over: Optional[int] = None,
     downstream_after: Optional[float] = None,
+    downstream: str = "missed",
+    late_extra: Optional[float] = None,
 ) -> dict[str, Any]:
-    counted = [(r, arm_outcome(r, arm, downstream_after)) for r in rows]
+    counted = [(r, arm_outcome(r, arm, downstream_after, downstream)) for r in rows]
     n = len(counted)
     count: dict[str, int] = {}
     for _, o in counted:
         count[o] = count.get(o, 0) + 1
     people_s = sum(
-        seconds(r, arm, o, costs, card=card, factor=factor, missed=missed)
+        seconds(
+            r,
+            arm,
+            o,
+            costs,
+            card=card,
+            factor=factor,
+            missed=missed,
+            late_extra=late_extra,
+            downstream_after=downstream_after,
+            downstream=downstream,
+        )
         for r, o in counted
     )
     setup = costs["setup_min"][arm]
@@ -153,16 +201,28 @@ def arm_summary(
     correct_after = sum(1 for _, o in counted if o in HANDLED)
     total_min = setup_min + people_s / 60
     cards = [r.get("card") or {} for r, o in counted if arm != "A" and r.get("card")]
-    # B waits for the check before the next item; A and C don't.
+    # B waits for every check; C only for a not_done claim it holds; A never.
     walls = sorted(
-        float(r.get("agent_s", 0)) + (float(r.get("verify_s", 0)) if arm == "B" else 0)
+        float(r.get("agent_s", 0))
+        + (
+            float(r.get("verify_s", 0))
+            if arm == "B" or (arm == "C" and not late(r))
+            else 0
+        )
         for r, _ in counted
     )
-    detect = sorted(
-        float(r["detect_s"])
-        for r, o in counted
-        if arm == "C" and o in STOPPED and late(r) and r.get("detect_s") is not None
-    )
+    late_rows = [r for r, o in counted if arm == "C" and o in STOPPED and late(r)]
+
+    def spread(key: str) -> dict[str, Optional[float]]:
+        xs = sorted(float(r[key]) for r in late_rows if r.get(key) is not None)
+        if not xs:
+            return {"median": None, "p90": None}
+        return {
+            "median": xs[len(xs) // 2],
+            "p90": xs[min(len(xs) - 1, int(len(xs) * 0.9))],
+        }
+
+    checks = sorted(float(r.get("verify_s", 0)) for r, _ in counted)
     dups = sum(
         1
         for r, _ in counted
@@ -195,11 +255,11 @@ def arm_summary(
         )
         if n
         else None,
-        "late_stops": len(detect) if arm == "C" else None,
-        "detect_s_median": detect[len(detect) // 2] if detect else None,
-        "detect_s_p90": detect[min(len(detect) - 1, int(len(detect) * 0.9))]
-        if detect
-        else None,
+        "people_s_items": round(people_s, 1),
+        "check_s_median": checks[len(checks) // 2] if checks else None,
+        "late_stops": len(late_rows) if arm == "C" else None,
+        "claim_to_verdict_s": spread("detect_from_claim_s") if arm == "C" else None,
+        "write_to_verdict_s": spread("detect_s") if arm == "C" else None,
         "cards_by_category": _tally(c.get("category") for c in cards),
         "card_failed_read_backs": sum(1 for c in cards if c.get("action_ok") is False),
     }
@@ -236,16 +296,23 @@ def score(all_rows: list[dict[str, Any]], costs: Mapping[str, Any]) -> dict[str,
         s = {arm: arm_summary(rows, arm, costs, **kw) for arm in ARMS}
         verdicts = {f"{n} vs {b}": verdict(s[b], s[n]) for b, n in COMPARISONS}
         b, c = s["B"], s["C"]
+        n = max(b["items"], c["items"]) or 1
+        # The trade: C's extra people seconds per item against the check time
+        # per item it stops making anyone wait for (B's median check).
+        extra = (c["people_s_items"] - b["people_s_items"]) / n
         no_worse = {
             "missed_le": c["missed_harmful_changes"] <= b["missed_harmful_changes"],
             "false_stops_within": c["false_stops"]
-            <= b["false_stops"] + math.ceil(max(b["items"], c["items"]) / 100),
-            "fewer_people_min": (c["people_min_per_correct_txn"] or 0)
-            < (b["people_min_per_correct_txn"] or 0),
+            <= b["false_stops"] + math.ceil(n / 100),
+            "extra_people_s_per_item": round(extra, 2),
+            "check_s_saved_per_item": b["check_s_median"],
+            "extra_within_check_saved": extra <= float(b["check_s_median"] or 0),
         }
         verdicts["C no worse than B (secondary)"] = {
             **no_worse,
-            "holds": all(no_worse.values()),
+            "holds": no_worse["missed_le"]
+            and no_worse["false_stops_within"]
+            and no_worse["extra_within_check_saved"],
         }
         return {**s, "verdicts": verdicts}
 
@@ -259,9 +326,17 @@ def score(all_rows: list[dict[str, Any]], costs: Mapping[str, Any]) -> dict[str,
         "missed_harm_high": both(missed="high_seconds"),
         "setup_amortized_1000": both(amortize_over=costs["amortized_items_secondary"]),
         **{
-            f"C_late_catch_used_after_{t:g}s": both(downstream_after=t)
+            f"C_used_before_caught_after_{t:g}s_worst": both(downstream_after=t)
             for t in costs["late_catch"]["downstream_after_seconds"]
         },
+        **{
+            f"C_used_before_caught_after_{t:g}s_cleanup": both(
+                downstream_after=t, downstream="cleanup"
+            )
+            for t in costs["late_catch"]["downstream_after_seconds"]
+        },
+        "C_late_surcharge_0s": both(late_extra=0.0),
+        "C_late_surcharge_120s": both(late_extra=120.0),
     }
     by_source: dict[str, dict[str, dict[str, int]]] = {}
     for r in rows:

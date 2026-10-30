@@ -1,7 +1,7 @@
 {
  "schema": "incremental-value/costs/v3",
  "frozen_with": "PREREGISTRATION_3.md",
- "note": "People seconds per outcome for run 3 (Medplum). costs_2.json's per-outcome figures, unchanged, except where PREREGISTRATION_3.md says: B's stops are charged from the stop card's modelled seconds, and setup is split into its parts. Never changed after run 3 starts.",
+ "note": "People seconds per outcome for run 3 (Medplum). costs_2.json's per-outcome figures, unchanged, except where PREREGISTRATION_3.md says: B's and C's stops are charged from the stop card's modelled seconds, C's late stops add a re-engagement charge (late_catch), and setup is split into its parts. Never changed after run 3 starts.",
  "missed_harm": {
   "seconds": 14737,
   "basis": "As costs_2.json: USD 96 to correct one duplicate patient record, at the US median wage of a medical records specialist, USD 23.45 per hour.",
@@ -51,12 +51,13 @@
  "amortized_items_secondary": 1000,
  "late_catch": {
   "reengage_seconds": 120,
+  "reinterrupt_seconds": 30,
   "cap_seconds": 330,
   "downstream_after_seconds": [
    60,
    300,
    900
   ],
-  "basis": "Arm C (asynchronous verification): a stop raised after the agent claimed done reaches a person who had moved on. It costs B's charge for the same outcome plus 120 s to reopen the closed item (cost model V1's reconcile operator, as in costs_2.json). A late caught harm, caught before anyone downstream used the record, is capped at 330 s (run 1's modelled cleanup, costs_2.json's low missed-harm figure), so it always costs between the caught-now card charge and 330 s. Sensitivities: a late catch whose detection took longer than 60, 300 or 900 s is read as missed (someone may have used the record first)."
+  "basis": "Arm C: a stop that arrives after the agent claimed done (and wasn't decided before the agent ran) reaches a person who had moved on. A late stop on a wrong state (caught harm, failed stop) adds 120 s, cost model V1's reconcile operator, the work costs_2.json charges when the state is wrong. A late stop on a right state (false stop, correct stop) adds 30 s, V1's interrupt: costs_2.json charges no reconcile when the state is right. A late caught harm is charged max(now, min(now + 120, 330)): between catching it now and 330 s, run 1's modelled cleanup and costs_2.json's low missed-harm figure. At V1 (420 s now) the late charge equals now, and for cards above 210 s the cap binds. Sensitivities: the surcharge at 0 s and at 120 s for every late stop; a late catch whose claim-to-verdict time exceeds 60, 300 or 900 s read as used first, either as missed (worst case) or as caught with the card plus the 330 s cleanup."
  }
 }

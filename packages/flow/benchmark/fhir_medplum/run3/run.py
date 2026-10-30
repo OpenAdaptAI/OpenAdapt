@@ -272,6 +272,7 @@ class Run3(Bench):
         row["b_params"] = dict(params)
         if unsure:
             row["verifier"] = {"outcome": "needs_review", "reasons": [unsure]}
+            row["verifier_before_agent"] = True
         else:
             try:
                 self.record_token()
@@ -282,6 +283,7 @@ class Run3(Bench):
                     "reasons": [f"unreadable: {exc}"],
                     "unreadable": True,
                 }
+                row["verifier_before_agent"] = True
         proxy.arm(case.get("faults") or [], RESOURCE[kind], refs)
         proxy.restart = bool(case.get("restart"))
         excused: dict[str, str] = {}
@@ -323,6 +325,7 @@ class Run3(Bench):
         self._timers.clear()
         row["agent_s"] = round(time.monotonic() - t0, 1)
         row["claim"] = claim
+        claimed_at = time.monotonic()
         for spec in others:
             if spec.get("at") == "after_agent":
                 self.other_write(
@@ -342,11 +345,14 @@ class Run3(Bench):
                 "unreadable": bool(result.evidence.get("unreadable")),
             }
         row["verify_s"] = round(time.monotonic() - t1, 1)
+        verdict_at = time.monotonic()
+        # Arm C's two clocks. From the claim to the verdict: C's own delay,
+        # the time the agent has moved on while the record is unchecked (a
+        # lower bound: no queue here). From the write's reply to the verdict:
+        # how long the record sat unchecked at all, the same under B.
+        row["detect_from_claim_s"] = round(verdict_at - claimed_at, 1)
         if proxy.first_write_at is not None:
-            # Arm C: from the write's reply to the verifier's verdict. An upper
-            # bound: here the check starts once the agent is done, while a
-            # background check would start at the write.
-            row["detect_s"] = round(time.monotonic() - proxy.first_write_at, 1)
+            row["detect_s"] = round(verdict_at - proxy.first_write_at, 1)
         proxy.run_after_check()
         time.sleep(1.0)
         after = self.snapshot()
