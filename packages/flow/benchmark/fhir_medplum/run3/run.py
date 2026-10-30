@@ -85,10 +85,14 @@ class RestartProxy(FaultProxy):
 
     restart = False
     cut = False
+    #: When the agent's first write of the task's type got its reply
+    #: (monotonic): arm C's detection time runs from here.
+    first_write_at: Optional[float] = None
 
     def arm(self, *args: Any, **kwargs: Any) -> None:
         super().arm(*args, **kwargs)
         self.restart = self.cut = False
+        self.first_write_at = None
 
     def _handle(self, h: Any) -> None:
         if self.cut:
@@ -101,6 +105,8 @@ class RestartProxy(FaultProxy):
             )
             return
         super()._handle(h)
+        if self.first_write_at is None and any(e.get("write") for e in self.log):
+            self.first_write_at = time.monotonic()
         if self.restart and any(e.get("write") == 1 for e in self.log):
             with self._lock:
                 self.cut = True
@@ -336,6 +342,11 @@ class Run3(Bench):
                 "unreadable": bool(result.evidence.get("unreadable")),
             }
         row["verify_s"] = round(time.monotonic() - t1, 1)
+        if proxy.first_write_at is not None:
+            # Arm C: from the write's reply to the verifier's verdict. An upper
+            # bound: here the check starts once the agent is done, while a
+            # background check would start at the write.
+            row["detect_s"] = round(time.monotonic() - proxy.first_write_at, 1)
         proxy.run_after_check()
         time.sleep(1.0)
         after = self.snapshot()

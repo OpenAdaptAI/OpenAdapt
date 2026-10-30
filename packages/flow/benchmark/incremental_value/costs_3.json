@@ -40,7 +40,23 @@
    "contract": 1.32,
    "read_path_qualification": 35.0,
    "basis": "The same agent setup as A; plus the person time measured while generating and reviewing B's three contracts (PERSON_LOG_3.md), filled in before the first item and frozen with the contracts; plus Medplum's one-time read-path qualification (fhir_medplum/readpath/MINUTES.md, about 35 minutes), charged in the primary figure because this run can't show it is already paid for any customer. The figure without it is reported."
+  },
+  "C": {
+   "agent": 60.0,
+   "contract": 1.32,
+   "read_path_qualification": 35.0,
+   "basis": "As B: the same agent, contracts and read path; the verifier runs in the background."
   }
  },
- "amortized_items_secondary": 1000
+ "amortized_items_secondary": 1000,
+ "late_catch": {
+  "reengage_seconds": 120,
+  "cap_seconds": 330,
+  "downstream_after_seconds": [
+   60,
+   300,
+   900
+  ],
+  "basis": "Arm C (asynchronous verification): a stop raised after the agent claimed done reaches a person who had moved on. It costs B's charge for the same outcome plus 120 s to reopen the closed item (cost model V1's reconcile operator, as in costs_2.json). A late caught harm, caught before anyone downstream used the record, is capped at 330 s (run 1's modelled cleanup, costs_2.json's low missed-harm figure), so it always costs between the caught-now card charge and 330 s. Sensitivities: a late catch whose detection took longer than 60, 300 or 900 s is read as missed (someone may have used the record first)."
+ }
 }

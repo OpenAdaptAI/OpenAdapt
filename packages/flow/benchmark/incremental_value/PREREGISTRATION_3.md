@@ -1,4 +1,4 @@
-# Pre-registration, run 3: what OpenAdapt adds on Medplum, with the setup and review levers
+# Pre-registration, run 3: what OpenAdapt adds on Medplum, checking synchronously and asynchronously
 
 **This is a new test on a different app.** It neither replaces nor
 reinterprets runs 1 and 2 ([`PREREGISTRATION.md`](PREREGISTRATION.md) and
@@ -16,6 +16,11 @@ It also measures the verifier changes that make them usable:
 
 - `void` (#1657);
 - the agent's own corrections (#1655).
+
+Run 3 also tests a way to deploy the verifier, as a third arm. **Arm C
+verifies asynchronously.** The agent writes and moves on. The verifier checks
+each write in the background, the way card networks authorize a payment and
+settle it later, and a mismatch comes back afterwards through the stop card.
 
 All four run only on `openadapt_flow.ensure_record`, which checks a write
 through FHIR and its audit trail. OpenEMR's verifier is a different one, a
@@ -46,7 +51,11 @@ dated deviation.
 4. An independent agent reviewed arm A for fairness before the freeze
    ([`REVIEW_ARM_A.md`](../fhir_medplum/run3/REVIEW_ARM_A.md)). Every finding
    it raised was fixed or is stated here.
-5. A smoke run of 3 stream items checked the stack end to end
+5. On 2026-10-30, at the founder's request and before any run-3 item ran,
+   arm C was added ([Arms](#arms)). A separate agent reviewed C's design
+   for bias before the freeze
+   ([`REVIEW_ARM_C.md`](../fhir_medplum/run3/REVIEW_ARM_C.md)).
+6. A smoke run of 3 stream items checked the stack end to end
    ([Smoke run](#smoke-run)). Its results are discarded, and those items
    run again in the stream.
 
@@ -81,14 +90,52 @@ The design is **paired**: one agent run per item, which both arms judge.
   B's patient and practitioner references come from a search by the name and
   date of birth the agent is given, made before the agent starts. They never
   come from the harness's ids. If 0 or 2+ records match, that is B's stop.
-- **B's stop card.** Every B stop gets a card, built and acted on after the
+- **C** is the same verifier with the same contracts on the same run, run
+  asynchronously:
+  - the agent's claim goes through at once, as A's does;
+  - the verifier's verdict lands later, and it is final, as B's is;
+  - a stop is raised then, through the same stop card. Its Undo is the
+    compensation.
+
+  C differs from B in two places only:
+  - **When a stop reaches a person.** When the agent claimed done, C's stop
+    comes after the agent moved on: a *late stop*. When the agent itself
+    said not done, a person is already involved, so C's stop costs what B's
+    does.
+  - **Waiting.** B holds the next item until its check is back. C doesn't.
+
+  C's detection time is measured per item, from the reply to the agent's
+  first write of the task's type to the verifier's verdict. In this harness
+  the check starts once the agent has finished, while a background check
+  would start at the write. So the figure is an upper bound on C's
+  detection time.
+
+  The arm-A fairness rules apply to C unchanged. C sees the same agent run,
+  and its references come from the same search.
+- **B's and C's stop card.** Every verifier stop gets a card, built and acted on after the
   oracle's last read, with a timed Undo or Fix and a read-back
   (`contract_autogen/blind.py stop_card`).
 
-**Why paired:** B is passive on Medplum. It reads after the agent finishes
+**Why paired:** B and C are passive on Medplum. It reads after the agent finishes
 and doesn't hold or change the agent's writes, the way run 2's in-run hold
-did. So the agent's behaviour is the same under both arms, and pairing
-removes the agent's run-to-run variance from the comparison.
+did. So the agent's behaviour is the same under all three arms, and pairing
+removes the agent's run-to-run variance from the comparison. Each arm is
+scored on the same N items.
+
+**What happens when a later item depends on a record that's still being
+checked.** In production, C lets the next task use a record whose check
+hasn't come back. In this stream it can't happen, because every item starts
+from an emptied project and no item reads another item's record. So
+dependence is modelled, not observed:
+
+- **Primary:** C's late catches are charged as caught before anyone used the
+  record.
+- **Sensitivity:** a late catch whose detection took longer than 60, 300 or
+  900 seconds is counted as missed, because someone may have opened the
+  record first. It is then charged 14,737 s and counts against criterion 1.
+- **The rule a deployment of C needs, not measured here:** a dependent write
+  waits for its parent's check. If the parent fails, the dependent stops
+  too.
 
 ## Workload
 
@@ -159,12 +206,15 @@ B's unreadable reads are B's stops, not exclusions.
 
 ## Measures and costs
 
-The measures are run 2's:
+The measures are run 2's, per arm:
 
 - the outcomes above, and duplicates;
 - people minutes per correct transaction;
 - model cost per item;
-- median and p90 wall time per item.
+- median and p90 wall time per item. B's includes waiting for its check;
+  A's and C's don't;
+- **for C: time from write to detection,** median and p90 over its late
+  stops, plus the count of late stops.
 
 People time is costed from [`costs_3.json`](costs_3.json), frozen with this
 file. It is `costs_2.json`, unchanged, except in two places.
@@ -181,6 +231,18 @@ file. It is `costs_2.json`, unchanged, except in two places.
     sensitivity**, with the verdict at that charge.
   - A's stops are charged as in run 2: 420 s for a caught harm, 120 s for a
     false or correct stop.
+- **C's late stops** (C stopped after the agent claimed done) cost B's
+  charge for the same outcome plus **120 s** to reopen an item the person
+  had closed. That is cost model V1's reconcile operator, as in
+  `costs_2.json`.
+  - A late **caught harm** is charged between catching it now and 330 s:
+    *max(card, min(card + 120, 330))*.
+  - 330 s is run 1's modelled cleanup and `costs_2.json`'s low missed-harm
+    figure. It is the cost of finding and fixing a wrong record later, before
+    anyone acted on it.
+  - So a harm C catches late always costs at least B's caught-now charge,
+    and never more than the cleanup.
+  - When the agent itself stopped, C's stop costs what B's does.
 - **Setup.**
   - A: 60 engineer-minutes, as run 2's A.
   - B: the same 60 minutes for the agent, plus the **measured 79 s** of
@@ -190,6 +252,7 @@ file. It is `costs_2.json`, unchanged, except in two places.
   - The qualification is charged in the primary figure. It's done once per
     server version, not once per customer, but this run can't show it is
     already paid for any given customer.
+  - C: the same as B. It's the same agent, contracts and read path.
   - The result is reported both ways. A secondary figure amortizes setup
     over 1,000 items, as in run 2.
 - The missed-harm charge is run 2's cited 14,737 s, with the same low (330 s)
@@ -198,18 +261,40 @@ file. It is `costs_2.json`, unchanged, except in two places.
 
 ## The win, decided now
 
-These are run 1's and run 2's three criteria. B wins only if all three hold
-over the N scored items:
+These are run 1's and run 2's three criteria, applied to three primary
+comparisons over the same N scored items: **B vs A, C vs A, and C vs B.** In
+each, the challenger (the first arm named) wins only if all three hold
+against the baseline:
 
-1. B has **strictly fewer missed harmful changes** than A. A tie is a loss.
-2. B's **false stops ≤ A's false stops + ⌈N/100⌉.**
-3. B's **people minutes per correct transaction < A's**, at x1, with
-   `costs_3.json`, the card's modelled seconds, and setup including the
-   read-path qualification.
+1. The challenger has **strictly fewer missed harmful changes**. A tie is a
+   loss.
+2. The challenger's **false stops ≤ the baseline's false stops + ⌈N/100⌉.**
+3. The challenger's **people minutes per correct transaction are lower**, at
+   x1, with `costs_3.json`, the card's modelled seconds, C's late-stop
+   charge, and setup including the read-path qualification.
 
-Otherwise the result is "B does not win", and it is published as such. The
-verdict at 420 s per caught harm and the verdict without the qualification
-are published beside it, but they don't replace it.
+Otherwise the result for that comparison is "does not win", and it is
+published as such.
+
+**C vs B ties on criterion 1 by construction.** B and C take the same
+verifier's verdict on the same run, so their missed harms are equal in the
+primary figures, and a tie is a loss. C vs B will therefore read "does not
+win". That is stated now, not discovered later. Beside it, one secondary
+reading of C vs B is fixed now: **C is no worse than B** if all three of
+these hold:
+
+- C's missed harms ≤ B's;
+- C's false stops ≤ B's + ⌈N/100⌉;
+- C's people minutes per correct transaction < B's.
+
+That answers the question C was added for: whether checking in the
+background saves people time without losing harms.
+
+These are published beside the primary verdicts but don't replace them:
+
+- the verdicts at 420 s per caught harm for B and C;
+- the verdicts without the read-path qualification;
+- the dependence sensitivities.
 
 ## Pins and run rules
 
@@ -252,6 +337,8 @@ are published beside it, but they don't replace it.
   seen by the oracle, not by B. The fault set's late cases (`late_collateral`
   and the three late `describe:` cases) count against B wherever they're
   harmful.
+- **C's detection time is an upper bound,** and dependence is modelled, not
+  observed. See [Arms](#arms).
 - **The card's seconds are modelled.** No person was timed on the card. If
   real review is slower, the 420 s sensitivity shows what happens.
 - **One agent, one model.** A different agent may check its own work more or
