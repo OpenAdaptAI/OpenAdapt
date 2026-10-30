@@ -382,7 +382,10 @@ def test_an_update_already_in_place_with_no_write_is_confirmed(
     app = generated["app"]
     v = {"project": "Help Desk", "subject": "VPN drops", "status": None, "assignee": None,
          "due_date": None, "done_ratio": 80, "notes": None}  # fmt: skip
-    app.q("UPDATE issues SET done_ratio=80 WHERE id=%s", (app.find("Help Desk", "VPN drops"),))
+    app.q(
+        "UPDATE issues SET done_ratio=80 WHERE id=%s",
+        (app.find("Help Desk", "VPN drops"),),
+    )
     assert _run(generated, "update_issue", v, lambda: None).startswith("CONFIRMED")
     # The same task with a stray write on the issue is stopped.
     stray = _run(generated, "update_issue", v,

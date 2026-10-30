@@ -265,9 +265,10 @@ def _mysql_schema(cur: Any) -> Schema:
             )
         )
     for tname, cname, cons, rtable, rcol in keys:
-        t = tables.get(tname)
-        if t is None:
+        kt = tables.get(tname)
+        if kt is None:
             continue
+        t = kt
         if cons == "PRIMARY":
             t.primary_key.append(str(cname))
         elif rtable:
@@ -327,9 +328,10 @@ def _pg_schema(cur: Any) -> Schema:
         (schema,),
     )
     for tname, ctype, cname, rtable, rcol in cons:
-        t = tables.get(str(tname).split(".")[-1].strip('"'))
-        if t is None:
+        ct = tables.get(str(tname).split(".")[-1].strip('"'))
+        if ct is None:
             continue
+        t = ct
         if ctype == "p":
             t.primary_key.append(str(cname))
         elif rtable and rcol:

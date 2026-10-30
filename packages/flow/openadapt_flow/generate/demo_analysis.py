@@ -120,15 +120,15 @@ def rule_for(stored: Optional[str], column_kind: str, value: Any) -> Optional[st
     if column_kind == "text":
         return None
     if column_kind in ("number", "bool"):
-        a, b = _decimal(stored), _decimal(text)
-        if a is not None and b is not None and a == b:
+        da, db = _decimal(stored), _decimal(text)
+        if da is not None and db is not None and da == db:
             return "number"
         return None
     if column_kind == "date":
         return "date" if stored[:10] == text and len(text) == 10 else None
     if column_kind == "datetime":
-        a, b = _datetime(stored.split(".")[0]), _datetime(text)
-        if a is not None and b is not None and a == b:
+        ta, tb = _datetime(stored.split(".")[0]), _datetime(text)
+        if ta is not None and tb is not None and ta == tb:
             return "datetime"
         return None
     return None
