@@ -5317,9 +5317,6 @@ class RollbackRecord(BaseModel):
     #: (their write itself may be gone with the row): an owner-only file
     #: beside ``diff_path``.
     late_diff_path: Optional[str] = None
-    #: Not rolled back only because other users wrote (each changed row is
-    #: positively theirs, none the run's): the run's own outcome stands.
-    colleague_only: bool = False
     steps: list[RollbackStepRecord] = Field(default_factory=list)
     started_at: Optional[str] = None
     finished_at: Optional[str] = None

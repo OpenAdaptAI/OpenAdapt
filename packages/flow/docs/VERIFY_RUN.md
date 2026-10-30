@@ -213,8 +213,8 @@ explains nothing. On MariaDB:
     record_field: patient_id
     record_key: pid
     event_field: kind
-    write_events: [insert, update, delete]
-    insert_events: [insert]
+    write_events: [insert, update, delete, replace]
+    insert_events: [insert, replace]
     delete_events: [delete]
     table_field: tbl
     read:

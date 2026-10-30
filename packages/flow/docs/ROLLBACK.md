@@ -125,10 +125,9 @@ run is refused before it starts: nothing after a stop could be proven.
      log must show no other user's write to a run row while the
      compensations ran.
    - Anything else: `RECONCILIATION_REQUIRED`, whatever the run's own
-     evidence says. The one exception: when every row that changed is
-     positively another user's and none is the run's, the run keeps its own
-     outcome (halted before any effect, say), and a person still gets the
-     diff. `report.json` holds a summary
+     evidence says, even when the only change is another user's: a
+     colleague's write to a record can't rule out an unlogged write by the
+     run to the same record. `report.json` holds a summary
      with counts and column names only. `<run-dir>/rollback/diff.json`
      (owner-only) holds every added, removed and changed row, with the values
      before and after. When another user wrote to the run's rows while the

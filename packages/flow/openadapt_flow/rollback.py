@@ -579,9 +579,15 @@ def roll_back(
                 "table, a column the app profile leaves out, or a read of one "
                 "collection), so a person checks",
             )
-        hidden = hidden_writes([], attributor.window()) if attributor else None
-        if hidden:
-            return finish("not_rolled_back", _hidden_reason(hidden, attributor))
+        if attributor is not None and attributor.spec.kind == "audit_read":
+            # With an audit log, "nothing landed" also needs the log to show
+            # no write by the run's user the read can't see; an unreadable
+            # log can't show that.
+            hidden = hidden_writes([], attributor.window())
+            if hidden is None or hidden:
+                return finish(
+                    "not_rolled_back", _hidden_reason(hidden or [], attributor)
+                )
         record.final_sha256 = record.after_stop_sha256
         return finish(
             "nothing_landed",
@@ -640,15 +646,6 @@ def roll_back(
     foreign = not_own(landed)
     if foreign:
         record.conflicts = len(foreign)
-        stop_window = attributor.window() if attributor is not None else None
-        # Only other users' writes, none of the run's: the run's own outcome
-        # stands (a person still sees the diff).
-        record.colleague_only = (
-            attributor is not None
-            and len(foreign) == len(run_changes)
-            and all(attributor.attribute(c, stop_window) == "other" for c in foreign)
-            and hidden_writes([], stop_window) == []
-        )
         return finish(
             "not_rolled_back",
             f"{len(foreign)} row(s) changed since the run started aren't "

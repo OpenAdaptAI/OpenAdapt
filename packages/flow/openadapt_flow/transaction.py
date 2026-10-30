@@ -432,7 +432,7 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     if rollback is not None and not report.success:
         if rollback.status == "rolled_back":
             return TransactionOutcome.ROLLED_BACK
-        if rollback.status == "not_rolled_back" and not rollback.colleague_only:
+        if rollback.status == "not_rolled_back":
             # The rollback found something it couldn't put back or prove
             # absent (a write the audit log shows, say): a person reconciles,
             # whatever the run's own evidence says.

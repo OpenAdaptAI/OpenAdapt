@@ -494,6 +494,9 @@ class ClinicBackend(FakeBackend):
                 # past more rows than the run's own.
                 conn.execute("INSERT INTO patients (name) VALUES ('Temp Synthetic')")
                 conn.execute("DELETE FROM patients WHERE name = 'Temp Synthetic'")
+            if self.during_undo == "audit_down":
+                # The audit log goes unreadable while the compensation runs.
+                self.audit.append({"__down__": "1"})
             if self.during_undo == "wipe_seeded":
                 # The app's delete also takes the note that was there before.
                 conn.execute("DELETE FROM notes WHERE id = 1")
@@ -677,6 +680,7 @@ def _run_clinic(
         audit_read=lambda: (
             [dict(e) for e in audit]
             if audit_up["before" if not audit_up.get("armed") else "after"]
+            and not any("__down__" in e for e in audit)
             else None
         ),
         allow_delete=allow_delete,
@@ -1884,11 +1888,15 @@ def test_a_run_with_no_ledger_never_ends_nothing_landed_over_a_logged_write(tmp_
     assert classify_transaction_outcome(report).value == "RECONCILIATION_REQUIRED"
 
 
-def test_only_a_colleagues_write_leaves_the_runs_own_outcome(tmp_path):
-    # The run stopped before any write; a nurse added a note, logged as hers.
-    # A person sees the diff, but the run itself halted before any effect.
+def test_a_colleagues_write_never_masks_the_runs_own(tmp_path):
+    # Round 11: the run's unlogged note and a nurse's logged note on the same
+    # patient. The colleague's entry can't vouch for the run's row: a person
+    # reconciles, never "halted before any effect".
     before_rows = [{"id": 1, "patient_id": "4"}]
-    after_rows = before_rows + [{"id": 2, "patient_id": "4"}]
+    after_rows = before_rows + [
+        {"id": 2, "patient_id": "4"},
+        {"id": 3, "patient_id": "4"},
+    ]
     record = roll_back(
         _stopped([]),
         Workflow(name="w", steps=[_key_step("note", "note", "F3")]),
@@ -1903,11 +1911,34 @@ def test_only_a_colleagues_write_leaves_the_runs_own_outcome(tmp_path):
         exclusive=False,
     )
     assert record.status == "not_rolled_back"
-    assert record.colleague_only
     report = _stopped([])
     report.execution_outcome = "HALTED"
     report.rollback = record
-    assert classify_transaction_outcome(report).value == "HALTED_BEFORE_EFFECT"
+    assert classify_transaction_outcome(report).value == "RECONCILIATION_REQUIRED"
+
+
+def test_nothing_landed_needs_a_readable_audit_log(tmp_path):
+    # Round 11: with audit attribution, an unreadable log after the stop can't
+    # show the run wrote nowhere the read can't see.
+    rows = [{"id": 1, "patient_id": "4"}]
+    reads = [[]]
+    attributor = Attributor.from_spec(
+        _audit_spec(), {}, lambda: reads.pop(0) if reads else None
+    )
+    assert attributor is not None and attributor.start()
+    record = roll_back(
+        _stopped([]),
+        Workflow(name="w", steps=[_key_step("note", "note", "F3")]),
+        run_dir=tmp_path,
+        bundle_dir=tmp_path,
+        reader=DatabaseListReader(rows),
+        before=records_snapshot(rows),
+        runner=RecordingRunner(),
+        attributor=attributor,
+        exclusive=False,
+    )
+    assert record.status == "not_rolled_back"
+    assert "couldn't be read" in record.reason
 
 
 def test_an_allow_listed_own_rows_table_isnt_excused(tmp_path):
@@ -1926,3 +1957,14 @@ def test_an_allow_listed_own_rows_table_isnt_excused(tmp_path):
     )
     assert "user_settings" in _own_row_tables(compared)
     assert "user_settings" not in _own_row_tables(listed)
+
+
+def test_an_unreadable_audit_log_at_the_end_is_never_rolled_back(tmp_path):
+    # On an exclusive store the late check is skipped; the hidden-write check
+    # still needs the log, and an unreadable one proves nothing.
+    report = _run_clinic(
+        tmp_path, attribution="audit", exclusive=True, during_undo="audit_down"
+    )
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert "couldn't be read" in rollback.reason
