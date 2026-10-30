@@ -254,6 +254,8 @@ row added, changed or removed anywhere is collateral unless a declared
 effect, a declared side record, an attributed concurrent write or an
 allow-listed bookkeeping table explains it.
 
+This is the frame of an EspoCRM "create opportunity" contract on MariaDB:
+
 ```yaml
 frame:
   identity_field: id
@@ -261,29 +263,39 @@ frame:
     dialect: mysql              # or sqlite
     read:                       # read-only: SELECT, TRIGGER and SHOW VIEW
       sql_driver: pymysql
-      sql_connect_args: {host: 127.0.0.1, port: 3306, user: reader, database: crm}
-      sql_password_env: CRM_DB_RO_PASSWORD
-    allow_tables:               # the app's own bookkeeping, append-only
+      sql_connect_args: {host: 127.0.0.1, port: 3306, user: frame_ro, database: espocrm}
+      sql_password_env: ESPOCRM_FRAME_RO_PASSWORD
+    allow_tables:               # the app's own logs: rows may only be added
     - action_history_record
-    - {table: auth_token, mode: skip, reason: sessions the app refreshes}
+    - auth_log_record
     new_row_fields:             # columns a declared or side row may set
-      opportunity: [name, amount, stage]
-    ignore_columns:             # columns that change on every row
-      user: [last_access]
-    settle_s: 1
+      opportunity: [name, amount, amount_currency, stage, last_stage, probability,
+        close_date, account_id, assigned_user_id, created_at, created_by_id,
+        modified_at, modified_by_id, stream_updated_at, version_number]
+      note: [id, type, data, number, parent_type, super_parent_id,
+        super_parent_type, created_at, created_by_id, modified_at, modified_by_id]
+    ignore_columns:             # columns the app moves on its own
+      account: [stream_updated_at]
   side_records:                 # rows the save adds beside the new record
-  - surface: opportunity        # a table, when it isn't a surface
+  - surface: opportunity        # a table, when no surface has that name
     link_field: id
-    of_surface: ""              # the read set (a single read has no name)
-    of_field: row_id            # the read set's field that holds the table key
+    of_surface: ""              # the contract's single read
+    of_field: row_id            # the read's column that holds the table key
+  - surface: note               # EspoCRM's own "Create" stream note
+    link_field: parent_id
+    of_surface: ""
+    of_field: row_id
 ```
 
 A table row that is the declared record seen from the database (the
 `opportunity` row of a new opportunity) is declared as a side record, linked
 to the new record in the read set. Rows the app adds on its own beside it
 (a stream note for the new record) are side records too, each with its
-`count`. Every other new row, such as a planned call or a note on the
-account, is unexplained, and the frame is refuted.
+`count` (default 1; a second one refutes). Every other new row, such as a
+planned call or a note on the account, is unexplained, and the frame is
+refuted. The read account needs `TRIGGER` and `SHOW VIEW` besides `SELECT`:
+without them a trigger planted in the window can't be seen, and the frame is
+not checked.
 
 Every column type is read, and none is dropped. On MySQL and MariaDB each
 row is read as `JSON_OBJECT`. A type whose value it can't carry as exact text
