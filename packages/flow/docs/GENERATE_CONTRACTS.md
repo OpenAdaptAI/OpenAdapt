@@ -126,23 +126,43 @@ that as a stop: the write must not be sent unchecked.
 | A display column of the row a key column points to | `project_id` -> `projects.name` |
 | Two text columns joined by one space | `firstname` and `lastname` |
 | A row the write added that holds the main record's key | a journal note, a custom field value |
+| A row it added that links the record to the row holding the value | an email address, a call's attendee |
 
 A key column can be a declared foreign key, or a column whose value is
 another table's primary key. When several places fit in every demonstration,
 the generator keeps the shortest path, then a declared key, then a column
-named after its table, then the most exact rule. If places are still tied,
-that is a question.
+named after its table, then the most exact rule. Among places still tied, it
+keeps, in this order:
 
-An update parameter that no example gives, such as `new_zip`, is placed at the
-main table's column with the same name after a leading `new_` or `set_`, when
-there is one. The report lists such parameters under `placed_by_name`.
+1. the column named like the parameter (`stage`, not `last_stage`);
+2. the source column when another is its lower-cased or digits-only copy in
+   every row (`email_address.name`, not `email_address.lower`), or the column
+   the table defines first when they hold the same value in every row;
+3. the place another kind's demonstrations used for the same table.
+
+If places are still tied, that is a question. A value that is also in a row
+the write added beside the record (a call's lead is its parent and an
+attendee row) is checked in both places.
+
+A parameter that no example gives is placed where another kind's
+demonstrations found the parameter of the same name on the same main table
+(`placed_from_another_kind`), else at the main table's column of the same
+name after a leading `new_` or `set_` (`placed_by_name`). A parameter whose
+value names the field to change (`field: status`, `value: In Process`) gets a
+contract per field: the demonstrated ones, and every other text column of the
+main table.
 
 **Field sets.** A task's field set is its non-null values. For an update, the
 generator writes a contract for every non-empty set of the fields to change
 that it found, up to 64. For a create, it writes one per demonstrated set,
-plus the sets with an optional field (null in some example) left out. A
-field left out of a create must be empty in the new record. A list parameter
-gets a contract per length, from 1 to 10 items.
+then the sets with optional fields left out, up to 64 in all. A field is
+optional when some example leaves it null or its place can be empty (a
+nullable column, a row beside the record). A field left out of a create must
+be empty in the new record, unless the demonstrations that left it out
+filled that column anyway (a call's parent, which is its account when there
+is no lead). A row the app adds with an empty value when a field is left out
+(Redmine's custom field values, a journal with no note) is expected then
+too. A list parameter gets a contract per length, from 1 to 10 items.
 
 **Create, found, update.**
 
@@ -154,15 +174,27 @@ gets a contract per length, from 1 to 10 items.
   record with the task's values is already there: a "make sure it exists"
   task whose record exists, or an update that is already in place.
 - `update`: exactly one record matches the task's identity values and holds
-  the new values. Only the fields the task changes may change.
+  the new values. Only the fields the task changes may change. When the
+  demonstrations replaced the record's rows beside it (an old email address
+  link removed), the earlier rows may go, and afterwards the record has as
+  many such rows as the demonstrations left.
+
+**Columns of a new row no value explains.** A key, a time stamp from the
+write, the acting user, a link to a row the write added, the year, month,
+week or day of a date the task gives, a generated token (a UUID), or a copy
+of a column of the row a key points to (an invoice line's price from its
+product) is recognized as such. Free text the demonstrations left empty is
+not checked. Any other column must hold the value the demonstrations
+showed; one that differed between them is not checked and is listed in the
+bookkeeping question.
 
 **Rows the app adds on its own.** A row type the app added the same number of
 times in every demonstration (an agenda event, a stream note, a price-history
 row) is declared with that count and its constant columns. A table whose
 added rows vary between demonstrations, or whose name says log, history,
-audit or similar, is proposed as a log. Columns that changed with no task
-value (a modified time, a version counter) are proposed as bookkeeping.
-Both go in one question.
+audit or similar, is proposed as a log of that kind. Columns that changed
+with no task value (a modified time, a version counter) are proposed as
+bookkeeping. All of it goes in one question.
 
 **The frame.** On MySQL and MariaDB every contract uses the whole-database
 frame (`frame.database`): a row added, removed or changed in any table that
@@ -189,8 +221,11 @@ and an admin connection you give, or not written, with the reason.
   needs it only to see them.
 - `--create-views --admin-read admin.yaml --reader-account ...`: the
   verifier's SQL guard refuses some table names in a read (EspoCRM's `call`).
-  This creates a view `oa_read_<table>` and grants the read account `SELECT`
-  on it. Without the flag, the kind is refused with the reason.
+  This creates a view `oa_read_<table>` in a schema of its own,
+  `<database>_oa_read` (so the app's own restores and upgrades don't drop it),
+  and grants the read account `SELECT` on that schema. Without the flag, the
+  kind is refused with the reason. `report.json` lists what was applied under
+  `applied`.
 
 Every contract is loaded and read once against the live store before it is
 written out. A contract whose read fails is not written; `report.json` says
