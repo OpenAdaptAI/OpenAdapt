@@ -37,7 +37,7 @@
   },
   "B": {
    "agent": 60.0,
-   "contract": null,
+   "contract": 1.32,
    "read_path_qualification": 35.0,
    "basis": "The same agent setup as A; plus the person time measured while generating and reviewing B's three contracts (PERSON_LOG_3.md), filled in before the first item and frozen with the contracts; plus Medplum's one-time read-path qualification (fhir_medplum/readpath/MINUTES.md, about 35 minutes), charged in the primary figure because this run can't show it is already paid for any customer. The figure without it is reported."
   }

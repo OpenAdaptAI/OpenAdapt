@@ -1,0 +1,9 @@
+{
+ "patient": "Patient/e1699c51-b2a3-4191-89ba-cba50fc43117",
+ "code_system": "http://snomed.info/sct",
+ "code": "418689008",
+ "criticality": "low",
+ "clinical_status": "active",
+ "verification_status": "confirmed",
+ "display": "Allergy to grass pollen"
+}

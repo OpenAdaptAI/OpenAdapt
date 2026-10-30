@@ -1,0 +1,39 @@
+[
+ {
+  "resourceType": "AllergyIntolerance",
+  "patient": {
+   "reference": "Patient/3981d702-367e-4297-b18b-c4b38ce2b01d"
+  },
+  "code": {
+   "coding": [
+    {
+     "system": "http://snomed.info/sct",
+     "code": "91936005",
+     "display": "Allergy to penicillin"
+    }
+   ]
+  },
+  "criticality": "high",
+  "clinicalStatus": {
+   "coding": [
+    {
+     "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+     "code": "active"
+    }
+   ]
+  },
+  "verificationStatus": {
+   "coding": [
+    {
+     "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+     "code": "confirmed"
+    }
+   ]
+  },
+  "id": "2143f4db-d0b3-418e-951b-e23001885d0c",
+  "meta": {
+   "versionId": "48816c76-1bb0-4944-be07-badab8412e79",
+   "lastUpdated": "2026-10-30T02:11:31.490Z"
+  }
+ }
+]

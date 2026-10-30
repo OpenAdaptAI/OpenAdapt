@@ -134,6 +134,9 @@ class Run3(Bench):
         if len(found) != 1:
             return f"{len(found)} patients match the task's name and date of birth"
         params["patient"] = found[0]
+        if kind == "allergy":
+            # The generated contract checks the display the task names.
+            params["display"] = v["display"]
         if kind == "appointment":
             d = self.suite["practitioners"][v["practitioner"]]
             found = self._search(
