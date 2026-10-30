@@ -312,6 +312,9 @@ class TableDiff:
     #: Why rows couldn't be compared (created, dropped, redefined, an
     #: append-only table whose existing rows moved, ...).
     unread: Optional[str] = None
+    #: ``(row key, values after)``: rows that moved and the app profile
+    #: excused as the app's own bookkeeping (not part of the diff).
+    excused: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
@@ -445,6 +448,10 @@ def diff_states(
                 # applies them. A row with no plain values is never excused.
                 if excuse is None or a.cell_columns != b.cell_columns:
                     return True
+                if set(a.cell_columns) != set(a.columns):
+                    # Over max_rows, only some columns keep cell MACs: what
+                    # changed can't be told, so nothing is excused.
+                    return True
                 old, new = a.rows.get(k), b.rows.get(k)
                 was = None if old is None else unpack(a.cell_columns, old[1])
                 now = None if new is None else b.values.get(k)
@@ -456,7 +463,10 @@ def diff_states(
                     fields = sorted(
                         c for c in a.cell_columns if was[c] != cells[c]
                     ) or ["(columns not compared)"]
-                return not excuse(name, was, now, fields)
+                if excuse(name, was, now, fields):
+                    diff.excused.append((k, dict(now or {})))
+                    return False
+                return True
 
             diff.added = [
                 (k, dict(b.values.get(k, {})))
@@ -751,37 +761,69 @@ class Attributor:
     def unaccounted_writes(
         self,
         window: Optional[list[dict[str, Any]]],
-        compared: set[str],
+        diffs: Sequence["StateDiff"],
         bookkeeping_inserts: set[str] = frozenset(),  # type: ignore[assignment]
+        bookkeeping_columns: set[str] = frozenset(),  # type: ignore[assignment]
     ) -> Optional[list[dict[str, Any]]]:
-        """The run's own logged writes the reads can't judge, or None when
-        there is no audit window to tell.
+        """The run's own logged writes the reads don't account for, or None
+        when there is no audit window to tell.
 
-        A write to a table the read compares row by row (``compared``) can't
-        hide: it shows in the diff, or it touched only what the reviewed app
-        profile calls bookkeeping (a sign-in counter, a uuid backfill, the
-        acting user's own UI state). Every other write the log names (a table
-        kept append-only, allow-listed, skipped, or not read at all) is
-        unaccounted for, except, as in the frame, an insert naming no record
-        (none, or patient 0) in a table the profile calls bookkeeping
-        (``no_record_insert_tables``)."""
+        An entry is accounted for by a row of ``diffs`` (the stop's, and the
+        final read's) in exactly the table it
+        names: a row that moved, or one the app profile excused as bookkeeping
+        (a sign-in counter, a uuid backfill), with the entry's record, or any
+        such excused row when the entry names no record (none, or patient 0).
+        As in the frame, an insert naming no record in a table the profile
+        calls bookkeeping (``no_record_insert_tables``) is the app's own, and
+        so is any write to a bookkeeping table the profile compares only in
+        part (``bookkeeping_columns``: a sequence counter, a scheduler's next
+        run).
+        Everything else (a write to a table kept append-only, a statement
+        that changed nothing, a write that landed after the read) is
+        unaccounted for."""
+        from openadapt_flow.app_profiles import table_name
         from openadapt_flow.runtime.effects.frame import get_path
 
         if self.spec.kind != "audit_read" or window is None:
             return None
+        tables: dict[str, str] = {}
+        refs: dict[str, set[Optional[str]]] = {}
+        excused_tables: set[str] = set()
+        for diff in diffs:
+            for c in changes(diff):
+                refs.setdefault(c[0], set()).add(self._ref(*c))
+            for t in diff.tables:
+                tables[t.table.lower()] = t.table
+                for k, values in t.excused:
+                    refs.setdefault(t.table, set()).add(
+                        self._ref(t.table, k, None, values)
+                    )
+                    excused_tables.add(t.table)
+        inserts = set(self.spec.insert_events)
         out = []
         for e in window:
             if str(get_path(e, self.spec.actor_field)) not in self.self_actors:
                 continue
             table = get_path(e, self.spec.table_field or "")
             record = get_path(e, self.spec.record_field or "")
-            if table not in (None, "") and any(_same_table(table, t) for t in compared):
-                continue
-            if (
-                record in (None, "", "0", 0)
-                and self._event(e) in set(self.spec.insert_events)
-                and table not in (None, "")
-                and any(_same_table(table, t) for t in bookkeeping_inserts)
+            no_record = record in (None, "", "0", 0)
+            named = None if table in (None, "") else str(table)
+            if named is not None and "." not in named:
+                if table_name(named) in bookkeeping_columns:
+                    # Only columns the profile leaves out move there.
+                    continue
+                if (
+                    no_record
+                    and self._event(e) in inserts
+                    and table_name(named) in bookkeeping_inserts
+                ):
+                    continue
+            # Exactly the table it names: an unqualified name is the read's
+            # own schema, never a same-named table in another one.
+            hit = tables.get(named.lower()) if named is not None else None
+            if hit is not None and (
+                (not no_record and str(record) in refs.get(hit, set()))
+                or (no_record and hit in excused_tables)
             ):
                 continue
             out.append(e)

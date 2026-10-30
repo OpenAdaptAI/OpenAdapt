@@ -61,13 +61,17 @@ run is refused before it starts: nothing after a stop could be proven.
    log) is then still caught by its log entry; a write the app doesn't log
    there, or logs under an event `write_events` doesn't list, isn't. With
    the audit log, the same holds for the whole run, on a shared store or an
-   exclusive one: a write by the run's user the log shows in a table the
-   read doesn't compare row by row (kept append-only, allow-listed, skipped
-   or not read at all), from any step, never ends "nothing landed" or
-   `ROLLED_BACK`. A write to a compared table can't hide: the diff shows it,
-   or it touched only what the reviewed app profile calls bookkeeping. As
-   in the verifier's frame, an insert naming no record (or patient 0) in a
-   table the profile calls bookkeeping is the app's own. Only a
+   exclusive one: every write the run's user logged, from any step, must be
+   accounted for by a row the reads show in exactly the table it names (a
+   row that moved, or one the reviewed app profile excused as bookkeeping,
+   such as a sign-in uuid backfill), or it never ends "nothing landed" or
+   `ROLLED_BACK`. So a write to a table kept append-only, a statement that
+   changed nothing, or a write that landed after the read goes to a person.
+   As in the verifier's frame, an insert naming no record (or patient 0) in
+   a table the profile calls bookkeeping is the app's own, and so is a write
+   to a bookkeeping table the profile compares only in part (a sequence
+   counter). On a table over `max_rows`, which keeps per-column MACs only
+   for a few columns, the profile excuses nothing. Only a
    whole-database read proves the run's effects absent; a collection read
    never overrides the run's own uncertainty.
 2. **Compensate, latest change first.** For each change in the run's

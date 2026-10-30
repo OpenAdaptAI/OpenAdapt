@@ -327,10 +327,21 @@ def _hidden_reason(
         )
     return (
         f"the audit log shows {len(hidden)} write(s) by the run's user that no "
-        "changed row accounts for (in " + ", ".join(tables) + "): a table the "
-        "read keeps append-only, a row the app profile excuses, or a statement "
-        "that changed nothing; a person checks"
+        "changed or excused row accounts for (in " + ", ".join(tables) + "): a "
+        "table the read keeps append-only, a statement that changed nothing, or "
+        "a write that landed after the read; a person checks"
     )
+
+
+def _bookkeeping_columns(reader: Any) -> set[str]:
+    """Tables whose columns the reader's app profile leaves out of the
+    comparison (unconditional column rules)."""
+    from openadapt_flow.app_profiles import table_name
+
+    profile = _profile_of(reader)
+    if profile is None:
+        return set()
+    return {table_name(t) for t in profile.ignore_columns()}
 
 
 def _profile_of(reader: Any) -> Any:
@@ -529,25 +540,22 @@ def roll_back(
 
     def reads_judge() -> bool:
         """Can the reads judge an effect-less step? Only a whole-database read
-        with an audit window in which every write the run's user logged is
-        one the reads can judge."""
+        with an audit window in which a changed or excused row accounts for
+        every write the run's user logged."""
         if scope != "database" or attributor is None:
             return False
-        unaccounted = hidden_writes(attributor.window())
+        unaccounted = hidden_writes([landed], attributor.window())
         return unaccounted is not None and not unaccounted
 
-    #: Tables the read compares row by row: a write there shows in the diff.
-    compared = {name for name, t in before.tables.items() if t.mode == "compare"}
-
     def hidden_writes(
-        window: Optional[list[dict[str, Any]]],
+        diffs: list[StateDiff], window: Optional[list[dict[str, Any]]]
     ) -> Optional[list[dict[str, Any]]]:
-        """The run's logged writes the reads can't judge; None without an
-        audit log."""
+        """The run's logged writes no row of ``diffs`` accounts for; None
+        without an audit log."""
         if attributor is None:
             return None
         return attributor.unaccounted_writes(
-            window, compared, _bookkeeping_inserts(reader)
+            window, diffs, _bookkeeping_inserts(reader), _bookkeeping_columns(reader)
         )
 
     record.after_stop_diff = landed.summary()
@@ -572,7 +580,7 @@ def roll_back(
             # With an audit log, "nothing landed" also needs the log to show
             # no write by the run's user the read can't see; an unreadable
             # log can't show that.
-            hidden = hidden_writes(attributor.window())
+            hidden = hidden_writes([landed], attributor.window())
             if hidden is None or hidden:
                 return finish(
                     "not_rolled_back",
@@ -892,7 +900,7 @@ def roll_back(
         # The run's own logged writes the reads don't show (a table kept
         # append-only, a step outside the ledger): never "rolled back", on a
         # shared store or an exclusive one.
-        hidden = hidden_writes(attributor.window())
+        hidden = hidden_writes([landed, remaining], attributor.window())
         if hidden is None or hidden:
             return finish(
                 "not_rolled_back",
