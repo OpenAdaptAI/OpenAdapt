@@ -1307,7 +1307,27 @@ def dry_read(path: Path, params: Mapping[str, Any], mysql: bool) -> Optional[str
     if mysql:
         snap = detail.get(FRAME_DB_DETAIL)
         if not isinstance(snap, dict):
-            return "dry read: the whole-database frame could not be read"
+            from openadapt_flow.runtime.effects.db_snapshot import mac_key, take_snapshot
+            from openadapt_flow.verify_run import _audit_sql, _db_connect, _ref_columns
+
+            database = contract.config.frame.database
+            try:
+                take_snapshot(
+                    _db_connect(database.read),
+                    database.dialect,
+                    key=mac_key(b"0" * 32),
+                    modes=database.modes(),
+                    max_rows=database.max_rows,
+                    extra_queries=_audit_sql(contract.config),
+                    ignore=database.all_ignore_columns(),
+                    ref_columns=_ref_columns(contract.config),
+                    schemas=database.schemas,
+                    links=database.recheck_after_s is not None,
+                )
+                why = "no error on a second read"
+            except Exception as exc:  # noqa: BLE001 - reported
+                why = f"{type(exc).__name__}: {exc}"
+            return f"dry read: the whole-database frame could not be read ({why})"
         if snap.get("code_visible") is False:
             return (
                 "dry read: the read account can't see triggers (MySQL needs the "
@@ -1375,13 +1395,7 @@ def guard_problem(sql: str) -> Optional[str]:
     return None
 
 
-def create_views(
-    admin_read: Mapping[str, Any], schema: Schema, tables: Sequence[str], reader: str
-) -> dict[str, str]:
-    """Create one read-only view per table the SQL guard refuses by name,
-    in the same database, and grant the read account SELECT on it. Only run
-    with ``--create-views``; the connection is the admin one given."""
-
+def _admin_connect(admin_read: Mapping[str, Any]) -> Any:
     import importlib
 
     module = importlib.import_module(str(admin_read["sql_driver"]))
@@ -1391,7 +1405,51 @@ def create_views(
         if env not in os.environ:
             raise GenerateError(f"environment variable {env} (the admin password) is not set")
         args["password"] = os.environ[str(env)]
-    conn = module.connect(**args)
+    return module.connect(**args)
+
+
+def grant_trigger(admin_read: Mapping[str, Any], schema: Schema, reader: str) -> str:
+    """MySQL shows a table's triggers only to an account with the TRIGGER
+    privilege, and the whole-database frame must see them (a trigger planted
+    during a write could otherwise pass). Run only with ``--grant-trigger``."""
+
+    conn = _admin_connect(admin_read)
+    try:
+        sql = f"GRANT TRIGGER ON {store.quote('mysql', schema.database)}.* TO {reader}"
+        conn.cursor().execute(sql)
+        conn.commit()
+    finally:
+        conn.close()
+    return sql
+
+
+def _sees_triggers(connect: Any) -> bool:
+    """Does the account hold TRIGGER (or ALL) on the database? A database
+    with no triggers shows none either way, so the grant is what's checked."""
+
+    conn = connect()
+    try:
+        cur = conn.cursor()
+        cur.execute("SHOW GRANTS")
+        grants = [str(g[0]).upper() for g in cur.fetchall()]
+    finally:
+        conn.rollback()
+        conn.close()
+    for g in grants:
+        privs = g.split(" ON ")[0]
+        if "TRIGGER" in privs or "ALL PRIVILEGES" in privs:
+            return True
+    return False
+
+
+def create_views(
+    admin_read: Mapping[str, Any], schema: Schema, tables: Sequence[str], reader: str
+) -> dict[str, str]:
+    """Create one read-only view per table the SQL guard refuses by name,
+    in the same database, and grant the read account SELECT on it. Only run
+    with ``--create-views``; the connection is the admin one given."""
+
+    conn = _admin_connect(admin_read)
     made = {}
     try:
         cur = conn.cursor()
@@ -1427,6 +1485,7 @@ def propose(
     create_views_flag: bool = False,
     reader_account: str = "",
     validate: bool = True,
+    grant_trigger_flag: bool = False,
 ) -> dict[str, Any]:
     """Analyze, ask, emit and validate. Returns the report (also written)."""
 
@@ -1439,6 +1498,20 @@ def propose(
             "the read account is not read-only, so no contract is proposed: "
             + "; ".join(problems)
         )
+    applied: list[str] = []
+    if dialect == "mysql" and not _sees_triggers(connect):
+        if grant_trigger_flag:
+            if not admin_read or not reader_account:
+                raise GenerateError("--grant-trigger needs --admin-read and --reader-account")
+            applied.append(grant_trigger(admin_read, schema, reader_account))
+        if not _sees_triggers(connect):
+            raise GenerateError(
+                "the read account can't see triggers, so the whole-database frame "
+                "would never be checked (every write would be UNCERTAIN). MySQL shows "
+                "triggers only to an account with the TRIGGER privilege. Rerun with "
+                "--grant-trigger --admin-read <admin.yaml> --reader-account <account>, "
+                "or have the DBA run: GRANT TRIGGER ON <database>.* TO <account>"
+            )
     demos = load_demos(demo_dir)
     env = environment_id or f"generated-{schema.database}"
     env = re.sub(r"[^A-Za-z0-9._:-]", "-", env)
@@ -1447,6 +1520,41 @@ def propose(
     plans = [analyze(schema, k, demos, actor_params) for k in kinds]
     questions: list[Question] = []
 
+    location_questions: list[Question] = []
+    # Q: per kind, a value the generator couldn't place.
+    for p in plans:
+        if not p.unresolved:
+            continue
+        chosen = dict(_answer(answers, f"locations.{p.kind}") or {})
+        open_ = {}
+        for name, tied in p.unresolved.items():
+            pick = chosen.get(name)
+            if isinstance(pick, int) and 0 <= pick < len(tied):
+                p.locations[name] = tied[pick]
+                if p.mode == "update" and name not in p.identity + p.changes:
+                    p.changes.append(name)
+            else:
+                open_[name] = tied
+        p.unresolved = open_
+        if open_:
+            parts = []
+            for name, tied in open_.items():
+                if tied:
+                    opts = "; ".join(f"[{i}] {loc.describe(p.anchor)}" for i, loc in enumerate(tied))
+                    parts.append(f"`{name}` is in several places: {opts}")
+                else:
+                    parts.append(
+                        f"`{name}` was not found in any row the demonstrations wrote; "
+                        "tasks that give it are stopped"
+                    )
+            location_questions.append(
+                Question(
+                    f"locations.{p.kind}",
+                    f"Kind `{p.kind}`: " + " ".join(parts)
+                    + f" Answer `locations.{p.kind}: {{<parameter>: <number>}}` to pick one.",
+                    None,
+                )
+            )
     # Q: bookkeeping, for the whole app at once.
     logs = set().union(*(p.logs for p in plans)) if plans else set()
     book: dict[str, set[str]] = {}
@@ -1512,40 +1620,7 @@ def propose(
                 DEFAULT_RECHECK_S,
             )
         )
-    # Q: per kind, a value the generator couldn't place.
-    for p in plans:
-        if not p.unresolved:
-            continue
-        chosen = dict(_answer(answers, f"locations.{p.kind}") or {})
-        open_ = {}
-        for name, tied in p.unresolved.items():
-            pick = chosen.get(name)
-            if isinstance(pick, int) and 0 <= pick < len(tied):
-                p.locations[name] = tied[pick]
-                if p.mode == "update" and name not in p.identity + p.changes:
-                    p.changes.append(name)
-            else:
-                open_[name] = tied
-        p.unresolved = open_
-        if open_:
-            parts = []
-            for name, tied in open_.items():
-                if tied:
-                    opts = "; ".join(f"[{i}] {loc.describe(p.anchor)}" for i, loc in enumerate(tied))
-                    parts.append(f"`{name}` is in several places: {opts}")
-                else:
-                    parts.append(
-                        f"`{name}` was not found in any row the demonstrations wrote; "
-                        "tasks that give it are stopped"
-                    )
-            questions.append(
-                Question(
-                    f"locations.{p.kind}",
-                    f"Kind `{p.kind}`: " + " ".join(parts)
-                    + f" Answer `locations.{p.kind}: {{<parameter>: <number>}}` to pick one.",
-                    None,
-                )
-            )
+    questions.extend(location_questions)
     questions_open = [
         q for q in questions if _answer(answers, q.key) is None
     ]
@@ -1593,6 +1668,7 @@ def propose(
         "kinds": {},
     }
     report: dict[str, Any] = {
+        "applied": applied,
         "dialect": dialect,
         "tables": len(schema.tables),
         "questions": [
@@ -1832,6 +1908,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     s.add_argument("--create-views", action="store_true", help="create a view for a table the SQL guard refuses by name (needs --admin-read)")
     s.add_argument("--admin-read", type=Path, help="admin.yaml: a connection allowed to CREATE VIEW and GRANT")
     s.add_argument("--reader-account", default="", help="the read account to GRANT SELECT on created views (MySQL: 'user'@'%%')")
+    s.add_argument("--grant-trigger", action="store_true", help="MySQL: GRANT TRIGGER to the read account through --admin-read, so the frame can see triggers")
     s.add_argument("--no-validate", action="store_true", help="skip the dry read (tests only)")
     args = ap.parse_args(argv)
     try:
@@ -1897,6 +1974,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             create_views_flag=args.create_views,
             reader_account=args.reader_account,
             validate=not args.no_validate,
+            grant_trigger_flag=args.grant_trigger,
         )
         print(f"questions: {len(report['questions'])} ({len(report['questions_open'])} open) -> {args.out / 'QUESTIONS.md'}")
         for kind, rep in report["kinds"].items():
