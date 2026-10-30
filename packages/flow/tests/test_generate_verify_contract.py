@@ -337,6 +337,10 @@ def test_questions_and_contracts(generated: dict[str, Any]) -> None:
     # notes), and the due date that create_issue's demonstrations placed on
     # the same table: every non-empty subset gets a contract.
     assert kinds["update_issue"]["placed_from_another_kind"] == ["due_date"]
+    # The journal names the issue and the user who saved it: the update's
+    # contracts read it as the target's versions (a lost update shows there).
+    assert kinds["update_issue"]["versions"]["kind"] == "audit"
+    assert kinds["update_issue"]["versions"]["table"] == "journals"
     assert kinds["update_issue"]["emitted"] == 31, json.dumps(
         kinds["update_issue"], indent=1
     )

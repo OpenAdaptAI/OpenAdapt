@@ -17,7 +17,7 @@
       "main_table": "issues",
       "locations": {
         "assignee": "issues.assigned_to_id -> users.firstname || ' ' || lastname (exact)",
-        "customer_ref": "custom_values (whose customized_id is the issues key).value (exact)",
+        "customer_ref": "custom_values (whose customized_id is the issues key).value (phone)",
         "description": "issues.description (exact)",
         "due_date": "issues.due_date (date)",
         "environment": "custom_values (whose customized_id is the issues key).value (exact)",
@@ -35,6 +35,7 @@
         "customer_ref": "custom_values",
         "environment": "custom_values"
       },
+      "dispatch_children": {},
       "lists": {},
       "side_rows": [],
       "logs": [],
@@ -67,6 +68,7 @@
       "children": {
         "notes": "journals"
       },
+      "dispatch_children": {},
       "lists": {},
       "side_rows": [],
       "logs": [
@@ -92,6 +94,7 @@
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
+      "dispatch_children": {},
       "lists": {},
       "side_rows": [],
       "logs": [],
@@ -114,6 +117,7 @@
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
+      "dispatch_children": {},
       "lists": {},
       "side_rows": [
         {

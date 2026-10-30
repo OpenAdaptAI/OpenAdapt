@@ -249,6 +249,11 @@ class KindPlan:
     by_name: list[str] = field(default_factory=list)
     #: Parameters placed where another kind's demonstrations found them.
     shared: list[str] = field(default_factory=list)
+    #: Where the target's versions are read (``frame.versions``): a version
+    #: column that steps by one per save, or an audit table naming the
+    #: record and the user who saved it. None when the demonstrations show
+    #: neither.
+    versions: Optional[dict[str, Any]] = None
     #: More places a value is in: rows the write added beside the record
     #: (a call's lead is its parent and also an attendee row).
     extra: dict[str, list[Location]] = field(default_factory=dict)
@@ -894,6 +899,140 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
         extra = plan.anchor_changed - explained
         if extra:
             plan.bookkeeping.setdefault(plan.anchor, set()).update(extra)
+        plan.versions = _audit_source(schema, plan, actor_values) or _version_column(
+            schema, plan
+        )
+
+
+_WHOLE_NUMBER = re.compile(r"^-?[0-9]+$")
+
+
+def _version_column(schema: Schema, plan: KindPlan) -> Optional[dict[str, Any]]:
+    """A whole-number column of the main record that went up by exactly one
+    in every update demonstration (Redmine's ``lock_version``)."""
+
+    t = schema.tables[plan.anchor]
+    if len(t.primary_key) != 1:
+        return None
+    for col in t.columns:
+        if col.kind != "number" or col.name in t.primary_key:
+            continue
+        ok = bool(plan.anchors)
+        for a in plan.anchors:
+            b0 = (a.before or {}).get(col.name)
+            b1 = (a.after or {}).get(col.name)
+            if not (
+                b0 is not None
+                and b1 is not None
+                and _WHOLE_NUMBER.match(b0)
+                and _WHOLE_NUMBER.match(b1)
+                and int(b1) == int(b0) + 1
+            ):
+                ok = False
+                break
+        if ok:
+            return {"kind": "step", "table": plan.anchor, "column": col.name}
+    return None
+
+
+def _audit_source(
+    schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]
+) -> Optional[dict[str, Any]]:
+    """A table that gained, in every update demonstration, a row naming the
+    main record (a column holding its key) and the acting user (a column
+    holding the actor's id): the app's own audit trail of saves (EspoCRM's
+    ``action_history_record``, Dolibarr's agenda events)."""
+
+    t = schema.tables[plan.anchor]
+    if len(t.primary_key) != 1 or not actor_values:
+        return None
+    actors = set(actor_values.values())
+    found: Optional[dict[str, Any]] = None
+    for name in sorted(schema.tables):
+        table = schema.tables[name]
+        if name == plan.anchor or len(table.primary_key) != 1:
+            continue
+        pairs: Optional[set[tuple[str, str, str]]] = None
+        rows: list[dict[str, Optional[str]]] = []
+        for d, a in zip(plan.demos, plan.anchors):
+            key = (a.after or {}).get(t.primary_key[0])
+            here: set[tuple[str, str, str]] = set()
+            for ch in d.diff.of(name, "added"):
+                r = ch.after or {}
+                for lc, lv in r.items():
+                    if lv != key:
+                        continue
+                    for ac, av in r.items():
+                        if ac != lc and av in actors:
+                            p = next(k for k, v in actor_values.items() if v == av)
+                            here.add((lc, ac, p))
+                            rows.append(r)
+            pairs = here if pairs is None else pairs & here
+        if not pairs or len(pairs) != 1:
+            continue
+        lc, ac, param = next(iter(pairs))
+        # Rows of the same type: their constant text and whole-number columns.
+        where = {}
+        for col in table.columns:
+            if col.name in (lc, ac) or col.name in table.primary_key:
+                continue
+            values = {r.get(col.name) for r in rows}
+            if len(values) == 1:
+                v = next(iter(values))
+                if v is not None and (col.kind == "text" or _WHOLE_NUMBER.match(v)):
+                    if "\\" not in v and "'" not in v and "%" not in v:
+                        where[col.name] = v
+        found = {
+            "kind": "audit",
+            "table": name,
+            "record_column": lc,
+            "author_column": ac,
+            "actor_param": param,
+            "where": where,
+        }
+        break
+    return found
+
+
+def _versions_frame(
+    b: "SqlBuilder", plan: KindPlan, settings: "Settings"
+) -> Optional[dict[str, Any]]:
+    v = plan.versions
+    if v is None:
+        return None
+    pk = b.schema.tables[plan.anchor].primary_key[0]
+    if v["kind"] == "step":
+        sql = (
+            f"SELECT {b.text('t', plan.anchor, pk)} AS {b.q('id')}, "
+            f"{b.text('t', plan.anchor, v['column'])} AS {b.q('ver')} "
+            f"FROM {b.tref(plan.anchor)} t"
+        )
+        return {
+            "read": {"kind": "sql", **settings.read, "sql_query": sql},
+            "record_field": "id",
+            "target_field": "id",
+            "version_field": "ver",
+        }
+    table = v["table"]
+    vpk = b.schema.tables[table].primary_key[0]
+    conds = " AND ".join(
+        f"{b.text('t', table, c)} = {b.literal(val)}"
+        for c, val in sorted(v["where"].items())
+    )
+    sql = (
+        f"SELECT {b.text('t', table, v['record_column'])} AS {b.q('id')}, "
+        f"{b.text('t', table, vpk)} AS {b.q('ver')}, "
+        f"{b.text('t', table, v['author_column'])} AS {b.q('author')} "
+        f"FROM {b.tref(table)} t" + (f" WHERE {conds}" if conds else "")
+    )
+    return {
+        "read": {"kind": "sql", **settings.read, "sql_query": sql},
+        "record_field": "id",
+        "target_field": "id",
+        "version_field": "ver",
+        "author_field": "author",
+        "self": [{"param": v["actor_param"]}],
+    }
 
 
 def _mark_replaced(
@@ -1476,6 +1615,12 @@ def build_contract(
         frame["target_fields"] = []
     else:
         frame["target_fields"] = sorted(target_fields)
+    if plan.mode == "update":
+        # Another user's save to the target inside the window (a lost
+        # update) shows only in the target's versions.
+        versions = _versions_frame(b, plan, settings)
+        if versions is not None:
+            frame["versions"] = versions
     if schema.dialect == "mysql":
         allow: list[dict[str, Any]] = []
         for t in sorted(logs):
@@ -2418,6 +2563,7 @@ def propose(
                 k: v.describe(p.anchor) for k, v in sorted(p.locations.items())
             },
             "placed_by_name": sorted(p.by_name),
+            "versions": p.versions,
             "placed_from_another_kind": sorted(p.shared),
             "demonstrations": len(p.demos),
             "children": {k: g.table for k, g in p.children.items()},
