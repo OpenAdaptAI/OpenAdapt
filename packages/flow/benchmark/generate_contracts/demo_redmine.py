@@ -14,7 +14,6 @@ from pathlib import Path
 
 import psycopg2
 import requests
-
 from demo_lib import demo, fixture, propose, setup_view, write_inputs
 
 APP = "redmine"
@@ -27,7 +26,12 @@ def main(work: Path) -> None:
     ro = fx.read_access()
     read = {
         "sql_driver": "psycopg2",
-        "sql_connect_args": {"host": ro["host"], "port": ro["port"], "user": ro["user"], "dbname": ro["database"]},
+        "sql_connect_args": {
+            "host": ro["host"],
+            "port": ro["port"],
+            "user": ro["user"],
+            "dbname": ro["database"],
+        },
         "sql_password_env": "REDMINE_RO_DB_PASSWORD",
     }
     write_inputs(work, APP, read)
@@ -46,10 +50,14 @@ def main(work: Path) -> None:
         return int(one("SELECT id FROM projects WHERE name=%s", (name,)))
 
     def user(name: str) -> int:
-        return int(one("SELECT id FROM users WHERE firstname || ' ' || lastname = %s", (name,)))
+        return int(
+            one("SELECT id FROM users WHERE firstname || ' ' || lastname = %s", (name,))
+        )
 
     def enum(kind: str, name: str) -> int:
-        return int(one("SELECT id FROM enumerations WHERE type=%s AND name=%s", (kind, name)))
+        return int(
+            one("SELECT id FROM enumerations WHERE type=%s AND name=%s", (kind, name))
+        )
 
     def issue(proj: str, subject: str) -> int:
         return int(one("SELECT i.id FROM issues i JOIN projects p ON p.id=i.project_id "
@@ -59,13 +67,21 @@ def main(work: Path) -> None:
         return int(one("SELECT id FROM custom_fields WHERE name=%s", (name,)))
 
     def api(method: str, path: str, payload: object) -> None:
-        r = requests.request(method, bot["base_url"] + path, headers=bot["headers"], json=payload, timeout=60)
+        r = requests.request(
+            method,
+            bot["base_url"] + path,
+            headers=bot["headers"],
+            json=payload,
+            timeout=60,
+        )
         r.raise_for_status()
 
     def create_payload(v: dict) -> dict:
         body: dict = {
             "project_id": project(v["project"]),
-            "tracker_id": int(one("SELECT id FROM trackers WHERE name=%s", (v["tracker"],))),
+            "tracker_id": int(
+                one("SELECT id FROM trackers WHERE name=%s", (v["tracker"],))
+            ),
             "subject": v["subject"],
             "priority_id": enum("IssuePriority", v["priority"]),
         }
@@ -77,7 +93,10 @@ def main(work: Path) -> None:
             body["description"] = v["description"]
         cf = [
             {"id": field(n), "value": v[k]}
-            for k, n in (("customer_ref", "Customer Ref"), ("environment", "Environment"))
+            for k, n in (
+                ("customer_ref", "Customer Ref"),
+                ("environment", "Environment"),
+            )
             if v.get(k) is not None
         ]
         if cf:
@@ -93,11 +112,21 @@ def main(work: Path) -> None:
                         "SELECT COUNT(*) FROM issues i JOIN projects p ON p.id=i.project_id "
                         "WHERE p.name=%s AND i.subject=%s", (v["project"], v["subject"]))):  # fmt: skip
                     continue
-                demo(work, kind, v, lambda p=create_payload(v): api("POST", "/issues.json", p))
+                demo(
+                    work,
+                    kind,
+                    v,
+                    lambda p=create_payload(v): api("POST", "/issues.json", p),
+                )
             elif kind == "update_issue":
                 body: dict = {}
                 if v.get("status"):
-                    body["status_id"] = int(one("SELECT id FROM issue_statuses WHERE name=%s", (v["status"],)))
+                    body["status_id"] = int(
+                        one(
+                            "SELECT id FROM issue_statuses WHERE name=%s",
+                            (v["status"],),
+                        )
+                    )
                 if v.get("assignee"):
                     body["assigned_to_id"] = user(v["assignee"])
                 if v.get("priority"):
@@ -106,15 +135,26 @@ def main(work: Path) -> None:
                     if v.get(key) is not None:
                         body[key] = v[key]
                 iid = issue(v["project"], v["subject"])
-                demo(work, kind, v, lambda i=iid, b=body: api("PUT", f"/issues/{i}.json", {"issue": b}))
+                demo(
+                    work,
+                    kind,
+                    v,
+                    lambda i=iid, b=body: api("PUT", f"/issues/{i}.json", {"issue": b}),
+                )
             elif kind == "log_time":
                 body = {"issue_id": issue(v["project"], v["issue_subject"]), "hours": v["hours"],
                         "spent_on": v["spent_on"], "activity_id": enum("TimeEntryActivity", v["activity"]),
                         "comments": v["comments"]}  # fmt: skip
-                demo(work, kind, v, lambda b=body: api("POST", "/time_entries.json", {"time_entry": b}))
+                demo(
+                    work,
+                    kind,
+                    v,
+                    lambda b=body: api("POST", "/time_entries.json", {"time_entry": b}),
+                )
     bot_id = one("SELECT id FROM users WHERE login=%s", (bot["login"],))
     report = propose(work, {"bot_user_id": str(bot_id)})
     print("questions:", len(report["questions"]))
+    db.close()
     fx.reset()
 
 
