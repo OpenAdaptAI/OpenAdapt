@@ -311,12 +311,40 @@ def _judged_by_reads(
     return approved_undo(workflow, entry.step_id) is None
 
 
+def _hidden_reason(hidden: list[dict[str, Any]], attributor: Any) -> str:
+    """Why a write the audit log shows and the reads don't goes to a person."""
+    from openadapt_flow.runtime.effects.frame import get_path
+
+    tables = sorted(
+        {str(get_path(e, attributor.spec.table_field or "") or "?") for e in hidden}
+    )
+    return (
+        f"the audit log shows {len(hidden)} write(s) by the run's user that the "
+        "reads don't account for (in " + ", ".join(tables) + "): a table the read "
+        "keeps append-only or leaves out, so a person checks"
+    )
+
+
+def _profile_of(reader: Any) -> Any:
+    load = getattr(reader, "_profile", None)
+    return load() if callable(load) else None
+
+
 def _bookkeeping_inserts(reader: Any) -> set[str]:
     """Tables whose no-record inserts are the app's own, from the reader's
     app profile."""
-    load = getattr(reader, "_profile", None)
-    profile = load() if callable(load) else None
+    profile = _profile_of(reader)
     return set(profile.no_record_insert_tables()) if profile is not None else set()
+
+
+def _own_row_tables(reader: Any) -> set[str]:
+    """Tables of the acting user's own rows the reader's app profile excuses."""
+    from openadapt_flow.app_profiles import table_name
+
+    profile = _profile_of(reader)
+    if profile is None:
+        return set()
+    return {table_name(r.table) for r in profile.rules if r.mode == "own_rows"}
 
 
 def _unseen_writes(
@@ -507,10 +535,19 @@ def roll_back(
         ``rows``."""
         if scope != "database" or attributor is None:
             return False
-        unaccounted = attributor.unaccounted_writes(
-            rows, attributor.window(), _bookkeeping_inserts(reader)
-        )
+        unaccounted = hidden_writes(rows, attributor.window())
         return unaccounted is not None and not unaccounted
+
+    def hidden_writes(
+        rows: list[Change], window: Optional[list[dict[str, Any]]]
+    ) -> Optional[list[dict[str, Any]]]:
+        """The run's logged writes no row of ``rows`` accounts for; None
+        without an audit log."""
+        if attributor is None:
+            return None
+        return attributor.unaccounted_writes(
+            rows, window, _bookkeeping_inserts(reader), _own_row_tables(reader)
+        )
 
     record.after_stop_diff = landed.summary()
     if not run_changes:
@@ -530,6 +567,9 @@ def roll_back(
                 "table, a column the app profile leaves out, or a read of one "
                 "collection), so a person checks",
             )
+        hidden = hidden_writes([], attributor.window()) if attributor else None
+        if hidden:
+            return finish("not_rolled_back", _hidden_reason(hidden, attributor))
         record.final_sha256 = record.after_stop_sha256
         return finish(
             "nothing_landed",
@@ -834,6 +874,19 @@ def roll_back(
                 "record) while the rollback ran; a person checks that their "
                 f"change isn't lost ({record.late_diff_path} holds those rows as "
                 "the stop left them)",
+                _with_rows(remaining, evidence),
+            )
+        # The run's own logged writes the reads don't show (a table kept
+        # append-only, a step outside the ledger): never "rolled back".
+        hidden = (
+            hidden_writes(run_changes + changes(remaining), final_window)
+            if stop_reason is None
+            else None
+        )
+        if hidden:
+            return finish(
+                "not_rolled_back",
+                _hidden_reason(hidden, attributor),
                 _with_rows(remaining, evidence),
             )
     if stop_reason is not None:

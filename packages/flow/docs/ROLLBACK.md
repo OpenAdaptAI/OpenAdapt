@@ -59,7 +59,10 @@ run is refused before it starts: nothing after a stop could be proven.
    changed. A write to a table the read keeps append-only (an allow-listed
    table, or one the app profile keeps append-only, such as a disclosure
    log) is then still caught by its log entry; a write the app doesn't log
-   there isn't. Only a
+   there, or logs under an event `write_events` doesn't list, isn't. With
+   the audit log, the same holds for the whole run: a write by the run's
+   user the log shows and the reads don't account for (from any step, in
+   any table) never ends "nothing landed" or `ROLLED_BACK`. Only a
    whole-database read proves the run's effects absent; a collection read
    never overrides the run's own uncertainty.
 2. **Compensate, latest change first.** For each change in the run's
@@ -194,8 +197,8 @@ rollback:
     record_field: patient_id
     record_key: pid
     event_field: kind
-    write_events: [insert, update, delete]
-    insert_events: [insert]
+    write_events: [insert, update, delete, replace]   # every write kind the log names
+    insert_events: [insert, replace]
     delete_events: [delete]
     table_field: tbl
     read:                           # the table and write kind, derived from the log

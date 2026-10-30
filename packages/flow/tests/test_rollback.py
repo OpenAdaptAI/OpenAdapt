@@ -1747,3 +1747,63 @@ def test_a_late_write_hands_over_the_store_as_it_is(tmp_path):
     assert rollback.late_diff_path
     late = json.loads((tmp_path / "run" / rollback.late_diff_path).read_text())
     assert "patients" in late["tables"]
+
+
+def test_a_rollback_that_isnt_back_is_always_reconciliation(tmp_path):
+    # Round 9: a run with no ledger entry (a reversible step) can look
+    # halted before any effect, but if the rollback found a write it can't
+    # prove absent, a person reconciles.
+    report = _stopped([])
+    report.execution_outcome = "HALTED"
+    from openadapt_flow.ir import RollbackRecord
+
+    report.rollback = RollbackRecord(
+        status="not_rolled_back",
+        reason="the audit log shows 1 write(s)",
+        scope="database",
+    )
+    assert classify_transaction_outcome(report).value == "RECONCILIATION_REQUIRED"
+
+
+def test_the_apps_own_logged_bookkeeping_is_accounted_for():
+    # Round 9, as the frame decides: an insert naming no record (none, or
+    # OpenEMR's patient 0) in a bookkeeping table, and the acting user's own
+    # per-user rows, are the app's; a write to a disclosure log isn't.
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
+    spec = FrameAttribution(
+        kind="audit_read",
+        actor_field="actor",
+        self=["bot"],
+        record_field="record",
+        record_key="patient_id",
+        event_field="event",
+        write_events=["insert", "update", "delete", "replace"],
+        insert_events=["insert", "replace"],
+        table_field="tbl",
+        read={"kind": "in_memory"},
+    )
+    attributor = Attributor.from_spec(spec, {})
+    assert attributor is not None
+
+    def entry(event, table, record):
+        return {"actor": "bot", "event": event, "tbl": table, "record": record}
+
+    window = [
+        entry("insert", "uuid_registry", "0"),
+        entry("insert", "uuid_registry", ""),
+        entry("update", "recent_patients", "4"),
+    ]
+    assert (
+        attributor.unaccounted_writes(
+            [], window, {"uuid_registry"}, {"recent_patients"}
+        )
+        == []
+    )
+    hidden = [entry("replace", "extended_log", "4")]
+    assert (
+        attributor.unaccounted_writes(
+            [], hidden, {"uuid_registry"}, {"recent_patients"}
+        )
+        == hidden
+    )

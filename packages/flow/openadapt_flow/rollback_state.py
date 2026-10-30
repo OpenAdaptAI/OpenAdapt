@@ -753,12 +753,15 @@ class Attributor:
         rows: Sequence[Change],
         window: Optional[list[dict[str, Any]]],
         bookkeeping_inserts: set[str] = frozenset(),  # type: ignore[assignment]
+        own_tables: set[str] = frozenset(),  # type: ignore[assignment]
     ) -> Optional[list[dict[str, Any]]]:
         """The run's own logged writes that no changed row accounts for (a
         write to a table the read keeps append-only, say), or None when
-        there is no audit window to tell. As the frame does, an insert entry
-        that names no record in a table the app profile calls bookkeeping
-        (``no_record_insert_tables``) is the app's own."""
+        there is no audit window to tell. As the frame does: an insert entry
+        that names no record (none, or patient 0) in a table the app profile
+        calls bookkeeping (``no_record_insert_tables``) is the app's own, and
+        so is an entry for a table of the acting user's own rows the profile
+        excuses (``own_rows``: UI settings, recent charts)."""
         from openadapt_flow.app_profiles import table_name
         from openadapt_flow.runtime.effects.frame import get_path
 
@@ -771,8 +774,10 @@ class Attributor:
                 continue
             table = get_path(e, self.spec.table_field or "")
             record = get_path(e, self.spec.record_field or "")
+            if table not in (None, "") and table_name(str(table)) in own_tables:
+                continue
             if (
-                record in (None, "")
+                record in (None, "", "0", 0)
                 and self._event(e) in set(self.spec.insert_events)
                 and table not in (None, "")
                 and table_name(str(table)) in bookkeeping_inserts
