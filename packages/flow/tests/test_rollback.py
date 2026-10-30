@@ -1778,14 +1778,11 @@ def test_a_rollback_that_isnt_back_is_always_reconciliation(tmp_path):
 
 
 def test_the_apps_own_logged_bookkeeping_is_accounted_for():
-    # An entry is accounted for by a row in exactly the table it names: one
-    # that moved, or one the app profile excused (a sign-in uuid backfill),
-    # by record, or any excused row when the entry names no record. As in
-    # the frame, an insert naming no record (none, or OpenEMR's patient 0)
-    # in a bookkeeping table is the app's own. A statement that moved
-    # nothing, a write landing after the read, and a write to another
-    # schema's same-named table are not (round 13).
-    from openadapt_flow.rollback_state import StateDiff, TableDiff
+    # As the frame decides: a write to a table the read compares row by row
+    # can't hide (the diff shows it, or the profile calls it bookkeeping),
+    # and neither can an insert naming no record (none, or OpenEMR's
+    # patient 0) in a bookkeeping table. A write to a disclosure log the read
+    # keeps append-only can.
     from openadapt_flow.runtime.effects.frame import FrameAttribution
 
     spec = FrameAttribution(
@@ -1802,43 +1799,21 @@ def test_the_apps_own_logged_bookkeeping_is_accounted_for():
     )
     attributor = Attributor.from_spec(spec, {})
     assert attributor is not None
-    diff = StateDiff(
-        tables=[
-            TableDiff(table="users", excused=[("k1", {"id": 2})]),
-            TableDiff(
-                table="history",
-                added=[("k2", {"patient_id": "4", "smoker": "no"})],
-            ),
-            TableDiff(table="site2.extended_log"),
-        ]
-    )
 
     def entry(event, table, record):
         return {"actor": "bot", "event": event, "tbl": table, "record": record}
 
-    accounted = [
+    compared = {"users", "recent_patients", "patient_data"}
+    window = [
         entry("insert", "uuid_registry", "0"),
         entry("insert", "uuid_registry", ""),
-        entry("update", "users", "0"),  # the excused sign-in backfill
-        entry("insert", "history", "4"),  # the run's own new row
-        entry("update", "sequences", "4"),  # only a column the profile ignores
+        entry("update", "recent_patients", "4"),
+        entry("update", "users", "0"),  # the sign-in uuid backfill
+        entry("delete", "patient_data", "4"),  # a statement that changed nothing
     ]
-    assert (
-        attributor.unaccounted_writes(
-            accounted, [diff], {"uuid_registry"}, {"sequences"}
-        )
-        == []
-    )
-    hidden = [
-        entry("delete", "history", "5"),  # moved nothing on record 5
-        entry("update", "patient_data", "4"),  # not in the diff: landed later
-        entry("insert", "extended_log", "4"),  # not site2.extended_log
-        entry("replace", "extended_log", "4"),
-    ]
-    assert (
-        attributor.unaccounted_writes(hidden, [diff], {"uuid_registry"}, {"sequences"})
-        == hidden
-    )
+    assert attributor.unaccounted_writes(window, compared, {"uuid_registry"}) == []
+    hidden = [entry("replace", "extended_log", "4"), entry("update", "nowhere", "4")]
+    assert attributor.unaccounted_writes(hidden, compared, {"uuid_registry"}) == hidden
 
 
 # ---------------------------------------------------------------------------
@@ -1856,7 +1831,7 @@ def test_a_logged_write_the_reads_cant_see_is_never_rolled_back(tmp_path, exclus
     )
     rollback = report.rollback
     assert rollback.status == "not_rolled_back", rollback.reason
-    assert "no changed or excused row accounts for (in log)" in rollback.reason
+    assert "no changed row accounts for (in log)" in rollback.reason
     assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
 
 
@@ -1961,6 +1936,15 @@ def test_nothing_landed_needs_a_readable_audit_log(tmp_path):
     assert "couldn't be read after the stop" in record.reason
 
 
+def test_an_allow_listed_table_isnt_compared(tmp_path):
+    # Round 10: an own-rows table the deployment allow-lists is kept
+    # append-only, so a logged write there is unaccounted for.
+    report = _run_clinic(
+        tmp_path, attribution="audit", hidden_log=True, allow_tables=("log",)
+    )
+    assert report.rollback.status == "not_rolled_back"
+
+
 def test_an_unreadable_audit_log_at_the_end_is_never_rolled_back(tmp_path):
     # On an exclusive store the late check is skipped; the hidden-write check
     # still needs the log, and an unreadable one proves nothing.
@@ -1970,38 +1954,3 @@ def test_an_unreadable_audit_log_at_the_end_is_never_rolled_back(tmp_path):
     rollback = report.rollback
     assert rollback.status == "not_rolled_back", rollback.reason
     assert "couldn't be read" in rollback.reason
-
-
-def test_a_backfill_on_a_table_over_max_rows_excuses_nothing(tmp_path):
-    # Round 13: over max_rows a table keeps cell MACs only for the profile's
-    # ref columns, so a uuid backfill beside a clinical edit would look like
-    # the backfill alone. Nothing is excused there.
-    db = tmp_path / "emr.db"
-    conn = sqlite3.connect(db)
-    conn.executescript(
-        """
-        CREATE TABLE patient_data (id INTEGER PRIMARY KEY, pid INTEGER, uuid TEXT,
-          allergy TEXT);
-        INSERT INTO patient_data VALUES (1, 1, 'u1', ''), (2, 2, 'u2', ''),
-          (3, 3, 'u3', ''), (4, 4, NULL, '');
-        """
-    )
-    conn.commit()
-    for max_rows in (2000, 2):
-        reader = DatabaseReader(
-            dialect="sqlite",
-            read_config={"sqlite_database": str(db)},
-            profile="openemr",
-            max_rows=max_rows,
-        )
-        before = reader.read()
-        conn.execute(
-            "UPDATE patient_data SET uuid = 'u4', allergy = 'penicillin' WHERE id = 4"
-        )
-        conn.commit()
-        after = reader.read(before=before)
-        diff = diff_states(before, after, excuse=reader.excuser(after))
-        assert [c[0] for c in changes(diff)] == ["patient_data"], max_rows
-        conn.execute("UPDATE patient_data SET uuid = NULL, allergy = '' WHERE id = 4")
-        conn.commit()
-    conn.close()

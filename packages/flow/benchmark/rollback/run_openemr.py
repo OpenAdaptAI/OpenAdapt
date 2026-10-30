@@ -185,32 +185,15 @@ def _after_save(bundle: Path, out: Path) -> Path:
     return out
 
 
-def _safe_read(reader: Any, before: Any) -> Any:
-    try:
-        return reader.read(before=before) if before is not None else None
-    except Exception:  # noqa: BLE001 - a diagnostic only
-        return None
-
-
-def _unjudged(plan: Any, before: Any, after: Any) -> Any:
-    """Which logged tables no changed or excused row accounts for (the
-    rollback's own rule, rollback_state.Attributor.unaccounted_writes)."""
-    from openadapt_flow.rollback import (
-        _bookkeeping_columns,
-        _bookkeeping_inserts,
-        _excuser,
-    )
-    from openadapt_flow.rollback_state import diff_states
+def _unjudged(plan: Any, before: Any) -> Any:
+    from openadapt_flow.rollback import _bookkeeping_inserts
 
     attributor = plan.attributor
-    if attributor is None or before is None or after is None:
+    if attributor is None or before is None:
         return None
-    landed = diff_states(before, after, excuse=_excuser(plan.reader, after))
+    compared = {n for n, t in before.tables.items() if t.mode == "compare"}
     hidden = attributor.unaccounted_writes(
-        attributor.window(),
-        [landed],
-        _bookkeeping_inserts(plan.reader),
-        _bookkeeping_columns(plan.reader),
+        attributor.window(), compared, _bookkeeping_inserts(plan.reader)
     )
     if hidden is None:
         return "audit log unreadable"
@@ -423,9 +406,7 @@ def main(argv: list[str] | None = None) -> int:
                     "cross_checked": rollback.cross_checked if rollback else None,
                     # Which logged writes by the run's user the reads couldn't
                     # judge (tables only), for the record.
-                    "audit_unjudged_tables": _unjudged(
-                        plan, before, _safe_read(plan.reader, before)
-                    ),
+                    "audit_unjudged_tables": _unjudged(plan, before),
                     "steps": [
                         {"step_id": s.step_id, "decision": s.decision}
                         for s in (rollback.steps if rollback else [])
