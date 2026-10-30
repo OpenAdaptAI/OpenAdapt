@@ -204,6 +204,17 @@ reads, with every column. On PostgreSQL, `frame.database` isn't available, so
 every other table is read as its own surface; tables proposed as logs are
 not read there.
 
+**Lost updates.** An update's contracts set `frame.versions`, so another
+user's save to the target inside the window stops the write. The generator
+takes the versions from the app's own audit trail when every update
+demonstration added a row there that names the record and the acting user
+(Redmine's journals, EspoCRM's `action_history_record`, Dolibarr's agenda
+events); the read is narrowed only by a column naming the record's type,
+so any other user's entry for the record counts. Otherwise it uses a whole
+number column of the record that went up by one in every demonstration
+(Redmine's `lock_version`). With neither, the update has no version check,
+and `report.json` shows `versions: null`.
+
 **The recheck window.** On MySQL and MariaDB, one question asks how long the
 app can still write on its own after a verified write. The answer is
 `frame.database.recheck_after_s`; the proposal is 300 seconds.
