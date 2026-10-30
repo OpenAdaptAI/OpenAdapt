@@ -26,7 +26,7 @@ import yaml
 from demo_lib import FCG, fixture, load
 
 from openadapt_flow.generate import verify_contract as gen
-from openadapt_flow.verifier import Actor, begin_write, verify_write
+from openadapt_flow.verifier import Actor, begin_write, recheck, verify_write
 
 LATE_WAIT_S = 150
 
@@ -128,6 +128,18 @@ def main() -> int:
             time.sleep(late)
             if hasattr(fx, "wait_late_writes"):
                 fx.wait_late_writes()
+            if rec["verdict"]["outcome"] == "CONFIRMED" and rec["verdict"].get("recheck_due_at"):
+                # A write that lands after the check: the recheck the contract
+                # declares (frame.database.recheck_after_s) reads it.
+                try:
+                    late_r = recheck(contract, r, params=params,
+                                     actor=Actor("agent", "generated-check"), wait=True)  # fmt: skip
+                    rec["recheck"] = {
+                        "outcome": getattr(late_r.outcome, "value", str(late_r.outcome)),
+                        "reasons": list(late_r.reasons),
+                    }
+                except Exception as exc:  # noqa: BLE001
+                    rec["recheck"] = {"outcome": "RECHECK_CRASH", "reasons": [f"{type(exc).__name__}: {exc}"]}
         after = oracle.snapshot()
         try:
             rec["oracle"] = oracle.judge(task, before, after)
