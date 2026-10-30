@@ -1130,7 +1130,7 @@ def _raw_effect(
             c = t.column(col)
             lit = value.get("literal") if isinstance(value, dict) else None
             if c is not None and lit is not None and not (
-                c.kind == "text" or (c.kind in ("number", "bool") and re.fullmatch(r"-?\d+", lit))
+                c.kind == "text" or (c.kind in ("number", "bool") and c.data_type.startswith(("int", "tinyint", "smallint", "mediumint", "bigint", "integer")) and re.fullmatch(r"-?\d+", lit))
             ):
                 m.pop(col)
         nrf = set(getattr(surf, "_new_row_fields", set()))
