@@ -122,6 +122,31 @@ The read path comes from each verifier's substrate: `sql` is `database`;
 `result.to_dict()` is the JSON reply for agents and the CLI. It holds closed
 fields only: no record values.
 
+## Numbers
+
+Values compare as exact text, with one rule for numbers. When the store
+typed a value as a number and the contract expects a number, the two
+compare by exact decimal value:
+
+- SQL: the driver returns a number (`int`, `float`, `Decimal`) only for a
+  numeric column, so the column type decides. A stored `2.0`, `2` or
+  `Decimal("2.00")` equals a parameter `2.0`, `2`, or the text `"2.00"`.
+- REST and FHIR: only a JSON number in the body against a parameter passed
+  as a JSON number. A JSON string stays text.
+
+There is no tolerance: a float compares by its shortest text, so a stored
+`0.30000000000000004` is not `0.3`. Text compared with text stays exact:
+`"2.0"` never equals `"2"` in a text column. Expected text counts as a
+number only in the plain form `-?digits[.digits][e±digits]`, without a
+leading zero, sign, spaces or underscores, so an id such as `"02139"` stays
+text. A bool is never a number.
+
+The same rule picks the saved record, counts the records that share a
+duplicate key, finds the record an undo restores, and links a new record's
+side rows. A plain number whose exponent is beyond ±999999 can't be
+compared exactly: `begin_write` refuses it and names the parameter. A
+literal marked `number: true` is part of the contract hash.
+
 ## Writes that land after the result
 
 With `frame.database.recheck_after_s`, a `CONFIRMED` result has

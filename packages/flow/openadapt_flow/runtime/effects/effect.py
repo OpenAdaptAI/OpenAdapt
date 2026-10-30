@@ -42,6 +42,7 @@ import json
 import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Literal, Optional, Protocol, runtime_checkable
 
@@ -84,6 +85,87 @@ def kind_form(
     if kind is None:
         return text
     return normalize_value(text, kind, date_order=date_order)  # type: ignore[arg-type]
+
+
+#: A plain decimal number as text: an optional minus, digits without a
+#: leading zero, an optional fraction and exponent. No spaces, ``+``,
+#: underscores, ``NaN`` or ``Infinity``: anything else is text.
+_PLAIN_NUMBER = re.compile(
+    r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE](?P<exp>[+-]?[0-9]+))?"
+)
+#: The largest exponent a plain number may have: Decimal's default context
+#: range, so every comparison of two plain numbers is exact and can't raise.
+_MAX_EXPONENT = 999_999
+
+
+def plain_number(text: str) -> Optional[Decimal]:
+    """``text`` as an exact :class:`~decimal.Decimal` when it is a plain
+    decimal number (``2``, ``2.00``, ``-0.25``, ``1e+21``), else None.
+
+    Raises ``ValueError`` for a plain number whose exponent is beyond
+    +/-999999 (``1e9999999``): it can't be compared exactly, and saying so
+    is better than reading it as text.
+    """
+
+    if not isinstance(text, str):
+        return None
+    shape = _PLAIN_NUMBER.fullmatch(text)
+    if shape is None:
+        return None
+    exponent = shape.group("exp")
+    if exponent is not None and abs(int(exponent)) > _MAX_EXPONENT:
+        raise ValueError(f"number {text[:40]!r} has an exponent beyond +/-999999")
+    return Decimal(text)
+
+
+def stored_number(value: Any) -> Optional[Decimal]:
+    """A stored value the store typed as a number, as an exact Decimal.
+
+    An ``int``, ``float`` or ``Decimal`` from the driver or the JSON body
+    (a float by its shortest text, so ``0.1`` is ``Decimal("0.1")``). A
+    bool, any text, and a non-finite float are not numbers: None.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        return None
+    number = Decimal(str(value)) if isinstance(value, float) else Decimal(value)
+    return number if number.is_finite() else None
+
+
+def number_matches(stored: Any, want: Any, *, text_numbers: bool) -> Optional[bool]:
+    """Compare ``stored`` and ``want`` by exact numeric value, when both are
+    numbers; None when the rule doesn't apply (compare as text instead).
+
+    ``stored`` is a number only when the store typed it as one
+    (:func:`stored_number`): a SQL numeric column, a JSON number. ``want``
+    is a number when it is a :attr:`ValueExpr.number`, or, with
+    ``text_numbers`` (a SQL read, whose column types are the store's), any
+    plain decimal text. So a stored ``2`` equals ``2.0`` and ``"2.00"`` in a
+    SQL numeric column, while a text column, and a JSON string, stay exact.
+    """
+
+    have = stored_number(stored)
+    if have is None:
+        return None
+    if isinstance(want, ValueExpr):
+        if want.kind is not None or want.literal is None:
+            return None
+        if not (want.number or text_numbers):
+            return None
+        text = want.literal
+    elif text_numbers and isinstance(want, str):
+        text = want
+    else:
+        return None
+    try:
+        expected = plain_number(text)
+    except ValueError:
+        # A number beyond any stored number's range (a parameter like this
+        # is refused at bind): it equals no stored number.
+        return False
+    if expected is None:
+        return None
+    return have == expected
 
 
 class ValueExpr(BaseModel):
@@ -144,6 +226,11 @@ class ValueExpr(BaseModel):
     #: unprojected field must not pass for null. Declared per field, never
     #: assumed for a store.
     absent_is_null: Optional[Literal[True]] = None
+    #: ``True`` when the value is a number: a parameter the run passed as a
+    #: JSON number binds to this. A number compares with a stored number by
+    #: exact decimal value (``2.0`` equals a stored ``2``), never with text
+    #: (:func:`number_matches`).
+    number: Optional[Literal[True]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
@@ -166,6 +253,15 @@ class ValueExpr(BaseModel):
             raise ValueError("a stored form applies to a parameter")
         if self.date_order is not None and self.kind != "date":
             raise ValueError("date_order applies to kind: date")
+        if self.number and (
+            self.kind is not None
+            or self.map is not None
+            or self.stored is not None
+            or (self.literal is not None and plain_number(self.literal) is None)
+        ):
+            raise ValueError("a number is a plain decimal, with no kind, map or form")
+        if self.number and self.literal is None:
+            raise ValueError("number applies to a literal; a parameter's type sets it")
         return self
 
     @model_serializer(mode="wrap")
@@ -181,6 +277,7 @@ class ValueExpr(BaseModel):
                 "date_order",
                 "null",
                 "absent_is_null",
+                "number",
             ):
                 if data.get(key) is None:
                     data.pop(key, None)
@@ -225,6 +322,8 @@ class ValueExpr(BaseModel):
 
         A parameter the run set to ``None`` binds to a null value
         (``null: true``), which matches only a stored null.
+        A parameter passed as a JSON number (not a bool) with no kind, map or
+        stored form binds as a number (:attr:`number`).
         """
         if self.null or (
             self.param is not None
@@ -237,8 +336,30 @@ class ValueExpr(BaseModel):
                 date_order=self.date_order,
                 absent_is_null=self.absent_is_null,
             )
+        literal = self.resolve(params)
+        raw = params.get(self.param) if self.param is not None else None
+        if self.param is not None and literal is not None:
+            try:
+                plain_number(literal)
+            except ValueError as exc:
+                raise ValueError(f"parameter {self.param!r}: {exc}") from None
+        number = (
+            self.number
+            if self.param is None
+            else (
+                True
+                if isinstance(raw, (int, float))
+                and not isinstance(raw, bool)
+                and self.kind is None
+                and self.map is None
+                and self.stored is None
+                and literal is not None
+                and plain_number(literal) is not None
+                else None
+            )
+        )
         return ValueExpr(
-            literal=self.resolve(params), kind=self.kind, date_order=self.date_order
+            literal=literal, kind=self.kind, date_order=self.date_order, number=number
         )
 
     def matches(self, stored: Any) -> bool:
@@ -287,6 +408,7 @@ class ValueExpr(BaseModel):
                 and self.map == other.map
                 and self.null == other.null
                 and self.absent_is_null == other.absent_is_null
+                and self.number == other.number
             )
         if isinstance(other, str):
             # A literal expression equals the bare string it stands for.
@@ -1265,6 +1387,26 @@ class Effect(BaseModel):
         )
         if absent:
             payload["absent_is_null"] = absent
+        # A number compares by value, text by text: a value marked as a
+        # number is a different contract. Bound only when set, so every
+        # other contract keeps its exact digest.
+        numbers = sorted(
+            path
+            for path, expr in [
+                *((f"match.{k}", v) for k, v in self.match.items()),
+                ("value", self.value),
+                ("idempotency_key", self.idempotency_key),
+                *((f"composite_key.{k}", v) for k, v in self.composite_key.items()),
+                *(
+                    (f"new_records.{i}.{k}", v)
+                    for i, selector in enumerate(self.new_records)
+                    for k, v in selector.items()
+                ),
+            ]
+            if isinstance(expr, ValueExpr) and expr.number
+        )
+        if numbers:
+            payload["value_numbers"] = numbers
         return payload
 
     def _semantic_contract_sha256(self) -> str:
@@ -1435,14 +1577,19 @@ def is_null_value(value: Any) -> bool:
 
 def selector_value(value: Any) -> Any:
     """A selector value for :func:`record_matches`: a value with a declared
-    kind, or a null value, stays an expression; any other becomes text."""
+    kind, a null value, or a number stays an expression; any other becomes
+    text."""
 
-    if isinstance(value, ValueExpr) and (value.kind is not None or value.null):
+    if isinstance(value, ValueExpr) and (
+        value.kind is not None or value.null or value.number
+    ):
         return value
     return str(value)
 
 
-def record_matches(record: dict[str, Any], selector: dict[str, Any]) -> bool:
+def record_matches(
+    record: dict[str, Any], selector: dict[str, Any], *, text_numbers: bool = False
+) -> bool:
     """Whether ``record`` satisfies every ``field == value`` in ``selector``.
 
     Comparison is on ``str()`` of both sides so a numeric id in JSON (``1``)
@@ -1456,6 +1603,11 @@ def record_matches(record: dict[str, Any], selector: dict[str, Any]) -> bool:
     check and the frame both call this, so they agree.
     The text ``"None"`` or ``""`` never matches a null value, and a null
     stored value never matches a text selector.
+
+    A stored number and an expected number compare by exact decimal value
+    instead (:func:`number_matches`; ``text_numbers`` for a SQL read), so a
+    whole-number float such as ``2.0`` equals a stored ``2``. Text compared
+    with text stays exact: ``"2.0"`` never equals ``"2"``.
     """
     for key, want in selector.items():
         if is_null_value(want):
@@ -1465,14 +1617,20 @@ def record_matches(record: dict[str, Any], selector: dict[str, Any]) -> bool:
             elif not want.absent_is_null:
                 return False
             continue
-        if record.get(key, None) is None:
+        stored = record.get(key, None)
+        if stored is None:
             # A stored null (or a missing field) equals no text, not even
-            # "None", and no value of a declared kind.
+            # "None", and no value of a declared kind or number.
             return False
         if isinstance(want, ValueExpr) and want.kind is not None:
-            if not want.matches(record.get(key, None)):
+            if not want.matches(stored):
                 return False
-        elif str(record.get(key, None)) != str(want):
+            continue
+        by_value = number_matches(stored, want, text_numbers=text_numbers)
+        if by_value is not None:
+            if not by_value:
+                return False
+        elif str(stored) != str(want):
             return False
     return True
 

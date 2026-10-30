@@ -885,6 +885,14 @@ def begin_write(
             + ", ".join(f"{n} (used in {unsafe[n]})" for n in nulls)
             + "; a null binds only in an effect's match, new_records or value"
         )
+    from openadapt_flow.runtime.effects.effect import plain_number
+
+    for name, value in values.items():
+        try:
+            plain_number(value)
+        except ValueError as exc:
+            # Compared exactly, a number this large can't be read back.
+            raise VerifierError(f"parameter {name!r}: {exc}") from None
     try:
         led = _resolve_ledger(ledger)
     except LedgerError as exc:
