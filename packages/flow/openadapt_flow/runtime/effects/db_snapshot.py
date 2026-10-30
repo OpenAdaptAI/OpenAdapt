@@ -54,6 +54,7 @@ import hashlib
 import json
 import os
 import secrets
+import struct
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Context, Decimal, InvalidOperation
@@ -172,7 +173,9 @@ def canonical(value: Any) -> str:
     if isinstance(value, (dict, list, tuple)):
         return _json_text(value)
     if isinstance(value, str):
-        return value
+        # The tags above start with NUL; a text that does too is escaped,
+        # so the text "\x00null" never reads as NULL.
+        return "\x00s" + value if value.startswith("\x00") else value
     if type(value).__str__ is object.__str__:
         raise TypeError(f"no exact text form for a {type(value).__name__} value")
     return str(value)
@@ -668,7 +671,12 @@ def _cell(dialect: Dialect, column: str, how: str = "") -> str:
         if how == "text":
             return f"CONCAT({q})"
         return q
-    return f"CASE WHEN typeof({q}) = 'blob' THEN hex({q}) ELSE {q} END"
+    # SQLite's json_object prints a REAL with 15 digits, so two doubles can
+    # print the same. Printed with 17 they can't; json() keeps it a number.
+    return (
+        f"CASE WHEN typeof({q}) = 'blob' THEN hex({q}) "
+        f"WHEN typeof({q}) = 'real' THEN json(printf('%!.17g', {q})) ELSE {q} END"
+    )
 
 
 def _row_json(dialect: Dialect, d: _Def) -> list[str]:
@@ -696,8 +704,49 @@ def _read_rows(
         for chunk in chunks:
             if chunk is not None:
                 row.update(_row_part(name, chunk))
-        out.append(row)
+        out.append(_plain_numbers(s.dialect, d, row))
     return out
+
+
+def _float32_text(value: Decimal) -> Decimal:
+    """The shortest decimal that reads back as the same 32-bit float."""
+
+    single = struct.unpack("f", struct.pack("f", float(value)))[0]
+    for digits in range(1, 10):
+        text = f"{single:.{digits}g}"
+        if struct.unpack("f", struct.pack("f", float(text)))[0] == single:
+            return Decimal(text)
+    return Decimal(repr(single))  # pragma: no cover - 9 digits always do
+
+
+def _plain_numbers(dialect: Dialect, d: _Def, row: dict[str, Any]) -> dict[str, Any]:
+    """Numbers in the form a person writes them, each still exact.
+
+    A row's numbers parse as ``Decimal`` so no digit is lost; the plain form
+    is what selectors and parameters compare with (``str()``):
+
+    - a SQLite ``REAL`` (read with 17 digits) as the shortest text that reads
+      back as the same double (``0.3``, not ``0.29999999999999999``);
+    - a MySQL ``FLOAT`` (read widened to ``DOUBLE``) as the shortest text that
+      reads back as the same 32-bit float (``1.1``, not
+      ``1.100000023841858``);
+    - any other MySQL decimal without trailing zeros (``1.5``, not
+      ``1.50000000``).
+
+    Each maps one stored value to one text, so a change still shows.
+    """
+
+    for column, value in row.items():
+        if not isinstance(value, Decimal) or not value.is_finite():
+            continue
+        if dialect == "sqlite":
+            row[column] = Decimal(repr(float(value)))
+        elif d.encode.get(column) == "double":
+            row[column] = _float32_text(value)
+        else:
+            exact = Context(prec=max(len(value.as_tuple().digits), 1))
+            row[column] = Decimal(format(value.normalize(exact), "f"))
+    return row
 
 
 def _row_part(table: str, chunk: Any) -> dict[str, Any]:
