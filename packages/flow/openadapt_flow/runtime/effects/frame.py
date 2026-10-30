@@ -286,7 +286,7 @@ class FrameDatabase(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    dialect: Literal["sqlite", "mysql"]
+    dialect: Literal["sqlite", "mysql", "postgresql"]
     #: The read-only connection: ``sqlite_database``, or ``sql_driver`` with
     #: ``sql_connect_args`` and ``sql_password_env``, as in a ``kind: sql``
     #: verifier (no query: every table is read).
@@ -307,8 +307,10 @@ class FrameDatabase(BaseModel):
     #: Over this many rows a table keeps, per row, its key and contents MACs
     #: and cell MACs only for the columns attribution and side records read.
     max_rows: int = Field(default=2000, ge=1)
-    #: Schemas the read account must see (MySQL); the snapshot refuses when
-    #: one isn't visible, so a schema the app writes can't be left out.
+    #: Schemas the read account must see; the snapshot refuses when one isn't
+    #: visible, so a schema the app writes can't be left out. On PostgreSQL
+    #: they are the schemas read; unset, every schema but the system ones is
+    #: read, and one the account can't see is refused.
     schemas: list[str] = Field(default_factory=list)
     #: An app profile (``openadapt_flow.app_profiles``): the app's own
     #: bookkeeping, versioned and shared with rollback and the RL grader. Its

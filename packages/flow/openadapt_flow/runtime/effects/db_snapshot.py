@@ -20,16 +20,21 @@ What a snapshot holds, and why:
   primary key.
 - **One consistent read.** Everything is read on one connection inside one
   read-only transaction (``START TRANSACTION WITH CONSISTENT SNAPSHOT, READ
-  ONLY`` on MySQL and MariaDB; ``BEGIN`` on SQLite). The audit log is read in
-  the same transaction (``extra_queries``). MySQL's ``AUTO_INCREMENT`` isn't
-  part of a snapshot, so it is read just before the snapshot starts: a row
-  committed in between is in the snapshot, never missing from it.
+  ONLY`` on MySQL and MariaDB; ``BEGIN ISOLATION LEVEL REPEATABLE READ, READ
+  ONLY`` on PostgreSQL; ``BEGIN`` on SQLite). The audit log is read in the
+  same transaction (``extra_queries``). MySQL's ``AUTO_INCREMENT`` and
+  PostgreSQL's sequences aren't part of a snapshot, so they are read just
+  before the snapshot starts: a row committed in between is in the snapshot,
+  never missing from it.
 - **Schema and code.** Each table's definition and the database's triggers,
   views, routines and events are digested. On MySQL a trigger is visible
   only to an account with ``TRIGGER``; without it the snapshot says so
   (``code_visible``), and the frame is not checked.
-- **Counters.** ``sqlite_sequence`` and ``AUTO_INCREMENT`` (on the column the
-  database numbers, key or not) show a row written and deleted in the window.
+- **Counters.** ``sqlite_sequence``, ``AUTO_INCREMENT`` and a PostgreSQL
+  sequence a column owns (on the column the database numbers, key or not)
+  show a row written and deleted in the window. Any other PostgreSQL sequence
+  is read as a one-row table of its own, so a value drawn from it is a
+  change unless the allow-list skips it with a reason.
 - **The clock.** ``CURRENT_TIMESTAMP`` at the snapshot, so a column the
   database fills with the time can be held to the window.
 - **Allow-listed tables** are append-only by default: their existing rows
@@ -38,12 +43,16 @@ What a snapshot holds, and why:
   and MariaDB a row is read as ``JSON_OBJECT``; a type whose value it can't
   carry as exact text is read another way (:func:`_mysql_encoding`: bytes,
   bit strings and geometries as hex, ``FLOAT`` widened to ``DOUBLE``, JSON as
-  its stored text), and numbers parse as ``Decimal``. :func:`canonical` gives
-  each value one exact text form.
+  its stored text), and numbers parse as ``Decimal``. On PostgreSQL each
+  column is read as text by a rule for its type (:func:`_pg_rule`), in a
+  session pinned to UTC and to exact float output; a type without a rule
+  makes the table unreadable. :func:`canonical` gives each value one exact
+  text form.
 
 Read-only: SQLite files open with ``mode=ro``; a driver connection should use
-an account with SELECT (and, on MySQL, TRIGGER and SHOW VIEW) on every schema
-the app can write. The baseline must still be protected like the records:
+an account with SELECT (and, on MySQL, TRIGGER and SHOW VIEW; on PostgreSQL,
+USAGE on each schema and SELECT on its sequences) on every schema the app can
+write. The baseline must still be protected like the records:
 whoever holds both it and the host secret can test guesses against the MACs.
 """
 
@@ -53,6 +62,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import secrets
 import struct
 from collections.abc import Callable, Mapping, Sequence
@@ -61,7 +71,7 @@ from decimal import Context, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-Dialect = Literal["sqlite", "mysql"]
+Dialect = Literal["sqlite", "mysql", "postgresql"]
 TableMode = Literal["compare", "append_only", "skip"]
 
 #: Columns per JSON object call: SQLite caps a function at 127 arguments.
@@ -157,6 +167,8 @@ def canonical(value: Any) -> str:
         return "\x00null"
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, StoredNumber):
+        return value.stored
     if isinstance(value, (int, float, Decimal)):
         number = Decimal(str(value))
         if not number.is_finite():
@@ -179,6 +191,24 @@ def canonical(value: Any) -> str:
     if type(value).__str__ is object.__str__:
         raise TypeError(f"no exact text form for a {type(value).__name__} value")
     return str(value)
+
+
+class StoredNumber(Decimal):
+    """A PostgreSQL ``numeric`` declared without a scale, which keeps the
+    scale it was stored with: ``1.5`` and ``1.50`` are different stored
+    values. It equals, and prints as, its plain value (``1.5``), so a
+    selector or parameter compares by value; :func:`canonical` gives the
+    stored text, so a change of scale alone still shows."""
+
+    stored: str
+
+
+def _stored_number(text: str) -> StoredNumber:
+    number = Decimal(text)
+    exact = Context(prec=max(len(number.as_tuple().digits), 1))
+    value = StoredNumber(format(number.normalize(exact), "f"))
+    value.stored = text
+    return value
 
 
 def _interval_text(value: datetime.timedelta) -> str:
@@ -422,6 +452,8 @@ def _default_text(raw: Any, dialect: Dialect) -> Optional[str]:
 
     if raw is None:
         return None
+    if dialect == "postgresql":
+        return _pg_default_text(str(raw))
     text = str(raw).strip()
     lowered = text.lower().strip("()")
     if lowered.startswith(
@@ -432,6 +464,40 @@ def _default_text(raw: Any, dialect: Dialect) -> Optional[str]:
         return None  # SQLite and MariaDB show DEFAULT NULL as the text NULL
     if len(text) >= 2 and text[0] == text[-1] and text[0] in "'\"":
         return text[1:-1].replace("''", "'")
+    return text
+
+
+#: PostgreSQL defaults the database fills with the time (``pg_get_expr``).
+_PG_CLOCK = re.compile(
+    r"(now\(\)|current_timestamp|current_date|localtimestamp|"
+    r"statement_timestamp\(\)|transaction_timestamp\(\)|clock_timestamp\(\)|"
+    r"\('now'::text\)::[a-z ]+)(::[a-z ()0-9]+)?",
+    re.IGNORECASE,
+)
+
+
+def _pg_default_text(expr: str) -> Optional[str]:
+    """A PostgreSQL default (``pg_get_expr``) as the value it stores.
+
+    Only literals are read: ``NULL``, a quoted string with a cast
+    (``'open'::character varying``), a number (``0``, ``(-1)``) and
+    ``true``/``false``. A time function is ``CLOCK_DEFAULT``. Any other
+    expression (``nextval(...)``, ``gen_random_uuid()``) is kept as its
+    text, which no stored value equals, so a new row that relies on it must
+    list the column in ``new_row_fields``.
+    """
+
+    text = expr.strip()
+    if _PG_CLOCK.fullmatch(text):
+        return CLOCK_DEFAULT
+    if re.fullmatch(r"NULL(::[^']+)?", text, re.IGNORECASE):
+        return None
+    m = re.fullmatch(r"'((?:[^']|'')*)'::[^']+", text, re.S)
+    if m:
+        return m.group(1).replace("''", "'")
+    m = re.fullmatch(r"\(?(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\)?(::[^']+)?", text)
+    if m:
+        return m.group(1)
     return text
 
 
@@ -454,10 +520,19 @@ class _Session:
     def __init__(self, connect: Callable[[], Any], dialect: Dialect) -> None:
         self.dialect = dialect
         self.con = connect()
+        if dialect == "postgresql":
+            # psycopg opens a transaction on the first statement unless told
+            # not to; the snapshot's own BEGIN must be the one that counts.
+            self.con.autocommit = True
         self.cur = self.con.cursor()
+        if dialect == "postgresql":
+            for sql in _PG_SESSION:
+                self.cur.execute(sql)
 
     def begin(self) -> None:
-        if self.dialect == "mysql":
+        if self.dialect == "postgresql":
+            self.cur.execute("BEGIN ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        elif self.dialect == "mysql":
             # Only statements that can't fail: a driver may end the session
             # on any error. MySQL 8 caches AUTO_INCREMENT unless told not to;
             # MariaDB has no such variable.
@@ -514,6 +589,13 @@ class _Def:
     #: The column the database numbers (AUTO_INCREMENT, or SQLite's rowid
     #: alias), whether or not it is the primary key.
     auto_column: Optional[str] = None
+    #: The quoted relation to read (PostgreSQL: ``"schema"."table"``).
+    relation: str = ""
+    #: Why the table can't be read exactly (PostgreSQL); it is refused
+    #: unless the allow-list skips it.
+    unreadable: str = ""
+    #: Rows read already (a PostgreSQL sequence's one row), not from a table.
+    fixed: Optional[list[dict[str, Any]]] = None
 
 
 def _digest(parts: Sequence[Any]) -> str:
@@ -784,6 +866,514 @@ def _row_part(table: str, chunk: Any) -> dict[str, Any]:
     return dict(parsed)
 
 
+# -- PostgreSQL -----------------------------------------------------------------
+
+#: The session a PostgreSQL snapshot reads in. Each setting fixes how a type
+#: prints, so one stored value has one text: timestamps in UTC (no repeated
+#: hour), ISO dates and intervals, floats with every digit they need
+#: (shortest exact on PostgreSQL 12 and later, 17 digits before), bytes as
+#: hex, ``money`` in the C locale (two decimals, read as ``numeric``).
+_PG_SESSION = (
+    "SET TimeZone = 'UTC'",
+    "SET DateStyle = 'ISO, YMD'",
+    "SET IntervalStyle = 'iso_8601'",
+    "SET extra_float_digits = 3",
+    "SET bytea_output = 'hex'",
+    "SET lc_monetary = 'C'",
+    "SET client_encoding = 'UTF8'",
+)
+
+#: Schemas a PostgreSQL snapshot never reads: the catalogs, TOAST storage
+#: and other sessions' temporary tables.
+_PG_SYSTEM_SCHEMAS = ("pg_catalog", "information_schema")
+
+
+def _pg_system(schema: str) -> bool:
+    return schema in _PG_SYSTEM_SCHEMAS or schema.startswith(("pg_toast", "pg_temp_"))
+
+
+#: Built-in PostgreSQL types (in ``pg_catalog``) and the rule each is read
+#: by. Every rule reads the column as text in the pinned session
+#: (:data:`_PG_SESSION`), whose output is exact for these types:
+#:
+#: - ``int``: integers and ``oid``, parsed as ``int``.
+#: - ``numeric``: parsed as ``Decimal``, every digit kept (``NaN`` and the
+#:   infinities too). Declared without a scale, as a :class:`StoredNumber`,
+#:   which keeps the scale it was stored with.
+#: - ``float4``/``float8``: parsed as ``Decimal``; the plain value is the
+#:   shortest text that reads back as the same stored float.
+#: - ``money``: read as ``numeric`` (in the C locale, hundredths).
+#: - ``bool``: ``true``/``false`` (its text cast) as ``bool``.
+#: - ``bytea``: the hex of the stored bytes, as ``bytes``.
+#: - ``text``: the type's own text. Strings, ``uuid``, network addresses,
+#:   dates and times (UTC), ``interval`` (ISO 8601, months, days and
+#:   microseconds kept apart), bit strings, ``xml``, ``json`` (its stored
+#:   text), ``jsonb`` (its canonical text: keys sorted, duplicates gone),
+#:   ``tsvector`` and ``tsquery`` (sorted lexemes), and the geometric types
+#:   (their floats printed exactly). Arrays, ranges, multiranges, enums and
+#:   domains are read by their element, subtype or base type's rule.
+_PG_RULES: dict[str, str] = {
+    **dict.fromkeys(("int2", "int4", "int8", "oid"), "int"),
+    "numeric": "numeric",
+    "float4": "float4",
+    "float8": "float8",
+    "money": "money",
+    "bool": "bool",
+    "bytea": "bytea",
+    **dict.fromkeys(
+        (
+            "text",
+            "varchar",
+            "bpchar",
+            "name",
+            "char",
+            "uuid",
+            "inet",
+            "cidr",
+            "macaddr",
+            "macaddr8",
+            "date",
+            "time",
+            "timetz",
+            "timestamp",
+            "timestamptz",
+            "interval",
+            "bit",
+            "varbit",
+            "xml",
+            "json",
+            "jsonb",
+            "jsonpath",
+            "tsvector",
+            "tsquery",
+            "point",
+            "line",
+            "lseg",
+            "box",
+            "path",
+            "polygon",
+            "circle",
+            "pg_lsn",
+        ),
+        "text",
+    ),
+}
+
+
+@dataclass
+class _PgType:
+    name: str
+    schema: str
+    kind: str  # pg_type.typtype: b(ase), d(omain), e(num), r(ange), m(ultirange), c(omposite), p(seudo)
+    category: str
+    element: int
+    base: int
+    typmod: int = -1  # a domain's own modifier (a numeric's scale)
+    subtype: int = 0  # a range's subtype, or a multirange's range
+
+
+def _pg_rule(
+    types: Mapping[int, _PgType], oid: int, typmod: int = -1, depth: int = 0
+) -> str:
+    """The rule a PostgreSQL column type is read by (:data:`_PG_RULES`).
+
+    Raises ``ValueError`` naming the type when there is none: an extension's
+    type, a composite, a ``reg*`` alias (it prints by ``search_path``), and
+    anything else whose text this module hasn't been shown to be exact.
+    """
+
+    t = types.get(oid)
+    if t is None or depth > 8:
+        raise ValueError(f"type oid {oid} is not in the catalog")
+    label = f"{t.schema}.{t.name}"
+    if t.kind == "d":
+        return _pg_rule(types, t.base, t.typmod, depth + 1)
+    if t.kind == "e":
+        return "text"
+    if t.kind in ("r", "m"):
+        inner = _pg_rule(types, t.subtype, -1, depth + 1)
+        if inner == "money":
+            raise ValueError(f"{label} holds money, which prints by locale")
+        return "text"
+    if t.kind == "b" and t.category == "A" and t.element:
+        inner = _pg_rule(types, t.element, -1, depth + 1)
+        if inner == "money":
+            raise ValueError(f"{label} holds money, which prints by locale")
+        return "text"
+    if t.kind == "b" and t.schema == "pg_catalog" and t.name in _PG_RULES:
+        if t.name == "numeric" and typmod == -1:
+            return "numeric_free"
+        return _PG_RULES[t.name]
+    raise ValueError(f"no exact reading rule for type {label}")
+
+
+def _pg_cell(column: str, rule: str) -> str:
+    q = _quote("postgresql", column)
+    if rule == "bytea":
+        return f"encode({q}, 'hex')"
+    if rule == "money":
+        return f"({q})::numeric::text"
+    if rule == "numeric_free":
+        return f"({q})::text"
+    return f"({q})::text"
+
+
+def _pg_value(rule: str, text: Optional[str]) -> Any:
+    """A column's text (read by :func:`_pg_cell`) as its plain value."""
+
+    if text is None:
+        return None
+    if rule == "int":
+        return int(text)
+    if rule == "bool":
+        if text not in ("true", "false"):
+            raise SnapshotError(f"a boolean read as {text!r}")
+        return text == "true"
+    if rule == "bytea":
+        return bytes.fromhex(text)
+    if rule == "numeric_free":
+        return _stored_number(text)
+    if rule in ("numeric", "money", "float4", "float8"):
+        number = Decimal(text)
+        if not number.is_finite():
+            return number
+        if rule == "float4":
+            return _float32_text(number)
+        if rule == "float8":
+            return Decimal(repr(float(number)))
+        exact = Context(prec=max(len(number.as_tuple().digits), 1))
+        return Decimal(format(number.normalize(exact), "f"))
+    return str(text)
+
+
+def _pg_in(names: Sequence[str]) -> str:
+    return "(" + ", ".join(_literal(n) for n in names) + ")"
+
+
+@dataclass
+class _PgSequence:
+    name: str
+    relation: str
+    increment: int
+    readable: bool
+    definition: list[Any]
+    #: The table and column that own it (``serial``, identity), if any.
+    table: Optional[str] = None
+    column: Optional[str] = None
+    #: The last value drawn (the start minus one step when none was).
+    last: Optional[int] = None
+    #: ``last_value`` and ``is_called`` as stored.
+    raw: Optional[int] = None
+    is_called: Optional[bool] = None
+
+
+def _pg_scope(s: _Session, schemas: Sequence[str]) -> tuple[list[str], str]:
+    """The schemas a PostgreSQL snapshot reads, and the default one (whose
+    tables are named without it).
+
+    Named schemas: exactly those, each visible. None named: every schema
+    but the system ones, and a schema the account can't see is refused
+    rather than left out."""
+
+    every = {
+        str(n): bool(u)
+        for n, u in s.rows(
+            "SELECT nspname, has_schema_privilege(oid, 'USAGE') FROM pg_namespace"
+        )
+        if not _pg_system(str(n))
+    }
+    if schemas:
+        missing = sorted(x for x in schemas if not every.get(x))
+        if missing:
+            raise SnapshotError(
+                "the read account can't see schema(s): " + ", ".join(missing)
+            )
+        scope = sorted(set(schemas))
+    else:
+        hidden = sorted(n for n, u in every.items() if not u)
+        if hidden:
+            raise SnapshotError(
+                "the read account can't see schema(s) "
+                + ", ".join(hidden)
+                + ": grant it USAGE and SELECT there, or name the schemas the "
+                "app writes in frame.database.schemas"
+            )
+        scope = sorted(every)
+    default = str(s.rows("SELECT current_schema()")[0][0] or "")
+    return scope, default
+
+
+def _pg_name(schema: str, table: str, default: str) -> str:
+    return table if schema == default else f"{schema}.{table}"
+
+
+def _pg_relation(schema: str, table: str) -> str:
+    return f"{_quote('postgresql', schema)}.{_quote('postgresql', table)}"
+
+
+def _pg_sequences(
+    s: _Session, scope: Sequence[str], default: str
+) -> dict[str, _PgSequence]:
+    """Every sequence in scope, with its value. Read before the snapshot
+    starts (a sequence isn't transactional): a row committed in between is
+    in the snapshot, so the counter never runs ahead of what it shows."""
+
+    out: dict[str, _PgSequence] = {}
+    for row in s.rows(
+        "SELECT n.nspname, c.relname, s.seqincrement, s.seqstart, s.seqmin, "
+        "s.seqmax, s.seqcycle, format_type(s.seqtypid, NULL), "
+        "has_sequence_privilege(c.oid, 'SELECT'), tn.nspname, t.relname, a.attname "
+        "FROM pg_sequence s JOIN pg_class c ON c.oid = s.seqrelid "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "LEFT JOIN pg_depend d ON d.classid = 'pg_class'::regclass "
+        "AND d.objid = c.oid AND d.refclassid = 'pg_class'::regclass "
+        "AND d.deptype IN ('a', 'i') AND d.refobjsubid > 0 "
+        "LEFT JOIN pg_class t ON t.oid = d.refobjid "
+        "LEFT JOIN pg_namespace tn ON tn.oid = t.relnamespace "
+        "LEFT JOIN pg_attribute a ON a.attrelid = d.refobjid "
+        "AND a.attnum = d.refobjsubid "
+        f"WHERE n.nspname IN {_pg_in(scope)} ORDER BY 1, 2"
+    ):
+        schema, name, inc, start, low, high, cycle, typ, ok, tschema, table, col = row
+        out[_pg_name(str(schema), str(name), default)] = _PgSequence(
+            _pg_name(str(schema), str(name), default),
+            _pg_relation(str(schema), str(name)),
+            int(inc),
+            bool(ok),
+            [int(inc), int(start), int(low), int(high), bool(cycle), str(typ)],
+            None if table is None else _pg_name(str(tschema), str(table), default),
+            None if col is None else str(col),
+        )
+    readable = [q for q in out.values() if q.readable]
+    if readable:
+        for name, last, called in s.rows(
+            " UNION ALL ".join(
+                f"SELECT {_literal(q.name)}, last_value, is_called FROM {q.relation}"
+                for q in readable
+            )
+        ):
+            q = out[str(name)]
+            q.raw, q.is_called = int(last), bool(called)
+            q.last = q.raw if called else q.raw - q.increment
+    return out
+
+
+def _pg_definitions(
+    s: _Session, scope: Sequence[str], default: str
+) -> tuple[dict[str, _Def], str]:
+    """Every PostgreSQL table's definition (partitions, not their parents),
+    and the digest of the database's code."""
+
+    within = _pg_in(scope)
+    types: dict[int, _PgType] = {}
+    for oid, name, schema, kind, cat, elem, base, mod in s.rows(
+        "SELECT t.oid, t.typname, n.nspname, t.typtype, t.typcategory, t.typelem, "
+        "t.typbasetype, t.typtypmod FROM pg_type t "
+        "JOIN pg_namespace n ON n.oid = t.typnamespace"
+    ):
+        types[int(oid)] = _PgType(
+            str(name), str(schema), str(kind), str(cat), int(elem), int(base), int(mod)
+        )
+    # pg_range.rngmultitypid exists from PostgreSQL 14; read through JSON so
+    # an older server gives NULL instead of an error.
+    for rng, sub, multi in s.rows(
+        "SELECT r.rngtypid, r.rngsubtype, (to_jsonb(r) ->> 'rngmultitypid')::oid "
+        "FROM pg_range r"
+    ):
+        types[int(rng)].subtype = int(sub)
+        if multi is not None and int(multi) in types:
+            types[int(multi)].subtype = int(rng)
+    tables: dict[int, tuple[str, str, list[Any]]] = {}
+    out: dict[str, _Def] = {}
+    parents: list[Any] = []
+    for row in s.rows(
+        "SELECT c.oid, n.nspname, c.relname, c.relkind, c.relpersistence, "
+        "c.relrowsecurity, c.relforcerowsecurity, has_table_privilege(c.oid, 'SELECT'), "
+        "CASE WHEN c.relrowsecurity THEN row_security_active(c.oid) ELSE false END "
+        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        f"WHERE c.relkind IN ('r', 'p', 'f') AND n.nspname IN {within} ORDER BY 2, 3"
+    ):
+        oid, schema, table, kind, persistence, rls, force, select, filtered = row
+        if kind == "p":
+            # A partitioned table holds no rows of its own; its partitions
+            # are read. Its definition is part of the database's code.
+            parents.append([schema, table])
+            continue
+        name = _pg_name(str(schema), str(table), default)
+        tables[int(oid)] = (name, str(schema), [kind, persistence, rls, force])
+        d = out[name] = _Def(
+            [], [], None, {}, {}, "", relation=_pg_relation(str(schema), str(table))
+        )
+        if kind == "f":
+            d.unreadable = "a foreign table: its rows live outside this database"
+        elif not select:
+            d.unreadable = "the read account has no SELECT on it"
+        elif filtered:
+            d.unreadable = "row-level security hides rows from the read account"
+    parts: dict[str, list[Any]] = {n: list(meta) for n, _, meta in tables.values()}
+    for (
+        oid,
+        column,
+        typ,
+        mod,
+        ctype,
+        notnull,
+        cdefault,
+        identity,
+        generated,
+        coll,
+    ) in s.rows(
+        "SELECT a.attrelid, a.attname, a.atttypid, a.atttypmod, "
+        "format_type(a.atttypid, a.atttypmod), "
+        "a.attnotnull, pg_get_expr(ad.adbin, ad.adrelid), a.attidentity, a.attgenerated, "
+        "co.collname FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid "
+        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum "
+        "LEFT JOIN pg_collation co ON co.oid = a.attcollation "
+        "WHERE a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'f') "
+        f"AND n.nspname IN {within} ORDER BY a.attrelid, a.attnum"
+    ):
+        if int(oid) not in tables:
+            continue
+        name = tables[int(oid)][0]
+        d = out[name]
+        d.columns.append(str(column))
+        d.defaults[str(column)] = _default_text(cdefault, "postgresql")
+        try:
+            d.encode[str(column)] = _pg_rule(types, int(typ), int(mod))
+        except ValueError as exc:
+            d.encode[str(column)] = ""
+            d.unreadable = d.unreadable or f"column {column}: {exc}"
+        parts[name].append(
+            [column, ctype, notnull, cdefault, identity, generated, coll]
+        )
+    for oid, column in s.rows(
+        "SELECT i.indrelid, a.attname FROM pg_index i "
+        "CROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS k(attnum, ord) "
+        "JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum "
+        "WHERE i.indisprimary ORDER BY i.indrelid, k.ord"
+    ):
+        if int(oid) in tables:
+            out[tables[int(oid)][0]].primary_key.append(str(column))
+    for oid, con, kind, definition in s.rows(
+        "SELECT conrelid, conname, contype, pg_get_constraintdef(oid) "
+        "FROM pg_constraint WHERE conrelid <> 0 ORDER BY 1, 2"
+    ):
+        if int(oid) in tables:
+            parts[tables[int(oid)][0]].append([con, kind, definition])
+    for name, d in out.items():
+        d.schema = _digest(parts[name])
+    code = [
+        parents,
+        s.rows(
+            "SELECT n.nspname, c.relname, t.tgname, t.tgenabled, pg_get_triggerdef(t.oid) "
+            "FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE NOT t.tgisinternal AND n.nspname IN {within} ORDER BY 1, 2, 3"
+        ),
+        s.rows(
+            "SELECT n.nspname, c.relname, c.relkind, pg_get_viewdef(c.oid) "
+            "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE c.relkind IN ('v', 'm') AND n.nspname IN {within} ORDER BY 1, 2"
+        ),
+        s.rows(
+            "SELECT n.nspname, p.proname, pg_get_function_identity_arguments(p.oid), "
+            "p.prokind, p.prosrc, p.probin, p.proconfig::text, p.prosecdef, l.lanname "
+            "FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+            "JOIN pg_language l ON l.oid = p.prolang "
+            f"WHERE n.nspname IN {within} ORDER BY 1, 2, 3"
+        ),
+        s.rows(
+            "SELECT schemaname, tablename, rulename, definition FROM pg_rules "
+            f"WHERE schemaname IN {within} ORDER BY 1, 2, 3"
+        ),
+        s.rows(
+            "SELECT schemaname, tablename, policyname, permissive, roles::text, cmd, "
+            f"qual, with_check FROM pg_policies WHERE schemaname IN {within} "
+            "ORDER BY 1, 2, 3"
+        ),
+        s.rows(
+            "SELECT evtname, evtevent, evtenabled, evtfoid::regproc::text, evttags::text "
+            "FROM pg_event_trigger ORDER BY 1"
+        ),
+        s.rows("SELECT extname, extversion FROM pg_extension ORDER BY 1"),
+        s.rows(
+            "SELECT n.nspname, t.typname, t.typtype, "
+            "format_type(t.typbasetype, t.typtypmod), t.typnotnull, t.typdefault, "
+            "(SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) "
+            "FROM pg_enum e WHERE e.enumtypid = t.oid), "
+            "(SELECT string_agg(pg_get_constraintdef(c.oid), ';' ORDER BY c.conname) "
+            "FROM pg_constraint c WHERE c.contypid = t.oid) "
+            "FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace "
+            f"WHERE t.typtype IN ('d', 'e', 'r') AND n.nspname IN {within} "
+            "ORDER BY 1, 2"
+        ),
+    ]
+    return out, _digest(code)
+
+
+def _pg_counters(
+    defs: dict[str, _Def], sequences: Mapping[str, _PgSequence]
+) -> tuple[dict[str, int], list[_PgSequence]]:
+    """Each table's counter (the sequence its key, or else its first
+    numbered column, owns), and every other sequence, which is read as a
+    one-row table of its own."""
+
+    owned: dict[str, list[_PgSequence]] = {}
+    for q in sequences.values():
+        if q.table in defs and q.column in defs[q.table].columns:
+            owned.setdefault(q.table, []).append(q)
+    counters: dict[str, int] = {}
+    used: set[str] = set()
+    for table, qs in owned.items():
+        d = defs[table]
+        qs.sort(key=lambda q: d.columns.index(q.column or ""))
+        pick = next((q for q in qs if d.primary_key == [q.column]), qs[0])
+        if pick.increment <= 0:
+            continue  # a descending sequence is read as its own table
+        d.auto_column = pick.column
+        if d.primary_key == [pick.column]:
+            d.generated_key = pick.column
+        used.add(pick.name)
+        if pick.last is not None:
+            counters[table] = pick.last
+        else:
+            d.unreadable = d.unreadable or (
+                f"the read account has no SELECT on its sequence {pick.name}"
+            )
+    return counters, [q for n, q in sequences.items() if n not in used]
+
+
+def _pg_sequence_def(q: _PgSequence) -> _Def:
+    """A sequence no table counts by, as a one-row table: a value drawn from
+    it is a change, like any other row."""
+
+    columns = ["sequence", "last_value", "is_called"]
+    d = _Def(
+        columns,
+        ["sequence"],
+        None,
+        dict.fromkeys(columns),
+        {},
+        _digest(["sequence", *q.definition]),
+        relation=q.relation,
+        fixed=[],
+    )
+    if q.raw is None:
+        d.unreadable = "a sequence the read account has no SELECT on"
+    else:
+        d.fixed = [{"sequence": q.name, "last_value": q.raw, "is_called": q.is_called}]
+    return d
+
+
+def _read_rows_pg(s: _Session, d: _Def) -> list[dict[str, Any]]:
+    cells = ", ".join(_pg_cell(c, d.encode[c]) for c in d.columns) or "NULL"
+    return [
+        {c: _pg_value(d.encode[c], v) for c, v in zip(d.columns, r)}
+        for r in s.rows(f"SELECT {cells} FROM ONLY {d.relation}")
+    ]
+
+
 def _row_key(
     d: _Def, row: Mapping[str, Any], seen: dict[str, int], skip: Sequence[str] = ()
 ) -> str:
@@ -903,18 +1493,41 @@ def _snapshot(
     dialect = s.dialect
     counters: dict[str, int] = {}
     visible = True
+    sequences: dict[str, _PgSequence] = {}
+    scope: list[str] = []
+    default_schema = ""
     if dialect == "mysql":
         # Before the snapshot starts: a row committed after this read is in
         # the snapshot, so the counter never runs ahead of what it shows.
         counters = _mysql_counters(s)
         visible = _sees_triggers(s)
+    elif dialect == "postgresql":
+        scope, default_schema = _pg_scope(s, schemas)
+        sequences = _pg_sequences(s, scope, default_schema)  # before, as above
     s.begin()
-    snap = Snapshot(
-        dialect=dialect,
-        clock=_clock_text(s.rows("SELECT CURRENT_TIMESTAMP")[0][0]),
-        code_visible=visible,
-    )
-    defs, snap.objects = _definitions(s)
+    if dialect == "postgresql":
+        # The first statement takes the snapshot; its start is the clock.
+        clock, isolation, read_only = s.rows(
+            "SELECT statement_timestamp()::text, "
+            "current_setting('transaction_isolation'), "
+            "current_setting('transaction_read_only')"
+        )[0]
+        if (isolation, read_only) != ("repeatable read", "on"):
+            raise SnapshotError(
+                f"the read ran as {isolation}, read_only={read_only}, not one "
+                "read-only repeatable-read transaction"
+            )
+    else:
+        clock = s.rows("SELECT CURRENT_TIMESTAMP")[0][0]
+    snap = Snapshot(dialect=dialect, clock=_clock_text(clock), code_visible=visible)
+    if dialect == "postgresql":
+        defs, snap.objects = _pg_definitions(s, scope, default_schema)
+        counters, others = _pg_counters(defs, sequences)
+        for q in others:
+            defs[q.name] = _pg_sequence_def(q)
+        snap.schemas = list(scope)
+    else:
+        defs, snap.objects = _definitions(s)
     if dialect == "mysql":
         default = str(s.rows("SELECT DATABASE()")[0][0])
         seen = {default} | {t.split(".", 1)[0] for t in defs if "." in t}
@@ -925,7 +1538,7 @@ def _snapshot(
             )
         snap.schemas = sorted(seen)
     else:
-        if any(
+        if dialect == "sqlite" and any(
             n == "sqlite_sequence"
             for (n,) in s.rows("SELECT name FROM sqlite_master WHERE type = 'table'")
         ):
@@ -945,17 +1558,30 @@ def _snapshot(
     for t in sorted(t for t in defs if modes.get(t) == "skip"):
         d = defs[t]
         snap.tables[t] = Table("skip", d.schema, d.columns, d.primary_key, None, {})
+    refused = sorted(f"{t} ({defs[t].unreadable})" for t in names if defs[t].unreadable)
+    if refused:
+        raise SnapshotError(
+            "can't read exactly: "
+            + "; ".join(refused)
+            + ". Skip a table only by allow-listing it with mode skip and a reason"
+        )
     if not names:
         return snap
-    counts = {
-        str(t): int(n)
-        for t, n in s.rows(
-            " UNION ALL ".join(
-                f"SELECT {_literal(t)}, COUNT(*) FROM {_quote(dialect, t)}"
-                for t in names
+
+    def rel(t: str) -> str:
+        return defs[t].relation or _quote(dialect, t)
+
+    stored = [t for t in names if defs[t].fixed is None]
+    counts = {t: len(defs[t].fixed or []) for t in names if defs[t].fixed is not None}
+    if stored:
+        counts.update(
+            (str(t), int(n))
+            for t, n in s.rows(
+                " UNION ALL ".join(
+                    f"SELECT {_literal(t)}, COUNT(*) FROM {rel(t)}" for t in stored
+                )
             )
         )
-    }
     numbered = [t for t in names if defs[t].auto_column]
     maxes = (
         {
@@ -963,7 +1589,7 @@ def _snapshot(
             for t, m in s.rows(
                 " UNION ALL ".join(
                     f"SELECT {_literal(t)}, MAX({_quote(dialect, defs[t].auto_column or '')}) "
-                    f"FROM {_quote(dialect, t)}"
+                    f"FROM {rel(t)}"
                     for t in numbered
                 )
             )
@@ -1002,7 +1628,15 @@ def _snapshot(
             table.cell_columns = list(d.columns)
         skip = [*ignore.get(t, ()), *ignore.get("*", ())]
         seen_keys: dict[str, int] = {}
-        for row in _read_rows(s, t, d) if table.count else []:
+        if d.fixed is not None:
+            read = d.fixed
+        elif not table.count:
+            read = []
+        elif dialect == "postgresql":
+            read = _read_rows_pg(s, d)
+        else:
+            read = _read_rows(s, t, d)
+        for row in read:
             text = _row_key(d, row, seen_keys, skip)
             k = row_key_hash(key, text, t)
             if links is not None and d.primary_key and mode == "compare":
@@ -1055,7 +1689,8 @@ def unread_reasons(
     ):
         reasons.append("existing rows changed or removed")
     if new.counter is not None:
-        # sqlite_sequence holds the last number used; AUTO_INCREMENT the next.
+        # sqlite_sequence and a PostgreSQL sequence hold the last number
+        # used; AUTO_INCREMENT the next.
         step = 1 if dialect == "mysql" else 0
         expected = max(
             old.counter or 0, 0 if new.max_auto is None else new.max_auto + step

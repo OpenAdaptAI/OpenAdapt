@@ -260,7 +260,7 @@ This is the frame of an EspoCRM "create opportunity" contract on MariaDB:
 frame:
   identity_field: id
   database:
-    dialect: mysql              # or sqlite
+    dialect: mysql              # or postgresql, sqlite
     read:                       # read-only: SELECT, TRIGGER and SHOW VIEW
       sql_driver: pymysql
       sql_connect_args: {host: 127.0.0.1, port: 3306, user: frame_ro, database: espocrm}
@@ -306,6 +306,72 @@ Numbers parse as `Decimal`, so a `DECIMAL(30,10)` keeps every digit. The read pi
 that still can't be read exactly makes the database unreadable, and the run
 stops; the error names the table. When the database can't be read at the
 baseline, `begin_write` says why.
+
+### PostgreSQL
+
+With `dialect: postgresql` (driver `psycopg2` or `psycopg`), the snapshot is
+one `REPEATABLE READ, READ ONLY` transaction. The read refuses to go on if the
+server reports any other isolation level.
+
+- **Schemas.** The read covers every schema except `pg_catalog`,
+  `information_schema` and PostgreSQL's internal ones. A schema the read
+  account can't see is refused, not left out. Set `frame.database.schemas`
+  to read only the schemas the app writes. A table in the default schema
+  (`public`) is named without it (`issues`); a table in another schema is
+  named with it (`billing.invoice`).
+- **The session.** The read pins its session so that each stored value has
+  one text: `TimeZone` UTC, ISO dates, ISO 8601 intervals,
+  `extra_float_digits = 3`, bytes as hex, and `lc_monetary` C. A reader
+  whose own settings differ reads the same thing.
+- **Types.** Each column is read as text by a declared rule for its type:
+  - integers as integers;
+  - `numeric` at full precision (`NaN` and infinities too). A `numeric`
+    declared without a scale keeps the scale it was stored with: `1.5`
+    changed to `1.50` shows, but both still equal the number 1.5;
+  - `real` and `double precision` exactly, with the shortest text that
+    reads back as the same float as the plain value;
+  - `money` as a number;
+  - `bytea` as the hex of its bytes;
+  - `json` as its stored text, and `jsonb` as its canonical text;
+  - as their own text: strings, `uuid`, network addresses, dates, times,
+    timestamps (in UTC), `interval` (months, days and seconds kept apart, so
+    `1 day` to `24 hours` shows), bit strings, `xml`, `tsvector`, `tsquery`
+    and the geometric types;
+  - arrays, ranges, multiranges, enums and domains by their element,
+    subtype or base type's rule.
+
+  A composite type, an extension's type, a `reg*` type, and an array of
+  `money` have no rule. A table with such a column is refused, and the error
+  names the column.
+- **Refusals.** The read also refuses a table the account has no `SELECT`
+  on, a table whose row-level security hides rows from it, a foreign table,
+  and a sequence it can't read. A refused table can only be left out by an
+  `allow_tables` entry with `mode: skip` and a reason.
+- **Tables without a primary key.** Their rows are keyed by the whole row,
+  and identical rows are counted, so a second copy of a row shows as added.
+- **Partitions.** A partitioned table is read through its partitions, and
+  only once.
+- **Sequences.** A sequence that a column owns (`serial`, `identity`) is
+  that table's counter, read just before the snapshot. A row written and
+  removed in the window moves it, which shows. So does an insert that
+  failed, because it draws a value too. Any other sequence is read as
+  a one-row table of its own. A value drawn from it is a change. Only an
+  `allow_tables` entry with `mode: skip` and a reason, which documents it as
+  the app's bookkeeping, leaves it out.
+- **Database code.** The read digests triggers (and whether each is
+  enabled), views, materialized views, functions, rules, row-level security
+  policies, event triggers and installed extensions. A change to any of them
+  in the window shows as `(database code)`.
+
+The read account needs `USAGE` on each schema and `SELECT` on its tables and
+sequences, for example:
+
+```sql
+GRANT USAGE ON SCHEMA public TO frame_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO frame_ro;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO frame_ro;
+ALTER ROLE frame_ro SET default_transaction_read_only = on;
+```
 
 ## Lost updates
 
