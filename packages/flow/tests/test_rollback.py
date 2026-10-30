@@ -1778,9 +1778,11 @@ def test_a_rollback_that_isnt_back_is_always_reconciliation(tmp_path):
 
 
 def test_the_apps_own_logged_bookkeeping_is_accounted_for():
-    # Round 9, as the frame decides: an insert naming no record (none, or
-    # OpenEMR's patient 0) in a bookkeeping table, and the acting user's own
-    # per-user rows, are the app's; a write to a disclosure log isn't.
+    # As the frame decides: a write to a table the read compares row by row
+    # can't hide (the diff shows it, or the profile calls it bookkeeping),
+    # and neither can an insert naming no record (none, or OpenEMR's
+    # patient 0) in a bookkeeping table. A write to a disclosure log the read
+    # keeps append-only can.
     from openadapt_flow.runtime.effects.frame import FrameAttribution
 
     spec = FrameAttribution(
@@ -1801,24 +1803,17 @@ def test_the_apps_own_logged_bookkeeping_is_accounted_for():
     def entry(event, table, record):
         return {"actor": "bot", "event": event, "tbl": table, "record": record}
 
+    compared = {"users", "recent_patients", "patient_data"}
     window = [
         entry("insert", "uuid_registry", "0"),
         entry("insert", "uuid_registry", ""),
         entry("update", "recent_patients", "4"),
+        entry("update", "users", "0"),  # the sign-in uuid backfill
+        entry("delete", "patient_data", "4"),  # a statement that changed nothing
     ]
-    assert (
-        attributor.unaccounted_writes(
-            [], window, {"uuid_registry"}, {"recent_patients"}
-        )
-        == []
-    )
-    hidden = [entry("replace", "extended_log", "4")]
-    assert (
-        attributor.unaccounted_writes(
-            [], hidden, {"uuid_registry"}, {"recent_patients"}
-        )
-        == hidden
-    )
+    assert attributor.unaccounted_writes(window, compared, {"uuid_registry"}) == []
+    hidden = [entry("replace", "extended_log", "4"), entry("update", "nowhere", "4")]
+    assert attributor.unaccounted_writes(hidden, compared, {"uuid_registry"}) == hidden
 
 
 # ---------------------------------------------------------------------------
@@ -1941,22 +1936,13 @@ def test_nothing_landed_needs_a_readable_audit_log(tmp_path):
     assert "couldn't be read after the stop" in record.reason
 
 
-def test_an_allow_listed_own_rows_table_isnt_excused(tmp_path):
-    from openadapt_flow.rollback import _own_row_tables
-
-    db = tmp_path / "x.db"
-    sqlite3.connect(db).close()
-    compared = DatabaseReader(
-        dialect="sqlite", read_config={"sqlite_database": str(db)}, profile="openemr"
+def test_an_allow_listed_table_isnt_compared(tmp_path):
+    # Round 10: an own-rows table the deployment allow-lists is kept
+    # append-only, so a logged write there is unaccounted for.
+    report = _run_clinic(
+        tmp_path, attribution="audit", hidden_log=True, allow_tables=("log",)
     )
-    listed = DatabaseReader(
-        dialect="sqlite",
-        read_config={"sqlite_database": str(db)},
-        profile="openemr",
-        allow_tables=["user_settings"],
-    )
-    assert "user_settings" in _own_row_tables(compared)
-    assert "user_settings" not in _own_row_tables(listed)
+    assert report.rollback.status == "not_rolled_back"
 
 
 def test_an_unreadable_audit_log_at_the_end_is_never_rolled_back(tmp_path):
