@@ -19,11 +19,17 @@
 
 ### Features
 
+- A lost update now stops the run. `frame.versions` names a read of the target's versions (HAPI's `hfj_res_ver`, a version column, or an app's action-history table) and, where the app records one, the author of each version. The verifier reads them before and after the write; a version of a pre-existing target by anyone other than the agent, or more than one version step when no author is read, refutes the frame. A versions read that fails, a target with no version, or a version with no author leaves the frame not checked. The receipt holds counts and a problem code (`evidence.frame.versions`). Contracts without `frame.versions` keep their digests.
+
 - A write that lands after the verdict can now be caught. With `frame.database.recheck_after_s`, a verified write's receipt says when a recheck is due (`recheck_due_at`), and `openadapt_flow.verifier.recheck` reads the whole database again at or after that time. It judges every change since the post-save read with the frame's rules: the app profile's bookkeeping, other users' writes the audit log attributes, and changes a later write by the same actor under the same contract saw in its own window (`excused_by`, any outcome). Anything else turns the earlier result into `REFUTED` (late). A change that may be what refuted a later write, a database that can't be read, or a saved state that wasn't issued here or doesn't match its receipt gives `UNCERTAIN`. The saved state holds keyed hashes, not values. `frame.database.settle_attempts` lets the reads after a save, and at a recheck, retry within a stated budget until two in a row match; rows added to append-only tables between them don't count as movement. Without these settings, nothing changes ([#1639](https://github.com/OpenAdaptAI/OpenAdapt/pull/1639)).
 
 ### Fixes
 
 - The read-only SQL guard now reads the query's tokens instead of matching substrings. `REPLACE(phone, '-', '')`, a `;` inside a string literal, and a table quoted as `` `call` `` no longer refuse the query. Every write and multi-statement form it refused before is still refused. It now also refuses a backslash, a dollar-quoted string, an unterminated literal, and a call to `query_to_xml` or `eval`, which run a query passed as text.
+
+- The whole-database snapshot reads a SQLite `REAL` with 17 digits, so 0.3 and 0.1+0.2 no longer read the same, and the text `"\x00null"` no longer reads as NULL. A number's plain value, which selectors compare with, is the shortest text that reads back as the stored value (`1.1` for a MySQL `FLOAT`, `1.5` for a `DECIMAL(24,8)`), so a correct write is no longer stopped because a selector stopped matching.
+
+- The whole-database frame (`frame.database`) now reads MySQL and MariaDB schemas with every column type. A `POINT` column (Dolibarr 21) made the read raise `TypeError`; a `BIT` column did the same; `FLOAT` values compared by six printed digits; decimals lost digits past 28. Binary strings, `BIT`, geometries and vectors are read as hex, `FLOAT` is widened to `DOUBLE`, `JSON` is read as its stored text, and numbers parse as `Decimal`. A value that still can't be read exactly makes the database unreadable, never a column dropped, and `begin_write` now says why the frame could not be read.
 
 ## v2.4.1 (2026-10-28)
 

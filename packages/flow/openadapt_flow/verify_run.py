@@ -150,6 +150,11 @@ _STRENGTH_RANK = {
 FRAME_AUDIT_DETAIL = "openadapt:frame_audit"
 #: Where the baseline keeps the whole-database snapshot (``frame.database``).
 FRAME_DB_DETAIL = "openadapt:frame_database"
+#: Why the whole-database snapshot couldn't be read, when it couldn't.
+FRAME_DB_ERROR = "openadapt:frame_database_error"
+#: Where the baseline keeps the target versions read (``frame.versions``), as
+#: keyed MACs.
+FRAME_VERSIONS_DETAIL = "openadapt:frame_versions"
 #: Where the baseline keeps the read set as keyed MACs (``effects/sealed.py``).
 SEALED_DETAIL = "openadapt:sealed_records"
 
@@ -429,6 +434,97 @@ def _audit_verifier(cfg: VerifyConfig, params: Mapping[str, object]) -> Any:
         raise VerifyRunError(f"cannot build the audit read: {exc}") from exc
 
 
+def _read_versions(
+    cfg: VerifyConfig, params: Mapping[str, object]
+) -> Optional[list[dict[str, Any]]]:
+    """The ``frame.versions`` read: one record per version, or None when it
+    can't be read."""
+
+    spec = cfg.frame.versions if cfg.frame is not None else None
+    if spec is None:
+        return None
+    try:
+        reader = build_effect_verifier(EffectsConfig.model_validate(spec.read), params)
+    except ValueError as exc:
+        raise VerifyRunError(f"cannot build the versions read: {exc}") from exc
+    try:
+        state = reader.capture_pre_state() if reader is not None else None
+    except Exception:  # noqa: BLE001 - unreadable -> the check stops the run
+        return None
+    if not isinstance(state, EffectState) or not state.reachable:
+        return None
+    return [dict(r) for r in state.records]
+
+
+def _judge_versions(
+    cfg: VerifyConfig,
+    frame: FrameVerdict,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: Sequence[EffectVerdict],
+    params: Mapping[str, object],
+    salt: bytes,
+) -> FrameVerdict:
+    """Add ``frame.versions`` to the frame: a version of a target in the
+    window that isn't the agent's own refutes it; one that can't be read or
+    attributed leaves it not checked."""
+
+    from openadapt_flow.runtime.effects.versions import judge_versions
+
+    spec = cfg.frame.versions if cfg.frame is not None else None
+    if spec is None:
+        return frame
+    field_name = spec.target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
+    # Whether a target existed is told by its identity, which a save doesn't
+    # change, never by the target field's value after the write: a target
+    # field the write changed would make an old record look created.
+    identity = cfg.frame.identity_field or "id"  # type: ignore[union-attr]
+    old: dict[str, dict[str, Any]] = {}
+    for r in before.records:
+        if r.get(identity) not in (None, ""):
+            old.setdefault(str(r.get(identity)), dict(r))
+    ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
+    targets: list[tuple[Optional[str], bool, bool]] = []
+    for effect, verdict in zip(effects, verdicts):
+        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+            continue
+        if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
+            continue  # a guard: "nothing here"
+        if not verdict.confirmed:
+            continue
+        for record in verdict.matched_records:
+            value = record.get(field_name)
+            text = None if value in (None, "") else str(value)
+            key = record.get(identity)
+            was = None if key in (None, "") else old.get(str(key))
+            # No identity to look up: never assume the record is new.
+            existed = was is not None or key in (None, "")
+            # Changed in the window: a field read before differs now (a
+            # sealed baseline marks a changed field, so it differs too).
+            changed = existed and (
+                was is None
+                or any(record.get(k) != v for k, v in was.items() if k not in ignored)
+            )
+            targets.append((text, existed, changed))
+    stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
+    result = judge_versions(
+        spec,
+        stored if isinstance(stored, Mapping) else {},
+        _read_versions(cfg, params),
+        targets,
+        _mac_key(salt),
+        params,
+    )
+    frame.versions = result
+    if result.status == "refuted":
+        frame.status = "refuted"
+        frame.reason = result.reason
+    elif result.status == "not_checked" and frame.status == "held":
+        frame.status = "not_checked"
+        frame.reason = result.reason
+    return frame
+
+
 def _db_connect(read: Mapping[str, Any]) -> Any:
     """A connect function for ``frame.database.read`` (read-only)."""
 
@@ -521,9 +617,13 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
 
 
 def _read_database(
-    cfg: VerifyConfig, salt: bytes, before: Optional[Any] = None
+    cfg: VerifyConfig,
+    salt: bytes,
+    before: Optional[Any] = None,
+    errors: Optional[list[str]] = None,
 ) -> Optional[Any]:
-    """The whole-database snapshot, or None when it can't be read."""
+    """The whole-database snapshot, or None when it can't be read (and then
+    why, appended to ``errors``)."""
 
     from openadapt_flow.runtime.effects.db_snapshot import mac_key, take_snapshot
 
@@ -545,7 +645,9 @@ def _read_database(
             optional_modes=database.profile_modes(),  # type: ignore[arg-type]
             links=database.recheck_after_s is not None,
         )
-    except Exception:  # noqa: BLE001 - unreadable -> the frame is not checked
+    except Exception as exc:  # noqa: BLE001 - unreadable -> the frame is not checked
+        if errors is not None:
+            errors.append(f"{type(exc).__name__}: {exc}")
         return None
 
 
@@ -1277,6 +1379,13 @@ def capture_baseline(
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
     salt = secrets.token_bytes(32)
+    # The versions first: a save between this read and the record read is
+    # then in the record baseline too, never hidden in the versions one.
+    versions_rows = (
+        _read_versions(cfg, params)
+        if cfg.frame is not None and cfg.frame.versions is not None
+        else None
+    )
     state = verifier.capture_pre_state()
     if not isinstance(state, EffectState):
         raise VerifyRunError("verifier returned no readable baseline")
@@ -1284,10 +1393,13 @@ def capture_baseline(
     entries: Optional[list[dict[str, Any]]] = None
     snapshot = None
     if cfg.frame is not None and cfg.frame.database is not None:
-        snapshot = _read_database(cfg, salt)
+        why: list[str] = []
+        snapshot = _read_database(cfg, salt, errors=why)
         if snapshot is not None:
             detail[FRAME_DB_DETAIL] = snapshot.to_json()
             entries = snapshot.extra.get("audit")
+        else:
+            detail[FRAME_DB_ERROR] = why[0] if why else "not read"
     audit_verifier = _audit_verifier(cfg, params)
     if audit_verifier is not None:
         if entries is None:
@@ -1297,6 +1409,12 @@ def capture_baseline(
             "reachable": entries is not None,
             "ids": _audit_ids(entries or [], salt),
         }
+    if cfg.frame is not None and cfg.frame.versions is not None:
+        from openadapt_flow.runtime.effects.versions import seal_versions
+
+        detail[FRAME_VERSIONS_DETAIL] = seal_versions(
+            cfg.frame.versions, versions_rows, _mac_key(salt)
+        )
     if detail:
         state = state.model_copy(update={"detail": {**state.detail, **detail}})
     state = _seal_state(cfg, state, salt)
@@ -1726,6 +1844,9 @@ def verify_run(
             # The executor's own id is this run, never "another user".
             run_actors=[str(run_record.get("executor_id") or "")],
             salt=salt,
+        )
+        frame = _judge_versions(
+            cfg, frame, before, bound_effects, verdicts, params, salt
         )
     else:
         frame = FrameVerdict(
