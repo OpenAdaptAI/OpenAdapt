@@ -915,7 +915,13 @@ def _version_column(schema: Schema, plan: KindPlan) -> Optional[dict[str, Any]]:
     if len(t.primary_key) != 1:
         return None
     for col in t.columns:
-        if col.kind != "number" or col.name in t.primary_key:
+        # Named as a version (``lock_version``, ``version_number``): a user
+        # id that happens to go from 1 to 2 is not one.
+        if (
+            col.kind != "number"
+            or col.name in t.primary_key
+            or "version" not in col.name.lower()
+        ):
             continue
         ok = bool(plan.anchors)
         for a in plan.anchors:
@@ -968,9 +974,18 @@ def _audit_source(
                             here.add((lc, ac, p))
                             rows.append(r)
             pairs = here if pairs is None else pairs & here
-        if not pairs or len(pairs) != 1:
+        if not pairs or len({p[0] for p in pairs}) != 1:
             continue
-        lc, ac, param = next(iter(pairs))
+        # Several columns hold the acting user (author and assignee): the
+        # one named as the author, else as a user, else the first by name.
+        lc, ac, param = sorted(
+            pairs,
+            key=lambda p: (
+                "author" not in p[1].lower(),
+                "user" not in p[1].lower(),
+                p[1],
+            ),
+        )[0]
         # Only a column naming the record's type (``target_type: Lead``)
         # narrows the read. Anything else the demonstrations had in common
         # (the action, the client address) could hide another user's save,

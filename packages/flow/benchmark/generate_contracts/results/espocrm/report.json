@@ -25,13 +25,14 @@
       "locations": {
         "account": "contact.account_id -> account.name (exact)",
         "account_city": "contact.account_id -> account.billing_address_city (exact)",
-        "email": "entity_email_address (whose entity_id is the contact key).email_address_id -> email_address.name (exact)",
+        "email": "entity_email_address (whose entity_id is the contact key).email_address_id -> email_address.name (email)",
         "first_name": "contact.first_name (exact)",
         "last_name": "contact.last_name (exact)",
         "phone": "entity_phone_number (whose entity_id is the contact key).phone_number_id -> phone_number.name (phone)",
         "title": "account_contact (whose contact_id is the contact key).role (exact)"
       },
       "placed_by_name": [],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {
@@ -72,6 +73,7 @@
         "stage": "opportunity.stage (exact)"
       },
       "placed_by_name": [],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
@@ -102,6 +104,16 @@
         "last_name": "lead.last_name (exact)"
       },
       "placed_by_name": [],
+      "versions": {
+        "kind": "audit",
+        "table": "action_history_record",
+        "record_column": "target_id",
+        "author_column": "user_id",
+        "actor_param": "bot_user_id",
+        "where": {
+          "target_type": "Lead"
+        }
+      },
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
@@ -139,6 +151,7 @@
         "subject": "call.name (exact)"
       },
       "placed_by_name": [],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {
