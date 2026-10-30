@@ -77,7 +77,7 @@ Every result also says what it establishes (`scope`): the read path (database, A
 A check sees what is in the store when it reads. A write that lands after that read is not part of the result: a retry that fires two minutes later, a queued job, a trigger. To catch those, the contract can ask for a recheck. Set `frame.database.recheck_after_s` (a contract that reads the whole database), and every `CONFIRMED` result says `provisional: true` and when the recheck is due (`recheck_due_at`). The recheck reads the whole database again and judges every change since the first check:
 
 - In Python: `recheck(contract, result, params=values, actor=AGENT)` at or after `recheck_due_at`, or with `wait=True` to sleep until then.
-- Over MCP: call `verify_recheck` with the `write_id`. Before the due time it returns `due: false` and how long to wait.
+- Over MCP: call `verify_recheck` with the `write_id`. Before the due time it returns `due: false` and how long to wait. Your agent's later writes under the same contract, once checked, account for their own rows. A write under another contract can't: an agent that creates a contact and then an opportunity inside the window gets the first write `REFUTED`.
 
 | Recheck outcome | What it means | What to do |
 | --- | --- | --- |
@@ -85,7 +85,7 @@ A check sees what is in the store when it reads. A write that lands after that r
 | `REFUTED` | Something changed after the first check that nothing explains: the earlier `CONFIRMED` no longer stands. | Don't retry. A person checks the record. |
 | `UNCERTAIN` | The database couldn't be read again, or was still changing. | Don't retry. A person checks the record. |
 
-A recheck that doesn't confirm also marks the write in the ledger, so a retry of it is held for a person (`openadapt verify ledger list`) instead of being handed the earlier `CONFIRMED`.
+A recheck that doesn't confirm also marks the write in the ledger, so a retry of it is held for a person (`openadapt verify ledger list`) instead of being handed the earlier `CONFIRMED`. That holds for a recheck run from a saved `recheck.json` too. If the recheck can't find the write in the ledger, its reasons say so: hold the write by hand.
 
 There is no default window: pick one longer than the slowest write that can follow a save in your system. A write after the recheck's read is not seen by anything. See [VERIFY_RUN.md](VERIFY_RUN.md#writes-that-land-later) for how the recheck judges changes and what was measured on real apps.
 

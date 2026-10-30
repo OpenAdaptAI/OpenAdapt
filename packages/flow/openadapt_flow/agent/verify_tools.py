@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from openadapt_flow.agent.bridge import BridgeError, ToolSpec
+from openadapt_flow.runtime.effects.late_write import parse_time
 from openadapt_flow.verifier import (
     Actor,
     AlreadyWritten,
@@ -115,6 +116,8 @@ class VerifyBridge:
         #: Held in this server's memory only: after a restart, recheck from
         #: Python with the saved ``recheck.json`` (``RecheckState.load``).
         self._rechecks: dict[str, tuple[PendingWrite, WriteResult]] = {}
+        #: Every checked write with a recheck state, of any outcome.
+        self._checked: list[tuple[PendingWrite, WriteResult]] = []
         self._lock = threading.Lock()
 
     # -- the MCP layer's interface ------------------------------------------
@@ -197,8 +200,10 @@ class VerifyBridge:
                     "Reads the whole database again: CONFIRMED (the verdict "
                     "stands), REFUTED (something moved after it that nothing "
                     "explains: the write is no longer verified) or UNCERTAIN. "
-                    "Before the due time it returns due: false and the time to "
-                    "call again."
+                    "Your later writes under the same contract, checked with "
+                    "verify_check, account for their own rows; a write under "
+                    "another contract does not, and refutes it. Before the due "
+                    "time it returns due: false and the time to call again."
                 ),
                 input_schema=_obj(
                     {"write_id": {"type": "string", "maxLength": 64}}, ["write_id"]
@@ -279,6 +284,11 @@ class VerifyBridge:
             entry, write_attempted=bool(args.get("write_attempted", True))
         )
         out = result.to_dict()
+        if result.recheck is not None:
+            # Any outcome: a later write's own window excuses its rows in an
+            # earlier write's recheck (``excused_by``).
+            with self._lock:
+                self._checked.append((entry, result))
         if result.recheck is not None and out.get("provisional"):
             with self._lock:
                 self._rechecks[write_id] = (entry, result)
@@ -287,6 +297,39 @@ class VerifyBridge:
                 "recheck_due_at. A write that lands before then can still refute "
                 "it; a write after the recheck is not seen."
             )
+        return out
+
+    def _later_writes(
+        self, entry: PendingWrite, result: WriteResult
+    ) -> list[WriteResult]:
+        """This session's checked writes under the same contract by the same
+        actor, begun after ``result``'s post-save read: each excuses only
+        what changed in its own window. A write under another contract, or
+        one begun before that read, excuses nothing."""
+
+        state = result.recheck
+        if state is None:
+            return []
+        post = state.payload.get("post_state") or {}
+        try:
+            since = parse_time(str(post.get("read_at")))
+        except ValueError:
+            return []
+        out: list[WriteResult] = []
+        for other_entry, other in self._checked:
+            if other is result or other_entry.contract is not entry.contract:
+                continue
+            if other_entry.actor != entry.actor or other.recheck is None:
+                continue
+            began = (other.recheck.payload.get("baseline") or {}).get(
+                "baseline_read_at"
+            )
+            try:
+                if parse_time(str(began)) < since:
+                    continue
+            except ValueError:
+                continue
+            out.append(other)
         return out
 
     def _recheck(self, args: Mapping[str, Any]) -> dict[str, Any]:
@@ -301,9 +344,26 @@ class VerifyBridge:
                 "memory only"
             )
         entry, result = held
+        with self._lock:
+            unchecked = [
+                p
+                for p in self._pending.values()
+                if p.contract is entry.contract and p.actor == entry.actor
+            ]
+            later = self._later_writes(entry, result)
+        if unchecked:
+            # Its rows would look unexplained: no verdict until it is checked.
+            raise BridgeError(
+                "a later write under this contract is not checked yet; call "
+                "verify_check for it, then verify_recheck again"
+            )
         try:
             late = recheck(
-                entry.contract, result, params=entry.params, actor=entry.actor
+                entry.contract,
+                result,
+                params=entry.params,
+                actor=entry.actor,
+                excused_by=later,
             )
         except RecheckNotDue as exc:
             return {

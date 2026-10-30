@@ -874,6 +874,67 @@ def test_a_recheck_without_a_ledger_changes_no_ledger(
 ) -> None:
     contract, db, result = _keyed(tmp_path, "order-80")
     _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
-    assert _recheck(contract, result, ledger=None).outcome == "REFUTED"
+    late = _recheck(contract, result, ledger=None)
+    assert late.outcome == "REFUTED"
+    # Nothing was held, and the result says so.
+    assert "no ledger attempt was re-resolved (no ledger was given)" in late.reasons[-1]
     with pytest.raises(verifier.AlreadyWritten):
         begin_write(contract, _params(2), actor=BOT, write_key="order-80")
+
+
+def test_a_recheck_from_a_saved_state_holds_the_write(
+    tmp_path: Path, due_now: None
+) -> None:
+    # The reviewer's probe: after a restart, the recheck runs from the saved
+    # recheck.json, which carries no ledger key.
+    contract, db, result = _keyed(tmp_path, "k-a1")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert result.recheck is not None and result.recheck.path is not None
+    saved = RecheckState.load(result.recheck.path, params=_params(2))
+    late = _recheck(contract, saved)
+    assert late.outcome == "REFUTED"
+    assert not any("re-resolved" in r for r in late.reasons)
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT, write_key="k-a1")
+
+
+def test_a_saved_state_whose_attempt_is_not_in_the_ledger_says_so(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, result = _keyed(tmp_path, "k-a2")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    saved = RecheckState.load(result.recheck.path, params=_params(2))
+    other = verifier.Ledger(verifier.MemoryLedger())
+    late = _recheck(contract, saved, ledger=other)
+    assert late.outcome == "REFUTED"
+    assert "this ledger has no attempt with the write's id" in late.reasons[-1]
+
+
+def test_the_write_carries_its_own_ledger(tmp_path: Path, due_now: None) -> None:
+    # The reviewer's probe A2: begun under a custom ledger, rechecked without
+    # naming it. The recheck re-resolves the attempt there.
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db))
+    custom = verifier.Ledger(verifier.MemoryLedger())
+    before = begin_write(
+        contract, _params(2), actor=BOT, ledger=custom, write_key="k-c"
+    )
+    _sql(db, *_save_sql(2))
+    result = verify_write(before)
+    assert result.provisional and result.ledger is custom
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert _recheck(contract, result).outcome == "REFUTED"
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT, ledger=custom, write_key="k-c")
+
+
+def test_a_wrong_ledger_says_nothing_was_held(tmp_path: Path, due_now: None) -> None:
+    contract, db, result = _keyed(tmp_path, "k-w")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    wrong = verifier.Ledger(verifier.MemoryLedger())
+    late = _recheck(contract, result, ledger=wrong)
+    assert late.outcome == "REFUTED"
+    assert (
+        "re-resolved" in late.reasons[-1]
+        and "hold this write by hand" in late.reasons[-1]
+    )

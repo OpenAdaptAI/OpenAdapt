@@ -560,6 +560,9 @@ class WriteResult:
     #: A person should look at the store: shown by ``openadapt verify ledger
     #: list`` until released, though it doesn't stop a retry being handed back.
     review: bool = False
+    #: The ledger the write was made under (``begin_write``'s), so
+    #: :func:`recheck` re-resolves the attempt there by default.
+    ledger: Optional[Ledger] = field(default=None, repr=False, compare=False)
     #: When the contract sets ``frame.database.recheck_after_s`` and the
     #: database settled after the save: the private state :func:`recheck`
     #: needs (saved as ``recheck.json`` in the write's folder). A confirmed
@@ -1208,6 +1211,10 @@ def verify_write(
             )
     finally:
         pending.release()
+    if pending.ledger is not None:
+        import dataclasses
+
+        result = dataclasses.replace(result, ledger=pending.ledger)
     return result
 
 
@@ -2013,13 +2020,15 @@ def recheck(
             a loaded state needs its params (:meth:`RecheckState.load`).
         wait: Before the due time, sleep until it instead of raising
             :class:`RecheckNotDue`.
-        ledger: The ledger the write was made under, as given to
-            :func:`begin_write` (default: the default ledger; ``None``:
-            none). When ``write`` is a :class:`WriteResult` with a ledger
-            key and the recheck doesn't confirm it, its attempt is resolved
-            again there (``REFUTED`` or ``UNCERTAIN``, for review), so a
-            retry is held for a person instead of being handed the earlier
-            ``CONFIRMED``.
+        ledger: The ledger the write was made under (default: the one a
+            :class:`WriteResult` carries from :func:`begin_write`, else the
+            default ledger; ``None``: none). When the recheck doesn't
+            confirm the write, its attempt is resolved again there
+            (``REFUTED`` or ``UNCERTAIN``, for review), so a retry is held
+            for a person instead of being handed the earlier ``CONFIRMED``.
+            A saved :class:`RecheckState` finds its attempt by the receipt's
+            ``correlation_id``. When no attempt is re-resolved, ``reasons``
+            says so.
 
     Changes the frame excuses after a save are excused here too: the app
     profile's bookkeeping, and another actor's write the audit log
@@ -2036,33 +2045,72 @@ def recheck(
     late = _judge_recheck(
         contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait
     )
-    if late.outcome != "CONFIRMED" and isinstance(write, WriteResult):
+    if late.outcome != "CONFIRMED":
         late = _hold_after_recheck(ledger, write, late)
     return late
 
 
 def _hold_after_recheck(
-    ledger: Any, write: WriteResult, late: RecheckResult
+    ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
 ) -> RecheckResult:
     """Resolve the write's ledger attempt again with the recheck's outcome,
     for review: ``REFUTED`` holds it, ``UNCERTAIN`` keeps it uncertain.
-    Either way a retry is not handed the earlier ``CONFIRMED``. A newer
-    attempt of the key, or no ledger key, leaves the ledger as it is."""
+    Either way a retry is not handed the earlier ``CONFIRMED``.
 
-    if not write.write_key or not write.write_id:
-        return late
+    The attempt is the write's own: its ledger key and write id from a
+    :class:`WriteResult`, or, for a saved :class:`RecheckState`, the
+    receipt's ``correlation_id`` (the write id) looked up in the ledger.
+    The ledger is the one given, else the one the write was made under.
+    When no attempt is re-resolved (no ledger, no such attempt, or a newer
+    attempt of the key), the result says so: the write must be held by hand.
+    """
+
+    if isinstance(write, WriteResult):
+        write_id, key = write.write_id, write.write_key
+        digest = write.receipt_sha256 or None
+        if ledger is _NO_LEDGER and write.ledger is not None:
+            ledger = write.ledger
+    else:
+        receipt = write.payload.get("receipt") or {}
+        write_id = str(receipt.get("correlation_id") or "")
+        key = ""
+        digest = receipt_sha256(receipt) if receipt else None
+
+    def unheld(why: str) -> RecheckResult:
+        return _replace(
+            late,
+            reasons=[
+                *late.reasons,
+                f"no ledger attempt was re-resolved ({why}); hold this write by "
+                "hand so a retry isn't handed the earlier CONFIRMED",
+            ],
+        )
+
     try:
         led = _resolve_ledger(ledger)
         if led is None:
-            return late
-        attempt = led.latest(write.write_key)
-        if attempt is None or attempt.attempt_id != write.write_id:
-            return late
+            return unheld("no ledger was given")
+        if not write_id:
+            return unheld("the write has no write id")
+        if not key:
+            found = [
+                k
+                for k, begun, _ in led.attempts()
+                if str(begun.get("attempt")) == write_id
+            ]
+            if len(found) != 1:
+                return unheld("this ledger has no attempt with the write's id")
+            key = found[0]
+        attempt = led.latest(key)
+        if attempt is None:
+            return unheld("this ledger has no attempt with the write's id")
+        if attempt.attempt_id != write_id:
+            return unheld("a newer attempt of this write is in the ledger")
         prior = attempt.resolved or {}
         reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
         led.resolved(
-            write.write_key,
-            write.write_id,
+            key,
+            write_id,
             outcome=late.outcome,
             retry_safe=False,
             landed=False,
@@ -2071,13 +2119,13 @@ def _hold_after_recheck(
             via="recheck",
             late=late.late,
             write_key_bound=bool(prior.get("write_key_bound")),
-            receipt_sha256=write.receipt_sha256 or None,
+            receipt_sha256=digest,
             result={
                 "verified": False,
                 "outcome": late.outcome,
                 "late": late.late,
                 "reason": reason,
-                "receipt_sha256": write.receipt_sha256 or None,
+                "receipt_sha256": digest,
             },
         )
     except Exception as exc:  # noqa: BLE001 - the verdict stands; say so

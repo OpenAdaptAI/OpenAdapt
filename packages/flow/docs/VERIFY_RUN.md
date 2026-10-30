@@ -607,16 +607,25 @@ A process that restarts in the window can load the saved state with
 Over MCP (`openadapt verify serve`), call `verify_recheck` with the
 `write_id` of a `verify_check` reply that says `provisional: true`. Before the
 due time it returns `due: false`, `recheck_due_at` and `wait_s`. The server
-holds the state in memory, so after a restart run the recheck from Python.
-There is no CLI command for it.
+passes the agent's own later writes as `excused_by`: those under the same
+contract, by the same agent, begun after this write's post-save read and
+already checked with `verify_check`. While such a write is begun but not yet
+checked, `verify_recheck` refuses and asks for that check first. Writes under
+different contracts can't excuse each other: an agent that creates a contact
+and then an opportunity inside the window gets the first write `REFUTED`.
+The server holds the state in memory, so after a restart run the recheck
+from Python. There is no CLI command for it.
 
 A recheck that gives `REFUTED` or `UNCERTAIN` also resolves the write's
 ledger attempt again, for review. `REFUTED` holds it, and `UNCERTAIN` keeps it
 uncertain, so a retry under the same key is never handed the earlier
 `CONFIRMED`; `openadapt verify ledger list` shows it until a person releases
-it. Pass `ledger=` to `recheck` as given to `begin_write` (`None` changes no
-ledger). A `RecheckState` loaded from disk carries no ledger key, so a
-recheck of one leaves the ledger as it is.
+it. The ledger is the one the `WriteResult` carries from `begin_write`, or
+the default ledger; `ledger=` overrides it. A `RecheckState` loaded from disk
+finds its attempt by the receipt's `correlation_id` (the write id). When no
+attempt is re-resolved (no ledger, a ledger without that attempt, or a newer
+attempt of the same write), the recheck's `reasons` say so, and the write
+must be held by hand.
 
 ### Choosing the window
 
@@ -647,6 +656,19 @@ Measured on two real apps, Dolibarr 21 and EspoCRM 10 on MariaDB 11.4, with
   `scheduled_job.last_run` in `ignore_columns`, and `settle_attempts: 10`.
   Then the correct writes were `CONFIRMED` again. An app with a scheduler
   needs this kind of review before its rechecks mean anything.
+
+Each of those declarations stops checking something, at the check and at
+the recheck:
+
+- A skipped table (`job`) is never read. Every write to it is unseen,
+  including a job the agent's own action queues (a mass email, a workflow,
+  a webhook) or one it adds by mistake.
+- An append-only table (`scheduled_job_log_record`) lets any added row
+  through, whoever added it. Only an edited or removed row counts.
+- An ignored column (`scheduled_job.last_run`) is not compared on any row.
+
+Prefer append-only, or `ignore_columns` on the columns that move, over
+skipping a table when the table allows it.
 
 ## Verdicts
 

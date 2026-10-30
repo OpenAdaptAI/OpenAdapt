@@ -261,6 +261,79 @@ def test_verify_recheck_refutes_a_write_that_landed_late(
     assert again["ok_to_write"] is False and "earlier_result" not in again
 
 
+VALUES_3 = {"fname": "Bo", "lname": "Quill", "email": "bo@example.test"}
+SAVE_3 = (
+    "INSERT INTO patient_data (id, fname, lname, email) "
+    "VALUES (3, 'Bo', 'Quill', 'bo@example.test')"
+)
+
+
+def _second(bridge: VerifyBridge, db: Path, contract: str = "patient") -> dict:
+    begun = bridge.dispatch("verify_begin", {"contract": contract, "values": VALUES_3})
+    _sql(db, SAVE_3)
+    return bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+
+
+def test_the_agents_next_write_in_the_window_does_not_refute_the_first(
+    sqlite_bridge, monkeypatch
+) -> None:
+    # The reviewer's probe: two correct writes by one agent under one
+    # contract inside the window. Each recheck excuses the other's rows.
+    bridge, db = sqlite_bridge
+    first = _provisional(bridge, db)
+    second = _second(bridge, db)
+    assert second["provisional"] is True
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    one = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    two = bridge.dispatch("verify_recheck", {"write_id": second["write_id"]})
+    assert one["outcome"] == "CONFIRMED", one["reasons"]
+    assert two["outcome"] == "CONFIRMED", two["reasons"]
+    retry = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    assert retry["ok_to_write"] is False
+    assert retry["earlier_result"]["outcome"] == "CONFIRMED"
+
+
+def test_a_late_row_after_the_next_write_still_refutes_the_first(
+    sqlite_bridge, monkeypatch
+) -> None:
+    bridge, db = sqlite_bridge
+    first = _provisional(bridge, db)
+    _second(bridge, db)
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    one = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    assert one["outcome"] == "REFUTED"
+
+
+def test_a_write_under_another_contract_is_not_excused(
+    sqlite_bridge, monkeypatch, tmp_path
+) -> None:
+    bridge, db = sqlite_bridge
+    # The same read under another name: another contract excuses nothing.
+    doc = yaml.safe_load((tmp_path / "contracts" / "patient.yaml").read_text())
+    bridge.contracts["intake"] = verifier.Contract.from_dict(doc, name="intake")
+    first = _provisional(bridge, db)
+    _second(bridge, db, contract="intake")
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    one = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    assert one["outcome"] == "REFUTED"
+
+
+def test_a_recheck_waits_for_a_later_write_still_unchecked(
+    sqlite_bridge, monkeypatch
+) -> None:
+    bridge, db = sqlite_bridge
+    first = _provisional(bridge, db)
+    begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES_3})
+    _sql(db, SAVE_3)
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    with pytest.raises(BridgeError, match="not checked yet"):
+        bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+    one = bridge.dispatch("verify_recheck", {"write_id": first["write_id"]})
+    assert one["outcome"] == "CONFIRMED", one["reasons"]
+
+
 def test_a_write_without_a_recheck_has_none_to_run(sqlite_bridge) -> None:
     bridge, _ = sqlite_bridge
     with pytest.raises(BridgeError, match="no provisional result"):

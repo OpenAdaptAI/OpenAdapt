@@ -148,8 +148,12 @@ that may be what refuted that later write gives `UNCERTAIN`.
 
 A recheck that gives `REFUTED` or `UNCERTAIN` resolves the write's ledger
 attempt again, for review: a retry under the same key is held for a person,
-never handed the earlier `CONFIRMED`. Pass `ledger=` as given to
-`begin_write` (default: the default ledger; `None`: no ledger). A write that
+never handed the earlier `CONFIRMED`. The ledger is the one the result
+carries from `begin_write` (`result.ledger`), else the default; `ledger=`
+overrides it (`None`: no ledger). A saved `RecheckState` finds its attempt by
+the receipt's `correlation_id`. When no attempt is re-resolved, the recheck's
+`reasons` say so. Over MCP, the agent's later writes under the same contract
+excuse their own rows; writes under other contracts can't. A write that
 lands after the recheck's read is not seen. MCP clients run the recheck with
 `verify_recheck`. See [VERIFY_RUN.md](VERIFY_RUN.md#writes-that-land-later).
 
