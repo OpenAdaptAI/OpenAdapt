@@ -81,6 +81,7 @@ from openadapt_flow.runtime.effects.effect import (
     record_matches,
     stable_id,
 )
+from openadapt_flow.runtime.effects.versions import FrameVersions, VersionVerdict
 
 FrameStatus = Literal["held", "refuted", "not_checked"]
 Attribution = Literal["other", "self", "unattributed"]
@@ -450,6 +451,19 @@ class FrameSpec(BaseModel):
     side_records: list[FrameSideRecord] = Field(default_factory=list)
     #: Diff the whole database (``FrameDatabase``).
     database: Optional[FrameDatabase] = None
+    #: The target's versions, read before and after the save
+    #: (``versions.FrameVersions``): a version in the window that isn't the
+    #: agent's own is a lost update.
+    versions: Optional[FrameVersions] = None
+
+    @model_serializer(mode="wrap")
+    def _compact(self, handler: Any) -> dict[str, Any]:
+        # Unset, ``versions`` is left out, so a contract that doesn't use it
+        # keeps its digests (``frame_sha256``, the check digest).
+        data: dict[str, Any] = handler(self)
+        if data.get("versions") is None:
+            data.pop("versions", None)
+        return data
 
     @model_validator(mode="after")
     def _database_attribution(self) -> "FrameSpec":
@@ -591,6 +605,8 @@ class FrameVerdict:
     added_by_others: set[tuple[str, str]] = field(default_factory=set)
     #: In memory only: app profile rules that excused a row change.
     excused_by: set[str] = field(default_factory=set)
+    #: ``frame.versions`` only: how the target's versions came out.
+    versions: Optional[VersionVerdict] = None
     #: In memory only, set when the frame held and ``recheck_after_s`` is
     #: set: what a later recheck compares with (the settled post-save
     #: snapshot as keyed MACs, the audit entries seen then as keyed hashes,
@@ -621,6 +637,11 @@ class FrameVerdict:
                 1 for c in self.collateral if c.other_on_target
             ),
             **({"database": self.database} if self.database is not None else {}),
+            **(
+                {"versions": self.versions.evidence()}
+                if self.versions is not None
+                else {}
+            ),
         }
 
 

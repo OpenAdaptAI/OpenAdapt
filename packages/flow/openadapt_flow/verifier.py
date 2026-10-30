@@ -1562,6 +1562,24 @@ def _scope(
     )
 
 
+#: ``frame.versions`` problems (``runtime/effects/versions.py``), as reasons.
+_VERSION_REASONS = {
+    "another_author": "lost update: another user saved a version of the target "
+    "inside the window, so the agent's save may have overwritten it",
+    "extra_steps": "lost update: the target moved more than one version in the "
+    "window, and only one save is the agent's",
+    "went_back": "the target's version went back or was replaced in the window",
+    "no_author": "a new version of the target names no author, so it can't be "
+    "told from another user's save",
+    "not_a_number": "the target's versions aren't whole numbers and no author "
+    "is read, so the saves in the window can't be counted",
+    "missing": "the target existed before the write but has no version to compare",
+    "no_target_id": "a target record has no field naming it in the versions read",
+    "unreadable": "the target's versions could not be read, before or after the write",
+    "self_unresolved": "frame.versions.self names a parameter the run did not supply",
+}
+
+
 def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
     out: list[str] = []
     for row in (evidence.get("readback") or {}).get("effects") or []:
@@ -1573,14 +1591,18 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
             f"{row.get('expected_count')} expected record(s)"
         )
     frame = evidence.get("frame") or {}
-    if frame.get("status") == "refuted":
+    versions = frame.get("versions") or {}
+    problem = versions.get("problem") if isinstance(versions, Mapping) else None
+    if problem:
+        out.append(_VERSION_REASONS.get(str(problem), f"the target's versions: {problem}"))
+    if frame.get("status") == "refuted" and frame.get("collateral_count", 0):
         kinds = ", ".join(frame.get("collateral_kinds") or [])
         out.append(
             f"{frame.get('collateral_count', 0)} record(s) outside the declared "
             f"write moved ({kinds}); "
             f"{frame.get('unattributed_count', 0)} of them no actor explains"
         )
-    elif frame.get("status") == "not_checked":
+    elif frame.get("status") == "not_checked" and not problem:
         out.append("what else changed could not be read, so the frame is not checked")
     source = evidence.get("source") or {}
     if isinstance(source, Mapping) and source.get("status") == "refuted":
