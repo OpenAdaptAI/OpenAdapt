@@ -34,6 +34,12 @@ What a snapshot holds, and why:
   database fills with the time can be held to the window.
 - **Allow-listed tables** are append-only by default: their existing rows
   must not change or go. ``skip`` reads nothing and needs a stated reason.
+- **Exact values.** Every column is read, and no type is dropped. On MySQL
+  and MariaDB a row is read as ``JSON_OBJECT``; a type whose value it can't
+  carry as exact text is read another way (:func:`_mysql_encoding`: bytes,
+  bit strings and geometries as hex, ``FLOAT`` widened to ``DOUBLE``, JSON as
+  its stored text), and numbers parse as ``Decimal``. :func:`canonical` gives
+  each value one exact text form.
 
 Read-only: SQLite files open with ``mode=ro``; a driver connection should use
 an account with SELECT (and, on MySQL, TRIGGER and SHOW VIEW) on every schema
@@ -43,13 +49,14 @@ whoever holds both it and the host secret can test guesses against the MACs.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
 import secrets
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
+from decimal import Context, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -125,7 +132,25 @@ def mac_key(salt: bytes) -> bytes:
 
 
 def canonical(value: Any) -> str:
-    """One text form per value, so equal values hash equally."""
+    """One exact text form per value, so equal values hash equally and
+    different ones don't.
+
+    It covers what MySQL, MariaDB, PostgreSQL and SQLite drivers return:
+
+    - numbers (``int``, ``float``, ``Decimal``) by value, every digit kept;
+    - bytes (``bytes``, ``bytearray``, ``memoryview``) as a tagged hex;
+    - ``datetime``, ``date`` and ``time`` as their ISO text with a space;
+    - ``timedelta`` (a MySQL ``TIME``, a PostgreSQL ``interval``) as signed
+      ``H:MM:SS[.ffffff]``, the text MySQL prints for a ``TIME``;
+    - a ``set`` (a MySQL ``SET``) as its sorted members joined by commas;
+    - ``dict``, ``list`` and ``tuple`` (``JSON``, ``jsonb``, arrays) as JSON
+      with sorted keys and these rules inside;
+    - any other type with its own ``str()`` (``UUID``, an IP address).
+
+    A type without an exact text form (its ``str()`` is the default, which
+    prints a memory address) raises ``TypeError``: a snapshot that can't
+    read a column exactly is unreadable, never a column dropped.
+    """
 
     if value is None:
         return "\x00null"
@@ -133,10 +158,52 @@ def canonical(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float, Decimal)):
         number = Decimal(str(value))
-        return format(number.normalize(), "f") if number == number else str(value)
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, sort_keys=True, default=str)
+        if not number.is_finite():
+            return str(value)
+        # The default context keeps 28 digits; a DECIMAL(65,30) has more.
+        exact = Context(prec=max(len(number.as_tuple().digits), 1))
+        return format(number.normalize(exact), "f")
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return "\x00bytes:" + bytes(value).hex()
+    if isinstance(value, datetime.timedelta):
+        return _interval_text(value)
+    if isinstance(value, (set, frozenset)):
+        return ",".join(sorted(canonical(v) for v in value))
+    if isinstance(value, (dict, list, tuple)):
+        return _json_text(value)
+    if isinstance(value, str):
+        return value
+    if type(value).__str__ is object.__str__:
+        raise TypeError(f"no exact text form for a {type(value).__name__} value")
     return str(value)
+
+
+def _interval_text(value: datetime.timedelta) -> str:
+    micro = (value.days * 86400 + value.seconds) * 1_000_000 + value.microseconds
+    sign, micro = ("-", -micro) if micro < 0 else ("", micro)
+    seconds, fraction = divmod(micro, 1_000_000)
+    hours, rest = divmod(seconds, 3600)
+    text = f"{sign}{hours:02d}:{rest // 60:02d}:{rest % 60:02d}"
+    return text + (f".{fraction:06d}" if fraction else "")
+
+
+def _json_text(value: Any) -> str:
+    if value is None or isinstance(value, (bool, str)):
+        return json.dumps(value)
+    if isinstance(value, (int, float, Decimal)):
+        return canonical(value)
+    if isinstance(value, Mapping):
+        return (
+            "{"
+            + ",".join(
+                json.dumps(str(k)) + ":" + _json_text(value[k])
+                for k in sorted(value, key=str)
+            )
+            + "}"
+        )
+    if isinstance(value, (list, tuple)):
+        return "[" + ",".join(_json_text(v) for v in value) + "]"
+    return json.dumps(canonical(value))
 
 
 def _mac(key: bytes, text: str) -> str:
@@ -403,12 +470,20 @@ class _Session:
 
     def rows(self, sql: str) -> list[tuple[Any, ...]]:
         self.cur.execute(sql)
-        return [tuple(r) for r in self.cur.fetchall()]
+        # A dict cursor (``pymysql.cursors.DictCursor``) yields mappings in
+        # column order; a plain one yields tuples.
+        return [
+            tuple(r.values()) if isinstance(r, Mapping) else tuple(r)
+            for r in self.cur.fetchall()
+        ]
 
     def dicts(self, sql: str) -> list[dict[str, Any]]:
         self.cur.execute(sql)
         names = [d[0] for d in self.cur.description or []]
-        return [dict(zip(names, r)) for r in self.cur.fetchall()]
+        return [
+            dict(r) if isinstance(r, Mapping) else dict(zip(names, r))
+            for r in self.cur.fetchall()
+        ]
 
     def close(self) -> None:
         try:
@@ -423,7 +498,9 @@ class _Def:
     primary_key: list[str]
     generated_key: Optional[str]
     defaults: dict[str, Optional[str]]
-    binary: set[str]
+    #: Column -> how it is read when its JSON text isn't exact
+    #: (:func:`_mysql_encoding`); every other column is read as it is.
+    encode: dict[str, str]
     schema: str
     non_transactional: bool = False
     #: The column the database numbers (AUTO_INCREMENT, or SQLite's rowid
@@ -465,7 +542,7 @@ def _definitions(s: _Session) -> tuple[dict[str, _Def], str]:
             if d is None:
                 engine = engines[(str(schema), str(table))].lower()
                 d = out[name] = _Def(
-                    [], [], None, {}, set(), "", engine not in ("innodb", "")
+                    [], [], None, {}, {}, "", engine not in ("innodb", "")
                 )
             d.columns.append(str(column))
             d.defaults[str(column)] = _default_text(cdefault, "mysql")
@@ -474,8 +551,9 @@ def _definitions(s: _Session) -> tuple[dict[str, _Def], str]:
             if "auto_increment" in str(extra).lower():
                 d.generated_key = str(column)
                 d.auto_column = str(column)
-            if "binary" in str(dtype).lower() or "blob" in str(dtype).lower():
-                d.binary.add(str(column))
+            how = _mysql_encoding(str(dtype))
+            if how:
+                d.encode[str(column)] = how
             d.schema = _digest(
                 [d.schema, column, ctype, cdefault, nullable, extra, key]
             )
@@ -521,7 +599,7 @@ def _definitions(s: _Session) -> tuple[dict[str, _Def], str]:
             pk,
             generated,
             {str(r[1]): _default_text(r[4], "sqlite") for r in info},
-            set(),
+            {},
             _digest([sql]),
             auto_column=generated,
         )
@@ -529,10 +607,62 @@ def _definitions(s: _Session) -> tuple[dict[str, _Def], str]:
     return out, _digest(sqlite_code)
 
 
-def _cell(dialect: Dialect, column: str, binary: bool) -> str:
+#: MySQL and MariaDB types whose value ``JSON_OBJECT`` can't carry as text:
+#: a bit string, a geometry or a vector is bytes, which turns the whole
+#: object into a binary string that isn't valid JSON (Dolibarr's
+#: ``llx_societe.geopoint``). They are read as the hex of their stored bytes.
+_MYSQL_HEX_TYPES = frozenset(
+    {
+        "bit",
+        "geometry",
+        "point",
+        "linestring",
+        "polygon",
+        "multipoint",
+        "multilinestring",
+        "multipolygon",
+        "geometrycollection",
+        "geomcollection",
+        "vector",
+    }
+)
+
+
+def _mysql_encoding(data_type: str) -> str:
+    """How a MySQL or MariaDB column is read so its text is exact.
+
+    - ``hex``: binary strings, blobs, bit strings, geometries and vectors, as
+      the hex of the stored bytes.
+    - ``double``: ``FLOAT``, widened to ``DOUBLE``. The server prints a
+      ``FLOAT`` with six significant digits, so two different stored values
+      can print the same; widening is exact, and a ``DOUBLE`` prints as the
+      shortest text that reads back as the same number.
+    - ``text``: ``JSON`` (and ``LONGTEXT``, MariaDB's type for it), as the
+      stored text, so ``JSON_OBJECT`` doesn't parse and print it again.
+    - ``""``: every other type, as ``JSON_OBJECT`` prints it. Integers,
+      decimals, dates, times, ``ENUM`` and ``SET`` print exactly there.
+    """
+
+    t = data_type.strip().lower()
+    if "binary" in t or "blob" in t or t in _MYSQL_HEX_TYPES:
+        return "hex"
+    if t == "float":
+        return "double"
+    if t in ("json", "longtext"):
+        return "text"
+    return ""
+
+
+def _cell(dialect: Dialect, column: str, how: str = "") -> str:
     q = _quote(dialect, column)
     if dialect == "mysql":
-        return f"HEX({q})" if binary else q
+        if how == "hex":
+            return f"HEX({q})"
+        if how == "double":
+            return f"CAST({q} AS DOUBLE)"
+        if how == "text":
+            return f"CONCAT({q})"
+        return q
     return f"CASE WHEN typeof({q}) = 'blob' THEN hex({q}) ELSE {q} END"
 
 
@@ -542,7 +672,7 @@ def _row_json(dialect: Dialect, d: _Def) -> list[str]:
         obj
         + "("
         + ", ".join(
-            f"{_literal(c)}, {_cell(dialect, c, c in d.binary)}"
+            f"{_literal(c)}, {_cell(dialect, c, d.encode.get(c, ''))}"
             for c in d.columns[i : i + _CHUNK]
         )
         + ")"
@@ -560,9 +690,44 @@ def _read_rows(
         row: dict[str, Any] = {}
         for chunk in chunks:
             if chunk is not None:
-                row.update(json.loads(chunk) if isinstance(chunk, str) else chunk)
+                row.update(_row_part(name, chunk))
         out.append(row)
     return out
+
+
+def _row_part(table: str, chunk: Any) -> dict[str, Any]:
+    """One ``JSON_OBJECT`` result as a dict, with numbers kept exact.
+
+    A driver returns the object as text, as bytes (when the server types the
+    result as a binary string), or already parsed. Bytes must be UTF-8 JSON.
+    Anything else can't be read exactly, so the table is unreadable; no
+    column is dropped. A number with a fraction or an exponent parses as a
+    ``Decimal``, never a ``float``, so a ``DECIMAL(30,10)`` keeps every digit.
+    """
+
+    if isinstance(chunk, (bytes, bytearray, memoryview)):
+        try:
+            chunk = bytes(chunk).decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise SnapshotError(
+                f"table {table}: a row isn't UTF-8 JSON ({exc.reason}); a column "
+                "type the snapshot doesn't read as hex"
+            ) from exc
+    if isinstance(chunk, str):
+        try:
+            parsed = json.loads(chunk, parse_float=Decimal)
+        except ValueError as exc:
+            raise SnapshotError(
+                f"table {table}: a row isn't valid JSON ({exc}); a column type "
+                "the snapshot doesn't read as hex"
+            ) from exc
+    else:
+        parsed = chunk
+    if not isinstance(parsed, Mapping):
+        raise SnapshotError(
+            f"table {table}: a row read as {type(parsed).__name__}, not a JSON object"
+        )
+    return dict(parsed)
 
 
 def _row_key(
