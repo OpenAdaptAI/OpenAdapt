@@ -1,0 +1,122 @@
+resource_type: Appointment
+demos:
+- name: noor_2026-12-02
+  seed:
+  - as: patient
+    resource:
+      resourceType: Patient
+      name:
+      - given:
+        - Noor
+        family: Haddad
+      birthDate: '1972-03-09'
+      gender: female
+  - as: doctor
+    resource:
+      resourceType: Practitioner
+      name:
+      - given:
+        - Ama
+        family: Osei
+        prefix:
+        - Dr
+  params:
+    status: booked
+    start: '2026-12-02T09:00:00Z'
+    end: '2026-12-02T09:30:00Z'
+    patient:
+      ref: patient
+    practitioner:
+      ref: doctor
+  resource:
+    resourceType: Appointment
+    status: booked
+    start: '2026-12-02T09:00:00Z'
+    end: '2026-12-02T09:30:00Z'
+    participant:
+    - actor:
+        ref: patient
+      status: accepted
+    - actor:
+        ref: doctor
+      status: accepted
+- name: elias_2026-12-03
+  seed:
+  - as: patient
+    resource:
+      resourceType: Patient
+      name:
+      - given:
+        - Elias
+        family: Brandt
+      birthDate: '1985-12-01'
+      gender: male
+  - as: doctor
+    resource:
+      resourceType: Practitioner
+      name:
+      - given:
+        - Petra
+        family: Lind
+        prefix:
+        - Dr
+  params:
+    status: booked
+    start: '2026-12-03T15:15:00Z'
+    end: '2026-12-03T15:45:00Z'
+    patient:
+      ref: patient
+    practitioner:
+      ref: doctor
+  resource:
+    resourceType: Appointment
+    status: booked
+    start: '2026-12-03T15:15:00Z'
+    end: '2026-12-03T15:45:00Z'
+    participant:
+    - actor:
+        ref: patient
+      status: accepted
+    - actor:
+        ref: doctor
+      status: accepted
+- name: mei_2026-12-08
+  seed:
+  - as: patient
+    resource:
+      resourceType: Patient
+      name:
+      - given:
+        - Mei
+        family: Tanaka
+      birthDate: '1958-07-27'
+      gender: female
+  - as: doctor
+    resource:
+      resourceType: Practitioner
+      name:
+      - given:
+        - Ama
+        family: Osei
+        prefix:
+        - Dr
+  params:
+    status: booked
+    start: '2026-12-08T11:00:00Z'
+    end: '2026-12-08T11:20:00Z'
+    patient:
+      ref: patient
+    practitioner:
+      ref: doctor
+  resource:
+    resourceType: Appointment
+    status: booked
+    start: '2026-12-08T11:00:00Z'
+    end: '2026-12-08T11:20:00Z'
+    participant:
+    - actor:
+        ref: patient
+      status: accepted
+    - actor:
+        ref: doctor
+      status: accepted

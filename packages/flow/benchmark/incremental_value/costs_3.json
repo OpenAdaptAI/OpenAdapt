@@ -1,0 +1,46 @@
+{
+ "schema": "incremental-value/costs/v3",
+ "frozen_with": "PREREGISTRATION_3.md",
+ "note": "People seconds per outcome for run 3 (Medplum). costs_2.json's per-outcome figures, unchanged, except where PREREGISTRATION_3.md says: B's stops are charged from the stop card's modelled seconds, and setup is split into its parts. Never changed after run 3 starts.",
+ "missed_harm": {
+  "seconds": 14737,
+  "basis": "As costs_2.json: USD 96 to correct one duplicate patient record, at the US median wage of a medical records specialist, USD 23.45 per hour.",
+  "sensitivity": {
+   "low_seconds": 330,
+   "high_seconds": 153518
+  }
+ },
+ "caught_harm": {
+  "seconds": 420,
+  "basis": "As costs_2.json (cost model V1, modelled). Arm A's charge, and B's sensitivity figure. B's primary charge is its stop card's modelled person seconds at x1 (benchmark/stop_card/PREREG_REVIEW.md)."
+ },
+ "false_stop": {
+  "seconds": 120,
+  "basis": "As costs_2.json. For B, the larger of this and the stop card's modelled seconds."
+ },
+ "correct_stop": {
+  "seconds": 120,
+  "basis": "As costs_2.json. For B, the larger of this and the stop card's modelled seconds."
+ },
+ "failed_stop": {
+  "seconds": 420,
+  "basis": "As costs_2.json. For B, the larger of this and the stop card's modelled seconds."
+ },
+ "silent_absent": {
+  "seconds": 330,
+  "basis": "As costs_2.json."
+ },
+ "setup_min": {
+  "A": {
+   "agent": 60.0,
+   "basis": "As costs_2.json's A: writing and checking the agent's prompt and read-back."
+  },
+  "B": {
+   "agent": 60.0,
+   "contract": null,
+   "read_path_qualification": 35.0,
+   "basis": "The same agent setup as A; plus the person time measured while generating and reviewing B's three contracts (PERSON_LOG_3.md), filled in before the first item and frozen with the contracts; plus Medplum's one-time read-path qualification (fhir_medplum/readpath/MINUTES.md, about 35 minutes), charged in the primary figure because this run can't show it is already paid for any customer. The figure without it is reported."
+  }
+ },
+ "amortized_items_secondary": 1000
+}

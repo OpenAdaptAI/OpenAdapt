@@ -205,17 +205,40 @@ def scripted(
 # -- claude: the Claude Agent SDK ---------------------------------------------------
 
 
-def claude(model: str = "claude-sonnet-5-5", max_turns: int = 25) -> AgentFn:
+def claude(
+    model: str = "claude-sonnet-5-5",
+    max_turns: int = 25,
+    *,
+    system: str = SYSTEM,
+    effort: Optional[str] = None,
+    max_budget_usd: Optional[float] = None,
+) -> AgentFn:
+    """``effort`` and ``max_budget_usd`` go to the Agent SDK when set."""
+
+    extra: dict[str, Any] = {}
+    if effort:
+        extra["effort"] = effort
+    if max_budget_usd:
+        extra["max_budget_usd"] = max_budget_usd
+
     def run(task: dict[str, Any], fhir_url: str, token: str) -> dict[str, Any]:
         import anyio
 
-        return anyio.run(_claude_once, task, fhir_url, token, model, max_turns)
+        return anyio.run(
+            _claude_once, task, fhir_url, token, model, max_turns, system, extra
+        )
 
     return run
 
 
 async def _claude_once(
-    task: dict[str, Any], fhir_url: str, token: str, model: str, max_turns: int
+    task: dict[str, Any],
+    fhir_url: str,
+    token: str,
+    model: str,
+    max_turns: int,
+    system: str = SYSTEM,
+    extra: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     from claude_agent_sdk import (
         ResultMessage,
@@ -264,10 +287,11 @@ async def _claude_once(
     server = create_sdk_mcp_server("fhir", tools=[fhir_request, finish])
     options = only(
         {"fhir": server},
-        system_prompt=SYSTEM,
+        system_prompt=system,
         model=model,
         max_turns=max_turns,
         setting_sources=[],
+        **(extra or {}),
     )
     cost = 0.0
     async for message in query(prompt=task["instruction"], options=options):
