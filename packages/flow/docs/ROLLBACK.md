@@ -54,9 +54,12 @@ run is refused before it starts: nothing after a stop could be proven.
    read) ends `RECONCILIATION_REQUIRED`, and an uncertain write counts as
    absent only when a fresh read of its own record says so. A step that
    declares no effect and has no compensation (pressing Enter in a form
-   field) is judged by the whole-database reads themselves: if it wrote, the
-   store shows it, unless the write went only to a reviewed allow-listed
-   table or a column the app profile leaves out. Only a
+   field) is judged by the whole-database reads and the audit log together:
+   only when every write the run's user logged is a row the read shows
+   changed. A write to a table the read keeps append-only (an allow-listed
+   table, or one the app profile keeps append-only, such as a disclosure
+   log) is then still caught by its log entry; a write the app doesn't log
+   there isn't. Only a
    whole-database read proves the run's effects absent; a collection read
    never overrides the run's own uncertainty.
 2. **Compensate, latest change first.** For each change in the run's
@@ -115,7 +118,9 @@ run is refused before it starts: nothing after a stop could be proven.
    - Anything else: `RECONCILIATION_REQUIRED`. `report.json` holds a summary
      with counts and column names only. `<run-dir>/rollback/diff.json`
      (owner-only) holds every added, removed and changed row, with the values
-     before and after.
+     before and after. When another user wrote to the run's rows while the
+     rollback ran, `rollback/late.json` holds those rows as the stop left
+     them.
 
 The halt message and `REPORT.md` show what happened to each step:
 
@@ -177,7 +182,7 @@ rollback:
       sql_driver: pymysql
       sql_connect_args: {host: 127.0.0.1, user: readonly, database: app}
       sql_password_env: APP_READONLY_PASSWORD
-    allow_tables: [log, sessions]   # tables the app writes on its own
+    allow_tables: []                # reviewed tables the app writes on its own, beyond the profile
   allow_delete: false               # the default: no hard deletes
   exclusive: false                  # true only for a declared test copy no one else writes
   profile: openemr                  # the app's own bookkeeping (app_profiles)

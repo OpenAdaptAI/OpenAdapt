@@ -53,6 +53,17 @@ _pkg = types.ModuleType("benchmark")
 _pkg.__path__ = [str(FLOW / "benchmark")]
 sys.modules["benchmark"] = _pkg
 
+#: OpenEMR's audit log as attribution reads it (docs/VERIFY_RUN.md, Records
+#: outside the target): the table and the write kind derived from the log.
+AUDIT_QUERY = (
+    "SELECT l.id, l.user, l.patient_id, SUBSTRING_INDEX(l.event, '-', -1) AS kind, "
+    "CASE WHEN IFNULL(e.encrypt, 'No') = 'Yes' THEN NULL ELSE "
+    "LOWER(REPLACE(REGEXP_SUBSTR(l.comments, "
+    "'(?i)(?<=insert into |update |delete from |replace into )[`a-z0-9_.]+'), "
+    "'`', '')) END AS tbl "
+    "FROM log l LEFT JOIN log_comment_encrypt e ON e.log_id = l.id"
+)
+
 UI_PORT, API_PORT = "9561", "9560"
 PROJECT = "openadapt-openemr-rollback"
 SAVE_STEP = "step_034"
@@ -204,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     from openadapt_flow.ir import Workflow
     from openadapt_flow.rollback import ReplayerRunner, RollbackPlan
     from openadapt_flow.rollback_state import DatabaseReader
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
     from openadapt_flow.runtime.effects.sql import SqlRecordVerifier
 
     root = args.root
@@ -243,6 +255,17 @@ def main(argv: list[str] | None = None) -> int:
 
         def session() -> Any:
             return ro.connect(container, "openemr")
+
+        def audit_rows() -> Any:
+            """The audit log through its own one-statement read; None when it
+            can't be read (attribution then says nothing)."""
+            try:
+                cur = one_shot().cursor()
+                cur.execute(AUDIT_QUERY)
+                names = [d[0] for d in cur.description or []]
+                return [dict(zip(names, row)) for row in cur.fetchall()]
+            except Exception:  # noqa: BLE001 - an unreadable log decides nothing
+                return None
 
         def one_shot() -> Any:
             return ro.OneShotConnection(container, "openemr")
@@ -286,6 +309,26 @@ def main(argv: list[str] | None = None) -> int:
                         ),
                     ),
                     read_records=records_reader(verifier),
+                    # With the profile, the realistic attribution: OpenEMR's
+                    # own audit log, the acting user as the run.
+                    attribution=(
+                        FrameAttribution(
+                            kind="audit_read",
+                            actor_field="user",
+                            self=[fx._runtime_values()["OPENEMR_ACTOR_USER"]],
+                            record_field="patient_id",
+                            record_key="pid",
+                            event_field="kind",
+                            write_events=["insert", "update", "delete"],
+                            insert_events=["insert"],
+                            delete_events=["delete"],
+                            table_field="tbl",
+                            read={"kind": "sql"},
+                        )
+                        if case_profile
+                        else None
+                    ),
+                    audit_read=audit_rows if case_profile else None,
                 )
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=True)

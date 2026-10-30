@@ -748,6 +748,43 @@ class Attributor:
                 out += added
         return out
 
+    def unaccounted_writes(
+        self,
+        rows: Sequence[Change],
+        window: Optional[list[dict[str, Any]]],
+        bookkeeping_inserts: set[str] = frozenset(),  # type: ignore[assignment]
+    ) -> Optional[list[dict[str, Any]]]:
+        """The run's own logged writes that no changed row accounts for (a
+        write to a table the read keeps append-only, say), or None when
+        there is no audit window to tell. As the frame does, an insert entry
+        that names no record in a table the app profile calls bookkeeping
+        (``no_record_insert_tables``) is the app's own."""
+        from openadapt_flow.app_profiles import table_name
+        from openadapt_flow.runtime.effects.frame import get_path
+
+        if self.spec.kind != "audit_read" or window is None:
+            return None
+        named = [(c[0], self._ref(*c)) for c in rows]
+        out = []
+        for e in window:
+            if str(get_path(e, self.spec.actor_field)) not in self.self_actors:
+                continue
+            table = get_path(e, self.spec.table_field or "")
+            record = get_path(e, self.spec.record_field or "")
+            if (
+                record in (None, "")
+                and self._event(e) in set(self.spec.insert_events)
+                and table not in (None, "")
+                and table_name(str(table)) in bookkeeping_inserts
+            ):
+                continue
+            if record not in (None, "") and any(
+                ref == str(record) and _same_table(table, t) for t, ref in named
+            ):
+                continue
+            out.append(e)
+        return out
+
     def _key_field(self, table: str) -> Optional[str]:
         return self.spec.record_keys.get(table, self.spec.record_key)
 

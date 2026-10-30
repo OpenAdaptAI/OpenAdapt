@@ -68,6 +68,8 @@ from openadapt_flow.runtime.effects.db_snapshot import Snapshot
 #: ``db_snapshot.unread_reasons`` for an id counter that moved past rows that
 #: are gone again.
 COUNTER_MOVED = "a row was written and removed (counter moved)"
+#: Rows another user wrote while the rollback ran, as the stop left them.
+LATE_FILENAME = "late.json"
 ROLLBACK_DIRNAME = "rollback"
 #: Written before the first compensation runs: from then on the run's store
 #: may have changed, and the run is never resumed (runtime.durable.resume).
@@ -285,21 +287,36 @@ def _certain(entry: ChangeLedgerEntry) -> bool:
     return entry.status == "confirmed" and entry.attempt_state != "delivery_uncertain"
 
 
-def _judged_by_reads(entry: ChangeLedgerEntry, workflow: Workflow, scope: str) -> bool:
-    """A step the whole-database reads judge: unconfirmed, with no declared
-    effect and no compensation (pressing Enter in a form field, say). If it
-    wrote, the store shows it; only a reviewed allow-listed table or a column
-    the app profile leaves out would hide it."""
+def _judged_by_reads(
+    entry: ChangeLedgerEntry, workflow: Workflow, reads_judge: bool
+) -> bool:
+    """A step the reads judge: unconfirmed, with no declared effect and no
+    compensation (pressing Enter in a form field, say), when ``reads_judge``:
+    a whole-database read, and an audit window in which every write the
+    run's user logged is accounted for by a changed row. A write to a table
+    the read keeps append-only is then still caught by its log entry."""
     from openadapt_flow.traversal import iter_workflow_steps
 
-    if scope != "database" or _certain(entry):
-        return False
-    if approved_undo(workflow, entry.step_id) is not None:
+    if not reads_judge or _certain(entry) or entry.effects:
         return False
     step = next(
         (s for s in iter_workflow_steps(workflow) if s.id == entry.step_id), None
     )
-    return step is not None and not step.effects
+    if (
+        step is None
+        or step.effects
+        or (step.api_binding is not None and step.api_binding.effects)
+    ):
+        return False
+    return approved_undo(workflow, entry.step_id) is None
+
+
+def _bookkeeping_inserts(reader: Any) -> set[str]:
+    """Tables whose no-record inserts are the app's own, from the reader's
+    app profile."""
+    load = getattr(reader, "_profile", None)
+    profile = load() if callable(load) else None
+    return set(profile.no_record_insert_tables()) if profile is not None else set()
 
 
 def _unseen_writes(
@@ -309,7 +326,7 @@ def _unseen_writes(
     run_dir: Path,
     params: dict[str, Any],
     read_records: Optional[RecordsReader],
-    scope: str = "collection",
+    reads_judge: bool = False,
 ) -> Optional[str]:
     """When the read shows nothing landed: a ledger write it contradicts. A
     confirmed write did land; an uncertain one counts as absent only when a
@@ -318,7 +335,7 @@ def _unseen_writes(
     for entry in pending:
         if _certain(entry):
             return f"step {entry.step_id} confirmed a write"
-        if _judged_by_reads(entry, workflow, scope):
+        if _judged_by_reads(entry, workflow, reads_judge):
             continue
         undo = approved_undo(workflow, entry.step_id)
         if undo is None:
@@ -483,6 +500,18 @@ def roll_back(
     params = dict(report.params)
     pending = [e for e in report.change_ledger if e.may_need_undo]
     run_changes = changes(landed)
+
+    def reads_judge(rows: list[Change]) -> bool:
+        """Can the reads judge an effect-less step? Only a whole-database read
+        with an audit window in which the run's every logged write is one of
+        ``rows``."""
+        if scope != "database" or attributor is None:
+            return False
+        unaccounted = attributor.unaccounted_writes(
+            rows, attributor.window(), _bookkeeping_inserts(reader)
+        )
+        return unaccounted is not None and not unaccounted
+
     record.after_stop_diff = landed.summary()
     if not run_changes:
         unseen = _unseen_writes(
@@ -491,7 +520,7 @@ def roll_back(
             run_dir=run_dir,
             params=params,
             read_records=read_records,
-            scope=scope,
+            reads_judge=reads_judge(run_changes),
         )
         if unseen:
             return finish(
@@ -619,6 +648,7 @@ def roll_back(
             )
         return None
 
+    judged_here = stop_reason is None and reads_judge(run_changes)
     for entry in entries if stop_reason is None else []:
         step_record = RollbackStepRecord(
             step_id=entry.step_id,
@@ -631,7 +661,7 @@ def roll_back(
             step_record.reason = "the step ran more than once"
             stop_reason = step_record.reason
             break
-        if _judged_by_reads(entry, workflow, scope):
+        if _judged_by_reads(entry, workflow, judged_here):
             # Whatever it wrote, the final whole-database read shows.
             step_record.decision = "not_needed"
             step_record.reason = (
@@ -795,12 +825,16 @@ def roll_back(
         ]
         if late:
             record.conflicts = len(late)
+            path = run_dir / ROLLBACK_DIRNAME / LATE_FILENAME
+            _write_private(path, keep_rows(landed, late).to_private_json())
+            record.late_diff_path = str(path.relative_to(run_dir))
             return finish(
                 "not_rolled_back",
                 f"another user wrote {len(late)} row(s) the run touched (or their "
                 "record) while the rollback ran; a person checks that their "
-                "change isn't lost (the diff names those rows as the stop left them)",
-                _with_rows(_with_rows(remaining, evidence), keep_rows(landed, late)),
+                f"change isn't lost ({record.late_diff_path} holds those rows as "
+                "the stop left them)",
+                _with_rows(remaining, evidence),
             )
     if stop_reason is not None:
         # The rollback stopped short: never "rolled back", whatever the

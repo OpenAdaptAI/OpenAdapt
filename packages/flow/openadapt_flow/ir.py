@@ -5313,6 +5313,10 @@ class RollbackRecord(BaseModel):
     cross_checked: Optional[bool] = None
     #: Run-directory-relative path of the full diff, when anything remains.
     diff_path: Optional[str] = None
+    #: Rows another user wrote while the rollback ran, as the stop left them
+    #: (their write itself may be gone with the row): an owner-only file
+    #: beside ``diff_path``.
+    late_diff_path: Optional[str] = None
     steps: list[RollbackStepRecord] = Field(default_factory=list)
     started_at: Optional[str] = None
     finished_at: Optional[str] = None

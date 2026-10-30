@@ -1654,18 +1654,40 @@ def test_rollback_refuses_a_durable_run():
     _refuse_rollback_durable(object(), False)
 
 
-def test_a_step_with_no_declared_effect_is_judged_by_the_whole_database(tmp_path):
+def test_a_step_with_no_declared_effect_is_judged_by_the_reads_and_the_log(tmp_path):
     # OpenEMR, live: pressing Enter in a form field is a ledger entry that
     # stays unconfirmed (no effect declared, no compensation). A whole-
-    # database read that shows nothing changed settles it; a read of one
-    # collection doesn't.
+    # database read that shows nothing changed settles it, but only with an
+    # audit window in which the run logged no write the read can't see.
+    # Round 8: a write to a table the read keeps append-only (a disclosure
+    # log) is caught by its log entry.
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
     workflow = Workflow(
         name="w",
         steps=[_key_step("press_enter", "press Enter", "Enter")],
     )
     rows = [{"id": 1, "x": "y"}]
+    spec = FrameAttribution(
+        kind="audit_read",
+        actor_field="actor",
+        self=["bot"],
+        record_field="record",
+        record_key="patient_id",
+        event_field="event",
+        write_events=["insert", "update", "delete"],
+        insert_events=["insert"],
+        table_field="tbl",
+        read={"kind": "in_memory"},
+    )
 
-    def settle(reader):
+    def settle(reader, log=None, audit=True):
+        attributor = None
+        if audit:
+            entries: list[dict[str, str]] = []
+            attributor = Attributor.from_spec(spec, {}, lambda: list(entries))
+            assert attributor is not None and attributor.start()
+            entries.extend(log or [])
         return roll_back(
             _stopped([_entry("press_enter", status="unknown")]),
             workflow,
@@ -1674,12 +1696,19 @@ def test_a_step_with_no_declared_effect_is_judged_by_the_whole_database(tmp_path
             reader=reader,
             before=records_snapshot(rows),
             runner=RecordingRunner(),
+            attributor=attributor,
+            exclusive=False,
         )
 
     assert settle(DatabaseListReader(rows)).status == "nothing_landed"
-    collection = settle(ListReader(rows))
-    assert collection.status == "not_rolled_back"
-    assert "may have written" in collection.reason
+    hidden = settle(
+        DatabaseListReader(rows),
+        log=[{"actor": "bot", "event": "insert", "tbl": "extended_log", "record": "2"}],
+    )
+    assert hidden.status == "not_rolled_back"
+    assert "may have written" in hidden.reason
+    assert settle(DatabaseListReader(rows), audit=False).status == "not_rolled_back"
+    assert settle(ListReader(rows)).status == "not_rolled_back"
 
 
 # ---------------------------------------------------------------------------
@@ -1712,6 +1741,9 @@ def test_a_late_write_hands_over_the_store_as_it_is(tmp_path):
     rollback = report.rollback
     assert rollback.status == "not_rolled_back", rollback.reason
     assert "as the stop left them" in rollback.reason
-    assert rollback.diff_path
-    diff = json.loads((tmp_path / "run" / rollback.diff_path).read_text())
-    assert "patients" in diff["tables"]
+    # The store is back: the summary says so, and the rows she wrote are
+    # named apart, as the stop left them.
+    assert rollback.remaining_diff == {}
+    assert rollback.late_diff_path
+    late = json.loads((tmp_path / "run" / rollback.late_diff_path).read_text())
+    assert "patients" in late["tables"]
