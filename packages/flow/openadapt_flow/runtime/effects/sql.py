@@ -162,6 +162,26 @@ def _sql_tokens(text: str) -> list[tuple[str, str]]:
             )
         if char == "$" and _DOLLAR_QUOTE.match(text, i):
             raise ValueError("sql query contains a dollar-quoted string ($$ or $tag$)")
+        if char == "$" and i + 1 < n and (text[i + 1].isalpha() or text[i + 1] == "_"):
+            # sqlite reads ``$name(...)`` as one variable token, quotes and
+            # all, so a quote inside it would hide what follows from this
+            # lexer. Only the ``$1`` placeholder form is read.
+            raise ValueError("sql query contains a $name variable; use $1 or :name")
+        if char == "[":
+            # sqlite reads ``[...]`` up to the first ``]`` as an identifier,
+            # quotes and all. Text there must lex the same way on its own
+            # (Postgres ``j['k']`` does), or a quote inside would open a
+            # literal here that hides what sqlite runs after the ``]``.
+            close = text.find("]", i + 1)
+            segment = text[i + 1 : close] if close >= 0 else ""
+            if any(q in segment for q in "'\"`"):
+                try:
+                    _sql_tokens(segment)
+                except ValueError:
+                    raise ValueError(
+                        "sql query has a quote inside [...] that doesn't close "
+                        "before the ']' (sqlite reads [...] as one identifier)"
+                    ) from None
         if _is_word_char(char):
             j = i
             while j < n and (_is_word_char(text[j]) or text[j] == "$"):
@@ -213,6 +233,28 @@ def read_only_connection(conn: Any, driver: str) -> Any:
     return conn
 
 
+def _name_token(token: tuple[str, str]) -> bool:
+    """A quoted name, or a word that isn't a number (``1.`` is a number)."""
+
+    kind, value = token
+    return kind == "quoted" or (kind == "word" and not value[:1].isdigit())
+
+
+def _qualified(tokens: list[tuple[str, str]], index: int) -> bool:
+    """Whether ``tokens[index]`` is part of a qualified name: a ``.`` with a
+    name on its other side (``schema.call``, ``call.id``). ``1. INTO`` is
+    not: the token before the ``.`` is a number."""
+
+    dot = ("punct", ".")
+    if index >= 2 and tokens[index - 1] == dot and _name_token(tokens[index - 2]):
+        return True
+    return (
+        index + 2 < len(tokens)
+        and tokens[index + 1] == dot
+        and _name_token(tokens[index + 2])
+    )
+
+
 def assert_read_only_sql(query: str) -> str:
     """Validate that ``query`` is a single read-only SELECT; return it.
 
@@ -251,7 +293,6 @@ def assert_read_only_sql(query: str) -> str:
     for index, (kind, value) in enumerate(tokens):
         if kind not in ("word", "quoted"):
             continue
-        before = tokens[index - 1] if index else ("", "")
         after = tokens[index + 1] if index + 1 < len(tokens) else ("", "")
         called = after == ("punct", "(")
         if called and _forbidden_function(value):
@@ -265,7 +306,7 @@ def assert_read_only_sql(query: str) -> str:
             continue
         if called and value == "replace":
             continue  # REPLACE(text, from, to): the string function
-        if not called and ("punct", ".") in (before, after):
+        if not called and value != "into" and _qualified(tokens, index):
             continue  # a qualified name: schema.call, t.update
         raise ValueError(
             f"sql query contains forbidden keyword {value!r} -- the effect "

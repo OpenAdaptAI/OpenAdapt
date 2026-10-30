@@ -132,3 +132,56 @@ def test_a_semicolon_in_a_literal_reads_on_a_real_engine() -> None:
         "SELECT REPLACE(phone, '-', '') AS phone FROM \"call\" WHERE note = 'a;b'"
     )
     assert con.execute(query).fetchall() == [("6175550100",)]
+
+
+# -- review round 1 ------------------------------------------------------------
+
+#: ``1.`` is a number, not a qualifier, so the ``into`` after it is INTO
+#: (MariaDB ran ``SELECT 1. INTO OUTFILE`` under a read-only session).
+#: sqlite reads ``[x']`` as one identifier and ``$a(')`` as one variable,
+#: so the quote inside must not open a literal that hides a call.
+REVIEW_REFUSED = [
+    "SELECT 1. INTO OUTFILE '/tmp/x'",
+    "SELECT 1. INTO @v",
+    "SELECT 1.into @v",
+    "SELECT 1. INTO newtab",
+    "SELECT t.into FROM t",
+    "SELECT 1 AS [x'], load_extension(char(47,110,111)) AS [y'] FROM t",
+    "SELECT [a\"], load_extension('x') AS [b\"] FROM t",
+    "SELECT ['a]b'], load_extension('x') FROM t",
+    "SELECT $a('), load_extension('x'), $b(') FROM t",
+    "SELECT $name FROM t",
+    "SELECT $_x FROM t",
+]
+
+
+@pytest.mark.parametrize("query", REVIEW_REFUSED)
+def test_review_round_1_forms_are_refused(query: str) -> None:
+    with pytest.raises(ValueError):
+        assert_read_only_sql(query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT j['k'] FROM t",  # Postgres jsonb subscript
+        "SELECT a[1], [plain] FROM t",
+        'SELECT espocrm.call.id, "s".update FROM t',
+        "SELECT x FROM t WHERE y = $1",
+    ],
+)
+def test_review_round_1_reads_still_pass(query: str) -> None:
+    assert assert_read_only_sql(query) == query
+
+
+def test_the_hidden_call_is_what_sqlite_would_run() -> None:
+    # The refused query really reaches load_extension on sqlite: the guard
+    # closes a hole, it doesn't refuse something harmless.
+    con = sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE t (a INTEGER)")
+    query = "SELECT 1 AS [x'], load_extension('nope') AS [y'] FROM t"
+    con.execute("INSERT INTO t VALUES (1)")
+    with pytest.raises(sqlite3.OperationalError, match="not authorized"):
+        con.execute(query).fetchall()
+    with pytest.raises(ValueError):
+        assert_read_only_sql(query)
