@@ -705,13 +705,19 @@ such change refutes unless the contract explains it (`allow_tables`, the app
 profile, `ignore_columns`, `side_records`) or the audit log attributes it to
 another user.
 
-Measured on two real apps, Dolibarr 21 and EspoCRM 10 on MariaDB 11.4, with
-`recheck_after_s: 180`:
+Measured on three real apps, Dolibarr 21 and EspoCRM 10 on MariaDB 11.4 and
+Redmine 6.1 on PostgreSQL 17, with `recheck_after_s: 180`:
 
 - Four planted late writes (a changed phone, a second product, a delayed
   duplicate opportunity, a look-alike lead's title) landed 125 to 130 s
   after the save. Each check said `CONFIRMED`, and each recheck said
   `REFUTED`. Correct writes of the same tasks stayed `CONFIRMED`.
+- On Redmine, a time entry's hours changed 150 s after the save, and a
+  delayed retry created a duplicate issue 140 s after it. Each check said
+  `CONFIRMED`, and each recheck said `REFUTED`. Correct writes stayed
+  `CONFIRMED` at the check and the recheck. Redmine's own bookkeeping
+  needed one declaration: `user_preferences.others` in `ignore_columns`
+  (every save records the user's last project there).
 - With the apps' schedulers off, `settle_s: 1` and `settle_attempts: 1` were
   enough.
 - With EspoCRM's cron daemon on, its job queue moved during every window.
