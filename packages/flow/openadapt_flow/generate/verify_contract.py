@@ -224,6 +224,8 @@ class KindPlan:
     unresolved: dict[str, list[Location]] = field(default_factory=dict)
     refused: list[str] = field(default_factory=list)
     removed: dict[str, int] = field(default_factory=dict)
+    #: Parameters placed by name, not by a demonstration.
+    by_name: list[str] = field(default_factory=list)
 
 
 def _scalars(values: Mapping[str, Any]) -> dict[str, Any]:
@@ -341,6 +343,12 @@ def analyze(
         loc, tied = best(_intersect(found[p]))
         if loc is None:
             if not found[p]:
+                named = _by_name(schema, plan, p)
+                if named is not None:
+                    plan.locations[p] = named
+                    plan.by_name.append(p)
+                    if plan.mode == "update":
+                        plan.changes.append(p)
                 continue  # never given: no contract uses it
             plan.unresolved[p] = tied
             continue
@@ -376,6 +384,27 @@ def analyze(
     _children(schema, plan, lists)
     _sides(schema, plan, actor_values)
     return plan
+
+
+def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
+    """An update parameter no demonstration gives (``new_zip``), placed at
+    the main table's column of the same name after a leading ``new_`` or
+    ``set_`` (``zip``), when one exists. Compared exactly by the column's
+    type. Reported as placed by name; a demonstration that gives it replaces
+    this."""
+
+    if plan.mode != "update" or not plan.anchor:
+        return None
+    name = re.sub(r"^(new|set)_", "", param)
+    if name == param:
+        return None
+    col = schema.tables[plan.anchor].column(name)
+    if col is None or name in schema.tables[plan.anchor].primary_key:
+        return None
+    rule = {"number": "number", "bool": "number", "date": "date", "datetime": "datetime"}.get(col.kind, "exact")
+    if col.kind not in ("text", "number", "bool", "date", "datetime"):
+        return None
+    return Location((), (name,), rule)
 
 
 def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
@@ -1535,10 +1564,11 @@ def propose(
                     p.changes.append(name)
             else:
                 open_[name] = tied
+        asked = dict(p.unresolved)
         p.unresolved = open_
-        if open_:
+        if asked:
             parts = []
-            for name, tied in open_.items():
+            for name, tied in asked.items():
                 if tied:
                     opts = "; ".join(f"[{i}] {loc.describe(p.anchor)}" for i, loc in enumerate(tied))
                     parts.append(f"`{name}` is in several places: {opts}")
@@ -1555,6 +1585,8 @@ def propose(
                     None,
                 )
             )
+            if not open_:
+                answers = {**answers, f"locations.{p.kind}": chosen}
     # Q: bookkeeping, for the whole app at once.
     logs = set().union(*(p.logs for p in plans)) if plans else set()
     book: dict[str, set[str]] = {}
@@ -1691,6 +1723,7 @@ def propose(
             "mode": p.mode,
             "main_table": p.anchor,
             "locations": {k: v.describe(p.anchor) for k, v in sorted(p.locations.items())},
+            "placed_by_name": sorted(p.by_name),
             "children": {k: g.table for k, g in p.children.items()},
             "lists": {k: g.table for k, g in p.lists.items()},
             "side_rows": [{"table": s.table, "count": s.count, "unless": s.unless} for s in p.sides],
