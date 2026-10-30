@@ -88,16 +88,20 @@ _FORBIDDEN_FUNCTIONS = frozenset(
         "query_to_xml", "query_to_xmlschema", "query_to_xml_and_xmlschema",
         "pg_sleep_for", "pg_sleep_until", "get_lock", "load_file",
         "pg_read_file", "pg_read_binary_file", "pg_notify",
+        "master_pos_wait", "source_pos_wait", "pg_terminate_backend",
+        "pg_cancel_backend", "pg_ls_dir",
     }
 )  # fmt: skip
 # Locks (``pg_advisory_lock``, ``pg_try_advisory_xact_lock_shared``, ...).
 _FORBIDDEN_PREFIXES = ("dblink", "pg_advisory", "pg_try_advisory")
 
-#: A bind placeholder (``%s``, ``%(name)s``, psycopg's ``%b``/``%t``,
-#: ``:name``). pymysql and psycopg2 substitute ``%`` placeholders on the
+#: A ``%`` bind placeholder (``%s``, ``%(name)s``, psycopg's ``%b``/``%t``).
+#: When parameters are passed, pymysql and psycopg2 substitute these on the
 #: client without regard to quotes, so one inside a literal splices the
 #: escaped value in as bare SQL: a parameter value could change the query.
-_PLACEHOLDER = re.compile(r"%[sbt(]|:[A-Za-z_]")
+#: ``%%`` (the escaped percent sign) is not one. Without parameters neither
+#: driver formats the query, and no driver binds ``:name`` inside a literal.
+_PLACEHOLDER = re.compile(r"%[sbt(]")
 
 #: A Postgres dollar-quote opener (``$$`` or ``$tag$``): a string form this
 #: lexer does not read, so it is refused rather than guessed.
@@ -159,12 +163,6 @@ def _sql_tokens(text: str) -> list[tuple[str, str]]:
                 body.append(text[j])
                 j += 1
             value = "".join(body)
-            if _PLACEHOLDER.search(value):
-                raise ValueError(
-                    "sql query has a bind placeholder inside a quoted literal or "
-                    "name -- bind the whole value instead (a driver may splice "
-                    "the value in as SQL)"
-                )
             tokens.append(
                 ("string", value) if char == "'" else ("quoted", value.lower())
             )
@@ -274,7 +272,7 @@ def _qualified(tokens: list[tuple[str, str]], index: int) -> bool:
     )
 
 
-def assert_read_only_sql(query: str) -> str:
+def assert_read_only_sql(query: str, *, binds: bool = False) -> str:
     """Validate that ``query`` is a single read-only SELECT; return it.
 
     The query is split into tokens (:func:`_sql_tokens`) first, so string
@@ -282,6 +280,10 @@ def assert_read_only_sql(query: str) -> str:
     ``'a;b'`` is not a second statement, a table named `` `call` `` is not
     ``CALL``, and ``REPLACE(phone, '-', '')`` is the string function, not
     the statement.
+
+    ``binds`` says parameters will be passed with the query. Then a ``%``
+    placeholder inside a literal or quoted name is refused (pymysql and
+    psycopg2 would splice the value in as SQL); ``%%`` is fine.
 
     Raises:
         ValueError: On an empty query; a form the tokenizer refuses
@@ -297,6 +299,15 @@ def assert_read_only_sql(query: str) -> str:
     if not text:
         raise ValueError("sql query is empty")
     tokens = _sql_tokens(text)
+    if binds and any(
+        kind in ("string", "quoted") and _PLACEHOLDER.search(value.replace("%%", ""))
+        for kind, value in tokens
+    ):
+        raise ValueError(
+            "sql query has a bind placeholder inside a quoted literal or name -- "
+            "bind the whole value instead (the driver splices it in as SQL); "
+            "write a literal percent sign as %%"
+        )
     if tokens and tokens[-1] == ("punct", ";"):
         tokens = tokens[:-1]
     if ("punct", ";") in tokens:
@@ -315,7 +326,11 @@ def assert_read_only_sql(query: str) -> str:
         after = tokens[index + 1] if index + 1 < len(tokens) else ("", "")
         if kind == "word" and (
             (value == "for" and after in (("word", "share"), ("word", "key")))
-            or (value == "lock" and after == ("word", "in"))
+            or (
+                value == "lock"
+                and [t[1] for t in tokens[index + 1 : index + 4]]
+                == ["in", "share", "mode"]
+            )
         ):
             raise ValueError(
                 "sql query takes a row lock (FOR SHARE, FOR KEY SHARE or LOCK IN "
@@ -399,7 +414,7 @@ class SqlRecordVerifier(VerifierAdapterBase):
     ) -> None:
         self.drop_fields = tuple(drop_fields)
         self._connect = connect
-        self.query = assert_read_only_sql(query)
+        self.query = assert_read_only_sql(query, binds=bool(query_params))
         self.query_params = dict(query_params or {})
         self.timeout_s = timeout_s
         self.poll_interval_s = poll_interval_s

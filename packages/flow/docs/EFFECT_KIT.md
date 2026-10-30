@@ -1171,13 +1171,17 @@ function, even quoted or schema qualified. The filter refuses what it can't
 read the same way in every dialect: a backslash anywhere (MySQL reads `\'`
 as an escaped quote, standard SQL as the end of the literal), a
 dollar-quoted string, an unterminated literal, and a comment (`--`, `/*`,
-`#`) outside a literal. It also refuses a bind placeholder (`%s`,
-`%(name)s`, `:name`) inside a literal or quoted name, because pymysql and
-psycopg2 substitute it without regard to quotes and a parameter value could
-then change the query; a row lock (`FOR SHARE`, `FOR KEY SHARE`,
-`LOCK IN SHARE MODE`); and calls that lock, wait, notify or read files
-(`get_lock`, `pg_advisory_*`, `pg_sleep_for`, `pg_sleep_until`,
-`pg_notify`, `load_file`, `pg_read_file`). **The filter is defense in
+`#`) outside a literal. When the query has parameters, it also refuses a
+`%` placeholder (`%s`, `%(name)s`) inside a literal or quoted name, because
+pymysql and psycopg2 substitute it without regard to quotes and a parameter
+value could then change the query; write a literal percent sign as `%%`.
+Without parameters no driver formats the query, so `DATE_FORMAT(ts,
+'%H:%i')` and `LIKE '%smith%'` pass. It refuses a row lock (`FOR SHARE`,
+`FOR KEY SHARE`, `LOCK IN SHARE MODE`), and calls that lock, wait, end
+sessions, notify or read files (`get_lock`, `pg_advisory_*`,
+`pg_sleep_for`, `pg_sleep_until`, `master_pos_wait`, `source_pos_wait`,
+`pg_terminate_backend`, `pg_cancel_backend`, `pg_notify`, `load_file`,
+`pg_read_file`, `pg_ls_dir`). **The filter is defense in
 depth, not proof**: on Postgres/MySQL a lexically-clean `SELECT` can still
 call a side-effecting function (a UDF, `nextval`, `dblink`), so **always run
 the SQL verifier under a dedicated read-only database role** — no
