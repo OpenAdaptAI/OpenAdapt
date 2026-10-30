@@ -294,7 +294,10 @@ def generated(pg: Any) -> dict[str, Any]:
     assert gen.main(argv) == 0
     report = json.loads((work / "out" / "report.json").read_text())
     # The person accepts the proposals.
+    # The person accepts the proposals, and says journal_details (one row
+    # per changed field) is the app's log.
     answers = {q["key"]: q["proposal"] for q in report["questions"]}
+    answers["bookkeeping"] = {"logs_add": ["journal_details"]}
     (work / "answers.yaml").write_text(yaml.safe_dump(answers))
     assert gen.main([*argv, "--answers", str(work / "answers.yaml")]) == 0
     if os.environ.get("OA_GEN_TEST_KEEP"):
@@ -344,7 +347,7 @@ def test_questions_and_contracts(generated: dict[str, Any]) -> None:
     assert kinds["update_issue"]["emitted"] == 31, json.dumps(
         kinds["update_issue"], indent=1
     )
-    assert "journal_details" in kinds["update_issue"]["logs"]
+    assert "journal_details" in kinds["update_issue"]["log_candidates"]
 
 
 def test_a_correct_create_is_confirmed(generated: dict[str, Any]) -> None:

@@ -119,12 +119,19 @@ that as a stop: the write must not be sent unchecked.
 | Rule | Example |
 | --- | --- |
 | The stored text equals the value | `subject` |
-| Equal after case folding, for any value shaped like an email address | `Ana@Example.org` |
-| Equal digits, for any value shaped like a phone number | `02 38 53 21 09` stored as `0238532109` |
+| Equal after case folding, for a value shaped like an email address | `Ana@Example.org` |
+| Equal digits, only for a parameter a person confirmed as a phone number (the `phones` question), when the app stored other text with the same digits | `02 38 53 21 09` stored as `0238532109` |
 | Equal as a number, a date or a date-time, compared in SQL | `9.20` stored as `9.2`; `2026-10-27 14:30` stored as `2026-10-27 14:30:00` |
 | Minutes between two date-time columns of the row | a call's duration |
 | A display column of the row a key column points to | `project_id` -> `projects.name` |
 | Two text columns joined by one space | `firstname` and `lastname` |
+
+A display value behind a key must name exactly one row of its table that
+isn't soft-deleted (a `deleted` or `is_deleted` flag, or a `deleted_at`
+time): a second "Jon Park", or "Mary Ann Lee" split as `Mary Ann|Lee` and
+`Mary|Ann Lee`, makes the value empty, so the write stops. At run time a
+confirmed phone value that isn't written like a phone number (fewer than 7
+digits, or other characters) is compared exactly.
 | A row the write added that holds the main record's key | a journal note, a custom field value |
 | A row it added that links the record to the row holding the value | an email address, a call's attendee |
 
@@ -169,51 +176,69 @@ too. A list parameter gets a contract per length, from 1 to 10 items.
 - `create`: exactly one new main record holds the task's values, and
   everything else in the new row is what the demonstrations showed, or is
   bookkeeping.
-- `found`: the record already holds the task's values, and nothing in the
-  database changed. `choose` reads the store first and picks `found` when a
-  record with the task's values is already there: a "make sure it exists"
-  task whose record exists, or an update that is already in place.
+- `found`: the record already holds the task's values and, for a create,
+  the same constants the demonstrations' new rows held (a soft-delete flag, a
+  status, a type), and nothing in the database changed. `choose` reads the
+  store first and picks `found` when such a record is already there: a "make
+  sure it exists" task whose record exists, or an update that is already in
+  place. A trashed record with the task's values is not found.
 - `update`: exactly one record matches the task's identity values and holds
-  the new values. Only the fields the task changes may change. When the
+  the new values. Only the fields the task changes may change, plus the
+  target's own bookkeeping columns a person confirmed. When the
   demonstrations replaced the record's rows beside it (an old email address
   link removed), the earlier rows may go, and afterwards the record has as
   many such rows as the demonstrations left.
 
-**Columns of a new row no value explains.** A key, a time stamp from the
-write, the acting user, a link to a row the write added, the year, month,
-week or day of a date the task gives, a generated token (a UUID), or a copy
-of a column of the row a key points to (an invoice line's price from its
-product) is recognized as such. Free text the demonstrations left empty is
-not checked. Any other column must hold the value the demonstrations
-showed; one that differed between them is not checked and is listed in the
-bookkeeping question.
+**Columns of a new row no value explains.** Each is pinned to the acting
+user, to the value every demonstration held, or to a copy of a column of the
+row a key points to (an invoice line's price from its product). A key, a
+link to a row the write added, the year, month, week or day of a date the
+task gives, and a generated token (a UUID) are recognized as such. Columns
+that differ between demonstrations, free text every demonstration left
+empty, and the write's time stamps are not checked; the bookkeeping question
+lists each of them by table, so a person sees every column left open.
 
 **Rows the app adds on its own.** A row type the app added the same number of
 times in every demonstration (an agenda event, a stream note, a price-history
 row) is declared with that count and its constant columns. A table whose
-added rows vary between demonstrations, or whose name says log, history,
-audit or similar, is proposed as a log of that kind. Columns that changed
-with no task value (a modified time, a version counter) are proposed as
-bookkeeping. All of it goes in one question.
+added rows differ in number between demonstrations is listed in the
+bookkeeping question and is a log only if the person names it (`logs_add`);
+otherwise every added row stops the write. The generator never decides a
+table is a log from its name.
+
+**Changes the app makes to existing rows.** A column of an existing row that
+the demonstrations changed with no task value is excused only on that row:
+the target itself, a row with the same key in every demonstration (a counter
+row), or the row the task's values name through a key of the main record
+(the account a contact belongs to). It is never excused by name on other
+rows or tables. Time stamps set during the write, counters that went up and
+columns set to the acting user are proposed; anything else is listed and
+excused only if the person adds it (`columns_add`). A changed row the
+generator can't identify is listed too, and a write that changes it stops.
 
 **The frame.** On MySQL and MariaDB every contract uses the whole-database
 frame (`frame.database`): a row added, removed or changed in any table that
-the contract doesn't declare stops the write. The main record's table and
-the tables of rows that hold values are read in full by the contract's own
-reads, with every column. On PostgreSQL, `frame.database` isn't available, so
-every other table is read as its own surface; tables proposed as logs are
-not read there.
+the contract doesn't declare stops the write, except rows added to a table
+the person named as a log. The main record's table and the tables of rows
+that hold values are read by the contract's own reads, with every column.
+On PostgreSQL, `frame.database` isn't available, so every other table is read
+as its own surface, except the tables the person named as logs, which are
+not read at all.
 
 **Lost updates.** An update's contracts set `frame.versions`, so another
 user's save to the target inside the window stops the write. The generator
 takes the versions from the app's own audit trail when every update
 demonstration added a row there that names the record and the acting user
 (Redmine's journals, EspoCRM's `action_history_record`, Dolibarr's agenda
-events); the read is narrowed only by a column naming the record's type,
-so any other user's entry for the record counts. Otherwise it uses a whole
-number column of the record that went up by one in every demonstration
-(Redmine's `lock_version`). With neither, the update has no version check,
-and `report.json` shows `versions: null`.
+events). The read is narrowed to the record's type and to write events: a
+column whose value in the update rows differs from its value in the rows
+creates added to the same table (EspoCRM's `action`, Dolibarr's `code`), so
+another user only viewing the record doesn't count. Otherwise it uses a
+whole-number column named as a version that went up by one in every
+demonstration (Redmine's `lock_version`). With neither, the update has no
+version check, and `report.json` shows `versions: null`. If the app stops
+writing the trail (an agenda setting turned off), the agent's own save has
+no new version, and the verifier stops the write rather than pass it.
 
 **The recheck window.** On MySQL and MariaDB, one question asks how long the
 app can still write on its own after a verified write. The answer is
@@ -226,10 +251,12 @@ that needs something the store doesn't have is either set up, with a flag
 and an admin connection you give, or not written, with the reason.
 
 - `--grant-trigger --admin-read admin.yaml --reader-account "'oa_reader'@'%'"`:
-  grants `TRIGGER` on the database to the read account (MySQL, MariaDB).
+  grants `TRIGGER` on the database to the read account (MySQL, MariaDB). The
+  account name is split into user and host and escaped by the driver.
   Without it, the generator stops and prints the `GRANT` statement for the
-  DBA. Note that `TRIGGER` also lets the account create triggers. The verifier
-  needs it only to see them.
+  DBA. `TRIGGER` also lets the account create and drop triggers; the verifier
+  needs it only to see them, and `report.json` says so under `read_account`.
+  Keep that account's password away from the agent.
 - `--create-views --admin-read admin.yaml --reader-account ...`: the
   verifier's SQL guard refuses some table names in a read (EspoCRM's `call`).
   This creates a view `oa_read_<table>` in a schema of its own,
@@ -252,18 +279,18 @@ why.
 - A list item that appears twice in one task (the same product and quantity
   twice) is stopped: each item must match one new row.
 - Columns of a new record that differ between demonstrations and aren't
-  task values (an invoice's computed totals, its draft reference) are not
-  checked. The bookkeeping question lists them.
-- Free-text columns of a new record that the task doesn't give, and that
-  every demonstration left empty (a line description, a note), are not
-  checked: an agent may fill them from the record it copies.
+  task values (an invoice's computed totals, its due date), free text every
+  demonstration left empty, and time stamps are not checked. The bookkeeping
+  question lists every one of them.
 - With one demonstration of a create, every other column must hold the value
   it held then, including one computed from the task's values (a price with
   tax). `QUESTIONS.md` says so; record a second create with other values.
-- On PostgreSQL there is no whole-database frame and no recheck: tables
-  proposed as logs are not read, and a write that lands after the check is
-  not seen.
+- On PostgreSQL there is no whole-database frame, so there is no recheck (a
+  write that lands after the check is not seen), and a table the person names
+  as a log is not read at all: a rewrite of its existing rows passes. Every
+  other table is read and compared.
 - REST metadata (OpenAPI) is not read yet. Apps without database access need
   hand-written contracts.
-- The generator does not read an audit trail, so another user's edit during
-  the window stops the write instead of being attributed to them.
+- The frame doesn't attribute changes to other users: another user's edit to
+  an unrelated record during the window stops the write. Only the target's
+  own versions are read from the audit trail (lost updates).
