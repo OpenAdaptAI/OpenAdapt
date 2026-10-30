@@ -302,7 +302,7 @@ row is read as `JSON_OBJECT`. A type whose value it can't carry as exact text
 is read another way: binary strings, blobs, `BIT`, geometries and vectors as
 the hex of their bytes, `FLOAT` widened to `DOUBLE` (the server prints a
 `FLOAT` with six digits), and `JSON` and `LONGTEXT` as their stored text.
-Numbers parse as `Decimal`, so a `DECIMAL(30,10)` keeps every digit. A value
+Numbers parse as `Decimal`, so a `DECIMAL(30,10)` keeps every digit. The read pins its session to UTC, so a `TIMESTAMP` in the hour a daylight-saving zone repeats still shows a change. A value
 that still can't be read exactly makes the database unreadable, and the run
 stops; the error names the table. When the database can't be read at the
 baseline, `begin_write` says why.

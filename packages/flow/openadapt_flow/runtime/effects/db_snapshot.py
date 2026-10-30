@@ -463,6 +463,11 @@ class _Session:
             )
             if self.cur.fetchall():
                 self.cur.execute("SET SESSION information_schema_stats_expiry = 0")
+            # A TIMESTAMP prints in the session's time zone. In a zone with
+            # daylight saving, two instants an hour apart print the same in
+            # the repeated hour, so a change would be invisible. UTC has no
+            # repeated hour.
+            self.cur.execute("SET SESSION time_zone = '+00:00'")
             self.cur.execute("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")
             self.cur.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY")
         else:

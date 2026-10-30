@@ -278,3 +278,30 @@ def test_a_null_and_a_value_differ(
         cur.execute(f"UPDATE `{name}`.t SET {column} = {old} WHERE id = 3")
     moved = diff(a, _snap(connect, before=a), key=b"k" * 32)
     assert (moved["t"].changed, moved["t"].changed_columns) == (1, [column])
+
+
+@live
+def test_a_timestamp_change_in_the_repeated_dst_hour_shows(database: Any) -> None:
+    # The reader's session is in New York. 05:30 and 06:30 UTC on
+    # 2026-11-01 both print as 01:30 there (the hour clocks repeat), so
+    # without a pinned zone this change would read as no change.
+    admin, name, connect = database
+    with admin.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM mysql.time_zone_name")
+        if not cur.fetchone()[0]:
+            pytest.skip("the server has no named time zones loaded")
+        cur.execute("SET time_zone = '+00:00'")
+        cur.execute(
+            f"UPDATE `{name}`.t SET c_timestamp = '2026-11-01 05:30:00' WHERE id = 1"
+        )
+
+    def new_york() -> Any:
+        return connect(init_command="SET time_zone = 'America/New_York'")
+
+    a = _snap(new_york)
+    with admin.cursor() as cur:
+        cur.execute(
+            f"UPDATE `{name}`.t SET c_timestamp = '2026-11-01 06:30:00' WHERE id = 1"
+        )
+    moved = diff(a, _snap(new_york, before=a), key=b"k" * 32)
+    assert (moved["t"].changed, moved["t"].changed_columns) == (1, ["c_timestamp"])
