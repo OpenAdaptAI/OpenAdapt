@@ -1048,23 +1048,49 @@ def _hold_legacy_null(
     values: Mapping[str, Any],
     write_key: Optional[str],
 ) -> None:
-    """Hold a write with a null while an attempt keyed the old way is open.
+    """Hold a write with a null while an attempt keyed the old way stands.
 
-    Ledgers once keyed ``None`` as ``""``. An attempt recorded then (or a
-    ``""`` write) that is still open, unresolved or refuted may be this
-    write, so it is held for a person rather than sent again. A landed
-    ``""`` write is a different write and is not handed back for it.
+    Ledgers once keyed ``None`` as ``""``, so an attempt under that key may
+    be this write (recorded before the upgrade) or a ``""`` write; nothing
+    tells them apart. Anything but a free key stops the write. One a person
+    or a read-back found in the store (``landed``) hands its result back,
+    as :func:`_settle` does, and the write is not sent again. Any other
+    state (open, uncertain, refuted, or a recent ``""`` write confirmed)
+    holds it for a person.
     """
 
     for digest in (contract.identity, contract.shape):
         legacy = led.key_for(digest, values, write_key, legacy_null=True)
-        if led.state(led.latest(legacy)) in ("open", "uncertain", "held"):
-            raise WriteHeld(
+        attempt = led.latest(legacy)
+        state = led.state(attempt)
+        if state == "free":
+            continue
+        resolved = (attempt.resolved if attempt is not None else None) or {}
+        if (
+            state == "undelivered"
+            and attempt is not None
+            and resolved.get("landed")
+            and resolved.get("outcome") != "CONFIRMED"
+        ):
+            result = dict(resolved.get("result") or {})
+            result["not_sent_again"] = True
+            if not attempt.delivered:
+                led.delivered(legacy, attempt.attempt_id)
+            raise AlreadyWritten(
                 "an earlier attempt of this write, recorded before a null was "
-                'told apart from "", is in flight or unresolved; a person '
-                "checks it (openadapt verify ledger list)",
+                'told apart from "", was found in the store; its result is '
+                "attached, and it was not sent again",
                 key=legacy,
+                result=result,
             )
+        raise WriteHeld(
+            "an earlier attempt of this write, recorded before a null was told "
+            'apart from "", is in flight, unresolved or just made. A person '
+            "checks the store: 'openadapt verify ledger release <key> --found "
+            "landed' hands that result back to this write, '--found absent' "
+            "lets it be sent",
+            key=legacy,
+        )
 
 
 def _hold_elsewhere(led: Ledger, key: str, shape_key: str) -> None:

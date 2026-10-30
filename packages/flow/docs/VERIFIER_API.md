@@ -178,7 +178,19 @@ match:
 ```
 
 The record check and the frame read the same declaration, and it is part
-of the contract hash.
+of the contract hash. It is accepted only on a `rest` or `graphql` read
+and only on a top-level key: a SQL row or a FHIR record always carries the
+field, and the REST reader never resolves a dotted key, so there a
+declaration would let any value pass. At least one record of the read must
+carry the declared key; if none does, the key is likely misspelled and the
+check stops (UNCERTAIN).
+
+A null write and a `""` write are different writes in the ledger. Ledgers
+written before keyed `None` as `""`, so a null write also looks at that
+old key. While an attempt stands there (in flight, unresolved, refuted, or
+a `""` write just made), the null write is held. `release KEY --found
+landed` hands that attempt's result back to the null write, and it is not
+sent; `--found absent` lets it be sent.
 
 A null value never matches `""`, the text `"None"`, or any other stored
 value, so a wrong write on a task with empty fields still stops. The

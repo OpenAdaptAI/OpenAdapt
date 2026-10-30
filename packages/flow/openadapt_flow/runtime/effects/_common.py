@@ -95,6 +95,24 @@ def judge_records(
             unavailable=True,
         )
 
+    # A field declared ``absent_is_null`` must appear in some record of the
+    # read. If it appears in none, the key is likely misspelled (or the read
+    # never carries it), and a null there would match every record.
+    unseen = [
+        name
+        for name in effect.absent_is_null_fields()
+        if not any(name in r for r in [*before.records, *current])
+    ]
+    if unseen:
+        return _indeterminate(
+            effect,
+            substrate,
+            "absent_is_null is declared on "
+            + ", ".join(repr(n) for n in unseen)
+            + ", which no record of the read carries: the key may be misspelled, "
+            "so a null there can't be told from a missing field; HALT",
+        )
+
     if effect.kind is EffectKind.EXACT_NEW_SET:
         return _judge_exact_new_set(effect, before, current, substrate)
 

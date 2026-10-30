@@ -1144,6 +1144,19 @@ class Effect(BaseModel):
         ).hexdigest()
         return f"sha256:{digest}"
 
+    def absent_is_null_fields(self) -> list[str]:
+        """The record fields this effect declares ``absent_is_null`` on."""
+
+        pairs = [
+            *self.match.items(),
+            *((k, v) for selector in self.new_records for k, v in selector.items()),
+        ]
+        if self.value is not None:
+            pairs.append((self.field or "", self.value))
+        return sorted(
+            {k for k, v in pairs if isinstance(v, ValueExpr) and v.absent_is_null}
+        )
+
     def referenced_params(self) -> set[str]:
         """Return the parameter names that determine this effect contract."""
 
