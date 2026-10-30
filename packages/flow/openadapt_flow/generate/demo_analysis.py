@@ -665,7 +665,9 @@ def _copied(
     every row? (An invoice line's unit price is its product's price.)"""
 
     col = t.column(name)
-    if col is None or col.kind not in ("number", "text"):
+    if col is None or col.kind not in ("number", "text") or len(rows) < 2:
+        # One row can't tell a copy from a coincidence (a user id equal to a
+        # project id).
         return None
     candidates: Optional[set[tuple[str, str, str, str]]] = None
     for demo, r in rows:
@@ -675,7 +677,7 @@ def _copied(
         idx = _Index(schema, demo.after)
         here: set[tuple[str, str, str, str]] = set()
         for other in t.columns:
-            if other.name == name or r.get(other.name) is None:
+            if other.name == name or other.name in t.primary_key or r.get(other.name) is None:
                 continue
             for target, ref, _declared in _fk_targets(
                 schema, idx, t, other.name, str(r.get(other.name))
