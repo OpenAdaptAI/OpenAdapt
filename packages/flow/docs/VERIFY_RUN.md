@@ -630,11 +630,23 @@ such change refutes unless the contract explains it (`allow_tables`, the app
 profile, `ignore_columns`, `side_records`) or the audit log attributes it to
 another user.
 
-On the first-contact study's apps (Dolibarr 21 and EspoCRM 10 on MariaDB
-11.4), the planted late writes landed 125 to 130 s after the save. With
-`recheck_after_s: 180`, `settle_s: 1` and `settle_attempts: 1`, the recheck
-refuted all four, and confirmed each task's correct write and the study's
-controls. See the pull request that added this section for the table.
+Measured on two real apps, Dolibarr 21 and EspoCRM 10 on MariaDB 11.4, with
+`recheck_after_s: 180`:
+
+- Four planted late writes (a changed phone, a second product, a delayed
+  duplicate opportunity, a look-alike lead's title) landed 125 to 130 s
+  after the save. Each check said `CONFIRMED`, and each recheck said
+  `REFUTED`. Correct writes of the same tasks stayed `CONFIRMED`.
+- With the apps' schedulers off, `settle_s: 1` and `settle_attempts: 1` were
+  enough.
+- With EspoCRM's cron daemon on, its job queue moved during every window.
+  Correct writes were refuted at the recheck (about 140 rows each), and a
+  recheck read while a job ran was `UNCERTAIN`. Declaring the scheduler's
+  bookkeeping fixed both: `scheduled_job_log_record` append-only, `job`
+  skipped with a reason (the queue adds and then updates its rows),
+  `scheduled_job.last_run` in `ignore_columns`, and `settle_attempts: 10`.
+  Then the correct writes were `CONFIRMED` again. An app with a scheduler
+  needs this kind of review before its rechecks mean anything.
 
 ## Verdicts
 
