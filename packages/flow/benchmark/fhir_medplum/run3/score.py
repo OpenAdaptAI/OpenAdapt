@@ -113,6 +113,16 @@ def arm_summary(
     correct_after = sum(1 for _, o in counted if o in HANDLED)
     total_min = setup_min + people_s / 60
     cards = [r.get("card") or {} for r, o in counted if arm == "B" and r.get("card")]
+    walls = sorted(
+        float(r.get("agent_s", 0)) + float(r.get("verify_s", 0)) for r, _ in counted
+    )
+    dups = sum(
+        1
+        for r, _ in counted
+        if any(
+            "not one" in x or "now match" in x for x in r["oracle"].get("reasons", [])
+        )
+    )
     return {
         "items": n,
         "correct_completions": count.get("correct", 0) + count.get("correct_stop", 0),
@@ -127,6 +137,16 @@ def arm_summary(
         "setup_min": round(setup_min, 2),
         "people_min_per_correct_txn": round(total_min / correct_after, 3)
         if correct_after
+        else None,
+        "duplicates": dups,
+        "wall_s_median": walls[len(walls) // 2] if walls else None,
+        "wall_s_p90": walls[min(len(walls) - 1, int(len(walls) * 0.9))]
+        if walls
+        else None,
+        "model_usd_per_item": round(
+            sum(float(r.get("cost_usd", 0)) for r, _ in counted) / n, 4
+        )
+        if n
         else None,
         "cards_by_category": _tally(c.get("category") for c in cards),
         "card_failed_read_backs": sum(1 for c in cards if c.get("action_ok") is False),

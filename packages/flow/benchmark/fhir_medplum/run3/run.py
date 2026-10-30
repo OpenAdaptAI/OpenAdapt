@@ -69,6 +69,13 @@ EFFORT = "medium"
 MAX_TURNS = 40
 ITEM_BUDGET_USD = 0.50
 PORT = 9590
+#: B's contracts, as frozen in openadapt-internal CONTRACT_FREEZE.md.
+CONTRACT_SHA256 = {
+    "patient": "b7bf94edc09e7594ab0e328e72b3e432398823441d31a14360e9f453763bec7c",
+    "allergy": "b78b67e954cb4088b09895bda45a3ff6c56c442d4d0c967254ea7ec13affe77f",
+    "appointment": "b51ccc2a7df5d7218175600b8662ee1abfae827268fcf29c124322f22a4a2828",
+}
+MAX_LOAD = 60.0
 #: The SDK's own stops that are the agent's outcome (it ran out), not a fault.
 AGENT_LIMITS = ("error_max_turns", "error_max_budget_usd")
 
@@ -401,6 +408,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     digest = hashlib.sha256(raw).hexdigest()
     if digest != args.sha256:
         raise SystemExit(f"fault set digest {digest} is not the frozen {args.sha256}")
+    for kind, want in CONTRACT_SHA256.items():
+        got = hashlib.sha256((Path(args.contracts) / f"{kind}.yaml").read_bytes())
+        if got.hexdigest() != want and args.agent == "claude":
+            raise SystemExit(f"{kind}.yaml is not the frozen contract")
+    if os.getloadavg()[0] >= MAX_LOAD:
+        raise SystemExit(f"load {os.getloadavg()[0]:.0f} is {MAX_LOAD:.0f} or more")
     suite = stream_mod.build(yaml.safe_load(raw), seed=args.seed)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
