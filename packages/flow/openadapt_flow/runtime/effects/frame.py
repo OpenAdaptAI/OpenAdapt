@@ -1388,7 +1388,14 @@ def judge_frame(
                     of_hasher(side.of_field, value) if of_hasher else str(value)
                 ) in taken:
                     continue
-                if any(record_matches(dict(record), s) for s in sels):
+                if any(
+                    record_matches(
+                        dict(record),
+                        s,
+                        text_numbers=before_state.substrate == "sql",
+                    )
+                    for s in sels
+                ):
                     links.add(str(value))
                 elif inserted_by_other(
                     side.of_surface, key_of(record, side.of_surface), record
@@ -1412,17 +1419,27 @@ def judge_frame(
             continue
         selectors = selectors_for(name)
         hasher = hashers.get(name)
+        # A SQL slice carries the store's column types (``TYPED_SUBSTRATES``).
+        typed = before_state.substrate == "sql"
 
         def declared(record: Mapping[str, Any], hashed: bool = False) -> bool:
             if hashed and hasher is not None:
                 return any(
                     all(
-                        record.get(k) == hasher(k, None if is_null_value(v) else v)
+                        record.get(k)
+                        == hasher(
+                            k,
+                            None
+                            if is_null_value(v)
+                            else (str(v) if getattr(v, "number", None) else v),
+                        )
                         for k, v in s.items()
                     )
                     for s in selectors
                 )
-            return any(record_matches(dict(record), s) for s in selectors)
+            return any(
+                record_matches(dict(record), s, text_numbers=typed) for s in selectors
+            )
 
         before_map: dict[Any, dict[str, Any]] = {}
         after_map: dict[Any, dict[str, Any]] = {}
