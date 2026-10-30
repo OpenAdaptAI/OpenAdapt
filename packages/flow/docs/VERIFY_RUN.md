@@ -244,6 +244,57 @@ file sets them explicitly; the frame covers the rest. Without a baseline,
 `forbid_collateral_change` is turned on as before, though it can't refute
 without a baseline either.
 
+## The whole database
+
+A frame over the read set can't see a record outside it. If the save also
+schedules a call nobody asked for, or posts a note on the account, and the
+contract reads only opportunities, the frame holds. `frame.database` closes
+that gap: it reads every table and column before and after the save, and a
+row added, changed or removed anywhere is collateral unless a declared
+effect, a declared side record, an attributed concurrent write or an
+allow-listed bookkeeping table explains it.
+
+```yaml
+frame:
+  identity_field: id
+  database:
+    dialect: mysql              # or sqlite
+    read:                       # read-only: SELECT, TRIGGER and SHOW VIEW
+      sql_driver: pymysql
+      sql_connect_args: {host: 127.0.0.1, port: 3306, user: reader, database: crm}
+      sql_password_env: CRM_DB_RO_PASSWORD
+    allow_tables:               # the app's own bookkeeping, append-only
+    - action_history_record
+    - {table: auth_token, mode: skip, reason: sessions the app refreshes}
+    new_row_fields:             # columns a declared or side row may set
+      opportunity: [name, amount, stage]
+    ignore_columns:             # columns that change on every row
+      user: [last_access]
+    settle_s: 1
+  side_records:                 # rows the save adds beside the new record
+  - surface: opportunity        # a table, when it isn't a surface
+    link_field: id
+    of_surface: ""              # the read set (a single read has no name)
+    of_field: row_id            # the read set's field that holds the table key
+```
+
+A table row that is the declared record seen from the database (the
+`opportunity` row of a new opportunity) is declared as a side record, linked
+to the new record in the read set. Rows the app adds on its own beside it
+(a stream note for the new record) are side records too, each with its
+`count`. Every other new row, such as a planned call or a note on the
+account, is unexplained, and the frame is refuted.
+
+Every column type is read, and none is dropped. On MySQL and MariaDB each
+row is read as `JSON_OBJECT`. A type whose value it can't carry as exact text
+is read another way: binary strings, blobs, `BIT`, geometries and vectors as
+the hex of their bytes, `FLOAT` widened to `DOUBLE` (the server prints a
+`FLOAT` with six digits), and `JSON` and `LONGTEXT` as their stored text.
+Numbers parse as `Decimal`, so a `DECIMAL(30,10)` keeps every digit. A value
+that still can't be read exactly makes the database unreadable, and the run
+stops; the error names the table. When the database can't be read at the
+baseline, `begin_write` says why.
+
 ## What the receipt says was checked
 
 The receipt's `checked` field names each part of the claim behind
