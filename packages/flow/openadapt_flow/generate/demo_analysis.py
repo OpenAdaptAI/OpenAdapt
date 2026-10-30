@@ -623,7 +623,14 @@ def _copied(
         # Several columns of the row it points to hold the same value: keep
         # the one named like this column (``tva_tx`` from ``tva_tx``, then
         # ``subprice`` from ``price``), if exactly one is.
-        for test in (lambda c: c[3] == name, lambda c: c[3] in name):
+        def stem(col: str) -> str:
+            return re.sub(r"(^fk_|_id$|_fk$|^id_)", "", col.lower())
+
+        for test in (
+            lambda c: c[3] == name,
+            lambda c: c[3] in name,
+            lambda c: c[3] in name and c[1].lower().endswith(stem(c[0])),
+        ):
             named = {c for c in candidates if test(c)}
             if len(named) == 1:
                 candidates = named
