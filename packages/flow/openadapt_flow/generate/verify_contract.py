@@ -946,8 +946,16 @@ def _is_ref_row(schema: Schema, plan: KindPlan, d: Demo, ch: RowChange) -> bool:
             and ch.after.get(col) is not None
             and _rule_ok(ch.after.get(col), d.values[p], rel.rule)
         ):
+            dv = str(d.values.get(plan.dispatch)) if plan.dispatch else None
             plan.added_refs.setdefault(
-                p, {"table": ch.table, "column": col, "rule": rel.rule}
+                f"{p}@{dv}" if dv else p,
+                {
+                    "table": ch.table,
+                    "column": col,
+                    "rule": rel.rule,
+                    "param": p,
+                    "dv": dv,
+                },
             )
             return True
     return False
@@ -1336,8 +1344,9 @@ def build_contract(
         if plan.mode == "update":
             target_fields.update(g.changed_columns)
     # A new row a link row names (a new email address).
-    for p, ref in plan.added_refs.items():
-        if p not in fields or found:
+    for ref in plan.added_refs.values():
+        p = ref["param"]
+        if p not in fields or found or ref["dv"] not in (None, variant.dispatch_value):
             continue
         effects.append(
             _raw_effect(
