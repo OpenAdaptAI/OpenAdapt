@@ -311,7 +311,9 @@ def _judged_by_reads(
     return approved_undo(workflow, entry.step_id) is None
 
 
-def _hidden_reason(hidden: list[dict[str, Any]], attributor: Any) -> str:
+def _hidden_reason(
+    hidden: list[dict[str, Any]], attributor: Any, when: str = "after the rollback"
+) -> str:
     """Why a write the audit log shows and the reads don't goes to a person."""
     from openadapt_flow.runtime.effects.frame import get_path
 
@@ -320,9 +322,8 @@ def _hidden_reason(hidden: list[dict[str, Any]], attributor: Any) -> str:
     )
     if not hidden:
         return (
-            "the audit log couldn't be read after the rollback, so a write by "
-            "the run's user the reads don't show can't be ruled out; a person "
-            "checks"
+            f"the audit log couldn't be read {when}, so a write by the run's "
+            "user the reads don't show can't be ruled out; a person checks"
         )
     return (
         f"the audit log shows {len(hidden)} write(s) by the run's user that no "
@@ -586,7 +587,8 @@ def roll_back(
             hidden = hidden_writes([], attributor.window())
             if hidden is None or hidden:
                 return finish(
-                    "not_rolled_back", _hidden_reason(hidden or [], attributor)
+                    "not_rolled_back",
+                    _hidden_reason(hidden or [], attributor, "after the stop"),
                 )
         record.final_sha256 = record.after_stop_sha256
         return finish(

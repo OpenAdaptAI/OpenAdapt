@@ -1938,7 +1938,7 @@ def test_nothing_landed_needs_a_readable_audit_log(tmp_path):
         exclusive=False,
     )
     assert record.status == "not_rolled_back"
-    assert "couldn't be read" in record.reason
+    assert "couldn't be read after the stop" in record.reason
 
 
 def test_an_allow_listed_own_rows_table_isnt_excused(tmp_path):
