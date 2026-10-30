@@ -54,8 +54,56 @@ verifier:
         = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `p__invoice_date`, (SELECT CAST(a1.`town` AS CHAR)
         FROM `llx_societe` a1 WHERE a1.`rowid` = t.`fk_soc`) AS `p__town` FROM `llx_facture` t
       sql_query_params:
-        v0:
+        v0: &id002
           param: invoice_date
+    rows_llx_facturedet:
+      kind: sql
+      sql_driver: pymysql
+      sql_connect_args: *id001
+      sql_password_env: FCG_DOLIBARR_READER_PASSWORD
+      sql_query: SELECT CAST(t.`rowid` AS CHAR) AS `id`, CAST(t.`rowid` AS CHAR) AS `rowid`, CAST(t.`fk_facture`
+        AS CHAR) AS `fk_facture`, CAST(t.`fk_parent_line` AS CHAR) AS `fk_parent_line`, CAST(t.`fk_product`
+        AS CHAR) AS `fk_product`, CAST(t.`label` AS CHAR) AS `label`, CAST(t.`description` AS CHAR) AS
+        `description`, CAST(t.`vat_src_code` AS CHAR) AS `vat_src_code`, CAST(t.`tva_tx` AS CHAR) AS `tva_tx`,
+        CAST(t.`localtax1_tx` AS CHAR) AS `localtax1_tx`, CAST(t.`localtax1_type` AS CHAR) AS `localtax1_type`,
+        CAST(t.`localtax2_tx` AS CHAR) AS `localtax2_tx`, CAST(t.`localtax2_type` AS CHAR) AS `localtax2_type`,
+        CAST(t.`qty` AS CHAR) AS `qty`, CAST(t.`remise_percent` AS CHAR) AS `remise_percent`, CAST(t.`remise`
+        AS CHAR) AS `remise`, CAST(t.`fk_remise_except` AS CHAR) AS `fk_remise_except`, CAST(t.`subprice`
+        AS CHAR) AS `subprice`, CAST(t.`subprice_ttc` AS CHAR) AS `subprice_ttc`, CAST(t.`price` AS CHAR)
+        AS `price`, CAST(t.`total_ht` AS CHAR) AS `total_ht`, CAST(t.`total_tva` AS CHAR) AS `total_tva`,
+        CAST(t.`total_localtax1` AS CHAR) AS `total_localtax1`, CAST(t.`total_localtax2` AS CHAR) AS `total_localtax2`,
+        CAST(t.`total_ttc` AS CHAR) AS `total_ttc`, CAST(t.`product_type` AS CHAR) AS `product_type`,
+        CAST(t.`date_start` AS CHAR) AS `date_start`, CAST(t.`date_end` AS CHAR) AS `date_end`, CAST(t.`info_bits`
+        AS CHAR) AS `info_bits`, CAST(t.`buy_price_ht` AS CHAR) AS `buy_price_ht`, CAST(t.`fk_product_fournisseur_price`
+        AS CHAR) AS `fk_product_fournisseur_price`, CAST(t.`batch` AS CHAR) AS `batch`, CAST(t.`fk_warehouse`
+        AS CHAR) AS `fk_warehouse`, CAST(t.`special_code` AS CHAR) AS `special_code`, CAST(t.`rang` AS
+        CHAR) AS `rang`, CAST(t.`fk_contract_line` AS CHAR) AS `fk_contract_line`, CAST(t.`fk_unit` AS
+        CHAR) AS `fk_unit`, CAST(t.`import_key` AS CHAR) AS `import_key`, CAST(t.`fk_code_ventilation`
+        AS CHAR) AS `fk_code_ventilation`, CAST(t.`situation_percent` AS CHAR) AS `situation_percent`,
+        CAST(t.`fk_prev_id` AS CHAR) AS `fk_prev_id`, CAST(t.`fk_user_author` AS CHAR) AS `fk_user_author`,
+        CAST(t.`fk_user_modif` AS CHAR) AS `fk_user_modif`, CAST(t.`fk_multicurrency` AS CHAR) AS `fk_multicurrency`,
+        CAST(t.`multicurrency_code` AS CHAR) AS `multicurrency_code`, CAST(t.`multicurrency_subprice`
+        AS CHAR) AS `multicurrency_subprice`, CAST(t.`multicurrency_subprice_ttc` AS CHAR) AS `multicurrency_subprice_ttc`,
+        CAST(t.`multicurrency_total_ht` AS CHAR) AS `multicurrency_total_ht`, CAST(t.`multicurrency_total_tva`
+        AS CHAR) AS `multicurrency_total_tva`, CAST(t.`multicurrency_total_ttc` AS CHAR) AS `multicurrency_total_ttc`,
+        CAST(t.`ref_ext` AS CHAR) AS `ref_ext`, (SELECT (SELECT CAST(a2.`nom` AS CHAR) FROM `llx_societe`
+        a2 WHERE a2.`rowid` = a1.`fk_soc`) FROM `llx_facture` a1 WHERE a1.`rowid` = t.`fk_facture`) AS
+        `main__customer`, CASE WHEN (SELECT a1.`datef` FROM `llx_facture` a1 WHERE a1.`rowid` = t.`fk_facture`)
+        = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `main__invoice_date`, (SELECT (SELECT CAST(a2.`town`
+        AS CHAR) FROM `llx_societe` a2 WHERE a2.`rowid` = a1.`fk_soc`) FROM `llx_facture` a1 WHERE a1.`rowid`
+        = t.`fk_facture`) AS `main__town`, (SELECT CAST(a1.`ref` AS CHAR) FROM `llx_product` a1 WHERE
+        CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS `p__lines_0_product_ref`, CASE
+        WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty` = CAST(%(v1)s AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `p__lines_0_qty`, (SELECT CAST(a1.`ref` AS CHAR) FROM `llx_product` a1
+        WHERE CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS `p__lines_1_product_ref`,
+        CASE WHEN CAST(%(v2)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty` = CAST(%(v2)s AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `p__lines_1_qty` FROM `llx_facturedet` t
+      sql_query_params:
+        v0: *id002
+        v1:
+          param: lines.0.qty
+        v2:
+          param: lines.1.qty
 effects:
 - kind: record_written
   probe: surface=record|the main record holds the task's values
@@ -66,6 +114,34 @@ effects:
       literal: '1'
     p__town:
       param: town
+  expected_count: 1
+- kind: record_written
+  probe: surface=rows_llx_facturedet|a row beside the main record holds lines
+  match:
+    main__customer:
+      param: customer
+    main__invoice_date:
+      literal: '1'
+    main__town:
+      param: town
+    p__lines_0_product_ref:
+      param: lines.0.product_ref
+    p__lines_0_qty:
+      literal: '1'
+  expected_count: 1
+- kind: record_written
+  probe: surface=rows_llx_facturedet|a row beside the main record holds lines
+  match:
+    main__customer:
+      param: customer
+    main__invoice_date:
+      literal: '1'
+    main__town:
+      param: town
+    p__lines_1_product_ref:
+      param: lines.1.product_ref
+    p__lines_1_qty:
+      literal: '1'
   expected_count: 1
 frame:
   ignore_fields:
@@ -80,8 +156,7 @@ frame:
       sql_password_env: FCG_DOLIBARR_READER_PASSWORD
     allow_tables:
     - table: llx_facture
-      mode: skip
-      reason: read in full, every column, by this contract's own surface
+    - table: llx_facturedet
     views: {}
     settle_s: 1
     settle_attempts: 5

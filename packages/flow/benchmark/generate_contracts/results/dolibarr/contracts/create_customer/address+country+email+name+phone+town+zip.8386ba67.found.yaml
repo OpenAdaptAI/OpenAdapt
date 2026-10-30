@@ -74,6 +74,7 @@ effects:
       param: country
     email:
       param: email
+      kind: email
     nom:
       param: name
     phone:
@@ -98,8 +99,6 @@ frame:
       sql_password_env: FCG_DOLIBARR_READER_PASSWORD
     allow_tables:
     - table: llx_societe
-      mode: skip
-      reason: read in full, every column, by this contract's own surface
     views: {}
     settle_s: 1
     settle_attempts: 5

@@ -6,7 +6,7 @@
     {
       "number": 1,
       "key": "bookkeeping",
-      "text": "Is this the app's own bookkeeping, which a write may change without a task asking? Columns that change on their own and are not compared: llx_societe: fk_user_modif, socialnetworks, tms Columns of a new record that differ between demonstrations and are not checked: llx_facture: date_lim_reglement, multicurrency_total_ht, multicurrency_total_ttc, multicurrency_total_tva, ref, total_ht, total_ttc, total_tva; llx_product: price_ttc Answer `bookkeeping: accept`, or list changes under logs_add, logs_remove, columns_add, columns_remove.",
+      "text": "Is this the app's own bookkeeping, which a write may change without a task asking? Rows the app adds beside each write, expected exactly that many times (a second save adds a second one, which stops the write; list a table under logs_add to allow any number): llx_actioncomm (1 per write), llx_actioncomm_resources (1 per write). Columns that change on their own and are not compared: llx_societe: fk_user_modif, socialnetworks, tms Columns of a new record that differ between demonstrations and are not checked: llx_facture: date_lim_reglement, multicurrency_total_ht, multicurrency_total_ttc, multicurrency_total_tva, ref, total_ht, total_ttc, total_tva; llx_product: price_ttc Answer `bookkeeping: accept`, or list changes under logs_add, logs_remove, columns_add, columns_remove.",
       "proposal": "accept",
       "answered": true
     },
@@ -32,15 +32,17 @@
       "locations": {
         "address": "llx_societe.address (exact)",
         "country": "llx_societe.fk_pays -> llx_c_country.label (exact)",
-        "email": "llx_societe.email (exact)",
+        "email": "llx_societe.email (email)",
         "name": "llx_societe.nom (exact)",
         "phone": "llx_societe.phone (phone)",
         "town": "llx_societe.town (exact)",
         "zip": "llx_societe.zip (exact)"
       },
       "placed_by_name": [],
+      "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
+      "dispatch_children": {},
       "lists": {},
       "side_rows": [
         {
@@ -57,7 +59,7 @@
       "logs": [],
       "refused": [],
       "unresolved": {},
-      "emitted": 1,
+      "emitted": 64,
       "rejected": []
     },
     "create_product": {
@@ -70,8 +72,13 @@
         "vat_rate": "llx_product.tva_tx (number)"
       },
       "placed_by_name": [],
+      "placed_from_another_kind": [],
       "demonstrations": 2,
-      "children": {},
+      "children": {
+        "price_excl_vat#2": "llx_product_price",
+        "vat_rate#2": "llx_product_price"
+      },
+      "dispatch_children": {},
       "lists": {},
       "side_rows": [
         {
@@ -83,17 +90,12 @@
           "table": "llx_actioncomm_resources",
           "count": 1,
           "unless": null
-        },
-        {
-          "table": "llx_product_price",
-          "count": 1,
-          "unless": null
         }
       ],
       "logs": [],
       "refused": [],
       "unresolved": {},
-      "emitted": 1,
+      "emitted": 4,
       "rejected": []
     },
     "create_draft_invoice": {
@@ -105,8 +107,10 @@
         "town": "llx_facture.fk_soc -> llx_societe.town (exact)"
       },
       "placed_by_name": [],
+      "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
+      "dispatch_children": {},
       "lists": {
         "lines": "llx_facturedet"
       },
@@ -123,7 +127,7 @@
       "locations": {
         "customer": "llx_societe.nom (exact)",
         "new_address": "llx_societe.address (exact)",
-        "new_email": "llx_societe.email (exact)",
+        "new_email": "llx_societe.email (email)",
         "new_phone": "llx_societe.phone (phone)",
         "new_zip": "llx_societe.zip (exact)",
         "town": "llx_societe.town (exact)"
@@ -132,8 +136,10 @@
         "new_address",
         "new_zip"
       ],
+      "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
+      "dispatch_children": {},
       "lists": {},
       "side_rows": [
         {

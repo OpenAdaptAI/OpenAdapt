@@ -169,44 +169,8 @@ verifier:
         `llx_product` s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__tva_tx`, (SELECT
         CAST(a1.`ref` AS CHAR) FROM `llx_product` a1 WHERE CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product`
         AS BINARY)) AS `p__lines_1_product_ref`, CASE WHEN CAST(%(v2)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$'
-        AND t.`qty` = CAST(%(v2)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `p__lines_1_qty`, CASE WHEN
-        t.`buy_price_ht` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__buy_price_ht`, CASE
-        WHEN t.`date_end` IS NULL THEN '1' ELSE '0' END AS `pin__date_end`, CASE WHEN t.`date_start` IS
-        NULL THEN '1' ELSE '0' END AS `pin__date_start`, CASE WHEN t.`fk_code_ventilation` = CAST('0'
-        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_code_ventilation`, CASE WHEN t.`fk_contract_line`
-        IS NULL THEN '1' ELSE '0' END AS `pin__fk_contract_line`, CASE WHEN t.`fk_multicurrency` = (SELECT
-        s.`fk_multicurrency` FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`) THEN '1' ELSE '0'
-        END AS `pin__fk_multicurrency`, CASE WHEN t.`fk_parent_line` IS NULL THEN '1' ELSE '0' END AS
-        `pin__fk_parent_line`, CASE WHEN t.`fk_prev_id` IS NULL THEN '1' ELSE '0' END AS `pin__fk_prev_id`,
-        CASE WHEN t.`fk_product_fournisseur_price` IS NULL THEN '1' ELSE '0' END AS `pin__fk_product_fournisseur_price`,
-        CASE WHEN t.`fk_remise_except` IS NULL THEN '1' ELSE '0' END AS `pin__fk_remise_except`, CASE
-        WHEN t.`fk_unit` IS NULL THEN '1' ELSE '0' END AS `pin__fk_unit`, CASE WHEN t.`fk_user_author`
-        = (SELECT s.`fk_user_author` FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`) THEN '1' ELSE
-        '0' END AS `pin__fk_user_author`, CASE WHEN t.`fk_user_modif` = CAST('2' AS DECIMAL(65,30)) THEN
-        '1' ELSE '0' END AS `pin__fk_user_modif`, CASE WHEN t.`fk_warehouse` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__fk_warehouse`, CASE WHEN t.`info_bits` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__info_bits`, CASE WHEN t.`localtax1_tx` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__localtax1_tx`, CASE WHEN t.`localtax2_tx` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__localtax2_tx`, CASE WHEN t.`multicurrency_code` = (SELECT s.`multicurrency_code`
-        FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`) THEN '1' ELSE '0' END AS `pin__multicurrency_code`,
-        CASE WHEN t.`multicurrency_subprice` = (SELECT s.`price` FROM `llx_product` s WHERE s.`rowid`
-        = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__multicurrency_subprice`, CASE WHEN t.`multicurrency_subprice_ttc`
-        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__multicurrency_subprice_ttc`, CASE
-        WHEN t.`price` IS NULL THEN '1' ELSE '0' END AS `pin__price`, CASE WHEN t.`product_type` = (SELECT
-        s.`type` FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`) THEN '1' ELSE '0' END AS `pin__product_type`,
-        CASE WHEN t.`rang` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__rang`, CASE WHEN
-        t.`remise` = (SELECT s.`remise` FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`) THEN '1'
-        ELSE '0' END AS `pin__remise`, CASE WHEN t.`remise_percent` = CAST('0' AS DECIMAL(65,30)) THEN
-        '1' ELSE '0' END AS `pin__remise_percent`, CASE WHEN t.`situation_percent` = CAST('100' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__situation_percent`, CASE WHEN t.`special_code` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__special_code`, CASE WHEN t.`subprice` = (SELECT s.`price` FROM
-        `llx_product` s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__subprice`, CASE
-        WHEN t.`subprice_ttc` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__subprice_ttc`,
-        CASE WHEN t.`total_localtax1` = (SELECT s.`localtax1` FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`)
-        THEN '1' ELSE '0' END AS `pin__total_localtax1`, CASE WHEN t.`total_localtax2` = (SELECT s.`localtax2`
-        FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`) THEN '1' ELSE '0' END AS `pin__total_localtax2`,
-        CASE WHEN t.`tva_tx` = (SELECT s.`tva_tx` FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`)
-        THEN '1' ELSE '0' END AS `pin__tva_tx` FROM `llx_facturedet` t
+        AND t.`qty` = CAST(%(v2)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `p__lines_1_qty` FROM `llx_facturedet`
+        t
       sql_query_params:
         v0: *id002
         v1:
@@ -480,11 +444,7 @@ frame:
       sql_password_env: FCG_DOLIBARR_READER_PASSWORD
     allow_tables:
     - table: llx_facture
-      mode: skip
-      reason: read in full, every column, by this contract's own surface
     - table: llx_facturedet
-      mode: skip
-      reason: read in full, every column, by this contract's own surface
     views: {}
     settle_s: 1
     settle_attempts: 5
