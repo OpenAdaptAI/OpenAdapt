@@ -39,6 +39,7 @@
         "zip": "llx_societe.zip (exact)"
       },
       "placed_by_name": [],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
@@ -72,6 +73,7 @@
         "vat_rate": "llx_product.tva_tx (number)"
       },
       "placed_by_name": [],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {
@@ -107,6 +109,7 @@
         "town": "llx_facture.fk_soc -> llx_societe.town (exact)"
       },
       "placed_by_name": [],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
@@ -136,6 +139,14 @@
         "new_address",
         "new_zip"
       ],
+      "versions": {
+        "kind": "audit",
+        "table": "llx_actioncomm",
+        "record_column": "fk_soc",
+        "author_column": "fk_user_author",
+        "actor_param": "bot_user_id",
+        "where": {}
+      },
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
