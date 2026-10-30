@@ -334,9 +334,10 @@ def test_questions_and_contracts(generated: dict[str, Any]) -> None:
     assert kinds["update_issue"]["mode"] == "update"
     assert kinds["create_issue"]["emitted"] > 0, kinds["create_issue"]
     # Four change fields the examples give (status, assignee, done ratio,
-    # notes): every non-empty subset gets a contract. No example gives a due
-    # date, so no contract changes one.
-    assert kinds["update_issue"]["emitted"] == 15, json.dumps(
+    # notes), and the due date that create_issue's demonstrations placed on
+    # the same table: every non-empty subset gets a contract.
+    assert kinds["update_issue"]["placed_from_another_kind"] == ["due_date"]
+    assert kinds["update_issue"]["emitted"] == 31, json.dumps(
         kinds["update_issue"], indent=1
     )
     assert "journal_details" in kinds["update_issue"]["logs"]

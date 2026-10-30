@@ -191,6 +191,9 @@ class ChildGroup:
     #: row also holds the title): with one of them given and this one not,
     #: the row is still expected, with this value empty.
     co_owners: list[str] = field(default_factory=list)
+    #: The app adds this row with an empty value when the task leaves the
+    #: parameter out (Redmine's custom field values): expected then too.
+    empty_when_null: bool = False
 
 
 @dataclass
@@ -232,6 +235,8 @@ class KindPlan:
     removed: dict[str, int] = field(default_factory=dict)
     #: Parameters placed by name, not by a demonstration.
     by_name: list[str] = field(default_factory=list)
+    #: Parameters placed where another kind's demonstrations found them.
+    shared: list[str] = field(default_factory=list)
 
 
 def _scalars(values: Mapping[str, Any]) -> dict[str, Any]:
@@ -398,6 +403,37 @@ def analyze(
     return plan
 
 
+def _share_locations(schema: Schema, plans: Sequence[KindPlan], kinds: Sequence[KindSpec]) -> None:
+    """An update parameter no example of its kind gives (a priority), placed
+    where another kind's demonstrations found the parameter of the same name
+    on the same main table (``issues.priority_id -> enumerations.name``).
+    Placed this way, it replaces a placement by name."""
+
+    for plan in plans:
+        if plan.mode != "update" or not plan.anchor:
+            continue
+        for name in plan.params:
+            if name in plan.identity or name == plan.dispatch:
+                continue
+            if name in plan.locations and name not in plan.by_name:
+                continue
+            for other in plans:
+                if other is plan or other.anchor != plan.anchor:
+                    continue
+                loc = other.locations.get(name)
+                if loc is None or name in other.by_name:
+                    continue
+                if loc.hops and loc.hops[0].kind != "fk":
+                    continue
+                plan.locations[name] = loc
+                if name in plan.by_name:
+                    plan.by_name.remove(name)
+                plan.shared.append(name)
+                if name not in plan.changes:
+                    plan.changes.append(name)
+                break
+
+
 def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
     """An update parameter no demonstration gives (``new_zip``), placed at
     the main table's column of the same name after a leading ``new_`` or
@@ -408,8 +444,6 @@ def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
     if plan.mode != "update" or not plan.anchor:
         return None
     name = re.sub(r"^(new|set)_", "", param)
-    if name == param:
-        return None
     col = schema.tables[plan.anchor].column(name)
     if col is None or name in schema.tables[plan.anchor].primary_key:
         return None
@@ -603,6 +637,8 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
                 per_table.setdefault(ch.table, [])
                 counts.setdefault(ch.table, [0] * len(plan.demos))
                 continue
+            if ch.table in child_tables and _is_empty_param_row(schema, plan, d, a, ch):
+                continue
             if _is_ref_row(schema, plan, d, ch):
                 continue
             per_table.setdefault(ch.table, []).append(ch.after or {})
@@ -656,6 +692,33 @@ def _is_param_row(schema: Schema, plan: KindPlan, d: Demo, ch: RowChange) -> boo
             d.values[p],
             max_hops=len(rel.hops),
         ):
+            return True
+    return False
+
+
+def _is_empty_param_row(
+    schema: Schema, plan: KindPlan, d: Demo, a: RowChange, ch: RowChange
+) -> bool:
+    """A row the app added for a parameter the task left out: linked to the
+    main record, holding every constant of that parameter's rows, and an
+    empty value where the parameter's value goes."""
+
+    if ch.after is None or a.after is None:
+        return False
+    for p, g in plan.children.items():
+        if g.table != ch.table or d.values.get(p) is not None:
+            continue
+        if ch.after.get(g.link.column) != a.after.get(g.link.ref_column):
+            continue
+        rel = g.params[p]
+        cols = rel.columns if not rel.hops else (rel.hops[0].column,)
+        if any(ch.after.get(c) not in (None, "") for c in cols):
+            continue
+        consts = [
+            (c, r.value) for c, r in g.roles.items() if r.role == "constant"
+        ]
+        if consts and all(ch.after.get(c) == v for c, v in consts):
+            g.empty_when_null = True
             return True
     return False
 
@@ -985,7 +1048,9 @@ def build_contract(
         groups = [
             (p, g)
             for p, g in plan.children.items()
-            if p in fields or (plan.mode == "create" and set(g.co_owners) & fields)
+            if p in fields
+            or g.empty_when_null
+            or (plan.mode == "create" and set(g.co_owners) & fields)
         ]
         groups += [(p, g) for p, g in plan.lists.items() if p in variant.lists]
         for p, g in groups:
@@ -1455,11 +1520,14 @@ def flatten(values: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
-def sample_values(plan: KindPlan, variant: Variant) -> dict[str, Any]:
-    """Values to dry-read a contract with: the demonstration's own."""
+def sample_values(
+    plan: KindPlan, variant: Variant, others: Sequence[Demo] = ()
+) -> dict[str, Any]:
+    """Values to dry-read a contract with: the demonstrations' own (another
+    kind's, for a parameter placed from that kind)."""
 
     out: dict[str, Any] = {}
-    for d in plan.demos:
+    for d in [*plan.demos, *others]:
         for k, v in d.values.items():
             if v is not None and k not in out:
                 out[k] = v
@@ -1731,6 +1799,7 @@ def propose(
     plans = [analyze(schema, k, demos, actor_params) for k in kinds]
     questions: list[Question] = []
 
+    _share_locations(schema, plans, kinds)
     location_questions: list[Question] = []
     # Q: per kind, a value the generator couldn't place.
     for p in plans:
@@ -1951,6 +2020,7 @@ def propose(
                 k: v.describe(p.anchor) for k, v in sorted(p.locations.items())
             },
             "placed_by_name": sorted(p.by_name),
+            "placed_from_another_kind": sorted(p.shared),
             "demonstrations": len(p.demos),
             "children": {k: g.table for k, g in p.children.items()},
             "lists": {k: g.table for k, g in p.lists.items()},
@@ -2009,7 +2079,7 @@ def propose(
                     why = why or guard_problem(s["sql_query"])
                 if why is None and validate:
                     why = dry_read(
-                        path, flatten(sample_values(p, v)), dialect == "mysql"
+                        path, flatten(sample_values(p, v, demos)), dialect == "mysql"
                     )
                 if why is not None:
                     path.unlink()
