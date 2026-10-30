@@ -187,10 +187,20 @@ check stops (UNCERTAIN).
 
 A null write and a `""` write are different writes in the ledger. Ledgers
 written before keyed `None` as `""`, so a null write also looks at that
-old key. While an attempt stands there (in flight, unresolved, refuted, or
-a `""` write just made), the null write is held. `release KEY --found
-landed` hands that attempt's result back to the null write, and it is not
-sent; `--found absent` lets it be sent.
+old key. An attempt there may be that null write, made before the upgrade,
+or a `""` write, and the ledger can't tell which. So its result is never
+handed back: while any attempt stands there that isn't free, the null
+write is held (`WriteHeld`, naming the old key).
+
+- In flight, unresolved or refuted: a person checks the store. If the
+  write isn't there, `openadapt verify ledger release KEY --by NAME
+  --reason TEXT --found absent` frees the key, and a retry sends the null
+  write. `--found landed` records that it is there; the null write stays
+  held.
+- In the store (landed or confirmed) and not yet handed back: `release`
+  can't clear it. This is a known limit. Don't retry the null write; a
+  person checks the store and repairs the record by hand if the field must
+  be null.
 
 A null value never matches `""`, the text `"None"`, or any other stored
 value, so a wrong write on a task with empty fields still stops. The

@@ -354,18 +354,18 @@ def _legacy_uncertain(tmp_path: Path) -> tuple[Path, Contract, Any, str]:
     return db, contract, ledger, legacy
 
 
-def test_a_legacy_attempt_released_as_landed_is_handed_back(tmp_path: Path) -> None:
+def test_a_legacy_attempt_released_as_landed_still_holds(tmp_path: Path) -> None:
+    # No legacy attempt's result is ever handed back: it may be a "" write.
     from openadapt_flow.verifier import WriteHeld
 
     db, contract, ledger, legacy = _legacy_uncertain(tmp_path)
-    _insert(db, "Tax", None)  # before the upgrade, the null write landed
+    _insert(db, "Tax", None)
     params = {"subject": "Tax", "description": None}
-    with pytest.raises(WriteHeld, match="--found landed"):
+    with pytest.raises(WriteHeld, match="--found absent"):
         begin_write(contract, params, actor=BOT, ledger=ledger)
     ledger.release(legacy, by="ops", reason="row 2 is there", found="landed")
-    with pytest.raises(AlreadyWritten) as caught:
+    with pytest.raises(WriteHeld, match="can't clear it"):
         begin_write(contract, params, actor=BOT, ledger=ledger)
-    assert caught.value.result.get("not_sent_again") is True
 
 
 def test_a_legacy_attempt_released_as_absent_lets_the_write_go(tmp_path: Path) -> None:
@@ -489,3 +489,108 @@ def test_a_declared_field_with_a_value_needs_the_value(rest_url: str) -> None:
     )
     STATE["issues"].append({"id": 2, "subject": "Tax"})
     assert verify_write(pending).outcome is not Outcome.CONFIRMED
+
+
+# -- review rounds 3 and 4: every legacy state but free holds ----------------
+
+
+def _pre_upgrade_null_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Contract, Any, str]:
+    """A null write made the way a pre-upgrade worker made it (keyed with
+    None as ""), read back UNCERTAIN; its row reaches the store afterwards."""
+    from openadapt_flow.verifier import Ledger
+    from openadapt_flow.write_ledger import FileLedger
+
+    db = _db(tmp_path)
+    contract = _sql(db)
+    ledger = Ledger(FileLedger(tmp_path / "led"))
+    key_for = Ledger.key_for
+
+    def old_key_for(
+        self: Any, digest: str, values: Any, write_key: Any = None, **_: Any
+    ) -> str:
+        return key_for(self, digest, values, write_key, legacy_null=True)
+
+    params = {"subject": "Tax", "description": None}
+    with monkeypatch.context() as patch:
+        patch.setattr(Ledger, "key_for", old_key_for)
+        patch.setattr("openadapt_flow.verifier._hold_legacy_null", lambda *a: None)
+        pending = begin_write(contract, params, actor=BOT, ledger=ledger)
+        assert verify_write(pending).outcome is Outcome.UNCERTAIN
+    _insert(db, "Tax", None)
+    legacy = ledger.key_for(contract.identity, params, None, legacy_null=True)
+    assert ledger.latest(legacy) is not None
+    return db, contract, ledger, legacy
+
+
+def test_a_reconciled_pre_upgrade_null_write_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.verifier import WriteHeld, reconcile
+    from openadapt_flow.write_ledger import LedgerError
+
+    _path, contract, ledger, legacy = _pre_upgrade_null_write(tmp_path, monkeypatch)
+    assert reconcile(contract, legacy, ledger=ledger) == "undelivered"
+    params = {"subject": "Tax", "description": None}
+    for _ in range(2):
+        with pytest.raises(WriteHeld, match="can't clear it"):
+            begin_write(contract, params, actor=BOT, ledger=ledger)
+    # The known limit the message names: release can't act on it.
+    with pytest.raises(LedgerError, match="nothing to release"):
+        ledger.release(legacy, by="ops", reason="it is there", found="landed")
+
+
+def test_a_pre_upgrade_null_write_released_landed_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.verifier import WriteHeld
+
+    _path, contract, ledger, legacy = _pre_upgrade_null_write(tmp_path, monkeypatch)
+    params = {"subject": "Tax", "description": None}
+    with pytest.raises(WriteHeld, match="--found absent"):
+        begin_write(contract, params, actor=BOT, ledger=ledger)
+    ledger.release(legacy, by="ops", reason="row is there", found="landed")
+    with pytest.raises(WriteHeld):
+        begin_write(contract, params, actor=BOT, ledger=ledger)
+
+
+def test_a_landed_empty_write_is_never_handed_to_a_null_write(tmp_path: Path) -> None:
+    from openadapt_flow.verifier import Ledger, WriteHeld
+    from openadapt_flow.write_ledger import FileLedger
+
+    db = _db(tmp_path)
+    contract = _sql(db)
+    ledger = Ledger(FileLedger(tmp_path / "led"))
+    empty = {"subject": "Tax", "description": ""}
+    pending = begin_write(contract, empty, actor=BOT, ledger=ledger)
+    assert verify_write(pending).outcome is Outcome.UNCERTAIN
+    _insert(db, "Tax", "")
+    key = ledger.key_for(contract.identity, empty, None)
+    ledger.release(key, by="ops", reason="the '' row is there", found="landed")
+    with pytest.raises(WriteHeld):
+        begin_write(
+            contract, {"subject": "Tax", "description": None}, actor=BOT, ledger=ledger
+        )
+
+
+def test_a_refuted_legacy_attempt_holds_until_released_absent(tmp_path: Path) -> None:
+    from openadapt_flow.verifier import Ledger, WriteHeld
+    from openadapt_flow.write_ledger import FileLedger
+
+    db = _db(tmp_path)
+    contract = _sql(db)
+    ledger = Ledger(FileLedger(tmp_path / "led"))
+    empty = {"subject": "Tax", "description": ""}
+    pending = begin_write(contract, empty, actor=BOT, ledger=ledger)
+    _insert(db, "Tax", "wrong")
+    _insert(db, "Other", "x")
+    assert verify_write(pending).outcome is Outcome.REFUTED
+    key = ledger.key_for(contract.identity, empty, None)
+    params = {"subject": "Tax", "description": None}
+    with pytest.raises(WriteHeld, match="--found absent"):
+        begin_write(contract, params, actor=BOT, ledger=ledger)
+    ledger.release(key, by="ops", reason="not there", found="absent")
+    pending = begin_write(contract, params, actor=BOT, ledger=ledger)
+    _insert(db, "Tax", None)
+    assert verify_write(pending).outcome is Outcome.CONFIRMED

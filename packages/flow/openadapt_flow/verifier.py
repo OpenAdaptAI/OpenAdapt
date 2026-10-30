@@ -1048,47 +1048,40 @@ def _hold_legacy_null(
     values: Mapping[str, Any],
     write_key: Optional[str],
 ) -> None:
-    """Hold a write with a null while an attempt keyed the old way stands.
+    """Hold a write with a null while any attempt keyed the old way stands.
 
     Ledgers once keyed ``None`` as ``""``, so an attempt under that key may
-    be this write (recorded before the upgrade) or a ``""`` write; nothing
-    tells them apart. Anything but a free key stops the write. One a person
-    or a read-back found in the store (``landed``) hands its result back,
-    as :func:`_settle` does, and the write is not sent again. Any other
-    state (open, uncertain, refuted, or a recent ``""`` write confirmed)
-    holds it for a person.
+    be this write (made before the upgrade) or a ``""`` write, and nothing
+    here tells them apart. So no legacy attempt's result is ever handed
+    back: every state but ``free`` holds the write for a person, whatever
+    the attempt resolved to.
     """
 
     for digest in (contract.identity, contract.shape):
         legacy = led.key_for(digest, values, write_key, legacy_null=True)
-        attempt = led.latest(legacy)
-        state = led.state(attempt)
+        state = led.state(led.latest(legacy))
         if state == "free":
             continue
-        resolved = (attempt.resolved if attempt is not None else None) or {}
-        if (
-            state == "undelivered"
-            and attempt is not None
-            and resolved.get("landed")
-            and resolved.get("outcome") != "CONFIRMED"
-        ):
-            result = dict(resolved.get("result") or {})
-            result["not_sent_again"] = True
-            if not attempt.delivered:
-                led.delivered(legacy, attempt.attempt_id)
-            raise AlreadyWritten(
-                "an earlier attempt of this write, recorded before a null was "
-                'told apart from "", was found in the store; its result is '
-                "attached, and it was not sent again",
-                key=legacy,
-                result=result,
+        if state in ("open", "uncertain", "held"):
+            clear = (
+                "A person checks the store. If this write is not there, run "
+                f"'openadapt verify ledger release {legacy} --by NAME --reason "
+                "TEXT --found absent' and retry: it is sent. If it is there, "
+                "don't retry it; '--found landed' records that, and this null "
+                "write stays held"
+            )
+        else:
+            clear = (
+                "That attempt is in the store (landed or confirmed) and its "
+                "result hasn't been handed back, so 'openadapt verify ledger "
+                "release' can't clear it (a known limit). Don't retry this "
+                "write; a person checks the store and repairs it by hand if "
+                "the field must be null"
             )
         raise WriteHeld(
-            "an earlier attempt of this write, recorded before a null was told "
-            'apart from "", is in flight, unresolved or just made. A person '
-            "checks the store: 'openadapt verify ledger release <key> --found "
-            "landed' hands that result back to this write, '--found absent' "
-            "lets it be sent",
+            "an earlier attempt under this write's old ledger key (from before "
+            'a null was told apart from "") may be this write or a "" write; '
+            f"it is held, never handed back. {clear}",
             key=legacy,
         )
 
