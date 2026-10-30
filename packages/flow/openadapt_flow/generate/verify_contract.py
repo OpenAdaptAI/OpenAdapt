@@ -1483,6 +1483,15 @@ def build_contract(
                 continue
             allow.append({"table": t})
         for t in sorted(named_tables):
+            if plan.mode == "create" or flavor == "found":
+                # The contract's own read judges the rows the write adds; the
+                # whole-database frame still sees any existing row change,
+                # now and at the recheck (a late edit to a look-alike).
+                allow.append({"table": t})
+                continue
+            # An update changes a row here, which an append-only table
+            # can't allow: its own read judges this table, and the recheck
+            # (database only) doesn't see it.
             allow.append(
                 {
                     "table": t,
