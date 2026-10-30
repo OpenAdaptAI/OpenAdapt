@@ -691,7 +691,11 @@ def _children(
                 and not isinstance(d.values.get(q), (list, dict))
             ]
             if hits and all(
-                h and h[0].hops and _hop_cost(h[0].hops[0]) <= 1 for h in hits
+                h
+                and h[0].hops
+                and _hop_cost(h[0].hops[0]) <= 1
+                and h[0].hops[0].table != plan.anchor
+                for h in hits
             ):
                 co.append(q)
                 explained |= {h[0].hops[0].column for h in hits}
@@ -1280,20 +1284,31 @@ def build_contract(
         roles = _anchor_roles(schema, plan, variant, settings.actor_params)
         for col, role in sorted(roles.items()):
             _pin(b, main, anchor, col, role, match, settings.actor_params)
+        support = _support(plan, variant)
         for p in plan.optional:
             if p in fields or p in variant.lists:
                 continue
             loc = plan.locations.get(p)
             if loc is None:
                 continue
-            if not loc.hops:
-                for c in loc.columns:
-                    main.columns.append((f"empty__{c}", b.empty("t", anchor, c)))
-                    match[f"empty__{c}"] = {"literal": "1"}
-            elif loc.hops[0].kind == "fk":
-                c = loc.hops[0].column
-                main.columns.append((f"empty__{c}", b.empty("t", anchor, c)))
-                match[f"empty__{c}"] = {"literal": "1"}
+            cols = (
+                list(loc.columns)
+                if not loc.hops
+                else ([loc.hops[0].column] if loc.hops[0].kind == "fk" else [])
+            )
+            for c in cols:
+                # A column another value of this field set fills (a call's
+                # parent is its account, or its lead) is not pinned empty.
+                if any(
+                    (a.after or {}).get(c) not in (None, "")
+                    for d, a in support
+                    if d.values.get(p) is None
+                ):
+                    continue
+                alias = _add_column(
+                    main, f"empty__{_alias(c)}", b.empty("t", anchor, c)
+                )
+                match[alias] = {"literal": "1"}
     effect: dict[str, Any] = {
         "kind": "record_written",
         "probe": "surface=record|the main record holds the task's values",
@@ -1698,14 +1713,7 @@ def _anchor_roles(
     """The main row's columns no parameter explains, from the demonstrations
     that give this field set (all of them when none gives exactly it)."""
 
-    fields = set(variant.fields) | set(variant.lists)
-    if variant.dispatch_value is not None:
-        fields.add(plan.dispatch or "")
-    support = [
-        (d, a)
-        for d, a in zip(plan.demos, plan.anchors)
-        if fields <= {k for k, v in d.values.items() if v is not None}
-    ] or list(zip(plan.demos, plan.anchors))
+    support = _support(plan, variant)
     explained: set[str] = set()
     for loc in plan.locations.values():
         if not loc.hops:
@@ -1713,7 +1721,41 @@ def _anchor_roles(
         elif loc.hops[0].kind == "fk":
             explained.add(loc.hops[0].column)
     rows = [(d, a.after or {}) for d, a in support]
-    return column_roles(schema, plan.anchor, rows, explained, actor_params)
+    roles = column_roles(schema, plan.anchor, rows, explained, actor_params)
+    if len(support) < len(plan.demos):
+        # A column that differs between all demonstrations and holds a
+        # generated token (a UUID) is the app's own, whichever ones support
+        # this field set.
+        everyone = [(d, a.after or {}) for d, a in zip(plan.demos, plan.anchors)]
+        for col, role in column_roles(
+            schema, plan.anchor, everyone, explained, actor_params
+        ).items():
+            values = [r.get(col) for _, r in everyone]
+            if role.role == "varies" and all(
+                v is not None and _TOKEN.match(v) for v in values
+            ):
+                roles[col] = role
+    return roles
+
+
+_TOKEN = re.compile(
+    r"^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    r"|[0-9a-fA-F]{16,})$"
+)
+
+
+def _support(plan: KindPlan, variant: Variant) -> list[tuple[Demo, RowChange]]:
+    """The demonstrations that give every field of this set (all of them
+    when none does)."""
+
+    fields = set(variant.fields) | set(variant.lists)
+    if variant.dispatch_value is not None:
+        fields.add(plan.dispatch or "")
+    return [
+        (d, a)
+        for d, a in zip(plan.demos, plan.anchors)
+        if fields <= {k for k, v in d.values.items() if v is not None}
+    ] or list(zip(plan.demos, plan.anchors))
 
 
 # -- variants -----------------------------------------------------------------------
