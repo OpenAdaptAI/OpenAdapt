@@ -54,6 +54,10 @@ PROBLEMS = (
     "extra_steps",
     "went_back",
     "self_unresolved",
+    "null_version",
+    "duplicate_version",
+    "no_new_version",
+    "history_changed",
 )
 
 _WHOLE = re.compile(r"^(0|[1-9][0-9]*)$")
@@ -169,13 +173,18 @@ def seal_versions(
         if record is None:
             continue  # a row that names no record is no record's version
         entry = records.setdefault(
-            _mac(key, "record", record), {"versions": [], "max": None, "whole": True}
+            _mac(key, "record", record),
+            {"versions": [], "max": None, "whole": True, "null": False, "dup": False},
         )
         if version is None:
+            # A null version can't tell two saves apart.
             entry["whole"] = False
-            entry["versions"].append(_mac(key, "version", record, "\x00null"))
+            entry["null"] = True
             continue
-        entry["versions"].append(_mac(key, "version", record, version))
+        mac = _mac(key, "version", record, version)
+        if mac in entry["versions"]:
+            entry["dup"] = True  # two rows, one version: a save could hide
+        entry["versions"].append(mac)
         if _WHOLE.match(version):
             entry["max"] = max(int(version), entry["max"] or 0)
         else:
@@ -201,7 +210,7 @@ def judge_versions(
     spec: FrameVersions,
     stored: Mapping[str, Any],
     rows: Optional[Sequence[Mapping[str, Any]]],
-    targets: Sequence[tuple[Optional[str], bool]],
+    targets: Sequence[tuple[Optional[str], bool, bool]],
     key: bytes,
     params: Mapping[str, object] = {},
 ) -> VersionVerdict:
@@ -210,7 +219,8 @@ def judge_versions(
     ``stored``: :func:`seal_versions` of the baseline read. ``rows``: the read
     after the save (None when it failed). ``targets``: per record a confirmed
     write effect matched, its ``target_field`` value (None when the record
-    has none) and whether it existed before the write.
+    has none), whether it existed before the write, and whether the record
+    changed in the window.
     """
 
     if not stored.get("reachable") or rows is None:
@@ -239,7 +249,7 @@ def judge_versions(
             worst = VersionVerdict(status, problem, reason=reason)
 
     seen: set[Optional[str]] = set()
-    for target, existed in targets:
+    for target, existed, changed in targets:
         if target in seen:
             continue
         seen.add(target)
@@ -266,15 +276,42 @@ def judge_versions(
             stop("not_checked", "missing", "the target has no version after the write")
             continue
         old = set(base.get("versions") or [])
-        fresh = []
-        for r in now:
-            version = _text(_get(r, spec.version_field))
-            mac = _mac(
-                key, "version", target, "\x00null" if version is None else version
+        versions = [_text(_get(r, spec.version_field)) for r in now]
+        if base.get("null") or any(v is None for v in versions):
+            stop(
+                "not_checked",
+                "null_version",
+                "a version of the target reads as null, so saves can't be told apart",
             )
-            if mac not in old:
-                fresh.append((version, r))
+            continue
+        macs = [_mac(key, "version", target, str(v)) for v in versions]
+        if base.get("dup") or len(set(macs)) != len(macs):
+            stop(
+                "not_checked",
+                "duplicate_version",
+                "two rows of the target's versions hold the same version, so a "
+                "save could hide behind another",
+            )
+            continue
+        fresh = [(v, r) for v, r, m in zip(versions, now, macs) if m not in old]
         out.new_versions += len(fresh)
+        if changed and not fresh:
+            stop(
+                "not_checked",
+                "no_new_version",
+                "the target changed in the window but no new version of it was "
+                "read, so who saved it can't be told",
+            )
+            continue
+        if spec.author_field and not old <= set(macs):
+            stop(
+                "not_checked",
+                "history_changed",
+                "a version of the target read before the write is gone after it: "
+                "the read isn't a history that only grows, so a save in the "
+                "window could be hidden",
+            )
+            continue
         if spec.author_field:
             for _version, r in fresh:
                 author = _text(_get(r, spec.author_field))

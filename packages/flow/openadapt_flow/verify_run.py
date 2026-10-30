@@ -473,12 +473,12 @@ def _judge_versions(
     if spec is None:
         return frame
     field_name = spec.target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
-    old = {
-        str(r.get(field_name))
-        for r in before.records
-        if r.get(field_name) not in (None, "")
-    }
-    targets: list[tuple[Optional[str], bool]] = []
+    old: dict[str, dict[str, Any]] = {}
+    for r in before.records:
+        if r.get(field_name) not in (None, ""):
+            old.setdefault(str(r.get(field_name)), dict(r))
+    ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
+    targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
         if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
             continue
@@ -489,7 +489,13 @@ def _judge_versions(
         for record in verdict.matched_records:
             value = record.get(field_name)
             text = None if value in (None, "") else str(value)
-            targets.append((text, text in old))
+            was = old.get(text) if text is not None else None
+            # Changed in the window: a field read before differs now (a
+            # sealed baseline marks a changed field, so it differs too).
+            changed = was is not None and any(
+                record.get(k) != v for k, v in was.items() if k not in ignored
+            )
+            targets.append((text, was is not None, changed))
     stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
     result = judge_versions(
         spec,
@@ -1357,6 +1363,13 @@ def capture_baseline(
     execution_id = _new_execution_id()
     _tag_reads(verifier, execution_id)
     salt = secrets.token_bytes(32)
+    # The versions first: a save between this read and the record read is
+    # then in the record baseline too, never hidden in the versions one.
+    versions_rows = (
+        _read_versions(cfg, params)
+        if cfg.frame is not None and cfg.frame.versions is not None
+        else None
+    )
     state = verifier.capture_pre_state()
     if not isinstance(state, EffectState):
         raise VerifyRunError("verifier returned no readable baseline")
@@ -1381,7 +1394,7 @@ def capture_baseline(
         from openadapt_flow.runtime.effects.versions import seal_versions
 
         detail[FRAME_VERSIONS_DETAIL] = seal_versions(
-            cfg.frame.versions, _read_versions(cfg, params), _mac_key(salt)
+            cfg.frame.versions, versions_rows, _mac_key(salt)
         )
     if detail:
         state = state.model_copy(update={"detail": {**state.detail, **detail}})

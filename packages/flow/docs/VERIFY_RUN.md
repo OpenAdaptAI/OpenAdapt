@@ -301,26 +301,47 @@ The versions of a target that are new in the window must be the agent's:
 
 - With `author_field`, every new version's author must be one of `self`. A
   version by anyone else is refuted as a lost update. A version with no
-  author is not checked.
-- Without it, versions must be whole numbers that step by one per save
-  (HAPI's `res_ver`, a `version_number` column). At most one step may
-  happen. Two or more steps are refuted: the
-  agent saved once, so someone else saved too. A version that went back is
-  refuted. A version that isn't a whole number (an opaque ETag) is not
-  checked: without authors the saves can't be counted. A read of only the
-  current version works too, since the step count is the difference.
+  author is not checked. The read must be a history that only grows: every
+  version read before the write must still be there after it, or the check
+  is not checked. A read of only the current version and its last author
+  would hide the other user's save.
+- Without it, versions must be whole numbers that step by one per save of
+  that record (HAPI's `res_ver`, a `version_number` column). At most one
+  step may happen. Two or more steps are refuted: the agent saved once, so
+  someone else saved too. A version that went back is refuted. A version
+  that isn't a whole number (an opaque ETag) is not checked: without authors
+  the saves can't be counted. A read of only the current version works here,
+  since the step count is the difference. The numbers must be per record and
+  contiguous: a global sequence, such as an audit table's row id, also moves
+  for other records' saves, so a correct update would be refuted. Use
+  `author_field` with such a sequence.
 
-Anything else stops the run, never a pass: a versions read that fails before
-or after the write, a target that existed but has no version, or a target
-record without the field that names it. A record created in the window has
-no earlier version to overwrite and isn't judged. Only targets are judged:
-another user's save to an unrelated record leaves this check as it was (the
-frame and its attribution judge that record, as before).
+Anything else stops the run, never a pass:
+
+- a versions read that fails before or after the write;
+- a target that existed but has no version, or a target record without the
+  field that names it;
+- a version that reads as null, before or after (`null_version`);
+- two rows of one record with the same version (`duplicate_version`): a
+  save could hide behind another;
+- a target whose record changed in the window with no new version
+  (`no_new_version`): the app saved without a version row, so who saved
+  can't be told. A target that didn't change (already right, nothing
+  written) needs no new version.
+
+A record created in the window has no earlier version to overwrite and isn't
+judged. Only targets are judged: another user's save to an unrelated record
+leaves this check as it was (the frame and its attribution judge that
+record, as before). The versions are read before the records at the
+baseline, so a save between the two reads shows in the record baseline. The
+window starts at the baseline: a copy the agent read before `begin_write` is
+not covered.
 
 The baseline keeps versions as keyed MACs of the record and the version;
 only a whole-number version's value is kept, to count steps. The receipt's
 `evidence.frame.versions` holds counts and a problem code (`another_author`,
-`extra_steps`, `went_back`, `no_author`, `not_a_number`, `missing`,
+`extra_steps`, `went_back`, `no_author`, `not_a_number`, `null_version`,
+`duplicate_version`, `no_new_version`, `history_changed`, `missing`,
 `no_target_id`, `unreadable`, `self_unresolved`), never ids or values. A
 refuted check refutes the frame (`checked.frame: refuted`); one that can't be
 judged leaves the frame `not_checked`.

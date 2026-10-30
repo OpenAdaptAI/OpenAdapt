@@ -233,3 +233,90 @@ def test_author_and_self_go_together() -> None:
 def test_a_frame_without_versions_keeps_its_digest() -> None:
     spec = FrameSpec.model_validate({"identity_field": "id"})
     assert "versions" not in spec.model_dump(mode="json", by_alias=True)
+
+
+# -- review round 1 (#1662): each attack ends in a stop ------------------------
+
+
+def test_r1_a1_authors_with_a_current_version_only_read_is_not_checked(
+    tmp_path: Path,
+) -> None:
+    # The read shows only the record's current version and its last author:
+    # the front desk's version is gone after the write.
+    db = tmp_path / "app.sqlite"
+    read = {
+        "kind": "sql",
+        "sqlite_database": str(db),
+        "sql_query": "SELECT p.id AS person_id, p.ver AS ver, (SELECT author FROM "
+        "person_version v WHERE v.person_id = p.id ORDER BY v.id DESC LIMIT 1) "
+        "AS author FROM person p",
+    }
+    result = _run(tmp_path, _lost_update, {**AUTHORS, "read": read})
+    assert result["receipt"]["outcome"] != "verified"
+    assert _versions(result)["problem"] == "history_changed"
+
+
+@pytest.mark.parametrize("versions", [AUTHORS, {}], ids=["authors", "steps"])
+def test_r1_a2_a_null_version_is_not_checked(tmp_path: Path, versions: Any) -> None:
+    result = _run(tmp_path, _lost_update, {**versions, "version_field": "version"})
+    assert result["receipt"]["outcome"] != "verified"
+    assert _versions(result)["problem"] == "null_version"
+
+
+def test_r1_a3_a_duplicate_version_is_not_checked(tmp_path: Path) -> None:
+    def window(con: sqlite3.Connection) -> None:
+        _lost_update(con)
+        con.execute("UPDATE person_version SET ver = '1' WHERE author = 'frontdesk'")
+
+    result = _run(tmp_path, window, AUTHORS)
+    assert result["receipt"]["outcome"] != "verified"
+    assert _versions(result)["problem"] == "duplicate_version"
+
+
+def test_r1_a4_versions_are_read_before_the_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import openadapt_flow.verify_run as vr
+
+    real = vr._read_versions
+    calls = {"n": 0}
+
+    def wrapped(cfg: Any, params: Any) -> Any:
+        calls["n"] += 1
+        rows = real(cfg, params)
+        if calls["n"] == 1:  # another user saves between the two baseline reads
+            con = sqlite3.connect(tmp_path / "app.sqlite")
+            _save(con, 1, "frontdesk", addr="9 New Rd")
+            con.commit()
+            con.close()
+        return rows
+
+    monkeypatch.setattr(vr, "_read_versions", wrapped)
+    result = _run(
+        tmp_path, lambda con: _save(con, 1, "bot", phone="555-0199", addr="1 Elm St")
+    )
+    assert result["receipt"]["outcome"] != "verified"
+
+
+@pytest.mark.parametrize("versions", [AUTHORS, {}], ids=["authors", "steps"])
+def test_r1_a_changed_target_with_no_new_version_is_not_checked(
+    tmp_path: Path, versions: Any
+) -> None:
+    # The app saved without writing a version row.
+    result = _run(
+        tmp_path,
+        lambda con: con.execute("UPDATE person SET phone = '555-0199' WHERE id = 1"),
+        versions,
+    )
+    assert result["receipt"]["outcome"] != "verified"
+    assert _versions(result)["problem"] == "no_new_version"
+
+
+def test_r1_an_unchanged_target_with_no_new_version_holds(tmp_path: Path) -> None:
+    # Already right, nothing written: no save could overwrite anything.
+    def setup(con: sqlite3.Connection) -> None:
+        con.execute("UPDATE person SET phone = '555-0199' WHERE id = 1")
+
+    result = _run(tmp_path, lambda con: None, AUTHORS, setup=setup)
+    assert result["receipt"]["outcome"] == "verified"
+    assert _versions(result)["new_versions"] == 0
