@@ -1,0 +1,41 @@
+schema_version: openadapt.ensure-record/v1
+resource_type: AllergyIntolerance
+base_url: ${MEDPLUM_FHIR_URL}
+access_token_env: MEDPLUM_RECORD_TOKEN
+self:
+- ${MEDPLUM_BOT_REF}
+fields:
+  clinical_status:
+    path: clinicalStatus.coding.code
+  code:
+    path: code.coding.code
+  code_system:
+    path: code.coding.system
+  criticality:
+    path: criticality
+  display:
+    path: code.coding.display
+  patient:
+    path: patient.reference
+  verification_status:
+    path: verificationStatus.coding.code
+identity:
+- - patient
+  - code
+search:
+  patient: patient
+  code: code
+closed: true
+allow:
+- clinicalStatus.coding.system="http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical"
+- verificationStatus.coding.system="http://terminology.hl7.org/CodeSystem/allergyintolerance-verification"
+change_feed:
+  audit:
+    heartbeat: true
+  history: true
+  history_author: false
+  sweep_types:
+  - AllergyIntolerance
+settle_s: 1.0
+void:
+- verificationStatus.coding.code="entered-in-error"

@@ -1,0 +1,9 @@
+{
+ "patient": "Patient/3981d702-367e-4297-b18b-c4b38ce2b01d",
+ "code_system": "http://snomed.info/sct",
+ "code": "91936005",
+ "criticality": "high",
+ "clinical_status": "active",
+ "verification_status": "confirmed",
+ "display": "Allergy to penicillin"
+}
