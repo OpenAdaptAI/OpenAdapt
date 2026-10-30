@@ -787,7 +787,12 @@ def read_changes(
                 if isinstance(version, dict):
                     meta = version.get("meta") or {}
                     when = _when(meta.get("lastUpdated"))
-                    if when is None or when < since or (until and when > until):
+                    if when is None:
+                        # A version with no time can't be placed in or out of
+                        # the window; skipping it would hide it from the
+                        # version count and the checks on each version.
+                        raise Unreadable(f"a version of {ref} has no lastUpdated")
+                    if when < since or (until and when > until):
                         continue
                     change.versions += 1
                     change.bodies.append(version)
@@ -1161,6 +1166,10 @@ def verify_ensure(
                 )
             except Unreadable:
                 existing_now = None  # gone or unreadable: not found
+                if rid in after_matches:
+                    # A search still finds it: the read by id failed, so the
+                    # heartbeat and the void check can't run on it.
+                    raise
             audit = contract.change_feed.audit
             if existing_now is not None and audit is not None and audit.heartbeat:
                 _hear_own_read(
@@ -1171,11 +1180,11 @@ def verify_ensure(
         late = _agents_part(read_changes(contract, reader, baseline.started), selfs)
         if late != _agents_part(changes, selfs):
             raise Unreadable("the agent wrote after the window closed")
+        return judge(
+            contract, params, baseline, changes, after_matches, created, existing_now
+        )
     except Unreadable as exc:
         return _review([f"unreadable: {exc}"], {"unreadable": True})
-    return judge(
-        contract, params, baseline, changes, after_matches, created, existing_now
-    )
 
 
 __all__ = [

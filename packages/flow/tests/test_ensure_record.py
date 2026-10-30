@@ -1257,3 +1257,66 @@ def test_voiding_a_record_that_was_the_person_is_no_correction():
     }
     r = judge(vax_contract(settle_s=1), VAX_PARAMS, base(e), changes, {"x": x}, x)
     assert r.outcome == "needs_review"
+
+
+# -- review of void with corrections (REVIEW_VOID.md, second part) --------------------
+
+
+def test_review_c4_an_unreadable_void_entry_in_judge_fails_closed():
+    from openadapt_flow.ensure_record import verify_ensure
+
+    # judge runs inside verify_ensure's try: an Unreadable there is a review.
+    server = _Server(("C", 2), ("U", 3))
+    c = cc(change_feed={"audit": {"heartbeat": True}, "history_author": False})
+    bad = c.model_copy(update={"void": ["status=entered-in-error"]})  # not JSON
+
+    def get(url, params):
+        if url.split("/fhir/R4/", 1)[-1] == "Patient":
+            return 200, {}, bundle()
+        return server.get(url, params)
+
+    r = verify_ensure(
+        bad, PARAMS, base(), reader=FhirReader(bad, get), sleep=lambda s: None
+    )
+    assert r.outcome == "needs_review" and r.evidence.get("unreadable")
+
+
+def test_review_c2_a_version_with_no_time_is_unreadable():
+    routes = {
+        "AuditEvent": bundle(
+            _stamped("C", "Immunization/x", _iso(1)),
+            _stamped("U", "Immunization/x", _iso(3)),
+        ),
+        "Immunization/x/_history": bundle(
+            versioned(vax("x"), BOT, _iso(1)),
+            {**vax("x", "entered-in-error"), "meta": {"author": {"reference": BOT}}},
+            versioned(vax("x"), BOT, _iso(3)),
+            kind="history",
+        ),
+    }
+    c = vax_contract(settle_s=1)
+    r = FhirReader(c, lambda url, p: (200, {}, routes[url.split("/fhir/R4/", 1)[-1]]))
+    with pytest.raises(Unreadable):
+        read_changes(c, r, T0)
+
+
+def test_review_c3_a_found_record_that_cant_be_read_by_id_needs_review():
+    from openadapt_flow.ensure_record import verify_ensure
+
+    e = patient("e")
+
+    def get(url, params):
+        key = url.split("/fhir/R4/", 1)[-1]
+        if key == "metadata":
+            return 200, {"Date": "Wed, 28 Oct 2026 12:00:10 GMT"}, {}
+        if key == "AuditEvent":
+            return 200, {}, bundle()
+        if key == "Patient/e":
+            return 503, {}, None
+        return 200, {}, bundle(e)
+
+    c = contract(change_feed={"audit": {"heartbeat": True}})
+    r = verify_ensure(
+        c, PARAMS, base(e), reader=FhirReader(c, get), sleep=lambda s: None
+    )
+    assert r.outcome == "needs_review" and r.evidence.get("unreadable")
