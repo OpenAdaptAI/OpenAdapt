@@ -33,7 +33,9 @@ INSERT INTO person_version (person_id, ver, author) VALUES (1, '1', 'admin'),
 PARAMS = {"phone": "555-0199", "bot": "bot"}
 
 
-def _save(con: sqlite3.Connection, pid: int, author: Optional[str], **values: str) -> None:
+def _save(
+    con: sqlite3.Connection, pid: int, author: Optional[str], **values: str
+) -> None:
     """The app's save: the row, its version number, one version row."""
 
     sets = ", ".join(f"{k} = ?" for k in values)

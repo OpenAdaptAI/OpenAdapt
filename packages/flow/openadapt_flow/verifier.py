@@ -1594,7 +1594,9 @@ def _reasons(evidence: Mapping[str, Any], receipt_outcome: str) -> list[str]:
     versions = frame.get("versions") or {}
     problem = versions.get("problem") if isinstance(versions, Mapping) else None
     if problem:
-        out.append(_VERSION_REASONS.get(str(problem), f"the target's versions: {problem}"))
+        out.append(
+            _VERSION_REASONS.get(str(problem), f"the target's versions: {problem}")
+        )
     if frame.get("status") == "refuted" and frame.get("collateral_count", 0):
         kinds = ", ".join(frame.get("collateral_kinds") or [])
         out.append(

@@ -185,7 +185,9 @@ def seal_versions(
     return {"reachable": True, "records": records}
 
 
-def _resolve_self(spec: FrameVersions, params: Mapping[str, object]) -> Optional[set[str]]:
+def _resolve_self(
+    spec: FrameVersions, params: Mapping[str, object]
+) -> Optional[set[str]]:
     out: set[str] = set()
     for expr in spec.self_actors:
         value = expr.resolve(params)
@@ -267,7 +269,9 @@ def judge_versions(
         fresh = []
         for r in now:
             version = _text(_get(r, spec.version_field))
-            mac = _mac(key, "version", target, "\x00null" if version is None else version)
+            mac = _mac(
+                key, "version", target, "\x00null" if version is None else version
+            )
             if mac not in old:
                 fresh.append((version, r))
         out.new_versions += len(fresh)
@@ -294,7 +298,9 @@ def judge_versions(
             continue
         # No authors: count whole-number steps.
         values = [_text(_get(r, spec.version_field)) for r in now]
-        if not base.get("whole") or any(v is None or not _WHOLE.match(v) for v in values):
+        if not base.get("whole") or any(
+            v is None or not _WHOLE.match(v) for v in values
+        ):
             stop(
                 "not_checked",
                 "not_a_number",
