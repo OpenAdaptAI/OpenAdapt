@@ -274,12 +274,20 @@ None of the runs made a model call.
 **OpenEMR, live:** the pinned local fixture (its own stack), a real browser,
 the scoreboard's New Patient program, and the whole `openemr` database read
 through a SELECT-only user. The program filled 28 steps of the form and
-stopped before the save. Read with only a copied allow-list of log and session
-tables, the rollback ended `RECONCILIATION_REQUIRED` and named exactly what
-else moved: 2 `background_services` rows (`next_run`) and 4 `users` rows
-(`last_updated`, `uuid`), bookkeeping OpenEMR does on its own while a user is
+stopped before the save. With no attribution and no profile, the rollback
+ended `RECONCILIATION_REQUIRED`, compensated nothing and named exactly what
+moved: 2 `background_services` rows (`next_run`), 4 `users` rows
+(`last_updated`, `uuid`) and new `log`, `log_comment_encrypt`, `uuid_mapping`
+and `uuid_registry` rows, bookkeeping OpenEMR does on its own while a user is
 signed in. That is the case the app profile below is for: a column nobody
-listed shows up by name rather than being assumed harmless.
+listed shows up by name rather than being assumed harmless. With the `openemr`
+profile and the audit-log attribution, the read showed nothing the run did,
+but the run still ended `RECONCILIATION_REQUIRED`: the change ledger lists
+steps that may have written (pressing Enter in a field), and they count as
+judged by the read only when every write the app logged for the run's user is
+a changed row. OpenEMR logs some of its own bookkeeping under that user, so a
+person checks. That is fail-closed, not a lost edit
+([results](../benchmark/rollback/results/openemr.json)).
 
 Not measured on OpenEMR: a stop after the save. On this stack the recorded
 program stops at its own scroll step (step 28 of 35), before the save, and the
