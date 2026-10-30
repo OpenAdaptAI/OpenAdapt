@@ -275,6 +275,26 @@ frame:
     # self: [{param: bot_user_id}]
 ```
 
+An app that logs each save with its user can name the author instead. EspoCRM's
+`action_history_record` logs every API save; a lead has no version column:
+
+```yaml
+  versions:
+    read:
+      kind: sql
+      sql_driver: pymysql
+      sql_connect_args: {host: 127.0.0.1, port: 3306, user: reader, database: espocrm}
+      sql_password_env: ESPOCRM_DB_RO_PASSWORD
+      sql_query: >-
+        SELECT CAST(CONCAT(LOWER(target_type), ':', target_id) AS CHAR) AS id,
+          CAST(number AS CHAR) AS ver, CAST(user_id AS CHAR) AS author
+        FROM action_history_record WHERE action <> 'read' AND deleted = 0
+    record_field: id            # equals the read set's id (lead:<id>)
+    version_field: ver
+    author_field: author
+    self: [{param: bot_user_id}]
+```
+
 The versions are read before the write and after it. Every record that a
 confirmed write effect names and that existed before the write is a target.
 The versions of a target that are new in the window must be the agent's:
@@ -283,8 +303,8 @@ The versions of a target that are new in the window must be the agent's:
   version by anyone else is refuted as a lost update. A version with no
   author is not checked.
 - Without it, versions must be whole numbers that step by one per save
-  (HAPI's `res_ver`, a `version_number`
-  column). At most one step may happen. Two or more steps are refuted: the
+  (HAPI's `res_ver`, a `version_number` column). At most one step may
+  happen. Two or more steps are refuted: the
   agent saved once, so someone else saved too. A version that went back is
   refuted. A version that isn't a whole number (an opaque ETag) is not
   checked: without authors the saves can't be counted. A read of only the
