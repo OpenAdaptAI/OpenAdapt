@@ -1,0 +1,311 @@
+schema_version: openadapt.contract-manifest/v1
+dialect: mysql
+database: dolidb
+actor_params:
+- bot_user_id
+questions_open: []
+kinds:
+  create_customer:
+    mode: create
+    main_table: llx_societe
+    parameters:
+    - name
+    - address
+    - zip
+    - town
+    - country
+    - phone
+    - email
+    identity: []
+    lists: []
+    dispatch: null
+    variants:
+    - fields:
+      - address
+      - country
+      - email
+      - name
+      - phone
+      - town
+      - zip
+      lists: {}
+      dispatch_value: null
+      create: contracts/create_customer/address+country+email+name+phone+town+zip.8386ba67.create.yaml
+      found: contracts/create_customer/address+country+email+name+phone+town+zip.8386ba67.found.yaml
+  create_product:
+    mode: create
+    main_table: llx_product
+    parameters:
+    - ref
+    - label
+    - price_excl_vat
+    - vat_rate
+    identity: []
+    lists: []
+    dispatch: null
+    variants:
+    - fields:
+      - label
+      - price_excl_vat
+      - ref
+      - vat_rate
+      lists: {}
+      dispatch_value: null
+      create: contracts/create_product/label+price_excl_vat+ref+vat_rate.bcd72fd0.create.yaml
+      found: contracts/create_product/label+price_excl_vat+ref+vat_rate.bcd72fd0.found.yaml
+  create_draft_invoice:
+    mode: create
+    main_table: llx_facture
+    parameters:
+    - customer
+    - town
+    - invoice_date
+    - lines
+    identity: []
+    lists:
+    - lines
+    dispatch: null
+    variants:
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 1
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx1.678821c0.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx1.678821c0.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 2
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx2.17de9df9.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx2.17de9df9.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 3
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx3.2f437a2c.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx3.2f437a2c.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 4
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx4.aea56f08.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx4.aea56f08.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 5
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx5.58afdd66.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx5.58afdd66.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 6
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx6.edf87893.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx6.edf87893.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 7
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx7.086ca1eb.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx7.086ca1eb.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 8
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx8.8d4e9b1f.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx8.8d4e9b1f.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 9
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx9.042138e5.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx9.042138e5.found.yaml
+    - fields:
+      - customer
+      - invoice_date
+      - town
+      lists:
+        lines: 10
+      dispatch_value: null
+      create: contracts/create_draft_invoice/customer+invoice_date+town+linesx10.f6fa907c.create.yaml
+      found: contracts/create_draft_invoice/customer+invoice_date+town+linesx10.f6fa907c.found.yaml
+  update_customer:
+    mode: update
+    main_table: llx_societe
+    parameters:
+    - customer
+    - town
+    - new_phone
+    - new_email
+    - new_address
+    - new_zip
+    identity:
+    - customer
+    - town
+    lists: []
+    dispatch: null
+    variants:
+    - fields:
+      - customer
+      - new_phone
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_phone+town.e481e632.update.yaml
+      found: contracts/update_customer/customer+new_phone+town.e481e632.found.yaml
+    - fields:
+      - customer
+      - new_email
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_email+town.014f1cf4.update.yaml
+      found: contracts/update_customer/customer+new_email+town.014f1cf4.found.yaml
+    - fields:
+      - customer
+      - new_address
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_address+town.7b5a4e67.update.yaml
+      found: contracts/update_customer/customer+new_address+town.7b5a4e67.found.yaml
+    - fields:
+      - customer
+      - new_zip
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_zip+town.5089de78.update.yaml
+      found: contracts/update_customer/customer+new_zip+town.5089de78.found.yaml
+    - fields:
+      - customer
+      - new_email
+      - new_phone
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_email+new_phone+town.110f7554.update.yaml
+      found: contracts/update_customer/customer+new_email+new_phone+town.110f7554.found.yaml
+    - fields:
+      - customer
+      - new_address
+      - new_phone
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_address+new_phone+town.be3325cd.update.yaml
+      found: contracts/update_customer/customer+new_address+new_phone+town.be3325cd.found.yaml
+    - fields:
+      - customer
+      - new_phone
+      - new_zip
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_phone+new_zip+town.00a25668.update.yaml
+      found: contracts/update_customer/customer+new_phone+new_zip+town.00a25668.found.yaml
+    - fields:
+      - customer
+      - new_address
+      - new_email
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_address+new_email+town.304fdd4f.update.yaml
+      found: contracts/update_customer/customer+new_address+new_email+town.304fdd4f.found.yaml
+    - fields:
+      - customer
+      - new_email
+      - new_zip
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_email+new_zip+town.adf5982d.update.yaml
+      found: contracts/update_customer/customer+new_email+new_zip+town.adf5982d.found.yaml
+    - fields:
+      - customer
+      - new_address
+      - new_zip
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_address+new_zip+town.8d26c1c7.update.yaml
+      found: contracts/update_customer/customer+new_address+new_zip+town.8d26c1c7.found.yaml
+    - fields:
+      - customer
+      - new_address
+      - new_email
+      - new_phone
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_address+new_email+new_phone+town.be743cce.update.yaml
+      found: contracts/update_customer/customer+new_address+new_email+new_phone+town.be743cce.found.yaml
+    - fields:
+      - customer
+      - new_email
+      - new_phone
+      - new_zip
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_email+new_phone+new_zip+town.d9b5d1c2.update.yaml
+      found: contracts/update_customer/customer+new_email+new_phone+new_zip+town.d9b5d1c2.found.yaml
+    - fields:
+      - customer
+      - new_address
+      - new_phone
+      - new_zip
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_address+new_phone+new_zip+town.998004a8.update.yaml
+      found: contracts/update_customer/customer+new_address+new_phone+new_zip+town.998004a8.found.yaml
+    - fields:
+      - customer
+      - new_address
+      - new_email
+      - new_zip
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_address+new_email+new_zip+town.e4f14417.update.yaml
+      found: contracts/update_customer/customer+new_address+new_email+new_zip+town.e4f14417.found.yaml
+    - fields:
+      - customer
+      - new_address
+      - new_email
+      - new_phone
+      - new_zip
+      - town
+      lists: {}
+      dispatch_value: null
+      update: contracts/update_customer/customer+new_address+new_email+new_phone+new_zip+town.0d2342b6.update.yaml
+      found: contracts/update_customer/customer+new_address+new_email+new_phone+new_zip+town.0d2342b6.found.yaml

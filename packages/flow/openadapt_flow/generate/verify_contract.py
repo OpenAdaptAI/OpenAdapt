@@ -1791,8 +1791,21 @@ def propose(
             book.setdefault(t, set()).update(cols)
         for t, cols in dict(ans.get("columns_remove", {})).items():
             book[t] = book.get(t, set()) - set(cols)
-    if logs or book or unchecked:
+    sides = sorted(
+        {f"{s.table} ({s.count} per write)" for p in plans for s in p.sides}
+    )
+    for p in plans:  # a table the person calls a log is no longer counted
+        p.sides = [s for s in p.sides if s.table not in logs]
+    if logs or book or unchecked or sides:
         lines = []
+        if sides:
+            lines.append(
+                "Rows the app adds beside each write, expected exactly that many "
+                "times (a second save adds a second one, which stops the write; "
+                "list a table under logs_add to allow any number): "
+                + ", ".join(sides)
+                + "."
+            )
         if logs:
             lines.append(
                 "Tables treated as the app's own logs (rows may be added, existing "

@@ -1,0 +1,157 @@
+{
+  "applied": [],
+  "dialect": "mysql",
+  "tables": 387,
+  "questions": [
+    {
+      "number": 1,
+      "key": "bookkeeping",
+      "text": "Is this the app's own bookkeeping, which a write may change without a task asking? Columns that change on their own and are not compared: llx_societe: fk_user_modif, socialnetworks, tms Columns of a new record that differ between demonstrations and are not checked: llx_facture: date_lim_reglement, multicurrency_total_ht, multicurrency_total_ttc, multicurrency_total_tva, ref, total_ht, total_ttc, total_tva; llx_product: price_ttc Answer `bookkeeping: accept`, or list changes under logs_add, logs_remove, columns_add, columns_remove.",
+      "proposal": "accept",
+      "answered": true
+    },
+    {
+      "number": 2,
+      "key": "recheck_after_s",
+      "text": "How long after a verified write can the app still write on its own (a background job, a delayed retry)? The database is read again that many seconds later and a late change refutes the write. Proposed: 300. Answer `recheck_after_s: <seconds>`.",
+      "proposal": 300,
+      "answered": true
+    },
+    {
+      "number": 3,
+      "key": "locations.create_draft_invoice",
+      "text": "Kind `create_draft_invoice`: `invoice_date` is in several places: [0] llx_facture.datef (date); [1] llx_facture.date_lim_reglement (date) Answer `locations.create_draft_invoice: {<parameter>: <number>}` to pick one.",
+      "proposal": null,
+      "answered": true
+    }
+  ],
+  "kinds": {
+    "create_customer": {
+      "mode": "create",
+      "main_table": "llx_societe",
+      "locations": {
+        "address": "llx_societe.address (exact)",
+        "country": "llx_societe.fk_pays -> llx_c_country.label (exact)",
+        "email": "llx_societe.email (exact)",
+        "name": "llx_societe.nom (exact)",
+        "phone": "llx_societe.phone (phone)",
+        "town": "llx_societe.town (exact)",
+        "zip": "llx_societe.zip (exact)"
+      },
+      "placed_by_name": [],
+      "demonstrations": 2,
+      "children": {},
+      "lists": {},
+      "side_rows": [
+        {
+          "table": "llx_actioncomm",
+          "count": 1,
+          "unless": null
+        },
+        {
+          "table": "llx_actioncomm_resources",
+          "count": 1,
+          "unless": null
+        }
+      ],
+      "logs": [],
+      "refused": [],
+      "unresolved": {},
+      "emitted": 1,
+      "rejected": []
+    },
+    "create_product": {
+      "mode": "create",
+      "main_table": "llx_product",
+      "locations": {
+        "label": "llx_product.label (exact)",
+        "price_excl_vat": "llx_product.price (number)",
+        "ref": "llx_product.ref (exact)",
+        "vat_rate": "llx_product.tva_tx (number)"
+      },
+      "placed_by_name": [],
+      "demonstrations": 2,
+      "children": {},
+      "lists": {},
+      "side_rows": [
+        {
+          "table": "llx_actioncomm",
+          "count": 1,
+          "unless": null
+        },
+        {
+          "table": "llx_actioncomm_resources",
+          "count": 1,
+          "unless": null
+        },
+        {
+          "table": "llx_product_price",
+          "count": 1,
+          "unless": null
+        }
+      ],
+      "logs": [],
+      "refused": [],
+      "unresolved": {},
+      "emitted": 1,
+      "rejected": []
+    },
+    "create_draft_invoice": {
+      "mode": "create",
+      "main_table": "llx_facture",
+      "locations": {
+        "customer": "llx_facture.fk_soc -> llx_societe.nom (exact)",
+        "invoice_date": "llx_facture.datef (date)",
+        "town": "llx_facture.fk_soc -> llx_societe.town (exact)"
+      },
+      "placed_by_name": [],
+      "demonstrations": 2,
+      "children": {},
+      "lists": {
+        "lines": "llx_facturedet"
+      },
+      "side_rows": [],
+      "logs": [],
+      "refused": [],
+      "unresolved": {},
+      "emitted": 10,
+      "rejected": []
+    },
+    "update_customer": {
+      "mode": "update",
+      "main_table": "llx_societe",
+      "locations": {
+        "customer": "llx_societe.nom (exact)",
+        "new_address": "llx_societe.address (exact)",
+        "new_email": "llx_societe.email (exact)",
+        "new_phone": "llx_societe.phone (phone)",
+        "new_zip": "llx_societe.zip (exact)",
+        "town": "llx_societe.town (exact)"
+      },
+      "placed_by_name": [
+        "new_address",
+        "new_zip"
+      ],
+      "demonstrations": 2,
+      "children": {},
+      "lists": {},
+      "side_rows": [
+        {
+          "table": "llx_actioncomm",
+          "count": 1,
+          "unless": null
+        },
+        {
+          "table": "llx_actioncomm_resources",
+          "count": 1,
+          "unless": null
+        }
+      ],
+      "logs": [],
+      "refused": [],
+      "unresolved": {},
+      "emitted": 15,
+      "rejected": []
+    }
+  }
+}
