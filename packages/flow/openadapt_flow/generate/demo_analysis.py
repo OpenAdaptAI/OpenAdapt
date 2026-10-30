@@ -49,12 +49,19 @@ _IDLIKE = re.compile(r"(^id$|_id$|^id_|^fk_|_fk$|^parent$|^parent_id$)", re.I)
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _PHONE = re.compile(r"^\+?[0-9][0-9 ().\-/]*$")
-#: Table names an app's own logs usually carry. Only a proposal: a person
-#: confirms which tables are logs (the bookkeeping question).
-_LOG_NAME = re.compile(
-    r"(log|history|audit|session|token|notification|queue|job|stat|cache|lock|event)",
-    re.I,
-)
+#: Fewest digits a value compared as a phone number may have.
+PHONE_MIN_DIGITS = 7
+
+
+def phone_shaped(value: Any) -> bool:
+    """Is ``value`` written like a phone number (digits and ``+ ( ) - . /``
+    and spaces, with at least :data:`PHONE_MIN_DIGITS` digits)?"""
+
+    text = value_text(value) if value is not None else ""
+    return (
+        bool(_PHONE.match(text))
+        and sum(ch.isdigit() for ch in text) >= PHONE_MIN_DIGITS
+    )
 
 
 def value_text(value: Any) -> str:
@@ -102,13 +109,18 @@ def rule_for(stored: Optional[str], column_kind: str, value: Any) -> Optional[st
     if text == "":
         return None
     if column_kind == "text":
-        # An email address or a phone number is compared in its declared
-        # canonical form even when this demonstration's text matches
-        # exactly: another write may store ``Ana@Example.org`` or
-        # ``+16175550144`` for the same value.
+        # An email address is compared case-folded even when this
+        # demonstration's text matches exactly (another write may store
+        # ``Ana@Example.org``). A phone number only when the app stored other
+        # text with the same digits, and only as a proposal: a person
+        # confirms it (the ``phones`` question), never the value's shape.
         if _EMAIL.match(text) and stored.casefold() == text.casefold():
             return "email"
-        if _PHONE.match(text) and sum(ch.isdigit() for ch in text) >= 6:
+        if (
+            stored != text
+            and _PHONE.match(text)
+            and sum(ch.isdigit() for ch in text) >= PHONE_MIN_DIGITS
+        ):
             a, b = kind_form("phone", stored), kind_form("phone", text)
             if a is not None and a == b:
                 return "phone"
@@ -514,10 +526,6 @@ def is_identifier(value: Any) -> bool:
 
 def snake(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-
-
-def looks_like_log(table: str) -> bool:
-    return bool(_LOG_NAME.search(table))
 
 
 @dataclass

@@ -58,7 +58,6 @@ from openadapt_flow.generate.demo_analysis import (
     is_identifier,
     link_columns,
     locate,
-    looks_like_log,
     pick_anchor,
 )
 from openadapt_flow.generate.sql_store import RowChange, Schema
@@ -249,6 +248,18 @@ class KindPlan:
     by_name: list[str] = field(default_factory=list)
     #: Parameters placed where another kind's demonstrations found them.
     shared: list[str] = field(default_factory=list)
+    #: Existing rows (not the target) the demonstrations changed with no
+    #: task value: each the same row every time (by key) or the row a
+    #: located value names (an account behind the contact's key), with the
+    #: columns that moved and what kind of change each was.
+    touched: list[dict[str, Any]] = field(default_factory=list)
+    #: The target's own columns that moved with no task value, by kind.
+    anchor_extra: dict[str, str] = field(default_factory=dict)
+    #: Changed rows nothing identifies: a write that changes them stops.
+    unexcused: dict[str, set[str]] = field(default_factory=dict)
+    #: Tables whose added rows differ between demonstrations: logs only if a
+    #: person says so.
+    log_candidates: set[str] = field(default_factory=set)
     #: Where the target's versions are read (``frame.versions``): a version
     #: column that steps by one per save, or an audit table naming the
     #: record and the user who saved it. None when the demonstrations show
@@ -451,7 +462,7 @@ def analyze(
             "target can't be told apart from other records"
         )
     _children(schema, plan, lists)
-    _sides(schema, plan, actor_values)
+    _sides(schema, plan, actor_values, demos)
     return plan
 
 
@@ -571,6 +582,32 @@ def _derived_copy(
             ) and any(r.get(a) != r.get(b) for r in rows.rows.values()):
                 return True
     return False
+
+
+def _all_locations(plan: KindPlan) -> list[tuple[str, Location]]:
+    out = list(plan.locations.items())
+    for locs in plan.dispatch_locations.values():
+        out.extend(locs.items())
+    for g in [*plan.children.values(), *plan.lists.values()]:
+        out.extend(g.params.items())
+    return out
+
+
+def _confirm_phones(plan: KindPlan, confirmed: set[str]) -> None:
+    """A phone rule a person didn't confirm compares the text exactly."""
+
+    def fix(name: str, loc: Location) -> Location:
+        if loc.rule == "phone" and name not in confirmed:
+            return Location(loc.hops, loc.columns, "exact")
+        return loc
+
+    plan.locations = {k: fix(k, v) for k, v in plan.locations.items()}
+    plan.dispatch_locations = {
+        dv: {k: fix(k, v) for k, v in locs.items()}
+        for dv, locs in plan.dispatch_locations.items()
+    }
+    for g in [*plan.children.values(), *plan.lists.values()]:
+        g.params = {k: fix(k, v) for k, v in g.params.items()}
 
 
 def _resolve(plan: KindPlan, key: str, loc: Location) -> None:
@@ -805,13 +842,19 @@ def _demo_groups(plan: KindPlan, d: Demo) -> list[ChildGroup]:
     return _all_groups(plan, dv) if dv is not None else list(plan.children.values())
 
 
-def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> None:
+def _sides(
+    schema: Schema,
+    plan: KindPlan,
+    actor_values: Mapping[str, str],
+    all_demos: Sequence[Demo] = (),
+) -> None:
     """Classify every other row the demonstrations touched."""
 
     child_tables = {g.table: g.param for g in _all_groups(plan)}
     list_tables = {g.table for g in plan.lists.values()}
     pure: dict[str, list[list[tuple[Demo, dict[str, Optional[str]]]]]] = {}
     counts: dict[str, list[int]] = {}
+    touched: list[tuple[Demo, RowChange, RowChange]] = []
     for d, a in zip(plan.demos, plan.anchors):
         added_keys: set[str] = set()
         for ch in d.diff.changes:
@@ -846,14 +889,8 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
                     g.changed_columns = sorted(
                         set(g.changed_columns) | set(ch.changed_columns)
                     )
-                elif ch.table == plan.anchor:
-                    plan.bookkeeping.setdefault(ch.table, set()).update(
-                        ch.changed_columns
-                    )
-                else:
-                    plan.bookkeeping.setdefault(ch.table, set()).update(
-                        ch.changed_columns
-                    )
+                elif ch.table != plan.anchor or ch.key != a.key:
+                    touched.append((d, a, ch))
                 continue
             # added
             if ch.table in list_tables:
@@ -875,12 +912,16 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
         d.__dict__["_added_keys"] = added_keys
     for t, cs in sorted(counts.items()):
         rows = [r for group in pure.get(t, []) for r in group]
-        if len(set(cs)) == 1 and cs[0] > 0 and not looks_like_log(t) and rows:
+        if len(set(cs)) == 1 and cs[0] > 0 and rows:
             links: list[set[str]] = [getattr(d, "_added_keys", set()) for d, _ in rows]
             roles = column_roles(schema, t, rows, set(), actor_values, links)
             plan.sides.append(SideSpec(t, cs[0], roles, unless=child_tables.get(t)))
         elif rows:
-            plan.logs.add(t)
+            # The number of added rows differs between demonstrations: a log
+            # only when a person says so (bookkeeping question). Until then
+            # every added row stops the write.
+            plan.log_candidates.add(t)
+    _touched_rows(schema, plan, touched, actor_values)
     if plan.mode == "update":
         for a in plan.anchors:
             plan.anchor_changed |= set(a.changed_columns)
@@ -896,14 +937,144 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
             for loc in locs.values():
                 explained |= set(loc.columns) if not loc.hops else {loc.hops[0].column}
         extra = plan.anchor_changed - explained
-        if extra:
-            plan.bookkeeping.setdefault(plan.anchor, set()).update(extra)
-        plan.versions = _audit_source(schema, plan, actor_values) or _version_column(
-            schema, plan
-        )
+        for col in sorted(extra):
+            plan.anchor_extra[col] = _change_kind(
+                schema, plan.anchor, col, plan.demos, plan.anchors, actor_values
+            )
+        plan.versions = _audit_source(
+            schema, plan, actor_values, all_demos
+        ) or _version_column(schema, plan)
 
 
 _WHOLE_NUMBER = re.compile(r"^-?[0-9]+$")
+
+#: Kinds of change a person is offered as the app's own bookkeeping by
+#: default. Anything else is listed but not excused unless they add it.
+BOOKKEEPING_KINDS = ("timestamp", "counter", "actor")
+
+
+def _change_kind(
+    schema: Schema,
+    table: str,
+    col: str,
+    demos: Sequence[Demo],
+    changes: Sequence[RowChange],
+    actor_values: Mapping[str, str],
+) -> str:
+    """``timestamp`` (set to a time inside the demonstration), ``counter``
+    (a whole number that went up), ``actor`` (set to the acting user) or
+    ``other``, the same in every demonstration that changed it."""
+
+    from openadapt_flow.generate.demo_analysis import _within
+
+    column = schema.tables[table].column(col)
+    kinds = set()
+    for d, ch in zip(demos, changes):
+        before = (ch.before or {}).get(col)
+        after = (ch.after or {}).get(col)
+        if before == after:
+            continue
+        if (
+            column is not None
+            and column.kind in ("date", "datetime")
+            and _within(after, d.started_at, d.finished_at)
+        ):
+            kinds.add("timestamp")
+        elif (
+            column is not None
+            and column.kind in ("number", "text")
+            and before is not None
+            and after is not None
+            and _WHOLE_NUMBER.match(before)
+            and _WHOLE_NUMBER.match(after)
+            and int(after) > int(before)
+        ):
+            kinds.add("counter")
+        elif after is not None and after in set(actor_values.values()):
+            kinds.add("actor")
+        else:
+            kinds.add("other")
+    return kinds.pop() if len(kinds) == 1 else "other"
+
+
+def _touched_rows(
+    schema: Schema,
+    plan: KindPlan,
+    touched: Sequence[tuple[Demo, RowChange, RowChange]],
+    actor_values: Mapping[str, str],
+) -> None:
+    """Identify each existing row a demonstration changed with no task
+    value, so an excuse applies to that row only: the same row (by key) in
+    every demonstration (a counter row), or the row a located value names
+    through a key of the main record (the contact's account)."""
+
+    by_table: dict[str, list[tuple[Demo, RowChange, RowChange]]] = {}
+    for item in touched:
+        by_table.setdefault(item[2].table, []).append(item)
+    for table, items in sorted(by_table.items()):
+        t = schema.tables.get(table)
+        cols = sorted({c for _, _, ch in items for c in ch.changed_columns})
+        if t is None or len(t.primary_key) != 1:
+            plan.unexcused.setdefault(table, set()).update(cols)
+            continue
+        pk = t.primary_key[0]
+        keys = {ch.key for _, _, ch in items}
+        demos_with = {id(d) for d, _, _ in items}
+        selector: Optional[dict[str, Any]] = None
+        how = ""
+        if (
+            len(keys) == 1
+            and len(demos_with) == len(plan.demos)
+            and len(items) == len(plan.demos)
+        ):
+            key = (items[0][2].after or {}).get(pk)
+            if key is not None:
+                selector = {pk: {"literal": key}}
+                how = f"{table} row {pk}={key}"
+        if selector is None:
+            # Reached from the main record by a key column whose target row
+            # holds located values in single columns.
+            for p, loc in plan.locations.items():
+                if (
+                    not loc.hops
+                    or loc.hops[0].kind != "fk"
+                    or loc.hops[0].table != table
+                ):
+                    continue
+                hop = loc.hops[0]
+                if all(
+                    (a.after or {}).get(hop.column) == (ch.after or {}).get(pk)
+                    for _, a, ch in items
+                ):
+                    sel = {
+                        x.columns[0]: {"param": q}
+                        for q, x in plan.locations.items()
+                        if len(x.hops) == 1
+                        and x.hops[0] == hop
+                        and len(x.columns) == 1
+                        and x.rule == "exact"
+                    }
+                    if sel:
+                        selector = sel
+                        how = f"the {table} row the task's {', '.join(sorted(v['param'] for v in sel.values()))} name"
+                        break
+        if selector is None or len(items) != len({id(d) for d, _, _ in items}):
+            plan.unexcused.setdefault(table, set()).update(cols)
+            continue
+        kinds = {
+            c: _change_kind(
+                schema,
+                table,
+                c,
+                [d for d, _, _ in items],
+                [ch for _, _, ch in items],
+                actor_values,
+            )
+            for c in cols
+        }
+        plan.touched.append(
+            {"table": table, "selector": selector, "columns": kinds, "row": how}
+        )
 
 
 def _version_column(schema: Schema, plan: KindPlan) -> Optional[dict[str, Any]]:
@@ -941,7 +1112,10 @@ def _version_column(schema: Schema, plan: KindPlan) -> Optional[dict[str, Any]]:
 
 
 def _audit_source(
-    schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]
+    schema: Schema,
+    plan: KindPlan,
+    actor_values: Mapping[str, str],
+    all_demos: Sequence[Demo] = (),
 ) -> Optional[dict[str, Any]]:
     """A table that gained, in every update demonstration, a row naming the
     main record (a column holding its key) and the acting user (a column
@@ -999,6 +1173,26 @@ def _audit_source(
                 v = next(iter(values))
                 if v is not None and v.lower() in names and v.isidentifier():
                     where[col.name] = v
+        # Write events only: a column whose value in these rows (every
+        # update) differs from its value in the rows creates added to the
+        # same table (EspoCRM's ``action``: update, not create or read;
+        # Dolibarr's ``code``: COMPANY_MODIFY).
+        created = [
+            ch.after or {}
+            for d in all_demos
+            if d not in plan.demos
+            for ch in d.diff.of(name, "added")
+        ]
+        for col in table.columns:
+            if col.name in (lc, ac) or col.name in table.primary_key:
+                continue
+            mine = {r.get(col.name) for r in rows}
+            theirs = {r.get(col.name) for r in created}
+            if len(mine) == 1 and created and len(theirs) == 1 and mine != theirs:
+                v = next(iter(mine))
+                if v is not None and (col.kind == "text" or _WHOLE_NUMBER.match(v)):
+                    if "\\" not in v and "'" not in v and "%" not in v:
+                        where[col.name] = v
         found = {
             "kind": "audit",
             "table": name,
@@ -1175,6 +1369,9 @@ class SqlBuilder:
         self.params: dict[str, dict[str, str]] = {}
         #: Tables read through a view (the SQL guard refuses their name).
         self.views: dict[str, str] = {}
+        #: The main record's table: a key back to it names the record by its
+        #: own key, not by a display value, so no uniqueness check applies.
+        self.anchor = ""
         self._n = itertools.count()
 
     def q(self, name: str) -> str:
@@ -1233,10 +1430,47 @@ class SqlBuilder:
             raise GenerateError("a child hop can't be read as one value")
         sub = f"a{depth + 1}"
         inner = self.path(sub, hop.table, rest, depth + 1)
+        live = self.live(sub, hop.table)
+        if not rest.hops and hop.table != self.anchor:
+            # The value must name exactly one live row of its table: a
+            # second "Jon Park", or "Mary Ann|Lee" beside "Mary|Ann Lee",
+            # makes it NULL, so nothing matches and the write stops.
+            u = f"u{depth + 1}"
+            other = self.display(u, hop.table, rest.columns, rest.rule)
+            mine = self.display(sub, hop.table, rest.columns, rest.rule)
+            unique = (
+                f"(SELECT COUNT(*) FROM {self.tref(hop.table)} {u} WHERE "
+                f"{self.same(other, mine, False)}{self.live_and(u, hop.table)}) = 1"
+            )
+            inner = f"CASE WHEN {unique} THEN {inner} END"
         return (
             f"(SELECT {inner} FROM {self.tref(hop.table)} {sub} WHERE "
-            f"{self.same(f'{sub}.{self.q(hop.ref_column)}', f'{alias}.{self.q(hop.column)}', hop.declared)})"
+            f"{self.same(f'{sub}.{self.q(hop.ref_column)}', f'{alias}.{self.q(hop.column)}', hop.declared)}"
+            f"{' AND ' + live if live else ''})"
         )
+
+    def live(self, alias: str, table: str) -> str:
+        """The condition that a row isn't soft-deleted (a ``deleted`` or
+        ``is_deleted`` flag, or a ``deleted_at`` time), or "" when the table
+        has none: a trashed look-alike never resolves a key."""
+
+        t = self.schema.tables.get(table)
+        if t is None:
+            return ""
+        for name in ("deleted", "is_deleted"):
+            col = t.column(name)
+            if col is not None and col.kind in ("number", "bool"):
+                ref = f"{alias}.{self.q(name)}"
+                if self.d == "mysql" or col.kind == "number":
+                    return f"COALESCE({ref}, 0) = 0"
+                return f"NOT COALESCE({ref}, false)"
+        if t.column("deleted_at") is not None:
+            return f"{alias}.{self.q('deleted_at')} IS NULL"
+        return ""
+
+    def live_and(self, alias: str, table: str) -> str:
+        cond = self.live(alias, table)
+        return f" AND {cond}" if cond else ""
 
     def same(self, a: str, b: str, declared: bool = True) -> str:
         if declared:
@@ -1400,13 +1634,17 @@ def build_contract(
     variant: Variant,
     flavor: str,
     settings: Settings,
-    bookkeeping: Mapping[str, set[str]],
+    excused: Mapping[str, set[str]],
     logs: set[str],
 ) -> dict[str, Any]:
-    """One ``openadapt.verify/v1`` document for one field set."""
+    """One ``openadapt.verify/v1`` document for one field set. ``excused``:
+    table -> columns a person confirmed as the app's own bookkeeping; each
+    is excused only on the rows it was seen changing (the target, or a row
+    identified by key or by the task's values), never by name elsewhere."""
 
     b = SqlBuilder(schema)
     b.views = dict(settings.views)
+    b.anchor = plan.anchor
     fields = set(variant.fields)
     anchor = plan.anchor
     surfaces: dict[str, Surface] = {}
@@ -1436,10 +1674,21 @@ def build_contract(
         if plan.mode == "update" and p in plan.changes:
             target_fields.add(key)
             target_fields.update(loc.columns if not loc.hops else [loc.hops[0].column])
-    if plan.mode == "create" and flavor == "create":
+    if plan.mode == "update" and flavor == "update":
+        # The target's own bookkeeping, excused on the target row only.
+        target_fields.update(
+            c for c in plan.anchor_extra if c in excused.get(anchor, set())
+        )
+    if plan.mode == "create":
+        # ``found`` pins the same constants as ``create`` (a soft-delete
+        # flag, a status, a type): a trashed record with the task's values
+        # is not "already there". Who created it may differ.
         roles = _anchor_roles(schema, plan, variant, settings.actor_params)
         for col, role in sorted(roles.items()):
+            if flavor == "found" and role.role in ("actor", "copied"):
+                continue
             _pin(b, main, anchor, col, role, match, settings.actor_params)
+    if plan.mode == "create" and flavor == "create":
         support = _support(plan, variant)
         for p in plan.optional:
             if p in fields or p in variant.lists:
@@ -1488,6 +1737,14 @@ def build_contract(
         or (not found and plan.mode == "create" and set(g.co_owners) & fields)
     ]
     groups += [(p, g) for p, g in plan.lists.items() if p in variant.lists]
+    # A child row names its record by the record's identity: for an update
+    # only the values that pick the target, never the ones it changes (the
+    # target's older rows would otherwise move with the change).
+    main_params = (
+        [ip for ip in identity_params if ip in plan.identity]
+        if plan.mode == "update"
+        else identity_params
+    )
     for p, g in groups:
         name = f"rows:{g.table}"
         sname = _alias(name)
@@ -1495,7 +1752,7 @@ def build_contract(
             scols = _base_columns(b, g.table)
             link = g.link
             # The main record's values, seen from the child row.
-            for ip in identity_params:
+            for ip in main_params:
                 loc = locations[ip]
                 up = Location(
                     (Hop("fk", anchor, link.column, link.ref_column, True),) + loc.hops,
@@ -1514,7 +1771,7 @@ def build_contract(
         items = range(variant.lists[p]) if g.list_param else [None]
         for i in items:
             m: dict[str, Any] = {}
-            for ip in identity_params:
+            for ip in main_params:
                 loc = locations[ip]
                 if loc.rule in ("number", "date", "datetime", "minutes"):
                     m[f"main__{_alias(ip)}"] = {"literal": "1"}
@@ -1536,7 +1793,7 @@ def build_contract(
                 else:
                     m[key] = _value_expr(pname, loc.rule)
             for col, role in sorted(g.roles.items()):
-                if role.role == "link" or found:
+                if role.role == "link" or (found and role.role in ("actor", "copied")):
                     continue
                 _pin(b, surf, g.table, col, role, m, settings.actor_params)
             effect = {
@@ -1569,6 +1826,32 @@ def build_contract(
             )
         if plan.mode == "update":
             target_fields.update(g.changed_columns)
+    # Existing rows the app changes beside the write (a counter row, the
+    # account a contact belongs to): declared by key or by the task's values,
+    # with only the confirmed columns allowed to move, on those rows only.
+    if not found:
+        for spec in plan.touched:
+            cols = [
+                c for c in spec["columns"] if c in excused.get(spec["table"], set())
+            ]
+            if not cols:
+                continue
+            name = f"raw_{_alias(spec['table'])}"
+            if name not in surfaces:
+                surfaces[name] = Surface(
+                    name,
+                    settings.views.get(spec["table"], spec["table"]),
+                    _base_columns(b, spec["table"]),
+                )
+            effects.append(
+                {
+                    "kind": "record_written",
+                    "probe": f"surface={name}|{spec['row']}, changed by the app",
+                    "match": dict(spec["selector"]),
+                    "expected_count": 1,
+                }
+            )
+            target_fields.update(cols)
     # A new row a link row names (a new email address).
     for ref in plan.added_refs.values():
         p = ref["param"]
@@ -1619,21 +1902,8 @@ def build_contract(
         verifier["surfaces"][s.name] = sub
     # Main and child effects read named surfaces: no other read is judged
     # against them, and the whole-database frame covers every other table.
-    ignore = sorted(
-        {c for cols in bookkeeping.values() for c in cols}
-        & (
-            _all_columns(schema, named_tables)
-            if schema.dialect == "mysql"
-            else _all_columns(schema, set(schema.tables))
-        )
-    )
     frame: dict[str, Any] = {}
-    if ignore:
-        frame["ignore_fields"] = ignore
-    if plan.mode == "create" or flavor == "found":
-        frame["target_fields"] = []
-    else:
-        frame["target_fields"] = sorted(target_fields)
+    frame["target_fields"] = [] if flavor == "found" else sorted(target_fields)
     if plan.mode == "update":
         # Another user's save to the target inside the window (a lost
         # update) shows only in the target's versions.
@@ -1681,11 +1951,6 @@ def build_contract(
         }
         if nrf:
             db["new_row_fields"] = nrf
-        ign = {
-            t: sorted(c) for t, c in bookkeeping.items() if t not in named_tables and c
-        }
-        if ign:
-            db["ignore_columns"] = ign
         if settings.recheck_after_s:
             db["recheck_after_s"] = settings.recheck_after_s
         frame["database"] = db
@@ -2186,6 +2451,23 @@ def check_read_only(connect: Any, dialect: str) -> list[str]:
     return problems
 
 
+def read_account_notes(connect: Any, dialect: str) -> list[str]:
+    """What the read account can do beyond reading, that the contracts
+    still need (MySQL: TRIGGER, so the whole-database frame sees triggers;
+    it also lets the account create them)."""
+
+    if dialect != "mysql":
+        return []
+    return (
+        [
+            "the read account holds TRIGGER (needed to see triggers; it can also "
+            "create and drop triggers, so keep its password from the agent)"
+        ]
+        if _sees_triggers(connect)
+        else []
+    )
+
+
 def guard_problem(sql: str) -> Optional[str]:
     from openadapt_flow.runtime.effects.sql import assert_read_only_sql
 
@@ -2211,6 +2493,17 @@ def _admin_connect(admin_read: Mapping[str, Any]) -> Any:
     return module.connect(**args)
 
 
+def _account(conn: Any, reader: str) -> str:
+    """``'user'@'host'`` from ``user@host`` or ``'user'@'host'``, each part
+    escaped by the driver: the account name never reaches SQL as written."""
+
+    m = re.fullmatch(r"'?([^'@]+)'?(?:@'?([^']*)'?)?", reader.strip())
+    if m is None:
+        raise GenerateError(f"--reader-account {reader!r} is not user@host")
+    user, host = m.group(1), m.group(2) if m.group(2) is not None else "%"
+    return f"{conn.escape(user)}@{conn.escape(host)}"
+
+
 def grant_trigger(admin_read: Mapping[str, Any], schema: Schema, reader: str) -> str:
     """MySQL shows a table's triggers only to an account with the TRIGGER
     privilege, and the whole-database frame must see them (a trigger planted
@@ -2218,7 +2511,10 @@ def grant_trigger(admin_read: Mapping[str, Any], schema: Schema, reader: str) ->
 
     conn = _admin_connect(admin_read)
     try:
-        sql = f"GRANT TRIGGER ON {store.quote('mysql', schema.database)}.* TO {reader}"
+        sql = (
+            f"GRANT TRIGGER ON {store.quote('mysql', schema.database)}.* TO "
+            f"{_account(conn, reader)}"
+        )
         conn.cursor().execute(sql)
         conn.commit()
     finally:
@@ -2299,7 +2595,7 @@ def create_views(
                 f"CREATE OR REPLACE SQL SECURITY DEFINER VIEW {v} AS SELECT * FROM {q}"
             )
             made[t] = f"{view_schema(schema)}.oa_read_{t}"
-        cur.execute(f"GRANT SELECT ON {vs}.* TO {reader}")
+        cur.execute(f"GRANT SELECT ON {vs}.* TO {_account(conn, reader)}")
         conn.commit()
     finally:
         conn.close()
@@ -2400,79 +2696,154 @@ def propose(
             )
             if not open_:
                 answers = {**answers, f"locations.{p.kind}": chosen}
+    # Q: phone numbers. Comparing by digits is a normalization a person
+    # confirms per parameter; it is never inferred from a value's shape.
+    phones = sorted(
+        {
+            f"{p.kind}.{name}"
+            for p in plans
+            for name, loc in _all_locations(p)
+            if loc.rule == "phone"
+        }
+    )
+    if phones:
+        confirmed = _answer(answers, "phones")
+        confirmed = set(confirmed) if isinstance(confirmed, list) else set()
+        questions.append(
+            Question(
+                "phones",
+                "These values were stored as other text with the same digits (a "
+                "phone number written with spaces stored without): "
+                + ", ".join(phones)
+                + ". Compare them as phone numbers (the same digits, at least 7, "
+                "and a task value that isn't shaped like a phone number is "
+                "compared exactly)? Answer `phones: [<kind.parameter>, ...]` with "
+                "the ones that are phone numbers; any other is compared exactly.",
+                phones,
+            )
+        )
+        for p in plans:
+            _confirm_phones(
+                p, {x.split(".", 1)[1] for x in confirmed if x.startswith(p.kind + ".")}
+            )
+
     # Q: bookkeeping, for the whole app at once.
-    logs = set().union(*(p.logs for p in plans)) if plans else set()
-    book: dict[str, set[str]] = {}
+    ans = _answer(answers, "bookkeeping")
+    accepted = ans == "accept" or isinstance(ans, dict)
+    ans = ans if isinstance(ans, dict) else {}
+    log_add = set(ans.get("logs_add", []))
+    columns_add = {t: set(c) for t, c in dict(ans.get("columns_add", {})).items()}
+    columns_remove = {t: set(c) for t, c in dict(ans.get("columns_remove", {})).items()}
+    proposed: dict[str, set[str]] = {}
+    offered: dict[str, set[str]] = {}
+    where_seen: dict[str, set[str]] = {}
+    for p in plans:
+        for col, kind in p.anchor_extra.items():
+            (proposed if kind in BOOKKEEPING_KINDS else offered).setdefault(
+                p.anchor, set()
+            ).add(col)
+            where_seen.setdefault(f"{p.anchor}", set()).add("the target row")
+        for row_spec in p.touched:
+            for col, kind in row_spec["columns"].items():
+                (proposed if kind in BOOKKEEPING_KINDS else offered).setdefault(
+                    row_spec["table"], set()
+                ).add(col)
+            where_seen.setdefault(row_spec["table"], set()).add(row_spec["row"])
+    excused: dict[str, set[str]] = {}
+    if accepted:
+        for t in set(proposed) | set(columns_add):
+            excused[t] = (proposed.get(t, set()) | columns_add.get(t, set())) - (
+                columns_remove.get(t, set())
+            )
     unchecked: dict[str, set[str]] = {}
     for p in plans:
-        for t, cols in p.bookkeeping.items():
-            book.setdefault(t, set()).update(cols)
         if p.mode == "create" and p.demos:
             for v in [Variant(p.kind, sorted(p.locations))]:
                 for col, role in _anchor_roles(schema, p, v, actor_params).items():
-                    if role.role == "varies":
+                    if role.role in ("varies", "free", "timestamp"):
                         unchecked.setdefault(p.anchor, set()).add(col)
-    log_add: set[str] = set()
-    log_remove: set[str] = set()
-    ans = _answer(answers, "bookkeeping")
-    if isinstance(ans, dict):
-        log_add, log_remove = (
-            set(ans.get("logs_add", [])),
-            set(ans.get("logs_remove", [])),
-        )
-        logs = (logs | log_add) - log_remove
-        for t, cols in dict(ans.get("columns_add", {})).items():
-            book.setdefault(t, set()).update(cols)
-        for t, cols in dict(ans.get("columns_remove", {})).items():
-            book[t] = book.get(t, set()) - set(cols)
+            for g in [*p.children.values(), *p.lists.values()]:
+                for col, role in g.roles.items():
+                    if role.role in ("varies", "free", "timestamp"):
+                        unchecked.setdefault(g.table, set()).add(col)
+    candidates = set().union(*(p.log_candidates for p in plans)) if plans else set()
+    logs = log_add if accepted else set()
     sides = sorted({f"{s.table} ({s.count} per write)" for p in plans for s in p.sides})
     for p in plans:  # a table the person calls a log is no longer counted
-        p.sides = [s for s in p.sides if s.table not in log_add]
-    if logs or book or unchecked or sides:
+        p.sides = [x for x in p.sides if x.table not in logs]
+        p.logs = (candidates & logs) | (p.logs & logs)
+    unexcused = {t: c for p in plans for t, c in p.unexcused.items()}
+    if proposed or offered or unchecked or candidates or sides or unexcused:
         lines = []
+        if proposed:
+            lines.append(
+                "Proposed as the app's own bookkeeping, excused only on the rows "
+                "the demonstrations changed ("
+                + "; ".join(
+                    f"{t}: {', '.join(sorted(where_seen.get(t, set())))}"
+                    for t in sorted(proposed)
+                )
+                + "): "
+                + "; ".join(
+                    f"{t}: {', '.join(sorted(c))}" for t, c in sorted(proposed.items())
+                )
+                + "."
+            )
+        if offered:
+            lines.append(
+                "Also changed with no task value, and not excused unless you add "
+                "them under columns_add (a write that changes them stops): "
+                + "; ".join(
+                    f"{t}: {', '.join(sorted(c))}" for t, c in sorted(offered.items())
+                )
+                + "."
+            )
+        if unexcused:
+            lines.append(
+                "Changed on rows the generator can't identify, so a write that "
+                "changes them stops: "
+                + "; ".join(
+                    f"{t}: {', '.join(sorted(c))}" for t, c in sorted(unexcused.items())
+                )
+                + "."
+            )
         if sides:
             lines.append(
                 "Rows the app adds beside each write, expected exactly that many "
-                "times (a second save adds a second one, which stops the write; "
-                "list a table under logs_add to allow any number): "
-                + ", ".join(sides)
-                + "."
+                "times: " + ", ".join(sides) + "."
             )
-        if logs:
+        if candidates:
             lines.append(
-                "Tables treated as the app's own logs (rows may be added, existing "
-                "rows must not change"
+                "Tables that gained a different number of rows in different "
+                "demonstrations; they are not logs unless you list them under "
+                "logs_add (rows may then be added, existing rows must not change"
                 + (
                     ")"
                     if dialect == "mysql"
-                    else "; on PostgreSQL they are not read at all)"
+                    else "; on PostgreSQL a log table is not read at all)"
                 )
                 + ": "
-                + ", ".join(sorted(logs))
-            )
-        if book:
-            lines.append(
-                "Columns that change on their own and are not compared: "
-                + "; ".join(
-                    f"{t}: {', '.join(sorted(c))}" for t, c in sorted(book.items()) if c
-                )
+                + ", ".join(sorted(candidates))
+                + "."
             )
         if unchecked:
             lines.append(
-                "Columns of a new record that differ between demonstrations and are "
-                "not checked: "
+                "Columns of a new record that are not checked (they differ between "
+                "demonstrations, are free text every demonstration left empty, or "
+                "are the write's time stamp): "
                 + "; ".join(
                     f"{t}: {', '.join(sorted(c))}" for t, c in sorted(unchecked.items())
                 )
+                + "."
             )
         questions.append(
             Question(
                 "bookkeeping",
-                "Is this the app's own bookkeeping, which a write may change without "
-                "a task asking? "
+                "Is this the app's own bookkeeping? "
                 + " ".join(lines)
-                + " Answer `bookkeeping: accept`, or list changes under "
-                "logs_add, logs_remove, columns_add, columns_remove.",
+                + " Answer `bookkeeping: accept`, or a mapping with any of "
+                "logs_add, columns_add, columns_remove. Unanswered, nothing is "
+                "excused and no table is a log.",
                 "accept",
             )
         )
@@ -2552,6 +2923,7 @@ def propose(
     }
     report: dict[str, Any] = {
         "applied": applied,
+        "read_account": read_account_notes(connect, dialect),
         "dialect": dialect,
         "tables": len(schema.tables),
         "questions": [
@@ -2597,6 +2969,9 @@ def propose(
                 for s in p.sides
             ],
             "logs": sorted(p.logs),
+            "log_candidates": sorted(p.log_candidates),
+            "touched_rows": p.touched,
+            "unexcused": {t: sorted(c) for t, c in p.unexcused.items()},
             "refused": list(p.refused),
             "unresolved": {
                 k: [loc.describe(p.anchor) for loc in v]
@@ -2626,8 +3001,9 @@ def propose(
                 continue
             ok = True
             for flavor in flavors:
-                kind_logs = (p.logs | log_add) - log_remove
-                doc = build_contract(schema, p, v, flavor, settings, book, kind_logs)
+                doc = build_contract(
+                    schema, p, v, flavor, settings, excused, set(p.logs)
+                )
                 rel = Path("contracts") / p.kind / f"{v.slug}.{flavor}.yaml"
                 path = out / rel
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -2742,8 +3118,6 @@ def choose(
     contract fits: the write is then stopped, never sent unchecked.
     """
 
-    from openadapt_flow.verifier import Contract
-
     manifest_path = Path(manifest_path)
     manifest = load_yaml(manifest_path) or {}
     if manifest.get("schema_version") != MANIFEST_SCHEMA:
@@ -2769,15 +3143,41 @@ def choose(
         base = manifest_path.parent
         # The record already holds the task's values (found, or an update
         # already in place): nothing may change. Else the create or update.
-        found = Contract.load(base / var["found"])
+        found = _load_for(base / var["found"], params)
         if _exists(found, params):
             return found, params
-        return Contract.load(base / var[entry["mode"]]), params
+        return _load_for(base / var[entry["mode"]], params), params
     raise GenerateError(
         f"no {kind} contract for the fields {sorted(given)}"
         + (f" and lists {lists}" if lists else "")
         + ": record a demonstration that gives them, or the task is stopped"
     )
+
+
+def _load_for(path: Path, params: Mapping[str, Any]) -> Any:
+    """The contract at ``path`` for these values. A value the contract
+    compares as a phone number that isn't written like one (fewer than 7
+    digits, or other characters) is compared exactly instead."""
+
+    from openadapt_flow.generate.demo_analysis import phone_shaped
+    from openadapt_flow.verifier import Contract
+
+    doc = load_yaml(path) or {}
+    changed = False
+    for effect in doc.get("effects") or []:
+        for value in (effect.get("match") or {}).values():
+            if (
+                isinstance(value, dict)
+                and value.get("kind") == "phone"
+                and not phone_shaped(params.get(str(value.get("param"))))
+            ):
+                value.pop("kind")
+                changed = True
+    if not changed:
+        return Contract.load(path)
+    contract = Contract.from_dict(doc, name=Path(path).stem)
+    contract.config._base_dir = Path(path).resolve().parent
+    return contract
 
 
 def _exists(contract: Any, params: Mapping[str, Any]) -> bool:
