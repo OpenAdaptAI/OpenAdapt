@@ -1835,29 +1835,32 @@ def build_contract(
     # Existing rows the app changes beside the write (a counter row, the
     # account a contact belongs to): declared by key or by the task's values,
     # with only the confirmed columns allowed to move, on those rows only.
-    if not found:
-        for spec in plan.touched:
-            cols = [
-                c for c in spec["columns"] if c in excused.get(spec["table"], set())
-            ]
-            if not cols:
-                continue
-            name = f"raw_{_alias(spec['table'])}"
-            if name not in surfaces:
-                surfaces[name] = Surface(
-                    name,
-                    settings.views.get(spec["table"], spec["table"]),
-                    _base_columns(b, spec["table"]),
-                )
-            effects.append(
-                {
-                    "kind": "record_written",
-                    "probe": f"surface={name}|{spec['row']}, changed by the app",
-                    "match": dict(spec["selector"]),
-                    "expected_count": 1,
-                }
+    touched_fields: set[str] = set()
+    for spec in plan.touched:
+        # A row changed by key (a user's preferences, which even a read may
+        # touch) is excused in ``found`` too; a row named by the task's
+        # values only when something is written.
+        if found and not spec.get("by_key"):
+            continue
+        cols = [c for c in spec["columns"] if c in excused.get(spec["table"], set())]
+        if not cols:
+            continue
+        name = f"raw_{_alias(spec['table'])}"
+        if name not in surfaces:
+            surfaces[name] = Surface(
+                name,
+                settings.views.get(spec["table"], spec["table"]),
+                _base_columns(b, spec["table"]),
             )
-            target_fields.update(cols)
+        effects.append(
+            {
+                "kind": "record_written",
+                "probe": f"surface={name}|{spec['row']}, changed by the app",
+                "match": dict(spec["selector"]),
+                "expected_count": 1,
+            }
+        )
+        touched_fields.update(cols)
     # A new row a link row names (a new email address).
     for ref in plan.added_refs.values():
         p = ref["param"]
@@ -1909,7 +1912,9 @@ def build_contract(
     # Main and child effects read named surfaces: no other read is judged
     # against them, and the whole-database frame covers every other table.
     frame: dict[str, Any] = {}
-    frame["target_fields"] = [] if flavor == "found" else sorted(target_fields)
+    frame["target_fields"] = sorted(
+        touched_fields | (set() if flavor == "found" else target_fields)
+    )
     if plan.mode == "update":
         # Another user's save to the target inside the window (a lost
         # update) shows only in the target's versions.
