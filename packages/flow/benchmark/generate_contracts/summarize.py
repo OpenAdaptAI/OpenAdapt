@@ -41,7 +41,8 @@ def main() -> None:
     misses, false_stops = [], []
     for r in rows:
         k = r["kind"]
-        ok = r["verdict"]["outcome"] == "CONFIRMED"
+        # A recheck that refutes a confirmed write turns it into a stop (late).
+        ok = r["verdict"]["outcome"] == "CONFIRMED" and r.get("recheck", {}).get("outcome", "CONFIRMED") == "CONFIRMED"
         label = str(r["oracle"].get("label"))
         harm = label not in GOOD
         sc = scope.get(r["case"].split("-", 1)[1], "in")
