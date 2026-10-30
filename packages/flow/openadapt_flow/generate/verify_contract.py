@@ -195,6 +195,9 @@ class ChildGroup:
     #: The app adds this row with an empty value when the task leaves the
     #: parameter out (Redmine's custom field values): expected then too.
     empty_when_null: bool = False
+    #: The parameter whose value the rows hold (``children`` may hold a
+    #: second group for it: a call's lead is its parent and an attendee).
+    param: str = ""
 
 
 @dataclass
@@ -234,10 +237,17 @@ class KindPlan:
     unresolved: dict[str, list[Location]] = field(default_factory=dict)
     refused: list[str] = field(default_factory=list)
     removed: dict[str, int] = field(default_factory=dict)
+    #: dispatch value -> group name -> rows that hold the value param.
+    dispatch_children: dict[str, dict[str, "ChildGroup"]] = field(default_factory=dict)
+    #: unresolved key -> (parameter, dispatch value or None).
+    unresolved_meta: dict[str, tuple[str, Optional[str]]] = field(default_factory=dict)
     #: Parameters placed by name, not by a demonstration.
     by_name: list[str] = field(default_factory=list)
     #: Parameters placed where another kind's demonstrations found them.
     shared: list[str] = field(default_factory=list)
+    #: More places a value is in: rows the write added beside the record
+    #: (a call's lead is its parent and also an attendee row).
+    extra: dict[str, list[Location]] = field(default_factory=dict)
 
 
 def _scalars(values: Mapping[str, Any]) -> dict[str, Any]:
@@ -340,7 +350,7 @@ def analyze(
     for p in scalars:
         if p == plan.dispatch:
             continue
-        if plan.dispatch is not None:
+        if plan.dispatch is not None and "identity" not in roles_of[p]:
             by_value: dict[str, list[list[Location]]] = {}
             for d, locs in zip(
                 [d for d in plan.demos if d.values.get(p) is not None], found[p]
@@ -349,16 +359,31 @@ def analyze(
             if len(by_value) > 1:
                 ok = True
                 for dv, per in by_value.items():
-                    loc, tied = best(_intersect(per))
+                    loc, tied = _pick(p, _intersect(per))
                     if loc is None:
-                        plan.unresolved[f"{p} (when {plan.dispatch} is {dv})"] = tied
+                        key = f"{p} (when {plan.dispatch} is {dv})"
+                        plan.unresolved[key] = tied
+                        plan.unresolved_meta[key] = (p, dv)
                         ok = False
                     else:
                         plan.dispatch_locations.setdefault(dv, {})[p] = loc
                 if ok:
                     plan.changes.append(p)
                 continue
-        loc, tied = best(_intersect(found[p]))
+        all_found = _intersect(found[p])
+        loc, tied = _pick(p, all_found)
+        if loc is not None:
+            plan.extra[p] = [
+                x
+                for x in all_found
+                if x.hops
+                and x.hops[0].kind == "child"
+                and x != loc
+                # in another table than the main place, through keys named
+                # after their tables (a call's lead attendee row)
+                and (not loc.hops or x.hops[0].table != loc.hops[0].table)
+                and all(_hop_cost(h) <= 1 for h in x.hops[1:])
+            ]
         if loc is None:
             if not found[p]:
                 named = _by_name(schema, plan, p)
@@ -369,6 +394,7 @@ def analyze(
                         plan.changes.append(p)
                 continue  # never given: no contract uses it
             plan.unresolved[p] = tied
+            plan.unresolved_meta[p] = (p, None)
             continue
         plan.locations[p] = loc
         if plan.mode == "update":
@@ -453,6 +479,64 @@ def _share_locations(
                 break
 
 
+def _pick(
+    param: str, found: Sequence[Location]
+) -> tuple[Optional[Location], list[Location]]:
+    """The best location; among tied ones, the one whose column is named
+    like the parameter (``stage``, not ``last_stage``), if exactly one is."""
+
+    loc, tied = best(found)
+    if loc is not None or not tied:
+        return loc, tied
+    name = re.sub(r"^(new|set)_", "", param)
+    named = [t for t in tied if t.columns and t.columns[-1] == name]
+    if len(named) == 1:
+        return named[0], []
+    return None, tied
+
+
+def _resolve(plan: KindPlan, key: str, loc: Location) -> None:
+    """Place an unresolved value (answered, or settled by a tie-break)."""
+
+    param, dv = plan.unresolved_meta.get(key, (key, None))
+    plan.unresolved.pop(key, None)
+    if dv is not None:
+        plan.dispatch_locations.setdefault(dv, {})[param] = loc
+        if param not in plan.changes:
+            plan.changes.append(param)
+        return
+    plan.locations[param] = loc
+    if plan.mode == "update" and param not in plan.identity + plan.changes:
+        plan.changes.append(param)
+
+
+def _tail(plan: KindPlan, loc: Location) -> tuple[str, tuple[str, ...]]:
+    return (loc.hops[-1].table if loc.hops else plan.anchor, loc.columns)
+
+
+def _break_ties_across(plans: Sequence[KindPlan]) -> None:
+    """A value tied between columns of one table (an email's ``name`` and
+    ``lower``) goes where another kind's demonstrations put the same kind
+    of value, if exactly one tied place is one of those."""
+
+    for plan in plans:
+        for key, tied in list(plan.unresolved.items()):
+            if not tied:
+                continue
+            seen = {
+                _tail(o, loc)
+                for o in plans
+                if o is not plan
+                for loc in [
+                    *o.locations.values(),
+                    *[x for d in o.dispatch_locations.values() for x in d.values()],
+                ]
+            }
+            hits = [t for t in tied if _tail(plan, t) in seen]
+            if len(hits) == 1:
+                _resolve(plan, key, hits[0])
+
+
 def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
     """An update parameter no demonstration gives (``new_zip``), placed at
     the main table's column of the same name after a leading ``new_`` or
@@ -477,16 +561,32 @@ def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
     return Location((), (name,), rule)
 
 
-def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
+def _children(
+    schema: Schema, plan: KindPlan, lists: Sequence[str], only_missing: bool = False
+) -> None:
     """Group child-row locations, and find each list parameter's rows."""
 
-    for p, loc in list(plan.locations.items()):
+    todo: list[tuple[str, str, Location, Optional[str]]] = []
+    for p, loc in plan.locations.items():
+        todo.append((p, p, loc, None))
+        for i, x in enumerate(plan.extra.get(p, [])):
+            todo.append((f"{p}#{i + 2}", p, x, None))
+    for dv, locs in plan.dispatch_locations.items():
+        for p, loc in locs.items():
+            todo.append((f"{p}@{dv}", p, loc, dv))
+    for gname, p, loc, dv in todo:
         if not loc.hops or loc.hops[0].kind != "child":
+            continue
+        if only_missing and (
+            gname in plan.children or gname in plan.dispatch_children.get(dv or "", {})
+        ):
             continue
         rel = Location(loc.hops[1:], loc.columns, loc.rule)
         rows = []
         for d, a in zip(plan.demos, plan.anchors):
             if d.values.get(p) is None:
+                continue
+            if dv is not None and str(d.values.get(plan.dispatch)) != dv:
                 continue
             for ch in d.diff.of(loc.hops[0].table, "added"):
                 if ch.after is None:
@@ -522,14 +622,19 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
             ):
                 co.append(q)
                 explained |= {h[0].hops[0].column for h in hits}
-        plan.children[p] = ChildGroup(
+        group = ChildGroup(
             loc.hops[0].table,
             loc.hops[0],
             {p: rel},
             column_roles(schema, loc.hops[0].table, rows, explained, {}),
             1,
             co_owners=co,
+            param=p,
         )
+        if dv is None:
+            plan.children[gname] = group
+        else:
+            plan.dispatch_children.setdefault(dv, {})[gname] = group
     for p in lists:
         per_key: dict[str, list[list[Location]]] = {}
         table = link = None
@@ -603,10 +708,26 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
         )
 
 
+def _all_groups(plan: KindPlan, dv: Optional[str] = None) -> list[ChildGroup]:
+    """Every child group; with ``dv``, the plain ones and that dispatch
+    value's own."""
+
+    out = list(plan.children.values())
+    for value, groups in plan.dispatch_children.items():
+        if dv is None or value == dv:
+            out.extend(groups.values())
+    return out
+
+
+def _demo_groups(plan: KindPlan, d: Demo) -> list[ChildGroup]:
+    dv = str(d.values.get(plan.dispatch)) if plan.dispatch else None
+    return _all_groups(plan, dv) if dv is not None else list(plan.children.values())
+
+
 def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> None:
     """Classify every other row the demonstrations touched."""
 
-    child_tables = {g.table: p for p, g in plan.children.items()}
+    child_tables = {g.table: g.param for g in _all_groups(plan)}
     list_tables = {g.table for g in plan.lists.values()}
     pure: dict[str, list[list[tuple[Demo, dict[str, Optional[str]]]]]] = {}
     counts: dict[str, list[int]] = {}
@@ -638,7 +759,7 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
                     )
                 )
                 if linked:
-                    g = plan.children[child_tables[ch.table]]
+                    g = next(x for x in _all_groups(plan) if x.table == ch.table)
                     g.changed_columns = sorted(
                         set(g.changed_columns) | set(ch.changed_columns)
                     )
@@ -702,7 +823,8 @@ def plan_pk(schema: Schema, table: str) -> str:
 
 
 def _is_param_row(schema: Schema, plan: KindPlan, d: Demo, ch: RowChange) -> bool:
-    for p, g in plan.children.items():
+    for g in _demo_groups(plan, d):
+        p = g.param
         if g.table != ch.table or d.values.get(p) is None or ch.after is None:
             continue
         rel = g.params[p]
@@ -726,7 +848,8 @@ def _is_empty_param_row(
 
     if ch.after is None or a.after is None:
         return False
-    for p, g in plan.children.items():
+    for g in _demo_groups(plan, d):
+        p = g.param
         if g.table != ch.table or d.values.get(p) is not None:
             continue
         if ch.after.get(g.link.column) != a.after.get(g.link.ref_column):
@@ -748,7 +871,8 @@ def _is_ref_row(schema: Schema, plan: KindPlan, d: Demo, ch: RowChange) -> bool:
 
     if ch.after is None:
         return False
-    for p, g in plan.children.items():
+    for g in _demo_groups(plan, d):
+        p = g.param
         rel = g.params[p]
         if not rel.hops or rel.hops[0].table != ch.table or d.values.get(p) is None:
             continue
@@ -782,10 +906,17 @@ class SqlBuilder:
         self.schema = schema
         self.d = schema.dialect
         self.params: dict[str, dict[str, str]] = {}
+        #: Tables read through a view (the SQL guard refuses their name).
+        self.views: dict[str, str] = {}
         self._n = itertools.count()
 
     def q(self, name: str) -> str:
         return store.quote(self.d, name)
+
+    def tref(self, table: str) -> str:
+        """A table as a read names it: its view when it has one."""
+
+        return self.q(self.views.get(table, table))
 
     def ph(self, param: str) -> str:
         for k, v in self.params.items():
@@ -831,7 +962,7 @@ class SqlBuilder:
         sub = f"a{depth + 1}"
         inner = self.path(sub, hop.table, rest, depth + 1)
         return (
-            f"(SELECT {inner} FROM {self.q(hop.table)} {sub} WHERE "
+            f"(SELECT {inner} FROM {self.tref(hop.table)} {sub} WHERE "
             f"{self.same(f'{sub}.{self.q(hop.ref_column)}', f'{alias}.{self.q(hop.column)}', hop.declared)})"
         )
 
@@ -897,7 +1028,7 @@ class SqlBuilder:
         self, alias: str, detail: Mapping[str, Any], table: str, column: str
     ) -> str:
         src = (
-            f"(SELECT s.{self.q(detail['column'])} FROM {self.q(detail['table'])} s "
+            f"(SELECT s.{self.q(detail['column'])} FROM {self.tref(detail['table'])} s "
             f"WHERE s.{self.q(detail['ref_column'])} = {alias}.{self.q(detail['via'])})"
         )
         ref = f"{alias}.{self.q(column)}"
@@ -1003,6 +1134,7 @@ def build_contract(
     """One ``openadapt.verify/v1`` document for one field set."""
 
     b = SqlBuilder(schema)
+    b.views = dict(settings.views)
     fields = set(variant.fields)
     anchor = plan.anchor
     surfaces: dict[str, Surface] = {}
@@ -1066,7 +1198,8 @@ def build_contract(
     found = flavor == "found"
     groups = [
         (p, g)
-        for p, g in plan.children.items()
+        for g in _all_groups(plan, variant.dispatch_value)
+        for p in [g.param]
         if p in fields
         or (not found and g.empty_when_null)
         or (not found and plan.mode == "create" and set(g.co_owners) & fields)
@@ -1497,7 +1630,7 @@ def variants(
     for d in plan.demos:
         given = {
             k for k, v in d.values.items() if v is not None and not isinstance(v, list)
-        } & (located | set(plan.children))
+        } & (located | {g.param for g in plan.children.values()})
         base_sets.append(frozenset(given))
     optional = [p for p in plan.optional if p in located and p not in lists]
     seen: set[frozenset[str]] = set()
@@ -1845,6 +1978,9 @@ def propose(
     questions: list[Question] = []
 
     _share_locations(schema, plans, kinds)
+    _break_ties_across(plans)
+    for p in plans:  # child groups of values placed after analysis
+        _children(schema, p, [], only_missing=True)
     location_questions: list[Question] = []
     # Q: per kind, a value the generator couldn't place.
     for p in plans:
@@ -1855,9 +1991,7 @@ def propose(
         for name, tied in p.unresolved.items():
             pick = chosen.get(name)
             if isinstance(pick, int) and 0 <= pick < len(tied):
-                p.locations[name] = tied[pick]
-                if p.mode == "update" and name not in p.identity + p.changes:
-                    p.changes.append(name)
+                _resolve(p, name, tied[pick])
             else:
                 open_[name] = tied
         asked = dict(p.unresolved)
@@ -2066,6 +2200,10 @@ def propose(
             "placed_from_another_kind": sorted(p.shared),
             "demonstrations": len(p.demos),
             "children": {k: g.table for k, g in p.children.items()},
+            "dispatch_children": {
+                dv: {k: g.table for k, g in gs.items()}
+                for dv, gs in p.dispatch_children.items()
+            },
             "lists": {k: g.table for k, g in p.lists.items()},
             "side_rows": [
                 {"table": s.table, "count": s.count, "unless": s.unless}

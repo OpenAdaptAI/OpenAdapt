@@ -485,6 +485,16 @@ def pick_anchor(
                 )
             else:
                 hit = locate(schema, demo, ch, v, max_hops=1)
+            # Only the row's own columns, and keys named after the table they
+            # point to: a row the write added beside the main record (an
+            # issue's journal) reaches the record's values only through a
+            # link back, and a key equal to some row's id by chance proves
+            # nothing.
+            hit = [
+                loc
+                for loc in hit
+                if all(h.kind == "fk" and _hop_cost(h) <= 1 for h in loc.hops)
+            ]
             score += 1 if hit else 0
             direct += 1 if any(not loc.hops for loc in hit) else 0
         if (score, direct) > (best_score, best_direct):
@@ -677,7 +687,11 @@ def _copied(
         idx = _Index(schema, demo.after)
         here: set[tuple[str, str, str, str]] = set()
         for other in t.columns:
-            if other.name == name or other.name in t.primary_key or r.get(other.name) is None:
+            if (
+                other.name == name
+                or other.name in t.primary_key
+                or r.get(other.name) is None
+            ):
                 continue
             for target, ref, _declared in _fk_targets(
                 schema, idx, t, other.name, str(r.get(other.name))

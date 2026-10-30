@@ -79,7 +79,9 @@ def main(work: Path, extra: list[str]) -> None:
                     cur.execute("SELECT COUNT(*) FROM contact WHERE BINARY first_name=%s AND BINARY last_name=%s AND deleted=0",
                                 (v["first_name"], v["last_name"]))  # fmt: skip
                     if cur.fetchone()[0]:
-                        continue
+                        # Already there: a create with values of our own.
+                        v = {**v, "first_name": "Lena", "last_name": "Okafor",
+                             "email": "lena.okafor@aurora-logistics.example"}
                 body = {"firstName": v["first_name"], "lastName": v["last_name"],
                         "accountId": account(v["account"], v["account_city"])}  # fmt: skip
                 if v.get("title"):
@@ -96,7 +98,9 @@ def main(work: Path, extra: list[str]) -> None:
                         (v["name"],),
                     )
                     if cur.fetchone()[0]:
-                        continue
+                        v = {**v, "name": "Aurora – Fleet Telematics Trial", "account": "Aurora Logistics",
+                             "account_city": "Boston", "amount": 12500, "stage": "Proposal",
+                             "close_date": "2027-02-15"}
                 body = {"name": v["name"], "accountId": account(v["account"], v["account_city"]),
                         "amount": v["amount"], "amountCurrency": v["currency"], "stage": v["stage"],
                         "closeDate": v["close_date"]}  # fmt: skip
