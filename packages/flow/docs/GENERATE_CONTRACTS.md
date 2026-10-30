@@ -119,8 +119,8 @@ that as a stop: the write must not be sent unchecked.
 | Rule | Example |
 | --- | --- |
 | The stored text equals the value | `subject` |
-| Equal after case folding (an email address) | `Ana@Example.org` |
-| Equal digits (a phone number) | `02 38 53 21 09` stored as `0238532109` |
+| Equal after case folding, for any value shaped like an email address | `Ana@Example.org` |
+| Equal digits, for any value shaped like a phone number | `02 38 53 21 09` stored as `0238532109` |
 | Equal as a number, a date or a date-time, compared in SQL | `9.20` stored as `9.2`; `2026-10-27 14:30` stored as `2026-10-27 14:30:00` |
 | Minutes between two date-time columns of the row | a call's duration |
 | A display column of the row a key column points to | `project_id` -> `projects.name` |
