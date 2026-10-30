@@ -591,7 +591,9 @@ def column_roles(
             continue
         part = _date_part(values, [d for d, _ in rows])
         if part is not None:
-            out[name] = ColumnRole("varies", detail={"why": f"the {part} of a date the task gives"})
+            out[name] = ColumnRole(
+                "varies", detail={"why": f"the {part} of a date the task gives"}
+            )
             continue
         copied = _copied(schema, t, name, rows)
         if copied is not None:
@@ -622,7 +624,9 @@ def column_roles(
     return out
 
 
-def _date_part(values: Sequence[Optional[str]], demos: Sequence["Demo"]) -> Optional[str]:
+def _date_part(
+    values: Sequence[Optional[str]], demos: Sequence["Demo"]
+) -> Optional[str]:
     """Is the column the year, month, ISO week or day of one date value the
     task gives, in every row? (Redmine stores a time entry's ``tyear``,
     ``tmonth`` and ``tweek``.) The app computes it, so it isn't pinned."""
