@@ -25,6 +25,8 @@
 
 ### Fixes
 
+- The read-only SQL guard now reads the query's tokens instead of matching substrings. `REPLACE(phone, '-', '')`, a `;` inside a string literal, and a table quoted as `` `call` `` no longer refuse the query. Every write and multi-statement form it refused before is still refused. It now also refuses a backslash, a dollar-quoted string, an unterminated literal, and a call to `query_to_xml` or `eval`, which run a query passed as text.
+
 - The whole-database snapshot reads a SQLite `REAL` with 17 digits, so 0.3 and 0.1+0.2 no longer read the same, and the text `"\x00null"` no longer reads as NULL. A number's plain value, which selectors compare with, is the shortest text that reads back as the stored value (`1.1` for a MySQL `FLOAT`, `1.5` for a `DECIMAL(24,8)`), so a correct write is no longer stopped because a selector stopped matching.
 
 - The whole-database frame (`frame.database`) now reads MySQL and MariaDB schemas with every column type. A `POINT` column (Dolibarr 21) made the read raise `TypeError`; a `BIT` column did the same; `FLOAT` values compared by six printed digits; decimals lost digits past 28. Binary strings, `BIT`, geometries and vectors are read as hex, `FLOAT` is widened to `DOUBLE`, `JSON` is read as its stored text, and numbers parse as `Decimal`. A value that still can't be read exactly makes the database unreadable, never a column dropped, and `begin_write` now says why the frame could not be read.
