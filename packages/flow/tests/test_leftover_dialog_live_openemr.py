@@ -49,7 +49,11 @@ def session(tmp_path: Path, ui):
     s.saves = []
     s.context.on(
         "request",
-        lambda r: s.saves.append(r.url) if r.method == "POST" and ui.SAVE_URL_PART in r.url else None,
+        lambda r: (
+            s.saves.append(r.url)
+            if r.method == "POST" and ui.SAVE_URL_PART in r.url
+            else None
+        ),
     )
     yield s
     s.close()
@@ -78,7 +82,9 @@ def test_a_popup_left_open_is_gone_at_the_next_item(session, ui) -> None:
     assert session.saves == []
 
 
-def test_a_popup_that_will_not_close_means_a_fresh_sign_in(session, ui, monkeypatch) -> None:
+def test_a_popup_that_will_not_close_means_a_fresh_sign_in(
+    session, ui, monkeypatch
+) -> None:
     _open_duplicate_check(session, ui)
     monkeypatch.setattr(ui, "_CLOSE_DIALOGS", "() => []")
 
