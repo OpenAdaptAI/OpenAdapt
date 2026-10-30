@@ -195,8 +195,8 @@ def test_a_null_value_takes_no_other_source() -> None:
     [
         ({"f": None}, False, True),
         ({"f": None}, True, True),
-        ({}, False, False),  # a SQL row missing the column: misnamed
-        ({}, True, True),  # a JSON record that leaves the null out
+        ({}, False, False),  # missing: may be misspelled or unprojected
+        ({}, True, True),  # declared: the store leaves a null field out
         ({"f": ""}, True, False),
         ({"f": "None"}, True, False),
         ({"f": 0}, True, False),
@@ -207,8 +207,8 @@ def test_a_null_value_takes_no_other_source() -> None:
 def test_record_matches_a_null_value_exactly(
     record: dict[str, Any], absent_is_null: bool, expected: bool
 ) -> None:
-    got = record_matches(record, {"f": NULL}, absent_is_null=absent_is_null)
-    assert got is expected
+    want = ValueExpr(null=True, absent_is_null=True if absent_is_null else None)
+    assert record_matches(record, {"f": want}) is expected
 
 
 @pytest.mark.parametrize("want", ["None", "", "null"])
@@ -223,21 +223,25 @@ def _state(records: list[dict[str, Any]]) -> EffectState:
 
 
 @pytest.mark.parametrize(
-    ("substrate", "after", "verdict"),
+    ("declared", "after", "verdict"),
     [
-        ("rest", {"id": 2, "name": "n"}, "confirmed"),  # field left out
-        ("rest", {"id": 2, "name": "n", "note": None}, "confirmed"),
-        ("rest", {"id": 2, "name": "n", "note": ""}, "refuted"),
-        ("sql", {"id": 2, "name": "n"}, "refuted"),  # no such column
-        ("sql", {"id": 2, "name": "n", "note": None}, "confirmed"),
+        (False, {"id": 2, "name": "n"}, "refuted"),  # absent is not null
+        (True, {"id": 2, "name": "n"}, "confirmed"),  # unless declared
+        (False, {"id": 2, "name": "n", "note": None}, "confirmed"),
+        (True, {"id": 2, "name": "n", "note": ""}, "refuted"),
+        (True, {"id": 2, "name": "n", "note": "x"}, "refuted"),
     ],
 )
-def test_absent_means_null_only_for_json_records(
-    substrate: str, after: dict[str, Any], verdict: str
+@pytest.mark.parametrize("substrate", ["rest", "fhir", "sql"])
+def test_absent_is_null_only_where_the_contract_declares_it(
+    substrate: str, declared: bool, after: dict[str, Any], verdict: str
 ) -> None:
+    note: dict[str, Any] = {"param": "note"}
+    if declared:
+        note["absent_is_null"] = True
     effect = Effect(
         kind="record_written",
-        match={"name": {"param": "name"}, "note": {"param": "note"}},
+        match={"name": {"param": "name"}, "note": note},
         expected_count=1,
         count_new_only=True,
     ).resolve({"name": "n", "note": None})
@@ -246,6 +250,17 @@ def test_absent_means_null_only_for_json_records(
         effect, _state(before), [*before, after], substrate=substrate
     )
     assert result.verdict.value == verdict, result.reason
+
+
+def test_absent_is_null_is_bound_in_the_contract_hash() -> None:
+    plain = Effect(kind="record_written", match={"f": {"param": "f"}})
+    marked = Effect(
+        kind="record_written", match={"f": {"param": "f", "absent_is_null": True}}
+    )
+    assert plain.contract_hash() != marked.contract_hash()
+    assert "absent_is_null" not in plain._contract_payload()
+    with pytest.raises(ValueError):
+        ValueExpr(literal="a", absent_is_null=True)
 
 
 @pytest.mark.parametrize(

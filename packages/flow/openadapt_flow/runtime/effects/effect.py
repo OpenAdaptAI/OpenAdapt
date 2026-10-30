@@ -137,6 +137,13 @@ class ValueExpr(BaseModel):
     #: this. It matches a stored null (SQL ``NULL``; for REST, an absent or
     #: null field) and nothing else: never ``""``, never the text ``"None"``.
     null: Optional[Literal[True]] = None
+    #: ``True`` when the system of record leaves this field out of a record
+    #: whose value is null (Redmine's issue JSON omits ``assigned_to`` when
+    #: no one is assigned). Then a null value matches a missing field too.
+    #: Without it a missing field matches nothing: a misspelled or
+    #: unprojected field must not pass for null. Declared per field, never
+    #: assumed for a store.
+    absent_is_null: Optional[Literal[True]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
@@ -149,6 +156,8 @@ class ValueExpr(BaseModel):
             raise ValueError("exactly one of literal, param or null must be set")
         if self.null and (self.map is not None or self.stored is not None):
             raise ValueError("a null value takes no map or stored form")
+        if self.absent_is_null and self.literal is not None:
+            raise ValueError("absent_is_null applies to a parameter or a null")
         if self.param == "":
             raise ValueError("effect parameter name must not be empty")
         if self.map is not None and (self.param is None or not self.map):
@@ -165,7 +174,14 @@ class ValueExpr(BaseModel):
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
         if isinstance(data, dict):
-            for key in ("map", "stored", "kind", "date_order", "null"):
+            for key in (
+                "map",
+                "stored",
+                "kind",
+                "date_order",
+                "null",
+                "absent_is_null",
+            ):
                 if data.get(key) is None:
                     data.pop(key, None)
         return data
@@ -215,7 +231,12 @@ class ValueExpr(BaseModel):
             and self.param in params
             and params[self.param] is None
         ):
-            return ValueExpr(null=True, kind=self.kind, date_order=self.date_order)
+            return ValueExpr(
+                null=True,
+                kind=self.kind,
+                date_order=self.date_order,
+                absent_is_null=self.absent_is_null,
+            )
         return ValueExpr(
             literal=self.resolve(params), kind=self.kind, date_order=self.date_order
         )
@@ -265,6 +286,7 @@ class ValueExpr(BaseModel):
                 and self.param == other.param
                 and self.map == other.map
                 and self.null == other.null
+                and self.absent_is_null == other.absent_is_null
             )
         if isinstance(other, str):
             # A literal expression equals the bare string it stands for.
@@ -278,7 +300,7 @@ class ValueExpr(BaseModel):
         # code that keys a set/dict on ``match`` values mixing plain strings
         # and literal expressions then behaves unchanged.
         if self.null:
-            return hash(("__null__",))
+            return hash(("__null__", bool(self.absent_is_null)))
         if self.param is None:
             return hash(self.literal)
         return hash(("__param__", self.param, tuple(sorted((self.map or {}).items()))))
@@ -1213,6 +1235,23 @@ class Effect(BaseModel):
                     maps[f"new_records.{index}.{key}"] = dict(sorted(expr.map.items()))
         if maps:
             payload["value_maps"] = maps
+        # A field the store may leave out when null is a different contract.
+        # Bound only when set, so every other contract keeps its digest.
+        absent = sorted(
+            path
+            for path, expr in [
+                *((f"match.{k}", v) for k, v in self.match.items()),
+                ("value", self.value),
+                *(
+                    (f"new_records.{i}.{k}", v)
+                    for i, selector in enumerate(self.new_records)
+                    for k, v in selector.items()
+                ),
+            ]
+            if isinstance(expr, ValueExpr) and expr.absent_is_null
+        )
+        if absent:
+            payload["absent_is_null"] = absent
         return payload
 
     def _semantic_contract_sha256(self) -> str:
@@ -1390,9 +1429,7 @@ def selector_value(value: Any) -> Any:
     return str(value)
 
 
-def record_matches(
-    record: dict[str, Any], selector: dict[str, Any], *, absent_is_null: bool = False
-) -> bool:
+def record_matches(record: dict[str, Any], selector: dict[str, Any]) -> bool:
     """Whether ``record`` satisfies every ``field == value`` in ``selector``.
 
     Comparison is on ``str()`` of both sides so a numeric id in JSON (``1``)
@@ -1400,9 +1437,10 @@ def record_matches(
     An empty selector matches every record (used by absence checks).
 
     A null value (:attr:`ValueExpr.null`) matches only a field that is
-    present and ``None``. A missing field matches it only with
-    ``absent_is_null`` (a JSON record, where a null field is often left
-    out); elsewhere a missing field is a misnamed column and matches nothing.
+    present and ``None``. A missing field matches it only when the contract
+    declares that field :attr:`ValueExpr.absent_is_null`; otherwise it may
+    be a misspelled or unprojected field and matches nothing. The record
+    check and the frame both call this, so they agree.
     The text ``"None"`` or ``""`` never matches a null value, and a null
     stored value never matches a text selector.
     """
@@ -1411,7 +1449,7 @@ def record_matches(
             if key in record:
                 if record[key] is not None:
                     return False
-            elif not absent_is_null:
+            elif not want.absent_is_null:
                 return False
             continue
         if record.get(key, None) is None:

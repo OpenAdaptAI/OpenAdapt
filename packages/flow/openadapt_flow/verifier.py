@@ -859,7 +859,14 @@ def begin_write(
         raise VerifierError(f"values missing for: {', '.join(missing)}")
     values = {n: params[n] for n in names}
     unsafe = contract.null_unsafe_params()
-    nulls = sorted(n for n in names if values[n] is None and n in unsafe)
+    read_kind = str(contract.config.verifier.kind).replace("-", "_")
+    screen = READ_PATHS.get(read_kind) == "screen"
+    nulls = sorted(n for n in names if values[n] is None and (screen or n in unsafe))
+    if screen and nulls:
+        raise VerifierError(
+            "a null value can't be read back from the screen (an empty field "
+            "reads as text): " + ", ".join(nulls)
+        )
     if nulls:
         raise VerifierError(
             "a null value can't be bound for: "
@@ -891,6 +898,8 @@ def begin_write(
     try:
         _settle(led, key, contract, params, actor)
         _hold_elsewhere(led, key, shape_key)
+        if any(v is None for v in values.values()):
+            _hold_legacy_null(led, contract, values, write_key)
         folder = (
             _new_folder(Path(workdir), write_id)
             if workdir is not None
@@ -1031,6 +1040,31 @@ def _settle(
         "releases it",
         key=key,
     )
+
+
+def _hold_legacy_null(
+    led: Ledger,
+    contract: Contract,
+    values: Mapping[str, Any],
+    write_key: Optional[str],
+) -> None:
+    """Hold a write with a null while an attempt keyed the old way is open.
+
+    Ledgers once keyed ``None`` as ``""``. An attempt recorded then (or a
+    ``""`` write) that is still open, unresolved or refuted may be this
+    write, so it is held for a person rather than sent again. A landed
+    ``""`` write is a different write and is not handed back for it.
+    """
+
+    for digest in (contract.identity, contract.shape):
+        legacy = led.key_for(digest, values, write_key, legacy_null=True)
+        if led.state(led.latest(legacy)) in ("open", "uncertain", "held"):
+            raise WriteHeld(
+                "an earlier attempt of this write, recorded before a null was "
+                'told apart from "", is in flight or unresolved; a person '
+                "checks it (openadapt verify ledger list)",
+                key=legacy,
+            )
 
 
 def _hold_elsewhere(led: Ledger, key: str, shape_key: str) -> None:
