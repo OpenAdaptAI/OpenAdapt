@@ -980,7 +980,12 @@ class SqlBuilder:
     def tref(self, table: str) -> str:
         """A table as a read names it: its view when it has one."""
 
-        return self.q(self.views.get(table, table))
+        return self.qt(self.views.get(table, table))
+
+    def qt(self, name: str) -> str:
+        """A table name, ``schema.table`` quoted part by part."""
+
+        return ".".join(self.q(part) for part in name.split("."))
 
     def ph(self, param: str) -> str:
         for k, v in self.params.items():
@@ -1124,7 +1129,7 @@ class Surface:
 
     def sql(self, b: SqlBuilder) -> str:
         cols = ", ".join(f"{expr} AS {b.q(a)}" for a, expr in self.columns)
-        return f"SELECT {cols} FROM {b.q(self.table)} {self.alias}"
+        return f"SELECT {cols} FROM {b.qt(self.table)} {self.alias}"
 
 
 def _base_columns(b: SqlBuilder, table: str, alias: str = "t") -> list[tuple[str, str]]:
@@ -1959,29 +1964,61 @@ def _sees_triggers(connect: Any) -> bool:
     return False
 
 
+def view_schema(schema: Schema) -> str:
+    """Where the generator's views live: a schema of their own, beside the
+    app's, so the app's own upgrades and restores never drop them and the
+    whole-database frame doesn't read them as app tables."""
+
+    return f"{schema.database}_oa_read"
+
+
+def existing_views(
+    connect: Any, schema: Schema, tables: Sequence[str]
+) -> dict[str, str]:
+    """Table -> ``schema.view`` for the views the read account can see."""
+
+    conn = connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT table_name FROM information_schema.views WHERE table_schema = %s",
+            (view_schema(schema),),
+        )
+        have = {str(r[0]) for r in cur.fetchall()}
+    finally:
+        conn.rollback()
+        conn.close()
+    return {
+        t: f"{view_schema(schema)}.oa_read_{t}"
+        for t in tables
+        if f"oa_read_{t}" in have
+    }
+
+
 def create_views(
     admin_read: Mapping[str, Any], schema: Schema, tables: Sequence[str], reader: str
 ) -> dict[str, str]:
-    """Create one read-only view per table the SQL guard refuses by name,
-    in the same database, and grant the read account SELECT on it. Only run
-    with ``--create-views``; the connection is the admin one given."""
+    """Create one read-only view per table the SQL guard refuses by name, in
+    the schema ``<database>_oa_read``, and grant the read account SELECT on
+    that schema. Only run with ``--create-views``; the connection is the
+    admin one given."""
 
+    if schema.dialect != "mysql":
+        raise GenerateError("--create-views supports MySQL and MariaDB")
     conn = _admin_connect(admin_read)
     made = {}
+    vs = store.quote("mysql", view_schema(schema))
     try:
         cur = conn.cursor()
+        cur.execute(f"CREATE DATABASE IF NOT EXISTS {vs}")
         for t in tables:
-            view = f"oa_read_{t}"
-            q = store.quote(schema.dialect, t)
-            v = store.quote(schema.dialect, view)
-            cur.execute(f"CREATE OR REPLACE VIEW {v} AS SELECT * FROM {q}")
-            if schema.dialect == "mysql":
-                cur.execute(f"GRANT SELECT ON {v} TO {reader}")
-            else:
-                cur.execute(
-                    f"GRANT SELECT ON {v} TO {store.quote('postgresql', reader)}"
-                )
-            made[t] = view
+            q = store.quote("mysql", schema.database) + "." + store.quote("mysql", t)
+            v = vs + "." + store.quote("mysql", f"oa_read_{t}")
+            cur.execute(
+                f"CREATE OR REPLACE SQL SECURITY DEFINER VIEW {v} AS SELECT * FROM {q}"
+            )
+            made[t] = f"{view_schema(schema)}.oa_read_{t}"
+        cur.execute(f"GRANT SELECT ON {vs}.* TO {reader}")
         conn.commit()
     finally:
         conn.close()
@@ -2200,18 +2237,16 @@ def propose(
         }
     )
     if needed:
-        existing = {t: f"oa_read_{t}" for t in needed if f"oa_read_{t}" in schema.views}
+        existing = existing_views(connect, schema, needed)
         missing = [t for t in needed if t not in existing]
         if missing and create_views_flag:
             if not admin_read or not reader_account:
                 raise GenerateError(
                     "--create-views needs --admin-read and --reader-account"
                 )
-            existing.update(create_views(admin_read, schema, missing, reader_account))
-            schema = store.read_schema(connect, dialect)
-            for t, v in list(existing.items()):
-                if v not in schema.views:
-                    existing.pop(t)
+            made = create_views(admin_read, schema, missing, reader_account)
+            applied.extend(f"view {v} over {t}" for t, v in made.items())
+            existing = existing_views(connect, schema, needed)
         settings.views = existing
         for p in plans:
             tables = {p.anchor} | {
