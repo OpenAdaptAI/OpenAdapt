@@ -371,7 +371,22 @@ def test_an_undemonstrated_update_combination_is_confirmed(
     ).startswith("CONFIRMED")
 
 
-CREATE = {"project": "Billing Portal", "subject": "Export CSV", "status": "New",
+def test_an_update_already_in_place_with_no_write_is_confirmed(
+    generated: dict[str, Any],
+) -> None:
+    app = generated["app"]
+    v = {"project": "Help Desk", "subject": "VPN drops", "status": None, "assignee": None,
+         "due_date": None, "done_ratio": 80, "notes": None}  # fmt: skip
+    app.q("UPDATE issues SET done_ratio=80 WHERE id=%s", (app.find("Help Desk", "VPN drops"),))
+    assert _run(generated, "update_issue", v, lambda: None).startswith("CONFIRMED")
+    # The same task with a stray write on the issue is stopped.
+    stray = _run(generated, "update_issue", v,
+                 lambda: app.q("UPDATE issues SET is_private=true WHERE subject='VPN drops'"))  # fmt: skip
+    app.q("UPDATE issues SET is_private=false WHERE subject='VPN drops'")
+    assert not stray.startswith("CONFIRMED"), stray
+
+
+CREATE ={"project": "Billing Portal", "subject": "Export CSV", "status": "New",
           "assignee": "Jon Park", "due_date": "2026-12-05", "customer_ref": "0042"}  # fmt: skip
 UPDATE = {"project": "Billing Portal", "subject": "Refund button missing", "status": "Resolved",
           "assignee": None, "due_date": None, "done_ratio": None, "notes": "Done."}  # fmt: skip

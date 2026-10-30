@@ -83,8 +83,8 @@ server, use `openadapt_flow.generate.ensure_contract` (an
 ## What it writes
 
 - `contracts/<kind>/<fields>.<flavor>.yaml`: one contract per field set. The
-  flavor is `create` and `found` for a kind that adds a record, `update` for a
-  kind that changes one.
+  flavor is `create` or `update`, and each has a `found` twin for a task
+  whose record already holds its values.
 - `manifest.yaml`: which contract fits which task values.
 - `QUESTIONS.md`: the numbered questions, the proposed answers, and per kind
   how many contracts were written and why any were not.
@@ -149,9 +149,10 @@ gets a contract per length, from 1 to 10 items.
 - `create`: exactly one new main record holds the task's values, and
   everything else in the new row is what the demonstrations showed, or is
   bookkeeping.
-- `found`: the record already exists, and nothing in the database changed.
-  `choose` reads the store first and picks `found` when a record with the
-  task's values is already there.
+- `found`: the record already holds the task's values, and nothing in the
+  database changed. `choose` reads the store first and picks `found` when a
+  record with the task's values is already there: a "make sure it exists"
+  task whose record exists, or an update that is already in place.
 - `update`: exactly one record matches the task's identity values and holds
   the new values. Only the fields the task changes may change.
 
@@ -207,6 +208,12 @@ why.
 - Columns of a new record that differ between demonstrations and aren't
   task values (an invoice's computed totals, its draft reference) are not
   checked. The bookkeeping question lists them.
+- Free-text columns of a new record that the task doesn't give, and that
+  every demonstration left empty (a line description, a note), are not
+  checked: an agent may fill them from the record it copies.
+- With one demonstration of a create, every other column must hold the value
+  it held then, including one computed from the task's values (a price with
+  tax). `QUESTIONS.md` says so; record a second create with other values.
 - On PostgreSQL there is no whole-database frame and no recheck: tables
   proposed as logs are not read, and a write that lands after the check is
   not seen.

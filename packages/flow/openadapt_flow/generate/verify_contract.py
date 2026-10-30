@@ -1963,7 +1963,7 @@ def propose(
             manifest["kinds"][p.kind] = entry
             report["kinds"][p.kind] = rep
             continue
-        flavors = ["create", "found"] if p.mode == "create" else ["update"]
+        flavors = ["create", "found"] if p.mode == "create" else ["update", "found"]
         for v in variants(schema, p, spec, answers):
             if any(
                 f not in p.locations
@@ -2115,12 +2115,12 @@ def choose(
             continue
         params = {**flatten(values), **dict(extra_params or {})}
         base = manifest_path.parent
-        if entry["mode"] == "update":
-            return Contract.load(base / var["update"]), params
+        # The record already holds the task's values (found, or an update
+        # already in place): nothing may change. Else the create or update.
         found = Contract.load(base / var["found"])
         if _exists(found, params):
             return found, params
-        return Contract.load(base / var["create"]), params
+        return Contract.load(base / var[entry["mode"]]), params
     raise GenerateError(
         f"no {kind} contract for the fields {sorted(given)}"
         + (f" and lists {lists}" if lists else "")
