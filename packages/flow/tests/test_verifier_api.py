@@ -351,6 +351,7 @@ def test_the_public_api_is_stable() -> None:
         ("actor", "KEYWORD_ONLY"),
         ("excused_by", "KEYWORD_ONLY"),
         ("wait", "KEYWORD_ONLY"),
+        ("ledger", "KEYWORD_ONLY"),
     ]
     assert [f for f in RecheckResult.__dataclass_fields__] == [
         "outcome",

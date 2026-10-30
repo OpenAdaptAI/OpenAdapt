@@ -1300,7 +1300,8 @@ def verify() -> None:
     help="Where baselines and receipts go (default ~/.openadapt/verify).",
 )
 def verify_serve(contracts: str, state: Optional[str]) -> None:
-    """Serve verify_contracts, verify_begin and verify_check over MCP (stdio)."""
+    """Serve verify_contracts, verify_begin, verify_check and verify_recheck
+    over MCP (stdio)."""
     _require_supported_python()
     try:
         from openadapt_flow.agent.cli import main as agent_main

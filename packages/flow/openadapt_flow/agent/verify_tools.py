@@ -18,7 +18,15 @@ agent calls:
     shows a different write) or ``RECONCILIATION_REQUIRED`` (it doesn't show
     the write, which may still land); ``outcome`` says the same as
     ``CONFIRMED``, ``REFUTED`` or ``UNCERTAIN``. Never retry a refused write:
-    a person checks the record.
+    a person checks the record. When the contract sets
+    ``frame.database.recheck_after_s``, a ``CONFIRMED`` result also says
+    ``provisional: true`` and ``recheck_due_at``: a write that lands before
+    then can still refute it.
+``verify_recheck``
+    At or after ``recheck_due_at``. The server reads the whole database
+    again and returns ``CONFIRMED`` (the earlier verdict stands), ``REFUTED``
+    (something moved since that nothing explains: the earlier ``CONFIRMED``
+    no longer stands) or ``UNCERTAIN``. A write after this read is not seen.
 
 ``verify_begin`` consults the uncertain-write ledger, so a write whose
 outcome is unknown is refused, also after a restart or in another server.
@@ -33,19 +41,24 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from openadapt_flow.agent.bridge import BridgeError, ToolSpec
+from openadapt_flow.runtime.effects.late_write import parse_time
 from openadapt_flow.verifier import (
     Actor,
     AlreadyWritten,
     Contract,
     PendingWrite,
+    RecheckNotDue,
+    VerifierError,
     WriteBlocked,
+    WriteResult,
     begin_write,
+    recheck,
     verify_write,
 )
 
 __all__ = ["VERIFY_TOOLS", "VerifyBridge", "contract_params"]
 
-VERIFY_TOOLS = ("verify_contracts", "verify_begin", "verify_check")
+VERIFY_TOOLS = ("verify_contracts", "verify_begin", "verify_check", "verify_recheck")
 _NAME = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _WRITE_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$")
 _AGENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
@@ -56,8 +69,11 @@ INSTRUCTIONS = (
     "the contract and the values you will save; if it refuses, don't write. "
     "Make the write your own way. Then call verify_check with the write_id. "
     "Only verified: true means the write is in the system of record as "
-    "declared. A refusal means a person must check the record: never retry "
-    "that write, and tell the person the verdict and reason."
+    "declared. If the result also says provisional: true, call "
+    "verify_recheck with the write_id at or after recheck_due_at: a write that "
+    "lands before then can still refute it. A refusal means a person must "
+    "check the record: never retry that write, and tell the person the "
+    "verdict and reason."
 )
 
 
@@ -96,6 +112,12 @@ class VerifyBridge:
         if not self.contracts:
             raise ValueError(f"no write contracts (*.yaml) in {self.contracts_dir}")
         self._pending: dict[str, PendingWrite] = {}
+        #: Provisional results whose recheck is still to run, by write_id.
+        #: Held in this server's memory only: after a restart, recheck from
+        #: Python with the saved ``recheck.json`` (``RecheckState.load``).
+        self._rechecks: dict[str, tuple[PendingWrite, WriteResult]] = {}
+        #: Every checked write with a recheck state, of any outcome.
+        self._checked: list[tuple[PendingWrite, WriteResult]] = []
         self._lock = threading.Lock()
 
     # -- the MCP layer's interface ------------------------------------------
@@ -171,6 +193,23 @@ class VerifyBridge:
                 ),
                 annotations={"readOnlyHint": True, "openWorldHint": True},
             ),
+            ToolSpec(
+                name="verify_recheck",
+                description=(
+                    "Call at or after a provisional result's recheck_due_at. "
+                    "Reads the whole database again: CONFIRMED (the verdict "
+                    "stands), REFUTED (something moved after it that nothing "
+                    "explains: the write is no longer verified) or UNCERTAIN. "
+                    "Your later writes under the same contract, checked with "
+                    "verify_check, account for their own rows; a write under "
+                    "another contract does not, and refutes it. Before the due "
+                    "time it returns due: false and the time to call again."
+                ),
+                input_schema=_obj(
+                    {"write_id": {"type": "string", "maxLength": 64}}, ["write_id"]
+                ),
+                annotations={"readOnlyHint": True, "openWorldHint": True},
+            ),
         ]
 
     def dispatch(
@@ -191,6 +230,8 @@ class VerifyBridge:
             return self._begin(args)
         if name == "verify_check":
             return self._check(args)
+        if name == "verify_recheck":
+            return self._recheck(args)
         raise BridgeError("unknown tool name")
 
     # -- tools ------------------------------------------------------------------
@@ -242,4 +283,121 @@ class VerifyBridge:
         result = verify_write(
             entry, write_attempted=bool(args.get("write_attempted", True))
         )
-        return result.to_dict()
+        out = result.to_dict()
+        if result.recheck is not None:
+            # Any outcome: a later write's own window excuses its rows in an
+            # earlier write's recheck (``excused_by``).
+            with self._lock:
+                self._checked.append((entry, result))
+        if result.recheck is not None and out.get("provisional"):
+            with self._lock:
+                self._rechecks[write_id] = (entry, result)
+            out["next"] = (
+                "Provisional: call verify_recheck with this write_id at or after "
+                "recheck_due_at. A write that lands before then can still refute "
+                "it; a write after the recheck is not seen."
+            )
+        return out
+
+    def _later_writes(
+        self, entry: PendingWrite, result: WriteResult
+    ) -> list[WriteResult]:
+        """This session's checked writes under the same contract by the same
+        actor, begun after ``result``'s post-save read: each excuses only
+        what changed in its own window. A write under another contract, or
+        one begun before that read, excuses nothing."""
+
+        state = result.recheck
+        if state is None:
+            return []
+        post = state.payload.get("post_state") or {}
+        try:
+            since = parse_time(str(post.get("read_at")))
+        except ValueError:
+            return []
+        out: list[WriteResult] = []
+        for other_entry, other in self._checked:
+            if other is result or other_entry.contract is not entry.contract:
+                continue
+            if other_entry.actor != entry.actor or other.recheck is None:
+                continue
+            began = (other.recheck.payload.get("baseline") or {}).get(
+                "baseline_read_at"
+            )
+            try:
+                if parse_time(str(began)) < since:
+                    continue
+            except ValueError:
+                continue
+            out.append(other)
+        return out
+
+    def _recheck(self, args: Mapping[str, Any]) -> dict[str, Any]:
+        write_id = str(args.get("write_id"))
+        with self._lock:
+            held = self._rechecks.get(write_id)
+        if held is None:
+            raise BridgeError(
+                "no provisional result for that write_id: only a CONFIRMED write "
+                "whose contract sets frame.database.recheck_after_s has a "
+                "recheck, each is rechecked once, and this server holds them in "
+                "memory only"
+            )
+        entry, result = held
+        with self._lock:
+            unchecked = [
+                p
+                for p in self._pending.values()
+                if p.contract is entry.contract and p.actor == entry.actor
+            ]
+            later = self._later_writes(entry, result)
+        if unchecked:
+            # Its rows would look unexplained: no verdict until it is checked.
+            raise BridgeError(
+                "a later write under this contract is not checked yet; call "
+                "verify_check for it, then verify_recheck again"
+            )
+        try:
+            late = recheck(
+                entry.contract,
+                result,
+                params=entry.params,
+                actor=entry.actor,
+                excused_by=later,
+            )
+        except RecheckNotDue as exc:
+            return {
+                "due": False,
+                "write_id": write_id,
+                "recheck_due_at": exc.due_at,
+                "wait_s": max(1, round(exc.wait_s)),
+                "next": "Not due yet: call verify_recheck again at or after "
+                "recheck_due_at.",
+            }
+        except VerifierError as exc:
+            with self._lock:
+                self._rechecks.pop(write_id, None)
+            raise BridgeError(f"the write can't be rechecked: {exc}") from exc
+        with self._lock:
+            self._rechecks.pop(write_id, None)
+        if late.verified:
+            nxt = "The verdict stands. A write after read_at is not seen."
+        elif late.late:
+            nxt = (
+                "The earlier CONFIRMED no longer stands. Don't retry: a person "
+                "checks the record."
+            )
+        else:
+            nxt = "Not a pass. Don't retry: a person checks the record."
+        return {
+            "due": True,
+            "write_id": write_id,
+            "verified": late.verified,
+            "outcome": late.outcome,
+            "late": late.late,
+            "reasons": list(late.reasons),
+            "recheck_due_at": late.due_at,
+            "read_at": late.read_at,
+            "receipt_sha256": late.receipt_sha256,
+            "next": nxt,
+        }
