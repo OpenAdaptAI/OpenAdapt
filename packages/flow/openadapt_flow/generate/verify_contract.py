@@ -404,7 +404,9 @@ def analyze(
                 col = anchor_t.column(loc.columns[0])
             elif loc.hops and loc.hops[0].kind == "fk":
                 col = anchor_t.column(loc.hops[0].column)
-            if (col is not None and col.nullable) or (loc.hops and loc.hops[0].kind == "child"):
+            if (col is not None and col.nullable) or (
+                loc.hops and loc.hops[0].kind == "child"
+            ):
                 if p not in plan.optional:
                     plan.optional.append(p)
         plan.optional.sort()
@@ -418,7 +420,9 @@ def analyze(
     return plan
 
 
-def _share_locations(schema: Schema, plans: Sequence[KindPlan], kinds: Sequence[KindSpec]) -> None:
+def _share_locations(
+    schema: Schema, plans: Sequence[KindPlan], kinds: Sequence[KindSpec]
+) -> None:
     """An update parameter no example of its kind gives (a priority), placed
     where another kind's demonstrations found the parameter of the same name
     on the same main table (``issues.priority_id -> enumerations.name``).
@@ -513,7 +517,9 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
                 if d.values.get(q) is not None
                 and not isinstance(d.values.get(q), (list, dict))
             ]
-            if hits and all(h and h[0].hops and _hop_cost(h[0].hops[0]) <= 1 for h in hits):
+            if hits and all(
+                h and h[0].hops and _hop_cost(h[0].hops[0]) <= 1 for h in hits
+            ):
                 co.append(q)
                 explained |= {h[0].hops[0].column for h in hits}
         plan.children[p] = ChildGroup(
@@ -729,9 +735,7 @@ def _is_empty_param_row(
         cols = rel.columns if not rel.hops else (rel.hops[0].column,)
         if any(ch.after.get(c) not in (None, "") for c in cols):
             continue
-        consts = [
-            (c, r.value) for c, r in g.roles.items() if r.role == "constant"
-        ]
+        consts = [(c, r.value) for c, r in g.roles.items() if r.role == "constant"]
         if consts and all(ch.after.get(c) == v for c, v in consts):
             g.empty_when_null = True
             return True
@@ -1059,13 +1063,14 @@ def build_contract(
 
     # Rows beside the main record that hold a value (a note, a custom field,
     # an email address link), and list items (invoice lines).
-    if flavor != "found":
+    found = flavor == "found"
+    if True:
         groups = [
             (p, g)
             for p, g in plan.children.items()
             if p in fields
-            or g.empty_when_null
-            or (plan.mode == "create" and set(g.co_owners) & fields)
+            or (not found and g.empty_when_null)
+            or (not found and plan.mode == "create" and set(g.co_owners) & fields)
         ]
         groups += [(p, g) for p, g in plan.lists.items() if p in variant.lists]
         for p, g in groups:
@@ -1117,23 +1122,24 @@ def build_contract(
                     else:
                         m[key] = _value_expr(pname, loc.rule)
                 for col, role in sorted(g.roles.items()):
-                    if role.role == "link":
+                    if role.role == "link" or found:
                         continue
                     _pin(b, surf, g.table, col, role, m, settings.actor_params)
-                effects.append(
-                    {
-                        "kind": "record_written",
-                        "probe": f"surface={sname}|a row beside the main record holds {p}",
-                        "match": m,
-                        "expected_count": 1,
-                        "count_new_only": True,
-                    }
-                )
+                effect = {
+                    "kind": "record_written",
+                    "probe": f"surface={sname}|a row beside the main record holds {p}",
+                    "match": m,
+                    "expected_count": 1,
+                }
+                if not found:
+                    # Found: the row is already there, and nothing changes.
+                    effect["count_new_only"] = True
+                effects.append(effect)
             if plan.mode == "update":
                 target_fields.update(g.changed_columns)
         # A new row a link row names (a new email address).
         for p, ref in plan.added_refs.items():
-            if p not in fields:
+            if p not in fields or found:
                 continue
             effects.append(
                 _raw_effect(
@@ -1149,7 +1155,7 @@ def build_contract(
                 )
             )
         for side in plan.sides:
-            if side.unless is not None and side.unless in fields:
+            if found or (side.unless is not None and side.unless in fields):
                 continue
             m = {}
             for col, role in sorted(side.roles.items()):
@@ -1301,15 +1307,32 @@ def _pin(
         if role.value is not None and column is not None and column.kind == "text":
             match.setdefault(col, {"literal": role.value})
             return
-        alias = f"pin__{_alias(col)}"
-        surf.columns.append((alias, b.pin("t", table, col, role.value)))
+        alias = _add_column(
+            surf, f"pin__{_alias(col)}", b.pin("t", table, col, role.value)
+        )
         match[alias] = {"literal": "1"}
     elif role.role == "actor":
         match.setdefault(col, {"param": role.detail["param"]})
     elif role.role == "copied":
-        alias = f"pin__{_alias(col)}"
-        surf.columns.append((alias, b.copied("t", role.detail, table, col)))
+        alias = _add_column(
+            surf, f"pin__{_alias(col)}", b.copied("t", role.detail, table, col)
+        )
         match[alias] = {"literal": "1"}
+
+
+def _add_column(surf: Surface, alias: str, expr: str) -> str:
+    """Add a computed column; the same name with another expression (two
+    rows of one table pinned to different constants) gets its own name."""
+
+    for a, e in surf.columns:
+        if a == alias and e == expr:
+            return alias
+    if any(a == alias for a, _ in surf.columns):
+        alias = f"{alias}__{hashlib.sha256(expr.encode()).hexdigest()[:6]}"
+        if any(a == alias for a, _ in surf.columns):
+            return alias
+    surf.columns.append((alias, expr))
+    return alias
 
 
 def _raw_effect(
@@ -1886,9 +1909,7 @@ def propose(
             book.setdefault(t, set()).update(cols)
         for t, cols in dict(ans.get("columns_remove", {})).items():
             book[t] = book.get(t, set()) - set(cols)
-    sides = sorted(
-        {f"{s.table} ({s.count} per write)" for p in plans for s in p.sides}
-    )
+    sides = sorted({f"{s.table} ({s.count} per write)" for p in plans for s in p.sides})
     for p in plans:  # a table the person calls a log is no longer counted
         p.sides = [s for s in p.sides if s.table not in logs]
     if logs or book or unchecked or sides:
@@ -2243,14 +2264,24 @@ def _exists(contract: Any, params: Mapping[str, Any]) -> bool:
     from openadapt_flow.runtime.effects.effect import record_matches
     from openadapt_flow.verify_run import _build_verifier
 
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
     verifier = _build_verifier(contract.config, params)
     state = verifier.capture_pre_state()
-    effect = contract.config.effects[0].resolve(params)
-    sub = (state.detail or {}).get("record", {})
-    if not sub.get("reachable"):
-        raise GenerateError("the store could not be read to choose the contract")
-    selector = {k: v for k, v in effect.match.items()}
-    return any(record_matches(dict(r), selector) for r in sub.get("records", []))
+    # Every effect of the found contract (the main record, and each row
+    # beside it that holds a value) must already hold.
+    for effect in contract.config.effects:
+        bound = effect.resolve(params)
+        sub = (state.detail or {}).get(surface_of(effect) or "record", {})
+        if not sub.get("reachable"):
+            raise GenerateError("the store could not be read to choose the contract")
+        selector = dict(bound.match)
+        hits = sum(
+            1 for r in sub.get("records", []) if record_matches(dict(r), selector)
+        )
+        if hits != bound.expected_count:
+            return False
+    return True
 
 
 # -- CLI ------------------------------------------------------------------------------------
