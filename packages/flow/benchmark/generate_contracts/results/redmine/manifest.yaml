@@ -34,6 +34,18 @@ kinds:
       create: contracts/create_issue/assignee+due_date+priority+project+subject+tracker.cb8524d8.create.yaml
       found: contracts/create_issue/assignee+due_date+priority+project+subject+tracker.cb8524d8.found.yaml
     - fields:
+      - assignee
+      - customer_ref
+      - environment
+      - priority
+      - project
+      - subject
+      - tracker
+      lists: {}
+      dispatch_value: null
+      create: contracts/create_issue/assignee+customer_ref+environment+priority+project+subject+tracker.1fa8ca93.create.yaml
+      found: contracts/create_issue/assignee+customer_ref+environment+priority+project+subject+tracker.1fa8ca93.found.yaml
+    - fields:
       - due_date
       - priority
       - project
@@ -53,27 +65,6 @@ kinds:
       dispatch_value: null
       create: contracts/create_issue/assignee+priority+project+subject+tracker.d16f0df9.create.yaml
       found: contracts/create_issue/assignee+priority+project+subject+tracker.d16f0df9.found.yaml
-    - fields:
-      - priority
-      - project
-      - subject
-      - tracker
-      lists: {}
-      dispatch_value: null
-      create: contracts/create_issue/priority+project+subject+tracker.a0dc8790.create.yaml
-      found: contracts/create_issue/priority+project+subject+tracker.a0dc8790.found.yaml
-    - fields:
-      - assignee
-      - customer_ref
-      - environment
-      - priority
-      - project
-      - subject
-      - tracker
-      lists: {}
-      dispatch_value: null
-      create: contracts/create_issue/assignee+customer_ref+environment+priority+project+subject+tracker.1fa8ca93.create.yaml
-      found: contracts/create_issue/assignee+customer_ref+environment+priority+project+subject+tracker.1fa8ca93.found.yaml
     - fields:
       - customer_ref
       - environment
@@ -107,6 +98,15 @@ kinds:
       dispatch_value: null
       create: contracts/create_issue/assignee+customer_ref+priority+project+subject+tracker.88f7523d.create.yaml
       found: contracts/create_issue/assignee+customer_ref+priority+project+subject+tracker.88f7523d.found.yaml
+    - fields:
+      - priority
+      - project
+      - subject
+      - tracker
+      lists: {}
+      dispatch_value: null
+      create: contracts/create_issue/priority+project+subject+tracker.a0dc8790.create.yaml
+      found: contracts/create_issue/priority+project+subject+tracker.a0dc8790.found.yaml
     - fields:
       - environment
       - priority
@@ -164,6 +164,32 @@ kinds:
       create: contracts/create_issue/assignee+due_date+environment+priority+project+subject+tracker.9f2faa3a.create.yaml
       found: contracts/create_issue/assignee+due_date+environment+priority+project+subject+tracker.9f2faa3a.found.yaml
     - fields:
+      - assignee
+      - customer_ref
+      - description
+      - environment
+      - priority
+      - project
+      - subject
+      - tracker
+      lists: {}
+      dispatch_value: null
+      create: contracts/create_issue/assignee+customer_ref+description+environment+priority+project+subject+tracker.d268453f.create.yaml
+      found: contracts/create_issue/assignee+customer_ref+description+environment+priority+project+subject+tracker.d268453f.found.yaml
+    - fields:
+      - assignee
+      - customer_ref
+      - due_date
+      - environment
+      - priority
+      - project
+      - subject
+      - tracker
+      lists: {}
+      dispatch_value: null
+      create: contracts/create_issue/assignee+customer_ref+due_date+environment+priority+project+subject+tracker.47c18f25.create.yaml
+      found: contracts/create_issue/assignee+customer_ref+due_date+environment+priority+project+subject+tracker.47c18f25.found.yaml
+    - fields:
       - customer_ref
       - due_date
       - priority
@@ -207,42 +233,6 @@ kinds:
       dispatch_value: null
       create: contracts/create_issue/assignee+description+priority+project+subject+tracker.054b82b6.create.yaml
       found: contracts/create_issue/assignee+description+priority+project+subject+tracker.054b82b6.found.yaml
-    - fields:
-      - description
-      - priority
-      - project
-      - subject
-      - tracker
-      lists: {}
-      dispatch_value: null
-      create: contracts/create_issue/description+priority+project+subject+tracker.ec0f6d4d.create.yaml
-      found: contracts/create_issue/description+priority+project+subject+tracker.ec0f6d4d.found.yaml
-    - fields:
-      - assignee
-      - customer_ref
-      - description
-      - environment
-      - priority
-      - project
-      - subject
-      - tracker
-      lists: {}
-      dispatch_value: null
-      create: contracts/create_issue/assignee+customer_ref+description+environment+priority+project+subject+tracker.d268453f.create.yaml
-      found: contracts/create_issue/assignee+customer_ref+description+environment+priority+project+subject+tracker.d268453f.found.yaml
-    - fields:
-      - assignee
-      - customer_ref
-      - due_date
-      - environment
-      - priority
-      - project
-      - subject
-      - tracker
-      lists: {}
-      dispatch_value: null
-      create: contracts/create_issue/assignee+customer_ref+due_date+environment+priority+project+subject+tracker.47c18f25.create.yaml
-      found: contracts/create_issue/assignee+customer_ref+due_date+environment+priority+project+subject+tracker.47c18f25.found.yaml
     - fields:
       - customer_ref
       - description
@@ -291,6 +281,16 @@ kinds:
       dispatch_value: null
       create: contracts/create_issue/assignee+customer_ref+description+priority+project+subject+tracker.4d3aeb69.create.yaml
       found: contracts/create_issue/assignee+customer_ref+description+priority+project+subject+tracker.4d3aeb69.found.yaml
+    - fields:
+      - description
+      - priority
+      - project
+      - subject
+      - tracker
+      lists: {}
+      dispatch_value: null
+      create: contracts/create_issue/description+priority+project+subject+tracker.ec0f6d4d.create.yaml
+      found: contracts/create_issue/description+priority+project+subject+tracker.ec0f6d4d.found.yaml
     - fields:
       - description
       - environment

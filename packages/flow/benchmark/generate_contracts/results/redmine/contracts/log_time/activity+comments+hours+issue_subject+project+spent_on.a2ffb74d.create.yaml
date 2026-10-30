@@ -268,6 +268,14 @@ verifier:
         AS TEXT) AS "estimated_hours", CAST(t."parent_id" AS TEXT) AS "parent_id", CAST(t."root_id" AS
         TEXT) AS "root_id", CAST(t."lft" AS TEXT) AS "lft", CAST(t."rgt" AS TEXT) AS "rgt", CAST(t."is_private"
         AS TEXT) AS "is_private", CAST(t."closed_on" AS TEXT) AS "closed_on" FROM "issues" t
+    raw_journal_details:
+      kind: sql
+      sql_driver: psycopg2
+      sql_connect_args: *id001
+      sql_password_env: REDMINE_RO_DB_PASSWORD
+      sql_query: SELECT CAST(t."id" AS TEXT) AS "id", CAST(t."journal_id" AS TEXT) AS "journal_id", CAST(t."property"
+        AS TEXT) AS "property", CAST(t."prop_key" AS TEXT) AS "prop_key", CAST(t."old_value" AS TEXT)
+        AS "old_value", CAST(t."value" AS TEXT) AS "value" FROM "journal_details" t
     raw_journals:
       kind: sql
       sql_driver: psycopg2
