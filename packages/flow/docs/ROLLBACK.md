@@ -55,19 +55,20 @@ run is refused before it starts: nothing after a stop could be proven.
    absent only when a fresh read of its own record says so. A step that
    declares no effect and has no compensation (pressing Enter in a form
    field) is judged by the whole-database reads and the audit log together:
-   only when every write the run's user logged is one the reads can judge
-   (see below). A write to a table the read keeps append-only (an allow-listed
+   only when every write the run's user logged is a row the read shows
+   changed. A write to a table the read keeps append-only (an allow-listed
    table, or one the app profile keeps append-only, such as a disclosure
    log) is then still caught by its log entry; a write the app doesn't log
    there, or logs under an event `write_events` doesn't list, isn't. With
    the audit log, the same holds for the whole run, on a shared store or an
-   exclusive one: a write by the run's user the log shows in a table the
-   read doesn't compare row by row (kept append-only, allow-listed, skipped
-   or not read at all), from any step, never ends "nothing landed" or
-   `ROLLED_BACK`. A write to a compared table can't hide: the diff shows it,
-   or it touched only what the reviewed app profile calls bookkeeping. As
-   in the verifier's frame, an insert naming no record (or patient 0) in a
-   table the profile calls bookkeeping is the app's own. Only a
+   exclusive one: a write by the run's user the log shows and no changed row
+   accounts for (from any step, in any table) never ends "nothing landed"
+   or `ROLLED_BACK`. As in the verifier's frame, two kinds of entry are the
+   app's own: an insert naming no record (or patient 0) in a table the
+   profile calls bookkeeping, and a write to a table of the acting user's
+   own rows the read compares row by row. A logged statement that changed
+   no row, or changed only a row the profile excuses, is also unaccounted
+   for, so it goes to a person. Only a
    whole-database read proves the run's effects absent; a collection read
    never overrides the run's own uncertainty.
 2. **Compensate, latest change first.** For each change in the run's

@@ -750,38 +750,42 @@ class Attributor:
 
     def unaccounted_writes(
         self,
+        rows: Sequence[Change],
         window: Optional[list[dict[str, Any]]],
-        compared: set[str],
         bookkeeping_inserts: set[str] = frozenset(),  # type: ignore[assignment]
+        own_tables: set[str] = frozenset(),  # type: ignore[assignment]
     ) -> Optional[list[dict[str, Any]]]:
-        """The run's own logged writes the reads can't judge, or None when
-        there is no audit window to tell.
-
-        A write to a table the read compares row by row (``compared``) can't
-        hide: it shows in the diff, or it touched only what the reviewed app
-        profile calls bookkeeping (a sign-in counter, a uuid backfill, the
-        acting user's own UI state). Every other write the log names (a table
-        kept append-only, allow-listed, skipped, or not read at all) is
-        unaccounted for, except, as in the frame, an insert naming no record
-        (none, or patient 0) in a table the profile calls bookkeeping
-        (``no_record_insert_tables``)."""
+        """The run's own logged writes that no changed row accounts for (a
+        write to a table the read keeps append-only, say), or None when
+        there is no audit window to tell. As the frame does: an insert entry
+        that names no record (none, or patient 0) in a table the app profile
+        calls bookkeeping (``no_record_insert_tables``) is the app's own, and
+        so is an entry for a table of the acting user's own rows the profile
+        excuses (``own_rows``: UI settings, recent charts)."""
         from openadapt_flow.runtime.effects.frame import get_path
 
         if self.spec.kind != "audit_read" or window is None:
             return None
+        named = [(c[0], self._ref(*c)) for c in rows]
         out = []
         for e in window:
             if str(get_path(e, self.spec.actor_field)) not in self.self_actors:
                 continue
             table = get_path(e, self.spec.table_field or "")
             record = get_path(e, self.spec.record_field or "")
-            if table not in (None, "") and any(_same_table(table, t) for t in compared):
+            if table not in (None, "") and any(
+                _same_table(table, t) for t in own_tables
+            ):
                 continue
             if (
                 record in (None, "", "0", 0)
                 and self._event(e) in set(self.spec.insert_events)
                 and table not in (None, "")
                 and any(_same_table(table, t) for t in bookkeeping_inserts)
+            ):
+                continue
+            if record not in (None, "") and any(
+                ref == str(record) and _same_table(table, t) for t, ref in named
             ):
                 continue
             out.append(e)
