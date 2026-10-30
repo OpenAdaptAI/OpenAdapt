@@ -21,7 +21,31 @@ from typing import Any, Optional
 
 FORM_PATH = "/interface/new/new_comprehensive.php"
 FORM_FRAME_NAME = "openadapt-new-patient"
+SAVE_URL_PART = "new_comprehensive_save.php"
 VIEWPORT = {"width": 1280, "height": 800}
+
+#: OpenEMR dialogs open over the tab shell (the product-registration prompt
+#: is dismissed separately).
+_OPEN_DIALOGS = (
+    "() => [...document.querySelectorAll('.modal')]"
+    ".filter(e => !e.classList.contains('product-registration-modal'))"
+    ".filter(e => e.offsetWidth || e.offsetHeight || e.getClientRects().length).length"
+)
+_CLOSE_DIALOGS = """() => {
+  const vis = e => !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
+  const how = [];
+  for (const m of [...document.querySelectorAll('.modal')]) {
+    if (m.classList.contains('product-registration-modal') || !vis(m)) continue;
+    const fr = m.querySelector('iframe');
+    try {
+      if (fr && fr.contentWindow && typeof fr.contentWindow.dlgclose === 'function') {
+        fr.contentWindow.dlgclose(); how.push('dlgclose'); continue;
+      }
+    } catch (e) {}
+    try { window.jQuery(m).modal('hide'); how.push('modal_hide'); } catch (e) { how.push('none'); }
+  }
+  return how;
+}"""
 
 #: The fields a referral sets, with the New Patient form's control ids.
 FORM_IDS = {
@@ -175,6 +199,9 @@ class OpenEMRSession:
         self.start()
         t0 = time.time()
         again = False
+        # A dialog an earlier item left open lives in the shell, not the form
+        # tab, so opening a fresh tab keeps it over the next item's form.
+        cleared = self._clear_leftover_dialogs()
         if not self._shell_ready() or "login" in (self.page.url or ""):
             self.sign_in()
             again = self.signins > 1
@@ -199,7 +226,53 @@ class OpenEMRSession:
             frame = self.form_frame()
             frame.locator("#form_fname").wait_for(state="visible", timeout=60_000)
         self._dismiss_registration()
-        return {"setup_s": round(time.time() - t0, 2), "signed_in_again": again}
+        return {"setup_s": round(time.time() - t0, 2), "signed_in_again": again, "cleared_dialogs": cleared}
+
+    def _clear_leftover_dialogs(self) -> int:
+        """Close dialogs left open over the shell; return how many there were.
+
+        OpenEMR opens its dialogs (such as the New Patient duplicate check) in
+        the shell page. Each is closed with OpenEMR's own ``dlgclose`` from
+        inside it. Reloading the shell would end the session (its token is
+        single-use), so if a dialog will not close, the shell is dropped and
+        ``blank_form`` signs in again. Closing must never save: a save sent
+        while clearing would land in the next item, so it raises instead.
+        """
+        try:
+            n = int(self.page.evaluate(_OPEN_DIALOGS))
+        except Exception:  # noqa: BLE001 - no shell yet; blank_form signs in
+            return 0
+        if not n:
+            return 0
+        saves: list[str] = []
+
+        def on_request(req: Any) -> None:
+            if req.method == "POST" and SAVE_URL_PART in req.url:
+                saves.append(req.url)
+
+        how: list[str] = []
+        self.page.on("request", on_request)
+        try:
+            for _ in range(5):  # a dialog still loading ignores its first close
+                how += self.page.evaluate(_CLOSE_DIALOGS)
+                self.page.wait_for_timeout(1500)
+                if not self.page.evaluate(_OPEN_DIALOGS):
+                    break
+            else:
+                how.append("signed_out")
+                self.page.goto("about:blank")
+        except Exception as exc:  # noqa: BLE001 - e.g. the shell navigated away
+            how.append(f"signed_out: {type(exc).__name__}")
+            try:
+                self.page.goto("about:blank")
+            except Exception:  # noqa: BLE001 - blank_form signs in either way
+                pass
+        finally:
+            self.page.remove_listener("request", on_request)
+        self.log.append({"event": "cleared_leftover_dialogs", "n": n, "how": how, "t": round(time.time(), 2)})
+        if saves:
+            raise RuntimeError(f"closing a leftover dialog sent a save ({saves[0]}); the next item is not clean")
+        return n
 
 
 class RestReader:
