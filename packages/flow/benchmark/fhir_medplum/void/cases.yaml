@@ -1,0 +1,296 @@
+# Written with expected outcomes before any run (2026-10-29). Synthetic data.
+schema: openadapt.medplum-fault-suite/v1
+resource_type: Immunization
+cases:
+- id: v1
+  class: void_lookalike_then_create
+  why: an entered-in-error record asserts nothing, so the create is the only fact
+  params:
+    patient:
+      ref: patient
+    vaccine_code: '140'
+    vaccine_display: Influenza, seasonal, injectable, preservative free
+    occurrence_date: '2025-10-14'
+    lot_number: VD1001
+  seed:
+  - &id001
+    as: patient
+    resource:
+      resourceType: Patient
+      name:
+      - use: official
+        family: Okafor
+        given:
+        - Ngozi
+      birthDate: '1971-02-03'
+      gender: female
+  - as: void
+    resource:
+      resourceType: Immunization
+      status: entered-in-error
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+  run:
+  - &id002
+    actor: bot
+    op: create
+    resource:
+      resourceType: Immunization
+      status: completed
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+    as: created
+  expected:
+    outcome: created_verified
+    id: created
+- id: v2
+  class: void_lookalike_only_no_write
+  why: a void record is not found; with no write, nothing is the person
+  params:
+    patient:
+      ref: patient
+    vaccine_code: '140'
+    vaccine_display: Influenza, seasonal, injectable, preservative free
+    occurrence_date: '2025-10-14'
+    lot_number: VD1001
+  seed:
+  - *id001
+  - as: void
+    resource:
+      resourceType: Immunization
+      status: entered-in-error
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+  run: []
+  expected:
+    outcome: needs_review
+- id: v3
+  class: completed_found
+  why: 'control: void does not change found_existing'
+  params:
+    patient:
+      ref: patient
+    vaccine_code: '140'
+    vaccine_display: Influenza, seasonal, injectable, preservative free
+    occurrence_date: '2025-10-14'
+    lot_number: VD1001
+  seed:
+  - *id001
+  - as: existing
+    resource:
+      resourceType: Immunization
+      status: completed
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+  run: []
+  expected:
+    outcome: found_existing
+    id: existing
+- id: v4
+  class: completed_and_void_found
+  why: the void record beside it is not a second match
+  params:
+    patient:
+      ref: patient
+    vaccine_code: '140'
+    vaccine_display: Influenza, seasonal, injectable, preservative free
+    occurrence_date: '2025-10-14'
+    lot_number: VD1001
+  seed:
+  - *id001
+  - as: existing
+    resource:
+      resourceType: Immunization
+      status: completed
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+  - as: void
+    resource:
+      resourceType: Immunization
+      status: entered-in-error
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+  run: []
+  expected:
+    outcome: found_existing
+    id: existing
+- id: v5
+  class: not_done_lookalike_then_create
+  why: void lists only entered-in-error; a status it misses still matches and stops
+  params:
+    patient:
+      ref: patient
+    vaccine_code: '140'
+    vaccine_display: Influenza, seasonal, injectable, preservative free
+    occurrence_date: '2025-10-14'
+    lot_number: VD1001
+  seed:
+  - *id001
+  - as: nd
+    resource:
+      resourceType: Immunization
+      status: not-done
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+  run:
+  - *id002
+  expected:
+    outcome: needs_review
+- id: v6
+  class: agent_creates_void
+  why: a created record that asserts nothing is wrong
+  params:
+    patient:
+      ref: patient
+    vaccine_code: '140'
+    vaccine_display: Influenza, seasonal, injectable, preservative free
+    occurrence_date: '2025-10-14'
+    lot_number: VD1001
+  seed:
+  - *id001
+  run:
+  - actor: bot
+    op: create
+    resource:
+      resourceType: Immunization
+      status: entered-in-error
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+    as: created
+  expected:
+    outcome: needs_review
+- id: v7
+  class: agent_voids_existing_and_creates
+  why: the agent wrote another resource, and the person existed
+  params:
+    patient:
+      ref: patient
+    vaccine_code: '140'
+    vaccine_display: Influenza, seasonal, injectable, preservative free
+    occurrence_date: '2025-10-14'
+    lot_number: VD1001
+  seed:
+  - *id001
+  - as: existing
+    resource:
+      resourceType: Immunization
+      status: completed
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+  run:
+  - actor: bot
+    op: update
+    target: existing
+    set:
+      status: entered-in-error
+  - *id002
+  expected:
+    outcome: needs_review
+- id: v8
+  class: other_voids_existing_agent_creates
+  why: the person existed before the write; someone else's change in the window doesn't make the create
+    right
+  params:
+    patient:
+      ref: patient
+    vaccine_code: '140'
+    vaccine_display: Influenza, seasonal, injectable, preservative free
+    occurrence_date: '2025-10-14'
+    lot_number: VD1001
+  seed:
+  - *id001
+  - as: existing
+    resource:
+      resourceType: Immunization
+      status: completed
+      vaccineCode:
+        coding:
+        - system: http://hl7.org/fhir/sid/cvx
+          code: '140'
+          display: Influenza, seasonal, injectable, preservative free
+      patient:
+        ref: patient
+      occurrenceDateTime: '2025-10-14'
+      primarySource: false
+      lotNumber: VD1001
+  run:
+  - actor: other
+    op: update
+    target: existing
+    set:
+      status: entered-in-error
+  - *id002
+  expected:
+    outcome: needs_review

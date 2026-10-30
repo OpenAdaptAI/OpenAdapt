@@ -151,6 +151,14 @@ class EnsureContract(BaseModel):
     #: ``id``, ``meta`` and ``resourceType`` always are.
     closed: bool = False
     allow: list[str] = Field(default_factory=list)
+    #: A record holding any of these values asserts nothing (an
+    #: Immunization with ``status="entered-in-error"``): it is never the
+    #: person, so it is neither found nor a duplicate, and a created record
+    #: that holds one is wrong. Each is a path and its one value, as JSON, in
+    #: ``allow``'s form. It names values to leave out, never values to keep:
+    #: a value the list misses still matches, which stops for review instead
+    #: of missing a duplicate.
+    void: list[str] = Field(default_factory=list)
     #: The audit trail is written a little after the save (Medplum: up to
     #: about 0.1 s). The change feed is read until two reads ``settle_s``
     #: apart agree, at most ``stable_reads`` times; a feed still changing
@@ -175,6 +183,13 @@ class EnsureContract(BaseModel):
                 raise ValueError(f"identity names unknown fields: {missing}")
             if not any(p in self.search for p in rule):
                 raise ValueError(f"identity rule {rule} has no search parameter")
+        identity_paths = {
+            _bare(self.fields[p].path) for rule in self.identity for p in rule
+        }
+        for entry in self.void:
+            path, value = _void_entry(entry)
+            if _bare(path) in identity_paths:
+                raise ValueError(f"void entry {entry!r} names an identity field")
         return self
 
 
@@ -277,6 +292,62 @@ def extract_all(node: Any, path: str) -> list[Any]:
     return extract_all(child, rest) if child is not None else []
 
 
+#: A void path: dotted FHIR element names, each with an optional
+#: ``[name=value]`` filter, as ``fields`` paths take.
+_VOID_PATH = re.compile(
+    r"[A-Za-z][A-Za-z0-9_]*(\[[^\[\]\s=]+=[^\[\]\s]+\])?"
+    r"(\.[A-Za-z][A-Za-z0-9_]*(\[[^\[\]\s=]+=[^\[\]\s]+\])?)*"
+)
+
+
+def _bare(path: str) -> str:
+    """A path with its list filters dropped (``telecom.value``)."""
+
+    return re.sub(r"\[[^\]]*\]", "", path)
+
+
+def _void_entry(entry: str) -> tuple[str, Any]:
+    """``path=value`` split at the first ``=`` outside a filter, checked."""
+
+    depth = 0
+    for i, ch in enumerate(entry):
+        depth += {"[": 1, "]": -1}.get(ch, 0)
+        if ch == "=" and depth == 0:
+            path, raw = entry[:i], entry[i + 1 :]
+            break
+    else:
+        raise ValueError(f"void entry {entry!r} needs a path and a value")
+    if not _VOID_PATH.fullmatch(path):
+        raise ValueError(f"void entry {entry!r}: {path!r} is not an element path")
+    try:
+        value = json.loads(raw)
+    except ValueError as exc:
+        raise ValueError(f"void entry {entry!r}: the value is not JSON") from exc
+    if not isinstance(value, (str, int, float, bool)):
+        raise ValueError(f"void entry {entry!r}: the value must be one JSON scalar")
+    return path, value
+
+
+def is_void(contract: EnsureContract, resource: Mapping[str, Any]) -> bool:
+    """True when the resource holds a value that makes it assert nothing.
+
+    Values compare as JSON, so ``1`` is not ``true`` and ``0`` is not ``0.0``.
+    """
+
+    for entry in contract.void:
+        try:
+            path, wanted = _void_entry(entry)
+        except ValueError as exc:  # a contract built without validation
+            raise Unreadable(str(exc)) from exc
+        want = json.dumps(wanted, ensure_ascii=False)
+        if any(
+            json.dumps(value, ensure_ascii=False) == want
+            for value in extract_all(resource, path)
+        ):
+            return True
+    return False
+
+
 def is_person(
     contract: EnsureContract, resource: Mapping[str, Any], params: Mapping[str, Any]
 ) -> bool:
@@ -284,8 +355,11 @@ def is_person(
 
     Every element counts: a record whose second name, or second email, is
     the person's is the person (a maiden name kept first doesn't hide it).
+    A void record (``contract.void``) is never the person.
     """
 
+    if is_void(contract, resource):
+        return False
     return any(
         all(
             any(
@@ -713,7 +787,12 @@ def read_changes(
                 if isinstance(version, dict):
                     meta = version.get("meta") or {}
                     when = _when(meta.get("lastUpdated"))
-                    if when is None or when < since or (until and when > until):
+                    if when is None:
+                        # A version with no time can't be placed in or out of
+                        # the window; skipping it would hide it from the
+                        # version count and the checks on each version.
+                        raise Unreadable(f"a version of {ref} has no lastUpdated")
+                    if when < since or (until and when > until):
                         continue
                     change.versions += 1
                     change.bodies.append(version)
@@ -805,6 +884,10 @@ def judge(
                 return _review(
                     [f"{len(dupes)} other record(s) are now also the person"], evidence
                 )
+            if existing_now is not None and is_void(contract, existing_now):
+                return _review(
+                    ["the existing record now asserts nothing (void)"], evidence
+                )
             if rid in after_matches or (
                 existing_now is not None and str(existing_now.get("id")) == rid
             ):
@@ -860,7 +943,9 @@ def judge(
             wrong = wrong_fields(contract, created, params)
             if wrong:
                 reasons.append("wrong or missing: " + ", ".join(wrong))
-            if not is_person(contract, created, params):
+            if is_void(contract, created):
+                reasons.append("the created record asserts nothing (void)")
+            elif not is_person(contract, created, params):
                 reasons.append("the created record is not the person")
             if contract.closed:
                 extra_paths = extra_elements(contract, created, params)
@@ -1081,6 +1166,10 @@ def verify_ensure(
                 )
             except Unreadable:
                 existing_now = None  # gone or unreadable: not found
+                if rid in after_matches:
+                    # A search still finds it: the read by id failed, so the
+                    # heartbeat and the void check can't run on it.
+                    raise
             audit = contract.change_feed.audit
             if existing_now is not None and audit is not None and audit.heartbeat:
                 _hear_own_read(
@@ -1091,11 +1180,11 @@ def verify_ensure(
         late = _agents_part(read_changes(contract, reader, baseline.started), selfs)
         if late != _agents_part(changes, selfs):
             raise Unreadable("the agent wrote after the window closed")
+        return judge(
+            contract, params, baseline, changes, after_matches, created, existing_now
+        )
     except Unreadable as exc:
         return _review([f"unreadable: {exc}"], {"unreadable": True})
-    return judge(
-        contract, params, baseline, changes, after_matches, created, existing_now
-    )
 
 
 __all__ = [
@@ -1108,6 +1197,7 @@ __all__ = [
     "Unreadable",
     "capture_baseline",
     "find_matches",
+    "is_void",
     "judge",
     "load_contract",
     "read_changes",

@@ -763,6 +763,184 @@ def test_an_identity_value_without_a_search_parameter_is_compared_not_searched()
     assert all(set(q) == {"patient", "_count"} for q in asked)
 
 
+# -- void records: a record that asserts nothing is never the person -------------
+
+VAX_PARAMS = {"patient": "Patient/p1", "code": "141", "date": "2025-10-01"}
+
+
+def vax_contract(**extra) -> EnsureContract:
+    doc = {
+        "resource_type": "Immunization",
+        "base_url": "http://fhir.test/fhir/R4",
+        "self": [BOT],
+        "fields": {
+            "patient": {"path": "patient.reference"},
+            "code": {"path": "vaccineCode.coding.code"},
+            "date": {"path": "occurrenceDateTime", "compare": "date"},
+        },
+        "identity": [["patient", "code", "date"]],
+        "search": {"patient": "patient", "code": "vaccine-code", "date": "date"},
+        "closed": True,
+        "allow": ['status="completed"'],
+        "void": ['status="entered-in-error"'],
+        "settle_s": 0,
+    }
+    doc.update(extra)
+    return EnsureContract.model_validate(doc)
+
+
+def vax(iid: str, status: str = "completed") -> dict:
+    return {
+        "resourceType": "Immunization",
+        "id": iid,
+        "status": status,
+        "patient": {"reference": "Patient/p1"},
+        "vaccineCode": {"coding": [{"code": "141"}]},
+        "occurrenceDateTime": "2025-10-01",
+    }
+
+
+def test_a_void_lookalike_is_not_the_person():
+    from openadapt_flow.ensure_record import is_person, is_void
+
+    c = vax_contract()
+    assert is_void(c, vax("v", "entered-in-error"))
+    assert not is_person(c, vax("v", "entered-in-error"), VAX_PARAMS)
+    assert is_person(c, vax("x"), VAX_PARAMS)
+
+
+def test_a_create_beside_a_void_lookalike_is_verified():
+    # The void record was there before and is still there; neither counts.
+    x = vax("x")
+    r = judge(
+        vax_contract(), VAX_PARAMS, base(), ch("Immunization/x", "C"), {"x": x}, x
+    )
+    assert (r.outcome, r.record_id) == ("created_verified", "x")
+
+
+def test_without_void_the_same_lookalike_stops():
+    from openadapt_flow.ensure_record import is_person
+
+    c = vax_contract(void=[])
+    assert is_person(c, vax("v", "entered-in-error"), VAX_PARAMS)
+
+
+def test_a_created_record_that_is_void_needs_review():
+    x = vax("x", "entered-in-error")
+    r = judge(
+        vax_contract(allow=[]), VAX_PARAMS, base(), ch("Immunization/x", "C"), {}, x
+    )
+    assert r.outcome == "needs_review"
+    assert any("asserts nothing" in reason for reason in r.reasons)
+
+
+def test_a_status_void_does_not_name_still_matches():
+    # A deny list: a value it misses stops for review, never hides a duplicate.
+    from openadapt_flow.ensure_record import is_person
+
+    assert is_person(vax_contract(), vax("n", "not-done"), VAX_PARAMS)
+    e, x = vax("e", "not-done"), vax("x")
+    r = judge(
+        vax_contract(),
+        VAX_PARAMS,
+        base(e),
+        ch("Immunization/x", "C"),
+        {"e": e, "x": x},
+        x,
+    )
+    assert r.outcome == "needs_review"
+
+
+def test_void_compares_json_values_in_lists():
+    from openadapt_flow.ensure_record import is_void
+
+    c = vax_contract(void=['meta.tag.code="void"'])
+    tagged = dict(vax("t"), meta={"tag": [{"code": "keep"}, {"code": "void"}]})
+    assert is_void(c, tagged)
+    assert not is_void(c, dict(vax("t"), meta={"tag": [{"code": "keep"}]}))
+    assert not is_void(vax_contract(void=["status=1"]), vax("s"))
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "status",
+        '="x"',
+        "status=entered-in-error",
+        'patient.reference="Patient/p1"',
+        'status ="entered-in-error"',
+        'status[x="y"="z"',
+        'status=["entered-in-error"]',
+        'patient[type=Patient].reference="Patient/p1"',
+    ],
+)
+def test_a_void_entry_must_be_a_path_and_a_json_value_off_identity(entry):
+    with pytest.raises(ValueError):
+        vax_contract(void=[entry])
+
+
+def test_find_matches_leaves_out_void_records():
+    from openadapt_flow.ensure_record import find_matches
+
+    rows = [vax("v", "entered-in-error"), vax("x")]
+
+    def get(url, params):
+        entry = [{"resource": r, "search": {"mode": "match"}} for r in rows]
+        return 200, {}, {"resourceType": "Bundle", "type": "searchset", "entry": entry}
+
+    c = vax_contract()
+    matches, seen = find_matches(c, FhirReader(c, get=get), VAX_PARAMS)
+    assert set(matches) == {"x"} and seen == 2
+
+
+# -- the adversarial review's findings (REVIEW_VOID.md) ---------------------------
+
+
+def test_review_1_an_existing_record_voided_in_the_window_is_not_found():
+    a, now = vax("a"), vax("a", "entered-in-error")
+    changes = ch("Immunization/a", "U", by=OTHER)
+    r = judge(vax_contract(), VAX_PARAMS, base(a), changes, {}, None, now)
+    assert r.outcome == "needs_review"
+    assert any("asserts nothing" in reason for reason in r.reasons)
+
+
+def test_review_2_void_values_compare_as_json_not_python_equality():
+    from openadapt_flow.ensure_record import is_void
+
+    assert not is_void(
+        vax_contract(void=["primarySource=true"]), vax("s") | {"primarySource": 1}
+    )
+    assert not is_void(
+        vax_contract(void=["doseQuantity.value=0"]),
+        vax("s") | {"doseQuantity": {"value": False}},
+    )
+    assert is_void(
+        vax_contract(void=["primarySource=true"]), vax("s") | {"primarySource": True}
+    )
+
+
+def test_review_4_a_void_path_may_filter_a_list():
+    from openadapt_flow.ensure_record import is_void
+
+    c = vax_contract(void=['identifier[system=urn:x].value="void"'])
+    hit = vax("i") | {
+        "identifier": [
+            {"system": "urn:y", "value": "void"},
+            {"system": "urn:x", "value": "void"},
+        ]
+    }
+    miss = vax("i") | {"identifier": [{"system": "urn:y", "value": "void"}]}
+    assert is_void(c, hit) and not is_void(c, miss)
+
+
+def test_review_6_an_unvalidated_bad_entry_reads_as_unreadable():
+    from openadapt_flow.ensure_record import is_void
+
+    c = vax_contract().model_copy(update={"void": ["status=entered-in-error"]})
+    with pytest.raises(Unreadable):
+        is_void(c, vax("x"))
+
+
 # -- the agent's own corrections ------------------------------------------------------
 
 READER = "ClientApplication/someone"
@@ -1038,3 +1216,107 @@ def test_a_server_that_logs_the_verifiers_own_reads(writes, corrected):
     )
     assert r.outcome == "created_verified", r.reasons
     assert bool(r.evidence.get("corrected")) is corrected
+
+
+# -- void and corrections together ----------------------------------------------------
+
+
+def test_a_correction_out_of_void_is_not_a_correction():
+    # Version 1 asserted nothing, so it was never the person: a search may
+    # have skipped it and another writer created the dose again.
+    v, x = vax("x", "entered-in-error"), vax("x")
+    changes = fixed(ref="Immunization/x", bodies=[v, x])
+    r = judge(vax_contract(settle_s=1), VAX_PARAMS, base(), changes, {"x": x}, x)
+    assert r.outcome == "needs_review"
+    assert any("not the person" in reason for reason in r.reasons)
+
+
+def test_a_correction_into_void_needs_review():
+    x, v = vax("x"), vax("x", "entered-in-error")
+    changes = fixed(ref="Immunization/x", bodies=[x, v])
+    r = judge(vax_contract(settle_s=1), VAX_PARAMS, base(), changes, {}, v)
+    assert r.outcome == "needs_review"
+    assert any("asserts nothing" in reason for reason in r.reasons)
+
+
+def test_a_correction_beside_a_void_lookalike_is_verified():
+    x = vax("x")
+    changes = fixed(ref="Immunization/x", bodies=[x, x])
+    r = judge(vax_contract(settle_s=1), VAX_PARAMS, base(), changes, {"x": x}, x)
+    assert (r.outcome, r.record_id) == ("created_verified", "x")
+    assert r.evidence["corrected"] is True
+
+
+def test_voiding_a_record_that_was_the_person_is_no_correction():
+    # The agent marks the existing dose entered-in-error and creates its own:
+    # the existing record was the person, and the agent wrote it.
+    e, x = vax("e"), vax("x")
+    changes = {
+        **ch("Immunization/e", "U"),
+        **fixed(ref="Immunization/x", bodies=[x, x]),
+    }
+    r = judge(vax_contract(settle_s=1), VAX_PARAMS, base(e), changes, {"x": x}, x)
+    assert r.outcome == "needs_review"
+
+
+# -- review of void with corrections (REVIEW_VOID.md, second part) --------------------
+
+
+def test_review_c4_an_unreadable_void_entry_in_judge_fails_closed():
+    from openadapt_flow.ensure_record import verify_ensure
+
+    # judge runs inside verify_ensure's try: an Unreadable there is a review.
+    server = _Server(("C", 2), ("U", 3))
+    c = cc(change_feed={"audit": {"heartbeat": True}, "history_author": False})
+    bad = c.model_copy(update={"void": ["status=entered-in-error"]})  # not JSON
+
+    def get(url, params):
+        if url.split("/fhir/R4/", 1)[-1] == "Patient":
+            return 200, {}, bundle()
+        return server.get(url, params)
+
+    r = verify_ensure(
+        bad, PARAMS, base(), reader=FhirReader(bad, get), sleep=lambda s: None
+    )
+    assert r.outcome == "needs_review" and r.evidence.get("unreadable")
+
+
+def test_review_c2_a_version_with_no_time_is_unreadable():
+    routes = {
+        "AuditEvent": bundle(
+            _stamped("C", "Immunization/x", _iso(1)),
+            _stamped("U", "Immunization/x", _iso(3)),
+        ),
+        "Immunization/x/_history": bundle(
+            versioned(vax("x"), BOT, _iso(1)),
+            {**vax("x", "entered-in-error"), "meta": {"author": {"reference": BOT}}},
+            versioned(vax("x"), BOT, _iso(3)),
+            kind="history",
+        ),
+    }
+    c = vax_contract(settle_s=1)
+    r = FhirReader(c, lambda url, p: (200, {}, routes[url.split("/fhir/R4/", 1)[-1]]))
+    with pytest.raises(Unreadable):
+        read_changes(c, r, T0)
+
+
+def test_review_c3_a_found_record_that_cant_be_read_by_id_needs_review():
+    from openadapt_flow.ensure_record import verify_ensure
+
+    e = patient("e")
+
+    def get(url, params):
+        key = url.split("/fhir/R4/", 1)[-1]
+        if key == "metadata":
+            return 200, {"Date": "Wed, 28 Oct 2026 12:00:10 GMT"}, {}
+        if key == "AuditEvent":
+            return 200, {}, bundle()
+        if key == "Patient/e":
+            return 503, {}, None
+        return 200, {}, bundle(e)
+
+    c = contract(change_feed={"audit": {"heartbeat": True}})
+    r = verify_ensure(
+        c, PARAMS, base(e), reader=FhirReader(c, get), sleep=lambda s: None
+    )
+    assert r.outcome == "needs_review" and r.evidence.get("unreadable")

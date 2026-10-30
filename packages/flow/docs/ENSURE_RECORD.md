@@ -77,6 +77,7 @@ false` in the contract sends every change after the create to review.
 | `search` | the FHIR search parameter for each identity value | a person (one line each) |
 | `self` | the agent's own actor references | setup |
 | `closed` | the created record holds nothing the task didn't give (a field the task left out must be absent; `meta.security` and `meta.tag` count), except what `allow` names | a person |
+| `void` | values that make a record assert nothing (`status="entered-in-error"` on an Immunization). A record holding one is never the person: it is not found, it is not a duplicate, and a created record holding one needs review. It names values to leave out, never values to keep, so a status it misses still matches and stops for review. Each entry is an element path (filters allowed, as in `fields`) and one JSON scalar, compared as JSON (`1` is not `true`). It can't name an identity field. A record that was the person and turns void during the run is not found. A created record the agent corrects must be the person in every version, so a version holding a void value is refused; a status the list doesn't name may still be corrected away | a person, from the resource's FHIR definition |
 | `change_feed` | the audit read, `_history`, whether the server returns `meta.author`, sweep types | a person, once per server |
 | `accept_corrections` | whether the agent's own updates after its create can count (default true; see above) | a person |
 
