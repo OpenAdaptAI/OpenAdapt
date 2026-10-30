@@ -111,7 +111,9 @@ def main(work: Path) -> None:
                 if kind == "ensure_issue" and int(one(
                         "SELECT COUNT(*) FROM issues i JOIN projects p ON p.id=i.project_id "
                         "WHERE p.name=%s AND i.subject=%s", (v["project"], v["subject"]))):  # fmt: skip
-                    continue
+                    # Already there: demonstrate a create with values of our own.
+                    v = {**v, "subject": "Generator demo: rotate the backup keys",
+                         "priority": "Low", "assignee": "Jon Park"}
                 demo(
                     work,
                     kind,
