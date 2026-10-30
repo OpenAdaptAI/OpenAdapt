@@ -445,12 +445,126 @@ def test_what_the_reader_cant_see_is_refused(pg: Pg) -> None:
         "CREATE SCHEMA hidden",
         "CREATE TABLE hidden.h (id int PRIMARY KEY)",
     )
-    with pytest.raises(SnapshotError, match="can't see schema.s. hidden"):
+    with pytest.raises(
+        SnapshotError, match="can't see schema.s. hidden.*'<schema>.\\*'"
+    ):
         pg.snap(reader=True)
-    a = pg.snap(reader=True, schemas=["public"])
-    assert a.schemas == ["public"] and "hidden.h" not in a.tables
+    # Naming schemas doesn't narrow the read (review #1673, B1): a hidden
+    # schema is still refused.
+    with pytest.raises(SnapshotError, match="can't see schema.s. hidden"):
+        pg.snap(reader=True, schemas=["public"])
     with pytest.raises(SnapshotError, match="can't see schema.s.: hidden"):
         pg.snap(reader=True, schemas=["public", "hidden"])
+    # Only the allow-list leaves a schema out.
+    a = pg.snap(reader=True, modes={"hidden.*": "skip"})
+    assert a.schemas == ["public"] and a.schemas_skipped == ["hidden"]
+    assert "hidden.h" not in a.tables
+    with pytest.raises(SnapshotError, match="allow-listed schemas not in the database"):
+        pg.snap(reader=True, modes={"nosuch.*": "skip"})
+
+
+@live
+def test_named_schemas_still_read_every_visible_schema(pg: Pg) -> None:
+    # Review #1673, B1: with schemas=["public"], a stray row in another
+    # schema and a rewritten trigger function in a third both show.
+    pg.sql(
+        "CREATE SCHEMA other",
+        "CREATE TABLE other.note (id serial PRIMARY KEY, body text)",
+        "CREATE SCHEMA util",
+        "CREATE FUNCTION util.f() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'",
+        "CREATE TRIGGER tr BEFORE INSERT ON pairs FOR EACH ROW EXECUTE FUNCTION util.f()",
+    )
+    a = pg.snap(schemas=["public"])
+    assert a.schemas == ["other", "public", "util"]
+    pg.sql("INSERT INTO other.note (body) VALUES ('stray')")
+    assert (
+        diff(a, pg.snap(before=a, schemas=["public"]), key=KEY)["other.note"].added == 1
+    )
+    b = pg.snap(schemas=["public"])
+    pg.sql(
+        "CREATE OR REPLACE FUNCTION util.f() RETURNS trigger LANGUAGE plpgsql "
+        "AS 'BEGIN NEW.b := ''x''; RETURN NEW; END'"
+    )
+    assert "(database code)" in diff(b, pg.snap(before=b, schemas=["public"]), key=KEY)
+
+
+def test_sqlite_composite_keys_that_join_alike_stay_apart(tmp_path: Path) -> None:
+    # Review #1673, S1, on every dialect: the key is a JSON array.
+    import sqlite3
+
+    path = tmp_path / "kv.sqlite"
+    con = sqlite3.connect(path)
+    con.executescript(
+        "CREATE TABLE kv (a TEXT, b TEXT, PRIMARY KEY (a, b));"
+        "INSERT INTO kv VALUES ('x|y', 'z'), ('x', 'y|z');"
+    )
+    con.commit()
+
+    def connect() -> Any:
+        return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+
+    a = take_snapshot(connect, "sqlite", key=KEY)
+    assert len(a.tables["kv"].rows) == 2
+    con.execute("DELETE FROM kv WHERE a = 'x|y'")
+    con.commit()
+    assert (
+        diff(a, take_snapshot(connect, "sqlite", key=KEY, before=a), key=KEY)[
+            "kv"
+        ].removed
+        == 1
+    )
+
+
+def test_a_schema_entry_in_the_allow_list_can_only_be_skipped() -> None:
+    from openadapt_flow.runtime.effects.frame import AllowedTable
+
+    AllowedTable(table="audit.*", mode="skip", reason="the DBA's own audit trail")
+    with pytest.raises(ValueError, match="can only be skipped"):
+        AllowedTable(table="audit.*")
+
+
+@live
+def test_composite_keys_that_join_alike_stay_apart(pg: Pg) -> None:
+    # Review #1673, S1: ('x|y', 'z') and ('x', 'y|z') are two rows.
+    pg.sql(
+        "CREATE TABLE kv (a text, b text, PRIMARY KEY (a, b))",
+        "INSERT INTO kv VALUES ('x|y', 'z'), ('x', 'y|z')",
+    )
+    a = pg.snap()
+    assert len(a.tables["kv"].rows) == 2
+    pg.sql("DELETE FROM kv WHERE a = 'x|y'")
+    assert diff(a, pg.snap(before=a), key=KEY)["kv"].removed == 1
+
+
+@live
+def test_large_objects_are_read_by_content_or_skipped(pg: Pg) -> None:
+    # Review #1673, S2: lo_put keeps the oid but changes the content.
+    pg.sql("SELECT lo_from_bytea(424242, 'scan v1')")
+    a = pg.snap()
+    assert a.tables["pg_largeobject"].count == 1
+    pg.sql("SELECT lo_put(424242, 0, 'SCAN')")
+    moved = diff(a, pg.snap(before=a), key=KEY)
+    assert list(moved) == ["pg_largeobject"]
+    assert moved["pg_largeobject"].changed_columns == ["sha256"]
+    b = pg.snap()
+    pg.sql("SELECT lo_unlink(424242)")
+    assert diff(b, pg.snap(before=b), key=KEY)["pg_largeobject"].removed == 1
+    pg.sql("SELECT lo_from_bytea(424243, 'x')")
+    with pytest.raises(SnapshotError, match="large objects can't be read"):
+        pg.snap(reader=True)
+    skip = {"pg_largeobject": "skip"}
+    c = pg.snap(reader=True, modes=skip)
+    pg.sql("SELECT lo_put(424243, 0, 'y')")
+    assert diff(c, pg.snap(before=c, reader=True, modes=skip), key=KEY) == {}
+
+
+@live
+def test_a_counter_set_back_shows(pg: Pg) -> None:
+    # Review #1673, N1: setval back lets later inserts reuse ids.
+    a = pg.snap()
+    pg.sql("SELECT setval('t_id_seq', 1)")
+    moved = diff(a, pg.snap(before=a), key=KEY)
+    assert moved["t"].unread == ["the counter went back"]
 
 
 @live
@@ -561,6 +675,11 @@ def test_the_frame_refutes_a_late_write_and_an_extra_record_on_postgresql(
         "CREATE TABLE note (id serial PRIMARY KEY, body text)",
         f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {pg.reader}",
         f"GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO {pg.reader}",
+        "CREATE SCHEMA other",
+        "CREATE TABLE other.note (id serial PRIMARY KEY, body text)",
+        f"GRANT USAGE ON SCHEMA other TO {pg.reader}",
+        f"GRANT SELECT ON ALL TABLES IN SCHEMA other TO {pg.reader}",
+        f"GRANT SELECT ON ALL SEQUENCES IN SCHEMA other TO {pg.reader}",
     )
     dsn = parse_dsn(pg.dsn)
     read = {
@@ -590,6 +709,8 @@ def test_the_frame_refutes_a_late_write_and_an_extra_record_on_postgresql(
                     "views": {"contact": ""},
                     "settle_s": 0,
                     "recheck_after_s": 60,
+                    # Must be visible; every other visible schema is read too.
+                    "schemas": ["public"],
                 },
             },
         }
@@ -611,6 +732,10 @@ def test_the_frame_refutes_a_late_write_and_an_extra_record_on_postgresql(
 
     params, extra = save(2, "INSERT INTO note (body) VALUES ('stray')")
     assert not extra.verified and extra.outcome == "REFUTED", extra.reasons
+
+    # Review #1673, B1: a stray row in a schema the contract doesn't name.
+    params, other = save(4, "INSERT INTO other.note (body) VALUES ('stray')")
+    assert not other.verified and other.outcome == "REFUTED", other.reasons
 
     params, late = save(3)
     assert late.verified, late.reasons

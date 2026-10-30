@@ -256,7 +256,8 @@ class AllowedTable(BaseModel):
     table: str
     #: ``append_only`` (the default): rows may be added, existing rows must
     #: not change, and the table needs a generated key. ``skip``: not read at
-    #: all, which needs a ``reason``.
+    #: all, which needs a ``reason``. On PostgreSQL ``<schema>.*`` names a
+    #: whole schema, which may only be skipped.
     mode: Literal["append_only", "skip"] = "append_only"
     reason: Optional[str] = None
 
@@ -264,6 +265,10 @@ class AllowedTable(BaseModel):
     def _skip_needs_reason(self) -> "AllowedTable":
         if self.mode == "skip" and not (self.reason or "").strip():
             raise ValueError(f"skipping table {self.table!r} needs a reason")
+        if self.table.endswith(".*") and self.mode != "skip":
+            raise ValueError(
+                f"schema {self.table!r} can only be skipped, with a reason"
+            )
         return self
 
 
@@ -308,9 +313,10 @@ class FrameDatabase(BaseModel):
     #: and cell MACs only for the columns attribution and side records read.
     max_rows: int = Field(default=2000, ge=1)
     #: Schemas the read account must see; the snapshot refuses when one isn't
-    #: visible, so a schema the app writes can't be left out. On PostgreSQL
-    #: they are the schemas read; unset, every schema but the system ones is
-    #: read, and one the account can't see is refused.
+    #: visible, so a schema the app writes can't be left out. Every other
+    #: visible schema is read too. On PostgreSQL a schema the account can't
+    #: see is refused unless ``allow_tables`` skips ``<schema>.*`` with a
+    #: reason.
     schemas: list[str] = Field(default_factory=list)
     #: An app profile (``openadapt_flow.app_profiles``): the app's own
     #: bookkeeping, versioned and shared with rollback and the RL grader. Its

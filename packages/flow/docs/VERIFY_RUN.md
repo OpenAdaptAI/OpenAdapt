@@ -315,8 +315,13 @@ server reports any other isolation level.
 
 - **Schemas.** The read covers every schema except `pg_catalog`,
   `information_schema` and PostgreSQL's internal ones. A schema the read
-  account can't see is refused, not left out. Set `frame.database.schemas`
-  to read only the schemas the app writes. A table in the default schema
+  account can't see is refused, not left out. `frame.database.schemas`
+  means what it means on MySQL: each named schema must be visible, and every
+  other visible schema is still read. Only an `allow_tables` entry
+  `<schema>.*` with `mode: skip` and a reason leaves a schema out; the
+  receipt lists it under `evidence.frame.database.schemas_skipped`. Leaving
+  a schema out also leaves out its code, such as a trigger function there
+  that runs on a table the frame reads. A table in the default schema
   (`public`) is named without it (`issues`); a table in another schema is
   named with it (`billing.invoice`).
 - **The session.** The read pins its session so that each stored value has
@@ -354,10 +359,17 @@ server reports any other isolation level.
 - **Sequences.** A sequence that a column owns (`serial`, `identity`) is
   that table's counter, read just before the snapshot. A row written and
   removed in the window moves it, which shows. So does an insert that
-  failed, because it draws a value too. Any other sequence is read as
+  failed, because it draws a value too, and a counter set back with
+  `setval`, after which inserts would reuse numbers. Any other sequence is read as
   a one-row table of its own. A value drawn from it is a change. Only an
   `allow_tables` entry with `mode: skip` and a reason, which documents it as
   the app's bookkeeping, leaves it out.
+- **Large objects.** They live in `pg_catalog`, and a column that holds
+  an object's oid keeps it when the content changes. The read keeps each
+  object's oid, owner, privileges and the SHA-256 of its content as rows of
+  a table named `pg_largeobject`, so a changed, added or removed object
+  shows. An object the account can't read is refused unless `pg_largeobject`
+  is skipped with a reason.
 - **Database code.** The read digests triggers (and whether each is
   enabled), views, materialized views, functions, rules, row-level security
   policies, event triggers and installed extensions. A change to any of them

@@ -337,6 +337,8 @@ class Snapshot:
     objects: str = ""
     code_visible: bool = True
     schemas: list[str] = field(default_factory=list)
+    #: Schemas the allow-list leaves out (``<schema>.*``, skip, with a reason).
+    schemas_skipped: list[str] = field(default_factory=list)
     tables: dict[str, Table] = field(default_factory=dict)
     #: In memory only: rows of ``extra_queries``, read in the same transaction.
     extra: dict[str, list[dict[str, Any]]] = field(default_factory=dict, repr=False)
@@ -350,6 +352,11 @@ class Snapshot:
             "objects": self.objects,
             "code_visible": self.code_visible,
             "schemas": self.schemas,
+            **(
+                {"schemas_skipped": self.schemas_skipped}
+                if self.schemas_skipped
+                else {}
+            ),
             "tables": {
                 name: {
                     "mode": t.mode,
@@ -379,6 +386,7 @@ class Snapshot:
             objects=str(data.get("objects", "")),
             code_visible=bool(data.get("code_visible", True)),
             schemas=list(data.get("schemas", [])),
+            schemas_skipped=list(data.get("schemas_skipped", [])),
             tables={
                 name: Table(
                     mode=t["mode"],
@@ -596,6 +604,9 @@ class _Def:
     unreadable: str = ""
     #: Rows read already (a PostgreSQL sequence's one row), not from a table.
     fixed: Optional[list[dict[str, Any]]] = None
+    #: The SELECT that reads the rows, when it isn't the table's own
+    #: (PostgreSQL large objects), one text column per ``columns``.
+    select: str = ""
 
 
 def _digest(parts: Sequence[Any]) -> str:
@@ -1067,13 +1078,16 @@ class _PgSequence:
     is_called: Optional[bool] = None
 
 
-def _pg_scope(s: _Session, schemas: Sequence[str]) -> tuple[list[str], str]:
+def _pg_scope(
+    s: _Session, schemas: Sequence[str], skipped: Sequence[str] = ()
+) -> tuple[list[str], str]:
     """The schemas a PostgreSQL snapshot reads, and the default one (whose
     tables are named without it).
 
-    Named schemas: exactly those, each visible. None named: every schema
-    but the system ones, and a schema the account can't see is refused
-    rather than left out."""
+    Every schema but the system ones is read, as on MySQL. ``schemas`` must
+    each be visible. A schema is left out only when the allow-list skips it
+    (``skipped``: ``<schema>.*`` with mode ``skip`` and a reason); any other
+    schema the account can't see is refused rather than left out."""
 
     every = {
         str(n): bool(u)
@@ -1082,23 +1096,25 @@ def _pg_scope(s: _Session, schemas: Sequence[str]) -> tuple[list[str], str]:
         )
         if not _pg_system(str(n))
     }
-    if schemas:
-        missing = sorted(x for x in schemas if not every.get(x))
-        if missing:
-            raise SnapshotError(
-                "the read account can't see schema(s): " + ", ".join(missing)
-            )
-        scope = sorted(set(schemas))
-    else:
-        hidden = sorted(n for n, u in every.items() if not u)
-        if hidden:
-            raise SnapshotError(
-                "the read account can't see schema(s) "
-                + ", ".join(hidden)
-                + ": grant it USAGE and SELECT there, or name the schemas the "
-                "app writes in frame.database.schemas"
-            )
-        scope = sorted(every)
+    unknown = sorted(set(skipped) - set(every))
+    if unknown:
+        raise SnapshotError(
+            "allow-listed schemas not in the database: " + ", ".join(unknown)
+        )
+    missing = sorted(x for x in schemas if not every.get(x) or x in skipped)
+    if missing:
+        raise SnapshotError(
+            "the read account can't see schema(s): " + ", ".join(missing)
+        )
+    hidden = sorted(n for n, u in every.items() if not u and n not in skipped)
+    if hidden:
+        raise SnapshotError(
+            "the read account can't see schema(s) "
+            + ", ".join(hidden)
+            + ": grant it USAGE and SELECT there, or allow-list each as "
+            "'<schema>.*' with mode skip and a reason"
+        )
+    scope = sorted(n for n in every if n not in skipped)
     default = str(s.rows("SELECT current_schema()")[0][0] or "")
     return scope, default
 
@@ -1366,7 +1382,44 @@ def _pg_sequence_def(q: _PgSequence) -> _Def:
     return d
 
 
+#: The name the frame and the allow-list use for PostgreSQL's large objects.
+LARGE_OBJECTS = "pg_largeobject"
+
+
+def _pg_large_objects() -> _Def:
+    """Large objects as one table: each object's oid, owner, privileges and
+    the SHA-256 of its content. They live in ``pg_catalog``, which is
+    otherwise not read, and a column that holds an object's oid keeps it when
+    the content changes (``lo_put``). The content is read only when there
+    are objects; one the account can't read is refused."""
+
+    columns = ["oid", "owner", "acl", "sha256"]
+    return _Def(
+        columns,
+        ["oid"],
+        None,
+        dict.fromkeys(columns),
+        dict.fromkeys(columns, "text"),
+        _digest(["large objects", *columns]),
+        relation="pg_catalog.pg_largeobject_metadata",
+        select=(
+            "SELECT m.oid::text, m.lomowner::regrole::text, m.lomacl::text, "
+            "encode(sha256(lo_get(m.oid)), 'hex') FROM pg_largeobject_metadata m"
+        ),
+    )
+
+
 def _read_rows_pg(s: _Session, d: _Def) -> list[dict[str, Any]]:
+    if d.select:
+        try:
+            rows = s.rows(d.select)
+        except Exception as exc:  # noqa: BLE001 - e.g. no SELECT on an object
+            raise SnapshotError(
+                f"large objects can't be read ({exc}); grant the read account "
+                f"SELECT on them, or allow-list {LARGE_OBJECTS} with mode skip "
+                "and a reason"
+            ) from exc
+        return [{c: _pg_value("text", v) for c, v in zip(d.columns, r)} for r in rows]
     cells = ", ".join(_pg_cell(c, d.encode[c]) for c in d.columns) or "NULL"
     return [
         {c: _pg_value(d.encode[c], v) for c, v in zip(d.columns, r)}
@@ -1374,11 +1427,18 @@ def _read_rows_pg(s: _Session, d: _Def) -> list[dict[str, Any]]:
     ]
 
 
+def key_text(primary_key: Sequence[str], row: Mapping[str, Any]) -> str:
+    """A keyed row's key as text: a JSON array of its key columns'
+    canonical values, so (``x|y``, ``z``) and (``x``, ``y|z``) differ."""
+
+    return json.dumps([canonical(row.get(c)) for c in primary_key])
+
+
 def _row_key(
     d: _Def, row: Mapping[str, Any], seen: dict[str, int], skip: Sequence[str] = ()
 ) -> str:
     if d.primary_key:
-        return "|".join(canonical(row.get(c)) for c in d.primary_key)
+        return key_text(d.primary_key, row)
     # No key: the row's contents, without the columns a rule lets move (a
     # counter row stays the same row when its counter moves).
     ignored = set(skip)
@@ -1441,7 +1501,9 @@ def take_snapshot(
         ignore: Table -> columns left out of each row's contents MAC.
         ref_columns: Columns attribution and side records read (a record
             key, a link field): their cell MACs are kept in every table.
-        schemas: Schemas the read must see (MySQL); refused if one isn't.
+        schemas: Schemas the read must see; refused if one isn't. Every
+            visible schema is read either way. On PostgreSQL a schema is left
+            out only by a ``<schema>.*`` entry in ``modes`` with ``skip``.
         optional_modes: Like ``modes``, for tables an app profile names that
             this database may not have (a profile covers several versions).
             ``ignore`` may name ``*`` for every table.
@@ -1502,7 +1564,10 @@ def _snapshot(
         counters = _mysql_counters(s)
         visible = _sees_triggers(s)
     elif dialect == "postgresql":
-        scope, default_schema = _pg_scope(s, schemas)
+        skipped_schemas = sorted(
+            t[:-2] for t, m in modes.items() if t.endswith(".*") and m == "skip"
+        )
+        scope, default_schema = _pg_scope(s, schemas, skipped_schemas)
         sequences = _pg_sequences(s, scope, default_schema)  # before, as above
     s.begin()
     if dialect == "postgresql":
@@ -1525,7 +1590,10 @@ def _snapshot(
         counters, others = _pg_counters(defs, sequences)
         for q in others:
             defs[q.name] = _pg_sequence_def(q)
+        defs[LARGE_OBJECTS] = _pg_large_objects()
         snap.schemas = list(scope)
+        snap.schemas_skipped = skipped_schemas
+        modes = {t: m for t, m in modes.items() if not t.endswith(".*")}
     else:
         defs, snap.objects = _definitions(s)
     if dialect == "mysql":
@@ -1697,6 +1765,10 @@ def unread_reasons(
         )
         if new.counter > expected:
             reasons.append("a row was written and removed (counter moved)")
+        if old.counter is not None and new.counter < old.counter:
+            # A PostgreSQL sequence can be set back (setval); later inserts
+            # would then reuse numbers.
+            reasons.append("the counter went back")
     return reasons
 
 
