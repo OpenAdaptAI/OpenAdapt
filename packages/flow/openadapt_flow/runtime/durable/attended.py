@@ -150,6 +150,27 @@ def _committed_transition_receipt_digest(
     return _digest(linear[0])
 
 
+def _refuse_rolled_back(
+    run_dir: Path, capability: "AttendedPauseCapability"
+) -> Optional["AttendedExecutionResult"]:
+    """A run a compensating rollback started undoing is over (docs/ROLLBACK.md):
+    nothing on this pause runs, not even a re-read."""
+    from openadapt_flow.runtime.durable.resume import was_compensated
+
+    if not was_compensated(run_dir):
+        return None
+    return AttendedExecutionResult(
+        status="refused",
+        message=(
+            "this run was rolled back after it stopped: its earlier writes may "
+            "be undone, so it can't be continued. Start a new run."
+        ),
+        report_success=False,
+        resumed_from=capability.step_id,
+        next_transition=capability.expected_next_transition,
+    )
+
+
 def _matches_reconciliation_checkpoint(
     checkpoint: Any,
     *,
@@ -3777,6 +3798,9 @@ class BoundAttendedExecutor:
         capability: AttendedPauseCapability,
         approval: ApprovalRecord,
     ) -> AttendedExecutionResult:
+        refused = _refuse_rolled_back(run_dir, capability)
+        if refused is not None:
+            return refused
         try:
             with self._exclusive_live_session():
                 return self._continue_run_locked(run_dir, capability, approval)
@@ -3913,6 +3937,9 @@ class BoundAttendedExecutor:
     ) -> AttendedExecutionResult:
         """Re-read a possibly completed action without delivering it again."""
 
+        refused = _refuse_rolled_back(run_dir, capability)
+        if refused is not None:
+            return refused
         try:
             with self._exclusive_live_session():
                 return self._reconcile_run_locked(
@@ -4121,6 +4148,9 @@ class BoundAttendedExecutor:
         capability: AttendedPauseCapability,
         approval: ApprovalRecord,
     ) -> AttendedExecutionResult:
+        refused = _refuse_rolled_back(run_dir, capability)
+        if refused is not None:
+            return refused
         try:
             with self._exclusive_live_session():
                 return self._skip_run_locked(run_dir, capability, approval)

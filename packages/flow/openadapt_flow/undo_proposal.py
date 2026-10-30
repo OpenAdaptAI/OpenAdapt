@@ -257,6 +257,26 @@ def _looks_inverse(workflow: Workflow) -> bool:
     return any(INVERSE_WORDS.search(t or "") for t in texts)
 
 
+_VOID_WORDS = re.compile(
+    r"\b(void|cancel|inactivate|deactivate|withdraw|retract)\b", re.I
+)
+_DISCARD_WORDS = re.compile(r"\b(discard|abandon)\b", re.I)
+
+
+CompensationKind = Literal["discard_draft", "restore", "void", "delete"]
+
+
+def recording_kind(workflow: Workflow) -> CompensationKind:
+    """The kind of a recorded compensation, from its own words; ``delete``
+    unless it says void, cancel or discard."""
+    text = " ".join([workflow.name, *(s.intent or "" for s in workflow.steps)])
+    if _DISCARD_WORDS.search(text):
+        return "discard_draft"
+    if _VOID_WORDS.search(text):
+        return "void"
+    return "delete"
+
+
 def recording_candidates(
     step: Step, effect: Effect, bundles: Sequence[Path]
 ) -> list[Candidate]:
@@ -317,6 +337,7 @@ def recording_candidates(
                     undoes=step.id,
                     intent=f"{demo.name} (undoes step {step.id}: {step.intent})"[:512],
                     source="demonstration",
+                    kind=recording_kind(demo),
                     steps=steps,
                     **extra,
                 ),
@@ -535,6 +556,7 @@ def network_candidates(
                         :512
                     ],
                     source="synthesized",
+                    kind="delete",
                     steps=[
                         _api_undo_step(
                             undo_id,
@@ -570,6 +592,7 @@ def network_candidates(
                     intent=f"set {effect.field} back to its old value (undoes step "
                     f"{step.id})"[:512],
                     source="synthesized",
+                    kind="restore",
                     steps=[
                         _api_undo_step(
                             undo_id,
@@ -675,6 +698,7 @@ def field_restore_candidate(
                 intent=f"set {effect.field} back to the value it had before step "
                 f"{step.id}"[:512],
                 source="synthesized",
+                kind="restore",
                 steps=steps,
                 **extra,
             ),

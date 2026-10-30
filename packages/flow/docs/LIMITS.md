@@ -796,6 +796,11 @@ What it does provide ([`AFTER_A_STOP.md`](AFTER_A_STOP.md)):
   proposal, only when every record afterwards matches the read-back from
   before the save. A person approves a proposal once (`undo accept`), and
   each run still needs approval after the stop.
+- With `rollback:` turned on in a deployment, a stopped run rolls itself
+  back ([`ROLLBACK.md`](ROLLBACK.md)): the compensation a person approved for
+  each change, latest first, then a read of the whole database that must
+  match the read taken before the run. Equal is `ROLLED_BACK`; anything else
+  is `RECONCILIATION_REQUIRED` with the exact rows in a private file.
 
 The limits of that:
 
@@ -822,8 +827,23 @@ The limits of that:
   one iteration's record.
 - The write-ordering check covers straight-line bundles only, and it can't
   tell whether a later check depends on an earlier write.
-- Duplicate-write compensation (`effects.compensation`) is the only automatic
-  repair, and only where a deployment has implemented and verified it.
+- A rollback undoes only what a person approved, and only proves what it
+  reads: without `rollback.database` it reads one collection. Without
+  the app's audit log (`rollback.attribution`, `audit_read`) it
+  compensates nothing outside a declared test copy, and it compensates only
+  while every change in the store is positively the run's own: any other
+  user's write during the run, or a row the log can't vouch for, goes to a
+  person with the diff. That suits a quiet store, not a busy one. A save
+  that removes a row isn't rolled back outside a test copy. Nothing is read
+  during a compensation, so a colleague's write to the run's record in that
+  window can be lost; the audit log shows it afterward. The Standard and
+  Regulated profiles require durable runs, so rollback doesn't run under
+  them yet. A hard delete runs only with
+  `rollback.allow_delete`. Rollback runs on single web runs only (a desktop,
+  RDP, pool or durable run with it on is refused), and never in a workflow
+  with a loop.
+- Duplicate-write compensation (`effects.compensation`) repairs a duplicate
+  on its own, only where a deployment has implemented and verified it.
 
 A halted item can also leave the screen dirty (a dialog open, a form half
 filled). Under `on_halt: skip_unwritten`, a worklist pool worker cleans up,

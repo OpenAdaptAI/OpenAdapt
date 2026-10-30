@@ -50,6 +50,7 @@ from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.deferred_report import DeferredReportSpec
 from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.frame import FrameAttribution, FrameDatabase
 from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
@@ -1011,6 +1012,58 @@ class ProbeCopySection(BaseModel):
     reward_contract: Optional[str] = None
 
 
+class RollbackSection(BaseModel):
+    """Compensating rollback after a stop (docs/ROLLBACK.md).
+
+    Off unless ``enabled``. When on, the run reads the system of record before
+    it starts; after a stop it runs the compensation a person approved for
+    each change, latest first, and reads the store again. It is
+    ``ROLLED_BACK`` only when that read matches the first one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    #: Read every table but ``allow_tables`` (same shape as
+    #: ``frame.database`` in ``verify.yaml``). Without it, the rollback reads
+    #: the one collection the ``effects`` verifier reads.
+    database: Optional[FrameDatabase] = None
+    #: A compensation that hard-deletes a record runs only when this is true.
+    #: Many record systems forbid deleting a chart for audit or legal reasons:
+    #: prefer a ``void`` compensation there.
+    allow_delete: bool = False
+    #: The app's versioned bookkeeping profile, by name (``openemr``;
+    #: ``openadapt_flow.app_profiles``), shared with the verifier's frame and
+    #: the RL grader: which tables move on their own and how (append-only,
+    #: session state, named columns). Never patient data. Applies to
+    #: ``database`` reads; without it, every changed row counts.
+    profile: Optional[str] = None
+    #: The sign-in names the run acts as, for the profile's own-row rules
+    #: (its own session and login rows). Another user's rows still count.
+    actor_names: list[str] = Field(default_factory=list)
+    #: The deployment's target is a declared test copy (``test_copy``) that
+    #: only this run writes: compensations then run without attribution. Off
+    #: by default; a shared QA copy where testers also write must not set it.
+    exclusive: bool = False
+    #: Who changed a row: the app's audit log (``frame.attribution`` in
+    #: ``verify.yaml``, ``kind: audit_read``). A compensation runs only while
+    #: every changed row is positively the run's own by it. Without it,
+    #: nothing is compensated. A last-writer field (``record_field``) is
+    #: refused: it can't show another user's edit between two of the run's
+    #: writes.
+    attribution: Optional[FrameAttribution] = None
+
+    @model_validator(mode="after")
+    def _audit_log_only(self) -> "RollbackSection":
+        if self.attribution is not None and self.attribution.kind != "audit_read":
+            raise ValueError(
+                "rollback.attribution must be the app's audit log (kind: "
+                "audit_read); a last-writer field can't show which changes are "
+                "the run's own (docs/ROLLBACK.md, Other users)"
+            )
+        return self
+
+
 #: Sentinel written by ``config init`` for fields the operator must fill.
 UNRESOLVED = "UNRESOLVED"
 
@@ -1096,6 +1149,9 @@ class DeploymentConfig(BaseModel):
     #: Declares the target a resettable test copy (``induce --probe-on``
     #: only). None (and omitted when serialized) otherwise.
     test_copy: Optional[ProbeCopySection] = None
+    #: Compensating rollback after a stop. None (and omitted when serialized)
+    #: otherwise.
+    rollback: Optional[RollbackSection] = None
     #: The pinned approver root (approval_mode/approver_roster.py). None (and
     #: omitted when serialized) means the run names it some other way.
     approvers: Optional[ApproversSection] = None
@@ -1131,6 +1187,8 @@ class DeploymentConfig(BaseModel):
             data.pop("worklist", None)
         if self.test_copy is None:
             data.pop("test_copy", None)
+        if self.rollback is None:
+            data.pop("rollback", None)
         if self.approvers is None:
             data.pop("approvers", None)
         if self.repair == RepairSection():

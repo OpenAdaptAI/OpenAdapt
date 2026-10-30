@@ -2364,6 +2364,17 @@ class UndoStep(BaseModel):
     #: Set by ``undo propose``: verified on a test copy, waiting for (or
     #: holding) a person's one-time approval. None for a declared undo.
     proposal: Optional[UndoProposal] = None
+    #: What the compensation does, least destructive first: ``discard_draft``
+    #: (drops an unsaved draft), ``restore`` (writes old values back),
+    #: ``void`` (marks the record void, cancelled or inactive; it stays),
+    #: ``delete`` (removes it). None is treated as ``delete``. A rollback runs
+    #: a ``delete`` only when the deployment allows hard deletes
+    #: (``rollback.allow_delete``). See docs/ROLLBACK.md.
+    kind: Optional[Literal["discard_draft", "restore", "void", "delete"]] = None
+    #: ``void`` only: the tables or collections where the voided record stays.
+    #: A rollback accepts the run's own record there, by its id, and nothing
+    #: else.
+    retains: list[str] = Field(default_factory=list)
 
     @property
     def awaiting_approval(self) -> bool:
@@ -2374,9 +2385,11 @@ class UndoStep(BaseModel):
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Keep declared undos byte-identical (the bundle digest covers them)."""
         data: dict[str, Any] = handler(self)
-        for name in ("locate", "restore", "proposal"):
+        for name in ("locate", "restore", "proposal", "kind"):
             if getattr(self, name) is None:
                 data.pop(name, None)
+        if not self.retains:
+            data.pop("retains", None)
         return data
 
     @model_validator(mode="after")
@@ -5239,6 +5252,80 @@ def managed_result_loss_idempotency_sha256(idempotency_key: str) -> str:
     ).hexdigest()
 
 
+class RollbackStepRecord(BaseModel):
+    """What the rollback did about one change in the ledger."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    position: int = Field(ge=1)
+    undo_id: Optional[str] = None
+    #: ``compensated``: the compensation ran and its own check confirmed it.
+    #: ``not_needed``: a fresh read showed the step's change isn't there.
+    #: ``refused``: nothing ran for this step (no approved compensation, an
+    #: uncertain write a fresh read couldn't settle, a value that couldn't
+    #: be found). ``failed``: the compensation ran and wasn't confirmed.
+    decision: Literal["compensated", "not_needed", "refused", "failed"]
+    reason: str
+    #: For an uncertain or unconfirmed write, what a fresh read showed.
+    fresh_read: Optional[Literal["present", "absent", "unknown"]] = None
+    undo_outcome: Optional[str] = None
+
+
+class RollbackRecord(BaseModel):
+    """A compensating rollback after a stop (docs/ROLLBACK.md).
+
+    PHI-free: table and column names, counts and digests. The rows a person
+    needs to repair the record are in ``diff_path`` (owner-only).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: ``rolled_back``: compensations ran and the store matches the read from
+    #: before the run. ``nothing_landed``: the store already matched it after
+    #: the stop. ``not_rolled_back``: it doesn't match; a person repairs it
+    #: from the diff. ``unarmed``: the store couldn't be read before the run,
+    #: so no rollback was attempted.
+    status: Literal["rolled_back", "nothing_landed", "not_rolled_back", "unarmed"]
+    reason: str
+    #: ``database``: every table but ``allow_tables``. ``collection``: one
+    #: collection read through the effect verifier.
+    scope: Literal["database", "collection"]
+    allow_tables: list[str] = Field(default_factory=list)
+    before_sha256: Optional[str] = None
+    after_stop_sha256: Optional[str] = None
+    final_sha256: Optional[str] = None
+    #: What the stop left, against the read from before the run.
+    after_stop_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: What still differs at the end, or what the read that stopped the
+    #: rollback showed (empty when rolled back).
+    remaining_diff: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: Rows that stopped the rollback: changed and not positively the run's.
+    conflicts: int = 0
+    #: Voided records left in place by a ``void`` compensation.
+    retained_rows: int = 0
+    #: The app's bookkeeping profile the reads applied (``rollback.profile``),
+    #: as ``app/version``.
+    profile_id: Optional[str] = None
+    #: The verifier's own whole-database diff (``openadapt_flow.verifier``)
+    #: agreed with the final check. None when it wasn't available or didn't
+    #: apply (a collection read, attribution, or voided rows).
+    cross_checked: Optional[bool] = None
+    #: Run-directory-relative path of the full diff, when anything remains.
+    diff_path: Optional[str] = None
+    #: Rows another user wrote while the rollback ran, as the stop left them
+    #: (their write itself may be gone with the row): an owner-only file
+    #: beside ``diff_path``.
+    late_diff_path: Optional[str] = None
+    steps: list[RollbackStepRecord] = Field(default_factory=list)
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+    @property
+    def store_proven_unchanged(self) -> bool:
+        return self.status in ("rolled_back", "nothing_landed")
+
+
 class ManagedResultLossEvidence(BaseModel):
     """Sealed PHI-free evidence that a managed child result was lost.
 
@@ -5665,6 +5752,14 @@ class RunReport(BaseModel):
             "declared effects and whether each was confirmed, refuted or "
             "unknown, and the declared undo when there is one. PHI-free. "
             "See docs/AFTER_A_STOP.md."
+        ),
+    )
+    rollback: Optional[RollbackRecord] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "The compensating rollback after a stop, when the deployment "
+            "turned it on. See docs/ROLLBACK.md."
         ),
     )
     managed_result_loss: Optional[ManagedResultLossEvidence] = Field(

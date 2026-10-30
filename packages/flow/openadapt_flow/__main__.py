@@ -881,10 +881,16 @@ def _build_and_run_replayer(
     readback_pipeline=None,
     secret_env_overrides: Optional[Mapping[str, str]] = None,
     api_steps_off_reason: Optional[str] = None,
+    rollback_plan=None,
+    fresh_session=None,
 ):
     """Build the shared Replayer configuration and execute one workflow.
 
     ``api_steps_off_reason`` turns API steps off for this run and says why.
+    ``rollback_plan`` (``openadapt_flow.rollback``) reads the system of
+    record before the run and, after a stop, runs the approved
+    compensations and proves the store is back; ``fresh_session`` returns
+    the backend to a signed-out start for a GUI compensation.
     """
     replayer = _configured_replayer(
         backend,
@@ -914,7 +920,21 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
-    return replayer.run(
+    _refuse_rollback_durable(rollback_plan, durable)
+    if rollback_plan is not None:
+        _require_undo_or_person(
+            workflow, rollback_plan, approval_gate, api_only=fresh_session is None
+        )
+    before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
+    if rollback_plan is not None and before is None:
+        # Without the first read nothing after a stop can be proven, and the
+        # undo-or-person rule let undoable saves run without a person.
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, but the system of record, "
+            "its audit log, or the run's own user for attribution couldn't be "
+            "read before the run, so a stop couldn't be rolled back. Nothing ran."
+        )
+    report = replayer.run(
         workflow,
         params=params,
         worklists=worklists,
@@ -932,6 +952,102 @@ def _build_and_run_replayer(
             else run_id
         ),
     )
+    if rollback_plan is not None and not report.success:
+        from openadapt_flow.rollback import ReplayerRunner
+
+        run_item = getattr(approval_gate, "_item", None)
+        if approval_gate is not None:
+            # A compensation is the undo a person approved: it doesn't need
+            # an undo of its own.
+            approval_gate.undo_or_person = False
+
+        def make_compensation_replayer():
+            if approval_gate is not None and run_item is not None:
+                # It acts on the run's own item, so the save gate checks the
+                # same record the run's save did.
+                approval_gate.next_item(run_item)
+            # The run's backend, verifier, API actuator and approval gate. No
+            # governed authorization or qualification guard: those bind the
+            # run's own workflow, and a compensation is its own approved undo.
+            return _configured_replayer(
+                backend,
+                workflow=workflow,
+                allow_egress=allow_egress,
+                effect_verifier=effect_verifier,
+                api_actuator=api_actuator,
+                durable=False,
+                use_structural=use_structural,
+                pixel_verify_enabled=pixel_verify_enabled,
+                runtime_config=runtime_config,
+                approval_gate=approval_gate,
+            )
+
+        report = rollback_plan.finish(
+            report,
+            workflow,
+            before=before,
+            run_dir=Path(run_dir),
+            bundle_dir=Path(bundle),
+            runner=ReplayerRunner(make_compensation_replayer, fresh_session),
+        )
+    return report
+
+
+def _refuse_rollback_durable(rollback_plan, durable: bool) -> None:
+    """A resumed run has no first read to roll back to, and a rollback at a
+    pause would leave a resumable run half undone: refuse the pair. (The
+    Standard and Regulated profiles require durable runs.)"""
+    if rollback_plan is not None and durable:
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and it doesn't run on a "
+            "durable (pausable) run yet, which the Standard and Regulated "
+            "profiles require. Turn one of them off. Nothing ran."
+        )
+
+
+def _refuse_rollback_unwired(cfg, where: str) -> None:
+    """Rollback runs only on a single web run; refuse rather than run without it."""
+    section = getattr(cfg, "rollback", None)
+    if section is not None and section.enabled:
+        raise SystemExit(
+            f"REFUSED before the run: rollback is on, and it doesn't run on {where} "
+            "yet. Turn rollback off for this deployment, or run a single web "
+            "item. Nothing ran."
+        )
+
+
+def _require_undo_or_person(
+    workflow, rollback_plan, approval_gate, *, api_only: bool = False
+) -> None:
+    """With rollback on, every save is either undoable or approved by a person
+    before it runs (docs/ROLLBACK.md).
+
+    A gate that can ask a person checks each save (``undo_or_person``); with
+    no such gate, a run that holds a save no approved compensation can undo
+    is refused before it starts.
+    """
+    from openadapt_flow.approval_mode.model import ApprovalMode
+    from openadapt_flow.rollback import saves_without_undo
+
+    if approval_gate is not None:
+        approval_gate.undo_or_person = True
+        approval_gate.undo_allows_delete = bool(rollback_plan.allow_delete)
+        approval_gate.undo_api_only = api_only
+        if getattr(approval_gate, "mode", None) is not ApprovalMode.NOT_GATED:
+            return
+    missing = saves_without_undo(
+        workflow, allow_delete=rollback_plan.allow_delete, api_only=api_only
+    )
+    if missing:
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and these saves have no "
+            "compensation a person approved (or only a delete this deployment "
+            "doesn't allow): "
+            + ", ".join(missing)
+            + ". A write that can't be undone needs a person's approval first: "
+            "qualify and approve a compensation (rollback qualify, undo accept), "
+            "or run with an approval mode that asks a person. Nothing ran."
+        )
 
 
 def _replay_outcome_epilogue(
@@ -1089,6 +1205,11 @@ def _finish_replay(
         ledger = _change_ledger_epilogue(report, run_dir, args)
         if ledger:
             print(f"\n{ledger}")
+        from openadapt_flow.rollback import rollback_lines
+
+        rolled = rollback_lines(report)
+        if rolled:
+            print("\n" + "\n".join(rolled))
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
     _maybe_attest_run(run_dir, report, args)
@@ -2661,6 +2782,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     pool_policy = requested_pool(args, cfg)
     if pool_policy is not None:
+        _refuse_rollback_unwired(cfg, "a worklist pool")
         return _replay_worklist_pool(
             args,
             cfg,
@@ -2677,6 +2799,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             surface_cfgs=surface_cfgs,
         )
     if _normalize_kind(backend_cfg.kind) != "web":
+        _refuse_rollback_unwired(cfg, "a desktop or remote-display backend")
         return _replay_desktop(
             args,
             backend_cfg,
@@ -2731,6 +2854,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         backend = build_backend(backend_cfg, page=page)
         held_backend.append(backend)
         surface_backends = _build_surface_backends(surface_cfgs, page=page)
+        from openadapt_flow.rollback import plan_from_deployment, web_fresh_session
+
+        rollback_plan = plan_from_deployment(cfg, effect_verifier)
         return _build_and_run_replayer(
             backend,
             workflow=workflow,
@@ -2769,6 +2895,17 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             qualification_fault_driver=fault_driver,
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            # Never reset the operator's own attached browser: that would
+            # sign them out. Only API-only compensations run there.
+            fresh_session=(
+                web_fresh_session(page, entry_url or page.url)
+                if rollback_plan is not None
+                and not (
+                    backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+                )
+                else None
+            ),
         )
 
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
@@ -4244,6 +4381,13 @@ def _resume_approval_gate(
     )
 
 
+def _was_rolled_back(run_dir: Path) -> bool:
+    """Did a compensating rollback start undoing this run?"""
+    from openadapt_flow.runtime.durable.resume import was_compensated
+
+    return was_compensated(run_dir)
+
+
 def _cmd_resume(args: argparse.Namespace) -> int:
     from openadapt_flow import crypto
     from openadapt_flow.runtime.durable import resume, resume_point
@@ -4268,6 +4412,13 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         print(
             "Resume REFUSED: a person declined this save; the item is over. "
             "Nothing was executed."
+        )
+        return 3
+    if _was_rolled_back(run_dir):
+        print(
+            "Resume REFUSED: this run was rolled back after it stopped, so its "
+            "earlier writes are undone and resuming would carry them as done. "
+            "Start a new run. Nothing was executed."
         )
         return 3
     # A governed run's resume takes its approver pin only from the deployment
@@ -11932,6 +12083,10 @@ def build_parser() -> argparse.ArgumentParser:
             _add_deployment_flags,
         ),
     )
+
+    from openadapt_flow.cli_rollback import register as _register_rollback
+
+    _register_rollback(sub)
 
     from openadapt_flow.cli_cleanup import register as _register_cleanup
 
