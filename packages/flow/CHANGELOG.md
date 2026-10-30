@@ -21,6 +21,10 @@
 
 - A write that lands after the verdict can now be caught. With `frame.database.recheck_after_s`, a verified write's receipt says when a recheck is due (`recheck_due_at`), and `openadapt_flow.verifier.recheck` reads the whole database again at or after that time. It judges every change since the post-save read with the frame's rules: the app profile's bookkeeping, other users' writes the audit log attributes, and changes a later write by the same actor under the same contract saw in its own window (`excused_by`, any outcome). Anything else turns the earlier result into `REFUTED` (late). A change that may be what refuted a later write, a database that can't be read, or a saved state that wasn't issued here or doesn't match its receipt gives `UNCERTAIN`. The saved state holds keyed hashes, not values. `frame.database.settle_attempts` lets the reads after a save, and at a recheck, retry within a stated budget until two in a row match; rows added to append-only tables between them don't count as movement. Without these settings, nothing changes ([#1639](https://github.com/OpenAdaptAI/OpenAdapt/pull/1639)).
 
+### Fixes
+
+- The whole-database frame (`frame.database`) now reads MySQL and MariaDB schemas with every column type. A `POINT` column (Dolibarr 21) made the read raise `TypeError`; a `BIT` column did the same; `FLOAT` values compared by six printed digits; decimals lost digits past 28. Binary strings, `BIT`, geometries and vectors are read as hex, `FLOAT` is widened to `DOUBLE`, `JSON` is read as its stored text, and numbers parse as `Decimal`. A value that still can't be read exactly makes the database unreadable, never a column dropped, and `begin_write` now says why the frame could not be read.
+
 ## v2.4.1 (2026-10-28)
 
 Flow runs without its benchmark package and accepts a pinned config with Windows line endings. Several checks now halt or refute where 2.4.0 could act on the wrong row or pass a weaker check, and the frame can compare the whole database.
