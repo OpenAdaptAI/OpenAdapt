@@ -18,8 +18,9 @@ bespoke benchmark plumbing into a deployable kit component:
 READ-ONLY is enforced in TWO layers, and the statement filter is only the
 inner one: :func:`assert_read_only_sql` refuses anything but a single
 ``SELECT``/``WITH``-``SELECT`` statement (no stacking, no comments, no
-mutating/DDL keywords, no known side-effecting functions) AT CONSTRUCTION
-TIME, and values are bound through DB-API parameters (never
+mutating/DDL keywords, no known side-effecting functions; checked on the
+query's tokens, so literals and quoted names are never read as SQL) AT
+CONSTRUCTION TIME, and values are bound through DB-API parameters (never
 string-interpolated) so a run param cannot inject SQL. But a keyword filter
 CANNOT prove a SELECT is side-effect-free on a real engine -- a Postgres
 ``SELECT some_udf(...)`` or vendor function can mutate state while passing
@@ -56,32 +57,122 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.verification import VerificationTier
 
-# Keywords that could make a SELECT-leading statement mutate. Matched on word
-# boundaries anywhere in the statement (defense in depth beyond the
-# leading-keyword + no-stacking checks): a data-modifying CTE
+# Words that could make a SELECT-leading statement mutate, checked on the
+# query's TOKENS (see :func:`_sql_tokens`), never on its raw text, so a word
+# inside a string literal or a quoted identifier is not a keyword. A bare
+# keyword anywhere in the statement is refused (defense in depth beyond the
+# leading-keyword + single-statement checks): a data-modifying CTE
 # (``WITH x AS (INSERT ... RETURNING ...)``), ``SELECT ... INTO``, and
-# sqlite/vendor escapes are all refused. Statement types that can only be
-# dangerous in LEADING position (``COPY``, ``SET``, ``DO``, ``COMMENT ON``,
-# ...) are already blocked by the SELECT/WITH leading-keyword check and the
-# single-statement rule, and are deliberately NOT in this list -- they are
-# common column names and would false-positive legitimate read queries.
-_FORBIDDEN_SQL = re.compile(
-    r"\b("
-    r"insert|update|delete|drop|alter|create|replace|truncate|merge|"
-    r"grant|revoke|attach|detach|pragma|vacuum|"
-    r"exec|execute|call|"
-    r"into|returning|"
-    # Known side-effecting / abuse-prone functions reachable from a bare
-    # SELECT (defense in depth -- the read-only DB ROLE is the real gate):
-    # sequence movement, large-object I/O, remote execution, extension
-    # loading, and sleep/DoS primitives.
-    r"nextval|setval|lastval|lo_import|lo_export|dblink\w*|load_extension|"
-    r"pg_sleep|sleep|benchmark"
-    r")\b",
-    re.IGNORECASE,
-)
+# sqlite/vendor escapes. Statement types that can only be dangerous in
+# LEADING position (``COPY``, ``SET``, ``DO``, ``COMMENT ON``, ...) are
+# already blocked by the SELECT/WITH leading check and the single-statement
+# rule, and are deliberately NOT here: they are common column names.
+_FORBIDDEN_WORDS = frozenset(
+    {
+        "insert", "update", "delete", "drop", "alter", "create", "replace",
+        "truncate", "merge", "grant", "revoke", "attach", "detach", "pragma",
+        "vacuum", "exec", "execute", "call", "into", "returning",
+    }
+)  # fmt: skip
+# Known side-effecting / abuse-prone functions reachable from a bare SELECT
+# (defense in depth -- the read-only DB ROLE is the real gate): sequence
+# movement, large-object I/O, remote execution, extension loading,
+# sleep/DoS primitives, and functions that run a query passed as text
+# (``query_to_xml('DELETE ...')``; sqlite's ``eval`` extension). Refused as
+# a call even when the name is quoted (``"nextval"('s')``) or schema
+# qualified (``pg_catalog.pg_sleep(1)``).
+_FORBIDDEN_FUNCTIONS = frozenset(
+    {
+        "nextval", "setval", "lastval", "lo_import", "lo_export",
+        "load_extension", "pg_sleep", "sleep", "benchmark", "eval",
+        "query_to_xml", "query_to_xmlschema", "query_to_xml_and_xmlschema",
+    }
+)  # fmt: skip
+_FORBIDDEN_PREFIXES = ("dblink",)
 
-_LEADING_SQL = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
+#: A Postgres dollar-quote opener (``$$`` or ``$tag$``): a string form this
+#: lexer does not read, so it is refused rather than guessed.
+_DOLLAR_QUOTE = re.compile(r"\$[A-Za-z_]*\$")
+
+
+def _forbidden_function(name: str) -> bool:
+    return name in _FORBIDDEN_FUNCTIONS or name.startswith(_FORBIDDEN_PREFIXES)
+
+
+def _is_word_char(char: str) -> bool:
+    return char == "_" or char.isalnum() or ord(char) > 127
+
+
+def _sql_tokens(text: str) -> list[tuple[str, str]]:
+    """Split ``text`` into ``(kind, value)`` tokens, or raise ``ValueError``.
+
+    Kinds: ``word`` (a bare word, lower-cased), ``quoted`` (a ``"..."`` or
+    ```...``` identifier's text, lower-cased), ``string`` (a ``'...'``
+    literal), ``punct`` (one other character). Whitespace is dropped.
+
+    It refuses, rather than guesses, every form whose reading differs
+    between dialects or that can hide text from the checks: a comment
+    (``--``, ``/*``, ``#``) outside a literal; a backslash anywhere (MySQL
+    reads ``\'`` inside a literal as an escaped quote, standard SQL as
+    the literal's end); a dollar-quoted string; an unterminated literal or
+    identifier; a NUL character.
+    """
+
+    if "\0" in text:
+        raise ValueError("sql query contains a NUL character")
+    if "\\" in text:
+        raise ValueError(
+            "sql query contains a backslash -- its meaning inside a literal "
+            "differs by dialect (MySQL escapes, standard SQL does not), so it "
+            "is refused"
+        )
+    tokens: list[tuple[str, str]] = []
+    i, n = 0, len(text)
+    while i < n:
+        char = text[i]
+        if char.isspace():
+            i += 1
+            continue
+        if char in "'\"`":
+            j = i + 1
+            body: list[str] = []
+            while True:
+                if j >= n:
+                    raise ValueError(
+                        "sql query has an unterminated quoted literal or identifier"
+                    )
+                if text[j] == char:
+                    if j + 1 < n and text[j + 1] == char:  # a doubled quote
+                        body.append(char)
+                        j += 2
+                        continue
+                    break
+                body.append(text[j])
+                j += 1
+            value = "".join(body)
+            tokens.append(
+                ("string", value) if char == "'" else ("quoted", value.lower())
+            )
+            i = j + 1
+            continue
+        if text.startswith("--", i) or text.startswith("/*", i) or char == "#":
+            raise ValueError(
+                "sql query contains a comment token (--, /* or #) -- comments are "
+                "refused in effect-verifier queries (comment smuggling)"
+            )
+        if char == "$" and _DOLLAR_QUOTE.match(text, i):
+            raise ValueError("sql query contains a dollar-quoted string ($$ or $tag$)")
+        if _is_word_char(char):
+            j = i
+            while j < n and (_is_word_char(text[j]) or text[j] == "$"):
+                j += 1
+            tokens.append(("word", text[i:j].lower()))
+            i = j
+            continue
+        tokens.append(("punct", char))
+        i += 1
+    return tokens
+
 
 #: Audited table names must be plain identifiers (letters / digits / ``_`` /
 #: space -- Frappe's ``tabLoan Application`` has a space). Anything else
@@ -125,38 +216,62 @@ def read_only_connection(conn: Any, driver: str) -> Any:
 def assert_read_only_sql(query: str) -> str:
     """Validate that ``query`` is a single read-only SELECT; return it.
 
+    The query is split into tokens (:func:`_sql_tokens`) first, so string
+    literals and quoted identifiers are read as such: a ``;`` inside
+    ``'a;b'`` is not a second statement, a table named `` `call` `` is not
+    ``CALL``, and ``REPLACE(phone, '-', '')`` is the string function, not
+    the statement.
+
     Raises:
-        ValueError: On an empty query, a non-SELECT leading keyword, statement
-            stacking (any ``;`` beyond one optional trailing terminator), SQL
-            comments (``--`` / ``/*`` / ``#`` -- refused outright so a
-            forbidden keyword cannot hide behind one), or any mutating /
-            DDL / control keyword anywhere in the statement.
+        ValueError: On an empty query; a form the tokenizer refuses
+            (comments, backslashes, dollar quotes, an unterminated literal);
+            a first word other than SELECT or WITH; statement stacking (a
+            ``;`` outside a literal anywhere but at the very end); a bare
+            mutating / DDL / control keyword anywhere in the statement
+            (``replace`` only as a function call, and a keyword next to a
+            ``.`` is a qualified name, not a keyword); or a call to a known
+            side-effecting function, quoted or qualified.
     """
     text = (query or "").strip()
     if not text:
         raise ValueError("sql query is empty")
-    if "--" in text or "/*" in text or "#" in text:
+    tokens = _sql_tokens(text)
+    if tokens and tokens[-1] == ("punct", ";"):
+        tokens = tokens[:-1]
+    if ("punct", ";") in tokens:
         raise ValueError(
-            "sql query contains a comment token (--, /* or #) -- comments are "
-            "refused in effect-verifier queries (comment smuggling)"
+            "sql query stacks multiple statements (a ';' outside a literal) -- "
+            "an effect verifier runs exactly one read-only SELECT"
         )
-    body = text[:-1] if text.endswith(";") else text
-    if ";" in body:
-        raise ValueError(
-            "sql query stacks multiple statements (embedded ';') -- an effect "
-            "verifier runs exactly one read-only SELECT"
-        )
-    if not _LEADING_SQL.match(body):
+    if not tokens or tokens[0] not in (("word", "select"), ("word", "with")):
         raise ValueError(
             "sql query must start with SELECT (or WITH ... SELECT) -- the "
             "effect verifier is read-only by contract"
         )
-    hit = _FORBIDDEN_SQL.search(body)
-    if hit:
+    for index, (kind, value) in enumerate(tokens):
+        if kind not in ("word", "quoted"):
+            continue
+        before = tokens[index - 1] if index else ("", "")
+        after = tokens[index + 1] if index + 1 < len(tokens) else ("", "")
+        called = after == ("punct", "(")
+        if called and _forbidden_function(value):
+            raise ValueError(
+                f"sql query calls forbidden function {value!r} -- the effect "
+                "verifier must be read-only"
+            )
+        if kind == "quoted":
+            continue  # a quoted name is an identifier, never a keyword
+        if not (value in _FORBIDDEN_WORDS or _forbidden_function(value)):
+            continue
+        if called and value == "replace":
+            continue  # REPLACE(text, from, to): the string function
+        if not called and ("punct", ".") in (before, after):
+            continue  # a qualified name: schema.call, t.update
         raise ValueError(
-            f"sql query contains forbidden keyword {hit.group(0)!r} -- the "
-            "effect verifier must be read-only (no writes, DDL, or control "
-            "statements; SELECT ... INTO is also refused)"
+            f"sql query contains forbidden keyword {value!r} -- the effect "
+            "verifier must be read-only (no writes, DDL, or control "
+            "statements; SELECT ... INTO is also refused). Quote a table or "
+            'column with that name (`call` or "call")'
         )
     return text
 
