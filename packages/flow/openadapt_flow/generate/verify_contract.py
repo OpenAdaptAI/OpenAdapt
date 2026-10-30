@@ -2196,22 +2196,20 @@ def propose(
 
     _share_locations(schema, plans, kinds)
     _break_ties_across(plans)
-    for p in plans:  # child groups of values placed after analysis
-        _children(schema, p, [], only_missing=True)
     location_questions: list[Question] = []
     # Q: per kind, a value the generator couldn't place.
     for p in plans:
         if not p.unresolved:
             continue
         chosen = dict(_answer(answers, f"locations.{p.kind}") or {})
+        asked = dict(p.unresolved)
         open_ = {}
-        for name, tied in p.unresolved.items():
+        for name, tied in list(p.unresolved.items()):
             pick = chosen.get(name)
             if isinstance(pick, int) and 0 <= pick < len(tied):
                 _resolve(p, name, tied[pick])
             else:
                 open_[name] = tied
-        asked = dict(p.unresolved)
         p.unresolved = open_
         if asked:
             parts = []
@@ -2328,6 +2326,8 @@ def propose(
                 DEFAULT_RECHECK_S,
             )
         )
+    for p in plans:  # child groups of values placed after analysis
+        _children(schema, p, [], only_missing=True)
     questions.extend(location_questions)
     questions_open = [q for q in questions if _answer(answers, q.key) is None]
     settings = Settings(
