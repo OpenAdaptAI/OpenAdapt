@@ -99,6 +99,9 @@ class AuditRead(BaseModel):
     #: With ``heartbeat``, a found record counts only when the verifier's own
     #: read of it shows up in the trail; set it where reads by id are logged.
     heartbeat: bool = True
+    #: When the event happened; it orders the agent's writes and other
+    #: actors' reads of the same record (``recorded`` in R4).
+    time_path: str = "recorded"
 
 
 class ChangeFeed(BaseModel):
@@ -163,6 +166,12 @@ class EnsureContract(BaseModel):
     settle_s: float = Field(default=2.0, ge=0, le=120)
     stable_reads: int = Field(default=3, ge=1, le=10)
     timeout_s: float = Field(default=15.0, gt=0, le=300)
+    #: A create followed by the agent's own updates of the same record counts
+    #: as one write when nothing else moved, every write is the agent's, and
+    #: the audit trail shows no other actor read the record between them (see
+    #: ``correction_refused``). The result says it was corrected. False sends
+    #: any change after the create to review.
+    accept_corrections: bool = True
 
     @model_validator(mode="after")
     def _bound(self) -> "EnsureContract":
@@ -457,9 +466,12 @@ Getter = Callable[
 
 
 def _ref(value: str) -> str:
-    """``Type/id``, whether the server wrote it relative or absolute."""
+    """``Type/id``, whether the server wrote it relative, absolute or versioned
+    (``Patient/x/_history/2``)."""
 
     parts = value.rstrip("/").split("/")
+    if "_history" in parts[1:]:
+        parts = parts[: parts.index("_history", 1)]
     return "/".join(parts[-2:]) if len(parts) >= 2 else value
 
 
@@ -645,6 +657,17 @@ class Change:
     attributed: bool = True
     #: True when only the sweep saw it (the audit trail did not log it).
     unlogged: bool = False
+    #: The audit trail's writes of it: (time, action, actors), time None when
+    #: the event gives none.
+    events: list[tuple[Optional[datetime], str, frozenset[str]]] = field(
+        default_factory=list
+    )
+    #: Versions ``_history`` shows in the window (None: history not read).
+    versions: Optional[int] = None
+    #: Those versions as the server returned them.
+    bodies: list[dict[str, Any]] = field(default_factory=list)
+    #: The audit trail's reads of it by id: (time, actors).
+    reads: list[tuple[Optional[datetime], frozenset[str]]] = field(default_factory=list)
 
 
 def find_matches(
@@ -707,33 +730,48 @@ def read_changes(
     feed = contract.change_feed
     selves = {_ref(x) for x in contract.self_actors}
     changes: dict[str, Change] = {}
+    reads: dict[str, list[tuple[Optional[datetime], frozenset[str]]]] = {}
     if feed.audit is not None:
         a = feed.audit
         for event in reader.resources(a.resource_type, window(a.since_param)):
             action = extract(event, a.action_path)
             if action not in AUDIT_ACTIONS:
                 raise Unreadable(f"an audit event has action {action!r}")
-            if action == "R":
-                continue
+            when = _when(extract(event, a.time_path))
             actors = [
                 _ref(x)
                 for x in extract_all(event, a.actor_path)
                 if isinstance(x, str) and x
             ]
-            ref = extract(event, a.entity_path)
-            if not isinstance(ref, str) or "/" not in ref:
+            # Every resource the event names, not only the first.
+            refs = sorted(
+                {
+                    _ref(x)
+                    for x in extract_all(event, a.entity_path)
+                    if isinstance(x, str) and "/" in x
+                }
+            )
+            if action == "R":
+                for ref in refs:
+                    reads.setdefault(ref, []).append((when, frozenset(actors)))
+                continue
+            if not refs:
                 if action == "E" and actors and not set(actors) & selves:
                     continue  # another user's operation on no resource
                 # A write the log can't tie to a resource: the window can't be
                 # read completely.
                 raise Unreadable("an audit write names no resource")
-            ref = _ref(ref)
-            change = changes.setdefault(ref, Change(ref=ref))
-            change.actions.add(str(action))
-            if actors:
-                change.authors.update(actors)
-            else:
-                change.attributed = False
+            for ref in refs:
+                change = changes.setdefault(ref, Change(ref=ref))
+                change.actions.add(str(action))
+                change.events.append((when, str(action), frozenset(actors)))
+                if actors:
+                    change.authors.update(actors)
+                else:
+                    change.attributed = False
+        for ref, seen_by in reads.items():
+            if ref in changes:
+                changes[ref].reads = seen_by
     for rtype in feed.sweep_types:
         for res in reader.resources(rtype, window("_lastUpdated")):
             ref = f"{rtype}/{res['id']}"
@@ -741,6 +779,7 @@ def read_changes(
                 changes[ref] = Change(ref=ref, actions={"U"}, unlogged=True)
     if feed.history:
         for ref, change in changes.items():
+            change.versions = 0
             authors: set[str] = set()
             for entry in reader.bundle(f"{ref}/_history", {"_count": "200"}):
                 version = entry.get("resource")
@@ -750,6 +789,8 @@ def read_changes(
                     when = _when(meta.get("lastUpdated"))
                     if when is None or when < since or (until and when > until):
                         continue
+                    change.versions += 1
+                    change.bodies.append(version)
                     if not feed.history_author:
                         continue
                     who = (meta.get("author") or {}).get("reference")
@@ -884,8 +925,11 @@ def judge(
         )
     if target is not None:
         tid = target.split("/", 1)[1]
-        if set(mine[target].actions) - {"C"}:
-            reasons.append("the agent changed or deleted the record after creating it")
+        corrected = bool(set(mine[target].actions) - {"C"})
+        if corrected:
+            refused = correction_refused(contract, mine[target], selfs, params)
+            if refused:
+                reasons.append(refused)
         if target in others or (changes[target].authors - selfs):
             reasons.append("someone else changed the created record")
         if created is None or str(created.get("id")) != tid:
@@ -908,6 +952,20 @@ def judge(
         if tid not in after_matches and created is not None:
             reasons.append("the created record does not come back from a search")
         if not reasons:
+            if corrected:
+                writes = len(mine[target].events)
+                evidence["corrected"] = True
+                evidence["writes_to_record"] = writes
+                return EnsureResult(
+                    "created_verified",
+                    tid,
+                    [
+                        f"created once and corrected by the agent ({writes} writes, "
+                        "no other actor read or wrote it between them), every "
+                        "value read back"
+                    ],
+                    evidence,
+                )
             return EnsureResult(
                 "created_verified",
                 tid,
@@ -915,6 +973,72 @@ def judge(
                 evidence,
             )
     return _review(reasons, evidence)
+
+
+def correction_refused(
+    contract: EnsureContract,
+    change: Change,
+    selfs: set[str],
+    params: Mapping[str, Any],
+) -> Optional[str]:
+    """Why a create followed by more writes can't count as one write, or None.
+
+    The agent may fix its own record (a value it read back wrong) and still
+    have created it once. That holds only when the audit trail shows exactly
+    one create and then updates, each with a time and each by the agent, and
+    no other actor reading the record by id from the create to the last
+    update: someone may have acted on the wrong value. Every other write
+    (another record, a second create, a delete) is judged as before. A read
+    the trail doesn't log by id (a search) can't be seen; the contract's
+    heartbeat checks that reads by id are logged at all.
+    """
+
+    changed = "the agent changed or deleted the record after creating it"
+    if not contract.accept_corrections:
+        return changed
+    if set(change.actions) != {"C", "U"}:
+        return changed
+    if contract.change_feed.audit is None:
+        return f"{changed}, and without an audit trail no one can tell who read it"
+    if not change.attributed or not change.events:
+        return f"{changed}, and the audit trail doesn't attribute every write"
+    if any(not who or who - selfs for _, _, who in change.events):
+        return "someone else changed the created record"
+    if contract.settle_s < 1:
+        # The verifier's own read of the record must land after the window.
+        return f"{changed}, and with settle_s under 1 s its reads can't be told apart"
+    if change.versions is None:
+        return f"{changed}, and without _history its versions can't be counted"
+    if any(not is_person(contract, body, params) for body in change.bodies):
+        # A version that was someone else (or no one) may have been found by
+        # a search no audit event names, and acted on.
+        return f"{changed}, and a version in between was not the person"
+    if change.versions != len(change.events):
+        # A write the trail didn't log may be someone else's.
+        return (
+            f"{changed}, and its history shows {change.versions} versions "
+            f"where the audit trail shows {len(change.events)} writes"
+        )
+    timed: list[tuple[datetime, str]] = []
+    for when, action, _ in change.events:
+        if when is None:
+            return (
+                f"unreadable: {changed}, and the audit trail gives no time for a write"
+            )
+        timed.append((when, action))
+    creates = [when for when, action in timed if action == "C"]
+    updates = [when for when, action in timed if action == "U"]
+    if len(creates) != 1 or not updates or min(updates) < creates[0]:
+        return changed
+    start = creates[0]
+    # From the create to the window's close: a read logged a moment after the
+    # last update may have seen the version before it.
+    for read_at, who in change.reads:
+        if read_at is None:
+            return f"unreadable: {changed}, and a read of it has no time"
+        if start <= read_at and (not who or who - selfs):
+            return "another actor read the record between the agent's writes"
+    return None
 
 
 def _hear_own_read(
@@ -945,20 +1069,34 @@ def _hear_own_read(
 def _agents_part(
     changes: Mapping[str, Change], selfs: set[str]
 ) -> dict[str, tuple[Any, ...]]:
-    """The fingerprint of the writes ``judge`` counts as the agent's."""
+    """The fingerprint of the writes ``judge`` counts as the agent's.
+
+    Writes only: the verifier's own reads land after the window, and must not
+    read as a late write.
+    """
 
     return _fingerprint(
         {
             r: c
             for r, c in changes.items()
             if not c.attributed or not c.authors or c.authors & selfs
-        }
+        },
+        reads=False,
     )
 
 
-def _fingerprint(changes: Mapping[str, Change]) -> dict[str, tuple[Any, ...]]:
+def _fingerprint(
+    changes: Mapping[str, Change], *, reads: bool = True
+) -> dict[str, tuple[Any, ...]]:
     return {
-        ref: (sorted(c.actions), sorted(c.authors), c.attributed, c.unlogged)
+        ref: (
+            sorted(c.actions),
+            sorted(c.authors),
+            c.attributed,
+            c.unlogged,
+            len(c.events),
+            len(c.reads) if reads else 0,
+        )
         for ref, c in changes.items()
     }
 
@@ -1004,6 +1142,16 @@ def verify_ensure(
                 _, created = reader.fetch(f"{reader.base_url}/{own[0]}")
             except Unreadable:
                 created = None  # gone (deleted) or unreadable: judged below
+            audit = contract.change_feed.audit
+            if (
+                created is not None
+                and "U" in changes[own[0]].actions
+                and audit is not None
+                and audit.heartbeat
+            ):
+                # A correction is accepted only on the trail's word that no
+                # one else read the record; check the trail logs reads at all.
+                _hear_own_read(contract, reader, own[0], until, sleep)
         existing_now = None
         if len(baseline.matches) == 1 and not own:
             (rid,) = baseline.matches
