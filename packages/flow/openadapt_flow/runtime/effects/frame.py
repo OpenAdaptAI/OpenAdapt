@@ -78,7 +78,9 @@ from openadapt_flow.runtime.effects.effect import (
     EffectKind,
     EffectState,
     ValueExpr,
+    is_null_value,
     record_matches,
+    selector_value,
     stable_id,
 )
 from openadapt_flow.runtime.effects.versions import FrameVersions, VersionVerdict
@@ -689,7 +691,7 @@ def declared_selectors(effect: Effect) -> list[dict[str, str]]:
         # A value with a declared kind stays an expression, so the record
         # is matched in canonical form (``record_matches``).
         out = {
-            k: (v if getattr(v, "kind", None) else str(v))  # type: ignore[misc]
+            k: selector_value(v)  # type: ignore[misc]
             for k, v in [*selector.items(), *effect.key_selector().items()]
         }
         return out
@@ -1414,7 +1416,10 @@ def judge_frame(
         def declared(record: Mapping[str, Any], hashed: bool = False) -> bool:
             if hashed and hasher is not None:
                 return any(
-                    all(record.get(k) == hasher(k, v) for k, v in s.items())
+                    all(
+                        record.get(k) == hasher(k, None if is_null_value(v) else v)
+                        for k, v in s.items()
+                    )
                     for s in selectors
                 )
             return any(record_matches(dict(record), s) for s in selectors)

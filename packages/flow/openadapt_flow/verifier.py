@@ -386,6 +386,39 @@ class Contract:
         walk(self.config.model_dump(mode="json"))
         return sorted(found)
 
+    def null_unsafe_params(self) -> dict[str, str]:
+        """Each parameter that may not be ``None``, with where it is used.
+
+        A null binds only in an effect's ``match``, ``new_records`` and
+        ``value``, where it must equal a stored null. Anywhere else (a query
+        or path parameter, an idempotency or composite key, a read-back
+        field, the frame) a null has no value to send or compare, so
+        :func:`begin_write` refuses it before anything is read.
+        """
+
+        found: dict[str, str] = {}
+
+        def walk(value: Any, where: str) -> None:
+            if isinstance(value, Mapping):
+                name = value.get("param")
+                if isinstance(name, str) and name:
+                    found.setdefault(name, where)
+                for item in value.values():
+                    walk(item, where)
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    walk(item, where)
+
+        dumped = self.config.model_dump(mode="json")
+        for section, body in dumped.items():
+            if section != "effects":
+                walk(body, section)
+        for index, effect in enumerate(dumped.get("effects") or []):
+            for key, body in effect.items():
+                if key not in ("match", "new_records", "value"):
+                    walk(body, f"effects[{index}].{key}")
+        return found
+
 
 #: Settings that change how long a read waits, never what is written.
 _TIMINGS = frozenset(
@@ -811,7 +844,8 @@ def begin_write(
     Raises :class:`WriteBlocked` (:class:`BaselineUnreadable`,
     :class:`WriteHeld` or :class:`AlreadyWritten`) when the write must not
     be sent, and :class:`VerifierError` for a value the contract needs that
-    ``params`` lacks.
+    ``params`` lacks, or that is ``None`` where a null can't be bound
+    (:meth:`Contract.null_unsafe_params`).
     """
 
     actor.run_record()  # an unknown kind fails before anything is read
@@ -824,6 +858,14 @@ def begin_write(
     if missing:
         raise VerifierError(f"values missing for: {', '.join(missing)}")
     values = {n: params[n] for n in names}
+    unsafe = contract.null_unsafe_params()
+    nulls = sorted(n for n in names if values[n] is None and n in unsafe)
+    if nulls:
+        raise VerifierError(
+            "a null value can't be bound for: "
+            + ", ".join(f"{n} (used in {unsafe[n]})" for n in nulls)
+            + "; a null binds only in an effect's match, new_records or value"
+        )
     try:
         led = _resolve_ledger(ledger)
     except LedgerError as exc:

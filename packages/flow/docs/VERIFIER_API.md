@@ -155,6 +155,31 @@ sent. Adapters turn it into a `written: false` reply.
 | `WriteHeld` | An earlier attempt with the same identity is in flight in another worker, `UNCERTAIN`, or `REFUTED` and not yet released by a person. |
 | `AlreadyWritten` | An earlier attempt was `CONFIRMED` but its reply never reached the caller (a cancellation, a timeout, a crash). It carries the earlier result, and the write isn't sent again. |
 
+It raises `VerifierError` when a value the contract needs is missing from
+`params`, or is `None` where a null can't be bound (see below).
+
+### Null values
+
+A parameter set to `None` means the field is left empty. In an effect's
+`match`, `new_records` or `value` it binds to a null value, which matches
+only a stored null:
+
+- SQL: the column is in the row and is `NULL`. A row without that column
+  matches nothing, so a misnamed column can't pass.
+- REST and FHIR: the field is `null` or absent.
+
+A null value never matches `""`, the text `"None"`, or any other stored
+value, so a wrong write on a task with empty fields still stops. The
+reverse holds too: a stored null matches no text parameter, `""` included.
+`""` and `NULL` are different values. When an app stores an empty field as
+either one, say so per column in the query, for example
+`NULLIF(description, '') AS description`, and pass `None`.
+
+Anywhere else a null has nothing to send or compare: a query, path or
+search parameter, an idempotency or composite key, a read-back field, or
+the frame. `begin_write` refuses a `None` there with a `VerifierError` that
+names the parameter and where it is used, before anything is read.
+
 ## The uncertain-write ledger
 
 The ledger stops a restart or a second worker from resending a write whose

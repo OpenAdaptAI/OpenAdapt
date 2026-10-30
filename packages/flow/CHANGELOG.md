@@ -31,6 +31,8 @@
 
 - The whole-database frame (`frame.database`) now reads MySQL and MariaDB schemas with every column type. A `POINT` column (Dolibarr 21) made the read raise `TypeError`; a `BIT` column did the same; `FLOAT` values compared by six printed digits; decimals lost digits past 28. Binary strings, `BIT`, geometries and vectors are read as hex, `FLOAT` is widened to `DOUBLE`, `JSON` is read as its stored text, and numbers parse as `Decimal`. A value that still can't be read exactly makes the database unreadable, never a column dropped, and `begin_write` now says why the frame could not be read.
 
+- A parameter set to `None` no longer makes the record check unreadable. Before, `verify_write` returned `UNCERTAIN` ("could not be read back") whatever was written, because the null could not be turned into text. Now a `None` in an effect's `match`, `new_records` or `value` matches only a stored null (SQL `NULL`; a REST or FHIR field that is null or absent). It never matches `""` or any other value, and a stored null no longer matches the text `"None"`. `field_equals` no longer treats a stored null as `""`. A `None` where a null can't be bound (a query parameter, a key, the frame) is refused at `begin_write` ([#1660](https://github.com/OpenAdaptAI/OpenAdapt/issues/1660)).
+
 ## v2.4.1 (2026-10-28)
 
 Flow runs without its benchmark package and accepts a pinned config with Windows line endings. Several checks now halt or refute where 2.4.0 could act on the wrong row or pass a weaker check, and the frame can compare the whole database.
