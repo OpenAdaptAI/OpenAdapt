@@ -498,7 +498,39 @@ def _pick(
     keep = [t for t in tied if not _derived_copy(t, tied, demos)]
     if len(keep) == 1:
         return keep[0], []
+    same = _identical_columns(keep, demos)
+    if same is not None:
+        return same, []
     return None, tied
+
+
+def _identical_columns(
+    tied: Sequence[Location], demos: Sequence[Demo]
+) -> Optional[Location]:
+    """Tied columns of one row that hold the same value in every row of
+    their table can't be told apart by any data: keep the one the table
+    defines first (the source; a copy is added after it). Either compares
+    exactly, so a wrong pick stops a write, never passes one."""
+
+    if not demos or len(tied) < 2:
+        return None
+    first = tied[0]
+    if any(
+        t.hops != first.hops or len(t.columns) != 1 or t.rule != first.rule
+        for t in tied
+    ):
+        return None
+    table = first.hops[-1].table if first.hops else None
+    rows = demos[0].after.get(table) if table else None
+    if rows is None or rows.count_only is not None or not rows.rows:
+        return None
+    cols = [t.columns[0] for t in tied]
+    if not all(len({r.get(c) for c in cols}) == 1 for r in rows.rows.values()):
+        return None
+    order = list(next(iter(rows.rows.values())).keys())
+    return min(
+        tied, key=lambda t: order.index(t.columns[0]) if t.columns[0] in order else 999
+    )
 
 
 def _derived_copy(
