@@ -1,0 +1,170 @@
+{
+  "applied": [],
+  "dialect": "mysql",
+  "tables": 141,
+  "questions": [
+    {
+      "number": 1,
+      "key": "bookkeeping",
+      "text": "Is this the app's own bookkeeping, which a write may change without a task asking? Rows the app adds beside each write, expected exactly that many times (a second save adds a second one, which stops the write; list a table under logs_add to allow any number): call_user (1 per write), note (1 per write). Tables treated as the app's own logs (rows may be added, existing rows must not change): action_history_record, auth_log_record, note, note_user Columns that change on their own and are not compared: account: stream_updated_at; contact: stream_updated_at; lead: modified_at, modified_by_id, stream_updated_at Columns of a new record that differ between demonstrations and are not checked: call: parent_type, uid; opportunity: last_stage, probability Answer `bookkeeping: accept`, or list changes under logs_add, logs_remove, columns_add, columns_remove.",
+      "proposal": "accept",
+      "answered": true
+    },
+    {
+      "number": 2,
+      "key": "recheck_after_s",
+      "text": "How long after a verified write can the app still write on its own (a background job, a delayed retry)? The database is read again that many seconds later and a late change refutes the write. Proposed: 300. Answer `recheck_after_s: <seconds>`.",
+      "proposal": 300,
+      "answered": true
+    }
+  ],
+  "kinds": {
+    "create_contact": {
+      "mode": "create",
+      "main_table": "contact",
+      "locations": {
+        "account": "contact.account_id -> account.name (exact)",
+        "account_city": "contact.account_id -> account.billing_address_city (exact)",
+        "email": "entity_email_address (whose entity_id is the contact key).email_address_id -> email_address.name (exact)",
+        "first_name": "contact.first_name (exact)",
+        "last_name": "contact.last_name (exact)",
+        "phone": "entity_phone_number (whose entity_id is the contact key).phone_number_id -> phone_number.name (phone)",
+        "title": "account_contact (whose contact_id is the contact key).role (exact)"
+      },
+      "placed_by_name": [],
+      "placed_from_another_kind": [],
+      "demonstrations": 2,
+      "children": {
+        "account#2": "account_contact",
+        "account_city#2": "account_contact",
+        "email": "entity_email_address",
+        "phone": "entity_phone_number",
+        "title": "account_contact"
+      },
+      "dispatch_children": {},
+      "lists": {},
+      "side_rows": [
+        {
+          "table": "note",
+          "count": 1,
+          "unless": null
+        }
+      ],
+      "logs": [
+        "action_history_record",
+        "auth_log_record"
+      ],
+      "refused": [],
+      "unresolved": {},
+      "emitted": 64,
+      "rejected": []
+    },
+    "create_opportunity": {
+      "mode": "create",
+      "main_table": "opportunity",
+      "locations": {
+        "account": "opportunity.account_id -> account.name (exact)",
+        "account_city": "opportunity.account_id -> account.billing_address_city (exact)",
+        "amount": "opportunity.amount (number)",
+        "close_date": "opportunity.close_date (date)",
+        "currency": "opportunity.amount_currency (exact)",
+        "name": "opportunity.name (exact)",
+        "stage": "opportunity.stage (exact)"
+      },
+      "placed_by_name": [],
+      "placed_from_another_kind": [],
+      "demonstrations": 2,
+      "children": {},
+      "dispatch_children": {},
+      "lists": {},
+      "side_rows": [
+        {
+          "table": "note",
+          "count": 1,
+          "unless": null
+        }
+      ],
+      "logs": [
+        "action_history_record",
+        "auth_log_record"
+      ],
+      "refused": [],
+      "unresolved": {},
+      "emitted": 64,
+      "rejected": []
+    },
+    "update_lead": {
+      "mode": "update",
+      "main_table": "lead",
+      "locations": {
+        "company": "lead.account_name (exact)",
+        "first_name": "lead.first_name (exact)",
+        "last_name": "lead.last_name (exact)"
+      },
+      "placed_by_name": [],
+      "placed_from_another_kind": [],
+      "demonstrations": 2,
+      "children": {},
+      "dispatch_children": {
+        "email": {
+          "value@email": "entity_email_address"
+        }
+      },
+      "lists": {},
+      "side_rows": [],
+      "logs": [
+        "action_history_record",
+        "auth_log_record",
+        "note"
+      ],
+      "refused": [],
+      "unresolved": {},
+      "emitted": 43,
+      "rejected": []
+    },
+    "log_call": {
+      "mode": "create",
+      "main_table": "call",
+      "locations": {
+        "account": "call.account_id -> account.name (exact)",
+        "account_city": "call.account_id -> account.billing_address_city (exact)",
+        "contact": "call_contact (whose call_id is the call key).contact_id -> contact.first_name || ' ' || last_name (exact)",
+        "date_start": "call.date_start (datetime)",
+        "description": "call.description (exact)",
+        "direction": "call.direction (exact)",
+        "duration_minutes": "call.date_start || ' ' || date_end (minutes)",
+        "lead": "call.parent_id -> lead.first_name || ' ' || last_name (exact)",
+        "lead_company": "call.parent_id -> lead.account_name (exact)",
+        "status": "call.status (exact)",
+        "subject": "call.name (exact)"
+      },
+      "placed_by_name": [],
+      "placed_from_another_kind": [],
+      "demonstrations": 2,
+      "children": {
+        "contact": "call_contact",
+        "lead#2": "call_lead",
+        "lead_company#2": "call_lead"
+      },
+      "dispatch_children": {},
+      "lists": {},
+      "side_rows": [
+        {
+          "table": "call_user",
+          "count": 1,
+          "unless": null
+        }
+      ],
+      "logs": [
+        "action_history_record",
+        "auth_log_record",
+        "note",
+        "note_user"
+      ],
+      "refused": [],
+      "unresolved": {},
+      "emitted": 64,
+      "rejected": []
+    }
+  }
+}
