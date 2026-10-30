@@ -48,7 +48,9 @@ def fixture(app: str) -> Any:
 
 
 def setup_view(app: str) -> dict[str, Any]:
-    return yaml.safe_load((FCG / "apps" / app / "setup_view.yaml").read_text(encoding="utf-8"))
+    return yaml.safe_load(
+        (FCG / "apps" / app / "setup_view.yaml").read_text(encoding="utf-8")
+    )
 
 
 def write_inputs(work: Path, app: str, read: dict[str, Any]) -> list[str]:
@@ -68,11 +70,15 @@ def write_inputs(work: Path, app: str, read: dict[str, Any]) -> list[str]:
             for k in view["kinds"]
         ]
     }
-    (work / "kinds.yaml").write_text(yaml.safe_dump(kinds, allow_unicode=True), encoding="utf-8")
+    (work / "kinds.yaml").write_text(
+        yaml.safe_dump(kinds, allow_unicode=True), encoding="utf-8"
+    )
     return ["--read", str(work / "read.yaml")]
 
 
-def demo(work: Path, kind: str, values: dict[str, Any], write: Callable[[], Any]) -> None:
+def demo(
+    work: Path, kind: str, values: dict[str, Any], write: Callable[[], Any]
+) -> None:
     """Snapshot, make one demonstration write, record the diff."""
 
     flags = ["--read", str(work / "read.yaml")]

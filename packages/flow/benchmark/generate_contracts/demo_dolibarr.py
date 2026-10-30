@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pymysql
 import requests
-
 from demo_lib import demo, fixture, propose, setup_view, write_inputs
 
 APP = "dolibarr"
@@ -28,11 +27,23 @@ def main(work: Path) -> None:
     ro = fx.read_access()
     read = {
         "sql_driver": "pymysql",
-        "sql_connect_args": {"host": ro["host"], "port": ro["port"], "user": ro["user"], "database": ro["database"]},
+        "sql_connect_args": {
+            "host": ro["host"],
+            "port": ro["port"],
+            "user": ro["user"],
+            "database": ro["database"],
+        },
         "sql_password_env": "FCG_DOLIBARR_READER_PASSWORD",
     }
     write_inputs(work, APP, read)
-    db = pymysql.connect(host=ro["host"], port=ro["port"], user=ro["user"], password=ro["password"], database=ro["database"])
+    db = pymysql.connect(
+        host=ro["host"],
+        port=ro["port"],
+        user=ro["user"],
+        password=ro["password"],
+        database=ro["database"],
+        autocommit=True,
+    )
 
     def q(sql: str, args: tuple = ()) -> list[tuple]:
         with db.cursor() as cur:
@@ -40,13 +51,22 @@ def main(work: Path) -> None:
             return list(cur.fetchall())
 
     def api(method: str, path: str, payload: object = None) -> object:
-        r = requests.request(method, bot["base_url"] + path, headers=bot["headers"], json=payload, timeout=60)
+        r = requests.request(
+            method,
+            bot["base_url"] + path,
+            headers=bot["headers"],
+            json=payload,
+            timeout=60,
+        )
         r.raise_for_status()
         return r.json()
 
     def customer(name: str, town: str) -> int | None:
         db.commit()
-        rows = q("SELECT rowid FROM llx_societe WHERE BINARY nom=%s AND BINARY town=%s", (name, town))
+        rows = q(
+            "SELECT rowid FROM llx_societe WHERE BINARY nom=%s AND BINARY town=%s",
+            (name, town),
+        )
         return int(rows[0][0]) if len(rows) == 1 else None
 
     def country(label: str) -> int:
@@ -54,7 +74,9 @@ def main(work: Path) -> None:
 
     def product(ref: str) -> tuple[int, str, str]:
         db.commit()
-        rid, price, tva = q("SELECT rowid, price, tva_tx FROM llx_product WHERE BINARY ref=%s", (ref,))[0]
+        rid, price, tva = q(
+            "SELECT rowid, price, tva_tx FROM llx_product WHERE BINARY ref=%s", (ref,)
+        )[0]
         return int(rid), str(price), str(tva)
 
     for k in setup_view(APP)["kinds"]:
@@ -65,17 +87,28 @@ def main(work: Path) -> None:
                 if customer(v["name"], v["town"]) is not None:
                     # Already there (a "make sure" example): demonstrate a
                     # second create with values of our own instead.
-                    v = {**v, "name": "Atelier Démo Générateur", "address": "8 place du Marché",
-                         "zip": "21000", "town": "Dijon", "phone": "03 80 30 31 32",
-                         "email": "atelier@demo-generateur.example"}
+                    v = {
+                        **v,
+                        "name": "Atelier Démo Générateur",
+                        "address": "8 place du Marché",
+                        "zip": "21000",
+                        "town": "Dijon",
+                        "phone": "03 80 30 31 32",
+                        "email": "atelier@demo-generateur.example",
+                    }
                 payload = {"name": v["name"], "address": v["address"], "zip": v["zip"], "town": v["town"],
                            "country_id": country(v["country"]), "phone": v["phone"], "email": v["email"], "client": 1}  # fmt: skip
                 demo(work, kind, v, lambda p=payload: api("POST", "/thirdparties", p))
             elif kind == "create_product":
                 db.commit()
                 if q("SELECT 1 FROM llx_product WHERE BINARY ref=%s", (v["ref"],)):
-                    v = {**v, "ref": "GEN-DEMO-2", "label": "Coffret démo générateur",
-                         "price_excl_vat": "12.40", "vat_rate": "20"}
+                    v = {
+                        **v,
+                        "ref": "GEN-DEMO-2",
+                        "label": "Coffret démo générateur",
+                        "price_excl_vat": "12.40",
+                        "vat_rate": "20",
+                    }
                 payload = {"ref": v["ref"], "label": v["label"], "type": 0, "price": v["price_excl_vat"],
                            "price_base_type": "HT", "tva_tx": v["vat_rate"], "status": 1, "status_buy": 1}  # fmt: skip
                 demo(work, kind, v, lambda p=payload: api("POST", "/products", p))
@@ -84,17 +117,35 @@ def main(work: Path) -> None:
                 lines = []
                 for ln in v["lines"]:
                     pid, price, tva = product(ln["product_ref"])
-                    lines.append({"fk_product": pid, "qty": ln["qty"], "subprice": price, "tva_tx": tva, "product_type": 0})
+                    lines.append(
+                        {
+                            "fk_product": pid,
+                            "qty": ln["qty"],
+                            "subprice": price,
+                            "tva_tx": tva,
+                            "product_type": 0,
+                        }
+                    )
                 payload = {"socid": customer(v["customer"], v["town"]), "type": 0,
                            "date": calendar.timegm((y, m, d, 12, 0, 0, 0, 0, 0)), "lines": lines}  # fmt: skip
                 demo(work, kind, v, lambda p=payload: api("POST", "/invoices", p))
             elif kind == "update_customer":
                 cid = customer(v["customer"], v["town"])
-                change = {key[4:]: x for key, x in v.items() if key.startswith("new_") and x is not None}
-                demo(work, kind, v, lambda c=cid, p=change: api("PUT", f"/thirdparties/{c}", p))
+                change = {
+                    key[4:]: x
+                    for key, x in v.items()
+                    if key.startswith("new_") and x is not None
+                }
+                demo(
+                    work,
+                    kind,
+                    v,
+                    lambda c=cid, p=change: api("PUT", f"/thirdparties/{c}", p),
+                )
     bot_id = q("SELECT rowid FROM llx_user WHERE login='fcg_bot'")[0][0]
     report = propose(work, {"bot_user_id": str(bot_id)})
     print("questions:", len(report["questions"]))
+    db.close()  # an open read transaction would block the reset
     fx.reset()
 
 

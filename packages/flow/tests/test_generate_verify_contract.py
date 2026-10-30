@@ -102,7 +102,9 @@ class App:
         self.port, self.db = port, db
 
     def con(self) -> Any:
-        c = psycopg2.connect(host="127.0.0.1", port=self.port, user="admin", dbname=self.db)
+        c = psycopg2.connect(
+            host="127.0.0.1", port=self.port, user="admin", dbname=self.db
+        )
         c.autocommit = True
         return c
 
@@ -118,10 +120,14 @@ class App:
 
     def user(self, name: str) -> int:
         first, last = name.split(" ", 1)
-        return self.one("SELECT id FROM users WHERE firstname=%s AND lastname=%s", (first, last))
+        return self.one(
+            "SELECT id FROM users WHERE firstname=%s AND lastname=%s", (first, last)
+        )
 
     def create_issue(self, v: dict[str, Any], *, project_id: Any = None) -> int:
-        pid = project_id or self.one("SELECT id FROM projects WHERE name=%s", (v["project"],))
+        pid = project_id or self.one(
+            "SELECT id FROM projects WHERE name=%s", (v["project"],)
+        )
         sid = self.one("SELECT id FROM statuses WHERE name=%s", (v["status"],))
         uid = self.user(v["assignee"]) if v.get("assignee") else None
         iid = self.one(
@@ -142,7 +148,12 @@ class App:
     def update_issue(self, iid: int, v: dict[str, Any], *, user: int = BOT) -> None:
         sets, details = [], []
         if v.get("status") is not None:
-            sets.append(("status_id", self.one("SELECT id FROM statuses WHERE name=%s", (v["status"],))))
+            sets.append(
+                (
+                    "status_id",
+                    self.one("SELECT id FROM statuses WHERE name=%s", (v["status"],)),
+                )
+            )
         if v.get("assignee") is not None:
             sets.append(("assigned_to_id", self.user(v["assignee"])))
         if v.get("due_date") is not None:
@@ -153,7 +164,10 @@ class App:
             old = self.one(f"SELECT {col}::text FROM issues WHERE id=%s", (iid,))
             self.q(f"UPDATE issues SET {col}=%s WHERE id=%s", (val, iid))
             details.append((col, old, str(val)))
-        self.q("UPDATE issues SET updated_on=now(), lock_version=lock_version+1 WHERE id=%s", (iid,))
+        self.q(
+            "UPDATE issues SET updated_on=now(), lock_version=lock_version+1 WHERE id=%s",
+            (iid,),
+        )
         jid = self.one(
             "INSERT INTO journals (journalized_id, journalized_type, user_id, notes, created_on) "
             "VALUES (%s,'Issue',%s,%s,now()) RETURNING id", (iid, user, v.get("notes") or ""))  # fmt: skip
@@ -166,23 +180,71 @@ KINDS = {
     "kinds": [
         {
             "kind": "create_issue",
-            "parameters": ["project", "subject", "status", "assignee", "due_date", "customer_ref"],
+            "parameters": [
+                "project",
+                "subject",
+                "status",
+                "assignee",
+                "due_date",
+                "customer_ref",
+            ],
             "examples": [
-                {"values": {"project": "Billing Portal", "subject": "Tax rounding", "status": "New",
-                            "assignee": "Jon Park", "due_date": "2026-11-20", "customer_ref": None}},
-                {"values": {"project": "Help Desk", "subject": "Onboard Zoë", "status": "New",
-                            "assignee": "Renée O'Connor", "due_date": None, "customer_ref": "007341"}},
+                {
+                    "values": {
+                        "project": "Billing Portal",
+                        "subject": "Tax rounding",
+                        "status": "New",
+                        "assignee": "Jon Park",
+                        "due_date": "2026-11-20",
+                        "customer_ref": None,
+                    }
+                },
+                {
+                    "values": {
+                        "project": "Help Desk",
+                        "subject": "Onboard Zoë",
+                        "status": "New",
+                        "assignee": "Renée O'Connor",
+                        "due_date": None,
+                        "customer_ref": "007341",
+                    }
+                },
             ],
         },
         {
             "kind": "update_issue",
-            "parameters": ["project", "subject", "status", "assignee", "due_date", "done_ratio", "notes"],
+            "parameters": [
+                "project",
+                "subject",
+                "status",
+                "assignee",
+                "due_date",
+                "done_ratio",
+                "notes",
+            ],
             "examples": [
-                {"values": {"project": "Help Desk", "subject": "Printer jams", "status": "In Progress",
-                            "assignee": "Jon Park", "due_date": None, "done_ratio": None, "notes": None}},
-                {"values": {"project": "Billing Portal", "subject": "Refund button missing",
-                            "status": None, "assignee": None, "due_date": None, "done_ratio": 30,
-                            "notes": "Customer confirmed the refund."}},
+                {
+                    "values": {
+                        "project": "Help Desk",
+                        "subject": "Printer jams",
+                        "status": "In Progress",
+                        "assignee": "Jon Park",
+                        "due_date": None,
+                        "done_ratio": None,
+                        "notes": None,
+                    }
+                },
+                {
+                    "values": {
+                        "project": "Billing Portal",
+                        "subject": "Refund button missing",
+                        "status": None,
+                        "assignee": None,
+                        "due_date": None,
+                        "done_ratio": 30,
+                        "notes": "Customer confirmed the refund.",
+                    }
+                },
             ],
         },
     ]
@@ -192,7 +254,9 @@ KINDS = {
 @pytest.fixture(scope="module")
 def generated(pg: Any) -> dict[str, Any]:
     root, port = pg["root"], pg["port"]
-    admin = psycopg2.connect(host="127.0.0.1", port=port, user="admin", dbname="postgres")
+    admin = psycopg2.connect(
+        host="127.0.0.1", port=port, user="admin", dbname="postgres"
+    )
     admin.autocommit = True
     admin.cursor().execute("CREATE DATABASE tracker")
     admin.close()
@@ -220,7 +284,11 @@ def generated(pg: Any) -> dict[str, Any]:
         demo("create_issue", ex["values"], lambda v=ex["values"]: app.create_issue(v))
     for ex in KINDS["kinds"][1]["examples"]:
         v = ex["values"]
-        demo("update_issue", v, lambda v=v: app.update_issue(app.find(v["project"], v["subject"]), v))
+        demo(
+            "update_issue",
+            v,
+            lambda v=v: app.update_issue(app.find(v["project"], v["subject"]), v),
+        )
     argv = ["propose", *common, "--kinds", str(work / "kinds.yaml"), "--demos", str(work / "demos"),
             "--out", str(work / "out"), "--actor-param", f"bot_user_id={BOT}"]  # fmt: skip
     assert gen.main(argv) == 0
@@ -234,16 +302,27 @@ def generated(pg: Any) -> dict[str, Any]:
     return {"app": app, "out": work / "out", "report": report, "read": read}
 
 
-def _run(generated: dict[str, Any], kind: str, values: dict[str, Any], write: Callable[[], Any]) -> str:
+def _run(
+    generated: dict[str, Any],
+    kind: str,
+    values: dict[str, Any],
+    write: Callable[[], Any],
+) -> str:
     from openadapt_flow.verifier import Actor, begin_write, verify_write
 
-    contract, params = gen.choose(generated["out"] / "manifest.yaml", kind, values, {"bot_user_id": str(BOT)})
+    contract, params = gen.choose(
+        generated["out"] / "manifest.yaml", kind, values, {"bot_user_id": str(BOT)}
+    )
     with tempfile.TemporaryDirectory() as tmp:
         pending = begin_write(contract, params, actor=Actor("agent", "ops-bot"), ledger=None,
                               write_key=f"t-{time.time_ns()}", workdir=tmp)  # fmt: skip
         write()
         result = verify_write(pending)
-    return getattr(result.outcome, "value", str(result.outcome)) + " " + "; ".join(result.reasons)[:400]
+    return (
+        getattr(result.outcome, "value", str(result.outcome))
+        + " "
+        + "; ".join(result.reasons)[:400]
+    )
 
 
 def test_questions_and_contracts(generated: dict[str, Any]) -> None:
@@ -257,7 +336,9 @@ def test_questions_and_contracts(generated: dict[str, Any]) -> None:
     # Four change fields the examples give (status, assignee, done ratio,
     # notes): every non-empty subset gets a contract. No example gives a due
     # date, so no contract changes one.
-    assert kinds["update_issue"]["emitted"] == 15, json.dumps(kinds["update_issue"], indent=1)
+    assert kinds["update_issue"]["emitted"] == 15, json.dumps(
+        kinds["update_issue"], indent=1
+    )
     assert "journal_details" in kinds["update_issue"]["logs"]
 
 
@@ -265,7 +346,9 @@ def test_a_correct_create_is_confirmed(generated: dict[str, Any]) -> None:
     app = generated["app"]
     v = {"project": "Billing Portal", "subject": "Dark mode", "status": "New",
          "assignee": "Renée O'Connor", "due_date": "2026-12-01", "customer_ref": "0099"}  # fmt: skip
-    assert _run(generated, "create_issue", v, lambda: app.create_issue(v)).startswith("CONFIRMED")
+    assert _run(generated, "create_issue", v, lambda: app.create_issue(v)).startswith(
+        "CONFIRMED"
+    )
 
 
 def test_found_existing_with_no_write_is_confirmed(generated: dict[str, Any]) -> None:
@@ -276,12 +359,16 @@ def test_found_existing_with_no_write_is_confirmed(generated: dict[str, Any]) ->
     assert _run(generated, "create_issue", v, lambda: None).startswith("CONFIRMED")
 
 
-def test_an_undemonstrated_update_combination_is_confirmed(generated: dict[str, Any]) -> None:
+def test_an_undemonstrated_update_combination_is_confirmed(
+    generated: dict[str, Any],
+) -> None:
     app = generated["app"]
     v = {"project": "Help Desk", "subject": "VPN drops", "status": "Resolved", "assignee": None,
          "due_date": None, "done_ratio": 80, "notes": "Fixed the tunnel."}  # fmt: skip
     iid = app.find("Help Desk", "VPN drops")
-    assert _run(generated, "update_issue", v, lambda: app.update_issue(iid, v)).startswith("CONFIRMED")
+    assert _run(
+        generated, "update_issue", v, lambda: app.update_issue(iid, v)
+    ).startswith("CONFIRMED")
 
 
 CREATE = {"project": "Billing Portal", "subject": "Export CSV", "status": "New",
@@ -332,4 +419,6 @@ def test_each_fault_is_stopped(generated: dict[str, Any], name: str) -> None:
             for t, rows in snapshot.items():
                 cur.execute(f"DELETE FROM {t}")
                 for r in rows:
-                    cur.execute(f"INSERT INTO {t} VALUES ({', '.join(['%s'] * len(r))})", r)
+                    cur.execute(
+                        f"INSERT INTO {t} VALUES ({', '.join(['%s'] * len(r))})", r
+                    )

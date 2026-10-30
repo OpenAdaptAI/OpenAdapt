@@ -181,7 +181,9 @@ def connector(read: Mapping[str, Any]) -> Callable[[], Any]:
     env = read.get("sql_password_env")
     if env:
         if env not in os.environ:
-            raise StoreError(f"environment variable {env} (the read password) is not set")
+            raise StoreError(
+                f"environment variable {env} (the read password) is not set"
+            )
         args["password"] = os.environ[str(env)]
 
     def connect() -> Any:
@@ -253,7 +255,9 @@ def _mysql_schema(cur: Any) -> Schema:
         t.columns.append(
             Column(
                 name=str(cname),
-                data_type="tinyint(1)" if ctype.startswith("tinyint(1)") else str(dtype).lower(),
+                data_type="tinyint(1)"
+                if ctype.startswith("tinyint(1)")
+                else str(dtype).lower(),
                 nullable=str(nullable).upper() == "YES",
                 default=None if default is None else str(default),
                 auto="auto_increment" in extra,
@@ -438,9 +442,7 @@ def save_snapshot(path: Path, rows: Mapping[str, TableRows]) -> None:
 
 def load_snapshot(path: Path) -> dict[str, TableRows]:
     data = json.loads(path.read_text(encoding="utf-8"))
-    return {
-        n: TableRows(dict(t["rows"]), t.get("count_only")) for n, t in data.items()
-    }
+    return {n: TableRows(dict(t["rows"]), t.get("count_only")) for n, t in data.items()}
 
 
 @dataclass
@@ -476,7 +478,9 @@ class Diff:
 
     def of(self, table: str, kind: Optional[str] = None) -> list[RowChange]:
         return [
-            c for c in self.changes if c.table == table and (kind is None or c.kind == kind)
+            c
+            for c in self.changes
+            if c.table == table and (kind is None or c.kind == kind)
         ]
 
     def to_json(self) -> dict[str, Any]:
@@ -489,7 +493,10 @@ class Diff:
     def from_json(cls, data: Mapping[str, Any]) -> "Diff":
         return cls(
             [RowChange(**c) for c in data.get("changes", [])],
-            {k: (int(v[0]), int(v[1])) for k, v in dict(data.get("unread", {})).items()},
+            {
+                k: (int(v[0]), int(v[1]))
+                for k, v in dict(data.get("unread", {})).items()
+            },
         )
 
 
@@ -501,7 +508,10 @@ def diff(before: Mapping[str, TableRows], after: Mapping[str, TableRows]) -> Dif
     for name in sorted(set(before) | set(after)):
         a, b = before.get(name), after.get(name)
         if a is None or b is None:
-            unread[name] = (0 if a is None else len(a.rows), 0 if b is None else len(b.rows))
+            unread[name] = (
+                0 if a is None else len(a.rows),
+                0 if b is None else len(b.rows),
+            )
             continue
         if a.count_only is not None or b.count_only is not None:
             ca = a.count_only if a.count_only is not None else len(a.rows)

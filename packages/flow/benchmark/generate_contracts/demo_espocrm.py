@@ -16,7 +16,6 @@ from pathlib import Path
 
 import pymysql
 import requests
-
 from demo_lib import demo, fixture, propose, setup_view, write_inputs
 
 APP = "espocrm"
@@ -46,7 +45,10 @@ def main(work: Path, extra: list[str]) -> None:
         return str(rows[0][0])
 
     def account(name: str, city: str) -> str:
-        return one("SELECT id FROM account WHERE BINARY name=%s AND BINARY billing_address_city=%s AND deleted=0", (name, city))
+        return one(
+            "SELECT id FROM account WHERE BINARY name=%s AND BINARY billing_address_city=%s AND deleted=0",
+            (name, city),
+        )
 
     def person(table: str, full: str, company: str | None = None) -> str:
         first, last = full.split(" ", 1)
@@ -58,7 +60,13 @@ def main(work: Path, extra: list[str]) -> None:
         return one(sql, args)
 
     def api(method: str, path: str, payload: dict) -> None:
-        r = requests.request(method, bot["base_url"] + path, headers=bot["headers"], json=payload, timeout=60)
+        r = requests.request(
+            method,
+            bot["base_url"] + path,
+            headers=bot["headers"],
+            json=payload,
+            timeout=60,
+        )
         r.raise_for_status()
 
     bot_id = one("SELECT id FROM user WHERE user_name=%s", ("crm-bot",))
@@ -83,7 +91,10 @@ def main(work: Path, extra: list[str]) -> None:
                 demo(work, kind, v, lambda b=body: api("POST", "/Contact", b))
             elif kind == "create_opportunity":
                 with db.cursor() as cur:
-                    cur.execute("SELECT COUNT(*) FROM opportunity WHERE BINARY name=%s AND deleted=0", (v["name"],))
+                    cur.execute(
+                        "SELECT COUNT(*) FROM opportunity WHERE BINARY name=%s AND deleted=0",
+                        (v["name"],),
+                    )
                     if cur.fetchone()[0]:
                         continue
                 body = {"name": v["name"], "accountId": account(v["account"], v["account_city"]),
@@ -107,7 +118,10 @@ def main(work: Path, extra: list[str]) -> None:
                         "dateStart": start.strftime("%Y-%m-%d %H:%M:%S"),
                         "dateEnd": end.strftime("%Y-%m-%d %H:%M:%S"), "assignedUserId": bot_id}  # fmt: skip
                 if v.get("account"):
-                    body.update(parentType="Account", parentId=account(v["account"], v["account_city"]))
+                    body.update(
+                        parentType="Account",
+                        parentId=account(v["account"], v["account_city"]),
+                    )
                 if v.get("lead"):
                     lead = person("lead", v["lead"], v.get("lead_company"))
                     body.update(parentType="Lead", parentId=lead, leadsIds=[lead])
@@ -118,6 +132,7 @@ def main(work: Path, extra: list[str]) -> None:
                 demo(work, kind, v, lambda b=body: api("POST", "/Call", b))
     report = propose(work, {"bot_user_id": bot_id}, extra)
     print("questions:", len(report["questions"]))
+    db.close()
     fx.reset()
 
 

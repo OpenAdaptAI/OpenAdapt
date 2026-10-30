@@ -347,7 +347,12 @@ def locate(
     added = set()
     for ch in demo.diff.changes:
         t2 = schema.tables.get(ch.table)
-        if ch.kind == "added" and ch.after and t2 is not None and len(t2.primary_key) == 1:
+        if (
+            ch.kind == "added"
+            and ch.after
+            and t2 is not None
+            and len(t2.primary_key) == 1
+        ):
             added.add((ch.table, ch.after.get(t2.primary_key[0])))
 
     def walk(
@@ -393,7 +398,9 @@ def locate(
                 for col in child.columns:
                     if ch.after.get(col.name) != key:
                         continue
-                    if links is not None and col.name not in links.get(ch.table, {col.name}):
+                    if links is not None and col.name not in links.get(
+                        ch.table, {col.name}
+                    ):
                         continue
                     declared = any(
                         fk.column == col.name and fk.table == t.name
@@ -405,7 +412,11 @@ def locate(
                         child,
                         ch.after,
                         hops
-                        + (Hop("child", ch.table, col.name, t.primary_key[0], declared),),
+                        + (
+                            Hop(
+                                "child", ch.table, col.name, t.primary_key[0], declared
+                            ),
+                        ),
                         depth + 1,
                     )
 
@@ -416,7 +427,9 @@ def locate(
     return sorted(unique.values(), key=_rank)
 
 
-def link_columns(schema: Schema, demos: Sequence[tuple["Demo", RowChange]]) -> dict[str, set[str]]:
+def link_columns(
+    schema: Schema, demos: Sequence[tuple["Demo", RowChange]]
+) -> dict[str, set[str]]:
     """Per table, the columns that hold the main record's key in every row
     that table gained, across all demonstrations (a journal's
     ``journalized_id``, not its ``user_id`` that happens to be equal once)."""
@@ -537,10 +550,14 @@ def column_roles(
         if col.auto or (name in t.primary_key and len(t.primary_key) == 1):
             out[name] = ColumnRole("key")
             continue
-        if col.kind in ("date", "datetime") and all(
-            v is None or _within(v, d.started_at, d.finished_at)
-            for (d, _), v in zip(rows, values)
-        ) and any(v is not None for v in values):
+        if (
+            col.kind in ("date", "datetime")
+            and all(
+                v is None or _within(v, d.started_at, d.finished_at)
+                for (d, _), v in zip(rows, values)
+            )
+            and any(v is not None for v in values)
+        ):
             out[name] = ColumnRole("timestamp")
             continue
         actor = [
@@ -553,17 +570,22 @@ def column_roles(
             continue
         links = link_values or [set() for _ in rows]
         if values and all(
-            v is not None and (v in lv or (len(t.primary_key) == 1 and v == r.get(t.primary_key[0])))
+            v is not None
+            and (v in lv or (len(t.primary_key) == 1 and v == r.get(t.primary_key[0])))
             for v, lv, (_, r) in zip(values, links, rows)
         ):
             out[name] = ColumnRole("link")
             continue
-        if len(t.primary_key) == 1 and values and all(
-            v is not None
-            and r.get(t.primary_key[0]) is not None
-            and str(r.get(t.primary_key[0])) in v
-            and v != r.get(t.primary_key[0])
-            for v, (_, r) in zip(values, rows)
+        if (
+            len(t.primary_key) == 1
+            and values
+            and all(
+                v is not None
+                and r.get(t.primary_key[0]) is not None
+                and str(r.get(t.primary_key[0])) in v
+                and v != r.get(t.primary_key[0])
+                for v, (_, r) in zip(values, rows)
+            )
         ):
             out[name] = ColumnRole("varies", detail={"why": "holds the row's own key"})
             continue
@@ -585,7 +607,11 @@ def column_roles(
                 out[name] = ColumnRole("constant", None)
             else:
                 out[name] = ColumnRole(
-                    "constant", v, detail={"is_default": default is not None and default.strip("'") == v}
+                    "constant",
+                    v,
+                    detail={
+                        "is_default": default is not None and default.strip("'") == v
+                    },
                 )
             continue
         out[name] = ColumnRole("varies")

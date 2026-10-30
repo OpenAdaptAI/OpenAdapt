@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from demo_lib import FCG, fixture, load
 
 from openadapt_flow.generate import verify_contract as gen
@@ -37,7 +36,9 @@ def main() -> int:
     ap.add_argument("app")
     ap.add_argument("work", type=Path)
     ap.add_argument("--only", nargs="*")
-    ap.add_argument("--actor-id", required=True, help="the bot's id as the contracts bind it")
+    ap.add_argument(
+        "--actor-id", required=True, help="the bot's id as the contracts bind it"
+    )
     ap.add_argument("--actor-param", default="bot_user_id")
     ap.add_argument("--no-faults", action="store_true")
     ap.add_argument("--no-correct", action="store_true")
@@ -52,11 +53,20 @@ def main() -> int:
     out = args.work / "validate.jsonl"
     done = set()
     if out.exists():
-        done = {json.loads(x)["case"] for x in out.read_text().splitlines() if x.strip()}
+        done = {
+            json.loads(x)["case"] for x in out.read_text().splitlines() if x.strip()
+        }
     cases: list[tuple[str, dict, Any, float]] = []
     if not args.no_correct:
         for tid, task in tasks.items():
-            cases.append((f"correct-{tid}", task, lambda t=task: faults.correct_write(t, fx.bot()), 0.0))
+            cases.append(
+                (
+                    f"correct-{tid}",
+                    task,
+                    lambda t=task: faults.correct_write(t, fx.bot()),
+                    0.0,
+                )
+            )
     if not args.no_faults:
         for f in yaml.safe_load((app_dir / "faults" / "faults.yaml").read_text()):
             task = tasks[f["task"]]
@@ -70,7 +80,9 @@ def main() -> int:
             )  # fmt: skip
     for case, task, act, late in cases:
         short = case.split("-", 1)[1]
-        if case in done or (args.only and short not in args.only and task["id"] not in args.only):
+        if case in done or (
+            args.only and short not in args.only and task["id"] not in args.only
+        ):
             continue
         while os.getloadavg()[0] >= 35:
             time.sleep(30)
@@ -79,17 +91,28 @@ def main() -> int:
         before = oracle.snapshot()
         pending = None
         try:
-            contract, params = gen.choose(manifest, task["kind"], task["values"], {args.actor_param: args.actor_id})
+            contract, params = gen.choose(
+                manifest,
+                task["kind"],
+                task["values"],
+                {args.actor_param: args.actor_id},
+            )
             rec["contract"] = contract.name
             tmp = tempfile.mkdtemp()
             pending = begin_write(contract, params, actor=Actor("agent", "generated-check"),
                                   ledger=None, write_key=f"{case}-{time.time_ns()}", workdir=tmp)  # fmt: skip
         except Exception as exc:  # noqa: BLE001 - a stop before the write
-            rec["verdict"] = {"outcome": "BLOCKED_AT_BEGIN", "reasons": [f"{type(exc).__name__}: {exc}"]}
+            rec["verdict"] = {
+                "outcome": "BLOCKED_AT_BEGIN",
+                "reasons": [f"{type(exc).__name__}: {exc}"],
+            }
         try:
             rec["claim"] = act()
         except Exception as exc:  # noqa: BLE001
-            rec["claim"] = {"status": "not_done", "note": f"{type(exc).__name__}: {exc}"}
+            rec["claim"] = {
+                "status": "not_done",
+                "note": f"{type(exc).__name__}: {exc}",
+            }
         if pending is not None:
             try:
                 r = verify_write(pending)

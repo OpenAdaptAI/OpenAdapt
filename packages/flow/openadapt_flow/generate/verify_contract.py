@@ -47,11 +47,11 @@ import yaml
 
 from openadapt_flow.generate import sql_store as store
 from openadapt_flow.generate.demo_analysis import (
-    _rank,
     ColumnRole,
     Demo,
     Hop,
     Location,
+    _rank,
     best,
     column_roles,
     is_identifier,
@@ -59,9 +59,8 @@ from openadapt_flow.generate.demo_analysis import (
     locate,
     looks_like_log,
     pick_anchor,
-    snake,
 )
-from openadapt_flow.generate.sql_store import RowChange, Schema, Table
+from openadapt_flow.generate.sql_store import RowChange, Schema
 
 MANIFEST_SCHEMA = "openadapt.contract-manifest/v1"
 #: Most contracts one kind gets (all subsets of up to six optional fields).
@@ -128,7 +127,10 @@ def load_kinds(path: Path) -> list[KindSpec]:
                 [str(p) for p in k["parameters"]],
                 str(k.get("description") or ""),
                 [
-                    {"instruction": e.get("instruction", ""), "values": dict(e.get("values") or {})}
+                    {
+                        "instruction": e.get("instruction", ""),
+                        "values": dict(e.get("values") or {}),
+                    }
                     for e in k.get("examples") or []
                 ],
             )
@@ -234,7 +236,9 @@ class KindPlan:
 
 def _scalars(values: Mapping[str, Any]) -> dict[str, Any]:
     return {
-        k: v for k, v in values.items() if v is not None and not isinstance(v, (list, dict))
+        k: v
+        for k, v in values.items()
+        if v is not None and not isinstance(v, (list, dict))
     }
 
 
@@ -286,7 +290,11 @@ def analyze(
         plan.anchor, plan.mode = anchor.table, mode
         plan.demos.append(d)
         plan.anchors.append(anchor)
-    lists = [p for p in spec.parameters if any(isinstance(d.values.get(p), list) for d in plan.demos)]
+    lists = [
+        p
+        for p in spec.parameters
+        if any(isinstance(d.values.get(p), list) for d in plan.demos)
+    ]
     links = link_columns(schema, list(zip(plan.demos, plan.anchors)))
     scalars = [p for p in spec.parameters if p not in lists]
 
@@ -405,7 +413,12 @@ def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
     col = schema.tables[plan.anchor].column(name)
     if col is None or name in schema.tables[plan.anchor].primary_key:
         return None
-    rule = {"number": "number", "bool": "number", "date": "date", "datetime": "datetime"}.get(col.kind, "exact")
+    rule = {
+        "number": "number",
+        "bool": "number",
+        "date": "date",
+        "datetime": "datetime",
+    }.get(col.kind, "exact")
     if col.kind not in ("text", "number", "bool", "date", "datetime"):
         return None
     return Location((), (name,), rule)
@@ -428,7 +441,13 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
                 key = (a.after or {}).get(loc.hops[0].ref_column)
                 if ch.after.get(loc.hops[0].column) != key:
                     continue
-                if locate(schema, d, _as_change(ch.table, ch.after), d.values[p], max_hops=len(rel.hops)):
+                if locate(
+                    schema,
+                    d,
+                    _as_change(ch.table, ch.after),
+                    d.values[p],
+                    max_hops=len(rel.hops),
+                ):
                     rows.append((d, ch.after))
                     break
         explained = {loc.hops[0].column, *rel.columns}
@@ -438,9 +457,12 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
             if q == p or not rows:
                 continue
             hits = [
-                locate(schema, d, _as_change(loc.hops[0].table, r), d.values[q], max_hops=1)
+                locate(
+                    schema, d, _as_change(loc.hops[0].table, r), d.values[q], max_hops=1
+                )
                 for d, r in rows
-                if d.values.get(q) is not None and not isinstance(d.values.get(q), (list, dict))
+                if d.values.get(q) is not None
+                and not isinstance(d.values.get(q), (list, dict))
             ]
             if hits and all(h and h[0].hops for h in hits):
                 co.append(q)
@@ -461,7 +483,11 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
             items = d.values.get(p)
             if not isinstance(items, list):
                 continue
-            key = (a.after or {}).get(schema.tables[plan.anchor].primary_key[0]) if schema.tables[plan.anchor].primary_key else None
+            key = (
+                (a.after or {}).get(schema.tables[plan.anchor].primary_key[0])
+                if schema.tables[plan.anchor].primary_key
+                else None
+            )
             children = [
                 ch
                 for ch in d.diff.changes
@@ -480,14 +506,14 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
                     if i in used:
                         continue
                     locs = {
-                        k: locate(schema, d, _as_change(ch.table, ch.after), v, max_hops=1)
+                        k: locate(
+                            schema, d, _as_change(ch.table, ch.after), v, max_hops=1
+                        )
                         for k, v in item.items()
                     }
                     if all(locs.values()):
                         used.add(i)
-                        link_col = next(
-                            c for c, v in ch.after.items() if v == key
-                        )
+                        link_col = next(c for c, v in ch.after.items() if v == key)
                         table = ch.table
                         link = Hop(
                             "child",
@@ -514,7 +540,11 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
         explained = {link.column} | {c for loc in locs.values() for c in loc.columns}
         explained |= {loc.hops[0].column for loc in locs.values() if loc.hops}
         plan.lists[p] = ChildGroup(
-            table, link, locs, column_roles(schema, table, rows, explained, {}), list_param=p
+            table,
+            link,
+            locs,
+            column_roles(schema, table, rows, explained, {}),
+            list_param=p,
         )
 
 
@@ -544,17 +574,27 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
                 plan.removed[ch.table] = plan.removed.get(ch.table, 0) + 1
                 continue
             if ch.kind == "changed":
-                linked = ch.table in child_tables and a.after is not None and any(
-                    v == (a.after or {}).get(plan_pk(schema, plan.anchor))
-                    for v in (ch.after or {}).values()
+                linked = (
+                    ch.table in child_tables
+                    and a.after is not None
+                    and any(
+                        v == (a.after or {}).get(plan_pk(schema, plan.anchor))
+                        for v in (ch.after or {}).values()
+                    )
                 )
                 if linked:
                     g = plan.children[child_tables[ch.table]]
-                    g.changed_columns = sorted(set(g.changed_columns) | set(ch.changed_columns))
+                    g.changed_columns = sorted(
+                        set(g.changed_columns) | set(ch.changed_columns)
+                    )
                 elif ch.table == plan.anchor:
-                    plan.bookkeeping.setdefault(ch.table, set()).update(ch.changed_columns)
+                    plan.bookkeeping.setdefault(ch.table, set()).update(
+                        ch.changed_columns
+                    )
                 else:
-                    plan.bookkeeping.setdefault(ch.table, set()).update(ch.changed_columns)
+                    plan.bookkeeping.setdefault(ch.table, set()).update(
+                        ch.changed_columns
+                    )
                 continue
             # added
             if ch.table in list_tables:
@@ -574,24 +614,23 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
         d.__dict__["_added_keys"] = added_keys
     for t, cs in sorted(counts.items()):
         rows = [r for group in pure.get(t, []) for r in group]
-        if (
-            len(set(cs)) == 1
-            and cs[0] > 0
-            and not looks_like_log(t)
-            and rows
-        ):
+        if len(set(cs)) == 1 and cs[0] > 0 and not looks_like_log(t) and rows:
             links = [getattr(d, "_added_keys", set()) for d, _ in rows]
             roles = column_roles(schema, t, rows, set(), actor_values, links)
-            plan.sides.append(
-                SideSpec(t, cs[0], roles, unless=child_tables.get(t))
-            )
+            plan.sides.append(SideSpec(t, cs[0], roles, unless=child_tables.get(t)))
         elif rows:
             plan.logs.add(t)
     if plan.mode == "update":
         for a in plan.anchors:
             plan.anchor_changed |= set(a.changed_columns)
-        explained = {c for loc in plan.locations.values() if not loc.hops for c in loc.columns}
-        explained |= {loc.hops[0].column for loc in plan.locations.values() if loc.hops and loc.hops[0].kind == "fk"}
+        explained = {
+            c for loc in plan.locations.values() if not loc.hops for c in loc.columns
+        }
+        explained |= {
+            loc.hops[0].column
+            for loc in plan.locations.values()
+            if loc.hops and loc.hops[0].kind == "fk"
+        }
         for locs in plan.dispatch_locations.values():
             for loc in locs.values():
                 explained |= set(loc.columns) if not loc.hops else {loc.hops[0].column}
@@ -610,7 +649,13 @@ def _is_param_row(schema: Schema, plan: KindPlan, d: Demo, ch: RowChange) -> boo
         if g.table != ch.table or d.values.get(p) is None or ch.after is None:
             continue
         rel = g.params[p]
-        if locate(schema, d, _as_change(ch.table, ch.after), d.values[p], max_hops=len(rel.hops)):
+        if locate(
+            schema,
+            d,
+            _as_change(ch.table, ch.after),
+            d.values[p],
+            max_hops=len(rel.hops),
+        ):
             return True
     return False
 
@@ -626,8 +671,14 @@ def _is_ref_row(schema: Schema, plan: KindPlan, d: Demo, ch: RowChange) -> bool:
         if not rel.hops or rel.hops[0].table != ch.table or d.values.get(p) is None:
             continue
         col = rel.columns[0] if len(rel.columns) == 1 else None
-        if col and ch.after.get(col) is not None and _rule_ok(ch.after.get(col), d.values[p], rel.rule):
-            plan.added_refs.setdefault(p, {"table": ch.table, "column": col, "rule": rel.rule})
+        if (
+            col
+            and ch.after.get(col) is not None
+            and _rule_ok(ch.after.get(col), d.values[p], rel.rule)
+        ):
+            plan.added_refs.setdefault(
+                p, {"table": ch.table, "column": col, "rule": rel.rule}
+            )
             return True
     return False
 
@@ -760,7 +811,9 @@ class SqlBuilder:
             return f"CASE WHEN {ref} IS NULL OR {ref} = '' THEN '1' ELSE '0' END"
         return f"CASE WHEN {ref} IS NULL THEN '1' ELSE '0' END"
 
-    def copied(self, alias: str, detail: Mapping[str, Any], table: str, column: str) -> str:
+    def copied(
+        self, alias: str, detail: Mapping[str, Any], table: str, column: str
+    ) -> str:
         src = (
             f"(SELECT s.{self.q(detail['column'])} FROM {self.q(detail['table'])} s "
             f"WHERE s.{self.q(detail['ref_column'])} = {alias}.{self.q(detail['via'])})"
@@ -819,12 +872,16 @@ class Variant:
     fields: list[str]
     lists: dict[str, int] = field(default_factory=dict)
     dispatch_value: Optional[str] = None
-    files: dict[str, str] = field(default_factory=dict)  # create | found | update -> path
+    files: dict[str, str] = field(
+        default_factory=dict
+    )  # create | found | update -> path
     sample: dict[str, Any] = field(default_factory=dict)
 
     @property
     def slug(self) -> str:
-        parts = sorted(self.fields) + [f"{k}x{n}" for k, n in sorted(self.lists.items())]
+        parts = sorted(self.fields) + [
+            f"{k}x{n}" for k, n in sorted(self.lists.items())
+        ]
         if self.dispatch_value is not None:
             parts.insert(0, f"{self.dispatch_value}")
         text = "+".join(parts)
@@ -872,7 +929,9 @@ def build_contract(
     named_tables: set[str] = {anchor}
 
     # The main record, with every column and the values its parameters reach.
-    main = Surface("record", settings.views.get(anchor, anchor), _base_columns(b, anchor))
+    main = Surface(
+        "record", settings.views.get(anchor, anchor), _base_columns(b, anchor)
+    )
     match: dict[str, Any] = {}
     locations = dict(plan.locations)
     if variant.dispatch_value is not None:
@@ -939,7 +998,8 @@ def build_contract(
                 for ip in identity_params:
                     loc = locations[ip]
                     up = Location(
-                        (Hop("fk", anchor, link.column, link.ref_column, True),) + loc.hops,
+                        (Hop("fk", anchor, link.column, link.ref_column, True),)
+                        + loc.hops,
                         loc.columns,
                         loc.rule,
                     )
@@ -947,7 +1007,9 @@ def build_contract(
                     if loc.rule in ("number", "date", "datetime", "minutes"):
                         expr = b.flag(expr, loc.rule, b.ph(ip))
                     cols.append((f"main__{_alias(ip)}", expr))
-                surfaces[sname] = Surface(sname, settings.views.get(g.table, g.table), cols)
+                surfaces[sname] = Surface(
+                    sname, settings.views.get(g.table, g.table), cols
+                )
                 named_tables.add(g.table)
             surf = surfaces[sname]
             items = range(variant.lists[p]) if g.list_param else [None]
@@ -993,7 +1055,19 @@ def build_contract(
         for p, ref in plan.added_refs.items():
             if p not in fields:
                 continue
-            effects.append(_raw_effect(b, schema, surfaces, settings, ref["table"], {ref["column"]: _value_expr(p, ref["rule"])}, 1, {}, f"the new {ref['table']} row holds {p}"))
+            effects.append(
+                _raw_effect(
+                    b,
+                    schema,
+                    surfaces,
+                    settings,
+                    ref["table"],
+                    {ref["column"]: _value_expr(p, ref["rule"])},
+                    1,
+                    {},
+                    f"the new {ref['table']} row holds {p}",
+                )
+            )
         for side in plan.sides:
             if side.unless is not None and side.unless in fields:
                 continue
@@ -1004,7 +1078,17 @@ def build_contract(
                 elif role.role == "actor":
                     m[col] = {"param": role.detail["param"]}
             effects.append(
-                _raw_effect(b, schema, surfaces, settings, side.table, m, side.count, side.roles, f"{side.count} row(s) the app adds to {side.table}")
+                _raw_effect(
+                    b,
+                    schema,
+                    surfaces,
+                    settings,
+                    side.table,
+                    m,
+                    side.count,
+                    side.roles,
+                    f"{side.count} row(s) the app adds to {side.table}",
+                )
             )
 
     verifier: dict[str, Any] = {"kind": "surfaces", "surfaces": {}}
@@ -1016,7 +1100,10 @@ def build_contract(
         verifier["surfaces"][s.name] = sub
     # Main and child effects read named surfaces: no other read is judged
     # against them, and the whole-database frame covers every other table.
-    ignore = sorted({c for cols in bookkeeping.values() for c in cols} & _all_columns(schema, named_tables))
+    ignore = sorted(
+        {c for cols in bookkeeping.values() for c in cols}
+        & _all_columns(schema, named_tables)
+    )
     frame: dict[str, Any] = {}
     if ignore:
         frame["ignore_fields"] = ignore
@@ -1056,7 +1143,9 @@ def build_contract(
         }
         if nrf:
             db["new_row_fields"] = nrf
-        ign = {t: sorted(c) for t, c in bookkeeping.items() if t not in named_tables and c}
+        ign = {
+            t: sorted(c) for t, c in bookkeeping.items() if t not in named_tables and c
+        }
         if ign:
             db["ignore_columns"] = ign
         if settings.recheck_after_s:
@@ -1070,9 +1159,15 @@ def build_contract(
                 continue
             if f"raw_{_alias(t)}" in surfaces:
                 continue
-            s = Surface(f"raw_{_alias(t)}", settings.views.get(t, t), _base_columns(b, t))
+            s = Surface(
+                f"raw_{_alias(t)}", settings.views.get(t, t), _base_columns(b, t)
+            )
             surfaces[s.name] = s
-            verifier["surfaces"][s.name] = {"kind": "sql", **settings.read, "sql_query": s.sql(b)}
+            verifier["surfaces"][s.name] = {
+                "kind": "sql",
+                **settings.read,
+                "sql_query": s.sql(b),
+            }
     doc: dict[str, Any] = {
         "schema_version": "openadapt.verify/v1",
         "environment_id": settings.environment_id,
@@ -1085,13 +1180,19 @@ def build_contract(
 
 
 def _all_columns(schema: Schema, tables: set[str]) -> set[str]:
-    return {c.name for t in tables if t in schema.tables for c in schema.tables[t].columns}
+    return {
+        c.name for t in tables if t in schema.tables for c in schema.tables[t].columns
+    }
 
 
 def _place(b: SqlBuilder, surf: Surface, table: str, param: str, loc: Location) -> str:
     """Add the column that holds ``param``'s value to ``surf``; its name."""
 
-    if not loc.hops and len(loc.columns) == 1 and loc.rule in ("exact", "email", "phone"):
+    if (
+        not loc.hops
+        and len(loc.columns) == 1
+        and loc.rule in ("exact", "email", "phone")
+    ):
         return loc.columns[0] if loc.columns[0] != "id" else "id"
     expr = b.path("t", table, loc)
     alias = f"p__{_alias(param)}"
@@ -1158,8 +1259,26 @@ def _raw_effect(
         for col, value in list(m.items()):
             c = t.column(col)
             lit = value.get("literal") if isinstance(value, dict) else None
-            if c is not None and lit is not None and not (
-                c.kind == "text" or (c.kind in ("number", "bool") and c.data_type.startswith(("int", "tinyint", "smallint", "mediumint", "bigint", "integer")) and re.fullmatch(r"-?\d+", lit))
+            if (
+                c is not None
+                and lit is not None
+                and not (
+                    c.kind == "text"
+                    or (
+                        c.kind in ("number", "bool")
+                        and c.data_type.startswith(
+                            (
+                                "int",
+                                "tinyint",
+                                "smallint",
+                                "mediumint",
+                                "bigint",
+                                "integer",
+                            )
+                        )
+                        and re.fullmatch(r"-?\d+", lit)
+                    )
+                )
             ):
                 m.pop(col)
         nrf = set(getattr(surf, "_new_row_fields", set()))
@@ -1169,8 +1288,20 @@ def _raw_effect(
             role = roles.get(c.name)
             if role is not None and role.role == "constant" and role.value is None:
                 continue
-            if role is None or role.role != "constant" or (role.detail or {}).get("is_default"):
-                if role is None or role.role in ("key", "timestamp", "link", "varies", "copied", "actor", "free"):
+            if (
+                role is None
+                or role.role != "constant"
+                or (role.detail or {}).get("is_default")
+            ):
+                if role is None or role.role in (
+                    "key",
+                    "timestamp",
+                    "link",
+                    "varies",
+                    "copied",
+                    "actor",
+                    "free",
+                ):
                     nrf.add(c.name)
                 continue
             nrf.add(c.name)
@@ -1221,7 +1352,9 @@ def _anchor_roles(
 # -- variants -----------------------------------------------------------------------
 
 
-def variants(schema: Schema, plan: KindPlan, spec: KindSpec, answers: Mapping[str, Any]) -> list[Variant]:
+def variants(
+    schema: Schema, plan: KindPlan, spec: KindSpec, answers: Mapping[str, Any]
+) -> list[Variant]:
     out: list[Variant] = []
     lists = list(plan.lists)
     if plan.mode == "update":
@@ -1239,7 +1372,10 @@ def variants(schema: Schema, plan: KindPlan, spec: KindSpec, answers: Mapping[st
                 vp = next(iter(next(iter(values.values()))))
                 for c in schema.tables[plan.anchor].columns:
                     for name in {c.name, _camel(c.name)}:
-                        if name in values or c.name in schema.tables[plan.anchor].primary_key:
+                        if (
+                            name in values
+                            or c.name in schema.tables[plan.anchor].primary_key
+                        ):
                             continue
                         if c.kind == "text":
                             values[name] = {vp: Location((), (c.name,), "exact")}
@@ -1342,7 +1478,11 @@ def dry_read(path: Path, params: Mapping[str, Any], mysql: bool) -> Optional[str
     would. None when it reads; else why not."""
 
     from openadapt_flow.verifier import Contract, VerifierError
-    from openadapt_flow.verify_run import FRAME_DB_DETAIL, VerifyRunError, capture_baseline
+    from openadapt_flow.verify_run import (
+        FRAME_DB_DETAIL,
+        VerifyRunError,
+        capture_baseline,
+    )
 
     try:
         contract = Contract.load(path)
@@ -1365,7 +1505,10 @@ def dry_read(path: Path, params: Mapping[str, Any], mysql: bool) -> Optional[str
     if mysql:
         snap = detail.get(FRAME_DB_DETAIL)
         if not isinstance(snap, dict):
-            from openadapt_flow.runtime.effects.db_snapshot import mac_key, take_snapshot
+            from openadapt_flow.runtime.effects.db_snapshot import (
+                mac_key,
+                take_snapshot,
+            )
             from openadapt_flow.verify_run import _audit_sql, _db_connect, _ref_columns
 
             database = contract.config.frame.database
@@ -1420,7 +1563,9 @@ def check_read_only(connect: Any, dialect: str) -> list[str]:
                     "SUPER",
                     "EVENT",
                 ):
-                    if re.search(rf"\b{word}\b", privs) and not privs.startswith("USAGE"):
+                    if re.search(rf"\b{word}\b", privs) and not privs.startswith(
+                        "USAGE"
+                    ):
                         problems.append(f"the read account has {word}: {grant}")
         else:
             cur.execute(
@@ -1429,7 +1574,9 @@ def check_read_only(connect: Any, dialect: str) -> list[str]:
             )
             row = cur.fetchone()
             if row and any(row):
-                problems.append("the read account is a superuser or can create roles or databases")
+                problems.append(
+                    "the read account is a superuser or can create roles or databases"
+                )
             cur.execute(
                 "SELECT table_name FROM information_schema.role_table_grants "
                 "WHERE grantee = current_user AND privilege_type IN "
@@ -1461,7 +1608,9 @@ def _admin_connect(admin_read: Mapping[str, Any]) -> Any:
     env = admin_read.get("sql_password_env")
     if env:
         if env not in os.environ:
-            raise GenerateError(f"environment variable {env} (the admin password) is not set")
+            raise GenerateError(
+                f"environment variable {env} (the admin password) is not set"
+            )
         args["password"] = os.environ[str(env)]
     return module.connect(**args)
 
@@ -1519,7 +1668,9 @@ def create_views(
             if schema.dialect == "mysql":
                 cur.execute(f"GRANT SELECT ON {v} TO {reader}")
             else:
-                cur.execute(f"GRANT SELECT ON {v} TO {store.quote('postgresql', reader)}")
+                cur.execute(
+                    f"GRANT SELECT ON {v} TO {store.quote('postgresql', reader)}"
+                )
             made[t] = view
         conn.commit()
     finally:
@@ -1560,7 +1711,9 @@ def propose(
     if dialect == "mysql" and not _sees_triggers(connect):
         if grant_trigger_flag:
             if not admin_read or not reader_account:
-                raise GenerateError("--grant-trigger needs --admin-read and --reader-account")
+                raise GenerateError(
+                    "--grant-trigger needs --admin-read and --reader-account"
+                )
             applied.append(grant_trigger(admin_read, schema, reader_account))
         if not _sees_triggers(connect):
             raise GenerateError(
@@ -1599,7 +1752,9 @@ def propose(
             parts = []
             for name, tied in asked.items():
                 if tied:
-                    opts = "; ".join(f"[{i}] {loc.describe(p.anchor)}" for i, loc in enumerate(tied))
+                    opts = "; ".join(
+                        f"[{i}] {loc.describe(p.anchor)}" for i, loc in enumerate(tied)
+                    )
                     parts.append(f"`{name}` is in several places: {opts}")
                 else:
                     parts.append(
@@ -1609,7 +1764,8 @@ def propose(
             location_questions.append(
                 Question(
                     f"locations.{p.kind}",
-                    f"Kind `{p.kind}`: " + " ".join(parts)
+                    f"Kind `{p.kind}`: "
+                    + " ".join(parts)
                     + f" Answer `locations.{p.kind}: {{<parameter>: <number>}}` to pick one.",
                     None,
                 )
@@ -1641,26 +1797,35 @@ def propose(
             lines.append(
                 "Tables treated as the app's own logs (rows may be added, existing "
                 "rows must not change"
-                + (")" if dialect == "mysql" else "; on PostgreSQL they are not read at all)")
+                + (
+                    ")"
+                    if dialect == "mysql"
+                    else "; on PostgreSQL they are not read at all)"
+                )
                 + ": "
                 + ", ".join(sorted(logs))
             )
         if book:
             lines.append(
                 "Columns that change on their own and are not compared: "
-                + "; ".join(f"{t}: {', '.join(sorted(c))}" for t, c in sorted(book.items()) if c)
+                + "; ".join(
+                    f"{t}: {', '.join(sorted(c))}" for t, c in sorted(book.items()) if c
+                )
             )
         if unchecked:
             lines.append(
                 "Columns of a new record that differ between demonstrations and are "
                 "not checked: "
-                + "; ".join(f"{t}: {', '.join(sorted(c))}" for t, c in sorted(unchecked.items()))
+                + "; ".join(
+                    f"{t}: {', '.join(sorted(c))}" for t, c in sorted(unchecked.items())
+                )
             )
         questions.append(
             Question(
                 "bookkeeping",
                 "Is this the app's own bookkeeping, which a write may change without "
-                "a task asking? " + " ".join(lines)
+                "a task asking? "
+                + " ".join(lines)
                 + " Answer `bookkeeping: accept`, or list changes under "
                 "logs_add, logs_remove, columns_add, columns_remove.",
                 "accept",
@@ -1682,10 +1847,13 @@ def propose(
             )
         )
     questions.extend(location_questions)
-    questions_open = [
-        q for q in questions if _answer(answers, q.key) is None
-    ]
-    settings = Settings(read, dict(actor_params), recheck or (DEFAULT_RECHECK_S if dialect == "mysql" else None), env)
+    questions_open = [q for q in questions if _answer(answers, q.key) is None]
+    settings = Settings(
+        read,
+        dict(actor_params),
+        recheck or (DEFAULT_RECHECK_S if dialect == "mysql" else None),
+        env,
+    )
 
     # Tables whose name the SQL guard refuses: a view, or a refusal.
     blocked = sorted(
@@ -1695,14 +1863,21 @@ def propose(
     )
     needed = sorted(
         {p.anchor for p in plans if p.anchor in blocked}
-        | {g.table for p in plans for g in list(p.children.values()) + list(p.lists.values()) if g.table in blocked}
+        | {
+            g.table
+            for p in plans
+            for g in list(p.children.values()) + list(p.lists.values())
+            if g.table in blocked
+        }
     )
     if needed:
         existing = {t: f"oa_read_{t}" for t in needed if f"oa_read_{t}" in schema.views}
         missing = [t for t in needed if t not in existing]
         if missing and create_views_flag:
             if not admin_read or not reader_account:
-                raise GenerateError("--create-views needs --admin-read and --reader-account")
+                raise GenerateError(
+                    "--create-views needs --admin-read and --reader-account"
+                )
             existing.update(create_views(admin_read, schema, missing, reader_account))
             schema = store.read_schema(connect, dialect)
             for t, v in list(existing.items()):
@@ -1710,7 +1885,9 @@ def propose(
                     existing.pop(t)
         settings.views = existing
         for p in plans:
-            tables = {p.anchor} | {g.table for g in list(p.children.values()) + list(p.lists.values())}
+            tables = {p.anchor} | {
+                g.table for g in list(p.children.values()) + list(p.lists.values())
+            }
             for t in sorted(tables & set(blocked)):
                 if t not in existing:
                     p.refused.append(
@@ -1733,7 +1910,13 @@ def propose(
         "dialect": dialect,
         "tables": len(schema.tables),
         "questions": [
-            {"number": i + 1, "key": q.key, "text": q.text, "proposal": q.proposal, "answered": _answer(answers, q.key) is not None}
+            {
+                "number": i + 1,
+                "key": q.key,
+                "text": q.text,
+                "proposal": q.proposal,
+                "answered": _answer(answers, q.key) is not None,
+            }
             for i, q in enumerate(questions)
         ],
         "kinds": {},
@@ -1751,15 +1934,23 @@ def propose(
         rep: dict[str, Any] = {
             "mode": p.mode,
             "main_table": p.anchor,
-            "locations": {k: v.describe(p.anchor) for k, v in sorted(p.locations.items())},
+            "locations": {
+                k: v.describe(p.anchor) for k, v in sorted(p.locations.items())
+            },
             "placed_by_name": sorted(p.by_name),
             "demonstrations": len(p.demos),
             "children": {k: g.table for k, g in p.children.items()},
             "lists": {k: g.table for k, g in p.lists.items()},
-            "side_rows": [{"table": s.table, "count": s.count, "unless": s.unless} for s in p.sides],
+            "side_rows": [
+                {"table": s.table, "count": s.count, "unless": s.unless}
+                for s in p.sides
+            ],
             "logs": sorted(p.logs),
             "refused": list(p.refused),
-            "unresolved": {k: [loc.describe(p.anchor) for loc in v] for k, v in sorted(p.unresolved.items())},
+            "unresolved": {
+                k: [loc.describe(p.anchor) for loc in v]
+                for k, v in sorted(p.unresolved.items())
+            },
             "emitted": 0,
             "rejected": [],
         }
@@ -1774,7 +1965,13 @@ def propose(
             continue
         flavors = ["create", "found"] if p.mode == "create" else ["update"]
         for v in variants(schema, p, spec, answers):
-            if any(f not in p.locations and f != p.dispatch and f not in p.children and f not in (p.dispatch_locations.get(v.dispatch_value or "", {})) for f in v.fields):
+            if any(
+                f not in p.locations
+                and f != p.dispatch
+                and f not in p.children
+                and f not in (p.dispatch_locations.get(v.dispatch_value or "", {}))
+                for f in v.fields
+            ):
                 continue
             ok = True
             for flavor in flavors:
@@ -1787,15 +1984,25 @@ def propose(
                     f"{flavor}, fields {', '.join(v.fields + [f'{k}x{n}' for k, n in v.lists.items()])}.\n"
                     "# Proposed, not admitted: a person answers QUESTIONS.md first.\n"
                 )
-                path.write_text(header + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100), encoding="utf-8")
+                path.write_text(
+                    header
+                    + yaml.safe_dump(
+                        doc, sort_keys=False, allow_unicode=True, width=100
+                    ),
+                    encoding="utf-8",
+                )
                 why = None
                 for s in doc["verifier"]["surfaces"].values():
                     why = why or guard_problem(s["sql_query"])
                 if why is None and validate:
-                    why = dry_read(path, flatten(sample_values(p, v)), dialect == "mysql")
+                    why = dry_read(
+                        path, flatten(sample_values(p, v)), dialect == "mysql"
+                    )
                 if why is not None:
                     path.unlink()
-                    rep["rejected"].append({"variant": v.slug, "flavor": flavor, "why": why})
+                    rep["rejected"].append(
+                        {"variant": v.slug, "flavor": flavor, "why": why}
+                    )
                     ok = False
                     break
                 v.files[flavor] = str(rel)
@@ -1814,27 +2021,41 @@ def propose(
                     (out / f).unlink(missing_ok=True)
         manifest["kinds"][p.kind] = entry
         report["kinds"][p.kind] = rep
-    (out / "manifest.yaml").write_text(yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8")
-    (out / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    (out / "QUESTIONS.md").write_text(_questions_md(questions, answers, report), encoding="utf-8")
+    (out / "manifest.yaml").write_text(
+        yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8"
+    )
+    (out / "report.json").write_text(
+        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    (out / "QUESTIONS.md").write_text(
+        _questions_md(questions, answers, report), encoding="utf-8"
+    )
     report["questions_open"] = [q.key for q in questions_open]
     return report
 
 
-def _questions_md(questions: Sequence[Question], answers: Mapping[str, Any], report: Mapping[str, Any]) -> str:
+def _questions_md(
+    questions: Sequence[Question], answers: Mapping[str, Any], report: Mapping[str, Any]
+) -> str:
     lines = ["# Questions for a person", ""]
     if not questions:
-        lines.append("None: every decision followed from the schema and the demonstrations.")
+        lines.append(
+            "None: every decision followed from the schema and the demonstrations."
+        )
     for i, q in enumerate(questions, 1):
         done = _answer(answers, q.key)
         lines.append(f"{i}. {q.text}")
         lines.append(f"   - Answer key: `{q.key}`. Proposed: `{q.proposal}`.")
-        lines.append(f"   - {'Answered: `' + json.dumps(done, ensure_ascii=False) + '`' if done is not None else 'Not answered yet.'}")
+        lines.append(
+            f"   - {'Answered: `' + json.dumps(done, ensure_ascii=False) + '`' if done is not None else 'Not answered yet.'}"
+        )
         lines.append("")
     lines.append("## Kinds")
     lines.append("")
     for kind, rep in report["kinds"].items():
-        lines.append(f"- `{kind}` ({rep['mode'] or 'no contract'}, main table `{rep['main_table']}`): {rep['emitted']} contract(s).")
+        lines.append(
+            f"- `{kind}` ({rep['mode'] or 'no contract'}, main table `{rep['main_table']}`): {rep['emitted']} contract(s)."
+        )
         if rep.get("demonstrations") == 1 and rep["mode"] == "create":
             lines.append(
                 "  - One demonstration only: every column of a new record that the task "
@@ -1927,7 +2148,11 @@ def _exists(contract: Any, params: Mapping[str, Any]) -> bool:
 
 
 def _now() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+    return (
+        _dt.datetime.now(_dt.timezone.utc)
+        .replace(tzinfo=None)
+        .isoformat(timespec="seconds")
+    )
 
 
 def _parse_actor(items: Sequence[str]) -> dict[str, str]:
@@ -1954,32 +2179,84 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ),
     )
     sub = ap.add_subparsers(dest="command", required=True)
-    s = sub.add_parser("schema", help="read the schema and check the account is read-only")
-    s.add_argument("--read", required=True, type=Path, help="read.yaml: sql_driver, sql_connect_args, sql_password_env")
+    s = sub.add_parser(
+        "schema", help="read the schema and check the account is read-only"
+    )
+    s.add_argument(
+        "--read",
+        required=True,
+        type=Path,
+        help="read.yaml: sql_driver, sql_connect_args, sql_password_env",
+    )
     s.add_argument("--out", type=Path, help="write schema.json here")
-    s = sub.add_parser("snapshot", help="snapshot every table before a demonstration write")
+    s = sub.add_parser(
+        "snapshot", help="snapshot every table before a demonstration write"
+    )
     s.add_argument("--read", required=True, type=Path)
-    s.add_argument("--out", required=True, type=Path, help="e.g. work/before.json (holds row values: keep it private)")
-    s = sub.add_parser("record", help="snapshot again after the write and save the demonstration")
+    s.add_argument(
+        "--out",
+        required=True,
+        type=Path,
+        help="e.g. work/before.json (holds row values: keep it private)",
+    )
+    s = sub.add_parser(
+        "record", help="snapshot again after the write and save the demonstration"
+    )
     s.add_argument("--read", required=True, type=Path)
     s.add_argument("--before", required=True, type=Path)
     s.add_argument("--kind", required=True)
-    s.add_argument("--values", required=True, help="the task's values as JSON, or @file.json")
-    s.add_argument("--demos", required=True, type=Path, help="directory of demonstrations")
-    s.add_argument("--name", default="", help="file name stem (default: kind and a number)")
+    s.add_argument(
+        "--values", required=True, help="the task's values as JSON, or @file.json"
+    )
+    s.add_argument(
+        "--demos", required=True, type=Path, help="directory of demonstrations"
+    )
+    s.add_argument(
+        "--name", default="", help="file name stem (default: kind and a number)"
+    )
     s = sub.add_parser("propose", help="analyze the demonstrations and write contracts")
     s.add_argument("--read", required=True, type=Path)
-    s.add_argument("--kinds", required=True, type=Path, help="kinds.yaml: kinds, parameters, examples")
+    s.add_argument(
+        "--kinds",
+        required=True,
+        type=Path,
+        help="kinds.yaml: kinds, parameters, examples",
+    )
     s.add_argument("--demos", required=True, type=Path)
     s.add_argument("--out", required=True, type=Path)
-    s.add_argument("--answers", type=Path, help="answers.yaml with the person's answers")
-    s.add_argument("--actor-param", action="append", default=[], help="NAME=VALUE the caller passes for the acting user (e.g. bot_user_id=5); a column holding it is the actor")
+    s.add_argument(
+        "--answers", type=Path, help="answers.yaml with the person's answers"
+    )
+    s.add_argument(
+        "--actor-param",
+        action="append",
+        default=[],
+        help="NAME=VALUE the caller passes for the acting user (e.g. bot_user_id=5); a column holding it is the actor",
+    )
     s.add_argument("--environment-id", default="")
-    s.add_argument("--create-views", action="store_true", help="create a view for a table the SQL guard refuses by name (needs --admin-read)")
-    s.add_argument("--admin-read", type=Path, help="admin.yaml: a connection allowed to CREATE VIEW and GRANT")
-    s.add_argument("--reader-account", default="", help="the read account to GRANT SELECT on created views (MySQL: 'user'@'%%')")
-    s.add_argument("--grant-trigger", action="store_true", help="MySQL: GRANT TRIGGER to the read account through --admin-read, so the frame can see triggers")
-    s.add_argument("--no-validate", action="store_true", help="skip the dry read (tests only)")
+    s.add_argument(
+        "--create-views",
+        action="store_true",
+        help="create a view for a table the SQL guard refuses by name (needs --admin-read)",
+    )
+    s.add_argument(
+        "--admin-read",
+        type=Path,
+        help="admin.yaml: a connection allowed to CREATE VIEW and GRANT",
+    )
+    s.add_argument(
+        "--reader-account",
+        default="",
+        help="the read account to GRANT SELECT on created views (MySQL: 'user'@'%%')",
+    )
+    s.add_argument(
+        "--grant-trigger",
+        action="store_true",
+        help="MySQL: GRANT TRIGGER to the read account through --admin-read, so the frame can see triggers",
+    )
+    s.add_argument(
+        "--no-validate", action="store_true", help="skip the dry read (tests only)"
+    )
     args = ap.parse_args(argv)
     try:
         read = load_read(args.read)
@@ -1989,8 +2266,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             schema = store.read_schema(connect, dialect)
             problems = check_read_only(connect, dialect)
             if args.out:
-                args.out.write_text(json.dumps(schema.to_json(), indent=1), encoding="utf-8")
-            print(f"{dialect} {schema.database}: {len(schema.tables)} tables, {len(schema.views)} views")
+                args.out.write_text(
+                    json.dumps(schema.to_json(), indent=1), encoding="utf-8"
+                )
+            print(
+                f"{dialect} {schema.database}: {len(schema.tables)} tables, {len(schema.views)} views"
+            )
             for p in problems:
                 print(f"NOT READ-ONLY: {p}")
             return 1 if problems else 0
@@ -1998,7 +2279,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             schema = store.read_schema(connect, dialect)
             rows = store.snapshot(connect, schema)
             store.save_snapshot(args.out, rows)
-            (args.out.with_suffix(".meta.json")).write_text(json.dumps({"taken_at": _now()}), encoding="utf-8")
+            (args.out.with_suffix(".meta.json")).write_text(
+                json.dumps({"taken_at": _now()}), encoding="utf-8"
+            )
             print(f"snapshot of {len(rows)} tables -> {args.out}")
             return 0
         if args.command == "record":
@@ -2026,9 +2309,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "diff": d.to_json(),
             }
             path = args.demos / f"{stem}.demo.json"
-            path.write_text(json.dumps(doc, indent=1, ensure_ascii=False), encoding="utf-8")
+            path.write_text(
+                json.dumps(doc, indent=1, ensure_ascii=False), encoding="utf-8"
+            )
             os.chmod(path, 0o600)
-            print(f"{path}: {len(d.changes)} row change(s) in {', '.join(d.tables()) or 'no table'}")
+            print(
+                f"{path}: {len(d.changes)} row change(s) in {', '.join(d.tables()) or 'no table'}"
+            )
             return 0
         answers = load_yaml(args.answers) if args.answers else {}
         admin = load_read(args.admin_read) if args.admin_read else None
@@ -2046,9 +2333,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             validate=not args.no_validate,
             grant_trigger_flag=args.grant_trigger,
         )
-        print(f"questions: {len(report['questions'])} ({len(report['questions_open'])} open) -> {args.out / 'QUESTIONS.md'}")
+        print(
+            f"questions: {len(report['questions'])} ({len(report['questions_open'])} open) -> {args.out / 'QUESTIONS.md'}"
+        )
         for kind, rep in report["kinds"].items():
-            status = "; ".join(rep["refused"]) if rep["refused"] else f"{rep['emitted']} contract(s)"
+            status = (
+                "; ".join(rep["refused"])
+                if rep["refused"]
+                else f"{rep['emitted']} contract(s)"
+            )
             print(f"  {kind}: {status}")
         return 0
     except (GenerateError, store.StoreError) as exc:
