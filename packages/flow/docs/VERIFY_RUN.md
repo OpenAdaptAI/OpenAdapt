@@ -307,11 +307,17 @@ The versions of a target that are new in the window must be the agent's:
   would hide the other user's save.
 - Without it, versions must be whole numbers that step by one per save of
   that record (HAPI's `res_ver`, a `version_number` column). At most one
-  step may happen. Two or more steps are refuted: the agent saved once, so
-  someone else saved too. A version that went back is refuted. A version
+  step may happen. Two or more steps are refuted: step mode assumes the
+  agent saves each record once per run, so a second step is someone else's.
+  An agent that saves the same record twice (correcting its own write) needs
+  `author_field`. A version that went back is refuted. A version
   that isn't a whole number (an opaque ETag) is not checked: without authors
-  the saves can't be counted. A read of only the current version works here,
-  since the step count is the difference. The numbers must be per record and
+  the saves can't be counted. Prefer a history read, one row per version. A
+  read of only the current version counts steps as the difference, which
+  trusts the app's numbering: an app that numbers a save from the client's
+  copy (two saves from version 1 both write version 2) hides a lost update
+  there, while a history read shows the two rows as `duplicate_version`.
+  The numbers must be per record and
   contiguous: a global sequence, such as an audit table's row id, also moves
   for other records' saves, so a correct update would be refuted. Use
   `author_field` with such a sequence.
@@ -327,10 +333,13 @@ Anything else stops the run, never a pass:
 - a target whose record changed in the window with no new version
   (`no_new_version`): the app saved without a version row, so who saved
   can't be told. A target that didn't change (already right, nothing
-  written) needs no new version.
+  written) needs no new version; this relies on the read recording every
+  save, since a change reverted by a save the read misses looks unchanged.
 
 A record created in the window has no earlier version to overwrite and isn't
-judged. Only targets are judged: another user's save to an unrelated record
+judged. Whether a target existed is told by `frame.identity_field` (default
+`id`), never by `target_field`'s value after the write: a target that existed
+with no version under its current `target_field` value is `missing`. Only targets are judged: another user's save to an unrelated record
 leaves this check as it was (the frame and its attribution judge that
 record, as before). The versions are read before the records at the
 baseline, so a save between the two reads shows in the record baseline. The

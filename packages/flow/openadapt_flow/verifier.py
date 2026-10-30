@@ -1577,6 +1577,12 @@ _VERSION_REASONS = {
     "no_target_id": "a target record has no field naming it in the versions read",
     "unreadable": "the target's versions could not be read, before or after the write",
     "self_unresolved": "frame.versions.self names a parameter the run did not supply",
+    "null_version": "a version of the target reads as null, so saves can't be told apart",
+    "duplicate_version": "two rows of the target's versions hold the same version, so a "
+    "save could hide behind another",
+    "no_new_version": "the target changed in the window but no new version of it was read",
+    "history_changed": "a version of the target read before the write is gone after it, "
+    "so a save in the window could be hidden",
 }
 
 

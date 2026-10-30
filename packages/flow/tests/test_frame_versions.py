@@ -320,3 +320,28 @@ def test_r1_an_unchanged_target_with_no_new_version_holds(tmp_path: Path) -> Non
     result = _run(tmp_path, lambda con: None, AUTHORS, setup=setup)
     assert result["receipt"]["outcome"] == "verified"
     assert _versions(result)["new_versions"] == 0
+
+
+# -- review round 2 (#1662) ------------------------------------------------------
+
+
+def test_r2_i2_a_target_field_the_write_changes_is_not_a_new_record(
+    tmp_path: Path,
+) -> None:
+    # The versions are keyed by the phone, which the agent's write changes:
+    # the record existed (by its identity), so no baseline under the new
+    # phone is a missing version, not a record created in the window.
+    db = tmp_path / "app.sqlite"
+    read = {
+        "kind": "sql",
+        "sqlite_database": str(db),
+        "sql_query": "SELECT p.phone AS phone, v.ver FROM person_version v "
+        "JOIN person p ON p.id = v.person_id",
+    }
+    result = _run(
+        tmp_path,
+        _lost_update,
+        {"target_field": "phone", "record_field": "phone", "read": read},
+    )
+    assert result["receipt"]["outcome"] != "verified"
+    assert _versions(result)["problem"] == "missing"

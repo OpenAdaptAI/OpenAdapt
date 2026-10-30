@@ -473,10 +473,14 @@ def _judge_versions(
     if spec is None:
         return frame
     field_name = spec.target_field or cfg.frame.identity_field or "id"  # type: ignore[union-attr]
+    # Whether a target existed is told by its identity, which a save doesn't
+    # change, never by the target field's value after the write: a target
+    # field the write changed would make an old record look created.
+    identity = cfg.frame.identity_field or "id"  # type: ignore[union-attr]
     old: dict[str, dict[str, Any]] = {}
     for r in before.records:
-        if r.get(field_name) not in (None, ""):
-            old.setdefault(str(r.get(field_name)), dict(r))
+        if r.get(identity) not in (None, ""):
+            old.setdefault(str(r.get(identity)), dict(r))
     ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
     targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
@@ -489,13 +493,17 @@ def _judge_versions(
         for record in verdict.matched_records:
             value = record.get(field_name)
             text = None if value in (None, "") else str(value)
-            was = old.get(text) if text is not None else None
+            key = record.get(identity)
+            was = None if key in (None, "") else old.get(str(key))
+            # No identity to look up: never assume the record is new.
+            existed = was is not None or key in (None, "")
             # Changed in the window: a field read before differs now (a
             # sealed baseline marks a changed field, so it differs too).
-            changed = was is not None and any(
-                record.get(k) != v for k, v in was.items() if k not in ignored
+            changed = existed and (
+                was is None
+                or any(record.get(k) != v for k, v in was.items() if k not in ignored)
             )
-            targets.append((text, was is not None, changed))
+            targets.append((text, existed, changed))
     stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
     result = judge_versions(
         spec,
