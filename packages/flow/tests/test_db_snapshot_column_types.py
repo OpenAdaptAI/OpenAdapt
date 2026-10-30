@@ -42,17 +42,29 @@ from openadapt_flow.runtime.effects.db_snapshot import (
 @pytest.mark.parametrize(
     "a, b",
     [
-        (Decimal("12345678901234567890.0123456789"), Decimal("12345678901234567890.0123456788")),
+        (
+            Decimal("12345678901234567890.0123456789"),
+            Decimal("12345678901234567890.0123456788"),
+        ),
         (0.30000000000000004, 0.3),
         (b"\x00\xff", b"\x00\xfe"),
         (bytearray(b"\x01"), b"\x02"),
         (memoryview(b"ab"), memoryview(b"ac")),
-        (datetime.timedelta(hours=-838, minutes=-59), datetime.timedelta(hours=838, minutes=59)),
+        (
+            datetime.timedelta(hours=-838, minutes=-59),
+            datetime.timedelta(hours=838, minutes=59),
+        ),
         (datetime.timedelta(microseconds=1), datetime.timedelta(0)),
-        (datetime.datetime(2026, 1, 2, 3, 4, 5, 600000), datetime.datetime(2026, 1, 2, 3, 4, 5)),
+        (
+            datetime.datetime(2026, 1, 2, 3, 4, 5, 600000),
+            datetime.datetime(2026, 1, 2, 3, 4, 5),
+        ),
         (datetime.time(1, 2, 3), datetime.time(1, 2, 4)),
         ({"a", "b"}, {"a"}),
-        ({"b": Decimal("1.10"), "a": [1, 2]}, {"b": Decimal("1.1000000000000001"), "a": [1, 2]}),
+        (
+            {"b": Decimal("1.10"), "a": [1, 2]},
+            {"b": Decimal("1.1000000000000001"), "a": [1, 2]},
+        ),
         ([1, 2], [2, 1]),
         (uuid.UUID(int=1), uuid.UUID(int=2)),
         ("a ", "a"),
@@ -131,20 +143,35 @@ live = pytest.mark.skipif(
 COLUMNS: list[tuple[str, str, str, str]] = [
     ("c_tinyint", "TINYINT", "-128", "-127"),
     ("c_bigint_u", "BIGINT UNSIGNED", "18446744073709551615", "18446744073709551614"),
-    ("c_decimal", "DECIMAL(30,10)", "12345678901234567890.0123456789", "12345678901234567890.0123456788"),
+    (
+        "c_decimal",
+        "DECIMAL(30,10)",
+        "12345678901234567890.0123456789",
+        "12345678901234567890.0123456788",
+    ),
     ("c_double", "DOUBLE", "1.0000000000000002e300", "1e300"),
     ("c_float", "FLOAT", "0.1", "0.1000001"),
     ("c_bit", "BIT(5)", "b'10101'", "b'10100'"),
     ("c_bool", "BOOLEAN", "1", "0"),
     ("c_date", "DATE", "'2026-01-02'", "'2026-01-03'"),
-    ("c_datetime", "DATETIME(6)", "'2026-01-02 03:04:05.600000'", "'2026-01-02 03:04:05.600001'"),
-    ("c_timestamp", "TIMESTAMP(6) NULL", "'2026-01-02 03:04:05.000001'", "'2026-01-02 03:04:05'"),
+    (
+        "c_datetime",
+        "DATETIME(6)",
+        "'2026-01-02 03:04:05.600000'",
+        "'2026-01-02 03:04:05.600001'",
+    ),
+    (
+        "c_timestamp",
+        "TIMESTAMP(6) NULL",
+        "'2026-01-02 03:04:05.000001'",
+        "'2026-01-02 03:04:05'",
+    ),
     ("c_time", "TIME(6)", "'-838:59:59.000000'", "'-838:59:58.999999'"),
     ("c_year", "YEAR", "2026", "2025"),
     ("c_char", "CHAR(4)", "'ab'", "'ac'"),
     ("c_varchar", "VARCHAR(20)", "'a '", "'a'"),
     ("c_text", "TEXT", "'x'", "'X'"),
-    ("c_longtext", "LONGTEXT", "'{\"b\": 1, \"a\": 2}'", "'{\"a\": 2, \"b\": 1}'"),
+    ("c_longtext", "LONGTEXT", '\'{"b": 1, "a": 2}\'', '\'{"a": 2, "b": 1}\''),
     ("c_json", "JSON", "'{\"b\": 1.10}'", "'{\"b\": 1.1}'"),
     ("c_enum", "ENUM('x','y')", "'x'", "'y'"),
     ("c_set", "SET('a','b')", "'a,b'", "'a'"),
@@ -152,7 +179,12 @@ COLUMNS: list[tuple[str, str, str, str]] = [
     ("c_varbinary", "VARBINARY(4)", "x'00'", "x'0000'"),
     ("c_blob", "BLOB", "x'00ff'", "x'00ff00'"),
     ("c_point", "POINT NULL", "POINT(1, 2)", "POINT(1, 2.0000000000000004)"),
-    ("c_geometry", "GEOMETRY NULL", "ST_GeomFromText('LINESTRING(0 0, 1 1)')", "ST_GeomFromText('LINESTRING(0 0, 1 2)')"),
+    (
+        "c_geometry",
+        "GEOMETRY NULL",
+        "ST_GeomFromText('LINESTRING(0 0, 1 1)')",
+        "ST_GeomFromText('LINESTRING(0 0, 1 2)')",
+    ),
 ]
 
 
@@ -169,8 +201,12 @@ def database() -> Iterator[Any]:
         cols = ", ".join(f"{c} {t}" for c, t, _, _ in COLUMNS)
         cur.execute(f"CREATE TABLE t (id INT PRIMARY KEY AUTO_INCREMENT, {cols})")
         values = ", ".join(v for _, _, v, _ in COLUMNS)
-        cur.execute(f"INSERT INTO t ({', '.join(c for c, *_ in COLUMNS)}) VALUES ({values})")
-        cur.execute(f"INSERT INTO t ({', '.join(c for c, *_ in COLUMNS)}) VALUES ({values})")
+        cur.execute(
+            f"INSERT INTO t ({', '.join(c for c, *_ in COLUMNS)}) VALUES ({values})"
+        )
+        cur.execute(
+            f"INSERT INTO t ({', '.join(c for c, *_ in COLUMNS)}) VALUES ({values})"
+        )
         cur.execute(
             f"INSERT INTO t ({', '.join(c for c, *_ in COLUMNS)}) VALUES "
             f"({', '.join('NULL' for _ in COLUMNS)})"
@@ -211,7 +247,9 @@ def test_a_dict_cursor_reads_the_same(database: Any) -> None:
 
 
 @live
-@pytest.mark.parametrize("column, _type, _old, new", COLUMNS, ids=[c[0] for c in COLUMNS])
+@pytest.mark.parametrize(
+    "column, _type, _old, new", COLUMNS, ids=[c[0] for c in COLUMNS]
+)
 def test_a_one_step_change_to_any_column_shows(
     database: Any, column: str, _type: str, _old: str, new: str
 ) -> None:
@@ -228,7 +266,9 @@ def test_a_one_step_change_to_any_column_shows(
 
 
 @live
-@pytest.mark.parametrize("column, _type, old, _new", COLUMNS, ids=[c[0] for c in COLUMNS])
+@pytest.mark.parametrize(
+    "column, _type, old, _new", COLUMNS, ids=[c[0] for c in COLUMNS]
+)
 def test_a_null_and_a_value_differ(
     database: Any, column: str, _type: str, old: str, _new: str
 ) -> None:
