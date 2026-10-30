@@ -30,6 +30,7 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -37,7 +38,7 @@ from typing import Any, Optional
 import yaml
 
 from benchmark.contract_autogen.blind import stop_card
-from benchmark.fhir_medplum.fixture import MedplumFixture
+from benchmark.fhir_medplum.fixture import MedplumFixture, _http
 from benchmark.fhir_medplum.public import agents as agent_mod
 from benchmark.fhir_medplum.public.model import RESOURCE, is_the_task
 from benchmark.fhir_medplum.public.oracle import judge, others_harmed
@@ -54,7 +55,9 @@ SYSTEM = (
     "check your own work: read the record back by its id and compare every "
     "value the task gives, then search again and make sure exactly one "
     "record matches the task. If a value is wrong, fix that record with a "
-    "PUT and read it back again. If you can't confirm that the record is "
+    "PUT and read it back again. If a write fails or times out, search "
+    "before you try again, and never leave two records. If you can't "
+    "confirm that the record is "
     "right and the only one, report not_done. When you're done, call finish "
     "once: status done with the record's id (Type/id) if the record now "
     "exists exactly as asked (created or already there), or status not_done "
@@ -65,6 +68,8 @@ EFFORT = "medium"
 MAX_TURNS = 40
 ITEM_BUDGET_USD = 0.50
 PORT = 9590
+#: The SDK's own stops that are the agent's outcome (it ran out), not a fault.
+AGENT_LIMITS = ("error_max_turns", "error_max_budget_usd")
 
 
 class RestartProxy(FaultProxy):
@@ -107,6 +112,49 @@ class Run3(Bench):
         if case.get("instruction_extra"):
             task["instruction"] += "\n" + str(case["instruction_extra"])
         return task, want, params
+
+    def b_params(self, case: dict[str, Any], params: dict[str, Any]) -> Optional[str]:
+        """Point B's references at what a search finds, never the harness's truth.
+
+        A gets the patient's name and date of birth, and the practitioner's
+        name. B is given the same: its patient and practitioner references
+        come from a search by them, as an intake mapping would make them,
+        before the agent starts. Returns why B can't tell, or None.
+        """
+
+        kind = case["type"]
+        if kind == "patient":
+            return None
+        v = {**self.suite["defaults"][kind], **(case.get("task") or {})}
+        p = self.suite["people"][v["patient"]]
+        found = self._search(
+            "Patient",
+            {"given": p["given"], "family": p["family"], "birthdate": p["birthDate"]},
+        )
+        if len(found) != 1:
+            return f"{len(found)} patients match the task's name and date of birth"
+        params["patient"] = found[0]
+        if kind == "appointment":
+            d = self.suite["practitioners"][v["practitioner"]]
+            found = self._search(
+                "Practitioner", {"given": d["given"], "family": d["family"]}
+            )
+            if len(found) != 1:
+                return f"{len(found)} practitioners match the task's name"
+            params["practitioner"] = found[0]
+        return None
+
+    def _search(self, rtype: str, query: dict[str, str]) -> list[str]:
+        url = f"{self.fx.fhir_url}/{rtype}?{urllib.parse.urlencode(query)}"
+        bundle = _http("GET", url, token=self.record_token())
+        return [f"{rtype}/{e['resource']['id']}" for e in bundle.get("entry") or []]
+
+    def record_token(self) -> str:
+        """B's read token, fresh, where the generated contracts read it."""
+
+        token = self.fx.client_token("record-check")
+        os.environ["MEDPLUM_RECORD_TOKEN"] = token
+        return token
 
     def expectation(self, kind: str, want: dict[str, Any], before: dict) -> str:
         """The oracle's ``expect``, from the seeded state, never the case's."""
@@ -155,15 +203,21 @@ class Run3(Bench):
         expect = self.expectation(kind, want, before)
         row["expect"] = expect
         contract = load_contract(self.contracts[kind])
-        try:
-            baseline = capture_baseline(contract, params)
-        except Unreadable as exc:
-            baseline = None
-            row["verifier"] = {
-                "outcome": "needs_review",
-                "reasons": [f"unreadable: {exc}"],
-                "unreadable": True,
-            }
+        baseline = None
+        unsure = self.b_params(case, params)
+        row["b_params"] = dict(params)
+        if unsure:
+            row["verifier"] = {"outcome": "needs_review", "reasons": [unsure]}
+        else:
+            try:
+                self.record_token()
+                baseline = capture_baseline(contract, params)
+            except Unreadable as exc:
+                row["verifier"] = {
+                    "outcome": "needs_review",
+                    "reasons": [f"unreadable: {exc}"],
+                    "unreadable": True,
+                }
         proxy.arm(case.get("faults") or [], RESOURCE[kind], refs)
         proxy.restart = bool(case.get("restart"))
         excused: dict[str, str] = {}
@@ -191,7 +245,15 @@ class Run3(Bench):
             row["first_claim"] = claim
             row["restart_cut"] = proxy.cut
             proxy.cut = proxy.restart = False
-            claim = _run_agent(agent, task, proxy, self.actors.token("bot"), row)
+            # As in run 2, the restart shares the item's one budget.
+            left = max(0.01, ITEM_BUDGET_USD - row.get("cost_usd", 0.0))
+            claim = _run_agent(
+                agent,
+                {**task, "_budget_usd": left},
+                proxy,
+                self.actors.token("bot"),
+                row,
+            )
         row["agent_s"] = round(time.monotonic() - t0, 1)
         row["claim"] = claim
         for spec in others:
@@ -203,6 +265,7 @@ class Run3(Bench):
                 )
         t1 = time.monotonic()
         if baseline is not None:
+            self.record_token()
             result = verify_ensure(contract, params, baseline)
             row["verifier"] = {
                 "outcome": result.outcome,
@@ -232,6 +295,7 @@ class Run3(Bench):
             delivered = False
         row["fault_delivered"] = delivered
         if baseline is not None and row["verifier"]["outcome"] == "needs_review":
+            self.record_token()
             row["card"] = stop_card(self.fx, self.actors, contract, params, baseline)
         row["load_end"] = os.getloadavg()[0]
         return row
@@ -244,11 +308,15 @@ def _run_agent(
     token: str,
     row: dict[str, Any],
 ) -> dict[str, Any]:
-    try:
-        claim = agent(task, proxy.fhir_url, token)
-    except Exception as exc:  # noqa: BLE001 - an agent crash is a stop
-        claim = {"status": "not_done", "note": f"agent raised {type(exc).__name__}"}
+    """One agent run. An infrastructure failure raises, so the item is an
+    error and leaves both arms (run 2's rule), never a stop of A's."""
+
+    claim = agent(task, proxy.fhir_url, token)
     row["cost_usd"] = row.get("cost_usd", 0.0) + float(claim.pop("cost_usd", 0) or 0)
+    sdk = claim.pop("sdk", {})
+    row.setdefault("sdk", []).append(sdk)
+    if sdk.get("is_error") and sdk.get("subtype") not in AGENT_LIMITS:
+        raise RuntimeError(f"agent infrastructure error: {sdk.get('subtype')}")
     return claim
 
 
@@ -295,6 +363,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             system=SYSTEM,
             effort=EFFORT,
             max_budget_usd=ITEM_BUDGET_USD,
+            nudge=True,
         )
     else:
         name, agent = agent_mod.load(args.agent, model=MODEL)
@@ -309,7 +378,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         bring_up(fx)
     bench = Run3(fx, suite, Path(args.contracts))
     bench.setup()
-    proxy = RestartProxy(fx.fhir_url).start()
+    # The generated contracts name their deployment by these (teach.json).
+    os.environ["MEDPLUM_FHIR_URL"] = fx.fhir_url
+    os.environ["MEDPLUM_BOT_REF"] = os.environ["BENCH_AGENT_REF"]
+    proxy = RestartProxy(fx.fhir_url)
+    proxy.start()
     proxy.side_write = bench.side_write
     meta = {
         "agent": name,

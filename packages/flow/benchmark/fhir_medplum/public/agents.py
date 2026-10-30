@@ -212,8 +212,14 @@ def claude(
     system: str = SYSTEM,
     effort: Optional[str] = None,
     max_budget_usd: Optional[float] = None,
+    nudge: bool = False,
 ) -> AgentFn:
-    """``effort`` and ``max_budget_usd`` go to the Agent SDK when set."""
+    """``effort`` and ``max_budget_usd`` go to the Agent SDK when set.
+
+    ``nudge``: when the agent stops without calling finish, resume its
+    session once and ask for the outcome (run 2's agent loop did this).
+    A task's ``_budget_usd`` key, when present, sets that run's budget.
+    """
 
     extra: dict[str, Any] = {}
     if effort:
@@ -224,8 +230,19 @@ def claude(
     def run(task: dict[str, Any], fhir_url: str, token: str) -> dict[str, Any]:
         import anyio
 
+        options = dict(extra)
+        if task.get("_budget_usd") is not None:
+            options["max_budget_usd"] = task["_budget_usd"]
         return anyio.run(
-            _claude_once, task, fhir_url, token, model, max_turns, system, extra
+            _claude_once,
+            task,
+            fhir_url,
+            token,
+            model,
+            max_turns,
+            system,
+            options,
+            nudge,
         )
 
     return run
@@ -239,6 +256,7 @@ async def _claude_once(
     max_turns: int,
     system: str = SYSTEM,
     extra: Optional[dict[str, Any]] = None,
+    nudge: bool = False,
 ) -> dict[str, Any]:
     from claude_agent_sdk import (
         ResultMessage,
@@ -272,7 +290,9 @@ async def _claude_once(
             _request, fhir_url, token, method, str(args.get("path", "")), body
         )
         text = json.dumps(reply) if not isinstance(reply, str) else reply
-        return {"content": [{"type": "text", "text": f"HTTP {status}\n{text[:20000]}"}]}
+        if len(text) > 20000:
+            text = f"{text[:20000]}\n[truncated {len(text) - 20000} characters]"
+        return {"content": [{"type": "text", "text": f"HTTP {status}\n{text}"}]}
 
     @tool(
         "finish",
@@ -294,12 +314,29 @@ async def _claude_once(
         **(extra or {}),
     )
     cost = 0.0
-    async for message in query(prompt=task["instruction"], options=options):
-        if isinstance(message, ResultMessage):
-            cost = float(message.total_cost_usd or 0.0)
+    result: dict[str, Any] = {}
+
+    async def turn(prompt: str, opts: Any) -> None:
+        nonlocal cost
+        async for message in query(prompt=prompt, options=opts):
+            if isinstance(message, ResultMessage):
+                cost += float(message.total_cost_usd or 0.0)
+                result.update(
+                    subtype=message.subtype,
+                    is_error=bool(message.is_error),
+                    session_id=message.session_id,
+                )
+
+    await turn(task["instruction"], options)
+    nudged = False
+    if nudge and "status" not in claim and result.get("session_id"):
+        nudged = True
+        options.resume = result["session_id"]
+        await turn("Call the finish tool to report the outcome.", options)
     if claim.get("status") not in ("done", "not_done"):
         claim = {"status": "not_done", "note": "the agent never called finish"}
     claim["cost_usd"] = cost
+    claim["sdk"] = {**result, "nudged": nudged}
     return claim
 
 
