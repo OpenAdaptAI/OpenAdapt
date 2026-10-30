@@ -198,6 +198,10 @@ class ChildGroup:
     #: The parameter whose value the rows hold (``children`` may hold a
     #: second group for it: a call's lead is its parent and an attendee).
     param: str = ""
+    #: An update replaced earlier rows here (removed or changed rows linked
+    #: to the record), leaving ``after_count`` of them.
+    replaced: bool = False
+    after_count: int = 1
 
 
 @dataclass
@@ -359,7 +363,7 @@ def analyze(
             if len(by_value) > 1:
                 ok = True
                 for dv, per in by_value.items():
-                    loc, tied = _pick(p, _intersect(per), plan.demos)
+                    loc, tied = _pick(p, _intersect(per), plan.demos, schema)
                     if loc is None:
                         key = f"{p} (when {plan.dispatch} is {dv})"
                         plan.unresolved[key] = tied
@@ -371,7 +375,7 @@ def analyze(
                     plan.changes.append(p)
                 continue
         all_found = _intersect(found[p])
-        loc, tied = _pick(p, all_found, plan.demos)
+        loc, tied = _pick(p, all_found, plan.demos, schema)
         if loc is not None:
             plan.extra[p] = [
                 x
@@ -480,7 +484,10 @@ def _share_locations(
 
 
 def _pick(
-    param: str, found: Sequence[Location], demos: Sequence[Demo] = ()
+    param: str,
+    found: Sequence[Location],
+    demos: Sequence[Demo] = (),
+    schema: Optional[Schema] = None,
 ) -> tuple[Optional[Location], list[Location]]:
     """The best location. Among tied ones: the one whose column is named
     like the parameter (``stage``, not ``last_stage``); else drop a column
@@ -498,14 +505,14 @@ def _pick(
     keep = [t for t in tied if not _derived_copy(t, tied, demos)]
     if len(keep) == 1:
         return keep[0], []
-    same = _identical_columns(keep, demos)
+    same = _identical_columns(keep, demos, schema)
     if same is not None:
         return same, []
     return None, tied
 
 
 def _identical_columns(
-    tied: Sequence[Location], demos: Sequence[Demo]
+    tied: Sequence[Location], demos: Sequence[Demo], schema: Optional[Schema] = None
 ) -> Optional[Location]:
     """Tied columns of one row that hold the same value in every row of
     their table can't be told apart by any data: keep the one the table
@@ -527,7 +534,9 @@ def _identical_columns(
     cols = [t.columns[0] for t in tied]
     if not all(len({r.get(c) for c in cols}) == 1 for r in rows.rows.values()):
         return None
-    order = list(next(iter(rows.rows.values())).keys())
+    if schema is None or table not in schema.tables:
+        return None
+    order = schema.tables[table].column_names
     return min(
         tied, key=lambda t: order.index(t.columns[0]) if t.columns[0] in order else 999
     )
@@ -810,6 +819,7 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
                 continue
             if ch.kind == "removed":
                 if ch.table in child_tables or ch.table in list_tables:
+                    _mark_replaced(schema, plan, d, a, ch)
                     continue
                 plan.removed[ch.table] = plan.removed.get(ch.table, 0) + 1
                 continue
@@ -823,6 +833,7 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
                     )
                 )
                 if linked:
+                    _mark_replaced(schema, plan, d, a, ch)
                     g = next(x for x in _all_groups(plan) if x.table == ch.table)
                     g.changed_columns = sorted(
                         set(g.changed_columns) | set(ch.changed_columns)
@@ -879,6 +890,30 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
         extra = plan.anchor_changed - explained
         if extra:
             plan.bookkeeping.setdefault(plan.anchor, set()).update(extra)
+
+
+def _mark_replaced(
+    schema: Schema, plan: KindPlan, d: Demo, a: RowChange, ch: RowChange
+) -> None:
+    """An update removed or changed a row linked to the record in a table
+    that holds a value: count the record's rows there after the write."""
+
+    if plan.mode != "update" or a.after is None:
+        return
+    for g in _demo_groups(plan, d):
+        if g.table != ch.table:
+            continue
+        key = a.after.get(g.link.ref_column)
+        rows = d.after.get(g.table)
+        if rows is None or rows.count_only is not None:
+            continue
+        consts = [(c, r.value) for c, r in g.roles.items() if r.role == "constant"]
+        n = sum(
+            1
+            for r in rows.rows.values()
+            if r.get(g.link.column) == key and all(r.get(c) == v for c, v in consts)
+        )
+        g.replaced, g.after_count = True, n
 
 
 def plan_pk(schema: Schema, table: str) -> str:
@@ -1341,6 +1376,24 @@ def build_contract(
                 # Found: the row is already there, and nothing changes.
                 effect["count_new_only"] = True
             effects.append(effect)
+        if plan.mode == "update" and g.replaced and not found:
+            # The demonstrations replaced the record's earlier rows here (an
+            # old email address link removed): afterwards the record has
+            # exactly as many such rows as they left, and its earlier ones
+            # may go.
+            m = {
+                k: v
+                for k, v in effects[-1]["match"].items()
+                if k.startswith(("main__", "pin__")) or k in g.roles
+            }
+            effects.append(
+                {
+                    "kind": "record_written",
+                    "probe": f"surface={sname}|the record's rows here after the write",
+                    "match": m,
+                    "expected_count": g.after_count,
+                }
+            )
         if plan.mode == "update":
             target_fields.update(g.changed_columns)
     # A new row a link row names (a new email address).
@@ -1711,12 +1764,15 @@ def variants(
         } & (located | {g.param for g in plan.children.values()})
         base_sets.append(frozenset(given))
     optional = [p for p in plan.optional if p in located and p not in lists]
-    seen: set[frozenset[str]] = set()
-    sets: list[frozenset[str]] = []
-    for base in base_sets:
-        drop = [p for p in optional if p in base]
-        for n in range(0, len(drop) + 1):
-            for combo in itertools.combinations(drop, n):
+    seen: set[frozenset[str]] = set(base_sets)
+    # Every demonstrated set first, then sets with fewer optional fields,
+    # one field left out at a time across demonstrations, so the cap keeps
+    # the sets closest to what was shown.
+    sets: list[frozenset[str]] = list(dict.fromkeys(base_sets))
+    drops = {base: [p for p in optional if p in base] for base in base_sets}
+    for n in range(1, max((len(v) for v in drops.values()), default=0) + 1):
+        for base in base_sets:
+            for combo in itertools.combinations(drops[base], n):
                 s = frozenset(base - set(combo))
                 if s not in seen:
                     seen.add(s)

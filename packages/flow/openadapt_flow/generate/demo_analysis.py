@@ -374,7 +374,7 @@ def locate(
                 target_row = idx.row(target, v)
                 if target_row is None or (target == anchor.table and hops):
                     continue  # back to the main record: not a location
-                if not declared and not hops and (target, v) in added:
+                if not declared and not hops and anchor.key and (target, v) in added:
                     # The main row's key columns point at rows that were
                     # there before; a row the write added is reached from a
                     # row that names the main record instead.
