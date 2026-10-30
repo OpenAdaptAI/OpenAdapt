@@ -345,8 +345,10 @@ class ClinicBackend(FakeBackend):
         colleague: Optional[str] = None,
         audit: Optional[list[dict[str, str]]] = None,
         during_undo: Optional[str] = None,
+        hidden_log: bool = False,
     ):
         super().__init__(viewport=(300, 200))
+        self.hidden_log = hidden_log
         self.during_undo = during_undo
         self.audit = audit if audit is not None else []
         self.path = path
@@ -380,6 +382,10 @@ class ClinicBackend(FakeBackend):
                 assert hist.lastrowid
                 self._log("bot", "insert", "history", cur.lastrowid)
             conn.execute("INSERT INTO log (event) VALUES ('patient created')")
+            if self.hidden_log:
+                # The save also writes a row the read keeps append-only (the
+                # allow-listed log), and the app logs that write.
+                self._log("bot", "insert", "log", cur.lastrowid)
         elif key == "F2" and self.colleague == "note":
             # About another patient (Existing Person, id 1).
             conn.execute(
@@ -616,6 +622,7 @@ def _run_clinic(
     audit_down: Optional[str] = None,
     on_read: Optional[dict[int, Any]] = None,
     autoinc: bool = False,
+    hidden_log: bool = False,
 ) -> RunReport:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
@@ -691,6 +698,7 @@ def _run_clinic(
                 colleague=colleague,
                 audit=audit,
                 during_undo=during_undo,
+                hidden_log=hidden_log,
             ),
             vision=_vision(),
             effect_verifier=_sql_verifier(db),
@@ -1807,3 +1815,114 @@ def test_the_apps_own_logged_bookkeeping_is_accounted_for():
         )
         == hidden
     )
+
+
+# ---------------------------------------------------------------------------
+# Review of #1634, round 10
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("exclusive", [False, True])
+def test_a_logged_write_the_reads_cant_see_is_never_rolled_back(tmp_path, exclusive):
+    # The save also writes the allow-listed log, and the audit log shows it:
+    # the compensation undoes the patient, but that write stays. Never
+    # ROLLED_BACK, on a shared store or an exclusive one.
+    report = _run_clinic(
+        tmp_path, attribution="audit", hidden_log=True, exclusive=exclusive
+    )
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back", rollback.reason
+    assert "no changed row accounts for (in log)" in rollback.reason
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def _audit_spec():
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
+    return FrameAttribution(
+        kind="audit_read",
+        actor_field="actor",
+        self=["bot"],
+        record_field="record",
+        record_key="patient_id",
+        event_field="event",
+        write_events=["insert", "update", "delete"],
+        insert_events=["insert"],
+        table_field="tbl",
+        read={"kind": "in_memory"},
+    )
+
+
+def _with_log(entries):
+    log: list[dict[str, str]] = []
+    attributor = Attributor.from_spec(_audit_spec(), {}, lambda: list(log))
+    assert attributor is not None and attributor.start()
+    log.extend(entries)
+    return attributor
+
+
+def test_a_run_with_no_ledger_never_ends_nothing_landed_over_a_logged_write(tmp_path):
+    # A reversible step (no ledger entry) wrote somewhere the read can't see.
+    rows = [{"id": 1, "patient_id": "4"}]
+    record = roll_back(
+        _stopped([]),
+        Workflow(name="w", steps=[_key_step("note", "note", "F3")]),
+        run_dir=tmp_path,
+        bundle_dir=tmp_path,
+        reader=DatabaseListReader(rows),
+        before=records_snapshot(rows),
+        runner=RecordingRunner(),
+        attributor=_with_log(
+            [{"actor": "bot", "event": "insert", "tbl": "extended_log", "record": "4"}]
+        ),
+        exclusive=False,
+    )
+    assert record.status == "not_rolled_back"
+    report = _stopped([])
+    report.execution_outcome = "HALTED"
+    report.rollback = record
+    assert classify_transaction_outcome(report).value == "RECONCILIATION_REQUIRED"
+
+
+def test_only_a_colleagues_write_leaves_the_runs_own_outcome(tmp_path):
+    # The run stopped before any write; a nurse added a note, logged as hers.
+    # A person sees the diff, but the run itself halted before any effect.
+    before_rows = [{"id": 1, "patient_id": "4"}]
+    after_rows = before_rows + [{"id": 2, "patient_id": "4"}]
+    record = roll_back(
+        _stopped([]),
+        Workflow(name="w", steps=[_key_step("note", "note", "F3")]),
+        run_dir=tmp_path,
+        bundle_dir=tmp_path,
+        reader=DatabaseListReader(after_rows),
+        before=records_snapshot(before_rows),
+        runner=RecordingRunner(),
+        attributor=_with_log(
+            [{"actor": "nurse", "event": "insert", "tbl": "records", "record": "4"}]
+        ),
+        exclusive=False,
+    )
+    assert record.status == "not_rolled_back"
+    assert record.colleague_only
+    report = _stopped([])
+    report.execution_outcome = "HALTED"
+    report.rollback = record
+    assert classify_transaction_outcome(report).value == "HALTED_BEFORE_EFFECT"
+
+
+def test_an_allow_listed_own_rows_table_isnt_excused(tmp_path):
+    from openadapt_flow.rollback import _own_row_tables
+
+    db = tmp_path / "x.db"
+    sqlite3.connect(db).close()
+    compared = DatabaseReader(
+        dialect="sqlite", read_config={"sqlite_database": str(db)}, profile="openemr"
+    )
+    listed = DatabaseReader(
+        dialect="sqlite",
+        read_config={"sqlite_database": str(db)},
+        profile="openemr",
+        allow_tables=["user_settings"],
+    )
+    assert "user_settings" in _own_row_tables(compared)
+    assert "user_settings" not in _own_row_tables(listed)

@@ -762,7 +762,6 @@ class Attributor:
         calls bookkeeping (``no_record_insert_tables``) is the app's own, and
         so is an entry for a table of the acting user's own rows the profile
         excuses (``own_rows``: UI settings, recent charts)."""
-        from openadapt_flow.app_profiles import table_name
         from openadapt_flow.runtime.effects.frame import get_path
 
         if self.spec.kind != "audit_read" or window is None:
@@ -774,13 +773,15 @@ class Attributor:
                 continue
             table = get_path(e, self.spec.table_field or "")
             record = get_path(e, self.spec.record_field or "")
-            if table not in (None, "") and table_name(str(table)) in own_tables:
+            if table not in (None, "") and any(
+                _same_table(table, t) for t in own_tables
+            ):
                 continue
             if (
                 record in (None, "", "0", 0)
                 and self._event(e) in set(self.spec.insert_events)
                 and table not in (None, "")
-                and table_name(str(table)) in bookkeeping_inserts
+                and any(_same_table(table, t) for t in bookkeeping_inserts)
             ):
                 continue
             if record not in (None, "") and any(

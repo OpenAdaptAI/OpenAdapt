@@ -318,10 +318,17 @@ def _hidden_reason(hidden: list[dict[str, Any]], attributor: Any) -> str:
     tables = sorted(
         {str(get_path(e, attributor.spec.table_field or "") or "?") for e in hidden}
     )
+    if not hidden:
+        return (
+            "the audit log couldn't be read after the rollback, so a write by "
+            "the run's user the reads don't show can't be ruled out; a person "
+            "checks"
+        )
     return (
-        f"the audit log shows {len(hidden)} write(s) by the run's user that the "
-        "reads don't account for (in " + ", ".join(tables) + "): a table the read "
-        "keeps append-only or leaves out, so a person checks"
+        f"the audit log shows {len(hidden)} write(s) by the run's user that no "
+        "changed row accounts for (in " + ", ".join(tables) + "): a table the "
+        "read keeps append-only, a row the app profile excuses, or a statement "
+        "that changed nothing; a person checks"
     )
 
 
@@ -344,7 +351,12 @@ def _own_row_tables(reader: Any) -> set[str]:
     profile = _profile_of(reader)
     if profile is None:
         return set()
-    return {table_name(r.table) for r in profile.rules if r.mode == "own_rows"}
+    # Only tables the read compares row by row: there the bot's write to any
+    # row but its own shows in the diff. An allow-listed one hides it.
+    allowed = {table_name(t) for t in getattr(reader, "allow_tables", ()) or ()}
+    return {
+        table_name(r.table) for r in profile.rules if r.mode == "own_rows"
+    } - allowed
 
 
 def _unseen_writes(
@@ -628,6 +640,15 @@ def roll_back(
     foreign = not_own(landed)
     if foreign:
         record.conflicts = len(foreign)
+        stop_window = attributor.window() if attributor is not None else None
+        # Only other users' writes, none of the run's: the run's own outcome
+        # stands (a person still sees the diff).
+        record.colleague_only = (
+            attributor is not None
+            and len(foreign) == len(run_changes)
+            and all(attributor.attribute(c, stop_window) == "other" for c in foreign)
+            and hidden_writes([], stop_window) == []
+        )
         return finish(
             "not_rolled_back",
             f"{len(foreign)} row(s) changed since the run started aren't "
@@ -876,17 +897,19 @@ def roll_back(
                 "the stop left them)",
                 _with_rows(remaining, evidence),
             )
+    if (
+        stop_reason is None
+        and attributor is not None
+        and attributor.spec.kind == "audit_read"
+    ):
         # The run's own logged writes the reads don't show (a table kept
-        # append-only, a step outside the ledger): never "rolled back".
-        hidden = (
-            hidden_writes(run_changes + changes(remaining), final_window)
-            if stop_reason is None
-            else None
-        )
-        if hidden:
+        # append-only, a step outside the ledger): never "rolled back", on a
+        # shared store or an exclusive one.
+        hidden = hidden_writes(run_changes + changes(remaining), attributor.window())
+        if hidden is None or hidden:
             return finish(
                 "not_rolled_back",
-                _hidden_reason(hidden, attributor),
+                _hidden_reason(hidden or [], attributor),
                 _with_rows(remaining, evidence),
             )
     if stop_reason is not None:

@@ -60,9 +60,15 @@ run is refused before it starts: nothing after a stop could be proven.
    table, or one the app profile keeps append-only, such as a disclosure
    log) is then still caught by its log entry; a write the app doesn't log
    there, or logs under an event `write_events` doesn't list, isn't. With
-   the audit log, the same holds for the whole run: a write by the run's
-   user the log shows and the reads don't account for (from any step, in
-   any table) never ends "nothing landed" or `ROLLED_BACK`. Only a
+   the audit log, the same holds for the whole run, on a shared store or an
+   exclusive one: a write by the run's user the log shows and no changed row
+   accounts for (from any step, in any table) never ends "nothing landed"
+   or `ROLLED_BACK`. As in the verifier's frame, two kinds of entry are the
+   app's own: an insert naming no record (or patient 0) in a table the
+   profile calls bookkeeping, and a write to a table of the acting user's
+   own rows the read compares row by row. A logged statement that changed
+   no row, or changed only a row the profile excuses, is also unaccounted
+   for, so it goes to a person. Only a
    whole-database read proves the run's effects absent; a collection read
    never overrides the run's own uncertainty.
 2. **Compensate, latest change first.** For each change in the run's
@@ -118,7 +124,11 @@ run is refused before it starts: nothing after a stop could be proven.
      there. A kept void row must have changed since the stop. The audit
      log must show no other user's write to a run row while the
      compensations ran.
-   - Anything else: `RECONCILIATION_REQUIRED`. `report.json` holds a summary
+   - Anything else: `RECONCILIATION_REQUIRED`, whatever the run's own
+     evidence says. The one exception: when every row that changed is
+     positively another user's and none is the run's, the run keeps its own
+     outcome (halted before any effect, say), and a person still gets the
+     diff. `report.json` holds a summary
      with counts and column names only. `<run-dir>/rollback/diff.json`
      (owner-only) holds every added, removed and changed row, with the values
      before and after. When another user wrote to the run's rows while the
