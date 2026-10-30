@@ -25,6 +25,7 @@ from benchmark.openemr_local.fixture import (
 from openadapt_flow.benchmark.openemr_local import (
     ARMS,
     CONDITIONS,
+    DUPLICATE_KEY,
     OpenEMRPatientOracle,
     PrimaryOutcome,
     SyntheticPatientSpec,
@@ -50,8 +51,6 @@ from scripts.openemr_local_demo import (
     _capture_post_evidence,
     _confirm_create_locator,
     _duplicate_dialog_postconditions,
-    _saved_chart_postcondition,
-    apply_referral_rules,
     _form_frame,
     _marked_save_step_id,
     _persist_evidence,
@@ -59,9 +58,11 @@ from scripts.openemr_local_demo import (
     _preauthenticate_browser,
     _reset_recording_state,
     _row,
+    _saved_chart_postcondition,
     _stable_pre_trial_counts,
     _tree_manifest_sha256,
     _validate_benchmark_bundle,
+    apply_referral_rules,
     record,
     run_matrix,
 )
@@ -334,12 +335,17 @@ def test_effects_and_api_binding_cover_same_synthetic_fields() -> None:
     assert effects[0].expected_count == 1
     assert effects[0].match["email"].param == "email"
     assert effects[0].match["lname"].param == "lname"
+    assert effects[0].idempotency_key is not None
+    assert effects[0].idempotency_key.param == DUPLICATE_KEY
+    assert effects[0].key_field == DUPLICATE_KEY
     assert {effect.field for effect in effects[1:]} == set(spec.fields) - {
         "email",
         "lname",
     }
     resolved = [effect.resolve(spec.params()) for effect in effects]
     assert str(resolved[0].match["email"]) == spec.email
+    assert str(resolved[0].idempotency_key) == spec.email
+    assert resolved[0].key_field == DUPLICATE_KEY
     state_effect = next(effect for effect in resolved if effect.field == "state")
     assert str(state_effect.value) == "MA"
 

@@ -106,6 +106,9 @@ class SyntheticPatientSpec:
         }
 
 
+DUPLICATE_KEY: str = "email"
+
+
 def patient_effects(
     spec: SyntheticPatientSpec | None = None, *, resolved: bool = False
 ) -> list[Effect]:
@@ -123,6 +126,8 @@ def patient_effects(
         Effect(
             kind=EffectKind.RECORD_WRITTEN,
             match=selector,
+            idempotency_key=ValueExpr(param=DUPLICATE_KEY),
+            key_field=DUPLICATE_KEY,
             expected_count=1,
             forbid_collateral_loss=True,
             risk="reversible",
@@ -402,6 +407,7 @@ __all__ = [
     "aggregate_rows",
     "publication_gate",
     "SyntheticPatientSpec",
+    "DUPLICATE_KEY",
     "OpenEMRPatientOracle",
     "canonical_patient_records",
     "classify_patient_trial",
