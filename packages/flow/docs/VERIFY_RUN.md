@@ -307,6 +307,117 @@ that still can't be read exactly makes the database unreadable, and the run
 stops; the error names the table. When the database can't be read at the
 baseline, `begin_write` says why.
 
+## Lost updates
+
+Two snapshots can't see a lost update. The agent reads a record, another
+user saves a change to it, and the agent then saves its stale copy over
+theirs. After the save the record looks like "the agent changed the phone,
+the address is unchanged", which is also what a correct update looks like.
+Only the record's versions show the second save.
+
+`frame.versions` names a read that returns one row per version of a record,
+and the fields of a row that name the record, the version and, where the app
+records it, the author:
+
+```yaml
+frame:
+  identity_field: id
+  versions:
+    read:                     # read-only, the same shape as `verifier:`
+      kind: sql
+      sql_driver: psycopg2
+      sql_connect_args: {host: 127.0.0.1, port: 5432, user: reader, dbname: hapi}
+      sql_password_env: HAPI_DB_PASSWORD
+      sql_query: >-
+        SELECT r.res_type || '/' || r.fhir_id AS id, v.res_ver::text AS ver
+        FROM hfj_res_ver v JOIN hfj_resource r ON r.res_id = v.res_id
+    record_field: id          # the version row's record
+    target_field: id          # the target's field in the read set (default: identity_field)
+    version_field: ver
+    # author_field: user_id   # when the app records who saved each version
+    # self: [{param: bot_user_id}]
+```
+
+An app that logs each save with its user can name the author instead. EspoCRM's
+`action_history_record` logs every API save; a lead has no version column:
+
+```yaml
+  versions:
+    read:
+      kind: sql
+      sql_driver: pymysql
+      sql_connect_args: {host: 127.0.0.1, port: 3306, user: reader, database: espocrm}
+      sql_password_env: ESPOCRM_DB_RO_PASSWORD
+      sql_query: >-
+        SELECT CAST(CONCAT(LOWER(target_type), ':', target_id) AS CHAR) AS id,
+          CAST(number AS CHAR) AS ver, CAST(user_id AS CHAR) AS author
+        FROM action_history_record WHERE action <> 'read' AND deleted = 0
+    record_field: id            # equals the read set's id (lead:<id>)
+    version_field: ver
+    author_field: author
+    self: [{param: bot_user_id}]
+```
+
+The versions are read before the write and after it. Every record that a
+confirmed write effect names and that existed before the write is a target.
+The versions of a target that are new in the window must be the agent's:
+
+- With `author_field`, every new version's author must be one of `self`. A
+  version by anyone else is refuted as a lost update. A version with no
+  author is not checked. The read must be a history that only grows: every
+  version read before the write must still be there after it, or the check
+  is not checked. A read of only the current version and its last author
+  would hide the other user's save.
+- Without it, versions must be whole numbers that step by one per save of
+  that record (HAPI's `res_ver`, a `version_number` column). At most one
+  step may happen. Two or more steps are refuted: step mode assumes the
+  agent saves each record once per run, so a second step is someone else's.
+  An agent that saves the same record twice (correcting its own write) needs
+  `author_field`. A version that went back is refuted. A version
+  that isn't a whole number (an opaque ETag) is not checked: without authors
+  the saves can't be counted. Prefer a history read, one row per version. A
+  read of only the current version counts steps as the difference, which
+  trusts the app's numbering: an app that numbers a save from the client's
+  copy (two saves from version 1 both write version 2) hides a lost update
+  there, while a history read shows the two rows as `duplicate_version`.
+  The numbers must be per record and
+  contiguous: a global sequence, such as an audit table's row id, also moves
+  for other records' saves, so a correct update would be refuted. Use
+  `author_field` with such a sequence.
+
+Anything else stops the run, never a pass:
+
+- a versions read that fails before or after the write;
+- a target that existed but has no version, or a target record without the
+  field that names it;
+- a version that reads as null, before or after (`null_version`);
+- two rows of one record with the same version (`duplicate_version`): a
+  save could hide behind another;
+- a target whose record changed in the window with no new version
+  (`no_new_version`): the app saved without a version row, so who saved
+  can't be told. A target that didn't change (already right, nothing
+  written) needs no new version; this relies on the read recording every
+  save, since a change reverted by a save the read misses looks unchanged.
+
+A record created in the window has no earlier version to overwrite and isn't
+judged. Whether a target existed is told by `frame.identity_field` (default
+`id`), never by `target_field`'s value after the write: a target that existed
+with no version under its current `target_field` value is `missing`. Only targets are judged: another user's save to an unrelated record
+leaves this check as it was (the frame and its attribution judge that
+record, as before). The versions are read before the records at the
+baseline, so a save between the two reads shows in the record baseline. The
+window starts at the baseline: a copy the agent read before `begin_write` is
+not covered.
+
+The baseline keeps versions as keyed MACs of the record and the version;
+only a whole-number version's value is kept, to count steps. The receipt's
+`evidence.frame.versions` holds counts and a problem code (`another_author`,
+`extra_steps`, `went_back`, `no_author`, `not_a_number`, `null_version`,
+`duplicate_version`, `no_new_version`, `history_changed`, `missing`,
+`no_target_id`, `unreadable`, `self_unresolved`), never ids or values. A
+refuted check refutes the frame (`checked.frame: refuted`); one that can't be
+judged leaves the frame `not_checked`.
+
 ## What the receipt says was checked
 
 The receipt's `checked` field names each part of the claim behind
