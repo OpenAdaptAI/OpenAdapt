@@ -21,6 +21,7 @@ from typing import Any, Optional
 
 FORM_PATH = "/interface/new/new_comprehensive.php"
 FORM_FRAME_NAME = "openadapt-new-patient"
+SAVE_URL_PART = "new_comprehensive_save.php"
 VIEWPORT = {"width": 1280, "height": 800}
 
 #: OpenEMR dialogs open over the tab shell (the product-registration prompt
@@ -232,9 +233,10 @@ class OpenEMRSession:
 
         OpenEMR opens its dialogs (such as the New Patient duplicate check) in
         the shell page. Each is closed with OpenEMR's own ``dlgclose`` from
-        inside it, which saves nothing. Reloading the shell would end the
-        session (its token is single-use), so if a dialog will not close, the
-        shell is dropped and ``blank_form`` signs in again.
+        inside it. Reloading the shell would end the session (its token is
+        single-use), so if a dialog will not close, the shell is dropped and
+        ``blank_form`` signs in again. Closing must never save: a save sent
+        while clearing would land in the next item, so it raises instead.
         """
         try:
             n = int(self.page.evaluate(_OPEN_DIALOGS))
@@ -242,16 +244,34 @@ class OpenEMRSession:
             return 0
         if not n:
             return 0
+        saves: list[str] = []
+
+        def on_request(req: Any) -> None:
+            if req.method == "POST" and SAVE_URL_PART in req.url:
+                saves.append(req.url)
+
         how: list[str] = []
-        for _ in range(5):  # a dialog still loading ignores its first close
-            how += self.page.evaluate(_CLOSE_DIALOGS)
-            self.page.wait_for_timeout(1500)
-            if not self.page.evaluate(_OPEN_DIALOGS):
-                break
-        else:
-            how.append("signed_out")
-            self.page.goto("about:blank")
+        self.page.on("request", on_request)
+        try:
+            for _ in range(5):  # a dialog still loading ignores its first close
+                how += self.page.evaluate(_CLOSE_DIALOGS)
+                self.page.wait_for_timeout(1500)
+                if not self.page.evaluate(_OPEN_DIALOGS):
+                    break
+            else:
+                how.append("signed_out")
+                self.page.goto("about:blank")
+        except Exception as exc:  # noqa: BLE001 - e.g. the shell navigated away
+            how.append(f"signed_out: {type(exc).__name__}")
+            try:
+                self.page.goto("about:blank")
+            except Exception:  # noqa: BLE001 - blank_form signs in either way
+                pass
+        finally:
+            self.page.remove_listener("request", on_request)
         self.log.append({"event": "cleared_leftover_dialogs", "n": n, "how": how, "t": round(time.time(), 2)})
+        if saves:
+            raise RuntimeError(f"closing a leftover dialog sent a save ({saves[0]}); the next item is not clean")
         return n
 
 
