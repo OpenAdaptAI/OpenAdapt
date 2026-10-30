@@ -63,14 +63,19 @@ def main(work: Path) -> None:
             kind = k["kind"]
             if kind == "create_customer":
                 if customer(v["name"], v["town"]) is not None:
-                    continue
+                    # Already there (a "make sure" example): demonstrate a
+                    # second create with values of our own instead.
+                    v = {**v, "name": "Atelier Démo Générateur", "address": "8 place du Marché",
+                         "zip": "21000", "town": "Dijon", "phone": "03 80 30 31 32",
+                         "email": "atelier@demo-generateur.example"}
                 payload = {"name": v["name"], "address": v["address"], "zip": v["zip"], "town": v["town"],
                            "country_id": country(v["country"]), "phone": v["phone"], "email": v["email"], "client": 1}  # fmt: skip
                 demo(work, kind, v, lambda p=payload: api("POST", "/thirdparties", p))
             elif kind == "create_product":
                 db.commit()
                 if q("SELECT 1 FROM llx_product WHERE BINARY ref=%s", (v["ref"],)):
-                    continue
+                    v = {**v, "ref": "GEN-DEMO-2", "label": "Coffret démo générateur",
+                         "price_excl_vat": "12.40", "vat_rate": "20"}
                 payload = {"ref": v["ref"], "label": v["label"], "type": 0, "price": v["price_excl_vat"],
                            "price_base_type": "HT", "tva_tx": v["vat_rate"], "status": 1, "status_buy": 1}  # fmt: skip
                 demo(work, kind, v, lambda p=payload: api("POST", "/products", p))

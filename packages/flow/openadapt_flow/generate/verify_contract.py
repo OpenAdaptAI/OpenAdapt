@@ -185,6 +185,10 @@ class ChildGroup:
     #: List parameter whose items these rows are, if any.
     list_param: Optional[str] = None
     changed_columns: list[str] = field(default_factory=list)
+    #: Other parameters this row also points to (a contact's account link
+    #: row also holds the title): with one of them given and this one not,
+    #: the row is still expected, with this value empty.
+    co_owners: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -429,12 +433,25 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
                     break
         explained = {loc.hops[0].column, *rel.columns}
         explained |= {h.column for h in rel.hops[:1]}
+        co: list[str] = []
+        for q in plan.params:
+            if q == p or not rows:
+                continue
+            hits = [
+                locate(schema, d, _as_change(loc.hops[0].table, r), d.values[q], max_hops=1)
+                for d, r in rows
+                if d.values.get(q) is not None and not isinstance(d.values.get(q), (list, dict))
+            ]
+            if hits and all(h and h[0].hops for h in hits):
+                co.append(q)
+                explained |= {h[0].hops[0].column for h in hits}
         plan.children[p] = ChildGroup(
             loc.hops[0].table,
             loc.hops[0],
             {p: rel},
             column_roles(schema, loc.hops[0].table, rows, explained, {}),
             1,
+            co_owners=co,
         )
     for p in lists:
         per_key: dict[str, list[list[Location]]] = {}
@@ -906,7 +923,11 @@ def build_contract(
     # Rows beside the main record that hold a value (a note, a custom field,
     # an email address link), and list items (invoice lines).
     if flavor != "found":
-        groups = [(p, g) for p, g in plan.children.items() if p in fields]
+        groups = [
+            (p, g)
+            for p, g in plan.children.items()
+            if p in fields or (plan.mode == "create" and set(g.co_owners) & fields)
+        ]
         groups += [(p, g) for p, g in plan.lists.items() if p in variant.lists]
         for p, g in groups:
             name = f"rows:{g.table}"
@@ -940,6 +961,14 @@ def build_contract(
                         m[f"main__{_alias(ip)}"] = _value_expr(ip, loc.rule)
                 for k, loc in g.params.items():
                     pname = k if g.list_param is None else f"{p}.{i}.{k}"
+                    if g.list_param is None and pname not in fields:
+                        # Given another owner but not this value: empty.
+                        for c in loc.columns if not loc.hops else [loc.hops[0].column]:
+                            alias = f"empty__{_alias(c)}"
+                            if alias not in {a for a, _ in surf.columns}:
+                                surf.columns.append((alias, b.empty("t", g.table, c)))
+                            m[alias] = {"literal": "1"}
+                        continue
                     key = _place(b, surf, g.table, pname, loc)
                     if loc.rule in ("number", "date", "datetime", "minutes"):
                         m[key] = {"literal": "1"}
@@ -1141,7 +1170,7 @@ def _raw_effect(
             if role is not None and role.role == "constant" and role.value is None:
                 continue
             if role is None or role.role != "constant" or (role.detail or {}).get("is_default"):
-                if role is None or role.role in ("key", "timestamp", "link", "varies", "copied", "actor"):
+                if role is None or role.role in ("key", "timestamp", "link", "varies", "copied", "actor", "free"):
                     nrf.add(c.name)
                 continue
             nrf.add(c.name)
@@ -1724,6 +1753,7 @@ def propose(
             "main_table": p.anchor,
             "locations": {k: v.describe(p.anchor) for k, v in sorted(p.locations.items())},
             "placed_by_name": sorted(p.by_name),
+            "demonstrations": len(p.demos),
             "children": {k: g.table for k, g in p.children.items()},
             "lists": {k: g.table for k, g in p.lists.items()},
             "side_rows": [{"table": s.table, "count": s.count, "unless": s.unless} for s in p.sides],
@@ -1805,6 +1835,13 @@ def _questions_md(questions: Sequence[Question], answers: Mapping[str, Any], rep
     lines.append("")
     for kind, rep in report["kinds"].items():
         lines.append(f"- `{kind}` ({rep['mode'] or 'no contract'}, main table `{rep['main_table']}`): {rep['emitted']} contract(s).")
+        if rep.get("demonstrations") == 1 and rep["mode"] == "create":
+            lines.append(
+                "  - One demonstration only: every column of a new record that the task "
+                "doesn't give must hold the value it held then. Record a second create "
+                "with other values, so a column computed from the values (a price with "
+                "tax) is told apart from a constant."
+            )
         for r in rep["refused"]:
             lines.append(f"  - Refused: {r}")
         for r in rep["rejected"][:5]:

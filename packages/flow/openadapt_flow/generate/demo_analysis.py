@@ -572,6 +572,12 @@ def column_roles(
             out[name] = ColumnRole("copied", detail=copied)
             continue
         distinct = {v for v in values}
+        if col.kind == "text" and distinct <= {None, ""}:
+            # Free text the task doesn't give and the demonstrations left
+            # empty (a line's description, a note): an agent may fill it
+            # from the record it copies, so it isn't checked.
+            out[name] = ColumnRole("free")
+            continue
         if len(distinct) == 1:
             v = values[0]
             default = col.default
