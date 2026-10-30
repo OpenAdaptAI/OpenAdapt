@@ -971,17 +971,20 @@ def _audit_source(
         if not pairs or len(pairs) != 1:
             continue
         lc, ac, param = next(iter(pairs))
-        # Rows of the same type: their constant text and whole-number columns.
+        # Only a column naming the record's type (``target_type: Lead``)
+        # narrows the read. Anything else the demonstrations had in common
+        # (the action, the client address) could hide another user's save,
+        # so it isn't used: an entry by anyone else stops the write.
         where = {}
+        names = {plan.anchor.lower(), plan.anchor.lower().split("_")[-1]}
         for col in table.columns:
-            if col.name in (lc, ac) or col.name in table.primary_key:
+            if col.name in (lc, ac) or col.kind != "text":
                 continue
             values = {r.get(col.name) for r in rows}
             if len(values) == 1:
                 v = next(iter(values))
-                if v is not None and (col.kind == "text" or _WHOLE_NUMBER.match(v)):
-                    if "\\" not in v and "'" not in v and "%" not in v:
-                        where[col.name] = v
+                if v is not None and v.lower() in names and v.isidentifier():
+                    where[col.name] = v
         found = {
             "kind": "audit",
             "table": name,
