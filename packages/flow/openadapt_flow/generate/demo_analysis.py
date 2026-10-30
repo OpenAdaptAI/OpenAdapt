@@ -99,7 +99,10 @@ def rule_for(stored: Optional[str], column_kind: str, value: Any) -> Optional[st
     text = value_text(value)
     if text == "":
         return None
-    if stored == text:
+    if stored == text and column_kind not in ("number", "bool", "date", "datetime"):
+        # A number or date column is compared by value even when this
+        # demonstration's text happens to match: another row of the same
+        # column may print as ``5.5000``.
         return "exact"
     if column_kind == "text":
         if "@" in text and stored.casefold() == text.casefold():
