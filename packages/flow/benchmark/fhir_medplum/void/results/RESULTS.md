@@ -5,6 +5,12 @@ The fixture was live Medplum 5.2.8 (the #1640 fixture, fresh volume). The
 code was this branch merged with #1653 (`ca44ffce0`). Per-case results for
 the frozen suite are in openadapt-internal.
 
+Run again on 2026-10-30 on `19455b552`: this branch after #1655 (the agent's
+own corrections) merged into the same module, with the fixes from the second
+review (`../REVIEW_VOID.md`, part 2). Every case's outcome and every card's
+category were the same as in the first run, so the tables below hold for
+both.
+
 ## What decides whether the card goes into run 3
 
 | Criterion (`REMEASURE.md`) | Result | Holds |
