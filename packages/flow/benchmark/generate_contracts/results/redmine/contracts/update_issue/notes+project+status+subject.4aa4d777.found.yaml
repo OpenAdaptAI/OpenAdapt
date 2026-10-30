@@ -574,3 +574,17 @@ frame:
   - others
   - updated_on
   target_fields: []
+  versions:
+    read:
+      kind: sql
+      sql_driver: psycopg2
+      sql_connect_args: *id001
+      sql_password_env: REDMINE_RO_DB_PASSWORD
+      sql_query: SELECT CAST(t."journalized_id" AS TEXT) AS "id", CAST(t."id" AS TEXT) AS "ver", CAST(t."user_id"
+        AS TEXT) AS "author" FROM "journals" t
+    record_field: id
+    target_field: id
+    version_field: ver
+    author_field: author
+    self:
+    - param: bot_user_id

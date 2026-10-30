@@ -165,6 +165,20 @@ frame:
   target_fields:
   - email
   - phone
+  versions:
+    read:
+      kind: sql
+      sql_driver: pymysql
+      sql_connect_args: *id001
+      sql_password_env: FCG_DOLIBARR_READER_PASSWORD
+      sql_query: SELECT CAST(t.`fk_soc` AS CHAR) AS `id`, CAST(t.`id` AS CHAR) AS `ver`, CAST(t.`fk_user_author`
+        AS CHAR) AS `author` FROM `llx_actioncomm` t
+    record_field: id
+    target_field: id
+    version_field: ver
+    author_field: author
+    self:
+    - param: bot_user_id
   database:
     dialect: mysql
     read:

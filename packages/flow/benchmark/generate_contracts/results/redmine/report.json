@@ -29,6 +29,7 @@
       "placed_by_name": [
         "description"
       ],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {
@@ -60,6 +61,14 @@
       "placed_by_name": [
         "done_ratio"
       ],
+      "versions": {
+        "kind": "audit",
+        "table": "journals",
+        "record_column": "journalized_id",
+        "author_column": "user_id",
+        "actor_param": "bot_user_id",
+        "where": {}
+      },
       "placed_from_another_kind": [
         "due_date",
         "priority"
@@ -91,6 +100,7 @@
         "spent_on": "time_entries.spent_on (date)"
       },
       "placed_by_name": [],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
@@ -114,6 +124,7 @@
         "tracker": "issues.tracker_id -> trackers.name (exact)"
       },
       "placed_by_name": [],
+      "versions": null,
       "placed_from_another_kind": [],
       "demonstrations": 2,
       "children": {},
