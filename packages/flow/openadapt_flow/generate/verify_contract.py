@@ -359,7 +359,7 @@ def analyze(
             if len(by_value) > 1:
                 ok = True
                 for dv, per in by_value.items():
-                    loc, tied = _pick(p, _intersect(per))
+                    loc, tied = _pick(p, _intersect(per), plan.demos)
                     if loc is None:
                         key = f"{p} (when {plan.dispatch} is {dv})"
                         plan.unresolved[key] = tied
@@ -371,7 +371,7 @@ def analyze(
                     plan.changes.append(p)
                 continue
         all_found = _intersect(found[p])
-        loc, tied = _pick(p, all_found)
+        loc, tied = _pick(p, all_found, plan.demos)
         if loc is not None:
             plan.extra[p] = [
                 x
@@ -480,10 +480,13 @@ def _share_locations(
 
 
 def _pick(
-    param: str, found: Sequence[Location]
+    param: str, found: Sequence[Location], demos: Sequence[Demo] = ()
 ) -> tuple[Optional[Location], list[Location]]:
-    """The best location; among tied ones, the one whose column is named
-    like the parameter (``stage``, not ``last_stage``), if exactly one is."""
+    """The best location. Among tied ones: the one whose column is named
+    like the parameter (``stage``, not ``last_stage``); else drop a column
+    that is only a copy of another tied one, lower-cased or digits only, in
+    every row of its table (EspoCRM's ``email_address.lower``,
+    ``phone_number.numeric``)."""
 
     loc, tied = best(found)
     if loc is not None or not tied:
@@ -492,7 +495,36 @@ def _pick(
     named = [t for t in tied if t.columns and t.columns[-1] == name]
     if len(named) == 1:
         return named[0], []
+    keep = [t for t in tied if not _derived_copy(t, tied, demos)]
+    if len(keep) == 1:
+        return keep[0], []
     return None, tied
+
+
+def _derived_copy(
+    loc: Location, tied: Sequence[Location], demos: Sequence[Demo]
+) -> bool:
+    if len(loc.columns) != 1 or not loc.hops or not demos:
+        return False
+    table = loc.hops[-1].table
+    rows = demos[0].after.get(table)
+    if rows is None or rows.count_only is not None or not rows.rows:
+        return False
+
+    def digits(v: str) -> str:
+        return "".join(ch for ch in v if ch.isdigit())
+
+    for other in tied:
+        if other is loc or other.hops != loc.hops or len(other.columns) != 1:
+            continue
+        a, b = other.columns[0], loc.columns[0]
+        for fn in (str.lower, digits):
+            if all(
+                r.get(b) == (fn(r[a]) if r.get(a) is not None else None)
+                for r in rows.rows.values()
+            ) and any(r.get(a) != r.get(b) for r in rows.rows.values()):
+                return True
+    return False
 
 
 def _resolve(plan: KindPlan, key: str, loc: Location) -> None:
@@ -2032,16 +2064,22 @@ def propose(
                 for col, role in _anchor_roles(schema, p, v, actor_params).items():
                     if role.role == "varies":
                         unchecked.setdefault(p.anchor, set()).add(col)
+    log_add: set[str] = set()
+    log_remove: set[str] = set()
     ans = _answer(answers, "bookkeeping")
     if isinstance(ans, dict):
-        logs = (logs | set(ans.get("logs_add", []))) - set(ans.get("logs_remove", []))
+        log_add, log_remove = (
+            set(ans.get("logs_add", [])),
+            set(ans.get("logs_remove", [])),
+        )
+        logs = (logs | log_add) - log_remove
         for t, cols in dict(ans.get("columns_add", {})).items():
             book.setdefault(t, set()).update(cols)
         for t, cols in dict(ans.get("columns_remove", {})).items():
             book[t] = book.get(t, set()) - set(cols)
     sides = sorted({f"{s.table} ({s.count} per write)" for p in plans for s in p.sides})
     for p in plans:  # a table the person calls a log is no longer counted
-        p.sides = [s for s in p.sides if s.table not in logs]
+        p.sides = [s for s in p.sides if s.table not in log_add]
     if logs or book or unchecked or sides:
         lines = []
         if sides:
@@ -2239,7 +2277,8 @@ def propose(
                 continue
             ok = True
             for flavor in flavors:
-                doc = build_contract(schema, p, v, flavor, settings, book, logs)
+                kind_logs = (p.logs | log_add) - log_remove
+                doc = build_contract(schema, p, v, flavor, settings, book, kind_logs)
                 rel = Path("contracts") / p.kind / f"{v.slug}.{flavor}.yaml"
                 path = out / rel
                 path.parent.mkdir(parents=True, exist_ok=True)
