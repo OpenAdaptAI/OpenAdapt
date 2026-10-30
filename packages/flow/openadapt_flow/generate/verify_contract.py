@@ -566,7 +566,7 @@ def _derived_copy(
         a, b = other.columns[0], loc.columns[0]
         for fn in (str.lower, digits):
             if all(
-                r.get(b) == (fn(r[a]) if r.get(a) is not None else None)
+                r.get(b) == (fn(str(r[a])) if r.get(a) is not None else None)
                 for r in rows.rows.values()
             ) and any(r.get(a) != r.get(b) for r in rows.rows.values()):
                 return True
@@ -649,9 +649,9 @@ def _children(
         todo.append((p, p, loc, None))
         for i, x in enumerate(plan.extra.get(p, [])):
             todo.append((f"{p}#{i + 2}", p, x, None))
-    for dv, locs in plan.dispatch_locations.items():
+    for value, locs in plan.dispatch_locations.items():
         for p, loc in locs.items():
-            todo.append((f"{p}@{dv}", p, loc, dv))
+            todo.append((f"{p}@{value}", p, loc, value))
     for gname, p, loc, dv in todo:
         if not loc.hops or loc.hops[0].kind != "child":
             continue
@@ -664,7 +664,7 @@ def _children(
         for d, a in zip(plan.demos, plan.anchors):
             if d.values.get(p) is None:
                 continue
-            if dv is not None and str(d.values.get(plan.dispatch)) != dv:
+            if dv is not None and str(d.values.get(plan.dispatch or "")) != dv:
                 continue
             for ch in d.diff.of(loc.hops[0].table, "added"):
                 if ch.after is None:
@@ -745,17 +745,16 @@ def _children(
                     plan.refused.append(f"{p}: list items must be mappings")
                     return
                 for i, ch in enumerate(children):
-                    if i in used:
+                    if i in used or ch.after is None:
                         continue
-                    locs = {
-                        k: locate(
-                            schema, d, _as_change(ch.table, ch.after), v, max_hops=1
-                        )
+                    after = ch.after
+                    found_at = {
+                        k: locate(schema, d, _as_change(ch.table, after), v, max_hops=1)
                         for k, v in item.items()
                     }
-                    if all(locs.values()):
+                    if all(found_at.values()):
                         used.add(i)
-                        link_col = next(c for c, v in ch.after.items() if v == key)
+                        link_col = next(c for c, v in after.items() if v == key)
                         table = ch.table
                         link = Hop(
                             "child",
@@ -763,28 +762,28 @@ def _children(
                             link_col,
                             schema.tables[plan.anchor].primary_key[0],
                         )
-                        for k, ls in locs.items():
+                        for k, ls in found_at.items():
                             per_key.setdefault(k, []).append(ls)
-                        rows.append((d, ch.after))
+                        rows.append((d, after))
                         break
                 else:
                     plan.unresolved[f"{p} item {item}"] = []
         if table is None or link is None:
             plan.unresolved.setdefault(p, [])
             continue
-        locs = {}
+        item_locs: dict[str, Location] = {}
         for k, per in per_key.items():
-            loc, tied = best(_intersect(per))
-            if loc is None:
+            item_loc, tied = best(_intersect(per))
+            if item_loc is None:
                 plan.unresolved[f"{p}.{k}"] = tied
                 return
-            locs[k] = loc
-        explained = {link.column} | {c for loc in locs.values() for c in loc.columns}
-        explained |= {loc.hops[0].column for loc in locs.values() if loc.hops}
+            item_locs[k] = item_loc
+        explained = {link.column} | {c for x in item_locs.values() for c in x.columns}
+        explained |= {x.hops[0].column for x in item_locs.values() if x.hops}
         plan.lists[p] = ChildGroup(
             table,
             link,
-            locs,
+            item_locs,
             column_roles(schema, table, rows, explained, {}),
             list_param=p,
         )
@@ -817,9 +816,9 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
         added_keys: set[str] = set()
         for ch in d.diff.changes:
             if ch.kind == "added" and ch.after is not None:
-                t = schema.tables.get(ch.table)
-                if t is not None and len(t.primary_key) == 1:
-                    v = ch.after.get(t.primary_key[0])
+                at = schema.tables.get(ch.table)
+                if at is not None and len(at.primary_key) == 1:
+                    v = ch.after.get(at.primary_key[0])
                     if v is not None:
                         added_keys.add(v)
         per_table: dict[str, list[dict[str, Optional[str]]]] = {}
@@ -869,15 +868,15 @@ def _sides(schema: Schema, plan: KindPlan, actor_values: Mapping[str, str]) -> N
                 continue
             per_table.setdefault(ch.table, []).append(ch.after or {})
         i = plan.demos.index(d)
-        for t, rows in per_table.items():
+        for t, added in per_table.items():
             counts.setdefault(t, [0] * len(plan.demos))
-            counts[t][i] = max(len(rows), 1 if t in child_tables else 0)
-            pure.setdefault(t, []).append([(d, r) for r in rows])
+            counts[t][i] = max(len(added), 1 if t in child_tables else 0)
+            pure.setdefault(t, []).append([(d, r) for r in added])
         d.__dict__["_added_keys"] = added_keys
     for t, cs in sorted(counts.items()):
         rows = [r for group in pure.get(t, []) for r in group]
         if len(set(cs)) == 1 and cs[0] > 0 and not looks_like_log(t) and rows:
-            links = [getattr(d, "_added_keys", set()) for d, _ in rows]
+            links: list[set[str]] = [getattr(d, "_added_keys", set()) for d, _ in rows]
             roles = column_roles(schema, t, rows, set(), actor_values, links)
             plan.sides.append(SideSpec(t, cs[0], roles, unless=child_tables.get(t)))
         elif rows:
@@ -1493,7 +1492,7 @@ def build_contract(
         name = f"rows:{g.table}"
         sname = _alias(name)
         if sname not in surfaces:
-            cols = _base_columns(b, g.table)
+            scols = _base_columns(b, g.table)
             link = g.link
             # The main record's values, seen from the child row.
             for ip in identity_params:
@@ -1506,8 +1505,10 @@ def build_contract(
                 expr = b.path("t", g.table, up)
                 if loc.rule in ("number", "date", "datetime", "minutes"):
                     expr = b.flag(expr, loc.rule, b.ph(ip))
-                cols.append((f"main__{_alias(ip)}", expr))
-            surfaces[sname] = Surface(sname, settings.views.get(g.table, g.table), cols)
+                scols.append((f"main__{_alias(ip)}", expr))
+            surfaces[sname] = Surface(
+                sname, settings.views.get(g.table, g.table), scols
+            )
             named_tables.add(g.table)
         surf = surfaces[sname]
         items = range(variant.lists[p]) if g.list_param else [None]
@@ -2105,7 +2106,8 @@ def dry_read(path: Path, params: Mapping[str, Any], mysql: bool) -> Optional[str
             )
             from openadapt_flow.verify_run import _audit_sql, _db_connect, _ref_columns
 
-            database = contract.config.frame.database
+            frame = contract.config.frame
+            database: Any = frame.database if frame is not None else None
             try:
                 take_snapshot(
                     _db_connect(database.read),
