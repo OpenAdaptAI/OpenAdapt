@@ -13,7 +13,7 @@ import sqlite3
 
 import pytest
 
-from openadapt_flow.runtime.effects.sql import assert_read_only_sql
+from openadapt_flow.runtime.effects.sql import SqlRecordVerifier, assert_read_only_sql
 
 ALLOWED = [
     # EspoCRM: the call table, quoted as MySQL needs, or schema qualified.
@@ -185,3 +185,115 @@ def test_the_hidden_call_is_what_sqlite_would_run() -> None:
         con.execute(query).fetchall()
     with pytest.raises(ValueError):
         assert_read_only_sql(query)
+
+
+# -- review round 1, follow-up (#1665 comment 6529357038) ---------------------
+
+#: With parameters passed, a ``%`` placeholder inside a literal or quoted
+#: name: pymysql and psycopg2 splice the value in as SQL (MariaDB returned
+#: every row for p = " OR 1=1 OR ").
+PLACEHOLDER_REFUSED_WITH_PARAMS = [
+    "SELECT a FROM t WHERE name = '%(p)s'",
+    "SELECT a FROM t WHERE name = '%s'",
+    "SELECT a FROM t WHERE name = 'x%(p)sy'",
+    "SELECT a FROM t WHERE name = '%b'",
+    "SELECT a FROM t WHERE name = '%%%s'",  # an escaped % then a placeholder
+    'SELECT "%(p)s" FROM t',
+    "SELECT `%s` FROM t",
+]
+
+
+@pytest.mark.parametrize("query", PLACEHOLDER_REFUSED_WITH_PARAMS)
+def test_a_placeholder_in_a_literal_is_refused_when_params_are_bound(
+    query: str,
+) -> None:
+    with pytest.raises(ValueError, match="placeholder"):
+        assert_read_only_sql(query, binds=True)
+    # Without parameters no driver formats the query: the text is text.
+    assert assert_read_only_sql(query) == query
+
+
+def test_the_verifier_checks_placeholders_only_with_params() -> None:
+    query = "SELECT a FROM t WHERE name = '%(p)s' AND b = %(b)s"
+    with pytest.raises(ValueError, match="placeholder"):
+        SqlRecordVerifier(lambda: None, query, query_params={"b": 1})
+    plain = "SELECT strftime('%s', ts) FROM t"
+    assert SqlRecordVerifier(lambda: None, plain).query == plain
+
+
+FOLLOW_UP_REFUSED = [
+    # A dollar quote right after a number: Postgres reads 1 then $$...$$.
+    "SELECT 1$$'$$; DELETE FROM t; SELECT 1$$' x$$",
+    "SELECT 1$$x$$",
+    "SELECT 1$tag$x$tag$",
+    # Locking reads.
+    "SELECT * FROM t LOCK IN SHARE MODE",
+    "SELECT * FROM t FOR SHARE",
+    "SELECT * FROM t FOR KEY SHARE",
+    "SELECT * FROM t for share nowait",
+    "SELECT * FROM t FOR NO KEY UPDATE",
+    # Functions with side effects or reads outside the database.
+    "SELECT get_lock('x', 1)",
+    "SELECT pg_advisory_lock(1)",
+    "SELECT pg_advisory_xact_lock_shared(1)",
+    "SELECT pg_try_advisory_lock(1)",
+    "SELECT pg_sleep_for('1 second')",
+    "SELECT pg_sleep_until(now())",
+    "SELECT load_file('/etc/passwd')",
+    "SELECT pg_read_file('postgresql.conf')",
+    "SELECT pg_read_binary_file('postgresql.conf')",
+    "SELECT pg_notify('channel', 'payload')",
+    'SELECT pg_catalog."pg_advisory_lock"(1)',
+    "SELECT master_pos_wait('log', 4)",
+    "SELECT source_pos_wait('log', 4)",
+    "SELECT pg_terminate_backend(42)",
+    "SELECT pg_cancel_backend(42)",
+    "SELECT pg_ls_dir('.')",
+]
+
+
+@pytest.mark.parametrize("query", FOLLOW_UP_REFUSED)
+def test_follow_up_forms_are_refused(query: str) -> None:
+    with pytest.raises(ValueError):
+        assert_read_only_sql(query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT a FROM t WHERE at = '14:30'",  # a time is not :name
+        "SELECT a FROM t WHERE code LIKE 'abc%' AND pct = '100%'",
+        "SELECT a FROM t WHERE name = %(p)s AND b = :b AND c = %s",
+        "SELECT share, lock, t.key FROM t",  # column names, not locks
+        "SELECT a$b, $1 FROM t",
+        "SELECT price FROM t WHERE x = 'for share'",
+    ],
+)
+def test_follow_up_reads_still_pass(query: str) -> None:
+    assert assert_read_only_sql(query) == query
+
+
+#: Realistic reads that work on main and must keep working (#1668 review
+#: round 1). The ones with ``%%`` are the escaped form used with params.
+MISFIRES_MUST_PASS = [
+    ("SELECT to_char(ts, 'HH24:MI') FROM t", False),
+    ("SELECT data->>'system:code' FROM t", False),
+    ("SELECT id FROM t WHERE sp_system = 'urn:oid:2.16.840.1.113883.4.1'", False),
+    ("SELECT id FROM t WHERE uri = 'mailto:a@b.c'", False),
+    ('SELECT "ns:attr" FROM t', False),
+    ("SELECT DATE_FORMAT(ts, '%H:%i:%s') FROM t", False),
+    ("SELECT DATE_FORMAT(ts, '%%H:%%i:%%s') FROM t WHERE id = %(id)s", True),
+    ("SELECT strftime('%s', ts) FROM t", False),
+    ("SELECT id FROM t WHERE lower(name) LIKE '%smith%'", False),
+    ("SELECT id FROM t WHERE name LIKE '%tax%' OR name LIKE '%bob%'", False),
+    ("SELECT id FROM t WHERE name LIKE '%%smith%%' AND b = %s", True),
+    ("SELECT format('%s-%s', a, b) FROM t", False),
+    ("SELECT id FROM t WHERE lock IN (1)", False),
+    ("SELECT id FROM t WHERE t.lock IN (1)", False),
+    ("SELECT id FROM t WHERE x = :x AND at = '14:30'", True),
+]
+
+
+@pytest.mark.parametrize(("query", "binds"), MISFIRES_MUST_PASS)
+def test_realistic_reads_from_the_review_pass(query: str, binds: bool) -> None:
+    assert assert_read_only_sql(query, binds=binds) == query
