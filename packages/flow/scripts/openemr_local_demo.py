@@ -325,8 +325,8 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
         return StructuralLocator(
             selector=target.get("selector"),
             frame_path=located.frame_path,
-            role=target.get("role"),
-            name=target.get("name"),
+            role=target.get("role") or located.role,
+            name=target.get("name") or located.name,
         )
 
     def _confirm_point(self) -> tuple[int, int] | None:

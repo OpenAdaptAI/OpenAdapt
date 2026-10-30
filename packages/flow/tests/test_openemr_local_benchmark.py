@@ -50,8 +50,6 @@ from scripts.openemr_local_demo import (
     _capture_post_evidence,
     _confirm_create_locator,
     _duplicate_dialog_postconditions,
-    _saved_chart_postcondition,
-    apply_referral_rules,
     _form_frame,
     _marked_save_step_id,
     _persist_evidence,
@@ -59,9 +57,11 @@ from scripts.openemr_local_demo import (
     _preauthenticate_browser,
     _reset_recording_state,
     _row,
+    _saved_chart_postcondition,
     _stable_pre_trial_counts,
     _tree_manifest_sha256,
     _validate_benchmark_bundle,
+    apply_referral_rules,
     record,
     run_matrix,
 )
@@ -784,7 +784,7 @@ window.openDuplicateCheck = () => {
 </iframe>
 </body></html>"""
 _FORM_HTML = """<!doctype html><html><body>
-<p>Name: <input id="form_fname" onclick="top.actions.push('fname')">
+<p>Name: <input id="form_fname" name="form_fname" onclick="top.actions.push('fname')">
 <input id="form_lname" onclick="top.actions.push('lname')"></p>
 <button id="create"
   onclick="top.actions.push('create'); top.openDuplicateCheck()">Create New Patient</button>
@@ -862,6 +862,10 @@ def test_openemr_adapter_delivers_guarded_dom_actions_in_the_form_frame(
         locator, handle, receipt = _act(backend, point)
         assert locator.selector == selector
         assert locator.frame_path  # bound to the exact hit-tested frame chain
+        if selector == "#form_fname":
+            assert locator.name == "form_fname"
+        elif selector == "#create":
+            assert locator.name == "Create New Patient"
         assert handle.target_fingerprint
         assert receipt.target_fingerprint == handle.target_fingerprint
     assert json.loads(

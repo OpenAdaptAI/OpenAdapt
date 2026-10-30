@@ -38,6 +38,7 @@ from openadapt_flow.risk import (
     LOCAL_EDIT_PREFIX,
     infer_step_risk,
     is_local_edit,
+    is_meaningful_label,
     only_weak_write_words,
     step_text,
 )
@@ -48,7 +49,12 @@ CHOICE_ROLES = frozenset({"combobox", "listbox"})
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 Pattern = Literal[
-    "select_all", "confirm_option", "confirm_entry", "in_form_tab", "dismiss_dialog"
+    "select_all",
+    "confirm_option",
+    "confirm_entry",
+    "in_form_tab",
+    "dismiss_dialog",
+    "focus_field",
 ]
 
 
@@ -353,6 +359,51 @@ def _click_edit(step: Step, steps: Sequence[Step], k: int) -> Optional[LocalEdit
             f"and {acting.id} acts in the same frame; {_EVIDENCE}",
             [Postcondition(kind=PostconditionKind.LOCAL_EDIT)],
         )
+    if role in (TEXT_ROLES | CHOICE_ROLES) and not is_meaningful_label(label):
+        acting = next(
+            (
+                later
+                for later in steps[k + 1 : k + 4]
+                if later.action not in {ActionKind.SCROLL, ActionKind.WAIT}
+            ),
+            None,
+        )
+        typing_step = None
+        if acting is not None:
+            if acting.action is ActionKind.TYPE:
+                typing_step = acting
+            elif acting.action is ActionKind.KEY and _key_chord(acting) in {
+                "a+control",
+                "a+meta",
+            }:
+                after_acting = next(
+                    (
+                        later
+                        for later in steps[k + 2 : k + 5]
+                        if later.action not in {ActionKind.SCROLL, ActionKind.WAIT}
+                    ),
+                    None,
+                )
+                if after_acting is not None and after_acting.action is ActionKind.TYPE:
+                    typing_step = after_acting
+
+        if typing_step is not None and (
+            _frame(typing_step) is None or _frame(typing_step) == _frame(step)
+        ):
+            kind = "dropdown" if role in CHOICE_ROLES else "field"
+            desc = target.selector or kind
+            return LocalEdit(
+                step.id,
+                "focus_field",
+                f"{LOCAL_EDIT_PREFIX} focuses the {kind} ({desc}) "
+                f"before {typing_step.id} types into it; {_EVIDENCE}",
+                [
+                    Postcondition(
+                        kind=PostconditionKind.LOCAL_EDIT,
+                        field_selector=target.selector,
+                    )
+                ],
+            )
     return None
 
 
