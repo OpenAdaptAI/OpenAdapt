@@ -1064,118 +1064,114 @@ def build_contract(
     # Rows beside the main record that hold a value (a note, a custom field,
     # an email address link), and list items (invoice lines).
     found = flavor == "found"
-    if True:
-        groups = [
-            (p, g)
-            for p, g in plan.children.items()
-            if p in fields
-            or (not found and g.empty_when_null)
-            or (not found and plan.mode == "create" and set(g.co_owners) & fields)
-        ]
-        groups += [(p, g) for p, g in plan.lists.items() if p in variant.lists]
-        for p, g in groups:
-            name = f"rows:{g.table}"
-            sname = _alias(name)
-            if sname not in surfaces:
-                cols = _base_columns(b, g.table)
-                link = g.link
-                # The main record's values, seen from the child row.
-                for ip in identity_params:
-                    loc = locations[ip]
-                    up = Location(
-                        (Hop("fk", anchor, link.column, link.ref_column, True),)
-                        + loc.hops,
-                        loc.columns,
-                        loc.rule,
-                    )
-                    expr = b.path("t", g.table, up)
-                    if loc.rule in ("number", "date", "datetime", "minutes"):
-                        expr = b.flag(expr, loc.rule, b.ph(ip))
-                    cols.append((f"main__{_alias(ip)}", expr))
-                surfaces[sname] = Surface(
-                    sname, settings.views.get(g.table, g.table), cols
+    groups = [
+        (p, g)
+        for p, g in plan.children.items()
+        if p in fields
+        or (not found and g.empty_when_null)
+        or (not found and plan.mode == "create" and set(g.co_owners) & fields)
+    ]
+    groups += [(p, g) for p, g in plan.lists.items() if p in variant.lists]
+    for p, g in groups:
+        name = f"rows:{g.table}"
+        sname = _alias(name)
+        if sname not in surfaces:
+            cols = _base_columns(b, g.table)
+            link = g.link
+            # The main record's values, seen from the child row.
+            for ip in identity_params:
+                loc = locations[ip]
+                up = Location(
+                    (Hop("fk", anchor, link.column, link.ref_column, True),) + loc.hops,
+                    loc.columns,
+                    loc.rule,
                 )
-                named_tables.add(g.table)
-            surf = surfaces[sname]
-            items = range(variant.lists[p]) if g.list_param else [None]
-            for i in items:
-                m: dict[str, Any] = {}
-                for ip in identity_params:
-                    loc = locations[ip]
-                    if loc.rule in ("number", "date", "datetime", "minutes"):
-                        m[f"main__{_alias(ip)}"] = {"literal": "1"}
-                    else:
-                        m[f"main__{_alias(ip)}"] = _value_expr(ip, loc.rule)
-                for k, loc in g.params.items():
-                    pname = k if g.list_param is None else f"{p}.{i}.{k}"
-                    if g.list_param is None and pname not in fields:
-                        # Given another owner but not this value: empty.
-                        for c in loc.columns if not loc.hops else [loc.hops[0].column]:
-                            alias = f"empty__{_alias(c)}"
-                            if alias not in {a for a, _ in surf.columns}:
-                                surf.columns.append((alias, b.empty("t", g.table, c)))
-                            m[alias] = {"literal": "1"}
-                        continue
-                    key = _place(b, surf, g.table, pname, loc)
-                    if loc.rule in ("number", "date", "datetime", "minutes"):
-                        m[key] = {"literal": "1"}
-                    else:
-                        m[key] = _value_expr(pname, loc.rule)
-                for col, role in sorted(g.roles.items()):
-                    if role.role == "link" or found:
-                        continue
-                    _pin(b, surf, g.table, col, role, m, settings.actor_params)
-                effect = {
-                    "kind": "record_written",
-                    "probe": f"surface={sname}|a row beside the main record holds {p}",
-                    "match": m,
-                    "expected_count": 1,
-                }
-                if not found:
-                    # Found: the row is already there, and nothing changes.
-                    effect["count_new_only"] = True
-                effects.append(effect)
-            if plan.mode == "update":
-                target_fields.update(g.changed_columns)
-        # A new row a link row names (a new email address).
-        for p, ref in plan.added_refs.items():
-            if p not in fields or found:
-                continue
-            effects.append(
-                _raw_effect(
-                    b,
-                    schema,
-                    surfaces,
-                    settings,
-                    ref["table"],
-                    {ref["column"]: _value_expr(p, ref["rule"])},
-                    1,
-                    {},
-                    f"the new {ref['table']} row holds {p}",
-                )
+                expr = b.path("t", g.table, up)
+                if loc.rule in ("number", "date", "datetime", "minutes"):
+                    expr = b.flag(expr, loc.rule, b.ph(ip))
+                cols.append((f"main__{_alias(ip)}", expr))
+            surfaces[sname] = Surface(sname, settings.views.get(g.table, g.table), cols)
+            named_tables.add(g.table)
+        surf = surfaces[sname]
+        items = range(variant.lists[p]) if g.list_param else [None]
+        for i in items:
+            m: dict[str, Any] = {}
+            for ip in identity_params:
+                loc = locations[ip]
+                if loc.rule in ("number", "date", "datetime", "minutes"):
+                    m[f"main__{_alias(ip)}"] = {"literal": "1"}
+                else:
+                    m[f"main__{_alias(ip)}"] = _value_expr(ip, loc.rule)
+            for k, loc in g.params.items():
+                pname = k if g.list_param is None else f"{p}.{i}.{k}"
+                if g.list_param is None and pname not in fields:
+                    # Given another owner but not this value: empty.
+                    for c in loc.columns if not loc.hops else [loc.hops[0].column]:
+                        alias = f"empty__{_alias(c)}"
+                        if alias not in {a for a, _ in surf.columns}:
+                            surf.columns.append((alias, b.empty("t", g.table, c)))
+                        m[alias] = {"literal": "1"}
+                    continue
+                key = _place(b, surf, g.table, pname, loc)
+                if loc.rule in ("number", "date", "datetime", "minutes"):
+                    m[key] = {"literal": "1"}
+                else:
+                    m[key] = _value_expr(pname, loc.rule)
+            for col, role in sorted(g.roles.items()):
+                if role.role == "link" or found:
+                    continue
+                _pin(b, surf, g.table, col, role, m, settings.actor_params)
+            effect = {
+                "kind": "record_written",
+                "probe": f"surface={sname}|a row beside the main record holds {p}",
+                "match": m,
+                "expected_count": 1,
+            }
+            if not found:
+                # Found: the row is already there, and nothing changes.
+                effect["count_new_only"] = True
+            effects.append(effect)
+        if plan.mode == "update":
+            target_fields.update(g.changed_columns)
+    # A new row a link row names (a new email address).
+    for p, ref in plan.added_refs.items():
+        if p not in fields or found:
+            continue
+        effects.append(
+            _raw_effect(
+                b,
+                schema,
+                surfaces,
+                settings,
+                ref["table"],
+                {ref["column"]: _value_expr(p, ref["rule"])},
+                1,
+                {},
+                f"the new {ref['table']} row holds {p}",
             )
-        for side in plan.sides:
-            if found or (side.unless is not None and side.unless in fields):
-                continue
-            m = {}
-            for col, role in sorted(side.roles.items()):
-                if role.role == "constant" and role.value is not None:
-                    m[col] = {"literal": role.value}
-                elif role.role == "actor":
-                    m[col] = {"param": role.detail["param"]}
-            effects.append(
-                _raw_effect(
-                    b,
-                    schema,
-                    surfaces,
-                    settings,
-                    side.table,
-                    m,
-                    side.count,
-                    side.roles,
-                    f"{side.count} row(s) the app adds to {side.table}",
-                )
+        )
+    for side in plan.sides:
+        if found or (side.unless is not None and side.unless in fields):
+            continue
+        m = {}
+        for col, role in sorted(side.roles.items()):
+            if role.role == "constant" and role.value is not None:
+                m[col] = {"literal": role.value}
+            elif role.role == "actor":
+                m[col] = {"param": role.detail["param"]}
+        effects.append(
+            _raw_effect(
+                b,
+                schema,
+                surfaces,
+                settings,
+                side.table,
+                m,
+                side.count,
+                side.roles,
+                f"{side.count} row(s) the app adds to {side.table}",
             )
+        )
 
     verifier: dict[str, Any] = {"kind": "surfaces", "surfaces": {}}
     for s in surfaces.values():
@@ -2259,12 +2255,12 @@ def choose(
 
 
 def _exists(contract: Any, params: Mapping[str, Any]) -> bool:
-    """Does a record matching the found contract's main effect exist now?"""
+    """Does every effect of the found contract hold now (the record, and each
+    row beside it that holds a value)?"""
 
     from openadapt_flow.runtime.effects.effect import record_matches
-    from openadapt_flow.verify_run import _build_verifier
-
     from openadapt_flow.runtime.effects.surfaces import surface_of
+    from openadapt_flow.verify_run import _build_verifier
 
     verifier = _build_verifier(contract.config, params)
     state = verifier.capture_pre_state()
