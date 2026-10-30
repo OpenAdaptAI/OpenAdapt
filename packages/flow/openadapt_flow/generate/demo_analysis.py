@@ -47,6 +47,8 @@ RULES = ("exact", "email", "phone", "number", "date", "datetime", "minutes")
 
 _IDLIKE = re.compile(r"(^id$|_id$|^id_|^fk_|_fk$|^parent$|^parent_id$)", re.I)
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PHONE = re.compile(r"^\+?[0-9][0-9 ().\-/]*$")
 #: Table names an app's own logs usually carry. Only a proposal: a person
 #: confirms which tables are logs (the bookkeeping question).
 _LOG_NAME = re.compile(
@@ -99,19 +101,23 @@ def rule_for(stored: Optional[str], column_kind: str, value: Any) -> Optional[st
     text = value_text(value)
     if text == "":
         return None
+    if column_kind == "text":
+        # An email address or a phone number is compared in its declared
+        # canonical form even when this demonstration's text matches
+        # exactly: another write may store ``Ana@Example.org`` or
+        # ``+16175550144`` for the same value.
+        if _EMAIL.match(text) and stored.casefold() == text.casefold():
+            return "email"
+        if _PHONE.match(text) and sum(ch.isdigit() for ch in text) >= 6:
+            a, b = kind_form("phone", stored), kind_form("phone", text)
+            if a is not None and a == b:
+                return "phone"
     if stored == text and column_kind not in ("number", "bool", "date", "datetime"):
         # A number or date column is compared by value even when this
         # demonstration's text happens to match: another row of the same
         # column may print as ``5.5000``.
         return "exact"
     if column_kind == "text":
-        if "@" in text and stored.casefold() == text.casefold():
-            return "email"
-        digits = sum(ch.isdigit() for ch in text)
-        if digits >= 6:
-            a, b = kind_form("phone", stored), kind_form("phone", text)
-            if a is not None and a == b:
-                return "phone"
         return None
     if column_kind in ("number", "bool"):
         a, b = _decimal(stored), _decimal(text)
