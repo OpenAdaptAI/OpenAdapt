@@ -187,13 +187,10 @@ check stops (UNCERTAIN).
 
 A null write and a `""` write are different writes in the ledger. Ledgers
 written before keyed `None` as `""`, so a null write also looks at that
-old key. Each attempt records the names (never the values) of the params
-it wrote as null, when it begins and when it resolves. An attempt there
-that is in the store (found by `reconcile`, or released `--found landed`)
-with the same null params is the same write: its result is handed back,
-and the write is not sent. Anything else that stands there (in flight,
-unresolved, refuted, or a `""` write) holds the null write;
-`release KEY --found absent` lets it be sent.
+old key. While an attempt stands there (in flight, unresolved, refuted, or
+a `""` write just made), the null write is held. `release KEY --found
+landed` hands that attempt's result back to the null write, and it is not
+sent; `--found absent` lets it be sent.
 
 A null value never matches `""`, the text `"None"`, or any other stored
 value, so a wrong write on a task with empty fields still stops. The

@@ -354,21 +354,18 @@ def _legacy_uncertain(tmp_path: Path) -> tuple[Path, Contract, Any, str]:
     return db, contract, ledger, legacy
 
 
-def test_a_legacy_empty_attempt_released_as_landed_still_holds(tmp_path: Path) -> None:
-    # The attempt under the old key is a "" write (it records no null
-    # params), so even released as landed it is not this null write's
-    # result (round 3). A real pre-upgrade null write is handed back:
-    # test_verifier_null_ledger.py.
+def test_a_legacy_attempt_released_as_landed_is_handed_back(tmp_path: Path) -> None:
     from openadapt_flow.verifier import WriteHeld
 
     db, contract, ledger, legacy = _legacy_uncertain(tmp_path)
-    _insert(db, "Tax", "")
+    _insert(db, "Tax", None)  # before the upgrade, the null write landed
     params = {"subject": "Tax", "description": None}
     with pytest.raises(WriteHeld, match="--found landed"):
         begin_write(contract, params, actor=BOT, ledger=ledger)
     ledger.release(legacy, by="ops", reason="row 2 is there", found="landed")
-    with pytest.raises(WriteHeld):
+    with pytest.raises(AlreadyWritten) as caught:
         begin_write(contract, params, actor=BOT, ledger=ledger)
+    assert caught.value.result.get("not_sent_again") is True
 
 
 def test_a_legacy_attempt_released_as_absent_lets_the_write_go(tmp_path: Path) -> None:
