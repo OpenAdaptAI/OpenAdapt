@@ -1073,7 +1073,13 @@ def _touched_rows(
             for c in cols
         }
         plan.touched.append(
-            {"table": table, "selector": selector, "columns": kinds, "row": how}
+            {
+                "table": table,
+                "selector": selector,
+                "columns": kinds,
+                "row": how,
+                "by_key": " row " in how,
+            }
         )
 
 
@@ -2726,6 +2732,24 @@ def propose(
             _confirm_phones(
                 p, {x.split(".", 1)[1] for x in confirmed if x.startswith(p.kind + ".")}
             )
+
+    # A row the app changes by key (a user's preferences, a counter) is the
+    # app's, whichever kind of write a demonstration happened to make when
+    # it changed: the same excuse, on that row only, applies to every kind.
+    keyed: dict[tuple[str, str], dict[str, Any]] = {}
+    for p in plans:
+        for row_spec in p.touched:
+            if row_spec.get("by_key"):
+                k = (
+                    row_spec["table"],
+                    json.dumps(row_spec["selector"], sort_keys=True),
+                )
+                merged = keyed.setdefault(k, {**row_spec, "columns": {}})
+                merged["columns"].update(row_spec["columns"])
+    for p in plans:
+        p.touched = [x for x in p.touched if not x.get("by_key")] + [
+            {**x, "columns": dict(x["columns"])} for x in keyed.values()
+        ]
 
     # Q: bookkeeping, for the whole app at once.
     ans = _answer(answers, "bookkeeping")
