@@ -108,6 +108,7 @@ effects:
       param: customer
     email:
       param: new_email
+      kind: email
     phone:
       param: new_phone
       kind: phone
@@ -117,6 +118,8 @@ effects:
 - kind: record_written
   probe: surface=raw_llx_actioncomm|1 row(s) the app adds to llx_actioncomm
   match:
+    code:
+      literal: AC_COMPANY_MODIFY
     entity:
       literal: '1'
     event_paid:
@@ -179,7 +182,6 @@ frame:
     settle_attempts: 5
     new_row_fields:
       llx_actioncomm:
-      - code
       - datec
       - datep
       - datep2

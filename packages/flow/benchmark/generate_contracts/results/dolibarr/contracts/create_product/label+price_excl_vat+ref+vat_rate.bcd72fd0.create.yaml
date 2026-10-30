@@ -104,10 +104,71 @@ verifier:
         IS NULL THEN '1' ELSE '0' END AS `pin__width`, CASE WHEN t.`width_units` IS NULL THEN '1' ELSE
         '0' END AS `pin__width_units` FROM `llx_product` t
       sql_query_params:
-        v0:
+        v0: &id002
           param: price_excl_vat
-        v1:
+        v1: &id003
           param: vat_rate
+    rows_llx_product_price:
+      kind: sql
+      sql_driver: pymysql
+      sql_connect_args: *id001
+      sql_password_env: FCG_DOLIBARR_READER_PASSWORD
+      sql_query: SELECT CAST(t.`rowid` AS CHAR) AS `id`, CAST(t.`rowid` AS CHAR) AS `rowid`, CAST(t.`entity`
+        AS CHAR) AS `entity`, CAST(t.`tms` AS CHAR) AS `tms`, CAST(t.`fk_product` AS CHAR) AS `fk_product`,
+        CAST(t.`date_price` AS CHAR) AS `date_price`, CAST(t.`price_level` AS CHAR) AS `price_level`,
+        CAST(t.`price` AS CHAR) AS `price`, CAST(t.`price_ttc` AS CHAR) AS `price_ttc`, CAST(t.`price_min`
+        AS CHAR) AS `price_min`, CAST(t.`price_min_ttc` AS CHAR) AS `price_min_ttc`, CAST(t.`price_base_type`
+        AS CHAR) AS `price_base_type`, CAST(t.`default_vat_code` AS CHAR) AS `default_vat_code`, CAST(t.`tva_tx`
+        AS CHAR) AS `tva_tx`, CAST(t.`recuperableonly` AS CHAR) AS `recuperableonly`, CAST(t.`localtax1_tx`
+        AS CHAR) AS `localtax1_tx`, CAST(t.`localtax1_type` AS CHAR) AS `localtax1_type`, CAST(t.`localtax2_tx`
+        AS CHAR) AS `localtax2_tx`, CAST(t.`localtax2_type` AS CHAR) AS `localtax2_type`, CAST(t.`fk_user_author`
+        AS CHAR) AS `fk_user_author`, CAST(t.`price_label` AS CHAR) AS `price_label`, CAST(t.`tosell`
+        AS CHAR) AS `tosell`, CAST(t.`price_by_qty` AS CHAR) AS `price_by_qty`, CAST(t.`fk_price_expression`
+        AS CHAR) AS `fk_price_expression`, CAST(t.`import_key` AS CHAR) AS `import_key`, CAST(t.`fk_multicurrency`
+        AS CHAR) AS `fk_multicurrency`, CAST(t.`multicurrency_code` AS CHAR) AS `multicurrency_code`,
+        CAST(t.`multicurrency_tx` AS CHAR) AS `multicurrency_tx`, CAST(t.`multicurrency_price` AS CHAR)
+        AS `multicurrency_price`, CAST(t.`multicurrency_price_ttc` AS CHAR) AS `multicurrency_price_ttc`,
+        (SELECT CAST(a1.`label` AS CHAR) FROM `llx_product` a1 WHERE a1.`rowid` = t.`fk_product`) AS `main__label`,
+        CASE WHEN CAST(%(v0)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND (SELECT a1.`price` FROM `llx_product`
+        a1 WHERE a1.`rowid` = t.`fk_product`) = CAST(%(v0)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS
+        `main__price_excl_vat`, (SELECT CAST(a1.`ref` AS CHAR) FROM `llx_product` a1 WHERE a1.`rowid`
+        = t.`fk_product`) AS `main__ref`, CASE WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$'
+        AND (SELECT a1.`tva_tx` FROM `llx_product` a1 WHERE a1.`rowid` = t.`fk_product`) = CAST(%(v1)s
+        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `main__vat_rate`, CASE WHEN CAST(%(v0)s AS CHAR) REGEXP
+        '^-?[0-9]+([.][0-9]+)?$' AND t.`price` = CAST(%(v0)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END
+        AS `p__price_excl_vat`, CASE WHEN t.`entity` = (SELECT s.`entity` FROM `llx_product` s WHERE s.`rowid`
+        = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__entity`, CASE WHEN t.`fk_multicurrency` IS NULL
+        THEN '1' ELSE '0' END AS `pin__fk_multicurrency`, CASE WHEN t.`fk_price_expression` IS NULL THEN
+        '1' ELSE '0' END AS `pin__fk_price_expression`, CASE WHEN t.`fk_user_author` = (SELECT s.`fk_user_author`
+        FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__fk_user_author`,
+        CASE WHEN t.`localtax1_tx` = (SELECT s.`localtax1_tx` FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`)
+        THEN '1' ELSE '0' END AS `pin__localtax1_tx`, CASE WHEN t.`localtax1_type` = (SELECT s.`localtax1_type`
+        FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__localtax1_type`,
+        CASE WHEN t.`localtax2_tx` = (SELECT s.`localtax2_tx` FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`)
+        THEN '1' ELSE '0' END AS `pin__localtax2_tx`, CASE WHEN t.`localtax2_type` = (SELECT s.`localtax2_type`
+        FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__localtax2_type`,
+        CASE WHEN t.`multicurrency_price` IS NULL THEN '1' ELSE '0' END AS `pin__multicurrency_price`,
+        CASE WHEN t.`multicurrency_price_ttc` IS NULL THEN '1' ELSE '0' END AS `pin__multicurrency_price_ttc`,
+        CASE WHEN t.`multicurrency_tx` = CAST('1' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__multicurrency_tx`,
+        CASE WHEN t.`price_base_type` = (SELECT s.`price_base_type` FROM `llx_product` s WHERE s.`rowid`
+        = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__price_base_type`, CASE WHEN t.`price_by_qty`
+        = (SELECT s.`price_by_qty` FROM `llx_product_price` s WHERE s.`rowid` = t.`fk_user_author`) THEN
+        '1' ELSE '0' END AS `pin__price_by_qty`, CASE WHEN t.`price_level` = (SELECT s.`price_level` FROM
+        `llx_product_price` s WHERE s.`rowid` = t.`fk_user_author`) THEN '1' ELSE '0' END AS `pin__price_level`,
+        CASE WHEN t.`price_min` = (SELECT s.`price_min` FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`)
+        THEN '1' ELSE '0' END AS `pin__price_min`, CASE WHEN t.`price_min_ttc` = CAST('0' AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `pin__price_min_ttc`, CASE WHEN t.`recuperableonly` = (SELECT s.`recuperableonly`
+        FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__recuperableonly`,
+        CASE WHEN t.`tosell` = (SELECT s.`tosell` FROM `llx_product` s WHERE s.`rowid` = t.`fk_product`)
+        THEN '1' ELSE '0' END AS `pin__tosell`, CASE WHEN t.`tva_tx` = (SELECT s.`tva_tx` FROM `llx_product`
+        s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__tva_tx`, CASE WHEN CAST(%(v1)s
+        AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`tva_tx` = CAST(%(v1)s AS DECIMAL(65,30)) THEN
+        '1' ELSE '0' END AS `p__vat_rate`, CASE WHEN t.`price` = (SELECT s.`price` FROM `llx_product`
+        s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__price` FROM `llx_product_price`
+        t
+      sql_query_params:
+        v0: *id002
+        v1: *id003
     raw_llx_actioncomm:
       kind: sql
       sql_driver: pymysql
@@ -145,27 +206,6 @@ verifier:
         AS CHAR) AS `fk_element`, CAST(t.`answer_status` AS CHAR) AS `answer_status`, CAST(t.`mandatory`
         AS CHAR) AS `mandatory`, CAST(t.`transparency` AS CHAR) AS `transparency` FROM `llx_actioncomm_resources`
         t
-    raw_llx_product_price:
-      kind: sql
-      sql_driver: pymysql
-      sql_connect_args: *id001
-      sql_password_env: FCG_DOLIBARR_READER_PASSWORD
-      sql_query: SELECT CAST(t.`rowid` AS CHAR) AS `id`, CAST(t.`rowid` AS CHAR) AS `rowid`, CAST(t.`entity`
-        AS CHAR) AS `entity`, CAST(t.`tms` AS CHAR) AS `tms`, CAST(t.`fk_product` AS CHAR) AS `fk_product`,
-        CAST(t.`date_price` AS CHAR) AS `date_price`, CAST(t.`price_level` AS CHAR) AS `price_level`,
-        CAST(t.`price` AS CHAR) AS `price`, CAST(t.`price_ttc` AS CHAR) AS `price_ttc`, CAST(t.`price_min`
-        AS CHAR) AS `price_min`, CAST(t.`price_min_ttc` AS CHAR) AS `price_min_ttc`, CAST(t.`price_base_type`
-        AS CHAR) AS `price_base_type`, CAST(t.`default_vat_code` AS CHAR) AS `default_vat_code`, CAST(t.`tva_tx`
-        AS CHAR) AS `tva_tx`, CAST(t.`recuperableonly` AS CHAR) AS `recuperableonly`, CAST(t.`localtax1_tx`
-        AS CHAR) AS `localtax1_tx`, CAST(t.`localtax1_type` AS CHAR) AS `localtax1_type`, CAST(t.`localtax2_tx`
-        AS CHAR) AS `localtax2_tx`, CAST(t.`localtax2_type` AS CHAR) AS `localtax2_type`, CAST(t.`fk_user_author`
-        AS CHAR) AS `fk_user_author`, CAST(t.`price_label` AS CHAR) AS `price_label`, CAST(t.`tosell`
-        AS CHAR) AS `tosell`, CAST(t.`price_by_qty` AS CHAR) AS `price_by_qty`, CAST(t.`fk_price_expression`
-        AS CHAR) AS `fk_price_expression`, CAST(t.`import_key` AS CHAR) AS `import_key`, CAST(t.`fk_multicurrency`
-        AS CHAR) AS `fk_multicurrency`, CAST(t.`multicurrency_code` AS CHAR) AS `multicurrency_code`,
-        CAST(t.`multicurrency_tx` AS CHAR) AS `multicurrency_tx`, CAST(t.`multicurrency_price` AS CHAR)
-        AS `multicurrency_price`, CAST(t.`multicurrency_price_ttc` AS CHAR) AS `multicurrency_price_ttc`
-        FROM `llx_product_price` t
 effects:
 - kind: record_written
   probe: surface=record|the main record holds the task's values
@@ -289,12 +329,114 @@ effects:
   expected_count: 1
   count_new_only: true
 - kind: record_written
+  probe: surface=rows_llx_product_price|a row beside the main record holds price_excl_vat
+  match:
+    main__label:
+      param: label
+    main__price_excl_vat:
+      literal: '1'
+    main__ref:
+      param: ref
+    main__vat_rate:
+      literal: '1'
+    p__price_excl_vat:
+      literal: '1'
+    pin__entity:
+      literal: '1'
+    pin__fk_multicurrency:
+      literal: '1'
+    pin__fk_price_expression:
+      literal: '1'
+    pin__fk_user_author:
+      literal: '1'
+    pin__localtax1_tx:
+      literal: '1'
+    pin__localtax1_type:
+      literal: '1'
+    pin__localtax2_tx:
+      literal: '1'
+    pin__localtax2_type:
+      literal: '1'
+    pin__multicurrency_price:
+      literal: '1'
+    pin__multicurrency_price_ttc:
+      literal: '1'
+    pin__multicurrency_tx:
+      literal: '1'
+    pin__price_base_type:
+      literal: '1'
+    pin__price_by_qty:
+      literal: '1'
+    pin__price_level:
+      literal: '1'
+    pin__price_min:
+      literal: '1'
+    pin__price_min_ttc:
+      literal: '1'
+    pin__recuperableonly:
+      literal: '1'
+    pin__tosell:
+      literal: '1'
+    pin__tva_tx:
+      literal: '1'
+  expected_count: 1
+  count_new_only: true
+- kind: record_written
+  probe: surface=rows_llx_product_price|a row beside the main record holds vat_rate
+  match:
+    main__label:
+      param: label
+    main__price_excl_vat:
+      literal: '1'
+    main__ref:
+      param: ref
+    main__vat_rate:
+      literal: '1'
+    p__vat_rate:
+      literal: '1'
+    pin__entity:
+      literal: '1'
+    pin__fk_multicurrency:
+      literal: '1'
+    pin__fk_price_expression:
+      literal: '1'
+    pin__fk_user_author:
+      literal: '1'
+    pin__localtax1_tx:
+      literal: '1'
+    pin__localtax1_type:
+      literal: '1'
+    pin__localtax2_tx:
+      literal: '1'
+    pin__localtax2_type:
+      literal: '1'
+    pin__multicurrency_price:
+      literal: '1'
+    pin__multicurrency_price_ttc:
+      literal: '1'
+    pin__multicurrency_tx:
+      literal: '1'
+    pin__price:
+      literal: '1'
+    pin__price_base_type:
+      literal: '1'
+    pin__price_by_qty:
+      literal: '1'
+    pin__price_level:
+      literal: '1'
+    pin__price_min:
+      literal: '1'
+    pin__price_min_ttc:
+      literal: '1'
+    pin__recuperableonly:
+      literal: '1'
+    pin__tosell:
+      literal: '1'
+  expected_count: 1
+  count_new_only: true
+- kind: record_written
   probe: surface=raw_llx_actioncomm|1 row(s) the app adds to llx_actioncomm
   match:
-    code:
-      literal: AC_PRODUCT_CREATE
-    elementtype:
-      literal: product
     entity:
       literal: '1'
     event_paid:
@@ -332,13 +474,6 @@ effects:
       literal: '0'
   expected_count: 1
   count_new_only: true
-- kind: record_written
-  probe: surface=raw_llx_product_price|1 row(s) the app adds to llx_product_price
-  match:
-    fk_user_author:
-      param: bot_user_id
-  expected_count: 1
-  count_new_only: true
 frame:
   ignore_fields:
   - fk_user_modif
@@ -352,20 +487,20 @@ frame:
       sql_password_env: FCG_DOLIBARR_READER_PASSWORD
     allow_tables:
     - table: llx_product
-      mode: skip
-      reason: read in full, every column, by this contract's own surface
+    - table: llx_product_price
     views:
       llx_actioncomm: raw_llx_actioncomm
       llx_actioncomm_resources: raw_llx_actioncomm_resources
-      llx_product_price: raw_llx_product_price
     settle_s: 1
     settle_attempts: 5
     new_row_fields:
       llx_actioncomm:
+      - code
       - datec
       - datep
       - datep2
       - durationp
+      - elementtype
       - email_from
       - email_msgid
       - email_sender
@@ -393,31 +528,6 @@ frame:
       - fk_actioncomm
       - rowid
       - transparency
-      llx_product_price:
-      - date_price
-      - default_vat_code
-      - entity
-      - fk_product
-      - import_key
-      - localtax1_tx
-      - localtax1_type
-      - localtax2_tx
-      - localtax2_type
-      - multicurrency_code
-      - multicurrency_tx
-      - price
-      - price_base_type
-      - price_by_qty
-      - price_label
-      - price_level
-      - price_min
-      - price_min_ttc
-      - price_ttc
-      - recuperableonly
-      - rowid
-      - tms
-      - tosell
-      - tva_tx
     ignore_columns:
       llx_societe:
       - fk_user_modif
