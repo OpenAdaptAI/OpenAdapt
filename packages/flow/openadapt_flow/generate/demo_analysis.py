@@ -589,6 +589,10 @@ def column_roles(
         ):
             out[name] = ColumnRole("varies", detail={"why": "holds the row's own key"})
             continue
+        part = _date_part(values, [d for d, _ in rows])
+        if part is not None:
+            out[name] = ColumnRole("varies", detail={"why": f"the {part} of a date the task gives"})
+            continue
         copied = _copied(schema, t, name, rows)
         if copied is not None:
             out[name] = ColumnRole("copied", detail=copied)
@@ -616,6 +620,35 @@ def column_roles(
             continue
         out[name] = ColumnRole("varies")
     return out
+
+
+def _date_part(values: Sequence[Optional[str]], demos: Sequence["Demo"]) -> Optional[str]:
+    """Is the column the year, month, ISO week or day of one date value the
+    task gives, in every row? (Redmine stores a time entry's ``tyear``,
+    ``tmonth`` and ``tweek``.) The app computes it, so it isn't pinned."""
+
+    parts = {
+        "year": lambda d: d.year,
+        "month": lambda d: d.month,
+        "week": lambda d: d.isocalendar()[1],
+        "day": lambda d: d.day,
+    }
+    for label, fn in parts.items():
+        ok = bool(values)
+        for v, demo in zip(values, demos):
+            dates = []
+            for x in demo.values.values():
+                if isinstance(x, str) and re.match(r"^\d{4}-\d{2}-\d{2}", x):
+                    try:
+                        dates.append(_dt.date.fromisoformat(x[:10]))
+                    except ValueError:
+                        pass
+            if v is None or not any(str(fn(dd)) == v for dd in dates):
+                ok = False
+                break
+        if ok:
+            return label
+    return None
 
 
 def _copied(

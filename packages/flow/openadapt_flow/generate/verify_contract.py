@@ -51,6 +51,7 @@ from openadapt_flow.generate.demo_analysis import (
     Demo,
     Hop,
     Location,
+    _hop_cost,
     _rank,
     best,
     column_roles,
@@ -393,6 +394,20 @@ def analyze(
                 if plan.mode == "update" and name not in plan.identity:
                     plan.changes.append(name)
                 progress = True
+    if plan.mode == "create":
+        # A create task may leave out any value whose place can be empty: a
+        # nullable column, a nullable key column, or a row beside the record.
+        anchor_t = schema.tables[plan.anchor]
+        for p, loc in plan.locations.items():
+            col = None
+            if not loc.hops and len(loc.columns) == 1:
+                col = anchor_t.column(loc.columns[0])
+            elif loc.hops and loc.hops[0].kind == "fk":
+                col = anchor_t.column(loc.hops[0].column)
+            if (col is not None and col.nullable) or (loc.hops and loc.hops[0].kind == "child"):
+                if p not in plan.optional:
+                    plan.optional.append(p)
+        plan.optional.sort()
     if plan.mode == "update" and not plan.identity:
         plan.refused.append(
             "no parameter names the record before the write, so the update's "
@@ -441,7 +456,7 @@ def _by_name(schema: Schema, plan: KindPlan, param: str) -> Optional[Location]:
     type. Reported as placed by name; a demonstration that gives it replaces
     this."""
 
-    if plan.mode != "update" or not plan.anchor:
+    if not plan.anchor:
         return None
     name = re.sub(r"^(new|set)_", "", param)
     col = schema.tables[plan.anchor].column(name)
@@ -498,7 +513,7 @@ def _children(schema: Schema, plan: KindPlan, lists: Sequence[str]) -> None:
                 if d.values.get(q) is not None
                 and not isinstance(d.values.get(q), (list, dict))
             ]
-            if hits and all(h and h[0].hops for h in hits):
+            if hits and all(h and h[0].hops and _hop_cost(h[0].hops[0]) <= 1 for h in hits):
                 co.append(q)
                 explained |= {h[0].hops[0].column for h in hits}
         plan.children[p] = ChildGroup(
@@ -1167,7 +1182,11 @@ def build_contract(
     # against them, and the whole-database frame covers every other table.
     ignore = sorted(
         {c for cols in bookkeeping.values() for c in cols}
-        & _all_columns(schema, named_tables)
+        & (
+            _all_columns(schema, named_tables)
+            if schema.dialect == "mysql"
+            else _all_columns(schema, set(schema.tables))
+        )
     )
     frame: dict[str, Any] = {}
     if ignore:
