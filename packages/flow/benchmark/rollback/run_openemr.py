@@ -185,6 +185,21 @@ def _after_save(bundle: Path, out: Path) -> Path:
     return out
 
 
+def _unjudged(plan: Any, before: Any) -> Any:
+    from openadapt_flow.rollback import _bookkeeping_inserts
+
+    attributor = plan.attributor
+    if attributor is None or before is None:
+        return None
+    compared = {n for n, t in before.tables.items() if t.mode == "compare"}
+    hidden = attributor.unaccounted_writes(
+        attributor.window(), compared, _bookkeeping_inserts(plan.reader)
+    )
+    if hidden is None:
+        return "audit log unreadable"
+    return sorted({str(e.get("tbl")) for e in hidden})
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--bundle", required=True, type=Path)
@@ -389,6 +404,9 @@ def main(argv: list[str] | None = None) -> int:
                     "remaining_diff": rollback.remaining_diff if rollback else None,
                     "profile_id": rollback.profile_id if rollback else None,
                     "cross_checked": rollback.cross_checked if rollback else None,
+                    # Which logged writes by the run's user the reads couldn't
+                    # judge (tables only), for the record.
+                    "audit_unjudged_tables": _unjudged(plan, before),
                     "steps": [
                         {"step_id": s.step_id, "decision": s.decision}
                         for s in (rollback.steps if rollback else [])
