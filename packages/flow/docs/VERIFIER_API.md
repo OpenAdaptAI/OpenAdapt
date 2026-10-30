@@ -137,12 +137,21 @@ late = recheck(contract, result, params=params, actor=actor,
 late.outcome   # CONFIRMED, REFUTED (late) or UNCERTAIN
 ```
 
-The caller can schedule it from `recheck_due_at` and keep working: before
-then, `recheck` raises `RecheckNotDue` (`wait=True` sleeps instead). It reads
-the whole database again and judges every change since the post-save read.
-A later write passed in `excused_by` accounts only for what changed in its
-own window. A change that may be what refuted that later write gives
-`UNCERTAIN`. See [VERIFY_RUN.md](VERIFY_RUN.md#writes-that-land-later).
+Until the recheck runs, the result is provisional: `result.provisional` is
+true (`provisional` in `to_dict()`), and a write that lands before the due
+time can still refute it. The caller can schedule the recheck from
+`recheck_due_at` and keep working: before then, `recheck` raises
+`RecheckNotDue` (`wait=True` sleeps instead). It reads the whole database
+again and judges every change since the post-save read. A later write passed
+in `excused_by` accounts only for what changed in its own window. A change
+that may be what refuted that later write gives `UNCERTAIN`.
+
+A recheck that gives `REFUTED` or `UNCERTAIN` resolves the write's ledger
+attempt again, for review: a retry under the same key is held for a person,
+never handed the earlier `CONFIRMED`. Pass `ledger=` as given to
+`begin_write` (default: the default ledger; `None`: no ledger). A write that
+lands after the recheck's read is not seen. MCP clients run the recheck with
+`verify_recheck`. See [VERIFY_RUN.md](VERIFY_RUN.md#writes-that-land-later).
 
 ## Before the write
 

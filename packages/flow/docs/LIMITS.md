@@ -574,6 +574,16 @@ same-surface observations. A visible value does not prove it was durably stored.
 Masked input can prove that the field changed, not what secret value it now
 contains.
 
+A write check sees the store as it was when it read. A write that lands
+later, such as a delayed retry, a queued job or a trigger, is not in its
+result. With `frame.database.recheck_after_s`, a `CONFIRMED` write check is
+provisional (`provisional: true`, `recheck_due_at`) until a recheck reads the
+whole database again, and the recheck refutes it when something moved that
+nothing explains. A write after the recheck's read is still not seen, and
+the window has no default: the contract's author picks one longer than the
+slowest write that can follow a save
+([`VERIFY_RUN.md`](VERIFY_RUN.md#writes-that-land-later)).
+
 `lint` reports vacuous postconditions and other coverage gaps. `certify`
 enforces the selected policy. Neither command understands the application's
 business semantics, and the permissive `replay` command does not require

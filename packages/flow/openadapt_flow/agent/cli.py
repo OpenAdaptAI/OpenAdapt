@@ -226,7 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="CONTRACTS_DIR",
         help=(
             "Serve only the verify tools (verify_contracts, verify_begin, "
-            "verify_check): any agent calls them around its own writes, and gets "
+            "verify_check, verify_recheck): any agent calls them around its own writes, and gets "
             "a verified receipt or a refusal. CONTRACTS_DIR holds the write "
             "contracts (<name>.yaml, openadapt.verify/v1)."
         ),

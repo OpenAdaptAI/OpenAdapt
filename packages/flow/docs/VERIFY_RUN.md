@@ -528,6 +528,9 @@ When it is set and the run is verified:
   the recheck without waiting on it.
 - A verified receipt that carries `recheck_due_at` is provisional until the
   recheck runs: a write that lands in the window can still refute it.
+  `WriteResult.provisional` is true, and so is `provisional` in
+  `to_dict()` and in the MCP `verify_check` reply. Don't treat the write as
+  final until the recheck confirms it.
 - `evidence.frame.recheck` says what the recheck compares
   (`database_since_post_save`), when the post-save read was taken, and a
   salted digest of the state it compares with.
@@ -585,6 +588,53 @@ until then instead. Limits:
 - A later write under another contract doesn't excuse anything.
 - A later write whose database never settled after its save has no state,
   so it can't be passed as `excused_by`. Reconcile it first.
+
+### Running the recheck
+
+In Python, call it at or after `recheck_due_at`, or let it sleep until then:
+
+```python
+from openadapt_flow.verifier import recheck
+
+late = recheck(contract, result, params=values, actor=actor, wait=True)
+late.outcome        # CONFIRMED, REFUTED or UNCERTAIN
+late.read_at        # the recheck's own read; nothing after it is seen
+```
+
+A process that restarts in the window can load the saved state with
+`RecheckState.load(path, params=values)` and pass it as `write`.
+
+Over MCP (`openadapt verify serve`), call `verify_recheck` with the
+`write_id` of a `verify_check` reply that says `provisional: true`. Before the
+due time it returns `due: false`, `recheck_due_at` and `wait_s`. The server
+holds the state in memory, so after a restart run the recheck from Python.
+There is no CLI command for it.
+
+A recheck that gives `REFUTED` or `UNCERTAIN` also resolves the write's
+ledger attempt again, for review. `REFUTED` holds it, and `UNCERTAIN` keeps it
+uncertain, so a retry under the same key is never handed the earlier
+`CONFIRMED`; `openadapt verify ledger list` shows it until a person releases
+it. Pass `ledger=` to `recheck` as given to `begin_write` (`None` changes no
+ledger). A `RecheckState` loaded from disk carries no ledger key, so a
+recheck of one leaves the ledger as it is.
+
+### Choosing the window
+
+`recheck_after_s` has no default. Make it longer than the slowest write
+that can follow a save in your system: a client's delayed retry, a queued
+job, a scheduled task, an integration that writes back. A write that lands
+after the recheck's read is not seen by the recheck or by anything else
+here; to cover a longer delay, make the window longer. The longer the
+window, the more of the app's own background activity it also sees, and each
+such change refutes unless the contract explains it (`allow_tables`, the app
+profile, `ignore_columns`, `side_records`) or the audit log attributes it to
+another user.
+
+On the first-contact study's apps (Dolibarr 21 and EspoCRM 10 on MariaDB
+11.4), the planted late writes landed 125 to 130 s after the save. With
+`recheck_after_s: 180`, `settle_s: 1` and `settle_attempts: 1`, the recheck
+refuted all four, and confirmed each task's correct write and the study's
+controls. See the pull request that added this section for the table.
 
 ## Verdicts
 

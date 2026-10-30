@@ -8,6 +8,7 @@ the contract reads. No model is called.
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,8 @@ pytest.importorskip("mcp")
 from mcp import ClientSession  # noqa: E402
 from mcp.shared.memory import create_client_server_memory_streams  # noqa: E402
 
+from openadapt_flow import verifier  # noqa: E402
+from openadapt_flow.agent.bridge import BridgeError  # noqa: E402
 from openadapt_flow.agent.cli import main as agent_main  # noqa: E402
 from openadapt_flow.agent.mcp import build_server  # noqa: E402
 from openadapt_flow.agent.verify_tools import VerifyBridge  # noqa: E402
@@ -144,3 +147,121 @@ def test_serve_verify_refuses_other_modes(tmp_path: Path, capsys) -> None:
     assert "--verify serves only the verify tools" in capsys.readouterr().err
     assert agent_main(["serve", "--verify", str(tmp_path)]) == 2
     assert "no write contracts" in capsys.readouterr().err
+
+
+# -- a provisional result and verify_recheck (SQLite, made-up records) ----------
+
+RECHECK_SCHEMA = """
+CREATE TABLE patient_data (id INTEGER PRIMARY KEY, fname TEXT, lname TEXT,
+  email TEXT);
+CREATE TABLE calendar (id INTEGER PRIMARY KEY AUTOINCREMENT, pid INTEGER, title TEXT);
+INSERT INTO patient_data VALUES (1, 'Wendell', 'Prior', 'w@example.test');
+"""
+
+VALUES = {"fname": "Ada", "lname": "Quill", "email": "ada@example.test"}
+SAVE = (
+    "INSERT INTO patient_data (id, fname, lname, email) "
+    "VALUES (2, 'Ada', 'Quill', 'ada@example.test')"
+)
+
+
+def _sql(db: Path, *statements: str) -> None:
+    con = sqlite3.connect(db)
+    for statement in statements:
+        con.execute(statement)
+    con.commit()
+    con.close()
+
+
+@pytest.fixture
+def sqlite_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[VerifyBridge, Path]:
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / "ledger"))
+    monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "used")
+    db = tmp_path / "app.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(RECHECK_SCHEMA)
+    con.commit()
+    con.close()
+    contracts = tmp_path / "contracts"
+    contracts.mkdir()
+    doc = {
+        "schema_version": "openadapt.verify/v1",
+        "verifier": {
+            "kind": "sql",
+            "sqlite_database": str(db),
+            "sql_query": "SELECT * FROM patient_data",
+        },
+        "record": {
+            "name": "patient",
+            "match": ["email", "lname"],
+            "fields": {"fname": "fname", "lname": "lname", "email": "email"},
+        },
+        "frame": {
+            "identity_field": "id",
+            "database": {
+                "dialect": "sqlite",
+                "read": {"sqlite_database": str(db)},
+                "views": {"patient_data": ""},
+                "settle_s": 0,
+                "recheck_after_s": 60,
+            },
+        },
+    }
+    (contracts / "patient.yaml").write_text(yaml.safe_dump(doc))
+    return VerifyBridge(contracts, tmp_path / "state"), db
+
+
+def _provisional(bridge: VerifyBridge, db: Path) -> dict[str, Any]:
+    begun = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    _sql(db, SAVE)
+    checked = bridge.dispatch("verify_check", {"write_id": begun["write_id"]})
+    assert checked["verified"] is True and checked["provisional"] is True
+    assert checked["recheck_due_at"] and "verify_recheck" in checked["next"]
+    return checked
+
+
+def test_verify_recheck_is_listed_and_waits_for_its_due_time(sqlite_bridge) -> None:
+    bridge, db = sqlite_bridge
+    assert "verify_recheck" in [t.name for t in bridge.list_tool_specs()]
+    assert "verify_recheck" in bridge.instructions
+    checked = _provisional(bridge, db)
+    early = bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
+    assert early["due"] is False
+    assert early["recheck_due_at"] == checked["recheck_due_at"]
+    assert early["wait_s"] > 30
+
+
+def test_verify_recheck_confirms_then_is_spent(sqlite_bridge, monkeypatch) -> None:
+    bridge, db = sqlite_bridge
+    checked = _provisional(bridge, db)
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    late = bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
+    assert late["due"] is True and late["outcome"] == "CONFIRMED"
+    assert late["verified"] is True and late["late"] is False
+    assert late["receipt_sha256"] == checked["receipt_sha256"]
+    with pytest.raises(BridgeError, match="no provisional result"):
+        bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
+
+
+def test_verify_recheck_refutes_a_write_that_landed_late(
+    sqlite_bridge, monkeypatch
+) -> None:
+    bridge, db = sqlite_bridge
+    checked = _provisional(bridge, db)
+    # After the verdict, before the recheck: a background job adds a row.
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    late = bridge.dispatch("verify_recheck", {"write_id": checked["write_id"]})
+    assert late["outcome"] == "REFUTED" and late["late"] is True
+    assert late["verified"] is False and "no longer stands" in late["next"]
+    # The same write again is held for a person, not handed the CONFIRMED.
+    again = bridge.dispatch("verify_begin", {"contract": "patient", "values": VALUES})
+    assert again["ok_to_write"] is False and "earlier_result" not in again
+
+
+def test_a_write_without_a_recheck_has_none_to_run(sqlite_bridge) -> None:
+    bridge, _ = sqlite_bridge
+    with pytest.raises(BridgeError, match="no provisional result"):
+        bridge.dispatch("verify_recheck", {"write_id": "nope"})

@@ -803,3 +803,77 @@ def test_settle_attempts_at_its_default_stays_out_of_the_digest() -> None:
     )
     assert plain.digest() == explicit.digest()
     assert "settle_attempts" not in json.dumps(plain.model_dump())
+
+
+# -- a provisional result, and the ledger after the recheck ----------------------
+
+
+def test_a_confirmed_result_with_a_recheck_due_is_provisional(tmp_path: Path) -> None:
+    _, _, result = _first(tmp_path)
+    assert result.verified and result.provisional
+    assert result.to_dict()["provisional"] is True
+    (tmp_path / "plain").mkdir()
+    db = _db(tmp_path / "plain")
+    plain = _save(Contract.from_dict(_doc(db, recheck_after_s=None)), db, 2)
+    assert plain.verified and not plain.provisional
+    assert plain.to_dict()["provisional"] is False
+
+
+def _keyed(tmp_path: Path, key: str) -> tuple[Contract, Path, WriteResult]:
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db))
+    before = begin_write(contract, _params(2), actor=BOT, write_key=key)
+    _sql(db, *_save_sql(2))
+    result = verify_write(before)
+    assert result.verified and result.provisional, result.reasons
+    return contract, db, result
+
+
+def test_a_late_refutation_holds_the_write_in_the_ledger(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, result = _keyed(tmp_path, "order-77")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    late = _recheck(contract, result)
+    assert late.outcome == "REFUTED"
+    # A retry under the same key is held for a person, never handed the
+    # earlier CONFIRMED.
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT, write_key="order-77")
+    from openadapt_flow.write_ledger import default_ledger
+
+    rows = dict(default_ledger().unresolved())
+    assert rows[result.write_key].resolved["via"] == "recheck"
+    assert rows[result.write_key].resolved["late"] is True
+
+
+def test_an_uncertain_recheck_is_not_handed_back_as_confirmed(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, result = _keyed(tmp_path, "order-78")
+    db.unlink()  # the database can't be read again
+    late = _recheck(contract, result)
+    assert late.outcome == "UNCERTAIN"
+    with pytest.raises(verifier.WriteBlocked) as raised:
+        begin_write(contract, _params(2), actor=BOT, write_key="order-78")
+    assert not isinstance(raised.value, verifier.AlreadyWritten)
+
+
+def test_a_confirming_recheck_leaves_the_ledger_as_it_was(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, _, result = _keyed(tmp_path, "order-79")
+    assert _recheck(contract, result).outcome == "CONFIRMED"
+    with pytest.raises(verifier.AlreadyWritten) as raised:
+        begin_write(contract, _params(2), actor=BOT, write_key="order-79")
+    assert raised.value.result["outcome"] == "CONFIRMED"
+
+
+def test_a_recheck_without_a_ledger_changes_no_ledger(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, db, result = _keyed(tmp_path, "order-80")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert _recheck(contract, result, ledger=None).outcome == "REFUTED"
+    with pytest.raises(verifier.AlreadyWritten):
+        begin_write(contract, _params(2), actor=BOT, write_key="order-80")

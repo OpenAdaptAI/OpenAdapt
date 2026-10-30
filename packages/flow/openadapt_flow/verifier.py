@@ -576,6 +576,14 @@ class WriteResult:
         return self.outcome is Outcome.CONFIRMED
 
     @property
+    def provisional(self) -> bool:
+        """CONFIRMED, but a recheck is due (``recheck_due_at``): a write that
+        lands before it can still refute this result, and only the recheck
+        says the verdict stands. A write after the recheck is not seen."""
+
+        return self.verified and bool(self.recheck_due_at)
+
+    @property
     def verdict(self) -> str:
         """The outcome under its old name (``VERIFIED``, ``REFUTED``,
         ``RECONCILIATION_REQUIRED``)."""
@@ -619,6 +627,7 @@ class WriteResult:
             "landed": self.landed,
             "review": self.review,
             "recheck_due_at": self.recheck_due_at,
+            "provisional": self.provisional,
         }
 
 
@@ -1980,6 +1989,7 @@ def recheck(
     actor: Actor,
     excused_by: Sequence[WriteResult | RecheckState] = (),
     wait: bool = False,
+    ledger: Any = _NO_LEDGER,
 ) -> RecheckResult:
     """Read the whole database again and judge every change since a verified
     write's post-save read.
@@ -2003,6 +2013,13 @@ def recheck(
             a loaded state needs its params (:meth:`RecheckState.load`).
         wait: Before the due time, sleep until it instead of raising
             :class:`RecheckNotDue`.
+        ledger: The ledger the write was made under, as given to
+            :func:`begin_write` (default: the default ledger; ``None``:
+            none). When ``write`` is a :class:`WriteResult` with a ledger
+            key and the recheck doesn't confirm it, its attempt is resolved
+            again there (``REFUTED`` or ``UNCERTAIN``, for review), so a
+            retry is held for a person instead of being handed the earlier
+            ``CONFIRMED``.
 
     Changes the frame excuses after a save are excused here too: the app
     profile's bookkeeping, and another actor's write the audit log
@@ -2012,8 +2029,78 @@ def recheck(
     ``UNCERTAIN``. Raises :class:`VerifierError` when ``write`` scheduled no
     recheck or an ``excused_by`` entry doesn't qualify, and
     :class:`RecheckNotDue` before the due time.
+
+    A write that lands after the recheck's read (``read_at``) is not seen.
     """
 
+    late = _judge_recheck(
+        contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait
+    )
+    if late.outcome != "CONFIRMED" and isinstance(write, WriteResult):
+        late = _hold_after_recheck(ledger, write, late)
+    return late
+
+
+def _hold_after_recheck(
+    ledger: Any, write: WriteResult, late: RecheckResult
+) -> RecheckResult:
+    """Resolve the write's ledger attempt again with the recheck's outcome,
+    for review: ``REFUTED`` holds it, ``UNCERTAIN`` keeps it uncertain.
+    Either way a retry is not handed the earlier ``CONFIRMED``. A newer
+    attempt of the key, or no ledger key, leaves the ledger as it is."""
+
+    if not write.write_key or not write.write_id:
+        return late
+    try:
+        led = _resolve_ledger(ledger)
+        if led is None:
+            return late
+        attempt = led.latest(write.write_key)
+        if attempt is None or attempt.attempt_id != write.write_id:
+            return late
+        prior = attempt.resolved or {}
+        reason = "; ".join(late.reasons) or "the recheck did not confirm the write"
+        led.resolved(
+            write.write_key,
+            write.write_id,
+            outcome=late.outcome,
+            retry_safe=False,
+            landed=False,
+            review=True,
+            delivered=True,
+            via="recheck",
+            late=late.late,
+            write_key_bound=bool(prior.get("write_key_bound")),
+            receipt_sha256=write.receipt_sha256 or None,
+            result={
+                "verified": False,
+                "outcome": late.outcome,
+                "late": late.late,
+                "reason": reason,
+                "receipt_sha256": write.receipt_sha256 or None,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - the verdict stands; say so
+        return _replace(
+            late,
+            reasons=[
+                *late.reasons,
+                f"the ledger could not record it ({type(exc).__name__}); hold "
+                "this write by hand",
+            ],
+        )
+    return late
+
+
+def _judge_recheck(
+    contract: Contract,
+    write: WriteResult | RecheckState,
+    *,
+    params: Mapping[str, object],
+    actor: Actor,
+    excused_by: Sequence[WriteResult | RecheckState],
+    wait: bool,
+) -> RecheckResult:
     state = write.recheck if isinstance(write, WriteResult) else write
     receipt = state.payload.get("receipt") if state is not None else None
     if (
