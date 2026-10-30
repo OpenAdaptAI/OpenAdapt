@@ -25,7 +25,7 @@
 
 ### Fixes
 
-- The read-only SQL guard now reads the query's tokens instead of matching substrings. `REPLACE(phone, '-', '')`, a `;` inside a string literal, and a table quoted as `` `call` `` no longer refuse the query. Every write and multi-statement form it refused before is still refused. It now also refuses a backslash, a dollar-quoted string, an unterminated literal, and a call to `query_to_xml` or `eval`, which run a query passed as text.
+- The read-only SQL guard now reads the query's tokens instead of matching substrings. `REPLACE(phone, '-', '')`, a `;` inside a string literal, and a table quoted as `` `call` `` no longer refuse the query. Every write and multi-statement form it refused before is still refused. It now also refuses a backslash, a dollar-quoted string, an unterminated literal, and a call to `query_to_xml` or `eval`, which run a query passed as text. It also refuses a bind placeholder inside a literal or quoted name (a driver splices the value in as SQL), a dollar quote right after a number, row locks (`FOR SHARE`, `FOR KEY SHARE`, `LOCK IN SHARE MODE`), and `get_lock`, `pg_advisory_*`, `pg_sleep_for`, `pg_sleep_until`, `load_file`, `pg_read_file` and `pg_notify`.
 
 - The whole-database snapshot reads a SQLite `REAL` with 17 digits, so 0.3 and 0.1+0.2 no longer read the same, and the text `"\x00null"` no longer reads as NULL. A number's plain value, which selectors compare with, is the shortest text that reads back as the stored value (`1.1` for a MySQL `FLOAT`, `1.5` for a `DECIMAL(24,8)`), so a correct write is no longer stopped because a selector stopped matching.
 

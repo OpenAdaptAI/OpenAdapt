@@ -86,9 +86,18 @@ _FORBIDDEN_FUNCTIONS = frozenset(
         "nextval", "setval", "lastval", "lo_import", "lo_export",
         "load_extension", "pg_sleep", "sleep", "benchmark", "eval",
         "query_to_xml", "query_to_xmlschema", "query_to_xml_and_xmlschema",
+        "pg_sleep_for", "pg_sleep_until", "get_lock", "load_file",
+        "pg_read_file", "pg_read_binary_file", "pg_notify",
     }
 )  # fmt: skip
-_FORBIDDEN_PREFIXES = ("dblink",)
+# Locks (``pg_advisory_lock``, ``pg_try_advisory_xact_lock_shared``, ...).
+_FORBIDDEN_PREFIXES = ("dblink", "pg_advisory", "pg_try_advisory")
+
+#: A bind placeholder (``%s``, ``%(name)s``, psycopg's ``%b``/``%t``,
+#: ``:name``). pymysql and psycopg2 substitute ``%`` placeholders on the
+#: client without regard to quotes, so one inside a literal splices the
+#: escaped value in as bare SQL: a parameter value could change the query.
+_PLACEHOLDER = re.compile(r"%[sbt(]|:[A-Za-z_]")
 
 #: A Postgres dollar-quote opener (``$$`` or ``$tag$``): a string form this
 #: lexer does not read, so it is refused rather than guessed.
@@ -150,6 +159,12 @@ def _sql_tokens(text: str) -> list[tuple[str, str]]:
                 body.append(text[j])
                 j += 1
             value = "".join(body)
+            if _PLACEHOLDER.search(value):
+                raise ValueError(
+                    "sql query has a bind placeholder inside a quoted literal or "
+                    "name -- bind the whole value instead (a driver may splice "
+                    "the value in as SQL)"
+                )
             tokens.append(
                 ("string", value) if char == "'" else ("quoted", value.lower())
             )
@@ -184,7 +199,11 @@ def _sql_tokens(text: str) -> list[tuple[str, str]]:
                     ) from None
         if _is_word_char(char):
             j = i
-            while j < n and (_is_word_char(text[j]) or text[j] == "$"):
+            # A number never absorbs a ``$``: ``1$$...$$`` is 1 and a
+            # dollar-quoted string to Postgres, so the ``$$`` is read (and
+            # refused) on its own.
+            number = char.isdigit()
+            while j < n and (_is_word_char(text[j]) or (text[j] == "$" and not number)):
                 j += 1
             tokens.append(("word", text[i:j].lower()))
             i = j
@@ -294,6 +313,14 @@ def assert_read_only_sql(query: str) -> str:
         if kind not in ("word", "quoted"):
             continue
         after = tokens[index + 1] if index + 1 < len(tokens) else ("", "")
+        if kind == "word" and (
+            (value == "for" and after in (("word", "share"), ("word", "key")))
+            or (value == "lock" and after == ("word", "in"))
+        ):
+            raise ValueError(
+                "sql query takes a row lock (FOR SHARE, FOR KEY SHARE or LOCK IN "
+                "SHARE MODE) -- the effect verifier only reads"
+            )
         called = after == ("punct", "(")
         if called and _forbidden_function(value):
             raise ValueError(

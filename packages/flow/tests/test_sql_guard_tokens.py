@@ -185,3 +185,62 @@ def test_the_hidden_call_is_what_sqlite_would_run() -> None:
         con.execute(query).fetchall()
     with pytest.raises(ValueError):
         assert_read_only_sql(query)
+
+
+# -- review round 1, follow-up (#1665 comment 6529357038) ---------------------
+
+FOLLOW_UP_REFUSED = [
+    # A placeholder inside a literal or quoted name: pymysql and psycopg2
+    # splice the value in as SQL (MariaDB returned every row for
+    # p = " OR 1=1 OR ").
+    "SELECT a FROM t WHERE name = '%(p)s'",
+    "SELECT a FROM t WHERE name = '%s'",
+    "SELECT a FROM t WHERE name = 'x%(p)sy'",
+    "SELECT a FROM t WHERE name = '%b'",
+    'SELECT "%(p)s" FROM t',
+    "SELECT `%s` FROM t",
+    "SELECT a FROM t WHERE name = ':name'",
+    # A dollar quote right after a number: Postgres reads 1 then $$...$$.
+    "SELECT 1$$'$$; DELETE FROM t; SELECT 1$$' x$$",
+    "SELECT 1$$x$$",
+    "SELECT 1$tag$x$tag$",
+    # Locking reads.
+    "SELECT * FROM t LOCK IN SHARE MODE",
+    "SELECT * FROM t FOR SHARE",
+    "SELECT * FROM t FOR KEY SHARE",
+    "SELECT * FROM t for share nowait",
+    "SELECT * FROM t FOR NO KEY UPDATE",
+    # Functions with side effects or reads outside the database.
+    "SELECT get_lock('x', 1)",
+    "SELECT pg_advisory_lock(1)",
+    "SELECT pg_advisory_xact_lock_shared(1)",
+    "SELECT pg_try_advisory_lock(1)",
+    "SELECT pg_sleep_for('1 second')",
+    "SELECT pg_sleep_until(now())",
+    "SELECT load_file('/etc/passwd')",
+    "SELECT pg_read_file('postgresql.conf')",
+    "SELECT pg_read_binary_file('postgresql.conf')",
+    "SELECT pg_notify('channel', 'payload')",
+    'SELECT pg_catalog."pg_advisory_lock"(1)',
+]
+
+
+@pytest.mark.parametrize("query", FOLLOW_UP_REFUSED)
+def test_follow_up_forms_are_refused(query: str) -> None:
+    with pytest.raises(ValueError):
+        assert_read_only_sql(query)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT a FROM t WHERE at = '14:30'",  # a time is not :name
+        "SELECT a FROM t WHERE code LIKE 'abc%' AND pct = '100%'",
+        "SELECT a FROM t WHERE name = %(p)s AND b = :b AND c = %s",
+        "SELECT share, lock, t.key FROM t",  # column names, not locks
+        "SELECT a$b, $1 FROM t",
+        "SELECT price FROM t WHERE x = 'for share'",
+    ],
+)
+def test_follow_up_reads_still_pass(query: str) -> None:
+    assert assert_read_only_sql(query) == query
