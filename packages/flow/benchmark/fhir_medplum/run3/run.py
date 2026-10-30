@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import sys
 import threading
 import time
@@ -68,14 +69,21 @@ MODEL = "claude-sonnet-5-5"
 EFFORT = "medium"
 MAX_TURNS = 40
 ITEM_BUDGET_USD = 0.50
-PORT = 9590
+#: Lane 2's ports for levers-run3 are 9640-9659 (fixture-lease-2/README.md).
+PORT = 9640
 #: B's contracts, as frozen in openadapt-internal CONTRACT_FREEZE.md.
 CONTRACT_SHA256 = {
     "patient": "b7bf94edc09e7594ab0e328e72b3e432398823441d31a14360e9f453763bec7c",
     "allergy": "b78b67e954cb4088b09895bda45a3ff6c56c442d4d0c967254ea7ec13affe77f",
     "appointment": "b51ccc2a7df5d7218175600b8662ee1abfae827268fcf29c124322f22a4a2828",
 }
-MAX_LOAD = 60.0
+#: Lane rules: a chunk starts only under load 35 with 30 GiB free, and timed
+#: work pauses while the 1-minute load is over 40.
+START_LOAD = 35.0
+PAUSE_LOAD = 40.0
+MIN_FREE_GIB = 30
+#: Lane 1's lease folder; each item records who held it.
+LANE_1 = Path.home() / "oa" / "scratch" / "fixture-lease"
 #: The SDK's own stops that are the agent's outcome (it ran out), not a fault.
 AGENT_LIMITS = ("error_max_turns", "error_max_budget_usd")
 
@@ -379,6 +387,25 @@ class Run3(Bench):
         return row
 
 
+def lane_1_holder() -> Optional[str]:
+    """Who holds the other lane's lease, recorded with each timed item."""
+    held = sorted(p.name.removeprefix("held-") for p in LANE_1.glob("held-*"))
+    return ",".join(held) or None
+
+
+def wait_for_load(pause: float = 60.0) -> float:
+    """Hold the next item while the 1-minute load is over the pause line."""
+    waited = 0.0
+    while os.getloadavg()[0] > PAUSE_LOAD:
+        print(
+            f"paused: load {os.getloadavg()[0]:.0f} is over {PAUSE_LOAD:.0f}",
+            flush=True,
+        )
+        time.sleep(pause)
+        waited += pause
+    return waited
+
+
 def _run_agent(
     agent: agent_mod.AgentFn,
     task: dict[str, Any],
@@ -429,8 +456,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         got = hashlib.sha256((Path(args.contracts) / f"{kind}.yaml").read_bytes())
         if got.hexdigest() != want and args.agent == "claude":
             raise SystemExit(f"{kind}.yaml is not the frozen contract")
-    if os.getloadavg()[0] >= MAX_LOAD:
-        raise SystemExit(f"load {os.getloadavg()[0]:.0f} is {MAX_LOAD:.0f} or more")
+    if os.getloadavg()[0] >= START_LOAD:
+        raise SystemExit(f"load {os.getloadavg()[0]:.0f} is {START_LOAD:.0f} or more")
+    free_gib = shutil.disk_usage("/System/Volumes/Data").free / 2**30
+    if free_gib < MIN_FREE_GIB:
+        raise SystemExit(f"{free_gib:.0f} GiB free is under {MIN_FREE_GIB}")
     suite = stream_mod.build(yaml.safe_load(raw), seed=args.seed)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -501,6 +531,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             if spent > args.max_usd:
                 print(f"stopping: the agent has spent ${spent:.2f}", flush=True)
                 break
+            paused_s = wait_for_load()
             try:
                 row = bench.run_item(case, agent, proxy)
             except Exception as exc:  # noqa: BLE001 - one item's crash is its own
@@ -512,6 +543,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "type": case["type"],
                     "error": f"{type(exc).__name__}: {str(exc)[:300]}",
                 }
+            row["paused_for_load_s"] = paused_s
+            row["lane_1_holder"] = lane_1_holder()
             spent += float(row.get("cost_usd", 0.0))
             with rows_path.open("a") as f:
                 f.write(json.dumps(row, default=str) + "\n")

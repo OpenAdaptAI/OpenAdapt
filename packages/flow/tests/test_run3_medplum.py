@@ -224,3 +224,17 @@ def test_the_c_no_worse_reading_can_hold():
     v = s3.score(rows, COSTS)["primary"]["verdicts"]["C no worse than B (secondary)"]
     assert v["extra_people_s_per_item"] == 40.0 and v["holds"] is True
     assert s3.score(rows, COSTS)["primary"]["verdicts"]["C vs B"]["wins"] is False
+
+
+def test_lane_rules_wait_out_load_and_name_lane_1(tmp_path, monkeypatch):
+    from benchmark.fhir_medplum.run3 import run as run3
+
+    loads = iter([45.0, 45.0, 41.0, 39.0, 39.0])
+    monkeypatch.setattr(run3.os, "getloadavg", lambda: (next(loads), 0, 0))
+    monkeypatch.setattr(run3.time, "sleep", lambda s: None)
+    assert run3.wait_for_load(pause=60) == 120
+    monkeypatch.setattr(run3, "LANE_1", tmp_path)
+    assert run3.lane_1_holder() is None
+    (tmp_path / "held-rl-env-openemr").mkdir()
+    assert run3.lane_1_holder() == "rl-env-openemr"
+    assert 9640 <= run3.PORT and run3.PORT + 1 <= 9659

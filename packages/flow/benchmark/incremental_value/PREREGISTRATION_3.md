@@ -200,8 +200,9 @@ compared with the oracle's verdict, and the comparison is reported.
 ## Schedule
 
 - 6 chunks of 50 items, in item order (`--items 1-50`, `51-100`, and so on),
-  each under the fixture lease from `~/oa/scratch/fixture-lease/QUEUE`. The
-  lease is released between chunks.
+  each under the lane-2 fixture lease (`~/oa/scratch/fixture-lease-2/QUEUE`,
+  as levers-run3, on ports 9640-9659). The lease is released between chunks.
+  Lane 1 may run an OpenEMR job at the same time.
 - Each chunk appends to one `rows.jsonl`, so a chunk that stops resumes where
   it stopped.
 - The project is emptied before every item, and Medplum is not reset
@@ -359,8 +360,10 @@ These are published beside the primary verdicts but don't replace them:
   `python -m benchmark.fhir_medplum.run3.run --faultset <frozen> --sha256 124a53d7… --described <frozen> --contracts benchmark/fhir_medplum/run3/contracts --out <dir> --items <chunk>`.
   It refuses a fault set with a different digest.
 - **Scoring:** `python -m benchmark.fhir_medplum.run3.score <dir>/rows.jsonl`.
-- **Host load:** each item records the load at its start and end. A chunk
-  doesn't start while the 1-minute load is 60 or more. Timings are reported
+- **Host load:** a chunk starts only while the 1-minute load is under 35
+  and at least 30 GiB is free. Before each item, the run waits while the load
+  is over 40, and records the seconds it waited. Each item records the load
+  at its start and end and who held the lane-1 lease. Timings are reported
   raw and for items run under load 40.
 - **Model spend:** under $150 in all.
 - **Results:**
