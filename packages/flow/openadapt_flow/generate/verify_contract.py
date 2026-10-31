@@ -1078,7 +1078,8 @@ def _touched_rows(
                 "selector": selector,
                 "columns": kinds,
                 "row": how,
-                "by_key": " row " in how,
+                # A literal key, not one the task's values name.
+                "by_key": all("literal" in v for v in selector.values()),
             }
         )
 
