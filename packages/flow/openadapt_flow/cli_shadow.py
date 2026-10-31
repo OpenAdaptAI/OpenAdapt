@@ -210,7 +210,7 @@ def cmd_shadow(args: argparse.Namespace) -> int:
             for k, label in (
                 ("late_refuted", "refuted on recheck"),
                 ("late_uncertain", "uncertain on recheck"),
-                ("rechecks_pending", "rechecks not run"),
+                ("rechecks_pending", "confirmed writes not yet rechecked"),
             )
             if doc.get(k)
         )

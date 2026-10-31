@@ -333,3 +333,17 @@ def test_a_later_write_under_no_route_makes_a_late_refutation_uncertain(
     ep = sh.episodes[0]
     assert ep.late_verdict == "UNCERTAIN", ep.late_reasons
     assert "can't tell apart" in ep.late_reasons[0]
+
+
+def test_a_sql_recheck_that_cant_be_scheduled_says_so(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, App(db), db)
+
+    class Odd:
+        recheck_due_at = "not a time"
+
+    ep = shadow_mod.Episode(id=1, kind="sql", name="x", verdict="CONFIRMED")
+    ep.result = Odd()
+    sh._schedule_recheck(ep)
+    sh.stop()
+    assert ep.late_verdict == "UNCERTAIN" and "can't be read" in ep.late_reasons[0]

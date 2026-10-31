@@ -30,7 +30,7 @@ KINDS = (
         "saved as another record first, then corrected",
     ),
     (r"created ([2-9]|\d{2,}) \S+ records, not one", "saved more than once"),
-    (r"other record\(s\) are now also the person", "saved more than once"),
+    (r"other record\(s\) are now also the person", "a duplicate of the record exists"),
     (r"observed conflicting, ([2-9]|\d{2,}) of 1 ", "saved more than once"),
     (r"observed absent", "not saved as sent (a value differs, or nothing landed)"),
     (r"wrong or missing", "a value differs from what the agent sent"),
@@ -215,8 +215,15 @@ def _item(c: dict[str, Any]) -> str:
 
 def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str:
     n = doc["counts"]
+    pending = doc.get("rechecks_pending") or 0
     tiles = "".join(
-        f"<div class=tile><b class={v}>{n[v]}</b>{v.title()}</div>"
+        f"<div class=tile><b class={v}>{n[v]}</b>{v.title()}"
+        + (
+            f"<br><span class=mute>{pending} not yet rechecked</span>"
+            if v == "CONFIRMED" and pending
+            else ""
+        )
+        + "</div>"
         for v in (*ORDER, "PENDING")
         if v != "PENDING" or n[v]
     )

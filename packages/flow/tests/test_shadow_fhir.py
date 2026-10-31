@@ -220,12 +220,7 @@ def test_a_confirmed_write_is_checked_again_and_a_late_change_refutes_it(
 
 
 def _stored(patient: str) -> dict[str, Any]:
-    return {
-        **_allergy(patient),
-        "id": "a1",
-        "clinicalStatus": {"coding": [{"code": "active"}]},
-        "verificationStatus": {"coding": [{"code": "confirmed"}]},
-    }
+    return {**_allergy(patient), "id": "a1"}
 
 
 def test_the_recheck_refutes_a_confirmed_record_changed_to_another_patient(
@@ -281,11 +276,10 @@ def test_a_write_during_a_recheck_makes_it_uncertain(env: dict[str, Any]) -> Non
 
 
 def test_a_later_write_with_no_known_record_makes_a_late_refutation_uncertain(
-    env: dict[str, Any],
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sh = env["sh"]
-    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
-    sh.flush()
+    _confirmed(env, monkeypatch)
     env["fhir"].status = 504  # a later create whose reply is lost
     _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p2"))
     env["calls"]["outcome"] = "needs_review"
@@ -320,7 +314,79 @@ def test_kinds_name_how_a_write_landed_wrong() -> None:
     assert kind_of(["the agent created 2 Patient records, not one"]) == (
         "saved more than once"
     )
+    assert kind_of(["1 other record(s) are now also the person"]) == (
+        "a duplicate of the record exists"
+    )
     both = ["wrong or missing: phone", "someone else changed the created record"]
     assert kind_of(both) == "changed by someone else"
     sql_dupe = ["record_written was refuted: observed conflicting, 2 of 1 expected"]
     assert kind_of(sql_dupe) == "saved more than once"
+
+
+def _confirmed(env: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> dict:
+    stored = {"now": _stored("Patient/p1")}
+
+    def fetch(self: Any, url: str, params: Any = None) -> Any:
+        if isinstance(stored["now"], Exception):
+            raise stored["now"]
+        return {}, stored["now"]
+
+    monkeypatch.setattr(ensure_record.FhirReader, "fetch", fetch)
+    _send(env["sh"], "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    env["sh"].flush()
+    env["calls"]["outcome"] = "found_existing"
+    return stored
+
+
+def test_a_value_added_to_a_closed_record_after_the_check_refutes(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stored = _confirmed(env, monkeypatch)
+    stored["now"] = {**_stored("Patient/p1"), "note": [{"text": "anaphylaxis"}]}
+    env["sh"].run_rechecks(now=True)
+    ep = env["sh"].episodes[0]
+    assert ep.late_verdict == "REFUTED" and "didn't send" in ep.late_reasons[0]
+
+
+def test_a_moved_record_stays_refuted_beside_an_unknown_later_write(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stored = _confirmed(env, monkeypatch)
+    env["fhir"].status = 504
+    _send(env["sh"], "POST", "/fhir/R4/Observation", {"resourceType": "Observation"})
+    env["sh"].flush()
+    stored["now"] = _stored("Patient/p2")
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"unreadable": True}  # and the change feed is flaky
+    env["sh"].run_rechecks(now=True)
+    assert env["sh"].episodes[0].late_verdict == "REFUTED"
+
+
+def test_a_deleted_record_is_refuted_and_an_unreachable_one_uncertain(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stored = _confirmed(env, monkeypatch)
+    stored["now"] = ensure_record.Unreadable("GET x returned HTTP 404")
+    env["sh"].run_rechecks(now=True)
+    ep = env["sh"].episodes[0]
+    assert ep.late_verdict == "REFUTED" and "is gone (HTTP 404)" in ep.late_reasons[0]
+    ep.late_verdict = ""
+    stored["now"] = ensure_record.Unreadable("GET x returned HTTP 503")
+    env["sh"].run_rechecks(now=True)
+    assert ep.late_verdict == "UNCERTAIN"
+
+
+def test_a_lost_retry_in_a_known_episode_makes_a_late_refutation_uncertain(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _confirmed(env, monkeypatch)
+    sh = env["sh"]
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p5"))
+    env["fhir"].status = 504
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p5"))
+    env["calls"]["outcome"] = "created_verified"
+    sh.flush()
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"agent_writes": 1}
+    sh.run_rechecks(now=True, only=[sh.episodes[0]])
+    assert sh.episodes[0].late_verdict == "UNCERTAIN"

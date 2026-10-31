@@ -98,6 +98,9 @@ class Episode:
     recheck_from: Any = None  # fhir: the server time the recheck reads from
     late_verdict: str = ""
     late_reasons: list[str] = field(default_factory=list)
+    #: The recheck read the record itself and found it changed or gone (a
+    #: finding no later write of the agent's can explain away).
+    late_moved: bool = False
 
 
 def _body_doc(body: bytes, content_type: str) -> Any:
@@ -615,9 +618,17 @@ class Shadow:
         elif ep.kind == "sql" and getattr(ep.result, "recheck_due_at", None):
             from datetime import datetime
 
-            due = datetime.fromisoformat(
-                ep.result.recheck_due_at.replace("Z", "+00:00")
-            )
+            try:
+                due = datetime.fromisoformat(
+                    str(ep.result.recheck_due_at).replace("Z", "+00:00")
+                )
+            except ValueError:
+                ep.late_verdict = UNCERTAIN
+                ep.late_reasons = [
+                    "the recheck couldn't be scheduled: its due time "
+                    f"{ep.result.recheck_due_at!r} can't be read"
+                ]
+                return
             ep.recheck_at = due.timestamp()
 
     def pending_rechecks(self) -> int:
@@ -657,7 +668,7 @@ class Shadow:
                     ep.late_reasons = [f"the recheck failed: {exc!r}"]
                     self._note_error(traceback.format_exc(limit=3))
                 with self._lock:
-                    if ep.late_verdict == REFUTED:
+                    if ep.late_verdict == REFUTED and not ep.late_moved:
                         unknown = self._unexplained_later(ep)
                         if unknown:
                             ep.late_verdict = UNCERTAIN
@@ -695,7 +706,13 @@ class Shadow:
         n = 0
         for o in self._later(ep):
             if ep.kind == "fhir":
-                n += not o.refs
+                # Per write: a create whose reply didn't come back may have
+                # made a record no one knows, even in an episode that has one.
+                n += sum(
+                    1
+                    for w in o.writes
+                    if w.status // 100 != 2 and (w.method == "POST" or not o.refs)
+                )
             else:
                 n += not (o.kind == "sql" and o.contract is ep.contract and o.result)
         return n
@@ -731,6 +748,7 @@ class Shadow:
             Baseline,
             FhirReader,
             Unreadable,
+            extra_elements,
             is_person,
             verify_ensure,
             wrong_fields,
@@ -749,8 +767,14 @@ class Shadow:
         try:
             _, now = reader.fetch(f"{reader.base_url}/{ref}")
         except Unreadable as exc:
-            ep.late_verdict = UNCERTAIN
-            ep.late_reasons = [f"the confirmed record can't be read again: {exc}"]
+            gone = re.search(r"returned HTTP (404|410)\b", str(exc))
+            ep.late_moved = bool(gone)
+            ep.late_verdict = REFUTED if gone else UNCERTAIN
+            ep.late_reasons = [
+                f"since the first check: the confirmed record is gone (HTTP {gone[1]})"
+                if gone
+                else f"the confirmed record can't be read again: {exc}"
+            ]
             return
         moved: list[str] = []
         if not isinstance(now, dict) or not is_person(contract, now, ep.params):
@@ -761,12 +785,25 @@ class Shadow:
                 moved.append(
                     "the confirmed record now holds other values: " + ", ".join(wrong)
                 )
+            extra = extra_elements(contract, now, ep.params) if contract.closed else []
+            if extra:
+                moved.append(
+                    "the confirmed record now holds values the agent didn't send: "
+                    + ", ".join(extra)
+                )
+        ep.late_moved = bool(moved)
         # Since the first check, the confirmed record is the one that was
         # already there: the agent may write nothing more, and it must still
         # be the only record that is the person.
         since = Baseline(started=ep.recheck_from, matches={rid: now})
         r = verify_ensure(contract, ep.params, since, declared=declared)
         reasons = list(moved)
+        with self._lock:
+            again = any(ref in o.refs for o in self._later(ep))
+        if again and r.outcome != "found_existing":
+            reasons.append(
+                "the agent wrote to the confirmed record again after the check"
+            )
         if r.outcome != "found_existing":
             n = int(r.evidence.get("agent_writes") or 0)
             if n:
@@ -776,9 +813,12 @@ class Shadow:
                 )
             reasons += list(r.reasons)
         ep.late_reasons = [f"since the first check: {x}" for x in reasons]
-        if r.evidence.get("unreadable"):
+        # The record read directly outranks a change feed that can't be read.
+        if moved:
+            ep.late_verdict = REFUTED
+        elif r.evidence.get("unreadable"):
             ep.late_verdict = UNCERTAIN
-        elif moved or r.outcome != "found_existing":
+        elif r.outcome != "found_existing":
             ep.late_verdict = REFUTED
         else:
             ep.late_verdict = CONFIRMED
