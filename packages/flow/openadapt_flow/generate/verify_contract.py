@@ -2200,9 +2200,16 @@ def _raw_effect(
             or (role.detail or {}).get("is_default")
         ):
             if role is not None and role.role in OPEN_ROLES:
-                # Set freely only when the person named it unchecked; else
-                # it must hold its default.
+                # Set freely only when the person named it unchecked. Free
+                # text not named must be empty (NULL or ''): pinned so, by the
+                # rows' own match. Anything else must hold its default.
                 if c.name in settings.unchecked.get(table, set()):
+                    nrf.add(c.name)
+                elif role.role == "free":
+                    alias = _add_column(
+                        surf, f"empty__{_alias(c.name)}", b.empty("t", table, c.name)
+                    )
+                    m[alias] = {"literal": "1"}
                     nrf.add(c.name)
                 continue
             if role is None or role.role in ("key", "link", "copied", "actor"):
