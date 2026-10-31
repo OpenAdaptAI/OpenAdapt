@@ -212,6 +212,13 @@ def record_effects(config: VerifyConfig) -> list[Any]:
                 timeout_s=record.timeout_s,
             )
         )
+    if record.surface:
+        from openadapt_flow.runtime.effects.surfaces import surface_probe
+
+        effects = [
+            e.model_copy(update={"probe": surface_probe(record.surface, e.probe or "")})
+            for e in effects
+        ]
     return effects
 
 
