@@ -107,6 +107,33 @@ registered (same email, phone and birth date, a different family name) was
 created again, and the shadow reported "1 other record(s) are now also the
 person". The timing task now uses a new person each run.
 
+## SQL mode on a live app: Dolibarr
+
+The same day, SQL mode ran on Dolibarr 21.0.4 with MariaDB 11.4.13. The
+agent created customers through Dolibarr's REST API, and the shadow checked
+each create with a `verify.yaml` that diffs the whole database. A fault proxy
+broke the writes in five ways, two cases each:
+
+- a changed value;
+- the create sent twice;
+- an edit to another customer with the agent's own key;
+- that edit 5 s after the check;
+- a lost reply (correct end state).
+
+There were also four correct creates.
+
+| | Result |
+|---|---|
+| Harms caught | 8 of 8; the 2 late edits were caught on the recheck |
+| Correct writes CONFIRMED, at the check and the recheck | 5 of 5 |
+| Agent writes equal proxy writes | yes |
+| The shadow's database accounts | SELECT only; the frame's account also has SHOW VIEW and TRIGGER, to read trigger definitions |
+| Added per write, median / largest | 292 / 321 ms |
+
+The read before a SQL write is a whole-database snapshot, so it adds more
+time than a FHIR search does. The fixture and contract are internal, so this
+run's data is kept with them rather than here.
+
 ## What it doesn't cover
 
 - **Values the agent was told.** The shadow checks that the store holds

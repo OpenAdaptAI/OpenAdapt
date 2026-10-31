@@ -322,3 +322,5 @@ def test_kinds_name_how_a_write_landed_wrong() -> None:
     )
     both = ["wrong or missing: phone", "someone else changed the created record"]
     assert kind_of(both) == "changed by someone else"
+    sql_dupe = ["record_written was refuted: observed conflicting, 2 of 1 expected"]
+    assert kind_of(sql_dupe) == "saved more than once"

@@ -31,6 +31,8 @@ KINDS = (
     ),
     (r"created ([2-9]|\d{2,}) \S+ records, not one", "saved more than once"),
     (r"other record\(s\) are now also the person", "saved more than once"),
+    (r"observed conflicting, ([2-9]|\d{2,}) of 1 ", "saved more than once"),
+    (r"observed absent", "not saved as sent (a value differs, or nothing landed)"),
     (r"wrong or missing", "a value differs from what the agent sent"),
     (r"not given by the task", "holds a value the agent didn't send"),
     (r"other resource|outside the declared write", "another record changed"),
