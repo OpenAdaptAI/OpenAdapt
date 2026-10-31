@@ -80,8 +80,9 @@ answered. So each `CONFIRMED` is checked again:
 - `fhir`: `recheck_s` after the check (default 300 s), `verify_ensure`
   reads the server again over the window since the first check, with the
   confirmed record as the one already there. It refutes when the record is
-  gone, is no longer the person, holds a value other than the one sent, or
-  has a duplicate, and when the agent's credential wrote anything since
+  gone, is no longer the person, holds a value other than the one sent (or,
+  under a closed contract, a value the agent didn't send), or has a
+  duplicate, and when the agent's credential wrote anything since
   that no other write through the shadow explains (a write to the confirmed
   record itself never counts as explained). `--recheck-s 0` turns it off.
 - `sql`: when the contract's `frame.database.recheck_after_s` is due,
@@ -99,8 +100,9 @@ A recheck reads a window, not one record. A change in it by the agent's
 credential that no write through the shadow explains refutes every
 `CONFIRMED` whose window holds it, not only the write it came from. If the
 agent made a later write through the shadow whose record the recheck can't
-know (a lost reply, a write under no contract), a refutation becomes
-`UNCERTAIN` instead.
+know (a lost reply, a write under no contract), a refutation that rests on
+such a change becomes `UNCERTAIN` instead. A refutation from reading the
+record itself (gone, moved, changed) stays `REFUTED`.
 
 ## Where the contract comes from
 
