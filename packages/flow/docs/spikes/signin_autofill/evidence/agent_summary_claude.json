@@ -1,0 +1,34 @@
+[
+ {
+  "agent": "claude",
+  "style": "approved",
+  "prompt": "plain",
+  "tool_calls": 1,
+  "signed_in": true,
+  "seconds": 22.4
+ },
+ {
+  "agent": "claude",
+  "style": "approved",
+  "prompt": "url",
+  "tool_calls": 1,
+  "signed_in": true,
+  "seconds": 25.2
+ },
+ {
+  "agent": "claude",
+  "style": "bare",
+  "prompt": "plain",
+  "tool_calls": 1,
+  "signed_in": true,
+  "seconds": 21.3
+ },
+ {
+  "agent": "claude",
+  "style": "bare",
+  "prompt": "url",
+  "tool_calls": 0,
+  "signed_in": false,
+  "seconds": 80.0
+ }
+]
