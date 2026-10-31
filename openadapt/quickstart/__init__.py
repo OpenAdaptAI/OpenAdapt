@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import IO, Callable, Optional
+from typing import IO, Any, Callable, Optional
 
+from openadapt.quickstart.scene import MOCKMED
 from openadapt.quickstart.story import (
     YOUR_APP_URL,
     NextSteps,
@@ -68,8 +69,13 @@ def run_quickstart(
     steps: Callable[[Outcome], NextSteps],
     stream: Optional[IO[str]] = None,
     interactive: Optional[bool] = None,
+    openemr: Optional[Path] = None,
 ) -> Outcome:
-    """Run the quickstart into ``root`` and print it to ``stream``."""
+    """Run the quickstart into ``root`` and print it to ``stream``.
+
+    ``openemr`` is a clone's ``packages/flow`` folder: the three acts then run
+    on OpenEMR in Docker instead of the bundled MockMed.
+    """
 
     from openadapt.quickstart.engine import FlowEngine, display_available, open_page
     from openadapt.quickstart.view import make_view
@@ -77,12 +83,18 @@ def run_quickstart(
     stream = stream or sys.stdout
     if interactive is None:
         interactive = bool(sys.stdin.isatty() and getattr(stream, "isatty", bool)())
-    # A person watching gets a short pause between demonstrated actions; a
-    # hidden browser runs at full speed.
-    engine = FlowEngine(root, visible=visible, pace_s=0.3 if visible else 0.0)
+    engine: Any
+    if openemr is not None:
+        from openadapt.quickstart.openemr import OpenEMREngine
+
+        engine = OpenEMREngine(root, visible=visible, flow=openemr)
+    else:
+        # A person watching gets a short pause between demonstrated actions;
+        # a hidden browser runs at full speed.
+        engine = FlowEngine(root, visible=visible, pace_s=0.3 if visible else 0.0)
     return run_story(
         engine,
-        make_view(stream),
+        make_view(stream, scene=getattr(engine, "scene", MOCKMED)),
         next_steps=steps,
         break_it=break_it,
         interactive=interactive,

@@ -21,6 +21,7 @@ from openadapt.quickstart.engine import (
     RunFacts,
     SealFacts,
 )
+from openadapt.quickstart.scene import MOCKMED, Scene
 
 #: The placeholder app address in the "try it on your own app" command.
 YOUR_APP_URL = "https://your-app.example"
@@ -44,6 +45,10 @@ class Engine(Protocol):
 
     root: Path
     visible: bool
+    #: The app's words (MockMed's when an engine has none).
+    scene: Scene
+    #: Act 2's inputs, one run each.
+    inputs: Sequence[str]
 
     def __enter__(self) -> "Engine": ...
 
@@ -130,6 +135,10 @@ class View(Protocol):
 
     def starting(self) -> Any: ...
 
+    def setup_progress(self, text: str, milestone: bool) -> None: ...
+
+    def setup_done(self, text: str) -> None: ...
+
     def act(self, number: int, title: str, subtitle: str) -> None: ...
 
     def demo_step(self, step: DemoStep) -> None: ...
@@ -159,25 +168,21 @@ class View(Protocol):
     def detail(self, lines: list[str]) -> None: ...
 
 
-def _engine_detail_run(run: RunFacts) -> list[str]:
+def _engine_detail_run(run: RunFacts, scene: Scene) -> list[str]:
+    if not scene.screen_claims_success:
+        return [
+            f"run {run.index}: execution {run.execution_outcome}, transaction "
+            f"{run.transaction_outcome}, record checks "
+            f"{run.effects_confirmed}/{run.effects_required} confirmed through "
+            f"OpenEMR's REST API, {run.records} chart(s) for this referral in "
+            f"OpenEMR's database; report {run.report_md}",
+        ]
     return [
         f"run {run.index}: execution {run.execution_outcome}, transaction "
         f"{run.transaction_outcome}, profile standard, record checks "
         f"{run.effects_confirmed}/{run.effects_required} confirmed by an "
         f"independent read of the database, {run.records} record(s) after the "
         f"run; report {run.report_md}",
-    ]
-
-
-def _engine_detail_break(broken: BreakFacts) -> list[str]:
-    return [
-        f"fault mode {broken.fault!r}: the server rejects the write after the "
-        "app shows its saved message",
-        f"execution {broken.execution_outcome}, transaction "
-        f"{broken.transaction_outcome}, record checks refuted "
-        f"{broken.effects_refuted}/{broken.effects_required}",
-        f"engine: {broken.halt_reason}",
-        f"report {broken.report_md}",
     ]
 
 
@@ -195,15 +200,22 @@ def run_story(
     """Run the three acts against ``engine`` and show them through ``view``."""
 
     outcome = Outcome(root=engine.root)
+    scene = getattr(engine, "scene", MOCKMED)
     started = clock()
     paused = 0.0
     view.intro(engine.root, engine.visible)
+    set_progress = getattr(engine, "set_progress", None)
+    if set_progress is not None:
+        set_progress(view.setup_progress)
     with view.starting():
         engine.__enter__()
     try:
+        ready = getattr(engine, "setup_summary", None)
+        if ready:
+            view.setup_done(ready)
         # Act 1: show it once. Act 2's workers get ready meanwhile.
         engine.start_workers()
-        view.act(1, "Show it once", _act1_subtitle(engine.visible))
+        view.act(1, "Show it once", _act1_subtitle(engine.visible, scene))
         act_start = clock()
         outcome.demo_steps = engine.record(view.demo_step)
         with view.compiling():
@@ -214,16 +226,25 @@ def run_story(
         if verbose:
             view.detail(
                 [
-                    f"recording {engine.root / 'recording'}",
-                    f"program {engine.root / 'bundle'} (certified under "
-                    "clinical-write; record checks mined from the demonstration)",
+                    "recording "
+                    f"{getattr(engine, 'recording_dir', engine.root / 'recording')}",
+                    f"program {engine.root / 'bundle'} "
+                    + getattr(
+                        engine,
+                        "program_detail",
+                        "(certified under clinical-write; record checks mined "
+                        "from the demonstration)",
+                    ),
                 ]
             )
 
         # Act 2: run it.
-        total = len(RUN_NOTES)
+        inputs = getattr(engine, "inputs", RUN_NOTES)
+        total = len(inputs)
         view.act(
-            2, "Run it", _act2_subtitle(total, engine.note_param(), engine.parallel)
+            2,
+            "Run it",
+            _act2_subtitle(total, engine.note_param(), engine.parallel, scene),
         )
         act_start = clock()
 
@@ -231,11 +252,11 @@ def run_story(
             outcome.runs.append(run)
             view.run_row(run, total)
             if verbose:
-                view.detail(_engine_detail_run(run))
+                view.detail(_engine_detail_run(run, scene))
             view.progress(len(outcome.runs), total, outcome.checked)
 
         with view.running(total, engine.parallel):
-            engine.run_all(RUN_NOTES, finished)
+            engine.run_all(inputs, finished)
         outcome.act2_seconds = clock() - act_start
         view.runs_total(outcome)
         # Sign the checked runs' reports while Act 3 runs; the finale waits.
@@ -244,12 +265,12 @@ def run_story(
         # Act 3: break it.
         paging = None
         if break_it:
-            view.act(3, "Break it", "the next save fails silently")
+            view.act(3, "Break it", scene.act3_subtitle)
             view.break_setup()
             if interactive:
                 waited = clock()
                 engine.before_prompt()
-                view.confirm("Press Enter to make the next save fail silently")
+                view.confirm(scene.confirm_prompt)
                 paused += clock() - waited
             with view.breaking():
                 outcome.broken = engine.break_it()
@@ -263,7 +284,7 @@ def run_story(
                 broken.screen_text = engine.read_screen(broken)
             view.break_result(outcome.broken)
             if verbose:
-                view.detail(_engine_detail_break(outcome.broken))
+                view.detail(scene.break_detail(outcome.broken))
 
         outcome.seal = sealing.result()
         if paging is not None:
@@ -288,11 +309,15 @@ def _in_background(work: Callable[[], Any]) -> Any:
     return future
 
 
-def _act2_subtitle(total: int, varied: bool, parallel: int) -> str:
+def _act2_subtitle(
+    total: int, varied: bool, parallel: int, scene: Scene = MOCKMED
+) -> str:
     # An engine that can't give a run its own note replays the demonstrated
     # one, and the header says so.
     what = (
-        f"the program on {total} new notes" if varied else f"the program {total} times"
+        f"the program on {total} new {scene.inputs_noun}"
+        if varied
+        else f"the program {total} times"
     )
     if parallel >= total:
         return f"{what}, all at once"
@@ -301,9 +326,11 @@ def _act2_subtitle(total: int, varied: bool, parallel: int) -> str:
     return what
 
 
-def _act1_subtitle(visible: bool) -> str:
+def _act1_subtitle(visible: bool, scene: Scene = MOCKMED) -> str:
+    if not scene.act1_live:
+        return scene.act1_where
     where = "watch the browser window" if visible else "in a hidden browser"
-    return f"a demonstration in a synthetic clinic app, {where}"
+    return f"{scene.act1_where}, {where}"
 
 
 __all__ = [

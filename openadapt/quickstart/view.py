@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import IO, Any, Iterator, Mapping, Optional
 
 from openadapt.quickstart.engine import BreakFacts, DemoStep, RunFacts
+from openadapt.quickstart.scene import MOCKMED, SEALS_LINE, SEALS_URL, Scene
 from openadapt.quickstart.story import NextSteps, Outcome, display_path
 
 #: Width of the step and note column, so times line up.
@@ -45,14 +46,14 @@ def seconds(value: float) -> str:
     return f"{value:.1f}s"
 
 
-def compiled_line(outcome: Outcome) -> str:
-    return f"Compiled into a program: {outcome.program_steps} steps."
+def compiled_line(outcome: Outcome, scene: Scene = MOCKMED) -> str:
+    return scene.compiled_line(outcome.program_steps)
 
 
-def run_status(run: RunFacts, marks: Marks) -> str:
+def run_status(run: RunFacts, marks: Marks, scene: Scene = MOCKMED) -> str:
     if run.checked:
         again = " (on a second try)" if run.repeated else ""
-        return f"{marks.ok} checked in the database{again}"
+        return f"{marks.ok} {scene.checked_in}{again}"
     return f"{marks.stop} {run.plain_label or run.execution_outcome}"
 
 
@@ -68,9 +69,8 @@ def runs_total_line(outcome: Outcome, marks: Marks) -> str:
     )
 
 
-def database_line(broken: BreakFacts) -> str:
-    count = broken.new_records
-    return f"{count} new record" + ("" if count == 1 else "s")
+def database_line(broken: BreakFacts, scene: Scene = MOCKMED) -> str:
+    return scene.database_line(broken)
 
 
 def bot_verdict(broken: BreakFacts, marks: Marks) -> Optional[str]:
@@ -79,50 +79,45 @@ def bot_verdict(broken: BreakFacts, marks: Marks) -> Optional[str]:
     return f"{marks.ok} Done" if broken.screen_showed_success else None
 
 
-def openadapt_verdict(broken: BreakFacts, marks: Marks) -> str:
+def openadapt_verdict(broken: BreakFacts, marks: Marks, scene: Scene = MOCKMED) -> str:
     if broken.stopped:
-        return f"{marks.stop} Stopped before reporting success"
+        return f"{marks.stop} {scene.stopped}"
     return f"{broken.execution_outcome.title()} (expected a stop)"
 
 
-def why_line(broken: BreakFacts) -> str:
-    if broken.stopped and broken.new_records == 0:
-        return (
-            "OpenAdapt reads the record back from the database after each save. "
-            "It found nothing, so it stopped."
-        )
-    if broken.stopped:
-        return "OpenAdapt read the record back, and it didn't match, so it stopped."
-    return "OpenAdapt did not stop. Treat this build as broken."
+def why_line(broken: BreakFacts, scene: Scene = MOCKMED) -> str:
+    return scene.why_line(broken)
 
 
-def aha_line(broken: BreakFacts) -> Optional[str]:
+def aha_line(broken: BreakFacts, scene: Scene = MOCKMED) -> Optional[str]:
     """The one-line summary, only when the run showed all of it."""
 
-    if not (
-        broken.stopped and broken.screen_showed_success and broken.new_records == 0
-    ):
-        return None
-    text = broken.screen_text
-    end = text.lower().find("saved") if text else -1
-    if text and end >= 0:
-        screen = f'The screen said "{text[: end + len("saved")]}".'
-    else:
-        screen = "The screen showed its saved message."
-    return (
-        f"{screen} The database had nothing. A bot that trusts the screen "
-        "reports Done. OpenAdapt stopped."
+    return scene.aha_line(broken)
+
+
+def break_labels(scene: Scene) -> tuple[str, str, str, str]:
+    """Act 3's four row labels, padded to one width (plain view)."""
+
+    labels = (
+        "What the screen showed:",
+        f"{scene.record_label}:",
+        "A screen-trusting bot:",
+        "OpenAdapt:",
     )
+    width = max(len(label) for label in labels) + 2
+    return tuple(f"{label:<{width}}" for label in labels)  # type: ignore[return-value]
 
 
-def receipt_rows(outcome: Outcome, marks: Marks) -> list[tuple[str, str]]:
+def receipt_rows(
+    outcome: Outcome, marks: Marks, scene: Scene = MOCKMED
+) -> list[tuple[str, str]]:
     dot = f" {marks.dot} "
     rows = [
         ("Program", f"{outcome.program_name}{dot}{outcome.program_steps} steps"),
         (
             "Runs",
-            f"{outcome.checked} of {len(outcome.runs)} saved and checked in the "
-            "database",
+            f"{outcome.checked} of {len(outcome.runs)} saved and checked "
+            f"{scene.receipt_where}",
         ),
         (
             "Cost",
@@ -181,14 +176,16 @@ def wants_plain(stream: IO[str], environ: Optional[Mapping[str, str]] = None) ->
     return not (callable(isatty) and isatty())
 
 
-def make_view(stream: Optional[IO[str]] = None, *, environ=None) -> Any:
+def make_view(
+    stream: Optional[IO[str]] = None, *, environ=None, scene: Scene = MOCKMED
+) -> Any:
     stream = stream or sys.stdout
     if wants_plain(stream, environ):
-        return PlainView(stream)
+        return PlainView(stream, scene=scene)
     try:
-        return RichView(stream, environ=environ)
+        return RichView(stream, environ=environ, scene=scene)
     except ImportError:  # rich is a launcher dependency; plain lines still work
-        return PlainView(stream)
+        return PlainView(stream, scene=scene)
 
 
 # ---------------------------------------------------------------------------
@@ -199,8 +196,9 @@ def make_view(stream: Optional[IO[str]] = None, *, environ=None) -> Any:
 class PlainView:
     """One line per fact, printed as it happens. No color, no cursor moves."""
 
-    def __init__(self, stream: IO[str]) -> None:
+    def __init__(self, stream: IO[str], *, scene: Scene = MOCKMED) -> None:
         self.stream = stream
+        self.scene = scene
         self.marks = Marks(getattr(stream, "encoding", None))
 
     def _say(self, text: str = "") -> None:
@@ -212,14 +210,18 @@ class PlainView:
         yield
 
     def intro(self, root: Path, visible: bool) -> None:
-        self._say(
-            "OpenAdapt quickstart: show a task once, run it, then watch it "
-            "catch a save that didn't happen."
-        )
+        self._say(f"OpenAdapt quickstart: {self.scene.intro}")
         self._say(f"Synthetic data only. Files go to {display_path(root)}")
 
     def starting(self):
         return self._quiet()
+
+    def setup_progress(self, text: str, milestone: bool) -> None:
+        if milestone:
+            self._say(f"   {text}")
+
+    def setup_done(self, text: str) -> None:
+        self._say(f"   {self.marks.ok} {text}")
 
     def act(self, number: int, title: str, subtitle: str) -> None:
         self._say()
@@ -234,7 +236,9 @@ class PlainView:
         return self._quiet()
 
     def compiled(self, outcome: Outcome) -> None:
-        self._say(f"   {compiled_line(outcome)} {seconds(outcome.act1_seconds)}")
+        self._say(
+            f"   {compiled_line(outcome, self.scene)} {seconds(outcome.act1_seconds)}"
+        )
 
     def running(self, total: int, parallel: int):
         return self._quiet()
@@ -245,16 +249,14 @@ class PlainView:
     def run_row(self, run: RunFacts, total: int) -> None:
         self._say(
             f"   {run.index}/{total}  {run.note:<{_LABEL_WIDTH - 6}} "
-            f"{run_status(run, self.marks)}  {seconds(run.seconds)}"
+            f"{run_status(run, self.marks, self.scene)}  {seconds(run.seconds)}"
         )
 
     def runs_total(self, outcome: Outcome) -> None:
         self._say(f"   {runs_total_line(outcome, self.marks)}")
 
     def break_setup(self) -> None:
-        self._say(
-            "   The app will show its saved message. The database will reject the save."
-        )
+        self._say(f"   {self.scene.break_setup}")
 
     def confirm(self, prompt: str) -> None:
         self.stream.write(f"   {prompt} ")
@@ -268,19 +270,21 @@ class PlainView:
         return self._quiet()
 
     def break_result(self, broken: BreakFacts) -> None:
+        scene = self.scene
+        screen, record, bot_label, openadapt = break_labels(scene)
         quote = broken.screen_text
-        shown = f'"{quote}"' if quote else "a saved message"
-        self._say(f"   What the screen showed:    {shown}")
-        self._say(f"   What the database showed:  {database_line(broken)}")
+        shown = f'"{quote}"' if quote else scene.screen_default
+        self._say(f"   {screen}{shown}")
+        self._say(f"   {record}{database_line(broken, scene)}")
         bot = bot_verdict(broken, self.marks)
         if bot:
-            self._say(f"   A screen-trusting bot:     {bot}")
+            self._say(f"   {bot_label}{bot}")
         self._say(
-            f"   OpenAdapt:                 {openadapt_verdict(broken, self.marks)}"
+            f"   {openadapt}{openadapt_verdict(broken, self.marks, scene)}"
             f"  {seconds(broken.seconds)}"
         )
-        self._say(f"   Why: {why_line(broken)}")
-        aha = aha_line(broken)
+        self._say(f"   Why: {why_line(broken, scene)}")
+        aha = aha_line(broken, scene)
         if aha:
             self._say()
             self._say(aha)
@@ -288,8 +292,9 @@ class PlainView:
     def finale(self, outcome: Outcome, steps: NextSteps) -> None:
         self._say()
         self._say("Receipt")
-        for name, value in receipt_rows(outcome, self.marks):
+        for name, value in receipt_rows(outcome, self.marks, self.scene):
             self._say(f"  {name:<9}  {value}")
+        self._say(SEALS_LINE)
         if steps.verify:
             self._say(f"Check it: {steps.verify}")
         self._say(details_line(outcome))
@@ -312,7 +317,12 @@ class RichView:
     """Color, spinners, a boxed receipt, and the screenshot where possible."""
 
     def __init__(
-        self, stream: IO[str], *, environ=None, width: Optional[int] = None
+        self,
+        stream: IO[str],
+        *,
+        environ=None,
+        width: Optional[int] = None,
+        scene: Scene = MOCKMED,
     ) -> None:
         from rich.console import Console
 
@@ -321,6 +331,7 @@ class RichView:
         self.console = Console(
             file=stream, highlight=False, soft_wrap=False, width=width
         )
+        self.scene = scene
         self.marks = Marks(getattr(stream, "encoding", None) or "utf-8")
         self.image_protocol = detect_image_protocol(environ, isatty=True)
 
@@ -329,15 +340,25 @@ class RichView:
 
     def intro(self, root: Path, visible: bool) -> None:
         self.console.print(
-            "[bold]OpenAdapt quickstart[/]: show a task once, run it, then watch "
-            "it catch a save that didn't happen."
+            f"[bold]OpenAdapt quickstart[/]: {_escape(self.scene.intro)}"
         )
         self.console.print(
             f"[dim]Synthetic data only. Files go to {display_path(root)}[/]"
         )
 
     def starting(self):
-        return self._status("Starting the synthetic clinic app")
+        self._setup = self._status(self.scene.starting)
+        return self._setup
+
+    def setup_progress(self, text: str, milestone: bool) -> None:
+        live = getattr(self, "_setup", None)
+        if live is not None:
+            live.update(
+                f"[dim]{_escape(self.scene.starting)} {self.marks.dot} {_escape(text)}[/]"
+            )
+
+    def setup_done(self, text: str) -> None:
+        self.console.print(f"   [green]{self.marks.ok}[/] {_escape(text)}")
 
     def act(self, number: int, title: str, subtitle: str) -> None:
         self.console.print()
@@ -356,7 +377,8 @@ class RichView:
 
     def compiled(self, outcome: Outcome) -> None:
         self.console.print(
-            f"   [bold]{compiled_line(outcome)}[/] [dim]{seconds(outcome.act1_seconds)}[/]"
+            f"   [bold]{compiled_line(outcome, self.scene)}[/] "
+            f"[dim]{seconds(outcome.act1_seconds)}[/]"
         )
 
     def running(self, total: int, parallel: int):
@@ -372,7 +394,7 @@ class RichView:
             how = "one after another"
         return (
             f"Running {total} {how} {self.marks.dot} {finished} done "
-            f"{self.marks.dot} {checked} checked in the database"
+            f"{self.marks.dot} {checked} {self.scene.checked_in}"
         )
 
     def progress(self, finished: int, total: int, checked: int) -> None:
@@ -386,16 +408,15 @@ class RichView:
         color = "green" if run.checked else "red"
         self.console.print(
             f"   [dim]{run.index}/{total}[/]  {_escape(run.note):<{_LABEL_WIDTH - 6}} "
-            f"[{color}]{run_status(run, self.marks)}[/]  [dim]{seconds(run.seconds)}[/]"
+            f"[{color}]{run_status(run, self.marks, self.scene)}[/]  "
+            f"[dim]{seconds(run.seconds)}[/]"
         )
 
     def runs_total(self, outcome: Outcome) -> None:
         self.console.print(f"   [bold]{runs_total_line(outcome, self.marks)}[/]")
 
     def break_setup(self) -> None:
-        self.console.print(
-            "   The app will show its saved message. The database will reject the save."
-        )
+        self.console.print(f"   {_escape(self.scene.break_setup)}")
 
     def confirm(self, prompt: str) -> None:
         try:
@@ -404,24 +425,28 @@ class RichView:
             self.console.print()
 
     def breaking(self):
-        return self._status("Running the program once more, checking the database")
+        return self._status(self.scene.breaking)
 
     def _right_column(self, broken: BreakFacts) -> list[str]:
         width = 52
+        scene = self.scene
         lines = [
-            "[bold]What the database showed[/]",
-            f"[bold red]{database_line(broken)}[/]",
+            f"[bold]{_escape(scene.record_label)}[/]",
+            f"[bold red]{database_line(broken, scene)}[/]",
             "",
         ]
         bot = bot_verdict(broken, self.marks)
         if bot:
             lines.append(f"A screen-trusting bot  [red]{bot}[/]")
         lines.append(
-            f"OpenAdapt              [bold green]{openadapt_verdict(broken, self.marks)}[/]"
+            f"OpenAdapt              "
+            f"[bold green]{openadapt_verdict(broken, self.marks, scene)}[/]"
             f"  [dim]{seconds(broken.seconds)}[/]"
         )
         lines.append("")
-        lines.extend(f"[dim]{part}[/]" for part in _wrap(why_line(broken), width))
+        lines.extend(
+            f"[dim]{part}[/]" for part in _wrap(why_line(broken, scene), width)
+        )
         return lines
 
     def break_result(self, broken: BreakFacts) -> None:
@@ -433,7 +458,7 @@ class RichView:
         if self.image_protocol and broken.screenshot is not None:
             drawn = self._draw_beside_screenshot(broken, right)
         if not drawn:
-            quote = broken.screen_text or "a saved message"
+            quote = broken.screen_text or self.scene.screen_default
             box = Panel(
                 f"[green]{_escape(quote)}[/]",
                 title="What the screen showed",
@@ -447,17 +472,16 @@ class RichView:
             grid.add_row(box, "\n".join(right))
             self.console.print()
             self.console.print(grid, crop=False)
-        aha = aha_line(broken)
+        aha = aha_line(broken, self.scene)
         if aha:
             self.console.print()
             self.console.print(f"[bold]{_escape(aha)}[/]")
 
     def _draw_beside_screenshot(self, broken: BreakFacts, right: list[str]) -> bool:
-        from openadapt.quickstart.engine import SCREEN_CROP
         from openadapt.quickstart.images import beside_image, crop_png, image_sequence
 
         try:
-            png = crop_png(broken.screenshot, SCREEN_CROP)
+            png = crop_png(broken.screenshot, self.scene.screen_crop)
         except Exception:  # noqa: BLE001 - fall back to the text box
             return False
         cols, rows = 40, 10
@@ -497,12 +521,14 @@ class RichView:
         table = Table.grid(padding=(0, 2))
         table.add_column(style="dim")
         table.add_column()
-        for name, value in receipt_rows(outcome, self.marks):
+        for name, value in receipt_rows(outcome, self.marks, self.scene):
             table.add_row(name, _escape(value))
         self.console.print()
         self.console.print(
             Panel(table, title="Receipt", title_align="left", expand=False)
         )
+        label = SEALS_LINE[: -len(SEALS_URL)].rstrip()
+        self.console.print(f"[dim]{label}[/] [bold cyan]{SEALS_URL}[/]")
         if steps.verify:
             self.console.print(f"[dim]Check it:[/] [bold]{_escape(steps.verify)}[/]")
         self.console.print(f"[dim]{_escape(details_line(outcome))}[/]")

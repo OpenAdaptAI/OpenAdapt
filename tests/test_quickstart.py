@@ -396,8 +396,56 @@ def test_act_two_says_how_many_run_at_once(root, parallel, subtitle):
 
 def test_no_seal_means_no_seal_line_and_no_verify_command(root):
     output, _ = _plain(FakeEngine(root, seal=None))
-    assert "Seal" not in output
+    assert not [line for line in output.splitlines() if line.startswith("  Seal ")]
+    assert "reports signed" not in output
     assert "seal verify" not in output
+
+
+# The link to the published Seals: every mode's finale, one line after the
+# receipt card, always the canonical page.
+CANONICAL_SEALS = "https://openadapt.ai/seals"
+
+
+def test_the_seals_link_is_the_canonical_page():
+    from openadapt.quickstart.scene import SEALS_LINE, SEALS_URL
+
+    assert SEALS_URL == CANONICAL_SEALS
+    assert SEALS_LINE == f"See real Seals from OpenEMR runs: {CANONICAL_SEALS}"
+
+
+@pytest.mark.parametrize("verbose", [False, True])
+@pytest.mark.parametrize("break_it", [True, False])
+def test_every_finale_links_the_seals_after_the_receipt(root, verbose, break_it):
+    output, _ = _plain(FakeEngine(root), verbose=verbose, break_it=break_it)
+    lines = output.splitlines()
+    receipt = lines.index("Receipt")
+    after = next(i for i in range(receipt + 1, len(lines)) if not lines[i].startswith("  "))
+    assert lines[after] == f"See real Seals from OpenEMR runs: {CANONICAL_SEALS}"
+    assert output.count("openadapt.ai/seals") == 1
+
+
+def test_the_terminal_finale_links_the_seals_after_the_receipt(root):
+    stream = _Terminal()
+    outcome = Outcome(root=root, seal=SealFacts("seal-ed25519-0", 5))
+    outcome.runs = [_run(root, index) for index in range(1, 6)]
+    RichView(stream, environ={}, width=110).finale(outcome, _steps(outcome))
+    lines = [line for line in stream.getvalue().splitlines() if line.strip()]
+    bottom = next(i for i, line in enumerate(lines) if line.startswith("╰"))
+    assert "See real Seals from OpenEMR runs:" in lines[bottom + 1]
+    assert CANONICAL_SEALS in lines[bottom + 1]
+
+
+@pytest.mark.skipif(
+    os.environ.get("OPENADAPT_CHECK_LINKS") != "1",
+    reason="set OPENADAPT_CHECK_LINKS=1 to fetch the Seals page",
+)
+def test_the_seals_page_resolves():
+    import urllib.request
+
+    request = urllib.request.Request(CANONICAL_SEALS, method="HEAD")
+    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310
+        assert response.status == 200
+        assert response.geturl().rstrip("/") == CANONICAL_SEALS
 
 
 def test_quickstart_exit_code_follows_the_runs(monkeypatch, tmp_path):
@@ -578,7 +626,8 @@ def test_terminal_finale_fits_twelve_lines_with_every_optional_line(root, monkey
     )
     RichView(stream, environ={}, width=110).finale(outcome, steps)
     lines = [line for line in stream.getvalue().splitlines() if line.strip()]
-    assert len(lines) <= 12, lines
+    # Twelve, plus the link to the published Seals that every finale carries.
+    assert len(lines) <= 13, lines
 
 
 def test_terminal_view_renders_color_boxes_and_the_comparison(root):
