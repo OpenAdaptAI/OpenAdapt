@@ -79,6 +79,17 @@ class Unpinned(ValueError):
     set gets no contract."""
 
 
+def _computed(role: ColumnRole) -> bool:
+    """A column the app computes from the row (the day of a date the task
+    gives, a text holding the row's own key): recognized, so not pinned and
+    not asked about."""
+
+    why = str(role.detail.get("why") or "")
+    return why == "holds the row's own key" or (
+        why.startswith("the ") and "of a date the task gives" in why
+    )
+
+
 class GenerateError(RuntimeError):
     """The generator can't go on; the message says why."""
 
@@ -2232,7 +2243,11 @@ def _pin(
     actor_params: Mapping[str, str],
     unchecked: Mapping[str, set[str]] = {},
 ) -> None:
-    if role.role == "varies" and col not in unchecked.get(table, set()):
+    if (
+        role.role == "varies"
+        and col not in unchecked.get(table, set())
+        and not _computed(role)
+    ):
         why = role.detail.get("why") or "it differs between demonstrations"
         raise Unpinned(f"{table}.{col} is not checked ({why})")
     if role.role == "free" and col not in unchecked.get(table, set()):
