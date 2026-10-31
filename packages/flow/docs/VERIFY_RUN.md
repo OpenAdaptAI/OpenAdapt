@@ -99,6 +99,9 @@ frame:
   identity_field: pid        # default: id, else the whole record
   ignore_fields: [date]      # fields that change on their own
   target_fields: [phone_home]  # default: the fields the effects name
+  # target_fields_by_surface:  # optional: per surface, replaces target_fields
+  #   record: [phone_home]     # a declared row of `record` may change these
+  #   raw_account: [updated_at]  # a table counts as the surface `views` maps it to
   attribution:               # optional
     kind: audit_read         # or record_field, with server_set: [...]
     actor_field: user
@@ -411,6 +414,7 @@ frame:
         FROM hfj_res_ver v JOIN hfj_resource r ON r.res_id = v.res_id
     record_field: id          # the version row's record
     target_field: id          # the target's field in the read set (default: identity_field)
+    # target_surface: record  # only records matched on this surface are targets
     version_field: ver
     # author_field: user_id   # when the app records who saved each version
     # self: [{param: bot_user_id}]
@@ -480,7 +484,10 @@ Anything else stops the run, never a pass:
 A record created in the window has no earlier version to overwrite and isn't
 judged. Whether a target existed is told by `frame.identity_field` (default
 `id`), never by `target_field`'s value after the write: a target that existed
-with no version under its current `target_field` value is `missing`. Only targets are judged: another user's save to an unrelated record
+with no version under its current `target_field` value is `missing`. A target
+is new only when the read before the write shows it wasn't there: the
+effect's own surface read for a `surfaces` verifier, else the verifier's
+records. With no such read, or no identity, it is treated as existing. Only targets are judged: another user's save to an unrelated record
 leaves this check as it was (the frame and its attribution judge that
 record, as before). The versions are read before the records at the
 baseline, so a save between the two reads shows in the record baseline. The

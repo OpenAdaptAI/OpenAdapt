@@ -195,8 +195,11 @@ row a key points to (an invoice line's price from its product). A key, a
 link to a row the write added, the year, month, week or day of a date the
 task gives, and a generated token (a UUID) are recognized as such. Columns
 that differ between demonstrations, free text every demonstration left
-empty, and the write's time stamps are not checked; the bookkeeping question
-lists each of them by table, so a person sees every column left open.
+empty, and the write's time stamps are listed in the bookkeeping question,
+and each is left unchecked only if the answer names it (`unchecked`). Free
+text the answer doesn't name must stay empty; a kind with any other column
+the answer doesn't name gets no contract. The proposed answer names every
+listed column, so accepting it is explicit.
 
 **Rows the app adds on its own.** A row type the app added the same number of
 times in every demonstration (an agenda event, a stream note, a price-history
@@ -205,9 +208,10 @@ added rows differ in number between demonstrations is listed in the
 bookkeeping question and is a log only if the person names it (`logs_add`);
 otherwise every added row stops the write. The person may also name a
 counted table (an access log the app writes once per request: the agent may
-make more requests than the demonstration did). A named table is a log for
-every kind: rows may be added to it, and existing rows must not change. The
-generator never decides a table is a log from its name.
+make more requests than the demonstration did). A named table is a log only
+for the kinds whose demonstrations added rows there: rows may be added to
+it, and existing rows must not change. The generator never decides a table
+is a log from its name.
 
 **Changes the app makes to existing rows.** A column of an existing row that
 the demonstrations changed with no task value is excused only on that row:
@@ -218,6 +222,15 @@ rows or tables. Time stamps set during the write, counters that went up and
 columns set to the acting user are proposed; anything else is listed and
 excused only if the person adds it (`columns_add`). A changed row the
 generator can't identify is listed too, and a write that changes it stops.
+Each declared row may change only its own table's excused columns
+(`frame.target_fields_by_surface`): a parent row the app touches can't take
+the target's changed fields, and the target can't take the parent's.
+
+**Answers.** `bookkeeping: accept` takes the proposal. A mapping may have
+`accept: true` (take the proposed columns), `logs_add`, `columns_add`,
+`columns_remove` and `unchecked`, and each can name only what the question
+listed. Any other key, or a table or column the question didn't list, is
+refused. A mapping without `accept: true` takes only what it names.
 
 **The frame.** Every contract uses the whole-database frame
 (`frame.database`, with the store's dialect): a row added, removed or changed
@@ -230,17 +243,21 @@ fails and no contract is written.
 
 **Lost updates.** An update's contracts set `frame.versions`, so another
 user's save to the target inside the window stops the write. The generator
-takes the versions from the app's own audit trail when every update
+first takes a whole-number column named as a version that went up by one in
+every demonstration (Redmine's `lock_version`): every existing record has a
+version there. Otherwise it takes the app's own audit trail when every update
 demonstration added a row there that names the record and the acting user
-(Redmine's journals, EspoCRM's `action_history_record`, Dolibarr's agenda
-events). The read is narrowed to the record's type and to write events: a
+(EspoCRM's `action_history_record`, Dolibarr's agenda events). The read is narrowed to the record's type and to write events: a
 text column, not an id, that holds one code of letters and underscores in
-every update row and in none of the rows creates added to the same table
-(EspoCRM's `action = update`, Dolibarr's `code = AC_COMPANY_MODIFY`), so
-another user only viewing the record doesn't count. A time stamp or a token
-the demonstrations happened to share is never used. Otherwise it uses a
-whole-number column named as a version that went up by one in every
-demonstration (Redmine's `lock_version`). With neither, the update has no
+every row any update kind added (so it doesn't vary with the fields saved)
+and only other codes in the rows create kinds added (EspoCRM's `action`).
+The read keeps the update code and the create codes, so a record the app
+created has a first version, and another user only viewing the record
+doesn't count. A time stamp or a token the demonstrations happened to share
+is never used. Only the main record is a target (`target_surface`). A target
+the read before the write doesn't show as new is treated as existing, and
+with no version before the write it stops as `missing` (a record saved
+before the trail began, or outside the app). With neither, the update has no
 version check, and `report.json` shows `versions: null`. If the app stops
 writing the trail (an agenda setting turned off), the agent's own save has
 no new version, and the verifier stops the write rather than pass it.
@@ -254,6 +271,12 @@ app can still write on its own after a verified write. The answer is
 The generator never leaves a step for a person to apply later. A contract
 that needs something the store doesn't have is either set up, with a flag
 and an admin connection you give, or not written, with the reason.
+
+The read account must be read-only. On PostgreSQL the check uses its
+effective privileges, so a role it is a member of counts: `INSERT`,
+`UPDATE`, `DELETE`, `TRUNCATE`, `TRIGGER` or `REFERENCES` on any table,
+`USAGE` or `UPDATE` on a sequence, or `CREATE` on a schema or the database
+stops the generator.
 
 - `--grant-trigger --admin-read admin.yaml --reader-account "'oa_reader'@'%'"`:
   grants `TRIGGER` on the database to the read account (MySQL, MariaDB). The

@@ -294,13 +294,17 @@ def generated(pg: Any) -> dict[str, Any]:
             "--out", str(work / "out"), "--actor-param", f"bot_user_id={BOT}"]  # fmt: skip
     assert gen.main(argv) == 0
     report = json.loads((work / "out" / "report.json").read_text())
-    # The person accepts the proposals.
-    # The person accepts the proposals, and says journal_details (one row
-    # per changed field) is the app's log.
     answers = {q["key"]: q["proposal"] for q in report["questions"]}
-    answers["bookkeeping"] = {"logs_add": ["journal_details"]}
+    # The person takes the proposal (each unchecked column named) and names
+    # journal_details a log.
+    proposal = answers["bookkeeping"]
+    answers["bookkeeping"] = {
+        **(proposal if isinstance(proposal, dict) else {"accept": True}),
+        "logs_add": ["journal_details"],
+    }
     (work / "answers.yaml").write_text(yaml.safe_dump(answers))
     assert gen.main([*argv, "--answers", str(work / "answers.yaml")]) == 0
+    report = json.loads((work / "out" / "report.json").read_text())
     if os.environ.get("OA_GEN_TEST_KEEP"):
         shutil.copytree(work, os.environ["OA_GEN_TEST_KEEP"], dirs_exist_ok=True)
     return {"app": app, "out": work / "out", "report": report, "read": read}
@@ -336,15 +340,19 @@ def test_questions_and_contracts(generated: dict[str, Any]) -> None:
     kinds = report["kinds"]
     assert kinds["create_issue"]["mode"] == "create"
     assert kinds["update_issue"]["mode"] == "update"
-    assert kinds["create_issue"]["emitted"] > 0, kinds["create_issue"]
+    assert kinds["create_issue"]["emitted"] > 0, (
+        kinds["create_issue"]["refused"],
+        kinds["create_issue"]["rejected"][:1],
+    )
     # Four change fields the examples give (status, assignee, done ratio,
     # notes), and the due date that create_issue's demonstrations placed on
     # the same table: every non-empty subset gets a contract.
     assert kinds["update_issue"]["placed_from_another_kind"] == ["due_date"]
-    # The journal names the issue and the user who saved it: the update's
-    # contracts read it as the target's versions (a lost update shows there).
-    assert kinds["update_issue"]["versions"]["kind"] == "audit"
-    assert kinds["update_issue"]["versions"]["table"] == "journals"
+    # lock_version steps by one per save: the update's contracts read it as
+    # the target's versions (a lost update shows there). It is preferred to
+    # the journals, which an issue saved before them doesn't have.
+    assert kinds["update_issue"]["versions"]["kind"] == "step"
+    assert kinds["update_issue"]["versions"]["column"] == "lock_version"
     assert kinds["update_issue"]["emitted"] == 31, json.dumps(
         kinds["update_issue"], indent=1
     )
