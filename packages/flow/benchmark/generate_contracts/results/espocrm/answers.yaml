@@ -1,4 +1,0 @@
-phones: [create_contact.phone]
-bookkeeping:
-  logs_add: [action_history_record, auth_log_record]
-recheck_after_s: 300

@@ -1,5 +1,0 @@
-phones: [create_customer.phone, update_customer.new_phone]
-bookkeeping:
-  columns_add: {llx_societe: [socialnetworks]}
-recheck_after_s: 300
-locations.create_draft_invoice: {invoice_date: 0}

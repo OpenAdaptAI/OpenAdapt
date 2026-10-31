@@ -1,4 +1,0 @@
-bookkeeping:
-  logs_add: [journal_details]
-  columns_add: {user_preferences: [others]}
-recheck_after_s: 300
