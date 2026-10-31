@@ -26,6 +26,11 @@ effects:
 
 The contract belongs to whoever runs the agent. The agent can't change what it is checked against.
 
+When the app keeps its data in MySQL, MariaDB or PostgreSQL, the generator
+writes these contracts from the schema and one demonstration write per
+example, and asks a person only what it can't decide:
+[GENERATE_CONTRACTS.md](GENERATE_CONTRACTS.md).
+
 ## 2. Wrap the write
 
 In Python, wrap your agent's own write function. The same code works as a tool in the Claude Agent SDK, OpenAI Agents, LangGraph, or a plain script:
