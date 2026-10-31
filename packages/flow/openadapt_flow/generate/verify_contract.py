@@ -2200,16 +2200,10 @@ def _raw_effect(
             or (role.detail or {}).get("is_default")
         ):
             if role is not None and role.role in OPEN_ROLES:
-                # Set freely only when the person named it unchecked. Free
-                # text not named must be empty (NULL or ''): pinned so, by the
-                # rows' own match. Anything else must hold its default.
+                # Set freely only when the person named it unchecked; else
+                # it must hold its default (the frame reads these rows from
+                # the table itself, so no computed pin applies).
                 if c.name in settings.unchecked.get(table, set()):
-                    nrf.add(c.name)
-                elif role.role == "free":
-                    alias = _add_column(
-                        surf, f"empty__{_alias(c.name)}", b.empty("t", table, c.name)
-                    )
-                    m[alias] = {"literal": "1"}
                     nrf.add(c.name)
                 continue
             if role is None or role.role in ("key", "link", "copied", "actor"):
@@ -2970,13 +2964,6 @@ def propose(
     for own_cols in open_by_kind.values():
         for t, roles_of in own_cols.items():
             unchecked.setdefault(t, set()).update(roles_of)
-    must_name: dict[str, list[str]] = {}
-    for own_cols in open_by_kind.values():
-        for t, roles_of in own_cols.items():
-            for c, role_name in roles_of.items():
-                if role_name != "free" and c not in must_name.get(t, []):
-                    must_name.setdefault(t, []).append(c)
-    must_name = {t: sorted(c) for t, c in sorted(must_name.items())}
     for t, cols in unchecked_named.items():
         extra = cols - unchecked.get(t, set())
         if extra:
@@ -3086,9 +3073,14 @@ def propose(
                 "columns_remove and unchecked. An answer can name only what this "
                 "question lists. Unanswered, nothing is excused, no table is a "
                 "log and no column is left unchecked.",
-                # The proposal names only the columns that vary or are time
-                # stamps: free text left empty is better pinned empty.
-                {"accept": True, "unchecked": must_name} if must_name else "accept",
+                # The proposal names every listed column, so accepting it is
+                # explicit; a person may leave any out to have it checked.
+                {
+                    "accept": True,
+                    "unchecked": {t: sorted(c) for t, c in sorted(unchecked.items())},
+                }
+                if unchecked
+                else "accept",
             )
         )
     # Q: the recheck window (frame.database.recheck_after_s).

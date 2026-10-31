@@ -197,10 +197,11 @@ task gives, and a generated token (a UUID) are recognized as such. Columns
 that differ between demonstrations, free text every demonstration left
 empty, and the write's time stamps are listed in the bookkeeping question,
 and each is left unchecked only if the answer names it (`unchecked`). Free
-text the answer doesn't name must stay empty; a kind with any other column
-the answer doesn't name gets no contract. The proposed answer names each
-column that varies or is a time stamp, so accepting it is explicit, and
-leaves free text out, so that stays empty.
+text the answer doesn't name must stay empty on the main record and its
+child rows, and hold its default on a row the app adds beside the write; a
+kind with any other column the answer doesn't name gets no contract. The
+proposed answer names every listed column, so accepting it is explicit; a
+person leaves a column out to have it checked.
 
 **Rows the app adds on its own.** A row type the app added the same number of
 times in every demonstration (an agenda event, a stream note, a price-history
