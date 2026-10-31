@@ -1197,14 +1197,16 @@ def _audit_source(
             theirs = {r.get(col.name) for r in created}
             # One event code in every update, and in none of the creates'
             # rows (COMPANY_MODIFY against COMPANY_CREATE, PRODUCT_CREATE).
-            # Only a code: a time stamp or a text one demonstration happened
-            # to share would hide other users' saves.
+            # Only a code (letters and underscores, not an id column): a time
+            # stamp, a token or a text the demonstrations happened to share
+            # would hide other users' saves.
             if len(mine) == 1 and created and mine.isdisjoint(theirs):
                 v = next(iter(mine))
                 if (
                     v is not None
                     and col.kind == "text"
-                    and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", v)
+                    and not col.name.lower().endswith("id")
+                    and re.fullmatch(r"[A-Za-z_]{1,64}", v)
                 ):
                     where[col.name] = v
         found = {
