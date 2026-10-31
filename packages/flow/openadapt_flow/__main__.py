@@ -12088,6 +12088,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_rollback(sub)
 
+    from openadapt_flow.cli_shadow import register as _register_shadow
+
+    _register_shadow(sub)
+
     from openadapt_flow.cli_cleanup import register as _register_cleanup
 
     _register_cleanup(sub)

@@ -40,7 +40,7 @@ import os
 import re
 import time
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -1113,18 +1113,30 @@ def verify_ensure(
     *,
     reader: Optional[FhirReader] = None,
     sleep: Callable[[float], None] = time.sleep,
+    declared: Collection[str] = (),
 ) -> EnsureResult:
-    """Read the server after the write and judge it against ``baseline``."""
+    """Read the server after the write and judge it against ``baseline``.
+
+    ``declared`` names resources (``Type/id``) the caller saw the agent write
+    as other writes, each judged on its own (shadow mode's other episodes).
+    They are left out of this judgment; every other change still counts.
+    """
 
     reader = reader or FhirReader(contract)
+    skip = {_ref(r) for r in declared}
+
+    def changes_since(until: Optional[datetime]) -> dict[str, Change]:
+        found = read_changes(contract, reader, baseline.started, until)
+        return {r: c for r, c in found.items() if r not in skip}
+
     try:
         # The window closes now (the Date header counts whole seconds).
         until = reader.server_time() + timedelta(seconds=1)
         sleep(contract.settle_s)
-        changes = read_changes(contract, reader, baseline.started, until)
+        changes = changes_since(until)
         for _ in range(contract.stable_reads):
             sleep(contract.settle_s)
-            again = read_changes(contract, reader, baseline.started, until)
+            again = changes_since(until)
             if _fingerprint(again) == _fingerprint(changes):
                 break
             changes = again
@@ -1177,7 +1189,7 @@ def verify_ensure(
                 )
         # Last, with no upper bound: a save of the agent's still in flight
         # when the window closed (a lost response) lands outside it.
-        late = _agents_part(read_changes(contract, reader, baseline.started), selfs)
+        late = _agents_part(changes_since(None), selfs)
         if late != _agents_part(changes, selfs):
             raise Unreadable("the agent wrote after the window closed")
         return judge(
