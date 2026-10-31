@@ -99,6 +99,9 @@ frame:
   identity_field: pid        # default: id, else the whole record
   ignore_fields: [date]      # fields that change on their own
   target_fields: [phone_home]  # default: the fields the effects name
+  # target_fields_by_surface:  # optional: per surface, replaces target_fields
+  #   record: [phone_home]     # a declared row of `record` may change these
+  #   raw_account: [updated_at]  # a table counts as the surface `views` maps it to
   attribution:               # optional
     kind: audit_read         # or record_field, with server_set: [...]
     actor_field: user
@@ -260,7 +263,7 @@ This is the frame of an EspoCRM "create opportunity" contract on MariaDB:
 frame:
   identity_field: id
   database:
-    dialect: mysql              # or sqlite
+    dialect: mysql              # or postgresql, sqlite
     read:                       # read-only: SELECT, TRIGGER and SHOW VIEW
       sql_driver: pymysql
       sql_connect_args: {host: 127.0.0.1, port: 3306, user: frame_ro, database: espocrm}
@@ -307,6 +310,84 @@ that still can't be read exactly makes the database unreadable, and the run
 stops; the error names the table. When the database can't be read at the
 baseline, `begin_write` says why.
 
+### PostgreSQL
+
+With `dialect: postgresql` (driver `psycopg2` or `psycopg`), the snapshot is
+one `REPEATABLE READ, READ ONLY` transaction. The read refuses to go on if the
+server reports any other isolation level.
+
+- **Schemas.** The read covers every schema except `pg_catalog`,
+  `information_schema` and PostgreSQL's internal ones. A schema the read
+  account can't see is refused, not left out. `frame.database.schemas`
+  means what it means on MySQL: each named schema must be visible, and every
+  other visible schema is still read. Only an `allow_tables` entry
+  `<schema>.*` with `mode: skip` and a reason leaves a schema out; the
+  receipt lists it under `evidence.frame.database.schemas_skipped`. Leaving
+  a schema out also leaves out its code, such as a trigger function there
+  that runs on a table the frame reads. A table in the default schema
+  (`public`) is named without it (`issues`); a table in another schema is
+  named with it (`billing.invoice`).
+- **The session.** The read pins its session so that each stored value has
+  one text: `TimeZone` UTC, ISO dates, ISO 8601 intervals,
+  `extra_float_digits = 3`, bytes as hex, and `lc_monetary` C. A reader
+  whose own settings differ reads the same thing.
+- **Types.** Each column is read as text by a declared rule for its type:
+  - integers as integers;
+  - `numeric` at full precision (`NaN` and infinities too). A `numeric`
+    declared without a scale keeps the scale it was stored with: `1.5`
+    changed to `1.50` shows, but both still equal the number 1.5;
+  - `real` and `double precision` exactly, with the shortest text that
+    reads back as the same float as the plain value;
+  - `money` as a number;
+  - `bytea` as the hex of its bytes;
+  - `json` as its stored text, and `jsonb` as its canonical text;
+  - as their own text: strings, `uuid`, network addresses, dates, times,
+    timestamps (in UTC), `interval` (months, days and seconds kept apart, so
+    `1 day` to `24 hours` shows), bit strings, `xml`, `tsvector`, `tsquery`
+    and the geometric types;
+  - arrays, ranges, multiranges, enums and domains by their element,
+    subtype or base type's rule.
+
+  A composite type, an extension's type, a `reg*` type, and an array of
+  `money` have no rule. A table with such a column is refused, and the error
+  names the column.
+- **Refusals.** The read also refuses a table the account has no `SELECT`
+  on, a table whose row-level security hides rows from it, a foreign table,
+  and a sequence it can't read. A refused table can only be left out by an
+  `allow_tables` entry with `mode: skip` and a reason.
+- **Tables without a primary key.** Their rows are keyed by the whole row,
+  and identical rows are counted, so a second copy of a row shows as added.
+- **Partitions.** A partitioned table is read through its partitions, and
+  only once.
+- **Sequences.** A sequence that a column owns (`serial`, `identity`) is
+  that table's counter, read just before the snapshot. A row written and
+  removed in the window moves it, which shows. So does an insert that
+  failed, because it draws a value too, and a counter set back with
+  `setval`, after which inserts would reuse numbers. Any other sequence is read as
+  a one-row table of its own. A value drawn from it is a change. Only an
+  `allow_tables` entry with `mode: skip` and a reason, which documents it as
+  the app's bookkeeping, leaves it out.
+- **Large objects.** They live in `pg_catalog`, and a column that holds
+  an object's oid keeps it when the content changes. The read keeps each
+  object's oid, owner, privileges and the SHA-256 of its content as rows of
+  a table named `pg_largeobject`, so a changed, added or removed object
+  shows. An object the account can't read is refused unless `pg_largeobject`
+  is skipped with a reason.
+- **Database code.** The read digests triggers (and whether each is
+  enabled), views, materialized views, functions, rules, row-level security
+  policies, event triggers and installed extensions. A change to any of them
+  in the window shows as `(database code)`.
+
+The read account needs `USAGE` on each schema and `SELECT` on its tables and
+sequences, for example:
+
+```sql
+GRANT USAGE ON SCHEMA public TO frame_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO frame_ro;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO frame_ro;
+ALTER ROLE frame_ro SET default_transaction_read_only = on;
+```
+
 ## Lost updates
 
 Two snapshots can't see a lost update. The agent reads a record, another
@@ -333,6 +414,7 @@ frame:
         FROM hfj_res_ver v JOIN hfj_resource r ON r.res_id = v.res_id
     record_field: id          # the version row's record
     target_field: id          # the target's field in the read set (default: identity_field)
+    # target_surface: record  # only records matched on this surface are targets
     version_field: ver
     # author_field: user_id   # when the app records who saved each version
     # self: [{param: bot_user_id}]
@@ -402,7 +484,10 @@ Anything else stops the run, never a pass:
 A record created in the window has no earlier version to overwrite and isn't
 judged. Whether a target existed is told by `frame.identity_field` (default
 `id`), never by `target_field`'s value after the write: a target that existed
-with no version under its current `target_field` value is `missing`. Only targets are judged: another user's save to an unrelated record
+with no version under its current `target_field` value is `missing`. A target
+is new only when the read before the write shows it wasn't there: the
+effect's own surface read for a `surfaces` verifier, else the verifier's
+records. With no such read, or no identity, it is treated as existing. Only targets are judged: another user's save to an unrelated record
 leaves this check as it was (the frame and its attribution judge that
 record, as before). The versions are read before the records at the
 baseline, so a save between the two reads shows in the record baseline. The
@@ -639,13 +724,19 @@ such change refutes unless the contract explains it (`allow_tables`, the app
 profile, `ignore_columns`, `side_records`) or the audit log attributes it to
 another user.
 
-Measured on two real apps, Dolibarr 21 and EspoCRM 10 on MariaDB 11.4, with
-`recheck_after_s: 180`:
+Measured on three real apps, Dolibarr 21 and EspoCRM 10 on MariaDB 11.4 and
+Redmine 6.1 on PostgreSQL 17, with `recheck_after_s: 180`:
 
 - Four planted late writes (a changed phone, a second product, a delayed
   duplicate opportunity, a look-alike lead's title) landed 125 to 130 s
   after the save. Each check said `CONFIRMED`, and each recheck said
   `REFUTED`. Correct writes of the same tasks stayed `CONFIRMED`.
+- On Redmine, a time entry's hours changed 150 s after the save, and a
+  delayed retry created a duplicate issue 140 s after it. Each check said
+  `CONFIRMED`, and each recheck said `REFUTED`. Correct writes stayed
+  `CONFIRMED` at the check and the recheck. Redmine's own bookkeeping
+  needed one declaration: `user_preferences.others` in `ignore_columns`
+  (every save records the user's last project there).
 - With the apps' schedulers off, `settle_s: 1` and `settle_attempts: 1` were
   enough.
 - With EspoCRM's cron daemon on, its job queue moved during every window.

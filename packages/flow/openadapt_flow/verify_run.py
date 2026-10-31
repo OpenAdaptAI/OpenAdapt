@@ -496,10 +496,29 @@ def _judge_versions(
     # change, never by the target field's value after the write: a target
     # field the write changed would make an old record look created.
     identity = cfg.frame.identity_field or "id"  # type: ignore[union-attr]
-    old: dict[str, dict[str, Any]] = {}
-    for r in before.records:
-        if r.get(identity) not in (None, ""):
-            old.setdefault(str(r.get(identity)), dict(r))
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    def index(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            if r.get(identity) not in (None, ""):
+                out.setdefault(str(r.get(identity)), dict(r))
+        return out
+
+    def before_rows(effect: Effect) -> Optional[dict[str, dict[str, Any]]]:
+        """The records read before the write where this effect looks: its
+        surface's own read, else the verifier's records. None: no read says
+        which records were there (then no target is taken as new)."""
+
+        surface = surface_of(effect)
+        if surface:
+            sub = (before.detail or {}).get(surface)
+            if not isinstance(sub, Mapping) or not sub.get("reachable"):
+                return None
+            rows = sub.get("records")
+            return index(rows) if isinstance(rows, list) else None
+        return index(before.records) if before.reachable else None
+
     ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
     targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
@@ -509,13 +528,20 @@ def _judge_versions(
             continue  # a guard: "nothing here"
         if not verdict.confirmed:
             continue
+        if (
+            spec.target_surface is not None
+            and surface_of(effect) != spec.target_surface
+        ):
+            continue  # a row beside the target, not the target
+        old = before_rows(effect)
         for record in verdict.matched_records:
             value = record.get(field_name)
             text = None if value in (None, "") else str(value)
             key = record.get(identity)
-            was = None if key in (None, "") else old.get(str(key))
-            # No identity to look up: never assume the record is new.
-            existed = was is not None or key in (None, "")
+            was = None if key in (None, "") or old is None else old.get(str(key))
+            # A record is new only when the read before the write shows it
+            # wasn't there. No identity, or no read to look in: never new.
+            existed = was is not None or key in (None, "") or old is None
             # Changed in the window: a field read before differs now (a
             # sealed baseline marks a changed field, so it differs too).
             changed = existed and (
@@ -906,6 +932,11 @@ def _database_frame(
             1 for t in new.tables.values() if t.non_transactional
         ),
         "schemas": list(new.schemas),
+        **(
+            {"schemas_skipped": list(new.schemas_skipped)}
+            if new.schemas_skipped
+            else {}
+        ),
         "allow_list_sha256": database.allow_list_sha256(),
         "settle_attempts": used,
         "settle_attempts_allowed": attempts,

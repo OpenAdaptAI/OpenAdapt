@@ -261,7 +261,7 @@ class LaterWindow:
         from openadapt_flow.runtime.effects.db_snapshot import (
             KEY,
             ROW,
-            canonical,
+            key_text,
             row_hash,
             row_key_hash,
         )
@@ -272,7 +272,7 @@ class LaterWindow:
         old = self.baseline.tables.get(table)
         if after is not None:
             row = {c: v for c, v in after.items() if c not in (KEY, ROW)}
-            text = "|".join(canonical(row.get(c)) for c in now.primary_key)
+            text = key_text(now.primary_key, row)
             k = row_key_hash(self.key, text, table)
             stored = now.rows.get(k)
             if stored is None or stored[0] != row_hash(self.key, table, row, skip):

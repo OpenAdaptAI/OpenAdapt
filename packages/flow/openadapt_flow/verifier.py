@@ -2401,8 +2401,8 @@ def capture_database(
 
     from openadapt_flow.verify_run import _db_connect
 
-    if dialect not in ("sqlite", "mysql"):
-        raise VerifierError(f"dialect {dialect!r} is not sqlite or mysql")
+    if dialect not in ("sqlite", "mysql", "postgresql"):
+        raise VerifierError(f"dialect {dialect!r} is not sqlite, mysql or postgresql")
     connect = read if callable(read) else _db_connect(read)
     extra: dict[str, str] = {}
     if profile is not None:

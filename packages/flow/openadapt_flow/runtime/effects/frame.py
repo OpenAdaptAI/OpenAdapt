@@ -256,7 +256,8 @@ class AllowedTable(BaseModel):
     table: str
     #: ``append_only`` (the default): rows may be added, existing rows must
     #: not change, and the table needs a generated key. ``skip``: not read at
-    #: all, which needs a ``reason``.
+    #: all, which needs a ``reason``. On PostgreSQL ``<schema>.*`` names a
+    #: whole schema, which may only be skipped.
     mode: Literal["append_only", "skip"] = "append_only"
     reason: Optional[str] = None
 
@@ -264,6 +265,10 @@ class AllowedTable(BaseModel):
     def _skip_needs_reason(self) -> "AllowedTable":
         if self.mode == "skip" and not (self.reason or "").strip():
             raise ValueError(f"skipping table {self.table!r} needs a reason")
+        if self.table.endswith(".*") and self.mode != "skip":
+            raise ValueError(
+                f"schema {self.table!r} can only be skipped, with a reason"
+            )
         return self
 
 
@@ -286,7 +291,7 @@ class FrameDatabase(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    dialect: Literal["sqlite", "mysql"]
+    dialect: Literal["sqlite", "mysql", "postgresql"]
     #: The read-only connection: ``sqlite_database``, or ``sql_driver`` with
     #: ``sql_connect_args`` and ``sql_password_env``, as in a ``kind: sql``
     #: verifier (no query: every table is read).
@@ -307,8 +312,11 @@ class FrameDatabase(BaseModel):
     #: Over this many rows a table keeps, per row, its key and contents MACs
     #: and cell MACs only for the columns attribution and side records read.
     max_rows: int = Field(default=2000, ge=1)
-    #: Schemas the read account must see (MySQL); the snapshot refuses when
-    #: one isn't visible, so a schema the app writes can't be left out.
+    #: Schemas the read account must see; the snapshot refuses when one isn't
+    #: visible, so a schema the app writes can't be left out. Every other
+    #: visible schema is read too. On PostgreSQL a schema the account can't
+    #: see is refused unless ``allow_tables`` skips ``<schema>.*`` with a
+    #: reason.
     schemas: list[str] = Field(default_factory=list)
     #: An app profile (``openadapt_flow.app_profiles``): the app's own
     #: bookkeeping, versioned and shared with rollback and the RL grader. Its
@@ -448,6 +456,12 @@ class FrameSpec(BaseModel):
     #: Fields of a pre-existing target record the save may change. Unset:
     #: the fields the effects name.
     target_fields: Optional[list[str]] = None
+    #: Surface -> the fields a declared row of that surface may change
+    #: (a database table counts as the surface ``database.views`` maps it
+    #: to). Set: it replaces ``target_fields`` for every declared row, and a
+    #: surface it doesn't list may change nothing, so a row touched beside
+    #: the write can't take the target's fields.
+    target_fields_by_surface: Optional[dict[str, list[str]]] = None
     attribution: Optional[FrameAttribution] = None
     #: Rows the save adds beside each new declared record (``FrameSideRecord``).
     side_records: list[FrameSideRecord] = Field(default_factory=list)
@@ -465,6 +479,8 @@ class FrameSpec(BaseModel):
         data: dict[str, Any] = handler(self)
         if data.get("versions") is None:
             data.pop("versions", None)
+        if data.get("target_fields_by_surface") is None:
+            data.pop("target_fields_by_surface", None)
         return data
 
     @model_validator(mode="after")
@@ -831,6 +847,13 @@ def judge_frame(
         surface_ignore |= set(attribution.server_set)
     written = declared_fields(effects)
     may_change = set(spec.target_fields) if spec.target_fields is not None else written
+    if spec.target_fields_by_surface is not None:
+        # Every field any declared row may change, for the attribution check.
+        may_change = (
+            set().union(*spec.target_fields_by_surface.values())
+            if (spec.target_fields_by_surface)
+            else set()
+        )
     if attribution is not None and attribution.kind == "record_field":
         # A field this run writes (or any run parameter names) is not evidence
         # of who changed a record: refuse the attribution, fail closed.
@@ -1315,6 +1338,15 @@ def judge_frame(
     concurrent: list[FrameChange] = []
     added_by_others: set[tuple[str, str]] = set()
     views_of = dict(database.views) if database is not None else {}
+
+    def may_change_for(name: str) -> set[str]:
+        by_surface = spec.target_fields_by_surface
+        if by_surface is None:
+            return may_change
+        if name in by_surface:
+            return set(by_surface[name])
+        return set(by_surface.get(views_of.get(name, ""), []))
+
     declared_keys: set[str] = set()
     #: What an audit entry names for each compared record (``ref_of``).
     refs: dict[tuple[str, str], tuple[Any, Optional[str]]] = {}
@@ -1534,12 +1566,13 @@ def judge_frame(
                 if after is None:
                     continue  # a removed target: the delta check's case
                 fields = changed(name, before, after)  # type: ignore[arg-type]
-                stray = [f for f in fields if f not in may_change]
+                row_may = may_change_for(name)
+                stray = [f for f in fields if f not in row_may]
                 if other_on_target(name, key, before, after):
                     ref, field = ref_of(name, key, before, after)
                     if (
                         fields
-                        and not (set(fields) & may_change)
+                        and not (set(fields) & row_may)
                         and attribution is not None
                         and attribution.write_events
                         and attribution.table_field
