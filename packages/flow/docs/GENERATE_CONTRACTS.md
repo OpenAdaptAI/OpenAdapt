@@ -216,14 +216,14 @@ columns set to the acting user are proposed; anything else is listed and
 excused only if the person adds it (`columns_add`). A changed row the
 generator can't identify is listed too, and a write that changes it stops.
 
-**The frame.** On MySQL and MariaDB every contract uses the whole-database
-frame (`frame.database`): a row added, removed or changed in any table that
-the contract doesn't declare stops the write, except rows added to a table
-the person named as a log. The main record's table and the tables of rows
-that hold values are read by the contract's own reads, with every column.
-On PostgreSQL, `frame.database` isn't available, so every other table is read
-as its own surface, except the tables the person named as logs, which are
-not read at all.
+**The frame.** Every contract uses the whole-database frame
+(`frame.database`, with the store's dialect): a row added, removed or changed
+in any table that the contract doesn't declare stops the write, except rows
+added to a table the person named as a log. The main record's table and the
+tables of rows that hold values are read by the contract's own reads, with
+every column. On PostgreSQL the read account also needs `SELECT` on the
+sequences (see [VERIFY_RUN.md](VERIFY_RUN.md)); without it the dry read
+fails and no contract is written.
 
 **Lost updates.** An update's contracts set `frame.versions`, so another
 user's save to the target inside the window stops the write. The generator
@@ -240,7 +240,7 @@ version check, and `report.json` shows `versions: null`. If the app stops
 writing the trail (an agenda setting turned off), the agent's own save has
 no new version, and the verifier stops the write rather than pass it.
 
-**The recheck window.** On MySQL and MariaDB, one question asks how long the
+**The recheck window.** One question asks how long the
 app can still write on its own after a verified write. The answer is
 `frame.database.recheck_after_s`; the proposal is 300 seconds.
 
@@ -285,10 +285,6 @@ why.
 - With one demonstration of a create, every other column must hold the value
   it held then, including one computed from the task's values (a price with
   tax). `QUESTIONS.md` says so; record a second create with other values.
-- On PostgreSQL there is no whole-database frame, so there is no recheck (a
-  write that lands after the check is not seen), and a table the person names
-  as a log is not read at all: a rewrite of its existing rows passes. Every
-  other table is read and compared.
 - REST metadata (OpenAPI) is not read yet. Apps without database access need
   hand-written contracts.
 - The frame doesn't attribute changes to other users: another user's edit to

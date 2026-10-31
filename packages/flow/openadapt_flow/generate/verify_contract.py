@@ -1947,67 +1947,48 @@ def build_contract(
         versions = _versions_frame(b, plan, settings)
         if versions is not None:
             frame["versions"] = versions
-    if schema.dialect == "mysql":
-        allow: list[dict[str, Any]] = []
-        for t in sorted(logs):
-            if t in named_tables:
-                continue
+    # MySQL, MariaDB and PostgreSQL: the whole-database frame
+    allow: list[dict[str, Any]] = []
+    for t in sorted(logs):
+        if t in named_tables:
+            continue
+        allow.append({"table": t})
+    for t in sorted(named_tables):
+        if plan.mode == "create" or flavor == "found":
+            # The contract's own read judges the rows the write adds; the
+            # whole-database frame still sees any existing row change,
+            # now and at the recheck (a late edit to a look-alike).
             allow.append({"table": t})
-        for t in sorted(named_tables):
-            if plan.mode == "create" or flavor == "found":
-                # The contract's own read judges the rows the write adds; the
-                # whole-database frame still sees any existing row change,
-                # now and at the recheck (a late edit to a look-alike).
-                allow.append({"table": t})
-                continue
-            # An update changes a row here, which an append-only table
-            # can't allow: its own read judges this table, and the recheck
-            # (database only) doesn't see it.
-            allow.append(
-                {
-                    "table": t,
-                    "mode": "skip",
-                    "reason": "read in full, every column, by this contract's own surface",
-                }
-            )
-        views = {
-            s.table: s.name for s in surfaces.values() if s.name.startswith("raw_")
-        }
-        db: dict[str, Any] = {
-            "dialect": "mysql",
-            "read": dict(settings.read),
-            "allow_tables": allow,
-            "views": views,
-            "settle_s": 1,
-            "settle_attempts": 5,
-        }
-        nrf = {
-            s.table: sorted(getattr(s, "_new_row_fields", []))
-            for s in surfaces.values()
-            if s.name.startswith("raw_") and getattr(s, "_new_row_fields", None)
-        }
-        if nrf:
-            db["new_row_fields"] = nrf
-        if settings.recheck_after_s:
-            db["recheck_after_s"] = settings.recheck_after_s
-        frame["database"] = db
-    else:
-        # PostgreSQL: frame.database reads MySQL and SQLite only, so every
-        # other table is read as its own surface (the read-set frame).
-        for t in sorted(schema.tables):
-            if t in named_tables or t in logs:
-                continue
-            if f"raw_{_alias(t)}" in surfaces:
-                continue
-            s = Surface(
-                f"raw_{_alias(t)}", settings.views.get(t, t), _base_columns(b, t)
-            )
-            surfaces[s.name] = s
-            verifier["surfaces"][s.name] = {
-                "kind": "sql",
-                **settings.read,
-                "sql_query": s.sql(b),
+            continue
+        # An update changes a row here, which an append-only table
+        # can't allow: its own read judges this table, and the recheck
+        # (database only) doesn't see it.
+        allow.append(
+            {
+                "table": t,
+                "mode": "skip",
+                "reason": "read in full, every column, by this contract's own surface",
             }
+        )
+    views = {s.table: s.name for s in surfaces.values() if s.name.startswith("raw_")}
+    db: dict[str, Any] = {
+        "dialect": schema.dialect,
+        "read": dict(settings.read),
+        "allow_tables": allow,
+        "views": views,
+        "settle_s": 1,
+        "settle_attempts": 5,
+    }
+    nrf = {
+        s.table: sorted(getattr(s, "_new_row_fields", []))
+        for s in surfaces.values()
+        if s.name.startswith("raw_") and getattr(s, "_new_row_fields", None)
+    }
+    if nrf:
+        db["new_row_fields"] = nrf
+    if settings.recheck_after_s:
+        db["recheck_after_s"] = settings.recheck_after_s
+    frame["database"] = db
     doc: dict[str, Any] = {
         "schema_version": "openadapt.verify/v1",
         "environment_id": settings.environment_id,
@@ -2098,10 +2079,9 @@ def _raw_effect(
 ) -> dict[str, Any]:
     """An effect on a table's own read: rows the app adds beside the write.
 
-    On MySQL the table is judged by the whole-database frame, which also
-    checks that every column these rows set beyond ``match`` is declared in
-    ``new_row_fields`` or holds its default. On PostgreSQL the surface reads
-    every column as text, so constants are pinned in ``match`` itself."""
+    The table is judged by the whole-database frame, which also checks that
+    every column these rows set beyond ``match`` is declared in
+    ``new_row_fields`` or holds its default."""
 
     name = f"raw_{_alias(table)}"
     surf = surfaces.get(name)
@@ -2110,69 +2090,58 @@ def _raw_effect(
         surfaces[name] = surf
     t = schema.tables[table]
     m = dict(match)
-    if schema.dialect == "mysql":
-        # Text and whole-number constants only: the snapshot's JSON form of
-        # a decimal or a date isn't the generator's text form.
-        for col, value in list(m.items()):
-            c = t.column(col)
-            lit = value.get("literal") if isinstance(value, dict) else None
-            if (
-                c is not None
-                and lit is not None
-                and not (
-                    c.kind == "text"
-                    or (
-                        c.kind in ("number", "bool")
-                        and c.data_type.startswith(
-                            (
-                                "int",
-                                "tinyint",
-                                "smallint",
-                                "mediumint",
-                                "bigint",
-                                "integer",
-                            )
+    # Text and whole-number constants only: the snapshot's JSON form of
+    # a decimal or a date isn't the generator's text form.
+    for col, value in list(m.items()):
+        c = t.column(col)
+        lit = value.get("literal") if isinstance(value, dict) else None
+        if (
+            c is not None
+            and lit is not None
+            and not (
+                c.kind == "text"
+                or (
+                    c.kind in ("number", "bool")
+                    and c.data_type.startswith(
+                        (
+                            "int",
+                            "tinyint",
+                            "smallint",
+                            "mediumint",
+                            "bigint",
+                            "integer",
                         )
-                        and re.fullmatch(r"-?\d+", lit)
                     )
+                    and re.fullmatch(r"-?\d+", lit)
                 )
+            )
+        ):
+            m.pop(col)
+    nrf = set(getattr(surf, "_new_row_fields", set()))
+    for c in t.columns:
+        if c.name in m:
+            continue
+        role = roles.get(c.name)
+        if role is not None and role.role == "constant" and role.value is None:
+            continue
+        if (
+            role is None
+            or role.role != "constant"
+            or (role.detail or {}).get("is_default")
+        ):
+            if role is None or role.role in (
+                "key",
+                "timestamp",
+                "link",
+                "varies",
+                "copied",
+                "actor",
+                "free",
             ):
-                m.pop(col)
-        nrf = set(getattr(surf, "_new_row_fields", set()))
-        for c in t.columns:
-            if c.name in m:
-                continue
-            role = roles.get(c.name)
-            if role is not None and role.role == "constant" and role.value is None:
-                continue
-            if (
-                role is None
-                or role.role != "constant"
-                or (role.detail or {}).get("is_default")
-            ):
-                if role is None or role.role in (
-                    "key",
-                    "timestamp",
-                    "link",
-                    "varies",
-                    "copied",
-                    "actor",
-                    "free",
-                ):
-                    nrf.add(c.name)
-                continue
-            nrf.add(c.name)
-        surf.__dict__["_new_row_fields"] = nrf
-    else:
-        for col, role in sorted(roles.items()):
-            if role.role == "constant" and col not in m:
-                if role.value is None:
-                    alias = f"pin__{_alias(col)}"
-                    if alias not in {a for a, _ in surf.columns}:
-                        surf.columns.append((alias, b.pin("t", table, col, None)))
-                    m[alias] = {"literal": "1"}
-                else:
-                    m[col] = {"literal": role.value}
+                nrf.add(c.name)
+            continue
+        nrf.add(c.name)
+    surf.__dict__["_new_row_fields"] = nrf
     return {
         "kind": "record_written",
         "probe": f"surface={name}|{note}",
@@ -2872,11 +2841,7 @@ def propose(
                 "Tables that gained a different number of rows in different "
                 "demonstrations; they are not logs unless you list them under "
                 "logs_add (rows may then be added, existing rows must not change"
-                + (
-                    ")"
-                    if dialect == "mysql"
-                    else "; on PostgreSQL a log table is not read at all)"
-                )
+                + ")"
                 + ": "
                 + ", ".join(sorted(candidates))
                 + "."
@@ -2902,21 +2867,20 @@ def propose(
                 "accept",
             )
         )
-    # Q: the recheck window (MySQL: frame.database.recheck_after_s).
+    # Q: the recheck window (frame.database.recheck_after_s).
     recheck: Optional[float] = None
-    if dialect == "mysql":
-        a = _answer(answers, "recheck_after_s")
-        recheck = float(a) if isinstance(a, (int, float)) and a > 0 else None
-        questions.append(
-            Question(
-                "recheck_after_s",
-                "How long after a verified write can the app still write on its own "
-                "(a background job, a delayed retry)? The database is read again that "
-                f"many seconds later and a late change refutes the write. Proposed: "
-                f"{DEFAULT_RECHECK_S}. Answer `recheck_after_s: <seconds>`.",
-                DEFAULT_RECHECK_S,
-            )
+    a = _answer(answers, "recheck_after_s")
+    recheck = float(a) if isinstance(a, (int, float)) and a > 0 else None
+    questions.append(
+        Question(
+            "recheck_after_s",
+            "How long after a verified write can the app still write on its own "
+            "(a background job, a delayed retry)? The database is read again that "
+            f"many seconds later and a late change refutes the write. Proposed: "
+            f"{DEFAULT_RECHECK_S}. Answer `recheck_after_s: <seconds>`.",
+            DEFAULT_RECHECK_S,
         )
+    )
     for p in plans:  # child groups of values placed after analysis
         _children(schema, p, [], only_missing=True)
     questions.extend(location_questions)
@@ -2924,7 +2888,7 @@ def propose(
     settings = Settings(
         read,
         dict(actor_params),
-        recheck or (DEFAULT_RECHECK_S if dialect == "mysql" else None),
+        recheck or DEFAULT_RECHECK_S,
         env,
     )
 
@@ -3078,9 +3042,7 @@ def propose(
                 for s in doc["verifier"]["surfaces"].values():
                     why = why or guard_problem(s["sql_query"])
                 if why is None and validate:
-                    why = dry_read(
-                        path, flatten(sample_values(p, v, demos)), dialect == "mysql"
-                    )
+                    why = dry_read(path, flatten(sample_values(p, v, demos)), True)
                 if why is not None:
                     path.unlink()
                     rep["rejected"].append(

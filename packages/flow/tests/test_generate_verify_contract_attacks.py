@@ -100,12 +100,6 @@ def test_a3_a_first_and_last_name_split_two_ways_is_stopped(
         app.q("DELETE FROM users WHERE id IN (%s,%s)", (a, b))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="PostgreSQL has no whole-database frame: a table a person names as a "
-    "log is not read, so a rewrite of its existing rows is not seen (documented "
-    "in GENERATE_CONTRACTS.md, Limits)",
-)
 def test_a4_a_rewrite_of_a_log_table_on_postgresql_is_stopped(
     generated: dict[str, Any],
 ) -> None:

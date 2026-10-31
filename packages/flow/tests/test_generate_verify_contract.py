@@ -62,6 +62,7 @@ INSERT INTO issues (project_id, subject, status_id, author_id, created_on, updat
 INSERT INTO settings (name, value) VALUES ('ui_theme', 'classic');
 CREATE ROLE oa_reader LOGIN PASSWORD 'reader-pw';
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO oa_reader;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO oa_reader;
 """
 
 BOT = 1
