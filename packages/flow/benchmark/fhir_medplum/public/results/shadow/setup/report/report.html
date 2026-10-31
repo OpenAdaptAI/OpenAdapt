@@ -1,0 +1,147 @@
+<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Shadow report</title><style>
+:root{--bg:#fff;--fg:#1b1f24;--mute:#59636e;--line:#d1d9e0;--bad:#b42318;--warn:#9a6700;--ok:#1a7f37}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--mute:#9198a1;--line:#3d444d;--bad:#f85149;--warn:#d29922;--ok:#3fb950}}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;max-width:960px;margin:24px auto;padding:0 16px}
+h1{font-size:22px}h2{font-size:18px;margin-top:28px}.mute{color:var(--mute)}
+.tiles{display:flex;gap:12px;flex-wrap:wrap}.tile{border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:120px}
+.tile b{display:block;font-size:26px}.REFUTED{color:var(--bad)}.UNCERTAIN{color:var(--warn)}.CONFIRMED{color:var(--ok)}
+table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.item{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:12px 0}.diff{color:var(--bad);font-weight:600}
+details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+</style></head><body><h1>Shadow report</h1><p class=mute>FHIR writes to http://127.0.0.1:9740. Each write was checked against the system of record. The shadow sent each one on as the agent sent it and blocked none.</p><p>1 writes seen, in 1 checks (a record's create, retries and corrections are one check).</p><div class=tiles><div class=tile><b class=REFUTED>0</b>Refuted</div><div class=tile><b class=UNCERTAIN>0</b>Uncertain</div><div class=tile><b class=CONFIRMED>1</b>Confirmed</div></div><p class=mute>Added latency per write: median 212.4 ms, largest 212.4 ms.</p><h2>Confirmed (1)</h2><details><summary>Show</summary><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 1, records: Patient/88883a88-d92d-4807-99a1-12dba9fe4732</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>212 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;9 Elm Street&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1959-07-19&quot;,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T18:06:09.883Z&quot;,
+    &quot;versionId&quot;: &quot;19a18b61-6837-4a96-88d5-d74d9896342c&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Setup9969&quot;,
+     &quot;given&quot;: [
+      &quot;Imani&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-9969&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;imani.setup9969@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Imani&quot;,
+   &quot;stored&quot;: &quot;Imani&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Setup9969&quot;,
+   &quot;stored&quot;: &quot;Setup9969&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;1959-07-19&quot;,
+   &quot;stored&quot;: &quot;1959-07-19&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;9 Elm Street&quot;,
+   &quot;stored&quot;: &quot;9 Elm Street&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;413-555-9969&quot;,
+   &quot;stored&quot;: &quot;413-555-9969&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/88883a88-d92d-4807-99a1-12dba9fe4732&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;imani.setup9969@example.org&quot;,
+   &quot;stored&quot;: &quot;imani.setup9969@example.org&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793469983.4868999,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div></details></body></html>

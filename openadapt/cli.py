@@ -1436,6 +1436,27 @@ def verify_ledger_release(
 
 
 @main.command(
+    "shadow",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def shadow(command_ctx: click.Context) -> None:
+    """Check each write your agent makes against the system of record.
+
+    Never blocks or changes a write; writes report.html and report.json.
+    Every argument passes to `openadapt flow shadow`; its options are listed
+    by `openadapt flow shadow --help`.
+    """
+    if "shadow" not in _flow_verbs():
+        click.echo(
+            "Error: the installed openadapt-flow has no shadow command.", err=True
+        )
+        click.echo("Upgrade with: pip install --upgrade openadapt", err=True)
+        sys.exit(2)
+    _run_flow(["shadow", *command_ctx.args])
+
+
+@main.command(
     "agent",
     context_settings={
         "ignore_unknown_options": True,

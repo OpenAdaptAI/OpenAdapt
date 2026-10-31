@@ -1,0 +1,3141 @@
+<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Shadow report</title><style>
+:root{--bg:#fff;--fg:#1b1f24;--mute:#59636e;--line:#d1d9e0;--bad:#b42318;--warn:#9a6700;--ok:#1a7f37}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--mute:#9198a1;--line:#3d444d;--bad:#f85149;--warn:#d29922;--ok:#3fb950}}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;max-width:960px;margin:24px auto;padding:0 16px}
+h1{font-size:22px}h2{font-size:18px;margin-top:28px}.mute{color:var(--mute)}
+.tiles{display:flex;gap:12px;flex-wrap:wrap}.tile{border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:120px}
+.tile b{display:block;font-size:26px}.REFUTED{color:var(--bad)}.UNCERTAIN{color:var(--warn)}.CONFIRMED{color:var(--ok)}
+table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.item{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:12px 0}.diff{color:var(--bad);font-weight:600}
+details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+</style></head><body><h1>Shadow report</h1><p class=mute>FHIR writes to http://127.0.0.1:9743. Each write was checked against the system of record. The shadow sent each one on as the agent sent it and blocked none.</p><p>33 writes seen, in 33 checks (a record's create, retries and corrections are one check).</p><div class=tiles><div class=tile><b class=REFUTED>18</b>Refuted</div><div class=tile><b class=UNCERTAIN>2</b>Uncertain</div><div class=tile><b class=CONFIRMED>13</b>Confirmed</div></div><p>Rechecks of confirmed writes: 1 refuted.</p><p>How they landed wrong:</p><ul><li>a value differs from what the agent sent: 9</li><li>another record changed: 4</li><li>saved more than once: 3</li><li>holds a value the agent didn&#x27;t send: 1</li><li>changed after the check: 1</li></ul><p class=mute>Added latency per write: median 15.2 ms, largest 37.8 ms.</p><h2>Landed wrong after the check (1)</h2><p class=mute>Confirmed at first, then refuted when checked again: something changed after the write.</p><div class=item><b class=REFUTED>REFUTED</b> <b>AllergyIntolerance</b> <span class=mute>check 20, records: AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=REFUTED>REFUTED</b>; since the first check: 1 record(s) were already the person, and the agent wrote anyway; since the first check: wrong or missing: patient; since the first check: the created record is not the person; since the first check: 1 other record(s) are now also the person; since the first check: the created record does not come back from a search</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;e87bd506-7bd7-485c-b1ba-7c0167d754e9&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:38:23.985Z&quot;,
+    &quot;versionId&quot;: &quot;fb0e98cd-be83-4e5c-b194-29a4ff8bcf85&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/fadc5ca1-448a-4d78-8080-f7500f05784b&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/fadc5ca1-448a-4d78-8080-f7500f05784b&quot;,
+   &quot;stored&quot;: &quot;Patient/fadc5ca1-448a-4d78-8080-f7500f05784b&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468314.547277,
+  &quot;reasons&quot;: [
+   &quot;since the first check: 1 record(s) were already the person, and the agent wrote anyway&quot;,
+   &quot;since the first check: wrong or missing: patient&quot;,
+   &quot;since the first check: the created record is not the person&quot;,
+   &quot;since the first check: 1 other record(s) are now also the person&quot;,
+   &quot;since the first check: the created record does not come back from a search&quot;
+  ],
+  &quot;verdict&quot;: &quot;REFUTED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><h2>Landed wrong (17)</h2><div class=item><b class=REFUTED>REFUTED</b> <b>Patient</b> <span class=mute>check 3, records: Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e</span><ul><li>wrong or missing: birthDate</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e</td><td>birthDate</td><td>1988-04-22</td><td>1988-02-04</td></tr><tr><td colspan=4 class=mute>9 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>27 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;14 Birch Lane&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1988-02-04&quot;,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:34:47.647Z&quot;,
+    &quot;versionId&quot;: &quot;472ac397-ee9b-4290-9765-b1b826da58f2&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Okafor&quot;,
+     &quot;given&quot;: [
+      &quot;Lena&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-0187&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;lena.okafor@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Lena&quot;,
+   &quot;stored&quot;: &quot;Lena&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Okafor&quot;,
+   &quot;stored&quot;: &quot;Okafor&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;1988-04-22&quot;,
+   &quot;stored&quot;: &quot;1988-02-04&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;14 Birch Lane&quot;,
+   &quot;stored&quot;: &quot;14 Birch Lane&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;413-555-0187&quot;,
+   &quot;stored&quot;: &quot;413-555-0187&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/5ec0827f-c57e-4ebc-b827-fd1cfbf22a3e&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;lena.okafor@example.org&quot;,
+   &quot;stored&quot;: &quot;lena.okafor@example.org&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Patient</b> <span class=mute>check 4, records: Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741</span><ul><li>wrong or missing: phone</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741</td><td>phone</td><td>413-555-0187</td><td>413-555-0178</td></tr><tr><td colspan=4 class=mute>9 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>26 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;14 Birch Lane&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1988-04-22&quot;,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:34:58.814Z&quot;,
+    &quot;versionId&quot;: &quot;42abf29a-4086-487b-b1d9-be01065e7829&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Okafor&quot;,
+     &quot;given&quot;: [
+      &quot;Lena&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-0178&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;lena.okafor@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Lena&quot;,
+   &quot;stored&quot;: &quot;Lena&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Okafor&quot;,
+   &quot;stored&quot;: &quot;Okafor&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;1988-04-22&quot;,
+   &quot;stored&quot;: &quot;1988-04-22&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;14 Birch Lane&quot;,
+   &quot;stored&quot;: &quot;14 Birch Lane&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;413-555-0187&quot;,
+   &quot;stored&quot;: &quot;413-555-0178&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/f2a3486f-16b7-4e5f-9404-e0e596d24741&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;lena.okafor@example.org&quot;,
+   &quot;stored&quot;: &quot;lena.okafor@example.org&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Patient</b> <span class=mute>check 5, records: Patient/9aee7cef-16d4-4071-ae32-70619e519863</span><ul><li>not given by the task: deceasedBoolean</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>Patient/9aee7cef-16d4-4071-ae32-70619e519863</td><td>(not sent)</td><td><i>none</i></td><td>deceasedBoolean</td></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>38 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;14 Birch Lane&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1988-04-22&quot;,
+   &quot;deceasedBoolean&quot;: true,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:35:10.014Z&quot;,
+    &quot;versionId&quot;: &quot;eac4916c-adce-407f-918b-11be1910bfa2&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Okafor&quot;,
+     &quot;given&quot;: [
+      &quot;Lena&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-0187&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;lena.okafor@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Lena&quot;,
+   &quot;stored&quot;: &quot;Lena&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Okafor&quot;,
+   &quot;stored&quot;: &quot;Okafor&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;1988-04-22&quot;,
+   &quot;stored&quot;: &quot;1988-04-22&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;14 Birch Lane&quot;,
+   &quot;stored&quot;: &quot;14 Birch Lane&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;413-555-0187&quot;,
+   &quot;stored&quot;: &quot;413-555-0187&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;lena.okafor@example.org&quot;,
+   &quot;stored&quot;: &quot;lena.okafor@example.org&quot;
+  },
+  {
+   &quot;field&quot;: &quot;(not sent)&quot;,
+   &quot;record&quot;: &quot;Patient/9aee7cef-16d4-4071-ae32-70619e519863&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: null,
+   &quot;stored&quot;: &quot;deceasedBoolean&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Patient</b> <span class=mute>check 6, records: Patient/5208bfaf-f51a-4192-a00b-864f5a024d22</span><ul><li>the agent created 2 Patient records, not one</li><li>the agent wrote 2 other resource(s): Patient</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>27 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;14 Birch Lane&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1988-04-22&quot;,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:35:21.225Z&quot;,
+    &quot;versionId&quot;: &quot;4c88bead-2e1a-4087-bacf-d219afefe67c&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Okafor&quot;,
+     &quot;given&quot;: [
+      &quot;Lena&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-0187&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;lena.okafor@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Lena&quot;,
+   &quot;stored&quot;: &quot;Lena&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Okafor&quot;,
+   &quot;stored&quot;: &quot;Okafor&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;1988-04-22&quot;,
+   &quot;stored&quot;: &quot;1988-04-22&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;14 Birch Lane&quot;,
+   &quot;stored&quot;: &quot;14 Birch Lane&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;413-555-0187&quot;,
+   &quot;stored&quot;: &quot;413-555-0187&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/5208bfaf-f51a-4192-a00b-864f5a024d22&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;lena.okafor@example.org&quot;,
+   &quot;stored&quot;: &quot;lena.okafor@example.org&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 2,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 2,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Patient</b> <span class=mute>check 8, records: Patient/28d55542-2412-4a3a-98db-44ec3d47ef68</span><ul><li>the agent wrote 1 other resource(s): Patient</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>27 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;14 Birch Lane&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1988-04-22&quot;,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:35:45.896Z&quot;,
+    &quot;versionId&quot;: &quot;730d70db-63e2-472e-b7ff-75f0d51042fc&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Okafor&quot;,
+     &quot;given&quot;: [
+      &quot;Lena&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-0187&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;lena.okafor@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Lena&quot;,
+   &quot;stored&quot;: &quot;Lena&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Okafor&quot;,
+   &quot;stored&quot;: &quot;Okafor&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;1988-04-22&quot;,
+   &quot;stored&quot;: &quot;1988-04-22&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;14 Birch Lane&quot;,
+   &quot;stored&quot;: &quot;14 Birch Lane&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;413-555-0187&quot;,
+   &quot;stored&quot;: &quot;413-555-0187&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/28d55542-2412-4a3a-98db-44ec3d47ef68&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;lena.okafor@example.org&quot;,
+   &quot;stored&quot;: &quot;lena.okafor@example.org&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 2,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>AllergyIntolerance</b> <span class=mute>check 14, records: AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d</span><ul><li>wrong or missing: patient</li><li>the created record is not the person</li><li>the created record does not come back from a search</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d</td><td>patient</td><td>Patient/9b8d64b0-ba6a-4d62-a9a0-86ed0243ef90</td><td>Patient/6784fdcb-56e6-40ea-b1cc-70922257bb3f</td></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>15 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;865e8ac4-d7aa-443d-acbe-d28de9ea834d&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:37:15.031Z&quot;,
+    &quot;versionId&quot;: &quot;2445768a-72de-4cdd-833d-a81c8b43e57b&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/6784fdcb-56e6-40ea-b1cc-70922257bb3f&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;Patient/9b8d64b0-ba6a-4d62-a9a0-86ed0243ef90&quot;,
+   &quot;stored&quot;: &quot;Patient/6784fdcb-56e6-40ea-b1cc-70922257bb3f&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/865e8ac4-d7aa-443d-acbe-d28de9ea834d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 0,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>AllergyIntolerance</b> <span class=mute>check 15, records: AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7</span><ul><li>wrong or missing: code</li><li>the created record is not the person</li><li>the created record does not come back from a search</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7</td><td>code</td><td>91936005</td><td>294505008</td></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;294505008&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;3513ca33-e78c-41ba-be7c-d69bb7c2bbc7&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:37:26.108Z&quot;,
+    &quot;versionId&quot;: &quot;cf898f95-a1de-4306-b87e-82df26769071&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/3456fc18-4b69-47ca-8a24-f4521dda15a2&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/3456fc18-4b69-47ca-8a24-f4521dda15a2&quot;,
+   &quot;stored&quot;: &quot;Patient/3456fc18-4b69-47ca-8a24-f4521dda15a2&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;294505008&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/3513ca33-e78c-41ba-be7c-d69bb7c2bbc7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 0,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>AllergyIntolerance</b> <span class=mute>check 16, records: AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044</span><ul><li>wrong or missing: criticality</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044</td><td>criticality</td><td>high</td><td>low</td></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;low&quot;,
+   &quot;id&quot;: &quot;a354a084-99e4-4bf7-9ecb-1d89f84e3044&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:37:37.198Z&quot;,
+    &quot;versionId&quot;: &quot;f6092bf7-27ea-4ae7-84a4-edc33198f53e&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/0406cc0a-1637-4bf0-8db4-6d10f6af00bd&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/0406cc0a-1637-4bf0-8db4-6d10f6af00bd&quot;,
+   &quot;stored&quot;: &quot;Patient/0406cc0a-1637-4bf0-8db4-6d10f6af00bd&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;low&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/a354a084-99e4-4bf7-9ecb-1d89f84e3044&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>AllergyIntolerance</b> <span class=mute>check 17, records: AllergyIntolerance/81d86c79-5738-4193-b20b-c2941c8a8ba0</span><ul><li>the agent created 2 AllergyIntolerance records, not one</li><li>the agent wrote 2 other resource(s): AllergyIntolerance</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/81d86c79-5738-4193-b20b-c2941c8a8ba0&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;81d86c79-5738-4193-b20b-c2941c8a8ba0&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:37:48.296Z&quot;,
+    &quot;versionId&quot;: &quot;54adbc1f-bc75-43a8-8906-0e9c416275bb&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/64f8fff0-9fbc-4824-bf17-495faabf94c5&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/81d86c79-5738-4193-b20b-c2941c8a8ba0&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/64f8fff0-9fbc-4824-bf17-495faabf94c5&quot;,
+   &quot;stored&quot;: &quot;Patient/64f8fff0-9fbc-4824-bf17-495faabf94c5&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/81d86c79-5738-4193-b20b-c2941c8a8ba0&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/81d86c79-5738-4193-b20b-c2941c8a8ba0&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/81d86c79-5738-4193-b20b-c2941c8a8ba0&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/81d86c79-5738-4193-b20b-c2941c8a8ba0&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/81d86c79-5738-4193-b20b-c2941c8a8ba0&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 2,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 2,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>AllergyIntolerance</b> <span class=mute>check 18, records: AllergyIntolerance/cf3ef71e-1dc1-4b8f-9d76-1be82507a12d</span><ul><li>the agent wrote 1 other resource(s): Patient</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/cf3ef71e-1dc1-4b8f-9d76-1be82507a12d&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;cf3ef71e-1dc1-4b8f-9d76-1be82507a12d&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:37:59.467Z&quot;,
+    &quot;versionId&quot;: &quot;7db8f140-9b7e-4bf5-ae54-fc1820c1a152&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/18bf765b-1782-42e4-a598-903ce1320905&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/cf3ef71e-1dc1-4b8f-9d76-1be82507a12d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/18bf765b-1782-42e4-a598-903ce1320905&quot;,
+   &quot;stored&quot;: &quot;Patient/18bf765b-1782-42e4-a598-903ce1320905&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/cf3ef71e-1dc1-4b8f-9d76-1be82507a12d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/cf3ef71e-1dc1-4b8f-9d76-1be82507a12d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/cf3ef71e-1dc1-4b8f-9d76-1be82507a12d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/cf3ef71e-1dc1-4b8f-9d76-1be82507a12d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/cf3ef71e-1dc1-4b8f-9d76-1be82507a12d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;,
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 2,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Appointment</b> <span class=mute>check 24, records: Appointment/74a46f65-ed89-4ade-b094-54196df60d83</span><ul><li>wrong or missing: end, start</li><li>the created record is not the person</li><li>the created record does not come back from a search</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>Appointment/74a46f65-ed89-4ade-b094-54196df60d83</td><td>start</td><td>2026-11-17T14:00:00Z</td><td>2026-11-17T15:00:00Z</td></tr><tr class=diff><td>Appointment/74a46f65-ed89-4ade-b094-54196df60d83</td><td>end</td><td>2026-11-17T14:30:00Z</td><td>2026-11-17T15:30:00Z</td></tr><tr><td colspan=4 class=mute>3 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>15 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/74a46f65-ed89-4ade-b094-54196df60d83&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T15:30:00Z&quot;,
+   &quot;id&quot;: &quot;74a46f65-ed89-4ade-b094-54196df60d83&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:39:24.774Z&quot;,
+    &quot;versionId&quot;: &quot;6ec9ae9f-8216-4029-ae28-08554d3f765e&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/afc1adf4-22d3-451f-8d00-15b343bbbe53&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T15:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/74a46f65-ed89-4ade-b094-54196df60d83&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/74a46f65-ed89-4ade-b094-54196df60d83&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T15:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/74a46f65-ed89-4ade-b094-54196df60d83&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T15:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/74a46f65-ed89-4ade-b094-54196df60d83&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/afc1adf4-22d3-451f-8d00-15b343bbbe53&quot;,
+   &quot;stored&quot;: &quot;Patient/afc1adf4-22d3-451f-8d00-15b343bbbe53&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/74a46f65-ed89-4ade-b094-54196df60d83&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 0,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Appointment</b> <span class=mute>check 25, records: Appointment/4532d989-2bc6-440e-8610-e5c9be273c96</span><ul><li>wrong or missing: practitioner</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>Appointment/4532d989-2bc6-440e-8610-e5c9be273c96</td><td>practitioner</td><td>Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f</td><td>Practitioner/761f7119-2022-41e2-8471-fc7dfa18b328</td></tr><tr><td colspan=4 class=mute>4 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/4532d989-2bc6-440e-8610-e5c9be273c96&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;4532d989-2bc6-440e-8610-e5c9be273c96&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:39:35.858Z&quot;,
+    &quot;versionId&quot;: &quot;30027a5d-10c9-449a-a2f4-ca9a84b34886&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/455d5b01-e8ed-40b8-b1df-18b8ffa58d0b&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/761f7119-2022-41e2-8471-fc7dfa18b328&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/4532d989-2bc6-440e-8610-e5c9be273c96&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/4532d989-2bc6-440e-8610-e5c9be273c96&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/4532d989-2bc6-440e-8610-e5c9be273c96&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/4532d989-2bc6-440e-8610-e5c9be273c96&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/455d5b01-e8ed-40b8-b1df-18b8ffa58d0b&quot;,
+   &quot;stored&quot;: &quot;Patient/455d5b01-e8ed-40b8-b1df-18b8ffa58d0b&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/4532d989-2bc6-440e-8610-e5c9be273c96&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/761f7119-2022-41e2-8471-fc7dfa18b328&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Appointment</b> <span class=mute>check 26, records: Appointment/945bf20b-1519-4e5d-81fa-b8bc6a49361d</span><ul><li>the agent created 2 Appointment records, not one</li><li>the agent wrote 2 other resource(s): Appointment</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>15 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/945bf20b-1519-4e5d-81fa-b8bc6a49361d&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;945bf20b-1519-4e5d-81fa-b8bc6a49361d&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:39:46.949Z&quot;,
+    &quot;versionId&quot;: &quot;5c98156b-5d7a-429c-a47c-fc94eb2302e6&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/64106f0e-d8be-4496-98f0-24b966ff0c2d&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/945bf20b-1519-4e5d-81fa-b8bc6a49361d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/945bf20b-1519-4e5d-81fa-b8bc6a49361d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/945bf20b-1519-4e5d-81fa-b8bc6a49361d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/945bf20b-1519-4e5d-81fa-b8bc6a49361d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/64106f0e-d8be-4496-98f0-24b966ff0c2d&quot;,
+   &quot;stored&quot;: &quot;Patient/64106f0e-d8be-4496-98f0-24b966ff0c2d&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/945bf20b-1519-4e5d-81fa-b8bc6a49361d&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 2,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 2,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Appointment</b> <span class=mute>check 28, records: Appointment/946cf955-75d1-4951-ab18-09b3ad989ec7</span><ul><li>the agent wrote 1 other resource(s): Appointment</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>15 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/946cf955-75d1-4951-ab18-09b3ad989ec7&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;946cf955-75d1-4951-ab18-09b3ad989ec7&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:40:11.310Z&quot;,
+    &quot;versionId&quot;: &quot;aba6f746-acc0-421e-a025-d30ebf79d1d8&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/2d05ece8-0bdd-42f6-92ea-13eb1f57d300&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/946cf955-75d1-4951-ab18-09b3ad989ec7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/946cf955-75d1-4951-ab18-09b3ad989ec7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/946cf955-75d1-4951-ab18-09b3ad989ec7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/946cf955-75d1-4951-ab18-09b3ad989ec7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/2d05ece8-0bdd-42f6-92ea-13eb1f57d300&quot;,
+   &quot;stored&quot;: &quot;Patient/2d05ece8-0bdd-42f6-92ea-13eb1f57d300&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/946cf955-75d1-4951-ab18-09b3ad989ec7&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 2,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Appointment</b> <span class=mute>check 30, records: Appointment/26d83825-c911-4e3e-a11e-bcf1212fa405</span><ul><li>wrong or missing: status</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>Appointment/26d83825-c911-4e3e-a11e-bcf1212fa405</td><td>status</td><td>booked</td><td>proposed</td></tr><tr><td colspan=4 class=mute>4 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>15 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/26d83825-c911-4e3e-a11e-bcf1212fa405&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;26d83825-c911-4e3e-a11e-bcf1212fa405&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:40:35.701Z&quot;,
+    &quot;versionId&quot;: &quot;83a7afe7-e7bd-4ad6-9e05-60224c1ba042&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/f264c3a5-4bff-45c1-85a9-2c11b6485ac4&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;proposed&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/26d83825-c911-4e3e-a11e-bcf1212fa405&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;proposed&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/26d83825-c911-4e3e-a11e-bcf1212fa405&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/26d83825-c911-4e3e-a11e-bcf1212fa405&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/26d83825-c911-4e3e-a11e-bcf1212fa405&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/f264c3a5-4bff-45c1-85a9-2c11b6485ac4&quot;,
+   &quot;stored&quot;: &quot;Patient/f264c3a5-4bff-45c1-85a9-2c11b6485ac4&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/26d83825-c911-4e3e-a11e-bcf1212fa405&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Appointment</b> <span class=mute>check 31, records: Appointment/ec124981-b787-47de-8fde-01fa30793779</span><ul><li>the agent wrote 1 other resource(s): AllergyIntolerance</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>16 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/ec124981-b787-47de-8fde-01fa30793779&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;ec124981-b787-47de-8fde-01fa30793779&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:40:46.811Z&quot;,
+    &quot;versionId&quot;: &quot;ac20b2d5-81fe-48c1-b4df-6767954a3b29&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/342b2a50-b8f2-44cc-aa39-54c0d91c5b70&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/ec124981-b787-47de-8fde-01fa30793779&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/ec124981-b787-47de-8fde-01fa30793779&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/ec124981-b787-47de-8fde-01fa30793779&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/ec124981-b787-47de-8fde-01fa30793779&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/342b2a50-b8f2-44cc-aa39-54c0d91c5b70&quot;,
+   &quot;stored&quot;: &quot;Patient/342b2a50-b8f2-44cc-aa39-54c0d91c5b70&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/ec124981-b787-47de-8fde-01fa30793779&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;,
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 2,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=REFUTED>REFUTED</b> <b>Appointment</b> <span class=mute>check 32, records: Appointment/1392f448-3384-448b-978a-f7fcacbea6cc</span><ul><li>wrong or missing: patient</li><li>the created record is not the person</li><li>the created record does not come back from a search</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr class=diff><td>Appointment/1392f448-3384-448b-978a-f7fcacbea6cc</td><td>patient</td><td>Patient/95839c97-77e2-47e4-92a0-649465992232</td><td>Patient/e65491a6-51fb-41ed-b8a5-a7093f1364f1</td></tr><tr><td colspan=4 class=mute>4 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>21 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/1392f448-3384-448b-978a-f7fcacbea6cc&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;1392f448-3384-448b-978a-f7fcacbea6cc&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:40:58.007Z&quot;,
+    &quot;versionId&quot;: &quot;68d4426a-efbe-4d58-b183-91ce217976cc&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/e65491a6-51fb-41ed-b8a5-a7093f1364f1&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/1392f448-3384-448b-978a-f7fcacbea6cc&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/1392f448-3384-448b-978a-f7fcacbea6cc&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/1392f448-3384-448b-978a-f7fcacbea6cc&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/1392f448-3384-448b-978a-f7fcacbea6cc&quot;,
+   &quot;same&quot;: false,
+   &quot;sent&quot;: &quot;Patient/95839c97-77e2-47e4-92a0-649465992232&quot;,
+   &quot;stored&quot;: &quot;Patient/e65491a6-51fb-41ed-b8a5-a7093f1364f1&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/1392f448-3384-448b-978a-f7fcacbea6cc&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 0,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><h2>Couldn't be confirmed (2)</h2><div class=item><b class=UNCERTAIN>UNCERTAIN</b> <b>Patient</b> <span class=mute>check 9, records: none</span><ul><li>the reply was 503 and the store shows no write by the agent</li><li>no record is the person and the agent created none</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td></td><td>given</td><td>Lena</td><td></td></tr><tr><td></td><td>family</td><td>Okafor</td><td></td></tr><tr><td></td><td>birthDate</td><td>1988-04-22</td><td></td></tr><tr><td></td><td>gender</td><td>female</td><td></td></tr><tr><td></td><td>line</td><td>14 Birch Lane</td><td></td></tr><tr><td></td><td>city</td><td>Springfield</td><td></td></tr><tr><td></td><td>state</td><td>MA</td><td></td></tr><tr><td></td><td>postalCode</td><td>01103</td><td></td></tr><tr><td></td><td>phone</td><td>413-555-0187</td><td></td></tr><tr><td></td><td>email</td><td>lena.okafor@example.org</td><td></td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>503</td><td>24 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {},
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [],
+ &quot;replies&quot;: [
+  503
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 0,
+  &quot;agent_write_types&quot;: [],
+  &quot;agent_writes&quot;: 0,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=UNCERTAIN>UNCERTAIN</b> <b>Patient</b> <span class=mute>check 11, records: Patient/00000000-0000-4000-8000-000000000000</span><ul><li>the reply was 201 and the store shows no write by the agent</li><li>no record is the person and the agent created none</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td></td><td>given</td><td>Lena</td><td></td></tr><tr><td></td><td>family</td><td>Okafor</td><td></td></tr><tr><td></td><td>birthDate</td><td>1988-04-22</td><td></td></tr><tr><td></td><td>gender</td><td>female</td><td></td></tr><tr><td></td><td>line</td><td>14 Birch Lane</td><td></td></tr><tr><td></td><td>city</td><td>Springfield</td><td></td></tr><tr><td></td><td>state</td><td>MA</td><td></td></tr><tr><td></td><td>postalCode</td><td>01103</td><td></td></tr><tr><td></td><td>phone</td><td>413-555-0187</td><td></td></tr><tr><td></td><td>email</td><td>lena.okafor@example.org</td><td></td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>25 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/00000000-0000-4000-8000-000000000000&quot;: {
+   &quot;unreadable&quot;: &quot;GET http://localhost:9740/fhir/R4/Patient/00000000-0000-4000-8000-000000000000 returned HTTP 404&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [],
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 0,
+  &quot;agent_write_types&quot;: [],
+  &quot;agent_writes&quot;: 0,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;needs_review&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><h2>Confirmed (13)</h2><details><summary>Show</summary><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 1, records: Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>29 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;14 Birch Lane&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1988-04-22&quot;,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:34:13.067Z&quot;,
+    &quot;versionId&quot;: &quot;aab4ffa4-223a-40c4-ace7-9e514b5ab64f&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Okafor&quot;,
+     &quot;given&quot;: [
+      &quot;Lena&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-0187&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;lena.okafor@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Lena&quot;,
+   &quot;stored&quot;: &quot;Lena&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Okafor&quot;,
+   &quot;stored&quot;: &quot;Okafor&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;1988-04-22&quot;,
+   &quot;stored&quot;: &quot;1988-04-22&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;14 Birch Lane&quot;,
+   &quot;stored&quot;: &quot;14 Birch Lane&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;413-555-0187&quot;,
+   &quot;stored&quot;: &quot;413-555-0187&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/5981c212-b3b9-4c5c-9fcf-d0e4404ab9bb&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;lena.okafor@example.org&quot;,
+   &quot;stored&quot;: &quot;lena.okafor@example.org&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468063.708895,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 2, records: Patient/e1464f85-5c70-4098-a25d-b8278440c469</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>29 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;14 Birch Lane&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1988-04-22&quot;,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:34:34.272Z&quot;,
+    &quot;versionId&quot;: &quot;eb28310d-f001-4e00-8899-6d0bae621722&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Okafor&quot;,
+     &quot;given&quot;: [
+      &quot;Lena&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-0187&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;lena.okafor@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Lena&quot;,
+   &quot;stored&quot;: &quot;Lena&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Okafor&quot;,
+   &quot;stored&quot;: &quot;Okafor&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;1988-04-22&quot;,
+   &quot;stored&quot;: &quot;1988-04-22&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;14 Birch Lane&quot;,
+   &quot;stored&quot;: &quot;14 Birch Lane&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;413-555-0187&quot;,
+   &quot;stored&quot;: &quot;413-555-0187&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/e1464f85-5c70-4098-a25d-b8278440c469&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;lena.okafor@example.org&quot;,
+   &quot;stored&quot;: &quot;lena.okafor@example.org&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468084.9708538,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 7, records: none</span><ul><li>created once, every value read back</li><li>the agent got an error reply (504) but the write landed</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td></td><td>given</td><td>Lena</td><td></td></tr><tr><td></td><td>family</td><td>Okafor</td><td></td></tr><tr><td></td><td>birthDate</td><td>1988-04-22</td><td></td></tr><tr><td></td><td>gender</td><td>female</td><td></td></tr><tr><td></td><td>line</td><td>14 Birch Lane</td><td></td></tr><tr><td></td><td>city</td><td>Springfield</td><td></td></tr><tr><td></td><td>state</td><td>MA</td><td></td></tr><tr><td></td><td>postalCode</td><td>01103</td><td></td></tr><tr><td></td><td>phone</td><td>413-555-0187</td><td></td></tr><tr><td></td><td>email</td><td>lena.okafor@example.org</td><td></td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>504</td><td>27 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {},
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468143.1951602,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  504
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 10, records: Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>25 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;: {
+   &quot;address&quot;: [
+    {
+     &quot;city&quot;: &quot;Springfield&quot;,
+     &quot;line&quot;: [
+      &quot;14 Birch Lane&quot;
+     ],
+     &quot;postalCode&quot;: &quot;01103&quot;,
+     &quot;state&quot;: &quot;MA&quot;
+    }
+   ],
+   &quot;birthDate&quot;: &quot;1988-04-22&quot;,
+   &quot;gender&quot;: &quot;female&quot;,
+   &quot;id&quot;: &quot;5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:36:16.346Z&quot;,
+    &quot;versionId&quot;: &quot;ddc6da33-ca88-444f-8a98-1606f513e1a3&quot;
+   },
+   &quot;name&quot;: [
+    {
+     &quot;family&quot;: &quot;Okafor&quot;,
+     &quot;given&quot;: [
+      &quot;Lena&quot;
+     ]
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Patient&quot;,
+   &quot;telecom&quot;: [
+    {
+     &quot;system&quot;: &quot;phone&quot;,
+     &quot;value&quot;: &quot;413-555-0187&quot;
+    },
+    {
+     &quot;system&quot;: &quot;email&quot;,
+     &quot;value&quot;: &quot;lena.okafor@example.org&quot;
+    }
+   ]
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;given&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Lena&quot;,
+   &quot;stored&quot;: &quot;Lena&quot;
+  },
+  {
+   &quot;field&quot;: &quot;family&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Okafor&quot;,
+   &quot;stored&quot;: &quot;Okafor&quot;
+  },
+  {
+   &quot;field&quot;: &quot;birthDate&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;1988-04-22&quot;,
+   &quot;stored&quot;: &quot;1988-04-22&quot;
+  },
+  {
+   &quot;field&quot;: &quot;gender&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;female&quot;,
+   &quot;stored&quot;: &quot;female&quot;
+  },
+  {
+   &quot;field&quot;: &quot;line&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;14 Birch Lane&quot;,
+   &quot;stored&quot;: &quot;14 Birch Lane&quot;
+  },
+  {
+   &quot;field&quot;: &quot;city&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Springfield&quot;,
+   &quot;stored&quot;: &quot;Springfield&quot;
+  },
+  {
+   &quot;field&quot;: &quot;state&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;MA&quot;,
+   &quot;stored&quot;: &quot;MA&quot;
+  },
+  {
+   &quot;field&quot;: &quot;postalCode&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;01103&quot;,
+   &quot;stored&quot;: &quot;01103&quot;
+  },
+  {
+   &quot;field&quot;: &quot;phone&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;413-555-0187&quot;,
+   &quot;stored&quot;: &quot;413-555-0187&quot;
+  },
+  {
+   &quot;field&quot;: &quot;email&quot;,
+   &quot;record&quot;: &quot;Patient/5c6dc610-73c4-408c-9e6a-bb6ab93864ed&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;lena.okafor@example.org&quot;,
+   &quot;stored&quot;: &quot;lena.okafor@example.org&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468186.973973,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Patient&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 12, records: AllergyIntolerance/e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:36:40.732Z&quot;,
+    &quot;versionId&quot;: &quot;72ac3f75-d96b-4b60-bb1b-55f97dd00543&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/dfb25df9-fb95-4b8e-a887-910a281e3268&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/dfb25df9-fb95-4b8e-a887-910a281e3268&quot;,
+   &quot;stored&quot;: &quot;Patient/dfb25df9-fb95-4b8e-a887-910a281e3268&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/e46aa9b1-d5d2-46da-b5a3-8bdf94f799a3&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468211.310466,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 13, records: AllergyIntolerance/54ef1ce4-7830-42ba-bd36-9d1081063880</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/54ef1ce4-7830-42ba-bd36-9d1081063880&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;54ef1ce4-7830-42ba-bd36-9d1081063880&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:37:01.805Z&quot;,
+    &quot;versionId&quot;: &quot;067d082b-c819-460d-80ca-955e5ff17406&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/c09b9a32-c888-4bf9-bce6-c529d59da0ab&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/54ef1ce4-7830-42ba-bd36-9d1081063880&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/c09b9a32-c888-4bf9-bce6-c529d59da0ab&quot;,
+   &quot;stored&quot;: &quot;Patient/c09b9a32-c888-4bf9-bce6-c529d59da0ab&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/54ef1ce4-7830-42ba-bd36-9d1081063880&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/54ef1ce4-7830-42ba-bd36-9d1081063880&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/54ef1ce4-7830-42ba-bd36-9d1081063880&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/54ef1ce4-7830-42ba-bd36-9d1081063880&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/54ef1ce4-7830-42ba-bd36-9d1081063880&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468232.358717,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 19, records: AllergyIntolerance/7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>16 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:38:10.699Z&quot;,
+    &quot;versionId&quot;: &quot;cf70af12-432f-4431-aefe-3cf25d265019&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/deb45d64-180e-467f-8f78-6723c21a5daa&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/deb45d64-180e-467f-8f78-6723c21a5daa&quot;,
+   &quot;stored&quot;: &quot;Patient/deb45d64-180e-467f-8f78-6723c21a5daa&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/7d28259f-ecdf-4278-bd69-e5f4c9cb1ac8&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468301.31057,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 1,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 21, records: AllergyIntolerance/0b86bbf6-4759-4992-a2e6-8691c44005f6</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/0b86bbf6-4759-4992-a2e6-8691c44005f6&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;0b86bbf6-4759-4992-a2e6-8691c44005f6&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:38:37.212Z&quot;,
+    &quot;versionId&quot;: &quot;fd7fa505-d7c2-46b1-b7a1-64640473a5e2&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/6aeabdac-2c10-48c9-a88b-038ddea0eaf4&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/0b86bbf6-4759-4992-a2e6-8691c44005f6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/6aeabdac-2c10-48c9-a88b-038ddea0eaf4&quot;,
+   &quot;stored&quot;: &quot;Patient/6aeabdac-2c10-48c9-a88b-038ddea0eaf4&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/0b86bbf6-4759-4992-a2e6-8691c44005f6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/0b86bbf6-4759-4992-a2e6-8691c44005f6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/0b86bbf6-4759-4992-a2e6-8691c44005f6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/0b86bbf6-4759-4992-a2e6-8691c44005f6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/0b86bbf6-4759-4992-a2e6-8691c44005f6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468327.772285,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 22, records: AllergyIntolerance/4f1670ab-218c-4306-8a6f-f79c9fe582c6</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>15 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;AllergyIntolerance/4f1670ab-218c-4306-8a6f-f79c9fe582c6&quot;: {
+   &quot;clinicalStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;active&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
+     }
+    ]
+   },
+   &quot;code&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;91936005&quot;,
+      &quot;display&quot;: &quot;Allergy to penicillin&quot;,
+      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
+     }
+    ]
+   },
+   &quot;criticality&quot;: &quot;high&quot;,
+   &quot;id&quot;: &quot;4f1670ab-218c-4306-8a6f-f79c9fe582c6&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:38:50.447Z&quot;,
+    &quot;versionId&quot;: &quot;dae62445-1fe5-4d2d-80dd-75a41e974f9a&quot;
+   },
+   &quot;patient&quot;: {
+    &quot;reference&quot;: &quot;Patient/aeb90990-a26a-4aca-8433-cf0843af8cd1&quot;
+   },
+   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
+   &quot;verificationStatus&quot;: {
+    &quot;coding&quot;: [
+     {
+      &quot;code&quot;: &quot;confirmed&quot;,
+      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
+     }
+    ]
+   }
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/4f1670ab-218c-4306-8a6f-f79c9fe582c6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/aeb90990-a26a-4aca-8433-cf0843af8cd1&quot;,
+   &quot;stored&quot;: &quot;Patient/aeb90990-a26a-4aca-8433-cf0843af8cd1&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code_system&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/4f1670ab-218c-4306-8a6f-f79c9fe582c6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
+   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
+  },
+  {
+   &quot;field&quot;: &quot;code&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/4f1670ab-218c-4306-8a6f-f79c9fe582c6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;91936005&quot;,
+   &quot;stored&quot;: &quot;91936005&quot;
+  },
+  {
+   &quot;field&quot;: &quot;criticality&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/4f1670ab-218c-4306-8a6f-f79c9fe582c6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;high&quot;,
+   &quot;stored&quot;: &quot;high&quot;
+  },
+  {
+   &quot;field&quot;: &quot;clinical_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/4f1670ab-218c-4306-8a6f-f79c9fe582c6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;active&quot;,
+   &quot;stored&quot;: &quot;active&quot;
+  },
+  {
+   &quot;field&quot;: &quot;verification_status&quot;,
+   &quot;record&quot;: &quot;AllergyIntolerance/4f1670ab-218c-4306-8a6f-f79c9fe582c6&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;confirmed&quot;,
+   &quot;stored&quot;: &quot;confirmed&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468341.029949,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;AllergyIntolerance&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 1,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 23, records: Appointment/197dd22f-855e-4f1a-8f05-871faeb6f055</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>15 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/197dd22f-855e-4f1a-8f05-871faeb6f055&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;197dd22f-855e-4f1a-8f05-871faeb6f055&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:39:03.697Z&quot;,
+    &quot;versionId&quot;: &quot;b4c47960-29a2-407e-b330-991d99441da1&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/2d5cb62c-3cb8-4854-9b34-d838fe6f8118&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/197dd22f-855e-4f1a-8f05-871faeb6f055&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/197dd22f-855e-4f1a-8f05-871faeb6f055&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/197dd22f-855e-4f1a-8f05-871faeb6f055&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/197dd22f-855e-4f1a-8f05-871faeb6f055&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/2d5cb62c-3cb8-4854-9b34-d838fe6f8118&quot;,
+   &quot;stored&quot;: &quot;Patient/2d5cb62c-3cb8-4854-9b34-d838fe6f8118&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/197dd22f-855e-4f1a-8f05-871faeb6f055&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468354.2606888,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 27, records: none</span><ul><li>created once, every value read back</li><li>the agent got an error reply (504) but the write landed</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td></td><td>status</td><td>booked</td><td></td></tr><tr><td></td><td>start</td><td>2026-11-17T14:00:00Z</td><td></td></tr><tr><td></td><td>end</td><td>2026-11-17T14:30:00Z</td><td></td></tr><tr><td></td><td>patient</td><td>Patient/8b929879-1320-43c8-b9a7-9a8e5ecf09b4</td><td></td></tr><tr><td></td><td>practitioner</td><td>Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f</td><td></td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>504</td><td>14 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {},
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468408.631721,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  504
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 29, records: Appointment/ec933615-1112-4693-9f19-eb920fc35511</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>15 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/ec933615-1112-4693-9f19-eb920fc35511&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;ec933615-1112-4693-9f19-eb920fc35511&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:40:22.467Z&quot;,
+    &quot;versionId&quot;: &quot;40d96d54-9d4b-448e-b52d-2346109ce81a&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/da24ba82-6f67-4789-83f0-bbfd36ac76dd&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/ec933615-1112-4693-9f19-eb920fc35511&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/ec933615-1112-4693-9f19-eb920fc35511&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/ec933615-1112-4693-9f19-eb920fc35511&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/ec933615-1112-4693-9f19-eb920fc35511&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/da24ba82-6f67-4789-83f0-bbfd36ac76dd&quot;,
+   &quot;stored&quot;: &quot;Patient/da24ba82-6f67-4789-83f0-bbfd36ac76dd&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/ec933615-1112-4693-9f19-eb920fc35511&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468433.013375,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 1,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 33, records: Appointment/77a36797-5b44-4f4c-9806-21affee4c890</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>20 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+ &quot;after&quot;: {
+  &quot;Appointment/77a36797-5b44-4f4c-9806-21affee4c890&quot;: {
+   &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;id&quot;: &quot;77a36797-5b44-4f4c-9806-21affee4c890&quot;,
+   &quot;meta&quot;: {
+    &quot;lastUpdated&quot;: &quot;2026-10-31T17:41:09.105Z&quot;,
+    &quot;versionId&quot;: &quot;ff0b3e47-a0cf-48a0-bc58-22a2beab8bd3&quot;
+   },
+   &quot;participant&quot;: [
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Patient/e38fdac4-2cf1-4ef3-87d9-54cc3d908d06&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    },
+    {
+     &quot;actor&quot;: {
+      &quot;reference&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+     },
+     &quot;status&quot;: &quot;accepted&quot;
+    }
+   ],
+   &quot;resourceType&quot;: &quot;Appointment&quot;,
+   &quot;start&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;status&quot;: &quot;booked&quot;
+  }
+ },
+ &quot;before&quot;: [],
+ &quot;fields&quot;: [
+  {
+   &quot;field&quot;: &quot;status&quot;,
+   &quot;record&quot;: &quot;Appointment/77a36797-5b44-4f4c-9806-21affee4c890&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;booked&quot;,
+   &quot;stored&quot;: &quot;booked&quot;
+  },
+  {
+   &quot;field&quot;: &quot;start&quot;,
+   &quot;record&quot;: &quot;Appointment/77a36797-5b44-4f4c-9806-21affee4c890&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:00:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:00:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;end&quot;,
+   &quot;record&quot;: &quot;Appointment/77a36797-5b44-4f4c-9806-21affee4c890&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;2026-11-17T14:30:00Z&quot;,
+   &quot;stored&quot;: &quot;2026-11-17T14:30:00Z&quot;
+  },
+  {
+   &quot;field&quot;: &quot;patient&quot;,
+   &quot;record&quot;: &quot;Appointment/77a36797-5b44-4f4c-9806-21affee4c890&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Patient/e38fdac4-2cf1-4ef3-87d9-54cc3d908d06&quot;,
+   &quot;stored&quot;: &quot;Patient/e38fdac4-2cf1-4ef3-87d9-54cc3d908d06&quot;
+  },
+  {
+   &quot;field&quot;: &quot;practitioner&quot;,
+   &quot;record&quot;: &quot;Appointment/77a36797-5b44-4f4c-9806-21affee4c890&quot;,
+   &quot;same&quot;: true,
+   &quot;sent&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;,
+   &quot;stored&quot;: &quot;Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f&quot;
+  }
+ ],
+ &quot;recheck&quot;: {
+  &quot;at&quot;: 1793468479.643488,
+  &quot;reasons&quot;: [
+   &quot;since the first check: one record was already the person&quot;
+  ],
+  &quot;verdict&quot;: &quot;CONFIRMED&quot;
+ },
+ &quot;replies&quot;: [
+  201
+ ],
+ &quot;verifier&quot;: {
+  &quot;after_matches&quot;: 1,
+  &quot;agent_write_types&quot;: [
+   &quot;Appointment&quot;
+  ],
+  &quot;agent_writes&quot;: 1,
+  &quot;before_matches&quot;: 0,
+  &quot;other_writes&quot;: 0,
+  &quot;outcome&quot;: &quot;created_verified&quot;,
+  &quot;unattributed_writes&quot;: 0,
+  &quot;unlogged_writes&quot;: 0
+ }
+}</pre></details></div></details></body></html>
