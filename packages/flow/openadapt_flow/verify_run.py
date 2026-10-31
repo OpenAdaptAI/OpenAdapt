@@ -906,6 +906,11 @@ def _database_frame(
             1 for t in new.tables.values() if t.non_transactional
         ),
         "schemas": list(new.schemas),
+        **(
+            {"schemas_skipped": list(new.schemas_skipped)}
+            if new.schemas_skipped
+            else {}
+        ),
         "allow_list_sha256": database.allow_list_sha256(),
         "settle_attempts": used,
         "settle_attempts_allowed": attempts,
