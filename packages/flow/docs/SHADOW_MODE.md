@@ -21,13 +21,19 @@ pass through untouched. For a write (POST, PUT, PATCH or DELETE), the proxy:
 1. finds the route the write matches, and the contract for it;
 2. reads the system of record before the write (the baseline), for at most
    `hold_ms` (default 2,000 ms);
-3. forwards the write unchanged, byte for byte, and returns the server's
-   reply unchanged.
+3. forwards the write and returns the server's reply: the same method,
+   target, headers (in order, repeats included) and body. Hop-by-hop headers
+   (`Connection`, `Transfer-Encoding` and the like) are the connection's own
+   and aren't passed on, so a chunked body goes on with its length instead.
 
 The baseline is the only delay. Each write's added latency is measured and
-shown in the report. If the baseline isn't ready within `hold_ms`, the write
-goes on anyway and its verdict is `UNCERTAIN`. If the shadow fails in any
-way, the write still goes through; the shadow's own error goes in the report.
+shown in the report: the hold for the baseline, plus the proxy's own time,
+which includes opening a new connection to the server for each request. If
+the baseline isn't ready within `hold_ms`, the write goes on anyway and its
+verdict is `UNCERTAIN`. If the shadow fails in any way, the write still goes
+through and the shadow's error goes in the report. If the server can't be
+reached or drops the connection, the agent's connection is closed with no
+reply, as it would be without the shadow; the shadow never makes up a status.
 
 Writes that touch the same record (the same contract and identity values,
 or a later write to the record an earlier one created) form one episode: a
@@ -60,8 +66,10 @@ Verdicts use the verifier's vocabulary:
 | `UNCERTAIN` | It couldn't be read, the baseline wasn't ready, the write has no contract, or the agent was still writing while it was checked. |
 
 The verdict fails closed: whatever can't be read is `UNCERTAIN`, never
-`CONFIRMED`. Shadow mode uses its own write ledger in the output folder,
-never the agent's, so it can't hold or refuse any of the agent's writes.
+`CONFIRMED`. A write the server refused, with nothing landed, is
+`UNCERTAIN` too: the write isn't there, and nothing landed wrong. Shadow mode
+uses no write ledger (`ledger=None`), so it can't hold or refuse any of the
+agent's writes. The baselines and receipts go in the output folder.
 
 ## Where the contract comes from
 
@@ -101,8 +109,14 @@ Keep it where the system of record's data may be kept.
 - Only writes that pass through the proxy are seen as the agent's. A write
   the agent makes another way shows only as a change the frame or the change
   feed sees, inside another write's check.
-- Writes of two episodes that overlap in time are checked together. A write
-  the agent makes while an episode is checked makes that episode
+- Checks wait until no write is in flight. Writes of other episodes not yet
+  checked are left out of an episode's judgment (each is judged on its own).
+  A write the agent makes while an episode is checked makes that episode
   `UNCERTAIN`.
-- A delayed write that lands after the check is outside it. A contract with
-  `frame.database.recheck_after_s` gets its recheck (`sql` mode).
+- A delayed write that lands after the check is outside it. With a
+  contract that sets `frame.database.recheck_after_s` (`sql` mode), a
+  `CONFIRMED` says it is provisional and when the recheck is due; shadow mode
+  doesn't run the recheck itself.
+- The server's links (`Location`, `fullUrl`) name the server, not the
+  shadow. An agent that follows them goes around the shadow, and those writes
+  show only as unexplained changes inside other checks.

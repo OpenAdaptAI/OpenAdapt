@@ -138,13 +138,16 @@ def _item(c: dict[str, Any]) -> str:
 def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str:
     n = doc["counts"]
     tiles = "".join(
-        f"<div class=tile><b class={v}>{n[v]}</b>{v.title()}</div>" for v in ORDER
+        f"<div class=tile><b class={v}>{n[v]}</b>{v.title()}</div>"
+        for v in (*ORDER, "PENDING")
+        if v != "PENDING" or n[v]
     )
     oh = doc["overhead_ms"]["added_total"]
     sections = []
     for v, title in (
         ("REFUTED", "Landed wrong"),
         ("UNCERTAIN", "Couldn't be confirmed"),
+        ("PENDING", "Never checked (the shadow failed; see its errors)"),
     ):
         items = [c for c in doc["items"] if c["verdict"] == v]
         if items:
@@ -181,8 +184,8 @@ def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str
         f"<title>Shadow report</title><style>{CSS}</style></head><body>"
         "<h1>Shadow report</h1>"
         f"<p class=mute>{doc['mode'].upper()} writes to {html.escape(doc['upstream'])}. "
-        "Each write was checked against the system of record. None was blocked "
-        "or changed.</p>"
+        "Each write was checked against the system of record. The shadow sent "
+        "each one on as the agent sent it and blocked none.</p>"
         f"<p>{doc['writes_seen']} writes seen, in {doc['checks']} checks "
         "(a record's create, retries and corrections are one check).</p>"
         f"<div class=tiles>{tiles}</div>"

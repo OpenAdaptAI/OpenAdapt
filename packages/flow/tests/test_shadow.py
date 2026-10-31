@@ -267,3 +267,15 @@ def test_the_shadow_listens_on_loopback_only(tmp_path: Path) -> None:
             out=tmp_path,
             listen=("0.0.0.0", 0),
         )
+
+
+def test_a_write_the_route_doesnt_fit_is_uncertain_not_refuted(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    app = App(db)
+    sh = _shadow(tmp_path, app, db)
+    sh.routes[0].params["lname"] = "surname"  # a key this write doesn't send
+    assert _post(sh.url, BODY)[0] == 201
+    sh.stop()
+    (item,) = sh.results()["items"]
+    assert item["verdict"] == "UNCERTAIN" and len(app.received) == 1
+    assert "doesn't give lname (at surname)" in item["reasons"][0]

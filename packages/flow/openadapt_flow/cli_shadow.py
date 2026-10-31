@@ -130,6 +130,7 @@ def build(cfg: dict[str, Any], out: Path) -> Any:
         out=out,
         listen=("127.0.0.1", int(cfg.get("listen") or 9670)),
         hold_ms=float(cfg.get("hold_ms", 2000)),
+        upstream_timeout_s=float(cfg.get("upstream_timeout_s", 300)),
         quiet_s=float(cfg.get("quiet_s", 5)),
     )
 
@@ -165,7 +166,9 @@ def cmd_shadow(args: argparse.Namespace) -> int:
     n = doc["counts"]
     print(
         f"{doc['writes_seen']} writes, {doc['checks']} checks: {n['CONFIRMED']} "
-        f"confirmed, {n['REFUTED']} refuted, {n['UNCERTAIN']} uncertain. "
+        f"confirmed, {n['REFUTED']} refuted, {n['UNCERTAIN']} uncertain"
+        + (f", {n['PENDING']} never checked" if n["PENDING"] else "")
+        + ". "
         f"Report: {page}"
     )
     return 0

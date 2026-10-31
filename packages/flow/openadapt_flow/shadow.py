@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, quote, urlsplit
 
 WRITE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
 HOP_BY_HOP = {
@@ -38,6 +38,9 @@ HOP_BY_HOP = {
     "content-length",
 }
 CONFIRMED, REFUTED, UNCERTAIN = "CONFIRMED", "REFUTED", "UNCERTAIN"
+#: Characters a request target keeps as they are (RFC 3986 reserved,
+#: unreserved and "%").
+_SAFE_URL = "/?#[]@!$&'()*+,;=:%-._~"
 
 
 class ShadowConfigError(ValueError):
@@ -97,7 +100,12 @@ def _body_doc(body: bytes, content_type: str) -> Any:
         return None
 
 
+_MISSING = object()
+
+
 def _dotted(doc: Any, path: str) -> Any:
+    """The value at a dotted path, or ``_MISSING`` (a null is a value)."""
+
     node = doc
     for part in path.split("."):
         if isinstance(node, dict) and part in node:
@@ -105,8 +113,16 @@ def _dotted(doc: Any, path: str) -> Any:
         elif isinstance(node, list) and part.isdigit() and int(part) < len(node):
             node = node[int(part)]
         else:
-            return None
+            return _MISSING
     return node
+
+
+class _QuietServer(ThreadingHTTPServer):
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        import sys
+
+        if not isinstance(sys.exc_info()[1], ConnectionError):
+            super().handle_error(request, client_address)
 
 
 class Shadow:
@@ -123,6 +139,7 @@ class Shadow:
         out: Path,
         listen: tuple[str, int] = ("127.0.0.1", 0),
         hold_ms: float = 2000.0,
+        upstream_timeout_s: float = 300.0,
         quiet_s: float = 5.0,
     ) -> None:
         if mode not in ("fhir", "sql"):
@@ -146,6 +163,7 @@ class Shadow:
         self.out = Path(out)
         self.hold_s = max(0.0, hold_ms) / 1000.0
         self.quiet_s = quiet_s
+        self.upstream_timeout_s = upstream_timeout_s
         self.started = time.time()
         self.episodes: list[Episode] = []
         self.writes: list[Write] = []
@@ -158,7 +176,7 @@ class Shadow:
         self._last_write = 0.0
         self._pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="shadow-read")
         self._stop = threading.Event()
-        self.server = ThreadingHTTPServer(listen, self._handler())
+        self.server = _QuietServer(listen, self._handler())
         self.server.daemon_threads = True
         self._threads = [
             threading.Thread(target=self.server.serve_forever, daemon=True),
@@ -198,7 +216,7 @@ class Shadow:
             if not busy:
                 break
             time.sleep(0.05)
-        self._check_due(force=True)
+        self._check_due()
 
     # -- the proxy -------------------------------------------------------------------
 
@@ -235,67 +253,108 @@ class Shadow:
 
     def _handle(self, h: BaseHTTPRequestHandler) -> None:
         t0 = time.perf_counter()
-        body = self._read_body(h)
         method = h.command
         write: Optional[Write] = None
         episode: Optional[Episode] = None
+        try:
+            body = self._read_body(h)
+        except Exception as exc:  # noqa: BLE001 - a body we can't read can't be sent
+            self._note_error(f"unreadable request body for {method}: {exc!r}")
+            h.close_connection = True
+            return
         if method in WRITE_METHODS:
             try:
                 write, episode = self._observe(method, h.path, h.headers, body)
             except Exception as exc:  # noqa: BLE001 - the write goes on regardless
                 self._note_error(f"observe {method}: {exc!r}")
-        held = time.perf_counter()
-        if episode is not None and episode.baseline is not None:
-            self._wait_baseline(episode)
-        if write is not None:
-            write.held_ms = (time.perf_counter() - held) * 1000
-        t_up = time.perf_counter()
-        status, headers, rbody, failure = self._forward(method, h.path, h.headers, body)
-        upstream_s = time.perf_counter() - t_up
+        upstream_s = 0.0
+        reply: Optional[tuple[int, str, list[tuple[str, str]], bytes]] = None
+        failure = ""
         try:
-            h.send_response_only(status)
-            for key, value in headers:
-                h.send_header(key, value)
-            h.send_header("Content-Length", str(len(rbody)))
-            h.end_headers()
-            if method != "HEAD":
-                h.wfile.write(rbody)
-        except OSError:
-            pass  # the agent hung up; the write already went on
-        if write is not None and episode is not None:
-            write.upstream_ms = upstream_s * 1000
-            write.proxy_ms = (time.perf_counter() - t0 - upstream_s) * 1000
-            write.status = status
-            write.error = failure
+            held = time.perf_counter()
+            if episode is not None and episode.baseline is not None:
+                self._wait_baseline(episode)
+            if write is not None:
+                write.held_ms = (time.perf_counter() - held) * 1000
+            t_up = time.perf_counter()
             try:
-                self._answered(episode, write, rbody, headers)
-            except Exception as exc:  # noqa: BLE001
-                self._note_error(f"answered {method}: {exc!r}")
+                reply = self._forward(method, h.path, h.headers, body)
+            except Exception as exc:  # noqa: BLE001 - mirrored as a dropped connection
+                failure = f"upstream failed: {type(exc).__name__}"
+                self._note_error(f"{method} {h.path[:200]}: {failure}")
+            upstream_s = time.perf_counter() - t_up
+            if reply is None:
+                # The agent sees what it would see without the shadow: the
+                # connection ends with no reply. Never a made-up status.
+                h.close_connection = True
+            else:
+                status, reason, headers, rbody = reply
+                try:
+                    h.send_response_only(status, reason or None)
+                    for key, value in headers:
+                        h.send_header(key, value)
+                    h.end_headers()
+                    if method != "HEAD":
+                        h.wfile.write(rbody)
+                except OSError:
+                    pass  # the agent hung up; the write already went on
+        finally:
+            if write is not None and episode is not None:
+                write.upstream_ms = upstream_s * 1000
+                write.proxy_ms = (
+                    time.perf_counter() - t0 - upstream_s
+                ) * 1000 - write.held_ms
+                write.status = reply[0] if reply else 0
+                write.error = failure
+                try:
+                    self._answered(episode, write, reply)
+                except Exception as exc:  # noqa: BLE001
+                    self._note_error(f"answered {method}: {exc!r}")
+                    with self._lock:
+                        episode.in_flight = max(0, episode.in_flight - 1)
 
     def _forward(
         self, method: str, path: str, headers: Any, body: bytes
-    ) -> tuple[int, list[tuple[str, str]], bytes, str]:
+    ) -> tuple[int, str, list[tuple[str, str]], bytes]:
+        """Send the request on unchanged and return the reply unchanged.
+
+        Hop-by-hop headers aside, every header goes on in order, repeats
+        included. A chunked body goes on with its length instead. Raises on
+        a transport failure.
+        """
+
         up = self.upstream
         cls = (
             http.client.HTTPSConnection
             if up.scheme == "https"
             else http.client.HTTPConnection
         )
-        conn = cls(up.hostname, up.port, timeout=300)
+        conn = cls(up.hostname, up.port, timeout=self.upstream_timeout_s)
         target = (up.path.rstrip("/") + path) if up.path not in ("", "/") else path
-        sent = {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP}
-        sent["Host"] = up.netloc
-        if body or method in WRITE_METHODS:
-            sent["Content-Length"] = str(len(body))
+        # http.server decodes the request line as Latin-1; send the same bytes,
+        # with any byte outside ASCII percent-encoded (the same URL).
+        target = quote(target.encode("latin-1"), safe=_SAFE_URL)
         try:
-            conn.request(method, target, body=body or None, headers=sent)
+            conn.putrequest(method, target, skip_host=True, skip_accept_encoding=True)
+            conn.putheader("Host", up.netloc)
+            for key, value in headers.items():
+                if key.lower() not in HOP_BY_HOP:
+                    conn.putheader(key, value)
+            if body or method in WRITE_METHODS or "Content-Length" in headers:
+                conn.putheader("Content-Length", str(len(body)))
+            conn.endheaders(body or None)
             resp = conn.getresponse()
             data = resp.read()
             kept = [(k, v) for k, v in resp.getheaders() if k.lower() not in HOP_BY_HOP]
-            return resp.status, kept, data, ""
-        except (OSError, http.client.HTTPException) as exc:
-            msg = f"upstream unreachable: {type(exc).__name__}"
-            return 502, [("Content-Type", "text/plain")], msg.encode(), msg
+            if resp.status not in (204, 304) and not 100 <= resp.status < 200:
+                length = resp.getheader("Content-Length")
+                kept.append(
+                    (
+                        "Content-Length",
+                        length if method == "HEAD" and length else str(len(data)),
+                    )
+                )
+            return resp.status, resp.reason, kept, data
         finally:
             conn.close()
 
@@ -347,6 +406,12 @@ class Shadow:
             return self._unchecked(name, f"no contract for {name}")
         contract = self.contracts[rtype]
         ref = f"{rtype}/{rid}" if rid else ""
+        params: dict[str, Any] = {}
+        if isinstance(doc, dict) and doc.get("resourceType") == rtype:
+            for name, rule in contract.fields.items():
+                value = extract(doc, rule.path)
+                if value is not None and not isinstance(value, (dict, list)):
+                    params[name] = value
         done = self._by_ref.get(ref) if ref else None
         if done is not None and done.checked:
             ep = self._unchecked(
@@ -355,12 +420,6 @@ class Shadow:
         elif done is not None:
             ep = done
         else:
-            params: dict[str, Any] = {}
-            if isinstance(doc, dict) and doc.get("resourceType") == rtype:
-                for name, rule in contract.fields.items():
-                    value = extract(doc, rule.path)
-                    if value is not None and not isinstance(value, (dict, list)):
-                        params[name] = value
             key = None
             for rule in contract.identity:
                 if all(p in params for p in rule):
@@ -390,9 +449,9 @@ class Shadow:
                         self._fhir_baseline, contract, params
                     )
                     self._by_key[key] = ep
-            if ep.kind == "fhir" and params:
-                ep.params = params  # the agent's latest values (its correction)
-        if ref and ep.kind == "fhir":
+        if ep.kind == "fhir" and params:
+            ep.params = params  # the agent's latest values (its correction)
+        if ref:
             ep.refs.add(ref)
             self._by_ref[ref] = ep
         return ep
@@ -409,6 +468,14 @@ class Shadow:
         if route is None:
             return self._unchecked(line, "no route matches this write")
         params = {p: _dotted(doc, where) for p, where in route.params.items()}
+        missing = sorted(p for p, v in params.items() if v is _MISSING)
+        if missing:
+            return self._unchecked(
+                route.name,
+                "the write doesn't give "
+                + ", ".join(f"{p} (at {route.params[p]})" for p in missing)
+                + ": the route doesn't fit this write",
+            )
         key = (route.name, json.dumps(params, sort_keys=True, default=str))
         ep = self._by_key.get(key)
         if ep is None or ep.checked:
@@ -433,7 +500,7 @@ class Shadow:
 
     def _wait_baseline(self, ep: Episode) -> None:
         fut = ep.baseline
-        if fut is None or fut.done():
+        if fut is None or fut.done() or ep.baseline_note:
             return
         try:
             fut.result(timeout=self.hold_s)
@@ -447,15 +514,14 @@ class Shadow:
                     "so the write went on without a baseline"
                 )
 
-    def _answered(
-        self, ep: Episode, write: Write, rbody: bytes, headers: list[tuple[str, str]]
-    ) -> None:
+    def _answered(self, ep: Episode, write: Write, reply: Optional[tuple]) -> None:
         with self._lock:
             ep.in_flight -= 1
             ep.last_end = time.time()
             self._last_write = max(self._last_write, ep.last_end)
-            if self.mode != "fhir" or write.status // 100 != 2:
+            if self.mode != "fhir" or reply is None or write.status // 100 != 2:
                 return
+            _, _, headers, rbody = reply
             refs = []
             try:
                 doc = json.loads(rbody) if rbody else None
@@ -480,14 +546,16 @@ class Shadow:
         while not self._stop.wait(0.25):
             if self.idle_s() >= self.quiet_s:
                 try:
-                    self._check_due(force=False)
+                    self._check_due()
                 except Exception as exc:  # noqa: BLE001
                     self._note_error(f"checker: {exc!r}")
 
-    def _check_due(self, force: bool) -> None:
+    def _check_due(self) -> None:
         with self._check_lock:
             with self._lock:
-                due = [e for e in self.episodes if not e.checked and not e.in_flight]
+                if any(e.in_flight for e in self.episodes):
+                    return  # a write still in flight would land in every window
+                due = [e for e in self.episodes if not e.checked]
                 seq = self._seq
             for ep in due:
                 try:
@@ -532,12 +600,20 @@ class Shadow:
             Unreadable,
             extra_elements,
             extract,
+            same,
             verify_ensure,
         )
 
         contract = ep.contract
         with self._lock:
-            declared = [r for o in self.episodes if o is not ep for r in o.refs]
+            # Only episodes not yet checked: a record checked earlier that
+            # moves again counts in this window like any other change.
+            declared = [
+                r
+                for o in self.episodes
+                if o is not ep and not o.checked
+                for r in o.refs
+            ]
         result = verify_ensure(contract, ep.params, base, declared=declared)
         ev = result.evidence
         ep.evidence["verifier"] = {"outcome": result.outcome, **ev}
@@ -549,18 +625,19 @@ class Shadow:
                     f"the agent got an error reply ({', '.join(map(str, statuses))}) "
                     "but the write landed"
                 )
+        elif result.outcome == "found_existing":
+            # A conditional create answered with the record already there.
+            ep.verdict, ep.reasons = CONFIRMED, list(result.reasons)
         elif ev.get("unreadable"):
             ep.verdict, ep.reasons = UNCERTAIN, list(result.reasons)
         elif result.outcome == "needs_review" and landed == 0 and "agent_writes" in ev:
-            if all(s // 100 in (4,) for s in statuses):
-                ep.verdict = CONFIRMED
-                ep.reasons = ["the server refused the write and nothing was written"]
-            else:
-                ep.verdict = UNCERTAIN
-                ep.reasons = [
-                    f"the reply was {', '.join(map(str, statuses))} but the store "
-                    "shows no write by the agent"
-                ] + list(result.reasons)
+            # Nothing of the agent's landed: never CONFIRMED (the write isn't
+            # there), never REFUTED (nothing landed wrong).
+            ep.verdict = UNCERTAIN
+            ep.reasons = [
+                f"the reply was {', '.join(map(str, statuses)) or 'none'} and the "
+                "store shows no write by the agent"
+            ] + list(result.reasons)
         else:
             ep.verdict, ep.reasons = REFUTED, list(result.reasons)
         # Evidence: what the agent sent, and what the store holds now.
@@ -590,7 +667,8 @@ class Shadow:
                         "field": name,
                         "sent": sent,
                         "stored": got,
-                        "same": str(sent) == str(got),
+                        "same": name in ep.params
+                        and same(contract, name, got, ep.params[name]),
                     }
                 )
             if contract.closed:
@@ -613,6 +691,12 @@ class Shadow:
         result = verify_write(pending, seal=False)
         ep.verdict = result.outcome.value
         ep.reasons = list(result.reasons)
+        if result.provisional:
+            ep.reasons.append(
+                f"provisional: the contract's recheck is due at {result.recheck_due_at}; "
+                "run it with verifier.recheck (shadow mode doesn't run it)"
+            )
+            ep.evidence["recheck_due_at"] = result.recheck_due_at
         ep.evidence["verifier"] = {
             "checked": result.checked,
             "observed": result.observed,

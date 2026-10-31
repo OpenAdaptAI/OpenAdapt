@@ -40,6 +40,8 @@ from benchmark.fhir_medplum.public.run import (
 
 
 def case_verdict(verdicts: list[str]) -> str:
+    if any(not v for v in verdicts):
+        return "PENDING"
     for v in ("REFUTED", "UNCERTAIN", "CONFIRMED"):
         if v in verdicts:
             return v
