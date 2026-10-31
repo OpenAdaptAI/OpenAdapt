@@ -197,11 +197,13 @@ task gives, and a generated token (a UUID) are recognized as such. Columns
 that differ between demonstrations, free text every demonstration left
 empty, and the write's time stamps are listed in the bookkeeping question,
 and each is left unchecked only if the answer names it (`unchecked`). Free
-text the answer doesn't name must stay empty on the main record and its
-child rows, and hold its default on a row the app adds beside the write; a
-kind with any other column the answer doesn't name gets no contract. The
-proposed answer names every listed column, so accepting it is explicit; a
-person leaves a column out to have it checked.
+text the answer doesn't name must stay empty: on the main record and its
+child rows NULL or `''`, and on a row the app adds beside the write the
+empty value every demonstration stored there. A kind with any other column
+the answer doesn't name gets no contract. The proposed answer names the
+columns that vary or are time stamps, so accepting it is explicit, and
+leaves free text out: a person adds a free-text column to `unchecked` only
+on purpose.
 
 **Rows the app adds on its own.** A row type the app added the same number of
 times in every demonstration (an agenda event, a stream note, a price-history
@@ -247,16 +249,20 @@ fails and no contract is written.
 user's save to the target inside the window stops the write. The generator
 first takes a whole-number column named as a version that went up by one in
 every demonstration (Redmine's `lock_version`): every existing record has a
-version there. Otherwise it takes the app's own audit trail when every update
-demonstration added a row there that names the record and the acting user
-(EspoCRM's `action_history_record`, Dolibarr's agenda events). The read is narrowed to the record's type and to write events: a
-text column, not an id, that holds one code of letters and underscores in
-every row any update kind added (so it doesn't vary with the fields saved)
-and only other codes in the rows create kinds added (EspoCRM's `action`).
-The read keeps the update code and the create codes, so a record the app
-created has a first version, and another user only viewing the record
-doesn't count. A time stamp or a token the demonstrations happened to share
-is never used. Only the main record is a target (`target_surface`). A target
+version there. Such a column is trusted to step from the stored value on
+every save. An app that writes back the version its form carried, without
+checking it, makes another user's save and the agent's stale one a single
+step, which this check can't see. An app with an audit trail of saves can
+read that trail as well (a hand-written `frame.versions`), since authors
+catch what a step count can't. Otherwise it takes the app's own audit trail
+when every update demonstration added a row there that names the record and
+the acting user (EspoCRM's `action_history_record`, Dolibarr's agenda
+events); the audit table's own key never counts as the record's. The read
+is narrowed to the record's type, and every entry counts as a save except
+an event code shown to be a read: one a demonstration logged on a record it
+didn't add or change, and no demonstration logged on one it did. A code no
+demonstration showed (a bulk edit, an import) and a NULL code count as
+saves. Only the main record is a target (`target_surface`). A target
 the read before the write doesn't show as new is treated as existing, and
 with no version before the write it stops as `missing` (a record saved
 before the trail began, or outside the app). With neither, the update has no
@@ -274,8 +280,9 @@ The generator never leaves a step for a person to apply later. A contract
 that needs something the store doesn't have is either set up, with a flag
 and an admin connection you give, or not written, with the reason.
 
-The read account must be read-only. On PostgreSQL the check uses its
-effective privileges, so a role it is a member of counts: `INSERT`,
+The read account must be read-only. On PostgreSQL the check uses the
+privileges of every role it can act as (a role it inherits, or
+one it can `SET ROLE` to), and column grants count too: `INSERT`,
 `UPDATE`, `DELETE`, `TRUNCATE`, `TRIGGER` or `REFERENCES` on any table,
 `USAGE` or `UPDATE` on a sequence, or `CREATE` on a schema or the database
 stops the generator.

@@ -628,7 +628,15 @@ def column_roles(
             # Free text the task doesn't give and the demonstrations left
             # empty (a line's description, a note): an agent may fill it
             # from the record it copies, so it isn't checked.
-            out[name] = ColumnRole("free")
+            # The empty value the demonstrations stored: NULL, '' or both.
+            empty = (
+                "null"
+                if distinct == {None}
+                else "text"
+                if distinct == {""}
+                else "mixed"
+            )
+            out[name] = ColumnRole("free", detail={"empty": empty})
             continue
         if len(distinct) == 1:
             v = values[0]

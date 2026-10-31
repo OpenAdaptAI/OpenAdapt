@@ -1144,7 +1144,9 @@ def _audit_source(
             for ch in d.diff.of(name, "added"):
                 r = ch.after or {}
                 for lc, lv in r.items():
-                    if lv != key:
+                    # The audit row's own id never names the record, even
+                    # when it happens to equal the record's id.
+                    if lv != key or lc in table.primary_key:
                         continue
                     for ac, av in r.items():
                         if ac != lc and av in actors:
@@ -1178,20 +1180,29 @@ def _audit_source(
                 v = next(iter(values))
                 if v is not None and v.lower() in names and v.isidentifier():
                     where[col.name] = v
-        # Write events only (another user only viewing the record doesn't
-        # count): a code column (letters and underscores, not an id) that
-        # holds one value in every row any update kind's demonstrations
-        # added here, so it doesn't vary with the fields saved, and only
-        # other codes in the rows create kinds added. The read keeps those
-        # codes, the update's and the creates' (a record the app created has
-        # its first version then). A time stamp, a token or a text the
-        # demonstrations happened to share is never used.
-        updated = [
-            ch.after or {} for d in update_demos for ch in d.diff.of(name, "added")
-        ]
-        created = [
-            ch.after or {} for d in create_demos for ch in d.diff.of(name, "added")
-        ]
+        # Every entry counts as a save except a code shown to be a read: a
+        # demonstration logged it on a record of this table it didn't add or
+        # change, and no demonstration logged it on one it did. An unseen
+        # code (a bulk edit, an import) or a NULL one counts as a save.
+        pk = t.primary_key[0]
+        reads: dict[str, set[str]] = {}
+        writes: dict[str, set[str]] = {}
+        for d in [*create_demos, *update_demos]:
+            moved = {
+                str((ch.after or ch.before or {}).get(pk))
+                for kind in ("added", "changed")
+                for ch in d.diff.of(plan.anchor, kind)
+            }
+            for ch in d.diff.of(name, "added"):
+                r = ch.after or {}
+                rid = r.get(lc)
+                if rid is None:
+                    continue
+                side = writes if str(rid) in moved else reads
+                for col in table.columns:
+                    v = r.get(col.name)
+                    if v is not None:
+                        side.setdefault(col.name, set()).add(v)
         for col in table.columns:
             if (
                 col.name in (lc, ac)
@@ -1201,18 +1212,9 @@ def _audit_source(
                 or col.name in where
             ):
                 continue
-            mine = {r.get(col.name) for r in updated}
-            theirs = {r.get(col.name) for r in created}
-            codes = mine | theirs
-            if (
-                len(mine) == 1
-                and theirs
-                and not (mine & theirs)
-                and all(
-                    x is not None and re.fullmatch(r"[A-Za-z_]{1,64}", x) for x in codes
-                )
-            ):
-                where[col.name] = sorted(x for x in codes if x is not None)
+            deny = reads.get(col.name, set()) - writes.get(col.name, set())
+            if deny and all(re.fullmatch(r"[A-Za-z_]{1,64}", x) for x in deny):
+                where[col.name] = {"not_in": sorted(deny)}
         found = {
             "kind": "audit",
             "table": name,
@@ -1247,12 +1249,16 @@ def _versions_frame(
         }
     table = v["table"]
     vpk = b.schema.tables[table].primary_key[0]
-    conds = " AND ".join(
-        f"{b.text('t', table, c)} = {b.literal(val)}"
-        if isinstance(val, str)
-        else f"{b.text('t', table, c)} IN ({', '.join(b.literal(x) for x in val)})"
-        for c, val in sorted(v["where"].items())
-    )
+
+    def cond(c: str, val: Any) -> str:
+        if isinstance(val, str):
+            return f"{b.text('t', table, c)} = {b.literal(val)}"
+        # A deny-list of read codes: a NULL code still counts as a save.
+        ref = b.text("t", table, c)
+        listed = ", ".join(b.literal(x) for x in val["not_in"])
+        return f"({ref} IS NULL OR {ref} NOT IN ({listed}))"
+
+    conds = " AND ".join(cond(c, val) for c, val in sorted(v["where"].items()))
     sql = (
         f"SELECT {b.text('t', table, v['record_column'])} AS {b.q('id')}, "
         f"{b.text('t', table, vpk)} AS {b.q('ver')}, "
@@ -2200,11 +2206,20 @@ def _raw_effect(
             or (role.detail or {}).get("is_default")
         ):
             if role is not None and role.role in OPEN_ROLES:
-                # Set freely only when the person named it unchecked; else
-                # it must hold its default (the frame reads these rows from
-                # the table itself, so no computed pin applies).
+                # Set freely only when the person named it unchecked. Free
+                # text not named holds the empty value every demonstration
+                # stored (NULL or ''), matched on the row itself; anything
+                # else must hold its default.
                 if c.name in settings.unchecked.get(table, set()):
                     nrf.add(c.name)
+                elif role.role == "free":
+                    empty = (role.detail or {}).get("empty")
+                    if empty == "null":
+                        m[c.name] = {"null": True}
+                        nrf.add(c.name)
+                    elif empty == "text":
+                        m[c.name] = {"literal": ""}
+                        nrf.add(c.name)
                 continue
             if role is None or role.role in ("key", "link", "copied", "actor"):
                 nrf.add(c.name)
@@ -2504,62 +2519,76 @@ def check_read_only(connect: Any, dialect: str) -> list[str]:
                     ):
                         problems.append(f"the read account has {word}: {grant}")
         else:
-            cur.execute(
-                "SELECT rolsuper, rolcreaterole, rolcreatedb FROM pg_roles "
-                "WHERE rolname = current_user"
+            # Every role the account is, inherits, or can SET ROLE to (a
+            # NOINHERIT membership): what any of them can do, the account can.
+            roles = (
+                "(SELECT oid, rolname, rolsuper, rolcreaterole, rolcreatedb "
+                "FROM pg_roles WHERE pg_has_role(current_user, oid, 'MEMBER')) r"
             )
-            row = cur.fetchone()
-            if row and any(row):
-                problems.append(
-                    "the read account is a superuser or can create roles or databases"
-                )
-            # Effective privileges, so a role the account is a member of (or a
-            # predefined role such as pg_write_all_data) counts too, on every
-            # table, view and sequence of every schema the app can use.
             user_schemas = (
                 "n.nspname NOT IN ('pg_catalog', 'information_schema') "
                 "AND n.nspname NOT LIKE 'pg\\_toast%' "
                 "AND n.nspname NOT LIKE 'pg\\_temp%'"
             )
+
+            def who(role: str) -> str:
+                return "the read account" + ("" if role == user else f" (as {role})")
+
+            cur.execute("SELECT current_user")
+            user = str(cur.fetchone()[0])
             cur.execute(
-                "SELECT n.nspname, c.relname, p.priv FROM pg_class c "
-                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "SELECT r.rolname FROM " + roles + " WHERE r.rolsuper OR "
+                "r.rolcreaterole OR r.rolcreatedb ORDER BY 1"
+            )
+            for (role,) in cur.fetchall():
+                problems.append(
+                    f"{who(role)} is a superuser or can create roles or databases"
+                )
+            cur.execute(
+                "SELECT r.rolname, n.nspname, c.relname, p.priv FROM " + roles + " "
+                "CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
                 "CROSS JOIN unnest(ARRAY['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', "
                 "'TRIGGER', 'REFERENCES']) AS p(priv) "
                 "WHERE c.relkind IN ('r', 'p', 'v', 'm', 'f') AND "
                 + user_schemas
-                + " AND has_table_privilege(c.oid, p.priv) "
-                "ORDER BY 1, 2, 3 LIMIT 20"
+                + " AND (has_table_privilege(r.oid, c.oid, p.priv) OR (p.priv IN "
+                "('INSERT', 'UPDATE', 'REFERENCES') AND "
+                "has_any_column_privilege(r.oid, c.oid, p.priv))) "
+                "ORDER BY 1, 2, 3, 4 LIMIT 20"
             )
-            for schema_name, t, priv in cur.fetchall():
+            for role, schema_name, t, priv in cur.fetchall():
                 problems.append(
-                    f"the read account has {priv} on table {schema_name}.{t}"
+                    f"{who(role)} has {priv} on table {schema_name}.{t} "
+                    "(or on one of its columns)"
                 )
             cur.execute(
-                "SELECT n.nspname, c.relname, p.priv FROM pg_class c "
-                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "SELECT r.rolname, n.nspname, c.relname, p.priv FROM " + roles + " "
+                "CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
                 "CROSS JOIN unnest(ARRAY['USAGE', 'UPDATE']) AS p(priv) "
                 "WHERE c.relkind = 'S' AND "
                 + user_schemas
-                + " AND has_sequence_privilege(c.oid, p.priv) "
-                "ORDER BY 1, 2, 3 LIMIT 20"
+                + " AND has_sequence_privilege(r.oid, c.oid, p.priv) "
+                "ORDER BY 1, 2, 3, 4 LIMIT 20"
             )
-            for schema_name, t, priv in cur.fetchall():
+            for role, schema_name, t, priv in cur.fetchall():
                 problems.append(
-                    f"the read account has {priv} on sequence {schema_name}.{t} "
+                    f"{who(role)} has {priv} on sequence {schema_name}.{t} "
                     "(it can move the counter)"
                 )
             cur.execute(
-                "SELECT n.nspname FROM pg_namespace n WHERE "
+                "SELECT r.rolname, n.nspname FROM " + roles + " "
+                "CROSS JOIN pg_namespace n WHERE "
                 + user_schemas
-                + " AND has_schema_privilege(n.oid, 'CREATE') ORDER BY 1"
+                + " AND has_schema_privilege(r.oid, n.oid, 'CREATE') ORDER BY 1, 2"
             )
-            for (schema_name,) in cur.fetchall():
-                problems.append(f"the read account has CREATE on schema {schema_name}")
-            cur.execute("SELECT has_database_privilege(current_database(), 'CREATE')")
-            row = cur.fetchone()
-            if row and row[0]:
-                problems.append("the read account has CREATE on the database")
+            for role, schema_name in cur.fetchall():
+                problems.append(f"{who(role)} has CREATE on schema {schema_name}")
+            cur.execute(
+                "SELECT r.rolname FROM " + roles + " WHERE "
+                "has_database_privilege(r.oid, current_database(), 'CREATE') ORDER BY 1"
+            )
+            for (role,) in cur.fetchall():
+                problems.append(f"{who(role)} has CREATE on the database")
     finally:
         conn.rollback()
         conn.close()
@@ -2964,6 +2993,15 @@ def propose(
     for own_cols in open_by_kind.values():
         for t, roles_of in own_cols.items():
             unchecked.setdefault(t, set()).update(roles_of)
+    proposed_open: dict[str, list[str]] = {}
+    for own_cols in open_by_kind.values():
+        for t, roles_of in own_cols.items():
+            for c, role_name in roles_of.items():
+                if role_name != "free":
+                    proposed_open.setdefault(t, [])
+                    if c not in proposed_open[t]:
+                        proposed_open[t].append(c)
+    proposed_open = {t: sorted(c) for t, c in sorted(proposed_open.items())}
     for t, cols in unchecked_named.items():
         extra = cols - unchecked.get(t, set())
         if extra:
@@ -3073,13 +3111,11 @@ def propose(
                 "columns_remove and unchecked. An answer can name only what this "
                 "question lists. Unanswered, nothing is excused, no table is a "
                 "log and no column is left unchecked.",
-                # The proposal names every listed column, so accepting it is
-                # explicit; a person may leave any out to have it checked.
-                {
-                    "accept": True,
-                    "unchecked": {t: sorted(c) for t, c in sorted(unchecked.items())},
-                }
-                if unchecked
+                # The proposal names the columns that vary or are time stamps,
+                # so accepting it is explicit. Free text every demonstration
+                # left empty stays pinned empty unless the person adds it.
+                {"accept": True, "unchecked": proposed_open}
+                if proposed_open
                 else "accept",
             )
         )

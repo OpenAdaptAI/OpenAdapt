@@ -188,9 +188,10 @@ def _fresh(app: AppV, subject: str) -> int:
 def test_versions_read_write_events_of_creates_and_updates(gv: dict[str, Any]) -> None:
     v = gv["report"]["kinds"]["edit_description"]["versions"]
     assert v["kind"] == "audit" and v["table"] == "audits", v
-    # Compared only with creates; a column that varies with the fields saved
-    # (field_name) is never a filter.
-    assert v["where"] == {"action": ["create", "update"]}, v
+    # No demonstration logged a code on a record it didn't change, so no
+    # code is shown to be a read: every entry counts as a save. A column
+    # that varies with the fields saved (field_name) is never a filter.
+    assert v["where"] == {}, v
 
 
 def test_correct_status_update_confirmed(gv: dict[str, Any]) -> None:
