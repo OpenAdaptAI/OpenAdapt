@@ -456,6 +456,12 @@ class FrameSpec(BaseModel):
     #: Fields of a pre-existing target record the save may change. Unset:
     #: the fields the effects name.
     target_fields: Optional[list[str]] = None
+    #: Surface -> the fields a declared row of that surface may change
+    #: (a database table counts as the surface ``database.views`` maps it
+    #: to). Set: it replaces ``target_fields`` for every declared row, and a
+    #: surface it doesn't list may change nothing, so a row touched beside
+    #: the write can't take the target's fields.
+    target_fields_by_surface: Optional[dict[str, list[str]]] = None
     attribution: Optional[FrameAttribution] = None
     #: Rows the save adds beside each new declared record (``FrameSideRecord``).
     side_records: list[FrameSideRecord] = Field(default_factory=list)
@@ -473,6 +479,8 @@ class FrameSpec(BaseModel):
         data: dict[str, Any] = handler(self)
         if data.get("versions") is None:
             data.pop("versions", None)
+        if data.get("target_fields_by_surface") is None:
+            data.pop("target_fields_by_surface", None)
         return data
 
     @model_validator(mode="after")
@@ -839,6 +847,13 @@ def judge_frame(
         surface_ignore |= set(attribution.server_set)
     written = declared_fields(effects)
     may_change = set(spec.target_fields) if spec.target_fields is not None else written
+    if spec.target_fields_by_surface is not None:
+        # Every field any declared row may change, for the attribution check.
+        may_change = (
+            set().union(*spec.target_fields_by_surface.values())
+            if (spec.target_fields_by_surface)
+            else set()
+        )
     if attribution is not None and attribution.kind == "record_field":
         # A field this run writes (or any run parameter names) is not evidence
         # of who changed a record: refuse the attribution, fail closed.
@@ -1323,6 +1338,15 @@ def judge_frame(
     concurrent: list[FrameChange] = []
     added_by_others: set[tuple[str, str]] = set()
     views_of = dict(database.views) if database is not None else {}
+
+    def may_change_for(name: str) -> set[str]:
+        by_surface = spec.target_fields_by_surface
+        if by_surface is None:
+            return may_change
+        if name in by_surface:
+            return set(by_surface[name])
+        return set(by_surface.get(views_of.get(name, ""), []))
+
     declared_keys: set[str] = set()
     #: What an audit entry names for each compared record (``ref_of``).
     refs: dict[tuple[str, str], tuple[Any, Optional[str]]] = {}
@@ -1542,12 +1566,13 @@ def judge_frame(
                 if after is None:
                     continue  # a removed target: the delta check's case
                 fields = changed(name, before, after)  # type: ignore[arg-type]
-                stray = [f for f in fields if f not in may_change]
+                row_may = may_change_for(name)
+                stray = [f for f in fields if f not in row_may]
                 if other_on_target(name, key, before, after):
                     ref, field = ref_of(name, key, before, after)
                     if (
                         fields
-                        and not (set(fields) & may_change)
+                        and not (set(fields) & row_may)
                         and attribution is not None
                         and attribution.write_events
                         and attribution.table_field
