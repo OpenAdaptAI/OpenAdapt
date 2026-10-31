@@ -1436,6 +1436,24 @@ def verify_ledger_release(
 
 
 @main.command(
+    "shadow",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def shadow(command_ctx: click.Context) -> None:
+    """Check each write your agent makes against the system of record.
+
+    Never blocks or changes a write; writes report.html and report.json.
+    Same as `openadapt flow shadow`.
+    """
+    _run_flow(["shadow", *command_ctx.args])
+
+
+@main.command(
     "agent",
     context_settings={
         "ignore_unknown_options": True,
