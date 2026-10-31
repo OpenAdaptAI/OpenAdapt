@@ -652,7 +652,7 @@ def column_roles(
         ):
             out[name] = ColumnRole("varies", detail={"why": "holds the row's own key"})
             continue
-        part = _date_part(values, [d for d, _ in rows])
+        part = None if one else _date_part(values, [d for d, _ in rows])
         if part is not None:
             out[name] = ColumnRole(
                 "varies", detail={"why": f"the {part} of a date the task gives"}
