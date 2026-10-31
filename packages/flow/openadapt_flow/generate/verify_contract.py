@@ -2800,9 +2800,16 @@ def propose(
     candidates = set().union(*(p.log_candidates for p in plans)) if plans else set()
     logs = log_add if accepted else set()
     sides = sorted({f"{s.table} ({s.count} per write)" for p in plans for s in p.sides})
+    # A table the person calls a log (one the demonstrations added rows to:
+    # a candidate or a counted side table) is a log for every kind, since
+    # an app logs every request, not only the kind a demonstration made.
+    added_to = candidates | {s.table for p in plans for s in p.sides}
+    for p in plans:
+        added_to |= p.logs
+    logs = logs & added_to
     for p in plans:  # a table the person calls a log is no longer counted
         p.sides = [x for x in p.sides if x.table not in logs]
-        p.logs = (candidates & logs) | (p.logs & logs)
+        p.logs = set(logs)
     unexcused = {t: c for p in plans for t, c in p.unexcused.items()}
     if proposed or offered or unchecked or candidates or sides or unexcused:
         lines = []
