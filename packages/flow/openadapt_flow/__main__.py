@@ -12092,6 +12092,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_shadow(sub)
 
+    from openadapt_flow.learn import register as _register_learn
+
+    _register_learn(sub)
+
     from openadapt_flow.cli_cleanup import register as _register_cleanup
 
     _register_cleanup(sub)

@@ -1454,6 +1454,24 @@ def shadow(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "learn",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def learn(command_ctx: click.Context) -> None:
+    """Learn the app's own per-request writes, then approve them as excuses.
+
+    collect (from a shadow run), propose, approve. Same as
+    `openadapt flow learn`.
+    """
+    _run_flow(["learn", *command_ctx.args])
+
+
+@main.command(
     "agent",
     context_settings={
         "ignore_unknown_options": True,
