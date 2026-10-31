@@ -2963,6 +2963,13 @@ def propose(
     for own_cols in open_by_kind.values():
         for t, roles_of in own_cols.items():
             unchecked.setdefault(t, set()).update(roles_of)
+    must_name: dict[str, list[str]] = {}
+    for own_cols in open_by_kind.values():
+        for t, roles_of in own_cols.items():
+            for c, role_name in roles_of.items():
+                if role_name != "free" and c not in must_name.get(t, []):
+                    must_name.setdefault(t, []).append(c)
+    must_name = {t: sorted(c) for t, c in sorted(must_name.items())}
     for t, cols in unchecked_named.items():
         extra = cols - unchecked.get(t, set())
         if extra:
@@ -3072,12 +3079,9 @@ def propose(
                 "columns_remove and unchecked. An answer can name only what this "
                 "question lists. Unanswered, nothing is excused, no table is a "
                 "log and no column is left unchecked.",
-                {
-                    "accept": True,
-                    "unchecked": {t: sorted(c) for t, c in sorted(unchecked.items())},
-                }
-                if unchecked
-                else "accept",
+                # The proposal names only the columns that vary or are time
+                # stamps: free text left empty is better pinned empty.
+                {"accept": True, "unchecked": must_name} if must_name else "accept",
             )
         )
     # Q: the recheck window (frame.database.recheck_after_s).
