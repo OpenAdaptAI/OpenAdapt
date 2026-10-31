@@ -37,6 +37,12 @@ What is not proposed (the reasons are returned):
 - a folded step made a read whose response must show text the GUI checks,
   and that text is in no response.
 
+Page script on the form (field handlers, an ``onsubmit`` validator, a submit
+listener, validate.js rules such as ``pastDate``) is not a reason to refuse:
+it is listed in ``client_scripts`` and the runtime runs it on the run's
+values before each save, with writes blocked; when it can't, the GUI steps
+run.
+
 Model-free and deterministic.
 """
 
@@ -61,14 +67,15 @@ from openadapt_flow.ir import (
     WebFormField,
     WebFormPrecheck,
     WebFormSpec,
+    WebFormWrite,
     Workflow,
 )
 from openadapt_flow.runtime.actuators.web_form import (
     client_rules,
     folded_checks_digest,
     form_controls,
-    form_scripts,
-    unsupported_client_rules,
+    page_scripts,
+    web_form_effects,
 )
 
 
@@ -241,6 +248,212 @@ def _success_pattern(line: dict[str, Any]) -> Optional[str]:
     return r".*?".join(pieces)
 
 
+def _in_page(selector: str, html: str) -> bool:
+    """Whether a recorded ``#id`` or ``[name="..."]`` selector names a control
+    of ``html`` that can start a submit (a ``<button>``, or an ``<input>`` of
+    type submit, button or image)."""
+
+    m = re.fullmatch(r"#([A-Za-z][\w:.-]*)", selector)
+    attr, value = ("id", m.group(1)) if m else (None, None)
+    if attr is None:
+        m = re.fullmatch(r"""\[name=["']?([^"'\]]+)["']?\]""", selector)
+        attr, value = ("name", m.group(1)) if m else (None, None)
+    if attr is None:
+        return False
+    tag = re.search(
+        r"""<(button|input)\b[^>]*\b%s\s*=\s*["']%s["'][^>]*>"""
+        % (attr, re.escape(value)),
+        html,
+        re.I,
+    )
+    if tag is None:
+        return False
+    if tag.group(1).lower() == "button":
+        return True
+    kind = re.search(r"""\btype\s*=\s*["']?(\w+)""", tag.group(0), re.I)
+    return bool(kind) and kind.group(1).lower() in ("submit", "button", "image")
+
+
+def _selector(step: Step, events: list[dict[str, Any]]) -> Optional[str]:
+    """The CSS selector a recorded click targeted, when it has one."""
+
+    if step.anchor is not None and step.anchor.structural is not None:
+        return step.anchor.structural.selector
+    i = _event_index(step)
+    if i is not None and i < len(events):
+        return (events[i].get("structural") or {}).get("selector")
+    return None
+
+
+def _submitter(
+    folded: list[Step],
+    events: list[dict[str, Any]],
+    lines: list[dict[str, Any]],
+    form_html: str,
+    post: dict[str, Any],
+) -> tuple[Optional[str], list[str]]:
+    """The last folded click on a control of the form page, and what it requested.
+
+    A recorded event is stamped once the screen has settled, so the requests
+    a click made fall between the previous event and the next one. Requests
+    from the save on belong to the save, so only the save step itself (when
+    it is the control) counts the save request.
+    """
+
+    for step in reversed(folded):
+        if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            continue
+        i = _event_index(step)
+        selector = _selector(step, events)
+        if not selector or not _in_page(selector, form_html) or i is None:
+            continue
+        lo = float(events[i - 1]["t"]) if 0 < i <= len(events) else float("-inf")
+        hi = float(events[i + 1]["t"]) if i + 1 < len(events) else float("inf")
+        made = {
+            f"{ln['method']} {_path(ln['url'])}"
+            for ln in lines
+            if lo < float(ln["t"]) < min(hi, float(post["t"]))
+        }
+        if step is folded[-1]:
+            made.add(f"POST {_path(post['url'])}")
+        return selector, sorted(made)
+    return None, []
+
+
+def _span_writes(
+    lines: list[dict[str, Any]],
+    post: dict[str, Any],
+    form_line: dict[str, Any],
+    folded: list[Step],
+    events: list[dict[str, Any]],
+    controls: dict[str, Any],
+    typed: dict[str, Optional[str]],
+    params: dict[str, str],
+) -> tuple[list[WebFormWrite], list[str]]:
+    """Every other write sent while the replaced steps ran, each with its role.
+
+    ``ambient`` when the page sent it on its own: a script request (fetch or
+    XHR) from another document than the form, one loaded before the form
+    opened, to an endpoint the form page's source doesn't name. ``step``
+    otherwise: sent in its recorded place before the save, rebuilt from a
+    form-encoded body whose every field is a typed parameter (by provenance,
+    as for the save), a session value or an unchanged form default, and read
+    back by the record check of the step it was sent during. Returns the
+    problems that refuse the proposal.
+    """
+
+    form_t, post_t = float(form_line["t"]), float(post["t"])
+    form_doc = _path(form_line["url"])
+    form_html = form_line.get("response_text") or ""
+    loaded_before = {
+        ln["url"]
+        for ln in lines
+        if ln["method"] == "GET"
+        and ln.get("resource_type") == "document"
+        and float(ln["t"]) < form_t
+    }
+    stamps = [
+        (float(events[i]["t"]), s.id)
+        for s in folded
+        if (i := _event_index(s)) is not None and i < len(events)
+    ]
+    out: list[WebFormWrite] = []
+    problems: list[str] = []
+    for ln in lines:
+        if (
+            ln["method"] in ("GET", "HEAD", "OPTIONS")
+            or ln is post
+            or not form_t < float(ln["t"]) < post_t
+        ):
+            continue
+        method, path = ln["method"], _path(ln["url"])
+        sender = ln.get("frame_url") or ""
+        leaf = path.rsplit("/", 1)[-1]
+        if (
+            ln.get("resource_type") in ("fetch", "xhr")
+            and sender
+            and _path(sender) != form_doc
+            and sender in loaded_before
+            and leaf
+            and leaf not in form_html
+        ):
+            out.append(
+                WebFormWrite(
+                    role="ambient",
+                    method=method,
+                    path=path,
+                    sent_by=_path(sender),
+                    evidence=(
+                        f"sent by a script of {_path(sender)}, a page loaded before "
+                        "the form opened; the form page doesn't name it"
+                    ),
+                )
+            )
+            continue
+        during = [sid for t, sid in stamps if t <= float(ln["t"])]
+        from_step = during[-1] if during else None
+        what = f"{method} {path}"
+        if from_step is None:
+            problems.append(
+                f"{what} was sent before any replaced step; its cause is unknown"
+            )
+            continue
+        if _origin(ln["url"]) != _origin(post["url"]):
+            problems.append(f"the steps also sent {what} to another origin")
+            continue
+        if up.urlsplit(ln["url"]).query:
+            problems.append(f"{from_step} also sent {what} with values in its URL")
+            continue
+        if ln.get("form") is None:
+            problems.append(
+                f"{from_step} also sent {what} with a body the API step can't rebuild "
+                f"({ln.get('body_omitted') or ln.get('request_type') or 'not form-encoded'})"
+            )
+            continue
+        status = ln.get("status")
+        if not isinstance(status, int) or not 200 <= status < 400:
+            problems.append(
+                f"{from_step} also sent {what}, and it wasn't accepted ({status})"
+            )
+            continue
+        fields: list[WebFormField] = []
+        for name, value in ln["form"]:
+            ctl = controls.get(name)
+            param = typed.get(name)
+            if param is not None and params.get(param) == value:
+                fields.append(WebFormField(name=name, source="param", param=param))
+            elif (
+                value.startswith("<session:")
+                and ctl is not None
+                and ctl.get("default") == value
+            ):
+                fields.append(WebFormField(name=name, source="session"))
+            elif ctl is not None and (ctl.get("default") or "") == value:
+                fields.append(
+                    WebFormField(name=name, source="form_default", value=value)
+                )
+            else:
+                problems.append(
+                    f"{from_step} also sent {what}; its field {name!r} is not a typed "
+                    "value, a form default or a session value"
+                )
+                break
+        else:
+            out.append(
+                WebFormWrite(
+                    role="step",
+                    method=method,
+                    path=path,
+                    sent_by=_path(sender),
+                    from_step=from_step,
+                    fields=fields,
+                    expected_status=[status],
+                    evidence=f"sent while {from_step} ran",
+                )
+            )
+    return out, problems
+
+
 def propose_api_step(
     workflow: Workflow, recording_dir: Path | str, *, replace: bool = False
 ) -> tuple[Workflow, Optional[Step], list[str]]:
@@ -351,30 +564,16 @@ def propose_api_step(
     form_path, url_problems = _url_template(form_line["url"], by_value)
     if url_problems:
         return workflow, None, url_problems
-    # A browser runs the page's validation and script before it submits; the
-    # API step can only stand in for what it can evaluate itself.
-    unsupported = unsupported_client_rules(client_rules(form_line["response_text"]))
-    if unsupported:
-        return (
-            workflow,
-            None,
-            [
-                "the form validates with rules the API step can't evaluate "
-                f"({', '.join(unsupported)}); it stays on the GUI"
-            ],
-        )
-    scripts = form_scripts(
-        form_line["response_text"], _path(post["url"]), [n for n, _ in post["form"]]
+    # A browser runs the page's validation and script before it submits. What
+    # reading the form can't evaluate (handlers, submit listeners, custom
+    # validate.js rules) the API step runs itself before each save, in a
+    # scratch page with every write blocked (runtime/actuators/form_eval.py).
+    client_scripts = page_scripts(
+        form_line["response_text"],
+        _path(post["url"]),
+        [n for n, _ in post["form"]],
+        client_rules(form_line["response_text"]),
     )
-    if scripts:
-        return (
-            workflow,
-            None,
-            [
-                "the form runs script the API step can't run "
-                f"({', '.join(scripts[:5])}); it stays on the GUI"
-            ],
-        )
 
     # Steps the API step stands in for: those recorded on the form page.
     folded: list[Step] = []
@@ -583,36 +782,30 @@ def propose_api_step(
             )
         )
 
-    others = sorted(
-        {
-            f"{ln['method']} {_path(ln['url'])}"
-            for ln in lines
-            if ln["method"] not in ("GET", "HEAD", "OPTIONS")
-            and ln is not post
-            and form_t < float(ln["t"]) < float(post["t"])
-        }
+    writes, write_problems = _span_writes(
+        lines, post, form_line, folded, events, controls, typed, params
     )
-    if others:
-        # The steps the API step would replace also wrote (a reservation, an
-        # autosave, a background call): the one request can't stand in for
-        # them, and skipping them would change what the program does.
-        return (
-            workflow,
-            None,
-            [
-                "the steps the API step would replace also sent "
-                f"{', '.join(others)}; one request can't stand in for them"
-            ],
-        )
+    if write_problems:
+        return workflow, None, write_problems
+    submitter, submitter_requests = _submitter(
+        folded, events, lines, form_line["response_text"], post
+    )
+    confirm = _selector(save, events) if submitter is not None else None
+    if confirm == submitter:
+        confirm = None
     spec = WebFormSpec(
         form_path=form_path,
         fields=fields,
         controls=sorted(controls),
         client_rules=client_rules(form_line["response_text"]),
+        client_scripts=client_scripts,
+        submitter=submitter,
+        submitter_requests=submitter_requests,
+        confirm=confirm,
         prechecks=prechecks,
         success_pattern=_success_pattern(post),
         replaces_steps=[s.id for s in folded],
-        other_writes_seen=others,
+        writes=writes,
         screen_only_checks=screen_only,
         folded_checks_digest=folded_checks_digest(folded),
     )
@@ -674,6 +867,11 @@ def describe_api_step(step: Step) -> str:
     )
     lines.append(
         f"  record check after: {len(b.effects)} effect(s) copied from the save step"
+        + (
+            " and the steps whose writes it sends"
+            if any(w.role == "step" for w in spec.writes)
+            else ""
+        )
     )
     for identity in b.identity:
         lines.append(
@@ -681,8 +879,29 @@ def describe_api_step(step: Step) -> str:
             f"in {', '.join(p.removeprefix('/body/') for p in identity.request_pointers)} "
             f"and the record check selects {identity.effect_field} = {{{identity.param}}}"
         )
+    if spec.client_scripts:
+        shown = spec.client_scripts[:6] + (
+            [f"and {len(spec.client_scripts) - 6} more"]
+            if len(spec.client_scripts) > 6
+            else []
+        )
+        lines.append(
+            "  the form's own script runs before each save, in a scratch page with "
+            f"writes blocked, on the run's values: {', '.join(shown)}"
+        )
     if spec.screen_only_checks:
         lines.append(f"  screen-only checks, not repeated: {spec.screen_only_checks}")
+    for i, write in enumerate(spec.writes, 1):
+        if write.role == "ambient":
+            lines.append(
+                f"  not sent (the page's own request): {write.method} {write.path}; "
+                f"{write.evidence}"
+            )
+        else:
+            lines.append(
+                f"  sent before the save, in this order: {write.method} {write.path} "
+                f"({len(write.fields)} field(s)), read back by {write.from_step}'s record check"
+            )
     if spec.other_writes_seen:
         lines.append(
             f"  NOT repeated (other writes seen during these steps): {spec.other_writes_seen}"
@@ -789,13 +1008,22 @@ def admit_api_step(
                     f"{step.id} has no record check; an API step must be confirmed by one "
                     "(add it, for example with record --verify or check mark, then admit)"
                 )
+            by_id = {s.id: s for s in workflow.steps}
+            for write in b.web_form.writes if b.web_form is not None else []:
+                cause = by_id.get(write.from_step or "")
+                if write.role == "step" and (cause is None or not cause.effects):
+                    raise ApiProposalError(
+                        f"{step.id}: {write.method} {write.path} is sent during "
+                        f"{write.from_step}, which has no record check; each write the "
+                        "API step sends must be read back (add one to that step, then admit)"
+                    )
             identities = [
                 web_form_identity(b, list(step.effects), key, param)
                 for key, param in sorted((identity or {}).items())
             ]
             clean = b.model_copy(
                 update={
-                    "effects": list(step.effects),
+                    "effects": web_form_effects(workflow.steps, step),
                     "admission": None,
                     "identity": identities or list(b.identity),
                 }

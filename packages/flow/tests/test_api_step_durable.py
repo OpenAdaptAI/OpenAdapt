@@ -379,3 +379,76 @@ def test_an_identity_checked_save_with_a_right_record_contract_runs_durably(tmp_
         assert [c.actuation for c in fx.store().checkpoints()] == ["api_folded", "api"]
     finally:
         fx.stop()
+
+
+class Crash(BaseException):
+    """The process dies: nothing after this point runs in this leg."""
+
+
+class WritesOnceThenDies(ScriptedActuator):
+    """The span's first write lands, then the process dies before the save.
+
+    Prepares and sends like the live-session actuator, so the replayer writes
+    the span's write-ahead checkpoint between the two.
+    """
+
+    def prepare(self, binding, params):
+        return object()
+
+    def send(self, binding, prepared):
+        return self.actuate(binding, {})
+
+    def actuate(self, binding, params):
+        self.calls += 1
+        requests.post(
+            f"{self.sor_url}/api/encounter",
+            json={**TARGET, "note": "write 1"},
+            timeout=5,
+        )
+        raise Crash()
+
+
+def test_a_crash_between_the_first_write_and_the_save_is_reconciled_not_resent(fx):
+    first = WritesOnceThenDies(fx.url, ActuationStatus.ACTUATED)
+    with pytest.raises(Crash):
+        fx.run(first)
+    assert first.calls == 1 and [r["note"] for r in fx.records()] == ["write 1"]
+
+    # The write-ahead checkpoint was persisted before the first request: the
+    # folded steps are done and the save is paused as delivery-uncertain.
+    store = fx.store()
+    assert [c.actuation for c in store.checkpoints()] == ["api_folded"]
+    pending = store.read_pending()
+    assert pending is not None and pending.step_id == "step_001"
+    assert pending.resume_from_index == 1 and pending.delivery_uncertainty is not None
+    assert "began sending its requests" in pending.reason
+
+    # An ordinary resume can't repeat a delivery that may have landed.
+    second = ScriptedActuator(fx.url, ActuationStatus.ACTUATED)
+    with pytest.raises(ApprovalRequired, match="may already have actuated"):
+        resume(fx.run_dir, fx.replayer(second), approval=fx.approval())
+    # Nor can one that authorizes an uncertain retry: nothing is sent again.
+    resumed = resume(
+        fx.run_dir,
+        fx.replayer(second),
+        approval=fx.approval(authorize_uncertain_retry=True),
+    )
+    assert second.calls == 0 and fx.backend.actions == []
+    assert (
+        resumed.success is False and "never sends it again" in resumed.results[-1].error
+    )
+    assert [r["note"] for r in fx.records()] == ["write 1"]
+
+
+class PreparesThenSaves(ScriptedActuator):
+    def prepare(self, binding, params):
+        return object()
+
+    def send(self, binding, prepared):
+        return self.actuate(binding, {})
+
+
+def test_a_finished_durable_span_leaves_no_provisional_pause(fx):
+    report = fx.run(PreparesThenSaves(fx.url, ActuationStatus.ACTUATED))
+    assert report.success is True
+    assert fx.store().read_pending() is None

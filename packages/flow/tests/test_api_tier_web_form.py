@@ -411,6 +411,21 @@ class FakeTransport:
         self.posts.append((path, body))
         return self.save
 
+    def evaluate_form(self, form_path, action_path, fields, **kw):
+        """A page whose script changes nothing: the browser sends the form as filled."""
+
+        from openadapt_flow.runtime.actuators.form_eval import FormEvaluation
+
+        self.evaluated = getattr(self, "evaluated", 0) + 1
+        controls = form_controls(self.form, action_path) or {}
+        typed = dict(fields)
+        body = [
+            (name, typed.get(name, c.get("default") or ""))
+            for name, c in controls.items()
+            if c.get("default") is not None or name in typed
+        ]
+        return FormEvaluation(status="valid", serialized=body, via="submit")
+
 
 def _admitted_binding(tmp_path) -> ApiBinding:
     wf, _, _ = propose_api_step(_workflow(), _recording(tmp_path))

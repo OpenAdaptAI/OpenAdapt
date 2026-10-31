@@ -819,6 +819,45 @@ class WebFormPrecheck(BaseModel):
     from_step: Optional[str] = None
 
 
+class WebFormWrite(BaseModel):
+    """A request, other than the save, that wrote while the replaced steps ran.
+
+    The API step's span is a declared, ordered sequence: these writes in the
+    order they were recorded, then the save. Each is one of two roles:
+
+    - ``ambient``: the page sent it on its own. It came from a script of
+      another document than the form, one that was loaded before the form
+      opened (for example OpenEMR's tab shell, which posts
+      ``execute_background_services.php`` on a timer), and the form page's
+      source doesn't name it. No replaced step caused it, so the API step
+      neither sends nor waits for it; the live page goes on as it does under
+      the GUI steps. Listed for the person who admits the step.
+    - ``step``: a replaced step caused it. The API step sends it, rebuilt
+      from ``fields`` the same way as the save, in its recorded place before
+      the save. Its read-back is the record check declared on ``from_step``,
+      which the binding's record check includes; admission refuses a step
+      write whose step has none. A write that fails, or whose response is
+      outside ``expected_status``, stops the run with nothing after it sent,
+      nothing retried and nothing redone through the GUI, and the run
+      reconciles by reading the records back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["ambient", "step"]
+    method: str = Field(min_length=1)
+    path: str = Field(min_length=1)
+    #: Path of the document whose script or form sent it.
+    sent_by: str = ""
+    #: The replaced step during which it was sent (``step`` writes).
+    from_step: Optional[str] = None
+    #: How to rebuild the body (``step`` writes): same sources as the save.
+    fields: list[WebFormField] = Field(default_factory=list)
+    expected_status: list[int] = Field(default_factory=list)
+    #: Why it has this role, in words, from the capture.
+    evidence: str = ""
+
+
 class WebFormSpec(BaseModel):
     """How to repeat a recorded browser form save as one HTTP request.
 
@@ -836,15 +875,41 @@ class WebFormSpec(BaseModel):
     fields: list[WebFormField] = Field(min_length=1)
     controls: list[str] = Field(default_factory=list)
     client_rules: Optional[dict[str, Any]] = None
+    #: Page script the browser runs on this save that the API step can't
+    #: evaluate by reading the form: the form's ``on*`` handlers, the ``on*``
+    #: handlers of the fields it sends, a page script listening for submit,
+    #: and validate.js rule kinds such as OpenEMR's ``pastDate``. Before each
+    #: save the runtime runs that script itself, in a scratch page of the live
+    #: session with every write blocked, on the run's values, and sends only
+    #: when the page would submit exactly the body the API step built. When
+    #: it can't run the script, the GUI steps run. The live form must list the
+    #: same script, or the API step doesn't run.
+    client_scripts: list[str] = Field(default_factory=list)
+    #: The control in the form the person clicked to start the save (a CSS
+    #: selector from the recording), and the requests that click made
+    #: (``METHOD /path``). Running the page's script clicks it, as the person
+    #: did, and the page must then submit the form or make one of those
+    #: requests.
+    submitter: Optional[str] = None
+    submitter_requests: list[str] = Field(default_factory=list)
+    #: The control the person clicked to confirm the save when it isn't the
+    #: submitter (for example OpenEMR's ``#confirmCreate`` in the duplicate
+    #: check dialog). Running the page's script clicks it too, in whichever
+    #: frame has it, and the page must then submit the form.
+    confirm: Optional[str] = None
     prechecks: list[WebFormPrecheck] = Field(default_factory=list)
     #: Regular expression the save response must match to count as accepted.
     success_pattern: Optional[str] = None
     #: GUI steps the API step stands in for, in order. The last one is the save.
     replaces_steps: list[str] = Field(min_length=1)
-    #: Other non-GET requests seen while the recorded steps ran. A proposal
-    #: with any is refused, and so are its admission and its run (a binding
-    #: proposed before that rule existed may still list some).
+    #: Other non-GET requests seen while the recorded steps ran that no
+    #: declared write accounts for. A binding with any is refused at
+    #: admission and at run time (bindings proposed before ``writes``
+    #: existed may list some).
     other_writes_seen: list[str] = Field(default_factory=list)
+    #: Every other write seen while the replaced steps ran, in recorded
+    #: order, each with its role (WebFormWrite). The save comes after them.
+    writes: list[WebFormWrite] = Field(default_factory=list)
     #: On-screen checks of folded steps that caused no request (screen-only,
     #: not repeated), listed for the person admitting the step.
     screen_only_checks: list[str] = Field(default_factory=list)
