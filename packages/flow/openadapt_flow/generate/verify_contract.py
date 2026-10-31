@@ -1724,6 +1724,8 @@ def build_contract(
     #: Surface -> the fields its declared rows may change.
     by_surface: dict[str, set[str]] = {}
     named_tables: set[str] = {anchor}
+    #: Table -> the surface that reads it in full (``frame.database.judged_by``).
+    judged: dict[str, str] = {anchor: "record"}
 
     # The main record, with every column and the values its parameters reach.
     main = Surface(
@@ -1849,6 +1851,7 @@ def build_contract(
                 sname, settings.views.get(g.table, g.table), scols
             )
             named_tables.add(g.table)
+            judged.setdefault(g.table, sname)
         surf = surfaces[sname]
         items = range(variant.lists[p]) if g.list_param else [None]
         for i in items:
@@ -2025,29 +2028,24 @@ def build_contract(
         if t in named_tables:
             continue
         allow.append({"table": t})
-    for t in sorted(named_tables):
-        if plan.mode == "create" or flavor == "found":
-            # The contract's own read judges the rows the write adds; the
-            # whole-database frame still sees any existing row change,
-            # now and at the recheck (a late edit to a look-alike).
-            allow.append({"table": t})
-            continue
-        # An update changes a row here, which an append-only table
-        # can't allow: its own read judges this table, and the recheck
-        # (database only) doesn't see it.
-        allow.append(
-            {
-                "table": t,
-                "mode": "skip",
-                "reason": "read in full, every column, by this contract's own surface",
-            }
-        )
-    views = {s.table: s.name for s in surfaces.values() if s.name.startswith("raw_")}
+    # A table the contract's own read covers, every row and column, is
+    # compared like any other: after the save, the rows that read saw move
+    # are left to it (the target, or the rows the write adds, each with only
+    # its declared fields), and every other row of the table must not move.
+    # A recheck reads no surface, so there any change to the table since the
+    # post-save read (a late checkout of a look-alike) stops the write.
+    judged_by = {t: judged[t] for t in sorted(named_tables)}
+    views = {
+        s.table: s.name
+        for s in surfaces.values()
+        if s.name.startswith("raw_") and s.table not in judged_by
+    }
     db: dict[str, Any] = {
         "dialect": schema.dialect,
         "read": dict(settings.read),
         "allow_tables": allow,
         "views": views,
+        "judged_by": judged_by,
         "settle_s": 1,
         "settle_attempts": 5,
     }
