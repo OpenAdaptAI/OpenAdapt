@@ -84,6 +84,7 @@ from openadapt_flow.runtime.effects.effect import (
     stable_id,
 )
 from openadapt_flow.runtime.effects.learned import (
+    NOT_COMPARED,
     LearnedFrame,
     actor_columns,
     actor_of,
@@ -626,10 +627,6 @@ class FrameChange:
     key: Any = None
     #: In memory only: the audit entry behind an ``audit_only`` change.
     entry: Any = None
-    #: In memory only: the row as the baseline holds it (MACs) and as read
-    #: now, for the learner's names-only summary (``FrameVerdict.moves``).
-    before: Any = field(default=None, repr=False)
-    after: Any = field(default=None, repr=False)
 
 
 @dataclass
@@ -1477,9 +1474,7 @@ def judge_frame(
                 return
         ref, _hashed = ref_of(name, key, None, after)
         others = actors(name, ref, None) - self_ids
-        change = FrameChange(
-            name, "added", "self", extra, on_target=True, key=key, after=after
-        )
+        change = FrameChange(name, "added", "self", extra, on_target=True, key=key)
         if others and bot_only_inserted(name, ref):
             change.attribution = "other"
             concurrent.append(change)
@@ -2002,6 +1997,8 @@ def _moves(
     false``: nothing the learner may excuse.
     """
 
+    from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW
+
     out: list[dict[str, Any]] = []
     for c in collateral:
         if len(out) >= MOVES_LIMIT:
@@ -2016,6 +2013,15 @@ def _moves(
             columns = added_columns(c.surface, after)
         else:
             columns = list(c.fields)
+        if (
+            c.change == "changed"
+            and before is not None
+            and after is not None
+            and any(k not in before for k in after if k not in (KEY, ROW))
+        ):
+            # A table over ``max_rows``: the baseline kept some columns only,
+            # so what else moved can't be named.
+            columns.append(NOT_COMPARED)
         out.append(
             {
                 "row": True,

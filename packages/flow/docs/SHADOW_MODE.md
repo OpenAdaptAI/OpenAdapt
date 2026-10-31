@@ -120,3 +120,12 @@ Keep it where the system of record's data may be kept.
 - The server's links (`Location`, `fullUrl`) name the server, not the
   shadow. An agent that follows them goes around the shadow, and those writes
   show only as unexplained changes inside other checks.
+
+## Learning from the run
+
+An app that writes on every request (a user's `last_login`, a token's
+`last_seen`) makes the whole-database frame refute every write.
+`openadapt-flow learn collect` runs the shadow with a hook that records what
+moved, by table and column name. `learn propose` and `learn approve` turn
+that into excuses a person approves once. See
+[LEARNED_EXCUSES.md](LEARNED_EXCUSES.md).
