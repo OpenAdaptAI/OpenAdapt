@@ -792,12 +792,14 @@ def cmd_propose(args: argparse.Namespace) -> int:
     except LearnError as exc:
         print(f"learn propose: {exc}", file=sys.stderr)
         return 2
+    from openadapt_flow.cli_hints import command
+
     count = sum(len(k["excuses"]) for k in proposal["kinds"].values())
+    approve_hint = command(f"learn approve {path} --by <name> ...")
     print(
         f"{count} excuse(s) proposed from {proposal['episodes']} check(s) "
         f"({proposal['ignored']} ignored). Read {md}; approve with "
-        f"`openadapt-flow learn approve {path} --by <name> ...`. "
-        f"Digest {proposal['proposal_sha256']}"
+        f"`{approve_hint}`. Digest {proposal['proposal_sha256']}"
     )
     return 0
 
