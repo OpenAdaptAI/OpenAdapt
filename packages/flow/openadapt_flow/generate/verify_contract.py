@@ -1375,6 +1375,9 @@ class SqlBuilder:
         self.params: dict[str, dict[str, str]] = {}
         #: Tables read through a view (the SQL guard refuses their name).
         self.views: dict[str, str] = {}
+        #: (table, key column) -> the displays the task's values are read
+        #: through that key with: checked together for uniqueness.
+        self.companions: dict[tuple[str, str], list[tuple[tuple[str, ...], str]]] = {}
         #: The main record's table: a key back to it names the record by its
         #: own key, not by a display value, so no uniqueness check applies.
         self.anchor = ""
@@ -1442,11 +1445,23 @@ class SqlBuilder:
             # second "Jon Park", or "Mary Ann|Lee" beside "Mary|Ann Lee",
             # makes it NULL, so nothing matches and the write stops.
             u = f"u{depth + 1}"
-            other = self.display(u, hop.table, rest.columns, rest.rule)
-            mine = self.display(sub, hop.table, rest.columns, rest.rule)
+            # Every value the task gives through this key together (a
+            # customer's name and town) must name one row: a name shared by
+            # two towns is fine when the town tells them apart.
+            displays = self.companions.get((hop.table, hop.column)) or [
+                (rest.columns, rest.rule)
+            ]
+            conds = [
+                self.same(
+                    self.display(u, hop.table, cols, rule),
+                    self.display(sub, hop.table, cols, rule),
+                    False,
+                )
+                for cols, rule in displays
+            ]
             unique = (
                 f"(SELECT COUNT(*) FROM {self.tref(hop.table)} {u} WHERE "
-                f"{self.same(other, mine, False)}{self.live_and(u, hop.table)}) = 1"
+                f"{' AND '.join(conds)}{self.live_and(u, hop.table)}) = 1"
             )
             inner = f"CASE WHEN {unique} THEN {inner} END"
         return (
@@ -1651,6 +1666,17 @@ def build_contract(
     b = SqlBuilder(schema)
     b.views = dict(settings.views)
     b.anchor = plan.anchor
+    wanted = set(variant.fields) | set(variant.lists)
+    list_keys = {k for g in plan.lists.values() for k in g.params}
+    for c_name, c_loc in _all_locations(plan):
+        if c_name not in wanted and c_name not in list_keys:
+            continue
+        if not c_loc.hops or c_loc.hops[-1].kind != "fk":
+            continue
+        c_key = (c_loc.hops[-1].table, c_loc.hops[-1].column)
+        c_entry = (tuple(c_loc.columns), c_loc.rule)
+        if c_entry not in b.companions.setdefault(c_key, []):
+            b.companions[c_key].append(c_entry)
     fields = set(variant.fields)
     anchor = plan.anchor
     surfaces: dict[str, Surface] = {}
