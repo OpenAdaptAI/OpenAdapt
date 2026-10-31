@@ -37,7 +37,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.runtime.effects.effect import ValueExpr
 
@@ -76,6 +76,9 @@ class FrameVersions(BaseModel):
     #: The target record's field (in the contract's read set) that equals
     #: ``record_field``. Unset: ``frame.identity_field``, else ``id``.
     target_field: Optional[str] = None
+    #: Only records matched on this surface are targets (the main record's
+    #: surface). Unset: every record a confirmed write effect matched.
+    target_surface: Optional[str] = None
     #: The version row's version id (``meta.versionId``, ``res_ver``, an
     #: audit entry's id).
     version_field: str = Field(min_length=1)
@@ -97,6 +100,15 @@ class FrameVersions(BaseModel):
                 data[key] = [
                     ValueExpr(literal=v) if isinstance(v, str) else v for v in values
                 ]
+        return data
+
+    @model_serializer(mode="wrap")
+    def _compact(self, handler: Any) -> dict[str, Any]:
+        # Unset, ``target_surface`` is left out, so a contract that doesn't
+        # use it keeps its digests.
+        data: dict[str, Any] = handler(self)
+        if data.get("target_surface") is None:
+            data.pop("target_surface", None)
         return data
 
     @model_validator(mode="after")

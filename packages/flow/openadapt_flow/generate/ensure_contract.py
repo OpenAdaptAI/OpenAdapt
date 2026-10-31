@@ -824,7 +824,12 @@ def render_yaml(gen: Generated, *, generator: str = "") -> str:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0]
+        + " For an app whose data is in MySQL, MariaDB or PostgreSQL, use "
+        "`python -m openadapt_flow.generate.verify_contract` instead "
+        "(docs/GENERATE_CONTRACTS.md)."
+    )
     ap.add_argument("teach", help="teach directory")
     ap.add_argument("--out", help="write the contract YAML here when admitted")
     ap.add_argument("--report", help="write the JSON report here")
