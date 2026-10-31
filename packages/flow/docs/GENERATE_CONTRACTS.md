@@ -171,6 +171,26 @@ is no lead). A row the app adds with an empty value when a field is left out
 (Redmine's custom field values, a journal with no note) is expected then
 too. A list parameter gets a contract per length, from 1 to 10 items.
 
+A field set the manifest doesn't list still gets a contract, so a task's set
+doesn't need its own demonstration. Each kind in `manifest.yaml` lists the
+fields a set may hold (`fields`): an update's identity fields and the fields
+it may change, or a create's required and optional fields. For a set of those
+that isn't listed (past the cap of 64, or optional fields no demonstration
+combined), `choose` builds the contracts the way `propose` builds the listed
+ones: from the same demonstrations, answers and schema, checked by the SQL
+guard and a dry read, and written under `field_sets/`. A field the set leaves
+out must stay as it was (an update) or be empty (a create), as in every
+contract. `choose` refuses, and the write stops, when the demonstrations or
+the schema changed since `propose` (`field_sets` in the manifest pins their
+digests), when a question is still open, when the set has a field no
+demonstration placed, or when a column of the new row would be left
+unchecked without the person's answer. A kind whose value names the field to
+change (`field: status`) gets only its listed sets.
+
+`QUESTIONS.md` lists, per kind, the parameters no demonstration gave and no
+column is named like (`not_placed` in `report.json`): record a demonstration
+that gives them before tasks need them.
+
 **Create, found, update.**
 
 - `create`: exactly one new main record holds the task's values, and
