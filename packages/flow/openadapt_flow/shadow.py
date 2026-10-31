@@ -87,6 +87,15 @@ class Episode:
     verdict: str = ""
     reasons: list[str] = field(default_factory=list)
     evidence: dict[str, Any] = field(default_factory=dict)
+    checked_at: float = 0.0
+    #: The verifier's first result and baseline, kept for the recheck.
+    result: Any = None
+    base: Any = None
+    #: When a CONFIRMED is checked again (epoch seconds; 0: never).
+    recheck_at: float = 0.0
+    recheck_from: Any = None  # fhir: the server time the recheck reads from
+    late_verdict: str = ""
+    late_reasons: list[str] = field(default_factory=list)
 
 
 def _body_doc(body: bytes, content_type: str) -> Any:
@@ -140,6 +149,7 @@ class Shadow:
         listen: tuple[str, int] = ("127.0.0.1", 0),
         hold_ms: float = 2000.0,
         upstream_timeout_s: float = 300.0,
+        recheck_s: Optional[float] = 300.0,
         quiet_s: float = 5.0,
     ) -> None:
         if mode not in ("fhir", "sql"):
@@ -164,6 +174,9 @@ class Shadow:
         self.hold_s = max(0.0, hold_ms) / 1000.0
         self.quiet_s = quiet_s
         self.upstream_timeout_s = upstream_timeout_s
+        #: fhir: check each CONFIRMED again this long after (None: never).
+        #: sql: the contract's ``frame.database.recheck_after_s`` decides.
+        self.recheck_s = recheck_s
         #: Called as ``on_checked(episode, result)`` after each verifier call,
         #: with the verifier's own result (``EnsureResult`` or ``WriteResult``),
         #: for a step that learns from checked traffic. Its errors go in
@@ -552,6 +565,7 @@ class Shadow:
             if self.idle_s() >= self.quiet_s:
                 try:
                     self._check_due()
+                    self.run_rechecks()
                 except Exception as exc:  # noqa: BLE001
                     self._note_error(f"checker: {exc!r}")
 
@@ -577,6 +591,119 @@ class Shadow:
                         )
                         ep.verdict = UNCERTAIN
                     ep.checked = True
+                    ep.checked_at = time.time()
+                    self._schedule_recheck(ep)
+
+    def _schedule_recheck(self, ep: Episode) -> None:
+        if ep.verdict != CONFIRMED or ep.result is None:
+            return
+        if ep.kind == "fhir" and self.recheck_s is not None and ep.recheck_from:
+            ep.recheck_at = ep.checked_at + self.recheck_s
+        elif ep.kind == "sql" and getattr(ep.result, "recheck_due_at", None):
+            from datetime import datetime
+
+            due = datetime.fromisoformat(
+                ep.result.recheck_due_at.replace("Z", "+00:00")
+            )
+            ep.recheck_at = due.timestamp()
+
+    def pending_rechecks(self) -> int:
+        with self._lock:
+            return sum(1 for e in self.episodes if e.recheck_at and not e.late_verdict)
+
+    def run_rechecks(self, *, now: bool = False, only: Optional[list] = None) -> None:
+        """Check each CONFIRMED again once it is due (``now``: whatever is
+        scheduled, earlier than due, as a test harness does before it resets
+        the store). A late REFUTED stands beside the first verdict."""
+
+        with self._check_lock:
+            with self._lock:
+                if any(e.in_flight for e in self.episodes):
+                    return
+                due = [
+                    e
+                    for e in (only if only is not None else self.episodes)
+                    if e.recheck_at
+                    and not e.late_verdict
+                    and (now or time.time() >= e.recheck_at)
+                ]
+                seq = self._seq
+            for ep in due:
+                try:
+                    self._recheck(ep, wait=now)
+                except Exception as exc:  # noqa: BLE001 - fail closed
+                    ep.late_verdict = UNCERTAIN
+                    ep.late_reasons = [f"the recheck failed: {exc!r}"]
+                    self._note_error(traceback.format_exc(limit=3))
+                with self._lock:
+                    if self._seq != seq and ep.late_verdict == CONFIRMED:
+                        ep.late_verdict = UNCERTAIN
+                        ep.late_reasons.insert(
+                            0, "the agent wrote while this was rechecked"
+                        )
+                    ep.evidence["recheck"] = {
+                        "verdict": ep.late_verdict,
+                        "reasons": ep.late_reasons,
+                        "at": time.time(),
+                    }
+
+    def _recheck(self, ep: Episode, wait: bool) -> None:
+        if ep.kind == "fhir":
+            from openadapt_flow.ensure_record import (
+                Baseline,
+                FhirReader,
+                Unreadable,
+                verify_ensure,
+            )
+
+            rtype = ep.contract.resource_type
+            rid = str(ep.result.record_id or "")
+            with self._lock:
+                # Every other write the agent sent is judged on its own.
+                declared = [r for o in self.episodes if o is not ep for r in o.refs]
+            reader = FhirReader(ep.contract)
+            try:
+                _, now = reader.fetch(f"{reader.base_url}/{rtype}/{rid}")
+            except Unreadable as exc:
+                ep.late_verdict = UNCERTAIN
+                ep.late_reasons = [f"the confirmed record can't be read again: {exc}"]
+                return
+            # Since the first check, the confirmed record is the one that was
+            # already there: the agent may write nothing more, and it must
+            # still be the only record that is the person.
+            since = Baseline(started=ep.recheck_from, matches={rid: now})
+            r = verify_ensure(ep.contract, ep.params, since, declared=declared)
+            ep.late_reasons = [f"since the first check: {x}" for x in r.reasons]
+            if r.outcome == "found_existing":
+                ep.late_verdict = CONFIRMED
+            elif r.evidence.get("unreadable"):
+                ep.late_verdict = UNCERTAIN
+            else:
+                ep.late_verdict = REFUTED
+            return
+        from openadapt_flow.verifier import Actor, recheck
+
+        with self._lock:
+            later = [
+                o.result
+                for o in self.episodes
+                if o is not ep
+                and o.kind == "sql"
+                and o.contract is ep.contract
+                and o.result is not None
+                and o.writes
+                and o.writes[0].started > ep.checked_at
+            ]
+        r = recheck(
+            ep.contract,
+            ep.result,
+            params=ep.params,
+            actor=Actor("agent", self.actor_id),
+            excused_by=later,
+            wait=True,  # due by now; never refuse for a clock a second early
+            ledger=None,
+        )
+        ep.late_verdict, ep.late_reasons = str(r.outcome), list(r.reasons)
 
     def _check(self, ep: Episode) -> None:
         statuses = [w.status for w in ep.writes]
@@ -619,7 +746,16 @@ class Shadow:
                 if o is not ep and not o.checked
                 for r in o.refs
             ]
+        # Where a recheck's window starts: after every write of this episode
+        # (whole seconds: an instant search is to the second), and no later
+        # than this check's own window closes.
+        time.sleep(1.1)
+        try:
+            ep.recheck_from = FhirReader(contract).server_time()
+        except Unreadable:
+            ep.recheck_from = None
         result = verify_ensure(contract, ep.params, base, declared=declared)
+        ep.result, ep.base = result, base
         self._notify(ep, result)
         ev = result.evidence
         ep.evidence["verifier"] = {"outcome": result.outcome, **ev}
@@ -695,6 +831,7 @@ class Shadow:
         from openadapt_flow.verifier import verify_write
 
         result = verify_write(pending, seal=False)
+        ep.result = result
         self._notify(ep, result)
         ep.verdict = result.outcome.value
         ep.reasons = list(result.reasons)

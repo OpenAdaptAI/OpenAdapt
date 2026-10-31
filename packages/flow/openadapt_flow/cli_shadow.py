@@ -66,6 +66,13 @@ def register(sub: argparse._SubParsersAction) -> None:
         metavar="SECONDS",
         help="stop after this long with no write (default: run until Ctrl-C)",
     )
+    p.add_argument(
+        "--recheck-s",
+        type=float,
+        default=None,
+        help="fhir: check each CONFIRMED write again this long after (default "
+        "300); --until-idle waits for the rechecks",
+    )
     p.set_defaults(func=cmd_shadow)
 
 
@@ -82,7 +89,15 @@ def load(args: argparse.Namespace) -> dict[str, Any]:
         if cfg.get("schema_version", SCHEMA) != SCHEMA:
             raise ShadowConfigError(f"{path} is not {SCHEMA}")
         base = path.resolve().parent
-    for key in ("mode", "upstream", "listen", "actor", "hold_ms", "quiet_s"):
+    for key in (
+        "mode",
+        "upstream",
+        "listen",
+        "actor",
+        "hold_ms",
+        "quiet_s",
+        "recheck_s",
+    ):
         value = getattr(args, key, None)
         if value is not None:
             cfg[key] = value
@@ -131,6 +146,9 @@ def build(cfg: dict[str, Any], out: Path) -> Any:
         listen=("127.0.0.1", int(cfg.get("listen") or 9670)),
         hold_ms=float(cfg.get("hold_ms", 2000)),
         upstream_timeout_s=float(cfg.get("upstream_timeout_s", 300)),
+        recheck_s=None
+        if cfg.get("recheck_s", 300) is None
+        else float(cfg.get("recheck_s", 300)),
         quiet_s=float(cfg.get("quiet_s", 5)),
     )
 
@@ -155,7 +173,11 @@ def cmd_shadow(args: argparse.Namespace) -> int:
     try:
         while not stopping:
             time.sleep(0.5)
-            if args.until_idle is not None and shadow.idle_s() >= args.until_idle:
+            if (
+                args.until_idle is not None
+                and shadow.idle_s() >= args.until_idle
+                and not shadow.pending_rechecks()
+            ):
                 break
     except KeyboardInterrupt:
         pass
@@ -168,6 +190,11 @@ def cmd_shadow(args: argparse.Namespace) -> int:
         f"{doc['writes_seen']} writes, {doc['checks']} checks: {n['CONFIRMED']} "
         f"confirmed, {n['REFUTED']} refuted, {n['UNCERTAIN']} uncertain"
         + (f", {n['PENDING']} never checked" if n["PENDING"] else "")
+        + (
+            f"; {doc['late_refuted']} refuted on recheck"
+            if doc.get("late_refuted")
+            else ""
+        )
         + ". "
         f"Report: {page}"
     )

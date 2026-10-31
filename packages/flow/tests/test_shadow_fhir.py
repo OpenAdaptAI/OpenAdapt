@@ -11,6 +11,7 @@ from __future__ import annotations
 import http.client
 import json
 import threading
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ import pytest
 from openadapt_flow import ensure_record
 from openadapt_flow.ensure_record import Baseline, EnsureResult, load_contract
 from openadapt_flow.shadow import Shadow
+from openadapt_flow.shadow_report import render_html
 
 CONTRACT = (
     Path(__file__).resolve().parents[1]
@@ -78,8 +80,6 @@ def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
     calls: dict[str, Any] = {"verify": [], "outcome": "created_verified", "ev": {}}
 
     def baseline(contract: Any, params: Any, reader: Any = None) -> Baseline:
-        from datetime import datetime, timezone
-
         return Baseline(started=datetime.now(timezone.utc), matches={})
 
     def verify(contract: Any, params: Any, base: Any, **kw: Any) -> EnsureResult:
@@ -94,6 +94,9 @@ def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
         ensure_record.FhirReader,
         "fetch",
         lambda self, url, params=None: ({}, {"resourceType": "AllergyIntolerance"}),
+    )
+    monkeypatch.setattr(
+        ensure_record.FhirReader, "server_time", lambda self: datetime.now(timezone.utc)
     )
     fhir = Fhir()
     sh = Shadow(
@@ -193,3 +196,24 @@ def test_a_path_outside_ascii_still_goes_through(env: dict[str, Any]) -> None:
     paths = [p for _, p, _ in env["fhir"].received]
     assert "/fhir/R4/Observation?n=%E9" in paths
     assert all(e.verdict for e in sh.episodes) and not sh.errors
+
+
+def test_a_confirmed_write_is_checked_again_and_a_late_change_refutes_it(
+    env: dict[str, Any],
+) -> None:
+    sh = env["sh"]
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    sh.flush()
+    (ep,) = sh.episodes
+    assert ep.verdict == "CONFIRMED" and ep.recheck_at > 0
+    assert sh.results()["rechecks_pending"] == 1
+    # Later, a side write by the agent's credential lands outside the proxy.
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"agent_writes": 2}
+    sh.run_rechecks(now=True)
+    doc = sh.results()
+    assert ep.late_verdict == "REFUTED" and doc["late_refuted"] == 1
+    assert "Landed wrong after the check (1)" in render_html(doc)
+    # The recheck is told every other write the agent sent, checked or not.
+    assert env["calls"]["verify"][-1]["declared"] == []
+    assert ep.late_reasons[0].startswith("since the first check: ")

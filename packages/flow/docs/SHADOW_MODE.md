@@ -71,6 +71,26 @@ The verdict fails closed: whatever can't be read is `UNCERTAIN`, never
 uses no write ledger (`ledger=None`), so it can't hold or refuse any of the
 agent's writes. The baselines and receipts go in the output folder.
 
+## Checked again later
+
+A write can be right when checked and wrong a minute later: a background
+job, a trigger, or the agent's tool writing to another record after it
+answered. So each `CONFIRMED` is checked again:
+
+- `fhir`: `recheck_s` after the check (default 300 s), `verify_ensure`
+  reads the server again over the window since the first check, with the
+  confirmed record as the one already there. It refutes when the agent's
+  credential wrote anything since that no write through the shadow
+  explains, or when the record is gone, no longer matches, or has a
+  duplicate.
+- `sql`: when the contract's `frame.database.recheck_after_s` is due,
+  `verifier.recheck` reads the whole database again. A contract without it
+  isn't rechecked.
+
+A recheck that refutes is a line of its own in the report ("Landed wrong
+after the check"), beside the first verdict, which stays as it was.
+`--until-idle` waits for the rechecks that are due.
+
 ## Where the contract comes from
 
 A team makes three decisions:
@@ -113,10 +133,7 @@ Keep it where the system of record's data may be kept.
   checked are left out of an episode's judgment (each is judged on its own).
   A write the agent makes while an episode is checked makes that episode
   `UNCERTAIN`.
-- A delayed write that lands after the check is outside it. With a
-  contract that sets `frame.database.recheck_after_s` (`sql` mode), a
-  `CONFIRMED` says it is provisional and when the recheck is due; shadow mode
-  doesn't run the recheck itself.
+- A change after the recheck's read is outside it.
 - The server's links (`Location`, `fullUrl`) name the server, not the
   shadow. An agent that follows them goes around the shadow, and those writes
   show only as unexplained changes inside other checks.

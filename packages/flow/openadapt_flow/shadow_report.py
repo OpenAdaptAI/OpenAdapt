@@ -19,6 +19,26 @@ def _ms(values: list[float]) -> dict[str, float]:
     return {"median": round(statistics.median(values), 1), "max": round(max(values), 1)}
 
 
+#: How a REFUTED write landed wrong, from the verifier's reasons (first match).
+KINDS = (
+    ("wrong or missing", "a value differs from what the agent sent"),
+    ("not one", "saved more than once"),
+    ("also the person", "saved more than once"),
+    ("other resource", "another record changed"),
+    ("outside the declared write", "another record changed"),
+    ("not given by the task", "holds a value the agent didn't send"),
+    ("someone else changed", "changed by someone else"),
+)
+
+
+def kind_of(reasons: list[str]) -> str:
+    text = " ".join(reasons)
+    for needle, kind in KINDS:
+        if needle in text:
+            return kind
+    return "other (see the reasons)"
+
+
 def summarize(shadow: Any) -> dict[str, Any]:
     checks = []
     for ep in shadow.episodes:
@@ -44,11 +64,24 @@ def summarize(shadow: Any) -> dict[str, Any]:
                     for w in ep.writes
                 ],
                 "evidence": ep.evidence,
+                "late": (
+                    {"verdict": ep.late_verdict, "reasons": list(ep.late_reasons)}
+                    if ep.late_verdict
+                    else (
+                        {"verdict": "PENDING", "reasons": ["recheck not yet due"]}
+                        if ep.recheck_at
+                        else None
+                    )
+                ),
             }
         )
     counts = {
         v: sum(1 for c in checks if c["verdict"] == v) for v in (*ORDER, "PENDING")
     }
+    kinds: dict[str, int] = {}
+    for c in checks:
+        if c["verdict"] == "REFUTED":
+            kinds[kind_of(c["reasons"])] = kinds.get(kind_of(c["reasons"]), 0) + 1
     held = [w.held_ms for w in shadow.writes]
     added = [w.held_ms + w.proxy_ms for w in shadow.writes]
     first = min((w.started for w in shadow.writes), default=None)
@@ -63,6 +96,13 @@ def summarize(shadow: Any) -> dict[str, Any]:
         "writes_seen": len(shadow.writes),
         "checks": len(checks),
         "counts": counts,
+        "late_refuted": sum(
+            1 for c in checks if (c["late"] or {}).get("verdict") == "REFUTED"
+        ),
+        "rechecks_pending": sum(
+            1 for c in checks if (c["late"] or {}).get("verdict") == "PENDING"
+        ),
+        "refuted_by_kind": dict(sorted(kinds.items(), key=lambda kv: -kv[1])),
         "overhead_ms": {"held_for_baseline": _ms(held), "added_total": _ms(added)},
         "errors": list(shadow.errors),
         "items": sorted(
@@ -99,18 +139,32 @@ def _item(c: dict[str, Any]) -> str:
         f"<td>{w['held_ms'] + w['proxy_ms']:.0f} ms</td></tr>"
         for w in c["writes"]
     )
+    fields = ev.get("fields") or []
+    differ = [f for f in fields if not f["same"]]
     rows = "".join(
-        f"<tr{' class=diff' if not f['same'] else ''}><td>{html.escape(f['record'])}</td>"
+        f"<tr class=diff><td>{html.escape(f['record'])}</td>"
         f"<td>{html.escape(f['field'])}</td><td>{_value(f['sent'])}</td>"
         f"<td>{_value(f['stored'])}</td></tr>"
-        for f in ev.get("fields") or []
+        for f in differ
     )
+    if fields:
+        rows += (
+            f"<tr><td colspan=4 class=mute>{len(fields) - len(differ)} other "
+            "fields hold what the agent sent (all fields are under Evidence)</td></tr>"
+        )
     if not rows and c["sent"]:
         rows = "".join(
             f"<tr><td></td><td>{html.escape(k)}</td><td>{_value(v)}</td><td></td></tr>"
             for k, v in c["sent"].items()
         )
     reasons = "".join(f"<li>{html.escape(r)}</li>" for r in c["reasons"])
+    late = c.get("late") or {}
+    if late:
+        reasons += (
+            f"<li>Checked again: <b class={late['verdict']}>{late['verdict']}</b>"
+            + "".join(f"; {html.escape(r)}" for r in late["reasons"])
+            + "</li>"
+        )
     before = ", ".join(ev.get("before") or []) or "none"
     return (
         f"<div class=item><b class={c['verdict']}>{c['verdict']}</b> "
@@ -143,6 +197,11 @@ def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str
         if v != "PENDING" or n[v]
     )
     oh = doc["overhead_ms"]["added_total"]
+    if doc.get("late_refuted"):
+        tiles += (
+            f"<div class=tile><b class=REFUTED>{doc['late_refuted']}</b>"
+            "Refuted on recheck</div>"
+        )
     sections = []
     for v, title in (
         ("REFUTED", "Landed wrong"),
@@ -154,6 +213,16 @@ def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str
             sections.append(
                 f"<h2>{title} ({len(items)})</h2>" + "".join(map(_item, items))
             )
+    late = [
+        c for c in doc["items"] if (c.get("late") or {}).get("verdict") == "REFUTED"
+    ]
+    if late:
+        sections.insert(
+            0,
+            f"<h2>Landed wrong after the check ({len(late)})</h2>"
+            "<p class=mute>Confirmed at first, then refuted when checked again: "
+            "something changed after the write.</p>" + "".join(map(_item, late)),
+        )
     ok = [c for c in doc["items"] if c["verdict"] == "CONFIRMED"]
     if ok:
         sections.append(
@@ -189,7 +258,17 @@ def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str
         f"<p>{doc['writes_seen']} writes seen, in {doc['checks']} checks "
         "(a record's create, retries and corrections are one check).</p>"
         f"<div class=tiles>{tiles}</div>"
-        f"<p class=mute>Added latency per write: median {oh['median']} ms, "
+        + (
+            "<p>How they landed wrong:</p><ul>"
+            + "".join(
+                f"<li>{html.escape(k)}: {v}</li>"
+                for k, v in (doc.get("refuted_by_kind") or {}).items()
+            )
+            + "</ul>"
+            if doc.get("refuted_by_kind")
+            else ""
+        )
+        + f"<p class=mute>Added latency per write: median {oh['median']} ms, "
         f"largest {oh['max']} ms.</p>"
         + "".join(sections)
         + setup_html

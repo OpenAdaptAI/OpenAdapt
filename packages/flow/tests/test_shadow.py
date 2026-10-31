@@ -279,3 +279,23 @@ def test_a_write_the_route_doesnt_fit_is_uncertain_not_refuted(tmp_path: Path) -
     (item,) = sh.results()["items"]
     assert item["verdict"] == "UNCERTAIN" and len(app.received) == 1
     assert "doesn't give lname (at surname)" in item["reasons"][0]
+
+
+def test_a_late_write_after_a_sql_confirmation_is_refuted_on_the_recheck(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path)
+    app = App(db)
+    sh = _shadow(tmp_path, app, db)
+    sh.routes[0].contract.config.frame.database.recheck_after_s = 1
+    assert _post(sh.url, BODY)[0] == 201
+    sh.flush()
+    (ep,) = sh.episodes
+    assert ep.verdict == "CONFIRMED" and ep.recheck_at
+    con = sqlite3.connect(db)  # a background job, a second later
+    con.execute("UPDATE patient SET phone='9' WHERE id=1")
+    con.commit()
+    con.close()
+    sh.run_rechecks(now=True)
+    sh.stop()
+    assert ep.late_verdict == "REFUTED" and sh.results()["late_refuted"] == 1

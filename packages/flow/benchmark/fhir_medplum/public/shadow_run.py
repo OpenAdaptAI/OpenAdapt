@@ -161,10 +161,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "error": str(exc)[:300],
                 }
             eps = current.get("episodes") or []
+            # The case is done (its late side writes too): check each
+            # CONFIRMED again now, before the next case empties the store.
+            shadow.run_rechecks(now=True, only=list(eps))
             verdicts = [e.verdict for e in eps]
+            late = [e.late_verdict for e in eps if e.late_verdict]
             proxy_writes = sum(1 for e in proxy.log if e.get("method") in WRITE_METHODS)
             row["shadow"] = {
                 "verdict": case_verdict(verdicts),
+                "late": case_verdict(late) if late else "",
                 "checks": [
                     {
                         "id": e.id,
@@ -178,11 +183,18 @@ def main(argv: Optional[list[str]] = None) -> int:
                 "proxy_writes": proxy_writes,
             }
             oracle = (row.get("oracle") or {}).get("verdict", "error")
-            row["shadow_outcome"] = outcome(oracle, row["shadow"]["verdict"])
+            final, note = row["shadow"]["verdict"], ""
+            if final == "CONFIRMED" and row["shadow"]["late"] in (
+                "REFUTED",
+                "UNCERTAIN",
+            ):
+                final, note = row["shadow"]["late"], " (on recheck)"
+            row["shadow_outcome"] = outcome(oracle, final) + note
             rows.append(row)
             print(
                 f"[{i:2}/{len(cases)}] {case['id']:5} {case['class']:16} oracle "
-                f"{oracle:8} shadow {row['shadow']['verdict']:10} -> {row['shadow_outcome']}",
+                f"{oracle:8} shadow {row['shadow']['verdict']:10} "
+                f"recheck {row['shadow']['late'] or '-':10} -> {row['shadow_outcome']}",
                 flush=True,
             )
     finally:
