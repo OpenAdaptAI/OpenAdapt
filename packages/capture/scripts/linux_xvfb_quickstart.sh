@@ -8,7 +8,8 @@
 #
 # It clicks into a terminal window, types "hello", stops the recorder the way
 # Ctrl+C does, and exits non-zero unless the saved recording holds that click
-# and that text. Nothing leaves the container; the recording is discarded with
+# and that text. It then runs scripts/linux_xvfb_focus_check.py, which checks
+# window-scoped focus against three real windows of one process. Nothing leaves the container; the recording is discarded with
 # it.
 set -euo pipefail
 
@@ -113,3 +114,7 @@ print(f"click at (200, 200): {len(clicks)}; typed text: {text!r}")
 if len(clicks) != 1 or text != "hello":
     raise SystemExit("the recording does not hold the click and the typed text")
 EOF
+
+# Window-scoped input: keys and clicks count only when the target window
+# itself has them, not another window of the same process.
+python /tmp/src/scripts/linux_xvfb_focus_check.py
