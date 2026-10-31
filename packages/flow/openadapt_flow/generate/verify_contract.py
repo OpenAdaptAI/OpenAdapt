@@ -1869,6 +1869,12 @@ def build_contract(
         # values only when something is written.
         if found and not spec.get("by_key"):
             continue
+        # A row the task's values name applies only to a field set that
+        # gives them (a call logged on a contact names no lead).
+        if any(
+            "param" in v and v["param"] not in fields for v in spec["selector"].values()
+        ):
+            continue
         cols = [c for c in spec["columns"] if c in excused.get(spec["table"], set())]
         if not cols:
             continue
