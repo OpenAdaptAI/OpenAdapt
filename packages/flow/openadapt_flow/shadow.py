@@ -206,7 +206,8 @@ class Shadow:
     @property
     def url(self) -> str:
         host, port = self.server.server_address[:2]
-        return f"http://{host}:{port}"
+        name = host.decode() if isinstance(host, bytes) else host
+        return f"http://{name}:{port}"
 
     def start(self) -> "Shadow":
         for t in self._threads:
@@ -257,7 +258,7 @@ class Shadow:
 
     def _read_body(self, h: BaseHTTPRequestHandler) -> bytes:
         if "chunked" in (h.headers.get("Transfer-Encoding") or "").lower():
-            chunks = []
+            chunks: list[bytes] = []
             while True:
                 size = int(h.rfile.readline().split(b";")[0].strip() or b"0", 16)
                 if size == 0:
@@ -347,7 +348,7 @@ class Shadow:
             if up.scheme == "https"
             else http.client.HTTPConnection
         )
-        conn = cls(up.hostname, up.port, timeout=self.upstream_timeout_s)
+        conn = cls(up.hostname or "", up.port, timeout=self.upstream_timeout_s)
         target = (up.path.rstrip("/") + path) if up.path not in ("", "/") else path
         # http.server decodes the request line as Latin-1; send the same bytes,
         # with any byte outside ASCII percent-encoded (the same URL).
@@ -449,10 +450,10 @@ class Shadow:
                         ),
                     )
                     break
-            ep = self._by_key.get(key) if key else None
-            if ep is not None and ep.checked:
-                ep = None  # checked already: a new write starts a new episode
-            if ep is None:
+            found = self._by_key.get(key) if key else None
+            if found is not None and not found.checked:
+                ep = found  # (a checked one: a new write starts a new episode)
+            else:
                 if ref or method != "POST":
                     ep = self._unchecked(
                         rtype,
@@ -701,7 +702,7 @@ class Shadow:
                 and o.writes
                 and o.writes[0].started > ep.checked_at
             ]
-        r = recheck(
+        late = recheck(
             ep.contract,
             ep.result,
             params=ep.params,
@@ -710,7 +711,7 @@ class Shadow:
             wait=True,  # due by now; never refuse for a clock a second early
             ledger=None,
         )
-        ep.late_verdict, ep.late_reasons = str(r.outcome), list(r.reasons)
+        ep.late_verdict, ep.late_reasons = str(late.outcome), list(late.reasons)
 
     def _check(self, ep: Episode) -> None:
         statuses = [w.status for w in ep.writes]
