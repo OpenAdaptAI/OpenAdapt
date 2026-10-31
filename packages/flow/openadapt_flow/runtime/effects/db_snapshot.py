@@ -1589,7 +1589,14 @@ def _snapshot(
         defs, snap.objects = _pg_definitions(s, scope, default_schema)
         counters, others = _pg_counters(defs, sequences)
         for q in others:
+            if q.name in defs:
+                raise SnapshotError(f"sequence {q.name!r} has the name of a table")
             defs[q.name] = _pg_sequence_def(q)
+        if LARGE_OBJECTS in defs:
+            # A table of that name would be replaced, and so never read.
+            raise SnapshotError(
+                f"a table is named {LARGE_OBJECTS!r}, which the snapshot uses"
+            )
         defs[LARGE_OBJECTS] = _pg_large_objects()
         snap.schemas = list(scope)
         snap.schemas_skipped = skipped_schemas
