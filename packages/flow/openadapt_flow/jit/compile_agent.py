@@ -537,7 +537,12 @@ class Recording:
             inputs=dict(self._params),
             model_key=owner.model_key,
         )
-        scope = owner._teach_scope(self._params)
+        try:
+            scope = owner._teach_scope(self._params)
+        except Exception:
+            # An authorization that does not verify or fit leaves no draft.
+            shutil.rmtree(program, ignore_errors=True)
+            raise
         if scope is not None:
             from openadapt_flow.teach_scope import TeachGuard
 
@@ -705,6 +710,11 @@ class CompiledAgent:
     on_warning: Optional[Callable[[str], None]] = None
     require_distinct_reviewer_and_admitter: bool = False
     teach_scope: Optional[TeachScopeSource] = None
+    #: A person's signed teach authorization
+    #: (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). With
+    #: one, the recording's scope is bound from it; ``teach_scope`` may only
+    #: narrow it. Without one the draft can't be admitted.
+    teach_authorization: Any = None
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
     # -- layout --------------------------------------------------------------
@@ -812,11 +822,28 @@ class CompiledAgent:
         from openadapt_flow.teach_scope import TeachScope
 
         source = self.teach_scope
-        if source is None:
+        authority = self.teach_authorization
+        if source is None and authority is None:
             return None
-        scope = source if isinstance(source, TeachScope) else source(dict(params))
+        authorized = None
+        if authority is not None:
+            from openadapt_flow import teach_authorization as ta
+
+            # Verify the copy kept beside the draft, so it is the one admitted.
+            kept = authority.kept_in(
+                self.program_dir / lifecycle.TEACH_AUTHORIZATION_DIR
+            )
+            authorized = kept.scope(
+                purpose="teach", task_id=self.task.task_id, params=params
+            )
+        if source is None:
+            scope = authorized
+        else:
+            scope = source if isinstance(source, TeachScope) else source(dict(params))
         if not isinstance(scope, TeachScope):
             raise ValueError("teach_scope must be a TeachScope or return one")
+        if authorized is not None and scope is not authorized:
+            scope = ta.narrowed(scope, authorized)
         if scope.task_id != self.task.task_id:
             raise ValueError(
                 f"the teach scope is for task {scope.task_id!r}, not "
@@ -921,6 +948,10 @@ class CompiledAgent:
                 **guard.report(),
                 "readback": readback.to_dict() if readback is not None else None,
             }
+            if guard.scope.authorization is not None:
+                # Who signed the scope; the statement is kept beside the
+                # draft (lifecycle.TEACH_AUTHORIZATION_DIR) for admission.
+                candidate["teach_authorization"] = dict(guard.scope.authorization)
         # Who made the recording, signed with the bundle digest, so editing
         # candidate.json can't turn the recorder into someone else.
         candidate = lifecycle.sign_recorder(program, candidate, key_dir=self.key_dir)
@@ -1379,6 +1410,7 @@ def compile_agent(
     on_warning: Optional[Callable[[str], None]] = None,
     require_distinct_reviewer_and_admitter: bool = False,
     teach_scope: Optional[TeachScopeSource] = None,
+    teach_authorization: Any = None,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -1417,6 +1449,11 @@ def compile_agent(
             system of record is read back after the run. A violation ends the
             capture as ``scope_refused`` or ``readback_refused`` with no
             draft. See ``docs/THREAT_MODEL.md``.
+        teach_authorization: A person's signed teach authorization
+            (:class:`~openadapt_flow.teach_authorization.TeachAuthority`).
+            The recording's scope is bound from it, and ``teach_scope`` may
+            only narrow it. Admission refuses an agent-taught draft without
+            one.
     """
 
     if agent is not None:
@@ -1446,4 +1483,5 @@ def compile_agent(
         on_warning=on_warning,
         require_distinct_reviewer_and_admitter=require_distinct_reviewer_and_admitter,
         teach_scope=teach_scope,
+        teach_authorization=teach_authorization,
     )
