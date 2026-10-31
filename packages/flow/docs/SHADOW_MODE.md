@@ -79,17 +79,28 @@ answered. So each `CONFIRMED` is checked again:
 
 - `fhir`: `recheck_s` after the check (default 300 s), `verify_ensure`
   reads the server again over the window since the first check, with the
-  confirmed record as the one already there. It refutes when the agent's
-  credential wrote anything since that no write through the shadow
-  explains, or when the record is gone, no longer matches, or has a
-  duplicate.
+  confirmed record as the one already there. It refutes when the record is
+  gone, is no longer the person, holds a value other than the one sent, or
+  has a duplicate, and when the agent's credential wrote anything since
+  that no other write through the shadow explains (a write to the confirmed
+  record itself never counts as explained). `--recheck-s 0` turns it off.
 - `sql`: when the contract's `frame.database.recheck_after_s` is due,
-  `verifier.recheck` reads the whole database again. A contract without it
-  isn't rechecked.
+  `verifier.recheck` reads the whole database again. Later writes through
+  the shadow under the same contract are excused as the verifier excuses
+  them. A contract without `recheck_after_s` isn't rechecked.
 
-A recheck that refutes is a line of its own in the report ("Landed wrong
-after the check"), beside the first verdict, which stays as it was.
-`--until-idle` waits for the rechecks that are due.
+A recheck that doesn't confirm sets the write's final verdict: it moves to
+"Landed wrong after the check" (`REFUTED`) or "Couldn't be confirmed"
+(`UNCERTAIN`), and both verdicts are shown. The counts are of final
+verdicts. A recheck still to run is listed as not yet run; `--until-idle`
+waits for the rechecks, while Ctrl-C ends the run without them.
+
+A recheck reads a window, not one record. A change in it by the agent's
+credential that no write through the shadow explains refutes every
+`CONFIRMED` whose window holds it, not only the write it came from. If the
+agent made a later write through the shadow whose record the recheck can't
+know (a lost reply, a write under no contract), a refutation becomes
+`UNCERTAIN` instead.
 
 ## Where the contract comes from
 
@@ -134,6 +145,8 @@ Keep it where the system of record's data may be kept.
   A write the agent makes while an episode is checked makes that episode
   `UNCERTAIN`.
 - A change after the recheck's read is outside it.
+- A write the agent was asked to make and never made shows nowhere: the
+  shadow sees only writes.
 - The server's links (`Location`, `fullUrl`) name the server, not the
   shadow. An agent that follows them goes around the shadow, and those writes
   show only as unexplained changes inside other checks.

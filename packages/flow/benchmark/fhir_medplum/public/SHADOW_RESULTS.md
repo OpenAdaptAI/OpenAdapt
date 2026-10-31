@@ -29,8 +29,11 @@ each case. Runner: `shadow_run.py`. Data: `results/shadow/`.
 - **The recheck** caught A10 for both agents. In A10, the fault proxy adds a
   second allergy with the agent's own credential after the agent has
   answered and the first check has passed. The recheck runs over the window
-  since the first check. In the benchmark it runs as soon as the case ends;
-  the command's default is 300 s.
+  since the first check. In the benchmark it runs as soon as the case ends,
+  before the next case empties the server, so each recheck window holds one
+  case. No run here used the command's 300 s default, and none measured a
+  recheck whose window spans several tasks; `SHADOW_MODE.md` says what such
+  a window does.
 - **Claude's 4 correct writes REFUTED** are the benchmark's own 4 hard
   cases: A04, A05, AP03 and AP11. In each, the fault proxy saved the record
   as a different patient, substance or slot, and Claude fixed it with one PUT.
@@ -44,7 +47,8 @@ each case. Runner: `shadow_run.py`. Data: `results/shadow/`.
 
 How they landed wrong, as the report groups them (scripted agent): a value
 differs from what the agent sent (9), another record changed (4), saved more
-than once (3), holds a value the agent didn't send (1).
+than once (3), holds a value the agent didn't send (1), changed after the
+check (1).
 
 ## It adds no writes and doesn't change them
 
@@ -78,8 +82,10 @@ Medplum, and timed it (`results/shadow/setup/setup-timing.json`):
 | 2. The agent's actor reference (`/auth/me`; Medplum's sign-in took 61 s) | 61.1 s |
 | 3. `shadow.yaml` (5 lines) and the three reference contracts, copied | 0.0 s |
 | 4. `openadapt shadow --config shadow.yaml` started | 0.6 s |
-| 5. The agent's first task, its check, its recheck and the report | 14.6 s |
+| 5. The agent's first task, its check, its recheck (`--recheck-s 3`) and the report | 14.6 s |
 | **Machine time, from nothing to a confirmed and rechecked first write** | **76.5 s** |
+
+With the 300 s default, step 5 waits about 5 minutes more for the recheck.
 
 It took three decisions:
 
@@ -109,6 +115,9 @@ person". The timing task now uses a new person each run.
 - **Updates and deletes of existing records.** These are UNCERTAIN: an
   ensure-record contract checks creates.
 - **Changes after the recheck's read.**
+- **Writes the agent never made.** In the Claude run, P03 ended with no
+  patient (Claude wrote nothing), and P10, an ambiguous case, with no write.
+  "Missed 0" counts only writes the agent made.
 
 ## Rerun
 
@@ -119,5 +128,8 @@ python -m benchmark.fhir_medplum.public.shadow_run --agent scripted --port 9740
 ```
 
 Add `--agent claude` with `ANTHROPIC_API_KEY` set; the Claude run's model
-spend was $0.72. After these runs, the kind labels in both reports were re-derived
-with the final `KINDS` table in `shadow_report.py`; the verdicts are as run.
+spend was $0.72. After these runs, review round 2 changed how the report
+counts and labels: final verdicts (a recheck that doesn't confirm overrides
+the first CONFIRMED) and the final `KINDS` table in `shadow_report.py`.
+`report.json` and `report.html` were re-derived from the run's own verdicts
+with that code; no verdict changed.

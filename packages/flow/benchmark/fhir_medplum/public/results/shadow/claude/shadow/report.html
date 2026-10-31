@@ -8,7 +8,7 @@ h1{font-size:22px}h2{font-size:18px;margin-top:28px}.mute{color:var(--mute)}
 table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
 .item{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:12px 0}.diff{color:var(--bad);font-weight:600}
 details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
-</style></head><body><h1>Shadow report</h1><p class=mute>FHIR writes to http://127.0.0.1:9743. Each write was checked against the system of record. The shadow sent each one on as the agent sent it and blocked none.</p><p>42 writes seen, in 32 checks (a record's create, retries and corrections are one check).</p><div class=tiles><div class=tile><b class=REFUTED>12</b>Refuted</div><div class=tile><b class=UNCERTAIN>1</b>Uncertain</div><div class=tile><b class=CONFIRMED>19</b>Confirmed</div><div class=tile><b class=REFUTED>1</b>Refuted on recheck</div></div><p>How they landed wrong:</p><ul><li>another record changed: 4</li><li>saved as another record first, then corrected: 4</li><li>saved more than once: 3</li><li>holds a value the agent didn&#x27;t send: 1</li></ul><p class=mute>Added latency per write: median 25.3 ms, largest 45.0 ms.</p><h2>Landed wrong after the check (1)</h2><p class=mute>Confirmed at first, then refuted when checked again: something changed after the write.</p><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 19, records: AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3</span><ul><li>created once, every value read back</li><li>Checked again: <b class=REFUTED>REFUTED</b>; since the first check: 1 record(s) were already the person, and the agent wrote anyway; since the first check: wrong or missing: patient; since the first check: the created record is not the person; since the first check: 1 other record(s) are now also the person; since the first check: the created record does not come back from a search</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>41 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+</style></head><body><h1>Shadow report</h1><p class=mute>FHIR writes to http://127.0.0.1:9743. Each write was checked against the system of record. The shadow sent each one on as the agent sent it and blocked none.</p><p>42 writes seen, in 32 checks (a record's create, retries and corrections are one check).</p><div class=tiles><div class=tile><b class=REFUTED>13</b>Refuted</div><div class=tile><b class=UNCERTAIN>1</b>Uncertain</div><div class=tile><b class=CONFIRMED>18</b>Confirmed</div></div><p>Rechecks of confirmed writes: 1 refuted.</p><p>How they landed wrong:</p><ul><li>another record changed: 4</li><li>saved as another record first, then corrected: 4</li><li>saved more than once: 3</li><li>holds a value the agent didn&#x27;t send: 1</li><li>changed after the check: 1</li></ul><p class=mute>Added latency per write: median 25.3 ms, largest 45.0 ms.</p><h2>Landed wrong after the check (1)</h2><p class=mute>Confirmed at first, then refuted when checked again: something changed after the write.</p><div class=item><b class=REFUTED>REFUTED</b> <b>AllergyIntolerance</b> <span class=mute>check 19, records: AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=REFUTED>REFUTED</b>; since the first check: 1 record(s) were already the person, and the agent wrote anyway; since the first check: wrong or missing: patient; since the first check: the created record is not the person; since the first check: 1 other record(s) are now also the person; since the first check: the created record does not come back from a search</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>41 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3&quot;: {
    &quot;clinicalStatus&quot;: {
@@ -1345,7 +1345,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><h2>Confirmed (19)</h2><details><summary>Show</summary><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 1, records: Patient/4b121980-4909-455e-957a-3a432d6d4e79</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>29 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><h2>Confirmed (18)</h2><details><summary>Show</summary><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 1, records: Patient/4b121980-4909-455e-957a-3a432d6d4e79</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>29 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Patient/4b121980-4909-455e-957a-3a432d6d4e79&quot;: {
    &quot;address&quot;: [
@@ -1482,7 +1482,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 2, records: Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>28 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 2, records: Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>28 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846&quot;: {
    &quot;address&quot;: [
@@ -1622,7 +1622,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unlogged_writes&quot;: 0,
   &quot;writes_to_record&quot;: 2
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 3, records: Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>26 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 3, records: Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>26 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e&quot;: {
    &quot;address&quot;: [
@@ -1762,7 +1762,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unlogged_writes&quot;: 0,
   &quot;writes_to_record&quot;: 2
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 6, records: none</span><ul><li>created once, every value read back</li><li>the agent got an error reply (504) but the write landed</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td></td><td>given</td><td>Lena</td><td></td></tr><tr><td></td><td>family</td><td>Okafor</td><td></td></tr><tr><td></td><td>birthDate</td><td>1988-04-22</td><td></td></tr><tr><td></td><td>gender</td><td>female</td><td></td></tr><tr><td></td><td>line</td><td>14 Birch Lane</td><td></td></tr><tr><td></td><td>city</td><td>Springfield</td><td></td></tr><tr><td></td><td>state</td><td>MA</td><td></td></tr><tr><td></td><td>postalCode</td><td>01103</td><td></td></tr><tr><td></td><td>phone</td><td>413-555-0187</td><td></td></tr><tr><td></td><td>email</td><td>lena.okafor@example.org</td><td></td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>504</td><td>36 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 6, records: none</span><ul><li>created once, every value read back</li><li>the agent got an error reply (504) but the write landed</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td></td><td>given</td><td>Lena</td><td></td></tr><tr><td></td><td>family</td><td>Okafor</td><td></td></tr><tr><td></td><td>birthDate</td><td>1988-04-22</td><td></td></tr><tr><td></td><td>gender</td><td>female</td><td></td></tr><tr><td></td><td>line</td><td>14 Birch Lane</td><td></td></tr><tr><td></td><td>city</td><td>Springfield</td><td></td></tr><tr><td></td><td>state</td><td>MA</td><td></td></tr><tr><td></td><td>postalCode</td><td>01103</td><td></td></tr><tr><td></td><td>phone</td><td>413-555-0187</td><td></td></tr><tr><td></td><td>email</td><td>lena.okafor@example.org</td><td></td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>504</td><td>36 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {},
  &quot;before&quot;: [],
  &quot;fields&quot;: [],
@@ -1788,7 +1788,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 8, records: Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd</span><ul><li>created once, every value read back</li><li>the agent got an error reply (503, 201) but the write landed</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>503</td><td>32 ms</td></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 8, records: Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd</span><ul><li>created once, every value read back</li><li>the agent got an error reply (503, 201) but the write landed</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>503</td><td>32 ms</td></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd&quot;: {
    &quot;address&quot;: [
@@ -1926,7 +1926,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 9, records: Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>36 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Patient</b> <span class=mute>check 9, records: Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>10 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Patient</td><td>201</td><td>36 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4&quot;: {
    &quot;address&quot;: [
@@ -2065,7 +2065,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 11, records: AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>17 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 11, records: AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>17 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5&quot;: {
    &quot;clinicalStatus&quot;: {
@@ -2172,7 +2172,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 12, records: AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>45 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 12, records: AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>45 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d&quot;: {
    &quot;clinicalStatus&quot;: {
@@ -2278,7 +2278,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 15, records: AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>24 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 15, records: AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>24 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04&quot;: {
    &quot;clinicalStatus&quot;: {
@@ -2387,7 +2387,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unlogged_writes&quot;: 0,
   &quot;writes_to_record&quot;: 2
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 18, records: AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>42 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 18, records: AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>42 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73&quot;: {
    &quot;clinicalStatus&quot;: {
@@ -2494,117 +2494,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 19, records: AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3</span><ul><li>created once, every value read back</li><li>Checked again: <b class=REFUTED>REFUTED</b>; since the first check: 1 record(s) were already the person, and the agent wrote anyway; since the first check: wrong or missing: patient; since the first check: the created record is not the person; since the first check: 1 other record(s) are now also the person; since the first check: the created record does not come back from a search</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>41 ms</td></tr></table><details><summary>Evidence</summary><pre>{
- &quot;after&quot;: {
-  &quot;AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3&quot;: {
-   &quot;clinicalStatus&quot;: {
-    &quot;coding&quot;: [
-     {
-      &quot;code&quot;: &quot;active&quot;,
-      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical&quot;
-     }
-    ]
-   },
-   &quot;code&quot;: {
-    &quot;coding&quot;: [
-     {
-      &quot;code&quot;: &quot;91936005&quot;,
-      &quot;system&quot;: &quot;http://snomed.info/sct&quot;
-     }
-    ]
-   },
-   &quot;criticality&quot;: &quot;high&quot;,
-   &quot;id&quot;: &quot;f6efe421-c750-4162-a8fb-a660629b87d3&quot;,
-   &quot;meta&quot;: {
-    &quot;lastUpdated&quot;: &quot;2026-10-31T17:54:41.735Z&quot;,
-    &quot;versionId&quot;: &quot;95bc4c4c-b396-408f-b5d2-e6de4332c2b4&quot;
-   },
-   &quot;patient&quot;: {
-    &quot;reference&quot;: &quot;Patient/0630c8ac-8d76-4cbd-87dd-2c696e2d050e&quot;
-   },
-   &quot;resourceType&quot;: &quot;AllergyIntolerance&quot;,
-   &quot;verificationStatus&quot;: {
-    &quot;coding&quot;: [
-     {
-      &quot;code&quot;: &quot;confirmed&quot;,
-      &quot;system&quot;: &quot;http://terminology.hl7.org/CodeSystem/allergyintolerance-verification&quot;
-     }
-    ]
-   }
-  }
- },
- &quot;before&quot;: [],
- &quot;fields&quot;: [
-  {
-   &quot;field&quot;: &quot;patient&quot;,
-   &quot;record&quot;: &quot;AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3&quot;,
-   &quot;same&quot;: true,
-   &quot;sent&quot;: &quot;Patient/0630c8ac-8d76-4cbd-87dd-2c696e2d050e&quot;,
-   &quot;stored&quot;: &quot;Patient/0630c8ac-8d76-4cbd-87dd-2c696e2d050e&quot;
-  },
-  {
-   &quot;field&quot;: &quot;code_system&quot;,
-   &quot;record&quot;: &quot;AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3&quot;,
-   &quot;same&quot;: true,
-   &quot;sent&quot;: &quot;http://snomed.info/sct&quot;,
-   &quot;stored&quot;: &quot;http://snomed.info/sct&quot;
-  },
-  {
-   &quot;field&quot;: &quot;code&quot;,
-   &quot;record&quot;: &quot;AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3&quot;,
-   &quot;same&quot;: true,
-   &quot;sent&quot;: &quot;91936005&quot;,
-   &quot;stored&quot;: &quot;91936005&quot;
-  },
-  {
-   &quot;field&quot;: &quot;criticality&quot;,
-   &quot;record&quot;: &quot;AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3&quot;,
-   &quot;same&quot;: true,
-   &quot;sent&quot;: &quot;high&quot;,
-   &quot;stored&quot;: &quot;high&quot;
-  },
-  {
-   &quot;field&quot;: &quot;clinical_status&quot;,
-   &quot;record&quot;: &quot;AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3&quot;,
-   &quot;same&quot;: true,
-   &quot;sent&quot;: &quot;active&quot;,
-   &quot;stored&quot;: &quot;active&quot;
-  },
-  {
-   &quot;field&quot;: &quot;verification_status&quot;,
-   &quot;record&quot;: &quot;AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3&quot;,
-   &quot;same&quot;: true,
-   &quot;sent&quot;: &quot;confirmed&quot;,
-   &quot;stored&quot;: &quot;confirmed&quot;
-  }
- ],
- &quot;recheck&quot;: {
-  &quot;at&quot;: 1793469296.2015731,
-  &quot;reasons&quot;: [
-   &quot;since the first check: 1 record(s) were already the person, and the agent wrote anyway&quot;,
-   &quot;since the first check: wrong or missing: patient&quot;,
-   &quot;since the first check: the created record is not the person&quot;,
-   &quot;since the first check: 1 other record(s) are now also the person&quot;,
-   &quot;since the first check: the created record does not come back from a search&quot;
-  ],
-  &quot;verdict&quot;: &quot;REFUTED&quot;
- },
- &quot;replies&quot;: [
-  201
- ],
- &quot;verifier&quot;: {
-  &quot;after_matches&quot;: 1,
-  &quot;agent_write_types&quot;: [
-   &quot;AllergyIntolerance&quot;
-  ],
-  &quot;agent_writes&quot;: 1,
-  &quot;before_matches&quot;: 0,
-  &quot;other_writes&quot;: 0,
-  &quot;outcome&quot;: &quot;created_verified&quot;,
-  &quot;unattributed_writes&quot;: 0,
-  &quot;unlogged_writes&quot;: 0
- }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 20, records: AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>18 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 20, records: AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>18 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a&quot;: {
    &quot;clinicalStatus&quot;: {
@@ -2711,7 +2601,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 21, records: AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>38 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>AllergyIntolerance</b> <span class=mute>check 21, records: AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>6 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/AllergyIntolerance</td><td>201</td><td>38 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e&quot;: {
    &quot;clinicalStatus&quot;: {
@@ -2817,7 +2707,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 22, records: Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>27 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 22, records: Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>27 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e&quot;: {
    &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
@@ -2905,7 +2795,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 24, records: Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>24 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 24, records: Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>24 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f&quot;: {
    &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
@@ -2996,7 +2886,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unlogged_writes&quot;: 0,
   &quot;writes_to_record&quot;: 2
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 26, records: none</span><ul><li>created once, every value read back</li><li>the agent got an error reply (504) but the write landed</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td></td><td>status</td><td>booked</td><td></td></tr><tr><td></td><td>start</td><td>2026-11-17T14:00:00Z</td><td></td></tr><tr><td></td><td>end</td><td>2026-11-17T14:30:00Z</td><td></td></tr><tr><td></td><td>patient</td><td>Patient/7b44ac49-b88e-45d0-95b7-08118312a47d</td><td></td></tr><tr><td></td><td>practitioner</td><td>Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f</td><td></td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>504</td><td>29 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 26, records: none</span><ul><li>created once, every value read back</li><li>the agent got an error reply (504) but the write landed</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td></td><td>status</td><td>booked</td><td></td></tr><tr><td></td><td>start</td><td>2026-11-17T14:00:00Z</td><td></td></tr><tr><td></td><td>end</td><td>2026-11-17T14:30:00Z</td><td></td></tr><tr><td></td><td>patient</td><td>Patient/7b44ac49-b88e-45d0-95b7-08118312a47d</td><td></td></tr><tr><td></td><td>practitioner</td><td>Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f</td><td></td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>504</td><td>29 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {},
  &quot;before&quot;: [],
  &quot;fields&quot;: [],
@@ -3022,7 +2912,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 28, records: Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>33 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 28, records: Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>33 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff&quot;: {
    &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
@@ -3110,7 +3000,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unattributed_writes&quot;: 0,
   &quot;unlogged_writes&quot;: 0
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 29, records: Appointment/b8324537-f357-4ae1-a350-2006597f71fe</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>18 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/Appointment/b8324537-f357-4ae1-a350-2006597f71fe</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 29, records: Appointment/b8324537-f357-4ae1-a350-2006597f71fe</span><ul><li>created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>18 ms</td></tr><tr><td>PUT</td><td>/fhir/R4/Appointment/b8324537-f357-4ae1-a350-2006597f71fe</td><td>200</td><td>0 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Appointment/b8324537-f357-4ae1-a350-2006597f71fe&quot;: {
    &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,
@@ -3201,7 +3091,7 @@ details{margin-top:6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size
   &quot;unlogged_writes&quot;: 0,
   &quot;writes_to_record&quot;: 2
  }
-}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 32, records: Appointment/94733b93-8a58-43f0-8cdd-d66871649c03</span><ul><li>created once, every value read back</li><li>Checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>27 ms</td></tr></table><details><summary>Evidence</summary><pre>{
+}</pre></details></div><div class=item><b class=CONFIRMED>CONFIRMED</b> <b>Appointment</b> <span class=mute>check 32, records: Appointment/94733b93-8a58-43f0-8cdd-d66871649c03</span><ul><li>created once, every value read back</li><li>Checked first: <b class=CONFIRMED>CONFIRMED</b>; checked again: <b class=CONFIRMED>CONFIRMED</b>; since the first check: one record was already the person</li></ul><table><tr><th>Record</th><th>Field</th><th>Agent sent</th><th>Store holds now</th></tr><tr><td colspan=4 class=mute>5 other fields hold what the agent sent (all fields are under Evidence)</td></tr></table><p class=mute>Before the write, matching records: none</p><table><tr><th>Write</th><th>Path</th><th>Reply</th><th>Added</th></tr><tr><td>POST</td><td>/fhir/R4/Appointment</td><td>201</td><td>27 ms</td></tr></table><details><summary>Evidence</summary><pre>{
  &quot;after&quot;: {
   &quot;Appointment/94733b93-8a58-43f0-8cdd-d66871649c03&quot;: {
    &quot;end&quot;: &quot;2026-11-17T14:30:00Z&quot;,

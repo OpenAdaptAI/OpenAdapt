@@ -203,7 +203,9 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     }
-  ]
+  ],
+  "late_uncertain": 0
 }

@@ -313,3 +313,23 @@ def test_a_pinned_value_binds_without_the_body(tmp_path: Path) -> None:
     sh.stop()
     (item,) = sh.results()["items"]
     assert item["verdict"] == "CONFIRMED" and item["sent"]["lname"] == "Quill"
+
+
+def test_a_later_write_under_no_route_makes_a_late_refutation_uncertain(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path)
+    app = App(db)
+    sh = _shadow(tmp_path, app, db)
+    sh.routes[0].contract.config.frame.database.recheck_after_s = 1
+    assert _post(sh.url, BODY)[0] == 201
+    sh.flush()
+    # The agent's next write goes to a path no route checks; it moves the db.
+    app.fault = "side_write"
+    assert _post(sh.url, {**BODY, "email": "z@example.test"}, "/api/other")[0] == 201
+    sh.flush()
+    sh.run_rechecks(now=True)
+    sh.stop()
+    ep = sh.episodes[0]
+    assert ep.late_verdict == "UNCERTAIN", ep.late_reasons
+    assert "can't tell apart" in ep.late_reasons[0]

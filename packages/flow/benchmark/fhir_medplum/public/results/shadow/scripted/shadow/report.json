@@ -7,9 +7,9 @@
   "writes_seen": 33,
   "checks": 33,
   "counts": {
-    "REFUTED": 17,
+    "REFUTED": 18,
     "UNCERTAIN": 2,
-    "CONFIRMED": 14,
+    "CONFIRMED": 13,
     "PENDING": 0
   },
   "late_refuted": 1,
@@ -18,7 +18,8 @@
     "a value differs from what the agent sent": 9,
     "another record changed": 4,
     "saved more than once": 3,
-    "holds a value the agent didn't send": 1
+    "holds a value the agent didn't send": 1,
+    "changed after the check": 1
   },
   "overhead_ms": {
     "held_for_baseline": {
@@ -196,7 +197,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 4,
@@ -362,7 +364,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 5,
@@ -536,7 +539,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 6,
@@ -703,7 +707,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 8,
@@ -869,7 +874,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 14,
@@ -1004,7 +1010,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 15,
@@ -1139,7 +1146,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 16,
@@ -1272,7 +1280,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 17,
@@ -1406,7 +1415,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 18,
@@ -1540,7 +1550,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 24,
@@ -1655,7 +1666,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 25,
@@ -1768,7 +1780,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 26,
@@ -1882,7 +1895,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 28,
@@ -1995,7 +2009,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 30,
@@ -2108,7 +2123,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 31,
@@ -2222,7 +2238,8 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
     },
     {
       "id": 32,
@@ -2337,7 +2354,162 @@
           }
         ]
       },
-      "late": null
+      "late": null,
+      "final": "REFUTED"
+    },
+    {
+      "id": 20,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "patient": "Patient/fadc5ca1-448a-4d78-8080-f7500f05784b",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9"
+      ],
+      "writes": [
+        {
+          "seq": 20,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 13.7,
+          "proxy_ms": 0.1,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/fadc5ca1-448a-4d78-8080-f7500f05784b"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005",
+                  "display": "Allergy to penicillin"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "e87bd506-7bd7-485c-b1ba-7c0167d754e9",
+            "meta": {
+              "versionId": "fb0e98cd-be83-4e5c-b194-29a4ff8bcf85",
+              "lastUpdated": "2026-10-31T17:38:23.985Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
+            "field": "patient",
+            "sent": "Patient/fadc5ca1-448a-4d78-8080-f7500f05784b",
+            "stored": "Patient/fadc5ca1-448a-4d78-8080-f7500f05784b",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "REFUTED",
+          "reasons": [
+            "since the first check: 1 record(s) were already the person, and the agent wrote anyway",
+            "since the first check: wrong or missing: patient",
+            "since the first check: the created record is not the person",
+            "since the first check: 1 other record(s) are now also the person",
+            "since the first check: the created record does not come back from a search"
+          ],
+          "at": 1793468314.547277
+        }
+      },
+      "late": {
+        "verdict": "REFUTED",
+        "reasons": [
+          "since the first check: 1 record(s) were already the person, and the agent wrote anyway",
+          "since the first check: wrong or missing: patient",
+          "since the first check: the created record is not the person",
+          "since the first check: 1 other record(s) are now also the person",
+          "since the first check: the created record does not come back from a search"
+        ]
+      },
+      "final": "REFUTED"
     },
     {
       "id": 9,
@@ -2390,7 +2562,8 @@
         "after": {},
         "fields": []
       },
-      "late": null
+      "late": null,
+      "final": "UNCERTAIN"
     },
     {
       "id": 11,
@@ -2449,7 +2622,8 @@
         },
         "fields": []
       },
-      "late": null
+      "late": null,
+      "final": "UNCERTAIN"
     },
     {
       "id": 1,
@@ -2627,7 +2801,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 2,
@@ -2805,7 +2980,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 7,
@@ -2872,7 +3048,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 10,
@@ -3050,7 +3227,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 12,
@@ -3195,7 +3373,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 13,
@@ -3340,7 +3519,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 19,
@@ -3485,160 +3665,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
-    },
-    {
-      "id": 20,
-      "kind": "fhir",
-      "name": "AllergyIntolerance",
-      "verdict": "CONFIRMED",
-      "reasons": [
-        "created once, every value read back"
-      ],
-      "sent": {
-        "patient": "Patient/fadc5ca1-448a-4d78-8080-f7500f05784b",
-        "code_system": "http://snomed.info/sct",
-        "code": "91936005",
-        "criticality": "high",
-        "clinical_status": "active",
-        "verification_status": "confirmed"
       },
-      "records": [
-        "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9"
-      ],
-      "writes": [
-        {
-          "seq": 20,
-          "method": "POST",
-          "path": "/fhir/R4/AllergyIntolerance",
-          "status": 201,
-          "held_ms": 13.7,
-          "proxy_ms": 0.1,
-          "error": ""
-        }
-      ],
-      "evidence": {
-        "replies": [
-          201
-        ],
-        "verifier": {
-          "outcome": "created_verified",
-          "before_matches": 0,
-          "after_matches": 1,
-          "agent_writes": 1,
-          "other_writes": 0,
-          "unattributed_writes": 0,
-          "unlogged_writes": 0,
-          "agent_write_types": [
-            "AllergyIntolerance"
-          ]
-        },
-        "before": [],
-        "after": {
-          "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9": {
-            "resourceType": "AllergyIntolerance",
-            "patient": {
-              "reference": "Patient/fadc5ca1-448a-4d78-8080-f7500f05784b"
-            },
-            "code": {
-              "coding": [
-                {
-                  "system": "http://snomed.info/sct",
-                  "code": "91936005",
-                  "display": "Allergy to penicillin"
-                }
-              ]
-            },
-            "criticality": "high",
-            "clinicalStatus": {
-              "coding": [
-                {
-                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
-                  "code": "active"
-                }
-              ]
-            },
-            "verificationStatus": {
-              "coding": [
-                {
-                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
-                  "code": "confirmed"
-                }
-              ]
-            },
-            "id": "e87bd506-7bd7-485c-b1ba-7c0167d754e9",
-            "meta": {
-              "versionId": "fb0e98cd-be83-4e5c-b194-29a4ff8bcf85",
-              "lastUpdated": "2026-10-31T17:38:23.985Z"
-            }
-          }
-        },
-        "fields": [
-          {
-            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
-            "field": "patient",
-            "sent": "Patient/fadc5ca1-448a-4d78-8080-f7500f05784b",
-            "stored": "Patient/fadc5ca1-448a-4d78-8080-f7500f05784b",
-            "same": true
-          },
-          {
-            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
-            "field": "code_system",
-            "sent": "http://snomed.info/sct",
-            "stored": "http://snomed.info/sct",
-            "same": true
-          },
-          {
-            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
-            "field": "code",
-            "sent": "91936005",
-            "stored": "91936005",
-            "same": true
-          },
-          {
-            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
-            "field": "criticality",
-            "sent": "high",
-            "stored": "high",
-            "same": true
-          },
-          {
-            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
-            "field": "clinical_status",
-            "sent": "active",
-            "stored": "active",
-            "same": true
-          },
-          {
-            "record": "AllergyIntolerance/e87bd506-7bd7-485c-b1ba-7c0167d754e9",
-            "field": "verification_status",
-            "sent": "confirmed",
-            "stored": "confirmed",
-            "same": true
-          }
-        ],
-        "recheck": {
-          "verdict": "REFUTED",
-          "reasons": [
-            "since the first check: 1 record(s) were already the person, and the agent wrote anyway",
-            "since the first check: wrong or missing: patient",
-            "since the first check: the created record is not the person",
-            "since the first check: 1 other record(s) are now also the person",
-            "since the first check: the created record does not come back from a search"
-          ],
-          "at": 1793468314.547277
-        }
-      },
-      "late": {
-        "verdict": "REFUTED",
-        "reasons": [
-          "since the first check: 1 record(s) were already the person, and the agent wrote anyway",
-          "since the first check: wrong or missing: patient",
-          "since the first check: the created record is not the person",
-          "since the first check: 1 other record(s) are now also the person",
-          "since the first check: the created record does not come back from a search"
-        ]
-      }
+      "final": "CONFIRMED"
     },
     {
       "id": 21,
@@ -3783,7 +3811,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 22,
@@ -3928,7 +3957,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 23,
@@ -4053,7 +4083,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 27,
@@ -4115,7 +4146,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 29,
@@ -4240,7 +4272,8 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     },
     {
       "id": 33,
@@ -4365,7 +4398,9 @@
         "reasons": [
           "since the first check: one record was already the person"
         ]
-      }
+      },
+      "final": "CONFIRMED"
     }
-  ]
+  ],
+  "late_uncertain": 0
 }

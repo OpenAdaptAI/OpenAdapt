@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import statistics
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,29 +21,48 @@ def _ms(values: list[float]) -> dict[str, float]:
     return {"median": round(statistics.median(values), 1), "max": round(max(values), 1)}
 
 
-#: How a REFUTED write landed wrong, from the verifier's reasons (first match).
+#: How a REFUTED write landed wrong, from the verifier's reasons: the first
+#: pattern that matches, most specific first.
 KINDS = (
-    ("wrong or missing", "a value differs from what the agent sent"),
-    ("not one", "saved more than once"),
-    ("also the person", "saved more than once"),
-    ("other resource", "another record changed"),
-    ("outside the declared write", "another record changed"),
-    ("not given by the task", "holds a value the agent didn't send"),
-    ("someone else changed", "changed by someone else"),
+    (r"someone else changed", "changed by someone else"),
     (
-        "version in between was not the person",
+        r"version in between was not the person",
         "saved as another record first, then corrected",
     ),
-    ("after creating it", "changed after it was created"),
+    (r"created ([2-9]|\d{2,}) \S+ records, not one", "saved more than once"),
+    (r"other record\(s\) are now also the person", "saved more than once"),
+    (r"wrong or missing", "a value differs from what the agent sent"),
+    (r"not given by the task", "holds a value the agent didn't send"),
+    (r"other resource|outside the declared write", "another record changed"),
+    (r"after creating it", "changed after it was created"),
 )
 
 
-def kind_of(reasons: list[str]) -> str:
+def kind_of(reasons: list[str], *, late: bool = False) -> str:
+    if late:
+        return "changed after the check"
     text = " ".join(reasons)
-    for needle, kind in KINDS:
-        if needle in text:
+    for pattern, kind in KINDS:
+        if re.search(pattern, text):
             return kind
     return "other (see the reasons)"
+
+
+def _late(ep: Any) -> dict[str, Any] | None:
+    if ep.late_verdict:
+        return {"verdict": ep.late_verdict, "reasons": list(ep.late_reasons)}
+    if ep.recheck_at:
+        due = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ep.recheck_at))
+        return {"verdict": "PENDING", "reasons": [f"recheck due at {due}, not run"]}
+    return None
+
+
+def _final(verdict: str, late: dict[str, Any] | None) -> str:
+    """A recheck that doesn't confirm overrides the first CONFIRMED."""
+
+    if verdict == "CONFIRMED" and late and late["verdict"] in ("REFUTED", "UNCERTAIN"):
+        return str(late["verdict"])
+    return verdict
 
 
 def summarize(shadow: Any) -> dict[str, Any]:
@@ -69,24 +90,18 @@ def summarize(shadow: Any) -> dict[str, Any]:
                     for w in ep.writes
                 ],
                 "evidence": ep.evidence,
-                "late": (
-                    {"verdict": ep.late_verdict, "reasons": list(ep.late_reasons)}
-                    if ep.late_verdict
-                    else (
-                        {"verdict": "PENDING", "reasons": ["recheck not yet due"]}
-                        if ep.recheck_at
-                        else None
-                    )
-                ),
+                "late": _late(ep),
             }
         )
-    counts = {
-        v: sum(1 for c in checks if c["verdict"] == v) for v in (*ORDER, "PENDING")
-    }
+        checks[-1]["final"] = _final(checks[-1]["verdict"], checks[-1]["late"])
+    # Counted by the final verdict: a recheck that doesn't confirm moves a
+    # write out of CONFIRMED.
+    counts = {v: sum(1 for c in checks if c["final"] == v) for v in (*ORDER, "PENDING")}
     kinds: dict[str, int] = {}
     for c in checks:
-        if c["verdict"] == "REFUTED":
-            kinds[kind_of(c["reasons"])] = kinds.get(kind_of(c["reasons"]), 0) + 1
+        if c["final"] == "REFUTED":
+            k = kind_of(c["reasons"], late=c["verdict"] != "REFUTED")
+            kinds[k] = kinds.get(k, 0) + 1
     held = [w.held_ms for w in shadow.writes]
     added = [w.held_ms + w.proxy_ms for w in shadow.writes]
     first = min((w.started for w in shadow.writes), default=None)
@@ -104,15 +119,16 @@ def summarize(shadow: Any) -> dict[str, Any]:
         "late_refuted": sum(
             1 for c in checks if (c["late"] or {}).get("verdict") == "REFUTED"
         ),
+        "late_uncertain": sum(
+            1 for c in checks if (c["late"] or {}).get("verdict") == "UNCERTAIN"
+        ),
         "rechecks_pending": sum(
             1 for c in checks if (c["late"] or {}).get("verdict") == "PENDING"
         ),
         "refuted_by_kind": dict(sorted(kinds.items(), key=lambda kv: -kv[1])),
         "overhead_ms": {"held_for_baseline": _ms(held), "added_total": _ms(added)},
         "errors": list(shadow.errors),
-        "items": sorted(
-            checks, key=lambda c: (ORDER + ("PENDING",)).index(c["verdict"])
-        ),
+        "items": sorted(checks, key=lambda c: (ORDER + ("PENDING",)).index(c["final"])),
     }
 
 
@@ -166,13 +182,14 @@ def _item(c: dict[str, Any]) -> str:
     late = c.get("late") or {}
     if late:
         reasons += (
-            f"<li>Checked again: <b class={late['verdict']}>{late['verdict']}</b>"
+            f"<li>Checked first: <b class={c['verdict']}>{c['verdict']}</b>; "
+            f"checked again: <b class={late['verdict']}>{late['verdict']}</b>"
             + "".join(f"; {html.escape(r)}" for r in late["reasons"])
             + "</li>"
         )
     before = ", ".join(ev.get("before") or []) or "none"
     return (
-        f"<div class=item><b class={c['verdict']}>{c['verdict']}</b> "
+        f"<div class=item><b class={c['final']}>{c['final']}</b> "
         f"<b>{html.escape(c['name'])}</b> <span class=mute>check {c['id']}, "
         f"records: {html.escape(', '.join(c['records']) or 'none')}</span>"
         f"<ul>{reasons}</ul>"
@@ -202,33 +219,36 @@ def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str
         if v != "PENDING" or n[v]
     )
     oh = doc["overhead_ms"]["added_total"]
-    if doc.get("late_refuted"):
-        tiles += (
-            f"<div class=tile><b class=REFUTED>{doc['late_refuted']}</b>"
-            "Refuted on recheck</div>"
+    recheck_note = ", ".join(
+        f"{doc[k]} {label}"
+        for k, label in (
+            ("late_refuted", "refuted"),
+            ("late_uncertain", "couldn't be confirmed"),
+            ("rechecks_pending", "not yet run"),
         )
+        if doc.get(k)
+    )
     sections = []
+    late = [
+        c for c in doc["items"] if c["final"] == "REFUTED" and c["verdict"] != "REFUTED"
+    ]
+    if late:
+        sections.append(
+            f"<h2>Landed wrong after the check ({len(late)})</h2>"
+            "<p class=mute>Confirmed at first, then refuted when checked again: "
+            "something changed after the write.</p>" + "".join(map(_item, late))
+        )
     for v, title in (
         ("REFUTED", "Landed wrong"),
         ("UNCERTAIN", "Couldn't be confirmed"),
         ("PENDING", "Never checked (the shadow failed; see its errors)"),
     ):
-        items = [c for c in doc["items"] if c["verdict"] == v]
+        items = [c for c in doc["items"] if c["final"] == v and c not in late]
         if items:
             sections.append(
                 f"<h2>{title} ({len(items)})</h2>" + "".join(map(_item, items))
             )
-    late = [
-        c for c in doc["items"] if (c.get("late") or {}).get("verdict") == "REFUTED"
-    ]
-    if late:
-        sections.insert(
-            0,
-            f"<h2>Landed wrong after the check ({len(late)})</h2>"
-            "<p class=mute>Confirmed at first, then refuted when checked again: "
-            "something changed after the write.</p>" + "".join(map(_item, late)),
-        )
-    ok = [c for c in doc["items"] if c["verdict"] == "CONFIRMED"]
+    ok = [c for c in doc["items"] if c["final"] == "CONFIRMED"]
     if ok:
         sections.append(
             f"<h2>Confirmed ({len(ok)})</h2><details><summary>Show</summary>"
@@ -263,6 +283,11 @@ def render_html(doc: dict[str, Any], setup: dict[str, Any] | None = None) -> str
         f"<p>{doc['writes_seen']} writes seen, in {doc['checks']} checks "
         "(a record's create, retries and corrections are one check).</p>"
         f"<div class=tiles>{tiles}</div>"
+        + (
+            f"<p>Rechecks of confirmed writes: {html.escape(recheck_note)}.</p>"
+            if recheck_note
+            else ""
+        )
         + (
             "<p>How they landed wrong:</p><ul>"
             + "".join(

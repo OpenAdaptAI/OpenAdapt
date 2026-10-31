@@ -71,7 +71,7 @@ def register(sub: argparse._SubParsersAction) -> None:
         type=float,
         default=None,
         help="fhir: check each CONFIRMED write again this long after (default "
-        "300); --until-idle waits for the rechecks",
+        "300; 0 turns it off); --until-idle waits for the rechecks",
     )
     p.set_defaults(func=cmd_shadow)
 
@@ -151,11 +151,21 @@ def build(cfg: dict[str, Any], out: Path) -> Any:
         listen=("127.0.0.1", int(cfg.get("listen") or 9670)),
         hold_ms=float(cfg.get("hold_ms", 2000)),
         upstream_timeout_s=float(cfg.get("upstream_timeout_s", 300)),
-        recheck_s=None
-        if cfg.get("recheck_s", 300) is None
-        else float(cfg.get("recheck_s", 300)),
+        recheck_s=_recheck_s(cfg.get("recheck_s", 300)),
         quiet_s=float(cfg.get("quiet_s", 5)),
     )
+
+
+def _recheck_s(value: Any) -> Any:
+    """``None`` or 0 turns the fhir recheck off; a negative wait is an error."""
+
+    from openadapt_flow.shadow import ShadowConfigError
+
+    if value is None or float(value) == 0:
+        return None
+    if float(value) < 0:
+        raise ShadowConfigError("recheck_s can't be negative")
+    return float(value)
 
 
 def cmd_shadow(args: argparse.Namespace) -> int:
@@ -195,10 +205,14 @@ def cmd_shadow(args: argparse.Namespace) -> int:
         f"{doc['writes_seen']} writes, {doc['checks']} checks: {n['CONFIRMED']} "
         f"confirmed, {n['REFUTED']} refuted, {n['UNCERTAIN']} uncertain"
         + (f", {n['PENDING']} never checked" if n["PENDING"] else "")
-        + (
-            f"; {doc['late_refuted']} refuted on recheck"
-            if doc.get("late_refuted")
-            else ""
+        + "".join(
+            f"; {doc[k]} {label}"
+            for k, label in (
+                ("late_refuted", "refuted on recheck"),
+                ("late_uncertain", "uncertain on recheck"),
+                ("rechecks_pending", "rechecks not run"),
+            )
+            if doc.get(k)
         )
         + ". "
         f"Report: {page}"

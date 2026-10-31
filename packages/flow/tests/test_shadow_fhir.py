@@ -217,3 +217,108 @@ def test_a_confirmed_write_is_checked_again_and_a_late_change_refutes_it(
     # The recheck is told every other write the agent sent, checked or not.
     assert env["calls"]["verify"][-1]["declared"] == []
     assert ep.late_reasons[0].startswith("since the first check: ")
+
+
+def _stored(patient: str) -> dict[str, Any]:
+    return {
+        **_allergy(patient),
+        "id": "a1",
+        "clinicalStatus": {"coding": [{"code": "active"}]},
+        "verificationStatus": {"coding": [{"code": "confirmed"}]},
+    }
+
+
+def test_the_recheck_refutes_a_confirmed_record_changed_to_another_patient(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sh = env["sh"]
+    stored = {"now": _stored("Patient/p1")}
+    monkeypatch.setattr(
+        ensure_record.FhirReader,
+        "fetch",
+        lambda self, url, params=None: ({}, stored["now"]),
+    )
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    sh.flush()
+    (ep,) = sh.episodes
+    # Nothing moved: the recheck confirms.
+    env["calls"]["outcome"] = "found_existing"
+    sh.run_rechecks(now=True)
+    assert ep.late_verdict == "CONFIRMED", ep.late_reasons
+    # Moved to another patient: refuted, though no write of the agent's shows.
+    ep.late_verdict = ""
+    stored["now"] = _stored("Patient/p2")
+    sh.run_rechecks(now=True)
+    assert ep.late_verdict == "REFUTED"
+    assert "no longer the person" in ep.late_reasons[0]
+    assert sh.results()["counts"]["REFUTED"] == 1  # counted by the final verdict
+
+
+def test_a_later_put_to_the_confirmed_record_is_not_excused(
+    env: dict[str, Any],
+) -> None:
+    sh = env["sh"]
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    sh.flush()
+    _send(sh, "PUT", "/fhir/R4/AllergyIntolerance/a1", _allergy("Patient/p2"))
+    sh.flush()
+    sh.run_rechecks(now=True)
+    assert "AllergyIntolerance/a1" not in env["calls"]["verify"][-1]["declared"]
+
+
+def test_a_write_during_a_recheck_makes_it_uncertain(env: dict[str, Any]) -> None:
+    sh = env["sh"]
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    sh.flush()
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"agent_writes": 1}
+    env["calls"]["during"] = lambda: _send(
+        sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p9")
+    )
+    sh.run_rechecks(now=True)
+    assert sh.episodes[0].late_verdict == "UNCERTAIN"
+    assert "while this was rechecked" in sh.episodes[0].late_reasons[0]
+
+
+def test_a_later_write_with_no_known_record_makes_a_late_refutation_uncertain(
+    env: dict[str, Any],
+) -> None:
+    sh = env["sh"]
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    sh.flush()
+    env["fhir"].status = 504  # a later create whose reply is lost
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p2"))
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"agent_writes": 1}
+    sh.flush()
+    sh.run_rechecks(now=True)
+    assert sh.episodes[0].late_verdict == "UNCERTAIN"
+    assert "can't tell apart" in sh.episodes[0].late_reasons[0]
+
+
+def test_a_recheck_that_cant_be_scheduled_says_so(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_clock(self: Any) -> Any:
+        raise ensure_record.Unreadable("no Date header")
+
+    monkeypatch.setattr(ensure_record.FhirReader, "server_time", no_clock)
+    _send(env["sh"], "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    env["sh"].flush()
+    ep = env["sh"].episodes[0]
+    assert ep.verdict == "CONFIRMED" and ep.late_verdict == "UNCERTAIN"
+    assert env["sh"].results()["counts"]["UNCERTAIN"] == 1
+
+
+def test_kinds_name_how_a_write_landed_wrong() -> None:
+    from openadapt_flow.shadow_report import kind_of
+
+    created_none = ["the agent created 0 Patient records, not one"]
+    assert kind_of(created_none + ["wrote 1 other resource(s)"]) == (
+        "another record changed"
+    )
+    assert kind_of(["the agent created 2 Patient records, not one"]) == (
+        "saved more than once"
+    )
+    both = ["wrong or missing: phone", "someone else changed the created record"]
+    assert kind_of(both) == "changed by someone else"
