@@ -79,10 +79,6 @@ effects:
       param: town
   expected_count: 1
 frame:
-  ignore_fields:
-  - fk_user_modif
-  - socialnetworks
-  - tms
   target_fields: []
   versions:
     read:
@@ -91,7 +87,7 @@ frame:
       sql_connect_args: *id001
       sql_password_env: FCG_DOLIBARR_READER_PASSWORD
       sql_query: SELECT CAST(t.`fk_soc` AS CHAR) AS `id`, CAST(t.`id` AS CHAR) AS `ver`, CAST(t.`fk_user_author`
-        AS CHAR) AS `author` FROM `llx_actioncomm` t
+        AS CHAR) AS `author` FROM `llx_actioncomm` t WHERE CAST(t.`code` AS CHAR) = 'AC_COMPANY_MODIFY'
     record_field: id
     target_field: id
     version_field: ver

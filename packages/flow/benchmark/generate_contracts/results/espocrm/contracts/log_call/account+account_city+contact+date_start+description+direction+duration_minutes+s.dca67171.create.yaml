@@ -23,14 +23,20 @@ verifier:
         CAST(t.`modified_at` AS CHAR) AS `modified_at`, CAST(t.`parent_id` AS CHAR) AS `parent_id`, CAST(t.`parent_type`
         AS CHAR) AS `parent_type`, CAST(t.`account_id` AS CHAR) AS `account_id`, CAST(t.`created_by_id`
         AS CHAR) AS `created_by_id`, CAST(t.`modified_by_id` AS CHAR) AS `modified_by_id`, CAST(t.`assigned_user_id`
-        AS CHAR) AS `assigned_user_id`, (SELECT CAST(a1.`name` AS CHAR) FROM `account` a1 WHERE CAST(a1.`id`
-        AS BINARY) = CAST(t.`account_id` AS BINARY)) AS `p__account`, (SELECT CAST(a1.`billing_address_city`
-        AS CHAR) FROM `account` a1 WHERE CAST(a1.`id` AS BINARY) = CAST(t.`account_id` AS BINARY)) AS
-        `p__account_city`, CASE WHEN t.`date_start` = CAST(%(v0)s AS DATETIME) THEN '1' ELSE '0' END AS
-        `p__date_start`, CASE WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND (TIMESTAMPDIFF(SECOND,
-        t.`date_start`, t.`date_end`) / 60) = CAST(%(v1)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS
-        `p__duration_minutes`, CASE WHEN t.`deleted` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END
-        AS `pin__deleted` FROM `call` t
+        AS CHAR) AS `assigned_user_id`, (SELECT CASE WHEN (SELECT COUNT(*) FROM `account` u1 WHERE CAST(CAST(u1.`name`
+        AS CHAR) AS BINARY) = CAST(CAST(a1.`name` AS CHAR) AS BINARY) AND CAST(CAST(u1.`billing_address_city`
+        AS CHAR) AS BINARY) = CAST(CAST(a1.`billing_address_city` AS CHAR) AS BINARY) AND COALESCE(u1.`deleted`,
+        0) = 0) = 1 THEN CAST(a1.`name` AS CHAR) END FROM `account` a1 WHERE CAST(a1.`id` AS BINARY) =
+        CAST(t.`account_id` AS BINARY) AND COALESCE(a1.`deleted`, 0) = 0) AS `p__account`, (SELECT CASE
+        WHEN (SELECT COUNT(*) FROM `account` u1 WHERE CAST(CAST(u1.`name` AS CHAR) AS BINARY) = CAST(CAST(a1.`name`
+        AS CHAR) AS BINARY) AND CAST(CAST(u1.`billing_address_city` AS CHAR) AS BINARY) = CAST(CAST(a1.`billing_address_city`
+        AS CHAR) AS BINARY) AND COALESCE(u1.`deleted`, 0) = 0) = 1 THEN CAST(a1.`billing_address_city`
+        AS CHAR) END FROM `account` a1 WHERE CAST(a1.`id` AS BINARY) = CAST(t.`account_id` AS BINARY)
+        AND COALESCE(a1.`deleted`, 0) = 0) AS `p__account_city`, CASE WHEN t.`date_start` = CAST(%(v0)s
+        AS DATETIME) THEN '1' ELSE '0' END AS `p__date_start`, CASE WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$'
+        AND (TIMESTAMPDIFF(SECOND, t.`date_start`, t.`date_end`) / 60) = CAST(%(v1)s AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `p__duration_minutes`, CASE WHEN t.`deleted` = CAST('0' AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `pin__deleted` FROM `call` t
       sql_query_params:
         v0: &id002
           param: date_start
@@ -43,24 +49,57 @@ verifier:
       sql_password_env: ESPOCRM_DB_RO_PASSWORD
       sql_query: SELECT CAST(t.`id` AS CHAR) AS `id`, CAST(t.`call_id` AS CHAR) AS `call_id`, CAST(t.`contact_id`
         AS CHAR) AS `contact_id`, CAST(t.`status` AS CHAR) AS `status`, CAST(t.`deleted` AS CHAR) AS `deleted`,
-        (SELECT (SELECT CAST(a2.`name` AS CHAR) FROM `account` a2 WHERE CAST(a2.`id` AS BINARY) = CAST(a1.`account_id`
-        AS BINARY)) FROM `call` a1 WHERE a1.`id` = t.`call_id`) AS `main__account`, (SELECT (SELECT CAST(a2.`billing_address_city`
-        AS CHAR) FROM `account` a2 WHERE CAST(a2.`id` AS BINARY) = CAST(a1.`account_id` AS BINARY)) FROM
-        `call` a1 WHERE a1.`id` = t.`call_id`) AS `main__account_city`, CASE WHEN (SELECT a1.`date_start`
-        FROM `call` a1 WHERE a1.`id` = t.`call_id`) = CAST(%(v0)s AS DATETIME) THEN '1' ELSE '0' END AS
-        `main__date_start`, (SELECT CAST(a1.`description` AS CHAR) FROM `call` a1 WHERE a1.`id` = t.`call_id`)
-        AS `main__description`, (SELECT CAST(a1.`direction` AS CHAR) FROM `call` a1 WHERE a1.`id` = t.`call_id`)
-        AS `main__direction`, CASE WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND (SELECT
-        (TIMESTAMPDIFF(SECOND, a1.`date_start`, a1.`date_end`) / 60) FROM `call` a1 WHERE a1.`id` = t.`call_id`)
-        = CAST(%(v1)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `main__duration_minutes`, (SELECT CAST(a1.`status`
-        AS CHAR) FROM `call` a1 WHERE a1.`id` = t.`call_id`) AS `main__status`, (SELECT CAST(a1.`name`
-        AS CHAR) FROM `call` a1 WHERE a1.`id` = t.`call_id`) AS `main__subject`, (SELECT CONCAT(CAST(a1.`first_name`
-        AS CHAR), ' ', CAST(a1.`last_name` AS CHAR)) FROM `contact` a1 WHERE CAST(a1.`id` AS BINARY) =
-        CAST(t.`contact_id` AS BINARY)) AS `p__contact`, CASE WHEN t.`deleted` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__deleted` FROM `call_contact` t
+        (SELECT (SELECT CASE WHEN (SELECT COUNT(*) FROM `account` u2 WHERE CAST(CAST(u2.`name` AS CHAR)
+        AS BINARY) = CAST(CAST(a2.`name` AS CHAR) AS BINARY) AND CAST(CAST(u2.`billing_address_city` AS
+        CHAR) AS BINARY) = CAST(CAST(a2.`billing_address_city` AS CHAR) AS BINARY) AND COALESCE(u2.`deleted`,
+        0) = 0) = 1 THEN CAST(a2.`name` AS CHAR) END FROM `account` a2 WHERE CAST(a2.`id` AS BINARY) =
+        CAST(a1.`account_id` AS BINARY) AND COALESCE(a2.`deleted`, 0) = 0) FROM `call` a1 WHERE a1.`id`
+        = t.`call_id` AND COALESCE(a1.`deleted`, 0) = 0) AS `main__account`, (SELECT (SELECT CASE WHEN
+        (SELECT COUNT(*) FROM `account` u2 WHERE CAST(CAST(u2.`name` AS CHAR) AS BINARY) = CAST(CAST(a2.`name`
+        AS CHAR) AS BINARY) AND CAST(CAST(u2.`billing_address_city` AS CHAR) AS BINARY) = CAST(CAST(a2.`billing_address_city`
+        AS CHAR) AS BINARY) AND COALESCE(u2.`deleted`, 0) = 0) = 1 THEN CAST(a2.`billing_address_city`
+        AS CHAR) END FROM `account` a2 WHERE CAST(a2.`id` AS BINARY) = CAST(a1.`account_id` AS BINARY)
+        AND COALESCE(a2.`deleted`, 0) = 0) FROM `call` a1 WHERE a1.`id` = t.`call_id` AND COALESCE(a1.`deleted`,
+        0) = 0) AS `main__account_city`, CASE WHEN (SELECT a1.`date_start` FROM `call` a1 WHERE a1.`id`
+        = t.`call_id` AND COALESCE(a1.`deleted`, 0) = 0) = CAST(%(v0)s AS DATETIME) THEN '1' ELSE '0'
+        END AS `main__date_start`, (SELECT CAST(a1.`description` AS CHAR) FROM `call` a1 WHERE a1.`id`
+        = t.`call_id` AND COALESCE(a1.`deleted`, 0) = 0) AS `main__description`, (SELECT CAST(a1.`direction`
+        AS CHAR) FROM `call` a1 WHERE a1.`id` = t.`call_id` AND COALESCE(a1.`deleted`, 0) = 0) AS `main__direction`,
+        CASE WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND (SELECT (TIMESTAMPDIFF(SECOND,
+        a1.`date_start`, a1.`date_end`) / 60) FROM `call` a1 WHERE a1.`id` = t.`call_id` AND COALESCE(a1.`deleted`,
+        0) = 0) = CAST(%(v1)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `main__duration_minutes`, (SELECT
+        CAST(a1.`status` AS CHAR) FROM `call` a1 WHERE a1.`id` = t.`call_id` AND COALESCE(a1.`deleted`,
+        0) = 0) AS `main__status`, (SELECT CAST(a1.`name` AS CHAR) FROM `call` a1 WHERE a1.`id` = t.`call_id`
+        AND COALESCE(a1.`deleted`, 0) = 0) AS `main__subject`, (SELECT CASE WHEN (SELECT COUNT(*) FROM
+        `contact` u1 WHERE CAST(CONCAT(CAST(u1.`first_name` AS CHAR), ' ', CAST(u1.`last_name` AS CHAR))
+        AS BINARY) = CAST(CONCAT(CAST(a1.`first_name` AS CHAR), ' ', CAST(a1.`last_name` AS CHAR)) AS
+        BINARY) AND COALESCE(u1.`deleted`, 0) = 0) = 1 THEN CONCAT(CAST(a1.`first_name` AS CHAR), ' ',
+        CAST(a1.`last_name` AS CHAR)) END FROM `contact` a1 WHERE CAST(a1.`id` AS BINARY) = CAST(t.`contact_id`
+        AS BINARY) AND COALESCE(a1.`deleted`, 0) = 0) AS `p__contact`, CASE WHEN t.`deleted` = CAST('0'
+        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__deleted` FROM `call_contact` t
       sql_query_params:
         v0: *id002
         v1: *id003
+    raw_account:
+      kind: sql
+      sql_driver: pymysql
+      sql_connect_args: *id001
+      sql_password_env: ESPOCRM_DB_RO_PASSWORD
+      sql_query: SELECT CAST(t.`id` AS CHAR) AS `id`, CAST(t.`name` AS CHAR) AS `name`, CAST(t.`deleted`
+        AS CHAR) AS `deleted`, CAST(t.`website` AS CHAR) AS `website`, CAST(t.`type` AS CHAR) AS `type`,
+        CAST(t.`industry` AS CHAR) AS `industry`, CAST(t.`sic_code` AS CHAR) AS `sic_code`, CAST(t.`billing_address_street`
+        AS CHAR) AS `billing_address_street`, CAST(t.`billing_address_city` AS CHAR) AS `billing_address_city`,
+        CAST(t.`billing_address_state` AS CHAR) AS `billing_address_state`, CAST(t.`billing_address_country`
+        AS CHAR) AS `billing_address_country`, CAST(t.`billing_address_postal_code` AS CHAR) AS `billing_address_postal_code`,
+        CAST(t.`shipping_address_street` AS CHAR) AS `shipping_address_street`, CAST(t.`shipping_address_city`
+        AS CHAR) AS `shipping_address_city`, CAST(t.`shipping_address_state` AS CHAR) AS `shipping_address_state`,
+        CAST(t.`shipping_address_country` AS CHAR) AS `shipping_address_country`, CAST(t.`shipping_address_postal_code`
+        AS CHAR) AS `shipping_address_postal_code`, CAST(t.`description` AS CHAR) AS `description`, CAST(t.`is_locked`
+        AS CHAR) AS `is_locked`, CAST(t.`created_at` AS CHAR) AS `created_at`, CAST(t.`modified_at` AS
+        CHAR) AS `modified_at`, CAST(t.`stream_updated_at` AS CHAR) AS `stream_updated_at`, CAST(t.`campaign_id`
+        AS CHAR) AS `campaign_id`, CAST(t.`created_by_id` AS CHAR) AS `created_by_id`, CAST(t.`modified_by_id`
+        AS CHAR) AS `modified_by_id`, CAST(t.`assigned_user_id` AS CHAR) AS `assigned_user_id`, CAST(t.`version_number`
+        AS CHAR) AS `version_number` FROM `account` t
     raw_call_user:
       kind: sql
       sql_driver: pymysql
@@ -127,6 +166,14 @@ effects:
   expected_count: 1
   count_new_only: true
 - kind: record_written
+  probe: surface=raw_account|the account row the task's account, account_city name, changed by the app
+  match:
+    name:
+      param: account
+    billing_address_city:
+      param: account_city
+  expected_count: 1
+- kind: record_written
   probe: surface=raw_call_user|1 row(s) the app adds to call_user
   match:
     deleted:
@@ -138,10 +185,8 @@ effects:
   expected_count: 1
   count_new_only: true
 frame:
-  ignore_fields:
-  - modified_at
-  - modified_by_id
-  target_fields: []
+  target_fields:
+  - stream_updated_at
   database:
     dialect: mysql
     read:
@@ -151,11 +196,10 @@ frame:
     allow_tables:
     - table: action_history_record
     - table: auth_log_record
-    - table: note
-    - table: note_user
     - table: call
     - table: call_contact
     views:
+      account: raw_account
       call_user: raw_call_user
     settle_s: 1
     settle_attempts: 5
@@ -163,13 +207,4 @@ frame:
       call_user:
       - call_id
       - id
-    ignore_columns:
-      account:
-      - stream_updated_at
-      lead:
-      - modified_at
-      - modified_by_id
-      - stream_updated_at
-      contact:
-      - stream_updated_at
     recheck_after_s: 300.0

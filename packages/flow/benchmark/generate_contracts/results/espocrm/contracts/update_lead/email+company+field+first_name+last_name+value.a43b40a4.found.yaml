@@ -41,11 +41,16 @@ verifier:
       sql_query: SELECT CAST(t.`id` AS CHAR) AS `id`, CAST(t.`entity_id` AS CHAR) AS `entity_id`, CAST(t.`email_address_id`
         AS CHAR) AS `email_address_id`, CAST(t.`entity_type` AS CHAR) AS `entity_type`, CAST(t.`primary`
         AS CHAR) AS `primary`, CAST(t.`deleted` AS CHAR) AS `deleted`, (SELECT CAST(a1.`account_name`
-        AS CHAR) FROM `lead` a1 WHERE a1.`id` = t.`entity_id`) AS `main__company`, (SELECT CAST(a1.`first_name`
-        AS CHAR) FROM `lead` a1 WHERE a1.`id` = t.`entity_id`) AS `main__first_name`, (SELECT CAST(a1.`last_name`
-        AS CHAR) FROM `lead` a1 WHERE a1.`id` = t.`entity_id`) AS `main__last_name`, (SELECT CAST(a1.`name`
-        AS CHAR) FROM `email_address` a1 WHERE CAST(a1.`id` AS BINARY) = CAST(t.`email_address_id` AS
-        BINARY)) AS `p__value` FROM `entity_email_address` t
+        AS CHAR) FROM `lead` a1 WHERE a1.`id` = t.`entity_id` AND COALESCE(a1.`deleted`, 0) = 0) AS `main__company`,
+        (SELECT CAST(a1.`first_name` AS CHAR) FROM `lead` a1 WHERE a1.`id` = t.`entity_id` AND COALESCE(a1.`deleted`,
+        0) = 0) AS `main__first_name`, (SELECT CAST(a1.`last_name` AS CHAR) FROM `lead` a1 WHERE a1.`id`
+        = t.`entity_id` AND COALESCE(a1.`deleted`, 0) = 0) AS `main__last_name`, (SELECT CASE WHEN (SELECT
+        COUNT(*) FROM `email_address` u1 WHERE CAST(CAST(u1.`name` AS CHAR) AS BINARY) = CAST(CAST(a1.`name`
+        AS CHAR) AS BINARY) AND COALESCE(u1.`deleted`, 0) = 0) = 1 THEN CAST(a1.`name` AS CHAR) END FROM
+        `email_address` a1 WHERE CAST(a1.`id` AS BINARY) = CAST(t.`email_address_id` AS BINARY) AND COALESCE(a1.`deleted`,
+        0) = 0) AS `p__value`, CASE WHEN t.`deleted` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END
+        AS `pin__deleted`, CASE WHEN t.`primary` = CAST('1' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS
+        `pin__primary` FROM `entity_email_address` t
 effects:
 - kind: record_written
   probe: surface=record|the main record holds the task's values
@@ -69,12 +74,14 @@ effects:
     p__value:
       param: value
       kind: email
+    pin__deleted:
+      literal: '1'
+    entity_type:
+      literal: Lead
+    pin__primary:
+      literal: '1'
   expected_count: 1
 frame:
-  ignore_fields:
-  - modified_at
-  - modified_by_id
-  - stream_updated_at
   target_fields: []
   versions:
     read:
@@ -83,7 +90,8 @@ frame:
       sql_connect_args: *id001
       sql_password_env: ESPOCRM_DB_RO_PASSWORD
       sql_query: SELECT CAST(t.`target_id` AS CHAR) AS `id`, CAST(t.`id` AS CHAR) AS `ver`, CAST(t.`user_id`
-        AS CHAR) AS `author` FROM `action_history_record` t WHERE CAST(t.`target_type` AS CHAR) = 'Lead'
+        AS CHAR) AS `author` FROM `action_history_record` t WHERE CAST(t.`action` AS CHAR) = 'update'
+        AND CAST(t.`target_type` AS CHAR) = 'Lead'
     record_field: id
     target_field: id
     version_field: ver
@@ -99,15 +107,9 @@ frame:
     allow_tables:
     - table: action_history_record
     - table: auth_log_record
-    - table: note
     - table: entity_email_address
     - table: lead
     views: {}
     settle_s: 1
     settle_attempts: 5
-    ignore_columns:
-      account:
-      - stream_updated_at
-      contact:
-      - stream_updated_at
     recheck_after_s: 300.0

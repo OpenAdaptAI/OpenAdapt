@@ -61,30 +61,31 @@ verifier:
         CAST(t.`tms` AS CHAR) AS `tms`, CAST(t.`datec` AS CHAR) AS `datec`, CAST(t.`fk_user_creat` AS
         CHAR) AS `fk_user_creat`, CAST(t.`fk_user_modif` AS CHAR) AS `fk_user_modif`, CAST(t.`fk_multicurrency`
         AS CHAR) AS `fk_multicurrency`, CAST(t.`multicurrency_code` AS CHAR) AS `multicurrency_code`,
-        CAST(t.`ip` AS CHAR) AS `ip`, CAST(t.`import_key` AS CHAR) AS `import_key`, (SELECT CAST(a1.`label`
-        AS CHAR) FROM `llx_c_country` a1 WHERE CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_pays` AS BINARY))
-        AS `p__country`, CASE WHEN t.`capital` IS NULL THEN '1' ELSE '0' END AS `pin__capital`, CASE WHEN
-        t.`client` = CAST('1' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__client`, CASE WHEN t.`cond_reglement`
-        IS NULL THEN '1' ELSE '0' END AS `pin__cond_reglement`, CASE WHEN t.`cond_reglement_supplier`
-        IS NULL THEN '1' ELSE '0' END AS `pin__cond_reglement_supplier`, CASE WHEN t.`customer_bad` =
-        CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__customer_bad`, CASE WHEN t.`customer_rate`
-        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__customer_rate`, CASE WHEN t.`entity`
-        = CAST('1' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__entity`, CASE WHEN t.`fk_account`
-        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_account`, CASE WHEN t.`fk_barcode_type`
-        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_barcode_type`, CASE WHEN t.`fk_departement`
-        IS NULL THEN '1' ELSE '0' END AS `pin__fk_departement`, CASE WHEN t.`fk_effectif` IS NULL THEN
-        '1' ELSE '0' END AS `pin__fk_effectif`, CASE WHEN t.`fk_forme_juridique` IS NULL THEN '1' ELSE
-        '0' END AS `pin__fk_forme_juridique`, CASE WHEN t.`fk_incoterms` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__fk_incoterms`, CASE WHEN t.`fk_multicurrency` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__fk_multicurrency`, CASE WHEN t.`fk_shipping_method` IS NULL THEN
-        '1' ELSE '0' END AS `pin__fk_shipping_method`, CASE WHEN t.`fk_stcomm` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__fk_stcomm`, CASE WHEN t.`fk_typent` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__fk_typent`, CASE WHEN t.`fk_warehouse` IS NULL THEN '1' ELSE '0'
-        END AS `pin__fk_warehouse`, CASE WHEN t.`fournisseur` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE
-        '0' END AS `pin__fournisseur`, CASE WHEN t.`geolat` IS NULL THEN '1' ELSE '0' END AS `pin__geolat`,
-        CASE WHEN t.`geolong` IS NULL THEN '1' ELSE '0' END AS `pin__geolong`, CASE WHEN t.`geopoint`
-        IS NULL THEN '1' ELSE '0' END AS `pin__geopoint`, CASE WHEN t.`localtax1_assuj` = CAST('0' AS
-        DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax1_assuj`, CASE WHEN t.`localtax1_value`
+        CAST(t.`ip` AS CHAR) AS `ip`, CAST(t.`import_key` AS CHAR) AS `import_key`, (SELECT CASE WHEN
+        (SELECT COUNT(*) FROM `llx_c_country` u1 WHERE CAST(CAST(u1.`label` AS CHAR) AS BINARY) = CAST(CAST(a1.`label`
+        AS CHAR) AS BINARY)) = 1 THEN CAST(a1.`label` AS CHAR) END FROM `llx_c_country` a1 WHERE CAST(a1.`rowid`
+        AS BINARY) = CAST(t.`fk_pays` AS BINARY)) AS `p__country`, CASE WHEN t.`capital` IS NULL THEN
+        '1' ELSE '0' END AS `pin__capital`, CASE WHEN t.`client` = CAST('1' AS DECIMAL(65,30)) THEN '1'
+        ELSE '0' END AS `pin__client`, CASE WHEN t.`cond_reglement` IS NULL THEN '1' ELSE '0' END AS `pin__cond_reglement`,
+        CASE WHEN t.`cond_reglement_supplier` IS NULL THEN '1' ELSE '0' END AS `pin__cond_reglement_supplier`,
+        CASE WHEN t.`customer_bad` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__customer_bad`,
+        CASE WHEN t.`customer_rate` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__customer_rate`,
+        CASE WHEN t.`entity` = CAST('1' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__entity`, CASE
+        WHEN t.`fk_account` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_account`,
+        CASE WHEN t.`fk_barcode_type` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_barcode_type`,
+        CASE WHEN t.`fk_departement` IS NULL THEN '1' ELSE '0' END AS `pin__fk_departement`, CASE WHEN
+        t.`fk_effectif` IS NULL THEN '1' ELSE '0' END AS `pin__fk_effectif`, CASE WHEN t.`fk_forme_juridique`
+        IS NULL THEN '1' ELSE '0' END AS `pin__fk_forme_juridique`, CASE WHEN t.`fk_incoterms` = CAST('0'
+        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_incoterms`, CASE WHEN t.`fk_multicurrency`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_multicurrency`, CASE WHEN t.`fk_shipping_method`
+        IS NULL THEN '1' ELSE '0' END AS `pin__fk_shipping_method`, CASE WHEN t.`fk_stcomm` = CAST('0'
+        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_stcomm`, CASE WHEN t.`fk_typent` = CAST('0'
+        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_typent`, CASE WHEN t.`fk_warehouse` IS NULL
+        THEN '1' ELSE '0' END AS `pin__fk_warehouse`, CASE WHEN t.`fournisseur` = CAST('0' AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `pin__fournisseur`, CASE WHEN t.`geolat` IS NULL THEN '1' ELSE '0' END
+        AS `pin__geolat`, CASE WHEN t.`geolong` IS NULL THEN '1' ELSE '0' END AS `pin__geolong`, CASE
+        WHEN t.`geopoint` IS NULL THEN '1' ELSE '0' END AS `pin__geopoint`, CASE WHEN t.`localtax1_assuj`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax1_assuj`, CASE WHEN t.`localtax1_value`
         = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax1_value`, CASE WHEN t.`localtax2_assuj`
         = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax2_assuj`, CASE WHEN t.`localtax2_value`
         = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax2_value`, CASE WHEN t.`mode_reglement`
@@ -294,10 +295,6 @@ effects:
   expected_count: 1
   count_new_only: true
 frame:
-  ignore_fields:
-  - fk_user_modif
-  - socialnetworks
-  - tms
   target_fields: []
   database:
     dialect: mysql

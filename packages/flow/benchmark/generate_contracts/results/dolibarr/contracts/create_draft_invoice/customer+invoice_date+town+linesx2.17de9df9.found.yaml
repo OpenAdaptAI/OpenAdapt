@@ -49,10 +49,46 @@ verifier:
         AS CHAR) AS `fk_multicurrency`, CAST(t.`multicurrency_code` AS CHAR) AS `multicurrency_code`,
         CAST(t.`multicurrency_tx` AS CHAR) AS `multicurrency_tx`, CAST(t.`multicurrency_total_ht` AS CHAR)
         AS `multicurrency_total_ht`, CAST(t.`multicurrency_total_tva` AS CHAR) AS `multicurrency_total_tva`,
-        CAST(t.`multicurrency_total_ttc` AS CHAR) AS `multicurrency_total_ttc`, (SELECT CAST(a1.`nom`
-        AS CHAR) FROM `llx_societe` a1 WHERE a1.`rowid` = t.`fk_soc`) AS `p__customer`, CASE WHEN t.`datef`
-        = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `p__invoice_date`, (SELECT CAST(a1.`town` AS CHAR)
-        FROM `llx_societe` a1 WHERE a1.`rowid` = t.`fk_soc`) AS `p__town` FROM `llx_facture` t
+        CAST(t.`multicurrency_total_ttc` AS CHAR) AS `multicurrency_total_ttc`, (SELECT CASE WHEN (SELECT
+        COUNT(*) FROM `llx_societe` u1 WHERE CAST(CAST(u1.`nom` AS CHAR) AS BINARY) = CAST(CAST(a1.`nom`
+        AS CHAR) AS BINARY) AND CAST(CAST(u1.`town` AS CHAR) AS BINARY) = CAST(CAST(a1.`town` AS CHAR)
+        AS BINARY)) = 1 THEN CAST(a1.`nom` AS CHAR) END FROM `llx_societe` a1 WHERE a1.`rowid` = t.`fk_soc`)
+        AS `p__customer`, CASE WHEN t.`datef` = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `p__invoice_date`,
+        (SELECT CASE WHEN (SELECT COUNT(*) FROM `llx_societe` u1 WHERE CAST(CAST(u1.`nom` AS CHAR) AS
+        BINARY) = CAST(CAST(a1.`nom` AS CHAR) AS BINARY) AND CAST(CAST(u1.`town` AS CHAR) AS BINARY) =
+        CAST(CAST(a1.`town` AS CHAR) AS BINARY)) = 1 THEN CAST(a1.`town` AS CHAR) END FROM `llx_societe`
+        a1 WHERE a1.`rowid` = t.`fk_soc`) AS `p__town`, CASE WHEN t.`close_missing_amount` IS NULL THEN
+        '1' ELSE '0' END AS `pin__close_missing_amount`, CASE WHEN t.`date_closing` IS NULL THEN '1' ELSE
+        '0' END AS `pin__date_closing`, CASE WHEN t.`date_pointoftax` IS NULL THEN '1' ELSE '0' END AS
+        `pin__date_pointoftax`, CASE WHEN t.`date_valid` IS NULL THEN '1' ELSE '0' END AS `pin__date_valid`,
+        CASE WHEN t.`entity` = CAST('1' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__entity`, CASE
+        WHEN t.`fk_account` IS NULL THEN '1' ELSE '0' END AS `pin__fk_account`, CASE WHEN t.`fk_cond_reglement`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_cond_reglement`, CASE WHEN t.`fk_fac_rec_source`
+        IS NULL THEN '1' ELSE '0' END AS `pin__fk_fac_rec_source`, CASE WHEN t.`fk_facture_source` IS
+        NULL THEN '1' ELSE '0' END AS `pin__fk_facture_source`, CASE WHEN t.`fk_mode_reglement` = CAST('0'
+        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_mode_reglement`, CASE WHEN t.`fk_projet`
+        IS NULL THEN '1' ELSE '0' END AS `pin__fk_projet`, CASE WHEN t.`fk_transport_mode` IS NULL THEN
+        '1' ELSE '0' END AS `pin__fk_transport_mode`, CASE WHEN t.`fk_user_closing` IS NULL THEN '1' ELSE
+        '0' END AS `pin__fk_user_closing`, CASE WHEN t.`fk_user_modif` IS NULL THEN '1' ELSE '0' END AS
+        `pin__fk_user_modif`, CASE WHEN t.`fk_user_valid` IS NULL THEN '1' ELSE '0' END AS `pin__fk_user_valid`,
+        CASE WHEN t.`is_also_delivery_note` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__is_also_delivery_note`,
+        CASE WHEN t.`localtax1` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax1`,
+        CASE WHEN t.`localtax2` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax2`,
+        CASE WHEN t.`multicurrency_tx` = CAST('1' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__multicurrency_tx`,
+        CASE WHEN t.`paye` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__paye`, CASE WHEN
+        t.`prorata_discount` IS NULL THEN '1' ELSE '0' END AS `pin__prorata_discount`, CASE WHEN t.`remise`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__remise`, CASE WHEN t.`remise_absolue`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__remise_absolue`, CASE WHEN t.`remise_percent`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__remise_percent`, CASE WHEN t.`retained_warranty`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__retained_warranty`, CASE WHEN t.`retained_warranty_date_limit`
+        IS NULL THEN '1' ELSE '0' END AS `pin__retained_warranty_date_limit`, CASE WHEN t.`retained_warranty_fk_cond_reglement`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__retained_warranty_fk_cond_reglement`,
+        CASE WHEN t.`revenuestamp` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__revenuestamp`,
+        CASE WHEN t.`situation_counter` IS NULL THEN '1' ELSE '0' END AS `pin__situation_counter`, CASE
+        WHEN t.`situation_cycle_ref` IS NULL THEN '1' ELSE '0' END AS `pin__situation_cycle_ref`, CASE
+        WHEN t.`situation_final` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__situation_final`,
+        CASE WHEN t.`subtype` IS NULL THEN '1' ELSE '0' END AS `pin__subtype`, CASE WHEN t.`type` = CAST('0'
+        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__type` FROM `llx_facture` t
       sql_query_params:
         v0: &id002
           param: invoice_date
@@ -86,18 +122,47 @@ verifier:
         AS CHAR) AS `multicurrency_subprice`, CAST(t.`multicurrency_subprice_ttc` AS CHAR) AS `multicurrency_subprice_ttc`,
         CAST(t.`multicurrency_total_ht` AS CHAR) AS `multicurrency_total_ht`, CAST(t.`multicurrency_total_tva`
         AS CHAR) AS `multicurrency_total_tva`, CAST(t.`multicurrency_total_ttc` AS CHAR) AS `multicurrency_total_ttc`,
-        CAST(t.`ref_ext` AS CHAR) AS `ref_ext`, (SELECT (SELECT CAST(a2.`nom` AS CHAR) FROM `llx_societe`
+        CAST(t.`ref_ext` AS CHAR) AS `ref_ext`, (SELECT (SELECT CASE WHEN (SELECT COUNT(*) FROM `llx_societe`
+        u2 WHERE CAST(CAST(u2.`nom` AS CHAR) AS BINARY) = CAST(CAST(a2.`nom` AS CHAR) AS BINARY) AND CAST(CAST(u2.`town`
+        AS CHAR) AS BINARY) = CAST(CAST(a2.`town` AS CHAR) AS BINARY)) = 1 THEN CAST(a2.`nom` AS CHAR)
+        END FROM `llx_societe` a2 WHERE a2.`rowid` = a1.`fk_soc`) FROM `llx_facture` a1 WHERE a1.`rowid`
+        = t.`fk_facture`) AS `main__customer`, CASE WHEN (SELECT a1.`datef` FROM `llx_facture` a1 WHERE
+        a1.`rowid` = t.`fk_facture`) = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `main__invoice_date`,
+        (SELECT (SELECT CASE WHEN (SELECT COUNT(*) FROM `llx_societe` u2 WHERE CAST(CAST(u2.`nom` AS CHAR)
+        AS BINARY) = CAST(CAST(a2.`nom` AS CHAR) AS BINARY) AND CAST(CAST(u2.`town` AS CHAR) AS BINARY)
+        = CAST(CAST(a2.`town` AS CHAR) AS BINARY)) = 1 THEN CAST(a2.`town` AS CHAR) END FROM `llx_societe`
         a2 WHERE a2.`rowid` = a1.`fk_soc`) FROM `llx_facture` a1 WHERE a1.`rowid` = t.`fk_facture`) AS
-        `main__customer`, CASE WHEN (SELECT a1.`datef` FROM `llx_facture` a1 WHERE a1.`rowid` = t.`fk_facture`)
-        = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `main__invoice_date`, (SELECT (SELECT CAST(a2.`town`
-        AS CHAR) FROM `llx_societe` a2 WHERE a2.`rowid` = a1.`fk_soc`) FROM `llx_facture` a1 WHERE a1.`rowid`
-        = t.`fk_facture`) AS `main__town`, (SELECT CAST(a1.`ref` AS CHAR) FROM `llx_product` a1 WHERE
-        CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS `p__lines_0_product_ref`, CASE
-        WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty` = CAST(%(v1)s AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `p__lines_0_qty`, (SELECT CAST(a1.`ref` AS CHAR) FROM `llx_product` a1
-        WHERE CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS `p__lines_1_product_ref`,
-        CASE WHEN CAST(%(v2)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty` = CAST(%(v2)s AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `p__lines_1_qty` FROM `llx_facturedet` t
+        `main__town`, (SELECT CASE WHEN (SELECT COUNT(*) FROM `llx_product` u1 WHERE CAST(CAST(u1.`ref`
+        AS CHAR) AS BINARY) = CAST(CAST(a1.`ref` AS CHAR) AS BINARY)) = 1 THEN CAST(a1.`ref` AS CHAR)
+        END FROM `llx_product` a1 WHERE CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS
+        `p__lines_0_product_ref`, CASE WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty`
+        = CAST(%(v1)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `p__lines_0_qty`, CASE WHEN t.`buy_price_ht`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__buy_price_ht`, CASE WHEN t.`date_end`
+        IS NULL THEN '1' ELSE '0' END AS `pin__date_end`, CASE WHEN t.`date_start` IS NULL THEN '1' ELSE
+        '0' END AS `pin__date_start`, CASE WHEN t.`fk_code_ventilation` = CAST('0' AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `pin__fk_code_ventilation`, CASE WHEN t.`fk_contract_line` IS NULL THEN
+        '1' ELSE '0' END AS `pin__fk_contract_line`, CASE WHEN t.`fk_parent_line` IS NULL THEN '1' ELSE
+        '0' END AS `pin__fk_parent_line`, CASE WHEN t.`fk_prev_id` IS NULL THEN '1' ELSE '0' END AS `pin__fk_prev_id`,
+        CASE WHEN t.`fk_product_fournisseur_price` IS NULL THEN '1' ELSE '0' END AS `pin__fk_product_fournisseur_price`,
+        CASE WHEN t.`fk_remise_except` IS NULL THEN '1' ELSE '0' END AS `pin__fk_remise_except`, CASE
+        WHEN t.`fk_unit` IS NULL THEN '1' ELSE '0' END AS `pin__fk_unit`, CASE WHEN t.`fk_user_modif`
+        = CAST('2' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_user_modif`, CASE WHEN t.`fk_warehouse`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_warehouse`, CASE WHEN t.`info_bits`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__info_bits`, CASE WHEN t.`localtax1_tx`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax1_tx`, CASE WHEN t.`localtax2_tx`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax2_tx`, CASE WHEN t.`multicurrency_subprice_ttc`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__multicurrency_subprice_ttc`, CASE
+        WHEN t.`price` IS NULL THEN '1' ELSE '0' END AS `pin__price`, CASE WHEN t.`rang` = CAST('0' AS
+        DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__rang`, CASE WHEN t.`remise_percent` = CAST('0'
+        AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__remise_percent`, CASE WHEN t.`situation_percent`
+        = CAST('100' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__situation_percent`, CASE WHEN t.`special_code`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__special_code`, CASE WHEN t.`subprice_ttc`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__subprice_ttc`, (SELECT CASE WHEN
+        (SELECT COUNT(*) FROM `llx_product` u1 WHERE CAST(CAST(u1.`ref` AS CHAR) AS BINARY) = CAST(CAST(a1.`ref`
+        AS CHAR) AS BINARY)) = 1 THEN CAST(a1.`ref` AS CHAR) END FROM `llx_product` a1 WHERE CAST(a1.`rowid`
+        AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS `p__lines_1_product_ref`, CASE WHEN CAST(%(v2)s
+        AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty` = CAST(%(v2)s AS DECIMAL(65,30)) THEN '1'
+        ELSE '0' END AS `p__lines_1_qty` FROM `llx_facturedet` t
       sql_query_params:
         v0: *id002
         v1:
@@ -114,6 +179,74 @@ effects:
       literal: '1'
     p__town:
       param: town
+    pin__close_missing_amount:
+      literal: '1'
+    pin__date_closing:
+      literal: '1'
+    pin__date_pointoftax:
+      literal: '1'
+    pin__date_valid:
+      literal: '1'
+    pin__entity:
+      literal: '1'
+    pin__fk_account:
+      literal: '1'
+    pin__fk_cond_reglement:
+      literal: '1'
+    pin__fk_fac_rec_source:
+      literal: '1'
+    pin__fk_facture_source:
+      literal: '1'
+    pin__fk_mode_reglement:
+      literal: '1'
+    pin__fk_projet:
+      literal: '1'
+    pin__fk_transport_mode:
+      literal: '1'
+    pin__fk_user_closing:
+      literal: '1'
+    pin__fk_user_modif:
+      literal: '1'
+    pin__fk_user_valid:
+      literal: '1'
+    pin__is_also_delivery_note:
+      literal: '1'
+    pin__localtax1:
+      literal: '1'
+    pin__localtax2:
+      literal: '1'
+    multicurrency_code:
+      literal: EUR
+    pin__multicurrency_tx:
+      literal: '1'
+    pin__paye:
+      literal: '1'
+    pin__prorata_discount:
+      literal: '1'
+    pin__remise:
+      literal: '1'
+    pin__remise_absolue:
+      literal: '1'
+    pin__remise_percent:
+      literal: '1'
+    pin__retained_warranty:
+      literal: '1'
+    pin__retained_warranty_date_limit:
+      literal: '1'
+    pin__retained_warranty_fk_cond_reglement:
+      literal: '1'
+    pin__revenuestamp:
+      literal: '1'
+    pin__situation_counter:
+      literal: '1'
+    pin__situation_cycle_ref:
+      literal: '1'
+    pin__situation_final:
+      literal: '1'
+    pin__subtype:
+      literal: '1'
+    pin__type:
+      literal: '1'
   expected_count: 1
 - kind: record_written
   probe: surface=rows_llx_facturedet|a row beside the main record holds lines
@@ -127,6 +260,54 @@ effects:
     p__lines_0_product_ref:
       param: lines.0.product_ref
     p__lines_0_qty:
+      literal: '1'
+    pin__buy_price_ht:
+      literal: '1'
+    pin__date_end:
+      literal: '1'
+    pin__date_start:
+      literal: '1'
+    pin__fk_code_ventilation:
+      literal: '1'
+    pin__fk_contract_line:
+      literal: '1'
+    pin__fk_parent_line:
+      literal: '1'
+    pin__fk_prev_id:
+      literal: '1'
+    pin__fk_product_fournisseur_price:
+      literal: '1'
+    pin__fk_remise_except:
+      literal: '1'
+    pin__fk_unit:
+      literal: '1'
+    pin__fk_user_modif:
+      literal: '1'
+    pin__fk_warehouse:
+      literal: '1'
+    pin__info_bits:
+      literal: '1'
+    pin__localtax1_tx:
+      literal: '1'
+    localtax1_type:
+      literal: '0'
+    pin__localtax2_tx:
+      literal: '1'
+    localtax2_type:
+      literal: '0'
+    pin__multicurrency_subprice_ttc:
+      literal: '1'
+    pin__price:
+      literal: '1'
+    pin__rang:
+      literal: '1'
+    pin__remise_percent:
+      literal: '1'
+    pin__situation_percent:
+      literal: '1'
+    pin__special_code:
+      literal: '1'
+    pin__subprice_ttc:
       literal: '1'
   expected_count: 1
 - kind: record_written
@@ -142,11 +323,56 @@ effects:
       param: lines.1.product_ref
     p__lines_1_qty:
       literal: '1'
+    pin__buy_price_ht:
+      literal: '1'
+    pin__date_end:
+      literal: '1'
+    pin__date_start:
+      literal: '1'
+    pin__fk_code_ventilation:
+      literal: '1'
+    pin__fk_contract_line:
+      literal: '1'
+    pin__fk_parent_line:
+      literal: '1'
+    pin__fk_prev_id:
+      literal: '1'
+    pin__fk_product_fournisseur_price:
+      literal: '1'
+    pin__fk_remise_except:
+      literal: '1'
+    pin__fk_unit:
+      literal: '1'
+    pin__fk_user_modif:
+      literal: '1'
+    pin__fk_warehouse:
+      literal: '1'
+    pin__info_bits:
+      literal: '1'
+    pin__localtax1_tx:
+      literal: '1'
+    localtax1_type:
+      literal: '0'
+    pin__localtax2_tx:
+      literal: '1'
+    localtax2_type:
+      literal: '0'
+    pin__multicurrency_subprice_ttc:
+      literal: '1'
+    pin__price:
+      literal: '1'
+    pin__rang:
+      literal: '1'
+    pin__remise_percent:
+      literal: '1'
+    pin__situation_percent:
+      literal: '1'
+    pin__special_code:
+      literal: '1'
+    pin__subprice_ttc:
+      literal: '1'
   expected_count: 1
 frame:
-  ignore_fields:
-  - fk_user_modif
-  - tms
   target_fields: []
   database:
     dialect: mysql
@@ -160,9 +386,4 @@ frame:
     views: {}
     settle_s: 1
     settle_attempts: 5
-    ignore_columns:
-      llx_societe:
-      - fk_user_modif
-      - socialnetworks
-      - tms
     recheck_after_s: 300.0

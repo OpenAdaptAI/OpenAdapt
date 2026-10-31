@@ -203,8 +203,11 @@ times in every demonstration (an agenda event, a stream note, a price-history
 row) is declared with that count and its constant columns. A table whose
 added rows differ in number between demonstrations is listed in the
 bookkeeping question and is a log only if the person names it (`logs_add`);
-otherwise every added row stops the write. The generator never decides a
-table is a log from its name.
+otherwise every added row stops the write. The person may also name a
+counted table (an access log the app writes once per request: the agent may
+make more requests than the demonstration did). A named table is a log for
+every kind: rows may be added to it, and existing rows must not change. The
+generator never decides a table is a log from its name.
 
 **Changes the app makes to existing rows.** A column of an existing row that
 the demonstrations changed with no task value is excused only on that row:
@@ -231,9 +234,11 @@ takes the versions from the app's own audit trail when every update
 demonstration added a row there that names the record and the acting user
 (Redmine's journals, EspoCRM's `action_history_record`, Dolibarr's agenda
 events). The read is narrowed to the record's type and to write events: a
-column whose value in the update rows differs from its value in the rows
-creates added to the same table (EspoCRM's `action`, Dolibarr's `code`), so
-another user only viewing the record doesn't count. Otherwise it uses a
+text column, not an id, that holds one code of letters and underscores in
+every update row and in none of the rows creates added to the same table
+(EspoCRM's `action = update`, Dolibarr's `code = AC_COMPANY_MODIFY`), so
+another user only viewing the record doesn't count. A time stamp or a token
+the demonstrations happened to share is never used. Otherwise it uses a
 whole-number column named as a version that went up by one in every
 demonstration (Redmine's `lock_version`). With neither, the update has no
 version check, and `report.json` shows `versions: null`. If the app stops

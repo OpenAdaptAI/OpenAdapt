@@ -22,15 +22,18 @@ Late-write faults also ran the recheck the contract declares.
 | | Dolibarr | Redmine | EspoCRM |
 | --- | --- | --- | --- |
 | Database | MariaDB 11.4 | PostgreSQL | MariaDB |
-| Questions for a person | **3** | **1** | **2** |
+| Questions for a person | **4** | **2** | **3** |
 | First study, person decisions | 11 | 11 | 11 |
-| Contracts written | 93 | 95 | 235 |
-| Correct writes confirmed (tasks and controls) | 40/43 | 35/38 | 36/40 |
+| Field sets with a contract pair | 93 | 95 | 235 |
+| Correct writes confirmed (tasks and controls) | 40/43 | 32/38 | 27/40 |
 | In-scope planted faults stopped | **22/22** | **19/19** | **21/21** |
 | First study, in-scope faults stopped | 21/21 | 26/26 | 16/19 |
-| Out-of-scope late writes stopped | 2/2 (recheck) | 0/2 (no recheck on PostgreSQL) | 1/2 (recheck) |
-| Lost-update versions (`frame.versions`) | agenda events (`llx_actioncomm`) | journals | `action_history_record` |
-| `propose` time | 1.5 min | 1.5 min | 2 min |
+| Out-of-scope late writes stopped | 2/2 (recheck) | 1/2 (recheck) | 1/2 (recheck) |
+| Lost-update versions (`frame.versions`) | agenda events (`llx_actioncomm`, `code = AC_COMPANY_MODIFY`) | journals | `action_history_record` (`action = update`, `target_type = Lead`) |
+| `propose` time | 2 min | 0.5 min | 1 min |
+
+Every contract uses the whole-database frame (`frame.database`) with the
+store's dialect, on PostgreSQL too, and declares the recheck window.
 
 The first study measured false stops on agents' writes; here the correct
 writes are the pack's reference writes and the controls, so the two false
@@ -38,49 +41,59 @@ stop rates are not the same measure.
 
 ### Questions asked
 
-- **Dolibarr** (3): bookkeeping (agenda events per write, `tms`,
-  `fk_user_modif`, the `socialnetworks` rewrite, invoice totals and draft
-  reference not checked); the recheck window (300 s proposed and accepted);
-  `invoice_date` is in `datef` and in `date_lim_reglement` (picked `datef`).
-- **Redmine** (1): bookkeeping (custom field rows per write, `journal_details`
-  as a log, `updated_on`, `lock_version`, `user_preferences.others`, and the
-  time entry's `tyear`, `tmonth`, `tweek`). No recheck question: PostgreSQL
-  has no whole-database frame.
-- **EspoCRM** (2): bookkeeping (stream notes, `call_user` and email link rows per write; `action_history_record`, `auth_log_record` and others as logs; `stream_updated_at`, `modified_at`); the recheck window (300 s).
+- **Dolibarr** (4): which parameters are phone numbers (both proposed,
+  both confirmed); bookkeeping (agenda events per write, `tms`,
+  `fk_user_modif`, invoice totals and draft reference not checked; the
+  person added the `socialnetworks` rewrite under `columns_add`); the recheck
+  window (300 s); `invoice_date` is in `datef` and in `date_lim_reglement`
+  (picked `datef`).
+- **Redmine** (2): bookkeeping (custom field rows per write, `updated_on`,
+  `lock_version`, the time entry's `tyear`, `tmonth`, `tweek`; the person
+  named `journal_details` a log and added `user_preferences.others`); the
+  recheck window (300 s).
+- **EspoCRM** (3): which parameters are phone numbers (confirmed);
+  bookkeeping (`stream_updated_at`, `modified_at`, `call_user` and stream
+  note rows; the person named `action_history_record` and `auth_log_record`
+  logs, and left `note` and `note_user` out, so stream notes are counted);
+  the recheck window (300 s).
 
-Every answer was the proposal, except the one choice in Dolibarr's question 3.
+The generator decides no log by table name. Every log was named by the
+person in the bookkeeping question.
 
 ### Setup steps the generator applied
 
 - Dolibarr and EspoCRM: `GRANT TRIGGER ON <db>.* TO <read account>`
   (`--grant-trigger`): the whole-database frame must see triggers.
-- Before the SQL guard fix (#1665), EspoCRM also needed a view
-  `espocrm_oa_read.oa_read_call` (`--create-views`), because the guard
-  refused the table name `call`. On `main` the guard reads `call`, and the
-  final run created no view.
+- Redmine: none. The read account needs `SELECT` on the sequences too,
+  which the study's fixture grants.
 
 ### False stops, by cause
 
 | App | Case | Cause |
 | --- | --- | --- |
-| Dolibarr | F18 (control) | Another user's edit to an unrelated customer: no audit trail is read, so it isn't attributed |
+| Dolibarr | F18 (control) | Another user's edit to an unrelated customer: not attributed |
 | Dolibarr | F21 (control) | Two saves add two agenda events; the contract expects one per write |
 | Dolibarr | F30 (control) | A resave of a value already in place adds an agenda event; the `found` contract allows no change |
 | Redmine | T19 | Closing an issue sets `closed_on`; no demonstration closed one |
+| Redmine | T22, T23, T28 | The issue subject names issues in two projects: a display value must name exactly one row |
 | Redmine | F21 (control) | Another user's edit to an unrelated issue: not attributed |
 | Redmine | F24 (control) | Two saves add two journals |
+| EspoCRM | T19, T23 | A status change adds a stream note; no demonstration changed the status |
 | EspoCRM | T21 | The reference write removes the old email address row when replacing it; the demonstration didn't |
 | EspoCRM | T22 | `field: phone` has no contract: no demonstration, and phones live in another table |
-| EspoCRM | F22, F27 (controls) | Another user's unrelated edit or new lead: not attributed |
+| EspoCRM | T29 to T34, T36 | Logging a call adds stream notes for each linked record and touches the contact's `stream_updated_at`, in numbers the demonstrations didn't show. `note` isn't a log unless the person says so |
+| EspoCRM | F22, F27 (controls) | Another user's unrelated edit or new record: not attributed |
 
-The lost-update faults are stopped with a version reason now (EspoCRM F19:
-"another user saved a version of the target inside the window"); the first
-study missed EspoCRM F19 and HAPI F14.
+The stream-note stops are the price of not calling `note` a log: a person
+who names it adds those rows to the logs, and an extra stream note (a
+planted fault) would then pass.
 
 ### Misses
 
-Out of scope only: Redmine F19 and F20 (late writes; PostgreSQL has no
-recheck), and EspoCRM F21 (a late edit to a look-alike lead: an update's main table is read by its own surface, which the recheck doesn't read). No in-scope planted fault was confirmed on any app.
+Out of scope only: Redmine F20 and EspoCRM F21. Both are late writes to the
+main record's table, which the contract reads through its own surface; the
+recheck reads the rest of the database again but not that surface. No
+in-scope planted fault was confirmed on any app.
 
 ## Reproduce
 
@@ -101,8 +114,6 @@ full set is regenerated by the commands above). The fault scripts and the
 oracle stay in the study's private pack.
 
 Code: the final runs used this branch rebased on `main` (with #1661 to
-#1669): EspoCRM at `baf86e78a`, Dolibarr and Redmine at `c51437ba6` (the
-commits after are lint, type and documentation fixes). Earlier runs on the
-branch before the rebase, with #1661 merged in, gave the same counts for
-Dolibarr and Redmine; for EspoCRM they missed nothing more and confirmed
-one write fewer (F24, before emails compared case-folded).
+#1669 and #1673): Redmine and EspoCRM at `0bd47c616`, Dolibarr at
+`f4cb759f9`. The commit after narrows the versions filter to letter-only
+codes; the three apps' versions reads are the same under it.

@@ -49,13 +49,18 @@ verifier:
         AS CHAR) AS `fk_multicurrency`, CAST(t.`multicurrency_code` AS CHAR) AS `multicurrency_code`,
         CAST(t.`multicurrency_tx` AS CHAR) AS `multicurrency_tx`, CAST(t.`multicurrency_total_ht` AS CHAR)
         AS `multicurrency_total_ht`, CAST(t.`multicurrency_total_tva` AS CHAR) AS `multicurrency_total_tva`,
-        CAST(t.`multicurrency_total_ttc` AS CHAR) AS `multicurrency_total_ttc`, (SELECT CAST(a1.`nom`
-        AS CHAR) FROM `llx_societe` a1 WHERE a1.`rowid` = t.`fk_soc`) AS `p__customer`, CASE WHEN t.`datef`
-        = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `p__invoice_date`, (SELECT CAST(a1.`town` AS CHAR)
-        FROM `llx_societe` a1 WHERE a1.`rowid` = t.`fk_soc`) AS `p__town`, CASE WHEN t.`close_missing_amount`
-        IS NULL THEN '1' ELSE '0' END AS `pin__close_missing_amount`, CASE WHEN t.`date_closing` IS NULL
-        THEN '1' ELSE '0' END AS `pin__date_closing`, CASE WHEN t.`date_pointoftax` IS NULL THEN '1' ELSE
-        '0' END AS `pin__date_pointoftax`, CASE WHEN t.`date_valid` IS NULL THEN '1' ELSE '0' END AS `pin__date_valid`,
+        CAST(t.`multicurrency_total_ttc` AS CHAR) AS `multicurrency_total_ttc`, (SELECT CASE WHEN (SELECT
+        COUNT(*) FROM `llx_societe` u1 WHERE CAST(CAST(u1.`nom` AS CHAR) AS BINARY) = CAST(CAST(a1.`nom`
+        AS CHAR) AS BINARY) AND CAST(CAST(u1.`town` AS CHAR) AS BINARY) = CAST(CAST(a1.`town` AS CHAR)
+        AS BINARY)) = 1 THEN CAST(a1.`nom` AS CHAR) END FROM `llx_societe` a1 WHERE a1.`rowid` = t.`fk_soc`)
+        AS `p__customer`, CASE WHEN t.`datef` = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `p__invoice_date`,
+        (SELECT CASE WHEN (SELECT COUNT(*) FROM `llx_societe` u1 WHERE CAST(CAST(u1.`nom` AS CHAR) AS
+        BINARY) = CAST(CAST(a1.`nom` AS CHAR) AS BINARY) AND CAST(CAST(u1.`town` AS CHAR) AS BINARY) =
+        CAST(CAST(a1.`town` AS CHAR) AS BINARY)) = 1 THEN CAST(a1.`town` AS CHAR) END FROM `llx_societe`
+        a1 WHERE a1.`rowid` = t.`fk_soc`) AS `p__town`, CASE WHEN t.`close_missing_amount` IS NULL THEN
+        '1' ELSE '0' END AS `pin__close_missing_amount`, CASE WHEN t.`date_closing` IS NULL THEN '1' ELSE
+        '0' END AS `pin__date_closing`, CASE WHEN t.`date_pointoftax` IS NULL THEN '1' ELSE '0' END AS
+        `pin__date_pointoftax`, CASE WHEN t.`date_valid` IS NULL THEN '1' ELSE '0' END AS `pin__date_valid`,
         CASE WHEN t.`entity` = CAST('1' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__entity`, CASE
         WHEN t.`fk_account` IS NULL THEN '1' ELSE '0' END AS `pin__fk_account`, CASE WHEN t.`fk_cond_reglement`
         = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_cond_reglement`, CASE WHEN t.`fk_fac_rec_source`
@@ -122,28 +127,34 @@ verifier:
         AS CHAR) AS `multicurrency_subprice`, CAST(t.`multicurrency_subprice_ttc` AS CHAR) AS `multicurrency_subprice_ttc`,
         CAST(t.`multicurrency_total_ht` AS CHAR) AS `multicurrency_total_ht`, CAST(t.`multicurrency_total_tva`
         AS CHAR) AS `multicurrency_total_tva`, CAST(t.`multicurrency_total_ttc` AS CHAR) AS `multicurrency_total_ttc`,
-        CAST(t.`ref_ext` AS CHAR) AS `ref_ext`, (SELECT (SELECT CAST(a2.`nom` AS CHAR) FROM `llx_societe`
+        CAST(t.`ref_ext` AS CHAR) AS `ref_ext`, (SELECT (SELECT CASE WHEN (SELECT COUNT(*) FROM `llx_societe`
+        u2 WHERE CAST(CAST(u2.`nom` AS CHAR) AS BINARY) = CAST(CAST(a2.`nom` AS CHAR) AS BINARY) AND CAST(CAST(u2.`town`
+        AS CHAR) AS BINARY) = CAST(CAST(a2.`town` AS CHAR) AS BINARY)) = 1 THEN CAST(a2.`nom` AS CHAR)
+        END FROM `llx_societe` a2 WHERE a2.`rowid` = a1.`fk_soc`) FROM `llx_facture` a1 WHERE a1.`rowid`
+        = t.`fk_facture`) AS `main__customer`, CASE WHEN (SELECT a1.`datef` FROM `llx_facture` a1 WHERE
+        a1.`rowid` = t.`fk_facture`) = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `main__invoice_date`,
+        (SELECT (SELECT CASE WHEN (SELECT COUNT(*) FROM `llx_societe` u2 WHERE CAST(CAST(u2.`nom` AS CHAR)
+        AS BINARY) = CAST(CAST(a2.`nom` AS CHAR) AS BINARY) AND CAST(CAST(u2.`town` AS CHAR) AS BINARY)
+        = CAST(CAST(a2.`town` AS CHAR) AS BINARY)) = 1 THEN CAST(a2.`town` AS CHAR) END FROM `llx_societe`
         a2 WHERE a2.`rowid` = a1.`fk_soc`) FROM `llx_facture` a1 WHERE a1.`rowid` = t.`fk_facture`) AS
-        `main__customer`, CASE WHEN (SELECT a1.`datef` FROM `llx_facture` a1 WHERE a1.`rowid` = t.`fk_facture`)
-        = CAST(%(v0)s AS DATE) THEN '1' ELSE '0' END AS `main__invoice_date`, (SELECT (SELECT CAST(a2.`town`
-        AS CHAR) FROM `llx_societe` a2 WHERE a2.`rowid` = a1.`fk_soc`) FROM `llx_facture` a1 WHERE a1.`rowid`
-        = t.`fk_facture`) AS `main__town`, (SELECT CAST(a1.`ref` AS CHAR) FROM `llx_product` a1 WHERE
-        CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS `p__lines_0_product_ref`, CASE
-        WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty` = CAST(%(v1)s AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `p__lines_0_qty`, CASE WHEN t.`buy_price_ht` = CAST('0' AS DECIMAL(65,30))
-        THEN '1' ELSE '0' END AS `pin__buy_price_ht`, CASE WHEN t.`date_end` IS NULL THEN '1' ELSE '0'
-        END AS `pin__date_end`, CASE WHEN t.`date_start` IS NULL THEN '1' ELSE '0' END AS `pin__date_start`,
-        CASE WHEN t.`fk_code_ventilation` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_code_ventilation`,
-        CASE WHEN t.`fk_contract_line` IS NULL THEN '1' ELSE '0' END AS `pin__fk_contract_line`, CASE
-        WHEN t.`fk_multicurrency` = (SELECT s.`fk_multicurrency` FROM `llx_facture` s WHERE s.`rowid`
-        = t.`fk_facture`) THEN '1' ELSE '0' END AS `pin__fk_multicurrency`, CASE WHEN t.`fk_parent_line`
-        IS NULL THEN '1' ELSE '0' END AS `pin__fk_parent_line`, CASE WHEN t.`fk_prev_id` IS NULL THEN
-        '1' ELSE '0' END AS `pin__fk_prev_id`, CASE WHEN t.`fk_product_fournisseur_price` IS NULL THEN
-        '1' ELSE '0' END AS `pin__fk_product_fournisseur_price`, CASE WHEN t.`fk_remise_except` IS NULL
-        THEN '1' ELSE '0' END AS `pin__fk_remise_except`, CASE WHEN t.`fk_unit` IS NULL THEN '1' ELSE
-        '0' END AS `pin__fk_unit`, CASE WHEN t.`fk_user_author` = (SELECT s.`fk_user_author` FROM `llx_facture`
-        s WHERE s.`rowid` = t.`fk_facture`) THEN '1' ELSE '0' END AS `pin__fk_user_author`, CASE WHEN
-        t.`fk_user_modif` = CAST('2' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_user_modif`,
+        `main__town`, (SELECT CASE WHEN (SELECT COUNT(*) FROM `llx_product` u1 WHERE CAST(CAST(u1.`ref`
+        AS CHAR) AS BINARY) = CAST(CAST(a1.`ref` AS CHAR) AS BINARY)) = 1 THEN CAST(a1.`ref` AS CHAR)
+        END FROM `llx_product` a1 WHERE CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS
+        `p__lines_0_product_ref`, CASE WHEN CAST(%(v1)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty`
+        = CAST(%(v1)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `p__lines_0_qty`, CASE WHEN t.`buy_price_ht`
+        = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__buy_price_ht`, CASE WHEN t.`date_end`
+        IS NULL THEN '1' ELSE '0' END AS `pin__date_end`, CASE WHEN t.`date_start` IS NULL THEN '1' ELSE
+        '0' END AS `pin__date_start`, CASE WHEN t.`fk_code_ventilation` = CAST('0' AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `pin__fk_code_ventilation`, CASE WHEN t.`fk_contract_line` IS NULL THEN
+        '1' ELSE '0' END AS `pin__fk_contract_line`, CASE WHEN t.`fk_multicurrency` = (SELECT s.`fk_multicurrency`
+        FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`) THEN '1' ELSE '0' END AS `pin__fk_multicurrency`,
+        CASE WHEN t.`fk_parent_line` IS NULL THEN '1' ELSE '0' END AS `pin__fk_parent_line`, CASE WHEN
+        t.`fk_prev_id` IS NULL THEN '1' ELSE '0' END AS `pin__fk_prev_id`, CASE WHEN t.`fk_product_fournisseur_price`
+        IS NULL THEN '1' ELSE '0' END AS `pin__fk_product_fournisseur_price`, CASE WHEN t.`fk_remise_except`
+        IS NULL THEN '1' ELSE '0' END AS `pin__fk_remise_except`, CASE WHEN t.`fk_unit` IS NULL THEN '1'
+        ELSE '0' END AS `pin__fk_unit`, CASE WHEN t.`fk_user_author` = (SELECT s.`fk_user_author` FROM
+        `llx_facture` s WHERE s.`rowid` = t.`fk_facture`) THEN '1' ELSE '0' END AS `pin__fk_user_author`,
+        CASE WHEN t.`fk_user_modif` = CAST('2' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_user_modif`,
         CASE WHEN t.`fk_warehouse` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__fk_warehouse`,
         CASE WHEN t.`info_bits` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__info_bits`,
         CASE WHEN t.`localtax1_tx` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__localtax1_tx`,
@@ -167,10 +178,11 @@ verifier:
         CASE WHEN t.`total_localtax2` = (SELECT s.`localtax2` FROM `llx_facture` s WHERE s.`rowid` = t.`fk_facture`)
         THEN '1' ELSE '0' END AS `pin__total_localtax2`, CASE WHEN t.`tva_tx` = (SELECT s.`tva_tx` FROM
         `llx_product` s WHERE s.`rowid` = t.`fk_product`) THEN '1' ELSE '0' END AS `pin__tva_tx`, (SELECT
-        CAST(a1.`ref` AS CHAR) FROM `llx_product` a1 WHERE CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product`
-        AS BINARY)) AS `p__lines_1_product_ref`, CASE WHEN CAST(%(v2)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$'
-        AND t.`qty` = CAST(%(v2)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `p__lines_1_qty` FROM `llx_facturedet`
-        t
+        CASE WHEN (SELECT COUNT(*) FROM `llx_product` u1 WHERE CAST(CAST(u1.`ref` AS CHAR) AS BINARY)
+        = CAST(CAST(a1.`ref` AS CHAR) AS BINARY)) = 1 THEN CAST(a1.`ref` AS CHAR) END FROM `llx_product`
+        a1 WHERE CAST(a1.`rowid` AS BINARY) = CAST(t.`fk_product` AS BINARY)) AS `p__lines_1_product_ref`,
+        CASE WHEN CAST(%(v2)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`qty` = CAST(%(v2)s AS DECIMAL(65,30))
+        THEN '1' ELSE '0' END AS `p__lines_1_qty` FROM `llx_facturedet` t
       sql_query_params:
         v0: *id002
         v1:
@@ -432,9 +444,6 @@ effects:
   expected_count: 1
   count_new_only: true
 frame:
-  ignore_fields:
-  - fk_user_modif
-  - tms
   target_fields: []
   database:
     dialect: mysql
@@ -448,9 +457,4 @@ frame:
     views: {}
     settle_s: 1
     settle_attempts: 5
-    ignore_columns:
-      llx_societe:
-      - fk_user_modif
-      - socialnetworks
-      - tms
     recheck_after_s: 300.0

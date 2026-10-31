@@ -26,12 +26,20 @@ verifier:
         CAST(t.`contact_id` AS CHAR) AS `contact_id`, CAST(t.`campaign_id` AS CHAR) AS `campaign_id`,
         CAST(t.`created_by_id` AS CHAR) AS `created_by_id`, CAST(t.`modified_by_id` AS CHAR) AS `modified_by_id`,
         CAST(t.`assigned_user_id` AS CHAR) AS `assigned_user_id`, CAST(t.`version_number` AS CHAR) AS
-        `version_number`, (SELECT CAST(a1.`name` AS CHAR) FROM `account` a1 WHERE CAST(a1.`id` AS BINARY)
-        = CAST(t.`account_id` AS BINARY)) AS `p__account`, (SELECT CAST(a1.`billing_address_city` AS CHAR)
-        FROM `account` a1 WHERE CAST(a1.`id` AS BINARY) = CAST(t.`account_id` AS BINARY)) AS `p__account_city`,
-        CASE WHEN CAST(%(v0)s AS CHAR) REGEXP '^-?[0-9]+([.][0-9]+)?$' AND t.`amount` = CAST(%(v0)s AS
-        DECIMAL(65,30)) THEN '1' ELSE '0' END AS `p__amount`, CASE WHEN t.`close_date` = CAST(%(v1)s AS
-        DATE) THEN '1' ELSE '0' END AS `p__close_date` FROM `opportunity` t
+        `version_number`, (SELECT CASE WHEN (SELECT COUNT(*) FROM `account` u1 WHERE CAST(CAST(u1.`name`
+        AS CHAR) AS BINARY) = CAST(CAST(a1.`name` AS CHAR) AS BINARY) AND CAST(CAST(u1.`billing_address_city`
+        AS CHAR) AS BINARY) = CAST(CAST(a1.`billing_address_city` AS CHAR) AS BINARY) AND COALESCE(u1.`deleted`,
+        0) = 0) = 1 THEN CAST(a1.`name` AS CHAR) END FROM `account` a1 WHERE CAST(a1.`id` AS BINARY) =
+        CAST(t.`account_id` AS BINARY) AND COALESCE(a1.`deleted`, 0) = 0) AS `p__account`, (SELECT CASE
+        WHEN (SELECT COUNT(*) FROM `account` u1 WHERE CAST(CAST(u1.`name` AS CHAR) AS BINARY) = CAST(CAST(a1.`name`
+        AS CHAR) AS BINARY) AND CAST(CAST(u1.`billing_address_city` AS CHAR) AS BINARY) = CAST(CAST(a1.`billing_address_city`
+        AS CHAR) AS BINARY) AND COALESCE(u1.`deleted`, 0) = 0) = 1 THEN CAST(a1.`billing_address_city`
+        AS CHAR) END FROM `account` a1 WHERE CAST(a1.`id` AS BINARY) = CAST(t.`account_id` AS BINARY)
+        AND COALESCE(a1.`deleted`, 0) = 0) AS `p__account_city`, CASE WHEN CAST(%(v0)s AS CHAR) REGEXP
+        '^-?[0-9]+([.][0-9]+)?$' AND t.`amount` = CAST(%(v0)s AS DECIMAL(65,30)) THEN '1' ELSE '0' END
+        AS `p__amount`, CASE WHEN t.`close_date` = CAST(%(v1)s AS DATE) THEN '1' ELSE '0' END AS `p__close_date`,
+        CASE WHEN t.`deleted` = CAST('0' AS DECIMAL(65,30)) THEN '1' ELSE '0' END AS `pin__deleted` FROM
+        `opportunity` t
       sql_query_params:
         v0:
           param: amount
@@ -55,12 +63,10 @@ effects:
       param: name
     stage:
       param: stage
+    pin__deleted:
+      literal: '1'
   expected_count: 1
 frame:
-  ignore_fields:
-  - modified_at
-  - modified_by_id
-  - stream_updated_at
   target_fields: []
   database:
     dialect: mysql
@@ -75,13 +81,4 @@ frame:
     views: {}
     settle_s: 1
     settle_attempts: 5
-    ignore_columns:
-      account:
-      - stream_updated_at
-      lead:
-      - modified_at
-      - modified_by_id
-      - stream_updated_at
-      contact:
-      - stream_updated_at
     recheck_after_s: 300.0

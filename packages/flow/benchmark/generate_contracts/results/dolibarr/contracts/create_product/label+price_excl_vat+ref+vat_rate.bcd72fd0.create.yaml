@@ -475,9 +475,6 @@ effects:
   expected_count: 1
   count_new_only: true
 frame:
-  ignore_fields:
-  - fk_user_modif
-  - tms
   target_fields: []
   database:
     dialect: mysql
@@ -528,9 +525,4 @@ frame:
       - fk_actioncomm
       - rowid
       - transparency
-    ignore_columns:
-      llx_societe:
-      - fk_user_modif
-      - socialnetworks
-      - tms
     recheck_after_s: 300.0

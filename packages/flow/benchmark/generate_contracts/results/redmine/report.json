@@ -1,13 +1,21 @@
 {
   "applied": [],
+  "read_account": [],
   "dialect": "postgresql",
   "tables": 58,
   "questions": [
     {
       "number": 1,
       "key": "bookkeeping",
-      "text": "Is this the app's own bookkeeping, which a write may change without a task asking? Rows the app adds beside each write, expected exactly that many times (a second save adds a second one, which stops the write; list a table under logs_add to allow any number): custom_values (2 per write). Tables treated as the app's own logs (rows may be added, existing rows must not change; on PostgreSQL they are not read at all): journal_details Columns that change on their own and are not compared: issues: lock_version, updated_on; user_preferences: others Columns of a new record that differ between demonstrations and are not checked: time_entries: tmonth, tweek, tyear Answer `bookkeeping: accept`, or list changes under logs_add, logs_remove, columns_add, columns_remove.",
+      "text": "Is this the app's own bookkeeping? Proposed as the app's own bookkeeping, excused only on the rows the demonstrations changed (issues: the target row): issues: lock_version, updated_on. Also changed with no task value, and not excused unless you add them under columns_add (a write that changes them stops): user_preferences: others. Rows the app adds beside each write, expected exactly that many times: custom_values (2 per write). Tables that gained a different number of rows in different demonstrations; they are not logs unless you list them under logs_add (rows may then be added, existing rows must not change): journal_details. Columns of a new record that are not checked (they differ between demonstrations, are free text every demonstration left empty, or are the write's time stamp): issues: created_on, description, updated_on; time_entries: created_on, tmonth, tweek, tyear, updated_on. Answer `bookkeeping: accept`, or a mapping with any of logs_add, columns_add, columns_remove. Unanswered, nothing is excused and no table is a log.",
       "proposal": "accept",
+      "answered": true
+    },
+    {
+      "number": 2,
+      "key": "recheck_after_s",
+      "text": "How long after a verified write can the app still write on its own (a background job, a delayed retry)? The database is read again that many seconds later and a late change refutes the write. Proposed: 300. Answer `recheck_after_s: <seconds>`.",
+      "proposal": 300,
       "answered": true
     }
   ],
@@ -17,7 +25,7 @@
       "main_table": "issues",
       "locations": {
         "assignee": "issues.assigned_to_id -> users.firstname || ' ' || lastname (exact)",
-        "customer_ref": "custom_values (whose customized_id is the issues key).value (phone)",
+        "customer_ref": "custom_values (whose customized_id is the issues key).value (exact)",
         "description": "issues.description (exact)",
         "due_date": "issues.due_date (date)",
         "environment": "custom_values (whose customized_id is the issues key).value (exact)",
@@ -39,7 +47,26 @@
       "dispatch_children": {},
       "lists": {},
       "side_rows": [],
-      "logs": [],
+      "logs": [
+        "journal_details"
+      ],
+      "log_candidates": [],
+      "touched_rows": [
+        {
+          "table": "user_preferences",
+          "selector": {
+            "id": {
+              "literal": "1"
+            }
+          },
+          "columns": {
+            "others": "other"
+          },
+          "row": "user_preferences row id=1",
+          "by_key": true
+        }
+      ],
+      "unexcused": {},
       "refused": [],
       "unresolved": {},
       "emitted": 26,
@@ -83,6 +110,25 @@
       "logs": [
         "journal_details"
       ],
+      "log_candidates": [
+        "journal_details"
+      ],
+      "touched_rows": [
+        {
+          "table": "user_preferences",
+          "selector": {
+            "id": {
+              "literal": "1"
+            }
+          },
+          "columns": {
+            "others": "other"
+          },
+          "row": "user_preferences row id=1",
+          "by_key": true
+        }
+      ],
+      "unexcused": {},
       "refused": [],
       "unresolved": {},
       "emitted": 63,
@@ -107,7 +153,26 @@
       "dispatch_children": {},
       "lists": {},
       "side_rows": [],
-      "logs": [],
+      "logs": [
+        "journal_details"
+      ],
+      "log_candidates": [],
+      "touched_rows": [
+        {
+          "table": "user_preferences",
+          "selector": {
+            "id": {
+              "literal": "1"
+            }
+          },
+          "columns": {
+            "others": "other"
+          },
+          "row": "user_preferences row id=1",
+          "by_key": true
+        }
+      ],
+      "unexcused": {},
       "refused": [],
       "unresolved": {},
       "emitted": 4,
@@ -137,7 +202,26 @@
           "unless": null
         }
       ],
-      "logs": [],
+      "logs": [
+        "journal_details"
+      ],
+      "log_candidates": [],
+      "touched_rows": [
+        {
+          "table": "user_preferences",
+          "selector": {
+            "id": {
+              "literal": "1"
+            }
+          },
+          "columns": {
+            "others": "other"
+          },
+          "row": "user_preferences row id=1",
+          "by_key": true
+        }
+      ],
+      "unexcused": {},
       "refused": [],
       "unresolved": {},
       "emitted": 2,
