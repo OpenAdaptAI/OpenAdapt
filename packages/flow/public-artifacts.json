@@ -460,6 +460,7 @@
     "benchmark/undo_proposal/results/openemr-new-patient.json",
     "benchmark/undo_proposal/results/openimis-claim.json",
     "benchmark/undo_proposal/results/summary.json",
+    "benchmark/verification_coverage/independent/faults.yaml",
     "benchmark/vision_hardening/corpus.json",
     "benchmark/vision_hardening/results.json",
     "benchmark/vlm_identity/pairs/collapse_digit_flanked_O0_AC50061_vs_AC5OO61.png",
