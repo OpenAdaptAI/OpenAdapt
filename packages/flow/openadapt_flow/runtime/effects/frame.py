@@ -83,6 +83,14 @@ from openadapt_flow.runtime.effects.effect import (
     selector_value,
     stable_id,
 )
+from openadapt_flow.runtime.effects.learned import (
+    NOT_COMPARED,
+    LearnedFrame,
+    actor_columns,
+    actor_of,
+    covers,
+    set_columns,
+)
 from openadapt_flow.runtime.effects.versions import FrameVersions, VersionVerdict
 
 FrameStatus = Literal["held", "refuted", "not_checked"]
@@ -471,6 +479,10 @@ class FrameSpec(BaseModel):
     #: (``versions.FrameVersions``): a version in the window that isn't the
     #: agent's own is a lost update.
     versions: Optional[FrameVersions] = None
+    #: Moves a person approved from ``openadapt-flow learn``
+    #: (``learned.LearnedFrame``): the app's own writes on the acting user's
+    #: row or the write's own rows, by table, column and change.
+    learned: Optional[LearnedFrame] = None
 
     @model_serializer(mode="wrap")
     def _compact(self, handler: Any) -> dict[str, Any]:
@@ -479,6 +491,8 @@ class FrameSpec(BaseModel):
         data: dict[str, Any] = handler(self)
         if data.get("versions") is None:
             data.pop("versions", None)
+        if data.get("learned") is None:
+            data.pop("learned", None)
         if data.get("target_fields_by_surface") is None:
             data.pop("target_fields_by_surface", None)
         return data
@@ -496,6 +510,14 @@ class FrameSpec(BaseModel):
                 "with frame.database, audit attribution needs event_field, "
                 "write_events and table_field: only a write to the same table "
                 "attributes a change"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _learned_needs_database(self) -> "FrameSpec":
+        if self.learned is not None and self.database is None:
+            raise ValueError(
+                "frame.learned excuses database rows: it applies with frame.database"
             )
         return self
 
@@ -625,6 +647,12 @@ class FrameVerdict:
     excused_by: set[str] = field(default_factory=set)
     #: ``frame.versions`` only: how the target's versions came out.
     versions: Optional[VersionVerdict] = None
+    #: Each collateral change, by names only (table, change, columns, its
+    #: relation to the write, the columns holding the actor's id), for
+    #: ``openadapt-flow learn``. Set only when the frame is refuted.
+    moves: Optional[list[dict[str, Any]]] = None
+    #: ``frame.learned`` only: the learned excuses that excused a row.
+    learned_used: set[str] = field(default_factory=set)
     #: In memory only, set when the frame held and ``recheck_after_s`` is
     #: set: what a later recheck compares with (the settled post-save
     #: snapshot as keyed MACs, the audit entries seen then as keyed hashes,
@@ -658,6 +686,18 @@ class FrameVerdict:
             **(
                 {"versions": self.versions.evidence()}
                 if self.versions is not None
+                else {}
+            ),
+            **({"moves": self.moves} if self.moves else {}),
+            **(
+                {
+                    "learned": {
+                        "proposal_sha256": spec.learned.proposal_sha256,
+                        "excuses": len(spec.learned.excuses),
+                        "used": sorted(self.learned_used),
+                    }
+                }
+                if spec.learned is not None
                 else {}
             ),
         }
@@ -841,6 +881,14 @@ def judge_frame(
 
     hashers = hashers or {}
     database = spec.database
+    learned = spec.learned
+    #: The acting user's id (the run's one executor id): what an
+    #: ``actor_row`` excuse and the learner's summary compare a row's actor
+    #: column with. None: no row is the actor's.
+    actor = actor_of(run_actors)
+    learned_used: set[str] = set()
+    #: (table, row key) -> the row before and now, for ``moves``.
+    rows_seen: dict[tuple[str, str], tuple[Any, Any]] = {}
     surface_ignore = set(spec.ignore_fields) | {KEY}
     if attribution is not None and attribution.kind == "record_field":
         # Server-set bookkeeping moves on every write; it says who, not what.
@@ -1136,6 +1184,39 @@ def judge_frame(
             return list(rules)
         return None
 
+    def added_columns(name: str, after: Mapping[str, Any]) -> list[str]:
+        """The columns an added row sets, as the learner names them."""
+
+        return set_columns(_without(after, ignore_for(name)))
+
+    def learned_actor_row(
+        name: str,
+        change: str,
+        before: Optional[Mapping[str, Any]],
+        after: Optional[Mapping[str, Any]],
+        fields: Sequence[str] = (),
+    ) -> Optional[str]:
+        """The learned ``actor_row`` excuse that covers this row no effect
+        declares, or None. An added row is judged by every column it sets."""
+
+        if learned is None or name not in hashers:
+            return None
+        if change == "added":
+            if after is None:
+                return None
+            fields = added_columns(name, after)
+        return covers(
+            learned,
+            table=name,
+            change=change,
+            relation="actor_row",
+            fields=list(fields),
+            before=before,
+            after=after,
+            hasher=hashers.get(name),
+            actor=actor,
+        )
+
     # Each other actor's entry explains at most one row: a colleague's one
     # insert can't cover two stray rows.
     used: set[int] = set()
@@ -1376,6 +1457,21 @@ def judge_frame(
         extra = undeclared_columns(name, after, also)
         if not extra:
             return
+        if name in hashers:
+            hit = covers(
+                learned,
+                table=name,
+                change="added",
+                relation="target",
+                fields=extra,
+                before=None,
+                after=after,
+                hasher=hashers.get(name),
+                actor=actor,
+            )
+            if hit:
+                learned_used.add(hit)
+                return
         ref, _hashed = ref_of(name, key, None, after)
         others = actors(name, ref, None) - self_ids
         change = FrameChange(name, "added", "self", extra, on_target=True, key=key)
@@ -1524,6 +1620,8 @@ def judge_frame(
         for key in set(before_map) | set(after_map):
             before = before_map.get(key)
             after = after_map.get(key)
+            if name in hashers:
+                rows_seen[(name, str(key))] = (before, after)
             is_declared = (
                 before is not None and declared(before, hashed=hasher is not None)
             ) or (after is not None and declared(after))
@@ -1600,6 +1698,23 @@ def judge_frame(
                         )
                     )
                     continue
+                if stray and name in hashers:
+                    # A move a person approved on the write's own row: only
+                    # these columns, on a row this run declares.
+                    hit = covers(
+                        learned,
+                        table=name,
+                        change="changed",
+                        relation="target",
+                        fields=stray,
+                        before=before,
+                        after=after,
+                        hasher=hasher,
+                        actor=actor,
+                    )
+                    if hit:
+                        learned_used.add(hit)
+                        continue
                 if stray:
                     note(
                         FrameChange(
@@ -1638,6 +1753,10 @@ def judge_frame(
                 rules = bookkeeping(name, None, after, [])
                 if rules:
                     partner(None, after, "bookkeeping", rules)
+                    continue
+                hit = learned_actor_row(name, "added", None, after)
+                if hit:
+                    learned_used.add(hit)
                     continue
                 theirs_side = False
                 extra_side = False
@@ -1682,6 +1801,14 @@ def judge_frame(
                 rules = bookkeeping(name, before, after, fields) if fields else None
                 if rules:
                     partner(before, after, "bookkeeping", rules)
+                    continue
+                hit = (
+                    learned_actor_row(name, "changed", before, after, fields)
+                    if fields
+                    else None
+                )
+                if hit:
+                    learned_used.add(hit)
                     continue
                 if fields:
                     change = FrameChange(
@@ -1838,9 +1965,77 @@ def judge_frame(
         database=database_evidence,
         added_by_others=added_by_others,
         excused_by=excused_by,
+        moves=_moves(collateral, rows_seen, hashers, actor, added_columns)
+        if collateral
+        else None,
+        learned_used=learned_used,
     )
     verdict.reason = _reason(verdict)
     return verdict
+
+
+#: How many collateral changes ``FrameVerdict.moves`` lists; past it the
+#: list says it was cut, and the learner learns nothing from the write.
+MOVES_LIMIT = 50
+
+
+def _moves(
+    collateral: Sequence[FrameChange],
+    rows_seen: Mapping[tuple[str, str], tuple[Any, Any]],
+    hashers: Mapping[str, Callable[[str, Any], str]],
+    actor: Optional[str],
+    added_columns: Callable[[str, Mapping[str, Any]], list[str]],
+) -> list[dict[str, Any]]:
+    """Each collateral change by names only, for ``openadapt-flow learn``.
+
+    A row of a snapshotted table gets ``row: true``, its columns (those that
+    changed; for an added row those it sets, or for a new declared row those
+    it sets beyond the declared ones), ``target`` (a row this write
+    declares) and ``actor_columns`` (columns holding the actor's id on every
+    side the row has). Anything else (an audit entry, a table that moved in
+    a way no row comparison explains, a missing side record) is ``row:
+    false``: nothing the learner may excuse.
+    """
+
+    from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW
+
+    out: list[dict[str, Any]] = []
+    for c in collateral:
+        if len(out) >= MOVES_LIMIT:
+            out.append({"truncated": True})
+            break
+        seen = rows_seen.get((c.surface, str(c.key)))
+        if c.audit_only or c.surface not in hashers or seen is None:
+            out.append({"row": False, "table": c.surface, "change": c.change})
+            continue
+        before, after = seen
+        if c.change == "added" and not c.on_target and after is not None:
+            columns = added_columns(c.surface, after)
+        else:
+            columns = list(c.fields)
+        if (
+            c.change == "changed"
+            and before is not None
+            and after is not None
+            and any(k not in before for k in after if k not in (KEY, ROW))
+        ):
+            # A table over ``max_rows``: the baseline kept some columns only,
+            # so what else moved can't be named.
+            columns.append(NOT_COMPARED)
+        out.append(
+            {
+                "row": True,
+                "table": c.surface,
+                "change": c.change,
+                "columns": sorted(columns),
+                "target": bool(c.on_target and not c.other_on_target),
+                "attribution": c.attribution,
+                "actor_columns": actor_columns(
+                    actor, before, after, hashers.get(c.surface)
+                ),
+            }
+        )
+    return out
 
 
 def _reason(verdict: FrameVerdict) -> str:

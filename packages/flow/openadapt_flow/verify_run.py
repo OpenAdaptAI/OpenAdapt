@@ -653,6 +653,9 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
         cols |= {o.column for o in a.owners.values()}
     for side in frame.side_records:
         cols |= {side.link_field, side.of_field}
+    if frame.learned is not None:
+        # A learned excuse is checked by its actor column and moved columns.
+        cols |= set(frame.learned.columns_to_keep())
     profile = frame.database.loaded_profile() if frame.database else None
     if profile is not None:
         cols |= set(profile.ref_columns())
