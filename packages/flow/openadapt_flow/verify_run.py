@@ -1226,6 +1226,98 @@ def judge_run_frame(
     return verdict
 
 
+def _excuse_attributed_additions(
+    cfg: VerifyConfig,
+    verifier: Any,
+    before: EffectState,
+    effects: Sequence[Effect],
+    verdicts: list[EffectVerdict],
+    rows: list[dict[str, Any]],
+    frame: FrameVerdict,
+) -> None:
+    """Re-judge a refuted ``exact_new_set`` without records another user added.
+
+    ``exact_new_set`` says the save added these records and nothing else. A
+    record the frame's attribution names another actor for (a colleague's
+    new patient in the same window) is not this save's addition. Only such
+    attributed additions are set aside; an unattributed one still refutes.
+
+    Only an insert event into the record's own table proves who created it:
+    the frame must diff the database (``frame.database``) and read the log
+    with ``insert_events`` and a ``table_field``. A colleague's later entry or last-modifier
+    stamp on a record says who touched it, not who added it, so under any
+    other attribution nothing is set aside.
+    """
+
+    from openadapt_flow.runtime.effects._common import judge_records
+    from openadapt_flow.runtime.effects.effect import stable_id
+    from openadapt_flow.runtime.effects.surfaces import surface_of
+
+    spec = cfg.frame or FrameSpec()
+    attribution = spec.attribution
+    if (
+        attribution is None
+        or attribution.kind != "audit_read"
+        or not attribution.insert_events
+        or not attribution.table_field
+        or spec.database is None
+    ):
+        return
+    excused = {
+        (c.surface, str(c.key))
+        for c in frame.concurrent
+        if c.change == "added" and c.key is not None
+    }
+    # When a database table is judged in place of the surface it holds, the
+    # frame names those additions as the surface does.
+    excused |= set(getattr(frame, "added_by_others", ()))
+    if not excused:
+        return
+
+    def key_of(record: Mapping[str, Any]) -> str:
+        if spec.identity_field:
+            return str(record.get(spec.identity_field))
+        ignore = set(spec.ignore_fields)
+        return str(stable_id({k: v for k, v in record.items() if k not in ignore}))
+
+    for i, (effect, verdict) in enumerate(zip(effects, verdicts)):
+        if (
+            effect.kind is not EffectKind.EXACT_NEW_SET
+            or verdict.verdict is not Verdict.REFUTED
+        ):
+            continue
+        try:
+            state = verifier.capture_pre_state()
+        except Exception:  # noqa: BLE001 - unreadable: the refutation stands
+            continue
+        surface = surface_of(effect) or ""
+        routed = isinstance(getattr(verifier, "verifiers", None), dict)
+        if routed and surface:
+            post = (state.detail or {}).get(surface, {})
+            pre = (before.detail or {}).get(surface, {})
+            records = list(post.get("records", [])) if post.get("reachable") else None
+            base = EffectState(
+                substrate=str(pre.get("substrate", "")),
+                reachable=bool(pre.get("reachable", False)),
+                records=list(pre.get("records", [])),
+            )
+            name = surface
+        else:
+            records = list(state.records) if state.reachable else None
+            base, name = before, ""
+        if records is None:
+            continue
+        kept = [r for r in records if (name, key_of(r)) not in excused]
+        if len(kept) == len(records):
+            continue
+        again = judge_records(effect, base, kept, substrate=verdict.substrate)
+        if again.verdict is Verdict.CONFIRMED:
+            verdicts[i] = again
+            rows[i]["verdict"] = _label(again.verdict)
+            rows[i]["observed_effect"] = again.observed_effect
+            rows[i]["observed_count"] = again.observed_count
+
+
 def _target_record(
     effects: Sequence[Effect], verdicts: Sequence[EffectVerdict]
 ) -> Optional[dict[str, Any]]:
@@ -1817,6 +1909,7 @@ def verify_run(
     verdicts: list[EffectVerdict] = []
     rows: list[dict[str, Any]] = []
     bound_effects: list[Effect] = []
+    judged_effects: list[Effect] = []
     weakest: Optional[VerificationTier] = None
     tiers: list[Optional[VerificationTier]] = []
     for effect in cfg.effects:
@@ -1839,6 +1932,7 @@ def verify_run(
             else _audit_effect(effect, bound)
         )
         bound_effects.append(bound)
+        judged_effects.append(judged)
         tier = verifier_effect_tier(verifier, judged)
         try:
             verdict = verify_effect_without_mutation(verifier, judged, before)
@@ -1901,6 +1995,12 @@ def verify_run(
             status="not_checked",
             reason="no baseline, so what else changed can't be known",
         )
+    if frame.concurrent and any(c.change == "added" for c in frame.concurrent):
+        _excuse_attributed_additions(
+            cfg, verifier, before, judged_effects, verdicts, rows, frame
+        )
+        delta_verdict = _aggregate(verdicts)
+        observed_effect = _observed(verdicts)
     # A record outside the declared delta moved: the save's effect on the
     # store is not the declared one, whatever the per-effect reads say.
     effect_verdict: EffectVerdictLabel = (
