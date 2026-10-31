@@ -227,12 +227,22 @@ def covers(
     that moved or can't be read, or any column outside the excuse.
     """
 
+    from openadapt_flow.runtime.effects.db_snapshot import KEY, ROW
+
     if learned is None or change not in ("changed", "added"):
         return None
     if change == "changed" and not fields:
         return None
     if any(f == NOT_COMPARED for f in fields):
         return None
+    if change == "changed":
+        # Over ``max_rows`` the baseline keeps cell MACs for some columns
+        # only, so ``fields`` can't show a move in the others: a row whose
+        # every column wasn't compared is never excused.
+        if before is None or after is None:
+            return None
+        if any(c not in before for c in after if c not in (KEY, ROW)):
+            return None
     for excuse in learned.excuses:
         if (
             excuse.table != table

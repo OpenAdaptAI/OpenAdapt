@@ -154,6 +154,7 @@ Approving again replaces the earlier `frame.learned` with the new one.
   it in the database frame) already lists what the target may change in
   `target_fields`.
 - Learning reads SQL mode only. FHIR mode has no database frame.
-- Moves the learner can't name (a large table whose compared columns the
-  snapshot didn't keep) are not learned. With `frame.learned`, the
-  snapshot keeps the excused columns and actor columns for every table.
+- Over `frame.database.max_rows` (2,000 rows by default) a table's baseline
+  keeps only some columns per row, so a change in another column can't be
+  named. Such a row is never learned and never excused: raise `max_rows`
+  for an app whose users or tokens table is larger.
