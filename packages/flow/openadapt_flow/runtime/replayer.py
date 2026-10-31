@@ -85,6 +85,7 @@ from openadapt_flow.backend import (
     RemoteFrameContractBackend,
     RichPointerActionBackend,
     SelectOptionBackend,
+    StructuralElementNotActionable,
     StructuralResolutionRefused,
     SubmitBindingBackend,
 )
@@ -8210,6 +8211,20 @@ class Replayer:
                 resolution, matched_region, error = self._resolve_step_target(
                     step, before_png, bundle_dir, workflow, target_missed
                 )
+            if (
+                error is not None
+                and resolution is None
+                and "structural candidate is not actionable" in error
+            ):
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.error = error
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="target_resolution",
+                    code="target_not_actionable",
+                    detector_input_sha256=sha256_bytes(last_frame),
+                )
             if resolution is not None and matched_region is not None:
                 assert step.anchor is not None
                 resolution = self._retain_visual_resolution_evidence(
@@ -11883,17 +11898,27 @@ class Replayer:
             if self.use_structural and hasattr(self.backend, "locate_structural")
             else None
         )
-        resolved = resolve(
-            step.anchor,
-            screen_png,
-            self.vision,
-            self.grounder if allow_grounder else None,
-            step.intent,
-            template_png=template_png,
-            viewport=_frame_viewport(screen_png),
-            structural=structural,
-            allow_target_ocr=allow_target_ocr,
-        )
+        try:
+            resolved = resolve(
+                step.anchor,
+                screen_png,
+                self.vision,
+                self.grounder if allow_grounder else None,
+                step.intent,
+                template_png=template_png,
+                viewport=_frame_viewport(screen_png),
+                structural=structural,
+                allow_target_ocr=allow_target_ocr,
+            )
+        except StructuralElementNotActionable as exc:
+            return (
+                None,
+                None,
+                (
+                    f"Could not resolve target for step '{step.id}' "
+                    f"({step.intent}): structural candidate is not actionable ({exc})"
+                ),
+            )
         if resolved is None:
             return (
                 None,
@@ -17776,11 +17801,12 @@ class Replayer:
                 viewport=_frame_viewport(frame_png),
                 structural=structural,
             )
-        except OcrResolutionRefused:
+        except (OcrResolutionRefused, StructuralElementNotActionable):
             # Readiness is a bounded, non-actuating probe. An ambiguous OCR
-            # candidate means that the target is not ready yet, so the scroll
-            # loop must continue. The later target action runs the full
-            # resolver again and still halts on the same ambiguity.
+            # candidate or an occluded/not-ready structural candidate (e.g.
+            # under a sticky header) means that the target is not ready yet, so
+            # the scroll loop must continue. The later target action runs the
+            # full resolver again and still halts on the same ambiguity.
             return miss("unresolved")
         if resolved is None:
             return miss("unresolved")

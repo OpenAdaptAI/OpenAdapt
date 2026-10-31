@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from openadapt_flow.backend import StructuralResolutionRefused
+from openadapt_flow.backend import (
+    StructuralElementNotActionableRefused,
+    StructuralResolutionRefused,
+)
 from openadapt_flow.ir import StructuralLocator
 
 
@@ -289,7 +292,8 @@ def test_ancestor_frame_change_before_locate_refuses_handle(
 
     _mutate_ancestor_frame(page, mutation)
 
-    assert backend.locate_structural(locator) is None
+    with pytest.raises(StructuralElementNotActionableRefused):
+        backend.locate_structural(locator)
     assert not _has_guard_attribute(frame)
 
 
