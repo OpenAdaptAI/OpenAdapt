@@ -376,8 +376,18 @@ def locate(
     def walk(
         t: Table, r: Mapping[str, Optional[str]], hops: tuple[Hop, ...], depth: int
     ) -> None:
+        # The column a hop arrived by holds the other row's key by
+        # construction (a child's link, the key an fk names): a value equal
+        # to it there can't be told from the link itself.
+        via = (
+            (hops[-1].column if hops[-1].kind == "child" else hops[-1].ref_column)
+            if hops
+            else None
+        )
         for cols, rule in _display_matches(t, r, value):
             if depth == 0 and changed_only and not (set(cols) & changed):
+                continue
+            if via is not None and via in cols:
                 continue
             found.append(Location(hops, cols, rule))
         if depth >= max_hops:
@@ -389,6 +399,10 @@ def locate(
             if depth == 0 and changed_only and col.name not in changed:
                 continue
             for target, ref, declared in _fk_targets(schema, idx, t, col.name, v):
+                if col.name in t.primary_key and not declared:
+                    # A row's own key names that row: equal to another
+                    # table's key only by chance, unless a foreign key says so.
+                    continue
                 target_row = idx.row(target, v)
                 if target_row is None or (target == anchor.table and hops):
                     continue  # back to the main record: not a location
@@ -426,6 +440,9 @@ def locate(
                     )
                     if not declared and not _IDLIKE.search(col.name):
                         continue
+                    if not declared and col.name in child.primary_key:
+                        continue  # the child's own key: equal by chance
+
                     walk(
                         child,
                         ch.after,
@@ -462,9 +479,24 @@ def link_columns(
         for ch in demo.diff.changes:
             if ch.kind != "added" or ch.table == anchor.table or ch.after is None:
                 continue
-            cols = {c for c, v in ch.after.items() if v == key}
+            cols = {
+                c
+                for c, v in ch.after.items()
+                if v == key and is_link_column(schema, ch.table, c, anchor.table)
+            }
             out[ch.table] = out[ch.table] & cols if ch.table in out else cols
     return out
+
+
+def is_link_column(schema: Schema, table: str, column: str, parent: str) -> bool:
+    """Can ``table.column`` link a row to a ``parent`` row? Not the row's own
+    primary key, unless a foreign key declares it (a one-to-one extension
+    table): a new row's key equals its parent's key only by chance."""
+
+    t = schema.tables.get(table)
+    if t is None or column not in t.primary_key:
+        return True
+    return any(fk.column == column and fk.table == parent for fk in t.foreign_keys)
 
 
 def best(locations: Sequence[Location]) -> tuple[Optional[Location], list[Location]]:
@@ -584,12 +616,19 @@ def column_roles(
         ):
             out[name] = ColumnRole("timestamp")
             continue
+        # One row can't tell a pinned value from what that one write
+        # happened to store (a reference number, a currency, an id equal to
+        # the bot's): never pinned from one row.
+        one = len(rows) < 2
         actor = [
             p
             for p, av in actor_values.items()
             if values and all(v is not None and v == av for v in values)
         ]
-        if actor:
+        if actor and not one:
+            # The acting user's id in every row: the person declared it
+            # (``--actor-param``), so it wins over a copy of another row's
+            # column that happens to hold the same id.
             out[name] = ColumnRole("actor", detail={"param": actor[0]})
             continue
         links = link_values or [set() for _ in rows]
@@ -637,6 +676,11 @@ def column_roles(
                 else "mixed"
             )
             out[name] = ColumnRole("free", detail={"empty": empty})
+            continue
+        if one:
+            out[name] = ColumnRole(
+                "varies", detail={"why": "seen in one demonstration only"}
+            )
             continue
         if len(distinct) == 1:
             v = values[0]

@@ -138,7 +138,7 @@ class App:
         )
         if v.get("customer_ref") is not None:
             self.q("INSERT INTO custom_values (customized_type, customized_id, custom_field_id, value) "
-                   "VALUES ('Issue', %s, 1, %s)", (iid, v["customer_ref"]))  # fmt: skip
+                   "VALUES ('Issue', %s, 4, %s)", (iid, v["customer_ref"]))  # fmt: skip
         return iid
 
     def find(self, project: str, subject: str) -> int:
@@ -208,6 +208,18 @@ KINDS = {
                         "assignee": "Renée O'Connor",
                         "due_date": None,
                         "customer_ref": "007341",
+                    }
+                },
+                # A second write with a custom field: one row can't tell a
+                # pinned value from what one write happened to store.
+                {
+                    "values": {
+                        "project": "Billing Portal Legacy",
+                        "subject": "Ledger export",
+                        "status": "In Progress",
+                        "assignee": "Jon Park",
+                        "due_date": None,
+                        "customer_ref": "008812",
                     }
                 },
             ],
