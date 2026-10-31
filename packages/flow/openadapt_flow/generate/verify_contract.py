@@ -56,6 +56,7 @@ from openadapt_flow.generate.demo_analysis import (
     best,
     column_roles,
     is_identifier,
+    is_link_column,
     link_columns,
     locate,
     pick_anchor,
@@ -69,6 +70,13 @@ MAX_VARIANTS = 64
 MAX_LIST = 10
 #: The recheck window proposed when the person hasn't answered.
 DEFAULT_RECHECK_S = 300
+
+
+class Unpinned(ValueError):
+    """A column of a new row that no rule checks, in one field set only (seen
+    in one demonstration, or two explanations the demonstrations can't tell
+    apart), and that the answer doesn't name under ``unchecked``: that field
+    set gets no contract."""
 
 
 class GenerateError(RuntimeError):
@@ -268,6 +276,8 @@ class KindPlan:
     #: More places a value is in: rows the write added beside the record
     #: (a call's lead is its parent and also an attendee row).
     extra: dict[str, list[Location]] = field(default_factory=dict)
+    #: The acting user's ids (``--actor-param``), for the roles of new rows.
+    actor_values: dict[str, str] = field(default_factory=dict)
 
 
 def _scalars(values: Mapping[str, Any]) -> dict[str, Any]:
@@ -299,6 +309,7 @@ def analyze(
     actor_values: Mapping[str, str],
 ) -> KindPlan:
     plan = KindPlan(spec.kind, params=list(spec.parameters))
+    plan.actor_values = dict(actor_values)
     mine = [d for d in demos if d.kind == spec.kind and d.diff.changes]
     if not mine:
         plan.refused.append(
@@ -392,6 +403,17 @@ def analyze(
                 continue
         all_found = _intersect(found[p])
         loc, tied = _pick(p, all_found, plan.demos, schema)
+        if (
+            loc is not None
+            and _by_value_only(loc)
+            and any(x != loc and not _by_value_only(x) for x in all_found)
+        ):
+            # The best place reaches the value through a key that only equal
+            # values support (no declared foreign key, no column named after
+            # its table), and a place whose every key is supported fits every
+            # demonstration too: the demonstrations can't tell a real join
+            # from ids that happened to be equal. A person picks.
+            loc, tied = None, sorted(all_found, key=_rank)
         if loc is not None:
             plan.extra[p] = [
                 x
@@ -429,10 +451,14 @@ def analyze(
             for c in loc.columns
         }
         for name, tied in list(plan.unresolved.items()):
+            # A place one key away through a column another value already
+            # holds is that value's row, not this one's. A longer path through
+            # it (a customer behind the project) still counts.
             left = [
                 loc
                 for loc in tied
-                if (loc.hops[0].column if loc.hops else loc.columns[0]) not in claimed
+                if len(loc.hops) > 1
+                or (loc.hops[0].column if loc.hops else loc.columns[0]) not in claimed
             ]
             if len(left) == 1 and name in plan.params:
                 plan.locations[name] = left[0]
@@ -464,6 +490,13 @@ def analyze(
     _children(schema, plan, lists)
     _sides(schema, plan, actor_values, demos)
     return plan
+
+
+def _by_value_only(loc: Location) -> bool:
+    """Does the place go through a hop that only a value match supports (no
+    declared foreign key, no column named after the table)?"""
+
+    return any(_hop_cost(h) >= 2 for h in loc.hops)
 
 
 def _share_locations(
@@ -741,11 +774,37 @@ def _children(
             ):
                 co.append(q)
                 explained |= {h[0].hops[0].column for h in hits}
+        roles = column_roles(
+            schema, loc.hops[0].table, rows, explained, plan.actor_values
+        )
+        if len(rows) < 2:
+            # One demonstration gives this value. Every row of the table the
+            # kind's demonstrations added for their record is evidence for a
+            # column that holds the same in all of them (a journal's type).
+            linked = [
+                (d, ch.after)
+                for d, a in zip(plan.demos, plan.anchors)
+                for ch in d.diff.of(loc.hops[0].table, "added")
+                if ch.after is not None
+                and ch.after.get(loc.hops[0].column)
+                == (a.after or {}).get(loc.hops[0].ref_column)
+            ]
+            if len(linked) >= 2:
+                wide = column_roles(
+                    schema, loc.hops[0].table, linked, explained, plan.actor_values
+                )
+                for col, role in roles.items():
+                    if role.detail.get(
+                        "why"
+                    ) == "seen in one demonstration only" and wide.get(
+                        col, role
+                    ).role in ("constant", "actor", "copied"):
+                        roles[col] = wide[col]
         group = ChildGroup(
             loc.hops[0].table,
             loc.hops[0],
             {p: rel},
-            column_roles(schema, loc.hops[0].table, rows, explained, {}),
+            roles,
             1,
             co_owners=co,
             param=p,
@@ -758,6 +817,8 @@ def _children(
         per_key: dict[str, list[list[Location]]] = {}
         table = link = None
         rows = []
+        #: Columns that hold the record's key in every list row so far.
+        link_cols: Optional[set[str]] = None
         for d, a in zip(plan.demos, plan.anchors):
             items = d.values.get(p)
             if not isinstance(items, list):
@@ -791,12 +852,18 @@ def _children(
                     }
                     if all(found_at.values()):
                         used.add(i)
-                        link_col = next(c for c, v in after.items() if v == key)
+                        here = {
+                            c
+                            for c, v in after.items()
+                            if v == key
+                            and is_link_column(schema, ch.table, c, plan.anchor)
+                        }
+                        link_cols = here if link_cols is None else link_cols & here
                         table = ch.table
                         link = Hop(
                             "child",
                             ch.table,
-                            link_col,
+                            "",
                             schema.tables[plan.anchor].primary_key[0],
                         )
                         for k, ls in found_at.items():
@@ -808,6 +875,30 @@ def _children(
         if table is None or link is None:
             plan.unresolved.setdefault(p, [])
             continue
+        # The column that links an item to its record: the one that holds
+        # the record's key in every item row. Two that always agree (an
+        # item's own id equal to the record's) can't be told apart, unless
+        # exactly one is a declared foreign key to the record.
+        cols = sorted(link_cols or [])
+        declared = [
+            c
+            for c in cols
+            if any(
+                fk.column == c and fk.table == plan.anchor
+                for fk in schema.tables[table].foreign_keys
+            )
+        ]
+        if len(cols) != 1 and len(declared) == 1:
+            cols = declared
+        if len(cols) != 1:
+            plan.refused.append(
+                f"{p}: the demonstrations can't tell which column of {table} "
+                "links an item to its record ("
+                + (", ".join(cols) or "none holds the record's key in every item")
+                + "); record a demonstration where they differ"
+            )
+            return
+        link = Hop("child", table, cols[0], link.ref_column)
         item_locs: dict[str, Location] = {}
         for k, per in per_key.items():
             item_loc, tied = best(_intersect(per))
@@ -821,7 +912,7 @@ def _children(
             table,
             link,
             item_locs,
-            column_roles(schema, table, rows, explained, {}),
+            column_roles(schema, table, rows, explained, plan.actor_values),
             list_param=p,
         )
 
@@ -840,6 +931,19 @@ def _all_groups(plan: KindPlan, dv: Optional[str] = None) -> list[ChildGroup]:
 def _demo_groups(plan: KindPlan, d: Demo) -> list[ChildGroup]:
     dv = str(d.values.get(plan.dispatch)) if plan.dispatch else None
     return _all_groups(plan, dv) if dv is not None else list(plan.children.values())
+
+
+def _link_keys(schema: Schema, plan: KindPlan, d: Demo) -> set[str]:
+    """Keys a row added beside a write may link to: the rows that write
+    added, and its main record (an update's journal names the issue)."""
+
+    keys = set(getattr(d, "_added_keys", set()))
+    if d in plan.demos:
+        a = plan.anchors[plan.demos.index(d)]
+        key = (a.after or a.before or {}).get(plan_pk(schema, plan.anchor))
+        if key is not None:
+            keys.add(key)
+    return keys
 
 
 def _sides(
@@ -913,8 +1017,30 @@ def _sides(
     for t, cs in sorted(counts.items()):
         rows = [r for group in pure.get(t, []) for r in group]
         if len(set(cs)) == 1 and cs[0] > 0 and rows:
-            links: list[set[str]] = [getattr(d, "_added_keys", set()) for d, _ in rows]
+            links: list[set[str]] = [_link_keys(schema, plan, d) for d, _ in rows]
             roles = column_roles(schema, t, rows, set(), actor_values, links)
+            if len(rows) < 2:
+                # Seen beside one write only (the other writes gave the
+                # value this row holds): every row the kind's writes added
+                # here is evidence for a column that holds the same in all.
+                wide = [
+                    (d, ch.after)
+                    for d in plan.demos
+                    for ch in d.diff.of(t, "added")
+                    if ch.after is not None
+                ]
+                if len(wide) >= 2:
+                    wide_links = [_link_keys(schema, plan, d) for d, _ in wide]
+                    more = column_roles(
+                        schema, t, wide, set(), actor_values, wide_links
+                    )
+                    for col, role in roles.items():
+                        if role.detail.get(
+                            "why"
+                        ) == "seen in one demonstration only" and more.get(
+                            col, role
+                        ).role in ("constant", "actor", "copied", "link"):
+                            roles[col] = more[col]
             plan.sides.append(SideSpec(t, cs[0], roles, unless=child_tables.get(t)))
         elif rows:
             # The number of added rows differs between demonstrations: a log
@@ -2106,6 +2232,9 @@ def _pin(
     actor_params: Mapping[str, str],
     unchecked: Mapping[str, set[str]] = {},
 ) -> None:
+    if role.role == "varies" and col not in unchecked.get(table, set()):
+        why = role.detail.get("why") or "it differs between demonstrations"
+        raise Unpinned(f"{table}.{col} is not checked ({why})")
     if role.role == "free" and col not in unchecked.get(table, set()):
         # Empty in every demonstration and not named as unchecked: it stays
         # empty.
@@ -2265,6 +2394,16 @@ def _anchor_roles(
             if role.role == "varies" and all(
                 v is not None and _TOKEN.match(v) for v in values
             ):
+                roles[col] = role
+            elif (
+                len(support) < 2
+                and roles.get(col, role).detail.get("why")
+                == "seen in one demonstration only"
+                and role.role in ("constant", "actor", "copied")
+            ):
+                # One demonstration gives this field set, but every
+                # demonstration of the kind stored the same there: that
+                # agreement is the evidence for the pin.
                 roles[col] = role
     return roles
 
@@ -2976,21 +3115,26 @@ def propose(
         excused[t] = (took | columns_add.get(t, set())) - columns_remove.get(t, set())
     # Columns of a new row no rule checks, per kind and table.
     open_by_kind: dict[str, dict[str, dict[str, str]]] = {}
+    #: Why a column can't be pinned, where the demonstrations can't tell
+    #: (one demonstration, or two explanations that agree).
+    why_open: dict[str, str] = {}
     for p in plans:
         own: dict[str, dict[str, str]] = {}
+        groups: list[tuple[str, dict[str, ColumnRole]]] = []
         if p.mode == "create" and p.demos:
             for v in [Variant(p.kind, sorted(p.locations))]:
-                for col, role in _anchor_roles(schema, p, v, actor_params).items():
-                    if role.role in OPEN_ROLES:
-                        own.setdefault(p.anchor, {})[col] = role.role
-        for g in [*p.children.values(), *p.lists.values()]:
-            for col, role in g.roles.items():
+                groups.append((p.anchor, _anchor_roles(schema, p, v, actor_params)))
+        groups += [
+            (g.table, g.roles) for g in [*p.children.values(), *p.lists.values()]
+        ]
+        groups += [(sd.table, sd.roles) for sd in p.sides]
+        for table, roles_of in groups:
+            for col, role in roles_of.items():
                 if role.role in OPEN_ROLES:
-                    own.setdefault(g.table, {})[col] = role.role
-        for sd in p.sides:
-            for col, role in sd.roles.items():
-                if role.role in OPEN_ROLES:
-                    own.setdefault(sd.table, {})[col] = role.role
+                    own.setdefault(table, {})[col] = role.role
+                    why = str(role.detail.get("why") or "")
+                    if "one demonstration" in why or "can't tell" in why:
+                        why_open[f"{table}.{col}"] = why
         open_by_kind[p.kind] = own
     unchecked: dict[str, set[str]] = {}
     for own_cols in open_by_kind.values():
@@ -3000,7 +3144,7 @@ def propose(
     for own_cols in open_by_kind.values():
         for t, roles_of in own_cols.items():
             for c, role_name in roles_of.items():
-                if role_name != "free":
+                if role_name != "free" and f"{t}.{c}" not in why_open:
                     proposed_open.setdefault(t, [])
                     if c not in proposed_open[t]:
                         proposed_open[t].append(c)
@@ -3103,6 +3247,14 @@ def propose(
                     f"{t}: {', '.join(sorted(c))}" for t, c in sorted(unchecked.items())
                 )
                 + "."
+            )
+        if why_open:
+            lines.append(
+                "The demonstrations can't tell what these hold, so they are not "
+                "pinned: "
+                + "; ".join(f"{c} ({w})" for c, w in sorted(why_open.items()))
+                + ". Record a demonstration where they differ, or name them "
+                "under unchecked."
             )
         questions.append(
             Question(
@@ -3276,9 +3428,16 @@ def propose(
                 continue
             ok = True
             for flavor in flavors:
-                doc = build_contract(
-                    schema, p, v, flavor, settings, excused, set(p.logs)
-                )
+                try:
+                    doc = build_contract(
+                        schema, p, v, flavor, settings, excused, set(p.logs)
+                    )
+                except Unpinned as exc:
+                    rep["rejected"].append(
+                        {"variant": v.slug, "flavor": flavor, "why": str(exc)}
+                    )
+                    ok = False
+                    break
                 rel = Path("contracts") / p.kind / f"{v.slug}.{flavor}.yaml"
                 path = out / rel
                 path.parent.mkdir(parents=True, exist_ok=True)
