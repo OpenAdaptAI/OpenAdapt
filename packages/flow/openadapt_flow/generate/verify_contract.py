@@ -3128,13 +3128,13 @@ def propose(
             (g.table, g.roles) for g in [*p.children.values(), *p.lists.values()]
         ]
         groups += [(sd.table, sd.roles) for sd in p.sides]
-        for table, roles_of in groups:
-            for col, role in roles_of.items():
+        for table, group_roles in groups:
+            for col, role in group_roles.items():
                 if role.role in OPEN_ROLES:
                     own.setdefault(table, {})[col] = role.role
-                    why = str(role.detail.get("why") or "")
-                    if "one demonstration" in why or "can't tell" in why:
-                        why_open[f"{table}.{col}"] = why
+                    reason = str(role.detail.get("why") or "")
+                    if "one demonstration" in reason or "can't tell" in reason:
+                        why_open[f"{table}.{col}"] = reason
         open_by_kind[p.kind] = own
     unchecked: dict[str, set[str]] = {}
     for own_cols in open_by_kind.values():
