@@ -1184,14 +1184,17 @@ def _audit_source(
         # demonstration logged it on a record of this table it didn't add or
         # change, and no demonstration logged it on one it did. An unseen
         # code (a bulk edit, an import) or a NULL one counts as a save.
-        pk = t.primary_key[0]
         reads: dict[str, set[str]] = {}
         writes: dict[str, set[str]] = {}
         for d in [*create_demos, *update_demos]:
+            # Every record the demonstration added or changed, in any table:
+            # an audit row naming one of them is a save (a create logged on a
+            # contact, not a read of a lead).
             moved = {
-                str((ch.after or ch.before or {}).get(pk))
-                for kind in ("added", "changed")
-                for ch in d.diff.of(plan.anchor, kind)
+                str((ch.after or {}).get(k))
+                for ch in d.diff.changes
+                if ch.kind in ("added", "changed") and ch.table in schema.tables
+                for k in schema.tables[ch.table].primary_key
             }
             for ch in d.diff.of(name, "added"):
                 r = ch.after or {}
