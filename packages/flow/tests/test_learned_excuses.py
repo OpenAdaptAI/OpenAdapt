@@ -587,6 +587,27 @@ def test_actor_row_never_covers_an_added_row_setting_another_column(
     )
 
 
+def test_actor_row_never_covers_a_column_a_large_table_didnt_compare(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Over ``max_rows`` the baseline keeps some columns only. The token's
+    label isn't kept, so a label change beside ``last_seen`` can't be seen
+    as a column: the row is never excused."""
+
+    contract = note_contract(engine, ACTOR_EXCUSES)
+    contract["frame"]["database"]["max_rows"] = 1
+    t = _title()
+
+    def act() -> None:
+        write_note(engine, t)
+        engine.run("UPDATE api_token SET label = 'stolen' WHERE user_id = 2")
+
+    result = check(engine, contract, {"title": t, "body": "Body text"}, act, tmp_path)
+    _refuted(result)
+    moves = {m["table"]: m for m in result.evidence["frame"]["moves"]}
+    assert "(columns not compared)" in moves["api_token"]["columns"]
+
+
 def test_actor_row_follows_this_runs_actor(engine: Engine, tmp_path: Path) -> None:
     """The same moves, but the run's actor is the colleague: the bot's rows
     are now another user's."""
@@ -1066,6 +1087,46 @@ def test_learned_needs_the_database_frame(tmp_path: Path) -> None:
         "user_id",
         "value",
     ]
+
+
+def test_the_cli_proposes_and_approves(tmp_path: Path, capsys: Any) -> None:
+    e = Engine(
+        "sqlite", {"sqlite_database": str(tmp_path / "x.sqlite")}, lambda *a: None
+    )
+    contract = tmp_path / "note.yaml"
+    contract.write_text(yaml.safe_dump(note_contract(e)))
+    episodes = tmp_path / "episodes.jsonl"
+    move = _move("api_token", ["last_seen"], actor_columns=["user_id"])
+    episodes.write_text(
+        "".join(json.dumps(_ep("note", [move])) + "\n" for _ in range(5))
+    )
+    proposal = tmp_path / "proposal.yaml"
+    code = learn.main(
+        [
+            "propose",
+            "--episodes",
+            str(episodes),
+            "--users",
+            "app_user.id",
+            "--user-column",
+            "api_token.user_id",
+            "--out",
+            str(proposal),
+        ]
+    )
+    assert code == 0
+    md = proposal.with_suffix(".md").read_text()
+    assert "`api_token`" in md and "user column" in md
+    with pytest.raises(SystemExit):
+        learn.main(["approve", str(proposal), "--contract", f"note={contract}"])
+    code = learn.main(
+        ["approve", str(proposal), "--by", "Dana", "--contract", f"note={contract}"]
+    )
+    assert code == 0
+    block = yaml.safe_load(contract.read_text())["frame"]["learned"]
+    assert block["excuses"] == [SEEN]
+    assert block["approved_by"] == "Dana"
+    assert "1 excuse(s) written into 1 contract(s)" in capsys.readouterr().out
 
 
 # -- through the shadow proxy ---------------------------------------------------------
