@@ -906,7 +906,8 @@ def _duplicate_dialog_postconditions() -> list[Postcondition]:
     The second check is the referral's business rule: confirm a new chart only
     when the duplicate check finds no match. Without it, the program confirms
     a possible duplicate (the dialog shows "Confirm Create New Patient" either
-    way).
+    way). The compiler mines it from the recording
+    (``compiler.empty_result_guard``); this is what it must mine.
     """
 
     return [
@@ -916,7 +917,10 @@ def _duplicate_dialog_postconditions() -> list[Postcondition]:
             timeout_s=10.0,
         ),
         Postcondition(
-            kind=PostconditionKind.TEXT_PRESENT, text=NO_MATCH_TEXT, timeout_s=10.0
+            kind=PostconditionKind.TEXT_PRESENT,
+            text=NO_MATCH_TEXT,
+            timeout_s=10.0,
+            exact=True,
         ),
     ]
 
@@ -930,15 +934,37 @@ def _saved_chart_postcondition() -> Postcondition:
 def apply_referral_rules(open_step: Any, save_step: Any) -> None:
     """The referral's checks on #create and #confirmCreate, for every compile.
 
-    ``open_step`` (#create) must show the duplicate-check dialog with no match
-    (generic mining emits a flaky region check for this full-frame change).
+    ``open_step`` (#create) must show the duplicate-check dialog with no match.
+    The no-match check is the compiler's: it mines the dialog's "No matches
+    were found." from the recording, as an exact check on #create and a guard
+    on #confirmCreate, and a compile without both is refused here rather than
+    patched. The dialog's title check is added, and the
+    generic region check mined for this full-frame change (flaky) is dropped.
     On ``save_step`` (#confirmCreate) the text the recorder mined from the
     post-save frame is the tab strip, which changes when OpenEMR opens the new
     patient's tab; it is replaced by the chart heading every saved patient
     gets. The save itself is confirmed by its record check (effects).
     """
 
-    open_step.expect = _duplicate_dialog_postconditions()
+    title, no_match = _duplicate_dialog_postconditions()
+    mined = [p for p in open_step.expect if p == no_match]
+    guard = getattr(save_step, "guard", None)
+    if not mined:
+        raise FixtureError(
+            "the compiler did not mine the duplicate dialog's "
+            f"{NO_MATCH_TEXT!r} check on #create; refusing to add it by hand"
+        )
+    if (
+        guard is None
+        or guard.on_unmet != "halt"
+        or not guard.predicate.exact
+        or guard.predicate.text != NO_MATCH_TEXT
+    ):
+        raise FixtureError(
+            "the compiler did not re-check the duplicate dialog's "
+            f"{NO_MATCH_TEXT!r} before #confirmCreate; refusing to add it by hand"
+        )
+    open_step.expect = [title, mined[0]]
     save_step.expect = [
         p for p in save_step.expect if p.kind is not PostconditionKind.TEXT_PRESENT
     ] + [_saved_chart_postcondition()]
@@ -979,6 +1005,9 @@ def _validate_benchmark_bundle(bundle_dir: Path) -> Any:
         != effects_payload
         or len(dialog_steps) != 1
         or dialog_steps[0].expect != _duplicate_dialog_postconditions()
+        or effect_steps[0].guard is None
+        or not effect_steps[0].guard.predicate.exact
+        or effect_steps[0].guard.predicate.text != NO_MATCH_TEXT
         or workflow.steps.index(dialog_steps[0]) + 1
         != workflow.steps.index(effect_steps[0])
     ):

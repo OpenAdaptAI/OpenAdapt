@@ -15086,8 +15086,12 @@ class Replayer:
         ``anchor_resolves`` runs the resolution ladder with NO grounder,
         ``text_present`` / ``text_absent`` use the tolerant OCR presence check,
         ``param_equals`` is a string compare, and ``and`` / ``or`` / ``not``
-        compose. An unknown kind fails safe (does not hold).
+        compose. An unknown kind fails safe (does not hold). An exact
+        ``text_present`` uses :meth:`_exact_text_holds` (OCR, then the DOM).
         """
+        kind = pred.kind.value if hasattr(pred.kind, "value") else pred.kind
+        if kind == "text_present" and pred.exact:
+            return bool(pred.text) and self._exact_text_holds(pred.text, frame_png)
         return evaluate_program_predicate(
             pred,
             frame_png,
@@ -15113,7 +15117,8 @@ class Replayer:
             )
             return f"anchor_resolves({label!r})"
         if kind in ("text_present", "text_absent"):
-            return f"{kind}({pred.text!r})"
+            exact = ", exact" if pred.exact else ""
+            return f"{kind}({pred.text!r}{exact})"
         if kind == "param_equals":
             return f"param_equals({pred.param!r}=={pred.value!r})"
         if kind in ("and", "or", "not"):
@@ -18533,7 +18538,8 @@ class Replayer:
             names = ", ".join(pc.candidate_params or ())
             return f"no_duplicate_candidate (no listed row has this run's {names})"
         if kind in ("text_present", "text_absent"):
-            return f"{kind} {pc.text!r}"
+            exact = " (exact)" if getattr(pc, "exact", False) else ""
+            return f"{kind}{exact} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             return f"{kind} (vs. the step's start state)"
         return f"{kind} region={tuple(pc.region) if pc.region else None}"
@@ -18611,6 +18617,8 @@ class Replayer:
             # or split it across boxes — see vision.ocr.text_present.
             if pc.text is None:
                 return False
+            if getattr(pc, "exact", False):
+                return self._exact_text_holds(pc.text, frame_png)
             # Page-structure first: the DOM can PROVE the text is rendered,
             # visible and uncovered (exact normalized substring, stricter
             # than the fuzzy OCR match). It can never prove absence, so a DOM
@@ -18717,6 +18725,25 @@ class Replayer:
                 self._pc_scaled_match = True
                 return True
         return False
+
+    def _exact_text_holds(self, text: str, frame_png: bytes) -> bool:
+        """An exact text check (``Postcondition.exact``, ``Predicate.exact``).
+
+        OCR must read ``text`` exactly once, as a whole line or wrapped lines
+        (``vision.exact_text_count``); a near miss such as "2 matches were
+        found" never passes, and two copies (two result sections) do not
+        either. When OCR reads it nowhere, the DOM may still prove it visibly
+        rendered (an exact normalized substring of one element's text, hit
+        tested). A vision without the exact counter fails closed.
+        """
+
+        counter = getattr(self.vision, "exact_text_count", None)
+        if not callable(counter):
+            return False
+        count = counter(frame_png, text)
+        if count == 1:
+            return True
+        return count == 0 and self._dom_text_visible(text)
 
     def _dom_text_visible(self, text: str) -> bool:
         """True only when the backend proves ``text`` is visibly rendered.

@@ -58,3 +58,35 @@ campaign:
   id: openemr-local-patient-registration-v2
   trials: 3
   policy: clinical-write
+
+# A rule OpenEMR itself enforces. After the reset, an existing chart for the
+# same person (Rosa Delgado, born 1958-03-27) is seeded; the referral is Rosa
+# Delgado born 1958-03-22. OpenEMR's duplicate check lists the existing chart,
+# and the program must stop before the save: HALTED_BEFORE_EFFECT, with no new
+# or changed chart. Certification runs it on every trial.
+business_rules:
+  - id: existing-duplicate
+    description: >-
+      An existing chart for the same person with a close birth date; the
+      duplicate check lists it, and the program stops before saving.
+    seed:
+      python: benchmark.openemr_local.qualify_hooks:seed_existing_chart
+    params:
+      title: Mrs.
+      fname: Rosa
+      lname: Delgado
+      DOB: "1958-03-22"
+      sex: Female
+      street: 7 MILL ROAD
+      city: EXAMPLETON
+      state_label: Massachusetts
+      postal_code: "02139"
+      phone_home: 555-0188
+      email: rosa.delgado@example.invalid
+      country_code: USA
+    expect: HALTED_BEFORE_EFFECT
+    readback: no_mutation
+    # Stop at the duplicate dialog's "No matches were found." check (after
+    # #create, or again before #confirmCreate); a halt anywhere else fails.
+    halt_at: empty_result_guard
+    halt_reason: No matches were found.
