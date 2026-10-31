@@ -302,6 +302,16 @@ class FrameDatabase(BaseModel):
     #: Table -> the surface whose records it holds (``patient_data`` ->
     #: ``patient``): an effect routed to the surface declares rows here too.
     views: dict[str, str] = Field(default_factory=dict)
+    #: Table -> a surface that reads every row and every column of it (a
+    #: contract's own read of its main record). After the save, a row of the
+    #: table that the surface saw change, appear or go (matched by primary
+    #: key) is judged by that surface alone, with the effects' rules; every
+    #: other row is compared here as usual. A recheck reads no surface, so
+    #: there the whole table is compared and any change since the post-save
+    #: read stops the write. A row the surface can't be matched to (no
+    #: single-value key in its records, or a column it doesn't read) is
+    #: compared here.
+    judged_by: dict[str, str] = Field(default_factory=dict)
     #: Table -> columns a new declared or side row may set beyond the fields
     #: the effects name (ids, creation dates, columns the app's form fills
     #: on its own). Any other column must hold its default.
@@ -363,6 +373,8 @@ class FrameDatabase(BaseModel):
             data.pop("recheck_after_s", None)
         if data.get("settle_attempts") == 1:
             data.pop("settle_attempts", None)
+        if not data.get("judged_by"):
+            data.pop("judged_by", None)
         return data
 
     @model_validator(mode="after")

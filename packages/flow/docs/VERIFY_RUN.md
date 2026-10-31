@@ -300,6 +300,27 @@ refuted. The read account needs `TRIGGER` and `SHOW VIEW` besides `SELECT`:
 without them a trigger planted in the window can't be seen, and the frame is
 not checked.
 
+`judged_by` names a table that one of the contract's own reads covers in
+full, every row and every column, such as an update's read of its main
+record's table:
+
+```yaml
+    judged_by:
+      assets: record            # the table, and the surface that reads it
+```
+
+After the save, a row of that table that the surface saw change, appear or
+go (matched by primary key) is judged by the surface alone, with the
+effects' selectors and `target_fields_by_surface`. Every other row of the
+table is compared as usual. A recheck reads no surface, so there the whole
+table is compared, and a change to any of its rows since the post-save read
+refutes the write. The table is compared, not allow-listed, so it can't also
+appear in `allow_tables` or `views`. When the surface lacks a column of the
+table, or a record's key can't be read, nothing is left to it: the table
+judges every row itself, and a change only the surface declares stops the
+write. The database is read before the surfaces, so a change can't land
+between the surface's read and the read a recheck compares with.
+
 Every column type is read, and none is dropped. On MySQL and MariaDB each
 row is read as `JSON_OBJECT`. A type whose value it can't carry as exact text
 is read another way: binary strings, blobs, `BIT`, geometries and vectors as
