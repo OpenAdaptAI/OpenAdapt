@@ -21,7 +21,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import parse_qsl, quote, urlsplit
 
 WRITE_METHODS = ("POST", "PUT", "PATCH", "DELETE")
@@ -164,6 +164,11 @@ class Shadow:
         self.hold_s = max(0.0, hold_ms) / 1000.0
         self.quiet_s = quiet_s
         self.upstream_timeout_s = upstream_timeout_s
+        #: Called as ``on_checked(episode, result)`` after each verifier call,
+        #: with the verifier's own result (``EnsureResult`` or ``WriteResult``),
+        #: for a step that learns from checked traffic. Its errors go in
+        #: ``errors``; it never changes a verdict.
+        self.on_checked: Optional[Callable[[Episode, Any], None]] = None
         self.started = time.time()
         self.episodes: list[Episode] = []
         self.writes: list[Write] = []
@@ -615,6 +620,7 @@ class Shadow:
                 for r in o.refs
             ]
         result = verify_ensure(contract, ep.params, base, declared=declared)
+        self._notify(ep, result)
         ev = result.evidence
         ep.evidence["verifier"] = {"outcome": result.outcome, **ev}
         landed = int(ev.get("agent_writes") or 0)
@@ -689,6 +695,7 @@ class Shadow:
         from openadapt_flow.verifier import verify_write
 
         result = verify_write(pending, seal=False)
+        self._notify(ep, result)
         ep.verdict = result.outcome.value
         ep.reasons = list(result.reasons)
         if result.provisional:
@@ -711,6 +718,14 @@ class Shadow:
         delta = (result.evidence or {}).get("delta")
         if delta is not None:
             ep.evidence["delta"] = delta
+
+    def _notify(self, ep: Episode, result: Any) -> None:
+        if self.on_checked is None:
+            return
+        try:
+            self.on_checked(ep, result)
+        except Exception as exc:  # noqa: BLE001 - a hook never changes a verdict
+            self._note_error(f"on_checked: {exc!r}")
 
     def _note_error(self, text: str) -> None:
         with self._lock:
