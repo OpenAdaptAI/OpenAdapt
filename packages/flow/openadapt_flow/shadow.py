@@ -608,8 +608,15 @@ class Shadow:
             ep.recheck_at = due.timestamp()
 
     def pending_rechecks(self) -> int:
+        """Checks or rechecks still to run: an unchecked episode may
+        schedule a recheck once it is checked."""
+
         with self._lock:
-            return sum(1 for e in self.episodes if e.recheck_at and not e.late_verdict)
+            return sum(
+                1
+                for e in self.episodes
+                if not e.checked or (e.recheck_at and not e.late_verdict)
+            )
 
     def run_rechecks(self, *, now: bool = False, only: Optional[list] = None) -> None:
         """Check each CONFIRMED again once it is due (``now``: whatever is

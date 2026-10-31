@@ -1,0 +1,4484 @@
+{
+  "schema": "openadapt.shadow-report/v1",
+  "mode": "fhir",
+  "upstream": "http://127.0.0.1:9743",
+  "started": 1793468480.873206,
+  "first_write_after_s": 26.0,
+  "writes_seen": 42,
+  "checks": 32,
+  "counts": {
+    "REFUTED": 12,
+    "UNCERTAIN": 1,
+    "CONFIRMED": 19,
+    "PENDING": 0
+  },
+  "late_refuted": 1,
+  "rechecks_pending": 0,
+  "refuted_by_kind": {
+    "another record changed": 4,
+    "saved as another record first, then corrected": 4,
+    "saved more than once": 3,
+    "holds a value the agent didn't send": 1
+  },
+  "overhead_ms": {
+    "held_for_baseline": {
+      "median": 25.1,
+      "max": 44.7
+    },
+    "added_total": {
+      "median": 25.3,
+      "max": 45.0
+    }
+  },
+  "errors": [],
+  "items": [
+    {
+      "id": 4,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "REFUTED",
+      "reasons": [
+        "not given by the task: deceasedBoolean"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8"
+      ],
+      "writes": [
+        {
+          "seq": 6,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 28.2,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8": {
+            "resourceType": "Patient",
+            "name": [
+              {
+                "family": "Okafor",
+                "given": [
+                  "Lena"
+                ]
+              }
+            ],
+            "birthDate": "1988-04-22",
+            "gender": "female",
+            "address": [
+              {
+                "line": [
+                  "14 Birch Lane"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-0187",
+                "use": "home"
+              },
+              {
+                "system": "email",
+                "value": "lena.okafor@example.org"
+              }
+            ],
+            "deceasedBoolean": true,
+            "id": "1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "meta": {
+              "versionId": "16cadd8a-bfda-4d8e-9529-5dca8b54ab47",
+              "lastUpdated": "2026-10-31T17:44:19.423Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "given",
+            "sent": "Lena",
+            "stored": "Lena",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "family",
+            "sent": "Okafor",
+            "stored": "Okafor",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "birthDate",
+            "sent": "1988-04-22",
+            "stored": "1988-04-22",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "line",
+            "sent": "14 Birch Lane",
+            "stored": "14 Birch Lane",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "phone",
+            "sent": "413-555-0187",
+            "stored": "413-555-0187",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "email",
+            "sent": "lena.okafor@example.org",
+            "stored": "lena.okafor@example.org",
+            "same": true
+          },
+          {
+            "record": "Patient/1b68619c-eeb7-4584-9f50-56b67a020ed8",
+            "field": "(not sent)",
+            "sent": null,
+            "stored": "deceasedBoolean",
+            "same": false
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 5,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent created 2 Patient records, not one",
+        "the agent wrote 2 other resource(s): Patient"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/f39af25c-8aa8-4695-9cba-292a37859abb"
+      ],
+      "writes": [
+        {
+          "seq": 7,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 27.4,
+          "proxy_ms": 0.3,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Patient/f39af25c-8aa8-4695-9cba-292a37859abb": {
+            "resourceType": "Patient",
+            "name": [
+              {
+                "family": "Okafor",
+                "given": [
+                  "Lena"
+                ]
+              }
+            ],
+            "birthDate": "1988-04-22",
+            "gender": "female",
+            "address": [
+              {
+                "line": [
+                  "14 Birch Lane"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-0187",
+                "use": "home"
+              },
+              {
+                "system": "email",
+                "value": "lena.okafor@example.org"
+              }
+            ],
+            "id": "f39af25c-8aa8-4695-9cba-292a37859abb",
+            "meta": {
+              "versionId": "010235c3-2af1-4239-92b4-b7c5c9ce863c",
+              "lastUpdated": "2026-10-31T17:44:52.162Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "given",
+            "sent": "Lena",
+            "stored": "Lena",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "family",
+            "sent": "Okafor",
+            "stored": "Okafor",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "birthDate",
+            "sent": "1988-04-22",
+            "stored": "1988-04-22",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "line",
+            "sent": "14 Birch Lane",
+            "stored": "14 Birch Lane",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "phone",
+            "sent": "413-555-0187",
+            "stored": "413-555-0187",
+            "same": true
+          },
+          {
+            "record": "Patient/f39af25c-8aa8-4695-9cba-292a37859abb",
+            "field": "email",
+            "sent": "lena.okafor@example.org",
+            "stored": "lena.okafor@example.org",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 7,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent wrote 1 other resource(s): Patient"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d"
+      ],
+      "writes": [
+        {
+          "seq": 9,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 33.9,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d": {
+            "resourceType": "Patient",
+            "name": [
+              {
+                "given": [
+                  "Lena"
+                ],
+                "family": "Okafor"
+              }
+            ],
+            "birthDate": "1988-04-22",
+            "gender": "female",
+            "address": [
+              {
+                "line": [
+                  "14 Birch Lane"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-0187",
+                "use": "home"
+              },
+              {
+                "system": "email",
+                "value": "lena.okafor@example.org"
+              }
+            ],
+            "id": "1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "meta": {
+              "versionId": "b3439938-121b-424d-993e-e282979ebc84",
+              "lastUpdated": "2026-10-31T17:46:26.392Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "given",
+            "sent": "Lena",
+            "stored": "Lena",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "family",
+            "sent": "Okafor",
+            "stored": "Okafor",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "birthDate",
+            "sent": "1988-04-22",
+            "stored": "1988-04-22",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "line",
+            "sent": "14 Birch Lane",
+            "stored": "14 Birch Lane",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "phone",
+            "sent": "413-555-0187",
+            "stored": "413-555-0187",
+            "same": true
+          },
+          {
+            "record": "Patient/1a5f5ad9-e8a4-41bc-82d2-8009ae2a893d",
+            "field": "email",
+            "sent": "lena.okafor@example.org",
+            "stored": "lena.okafor@example.org",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 13,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent changed or deleted the record after creating it, and a version in between was not the person"
+      ],
+      "sent": {
+        "patient": "Patient/c1580976-4160-47e8-a22e-40e164205dff",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500"
+      ],
+      "writes": [
+        {
+          "seq": 16,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 18.0,
+          "proxy_ms": 0.2,
+          "error": ""
+        },
+        {
+          "seq": 17,
+          "method": "PUT",
+          "path": "/fhir/R4/AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.1,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500": {
+            "resourceType": "AllergyIntolerance",
+            "id": "02794b85-4b82-4c82-8482-68dc48e2f500",
+            "patient": {
+              "reference": "Patient/c1580976-4160-47e8-a22e-40e164205dff"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005",
+                  "display": "Allergy to penicillin"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "meta": {
+              "versionId": "aa79f6a5-47a3-4d1f-8422-657db2e372ce",
+              "lastUpdated": "2026-10-31T17:50:47.285Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500",
+            "field": "patient",
+            "sent": "Patient/c1580976-4160-47e8-a22e-40e164205dff",
+            "stored": "Patient/c1580976-4160-47e8-a22e-40e164205dff",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/02794b85-4b82-4c82-8482-68dc48e2f500",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 14,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent changed or deleted the record after creating it, and a version in between was not the person"
+      ],
+      "sent": {
+        "patient": "Patient/a18f44dd-c797-4d85-b79c-b980e0caae93",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37"
+      ],
+      "writes": [
+        {
+          "seq": 18,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 17.9,
+          "proxy_ms": 0.1,
+          "error": ""
+        },
+        {
+          "seq": 19,
+          "method": "PUT",
+          "path": "/fhir/R4/AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.1,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37": {
+            "resourceType": "AllergyIntolerance",
+            "id": "5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37",
+            "patient": {
+              "reference": "Patient/a18f44dd-c797-4d85-b79c-b980e0caae93"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "meta": {
+              "versionId": "e3f81756-0989-4ce7-b9ea-223096e09d3f",
+              "lastUpdated": "2026-10-31T17:51:27.105Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37",
+            "field": "patient",
+            "sent": "Patient/a18f44dd-c797-4d85-b79c-b980e0caae93",
+            "stored": "Patient/a18f44dd-c797-4d85-b79c-b980e0caae93",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/5f6c42f4-7f1f-42e6-ae98-3930b8b0eb37",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 16,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent created 2 AllergyIntolerance records, not one",
+        "the agent wrote 2 other resource(s): AllergyIntolerance"
+      ],
+      "sent": {
+        "patient": "Patient/cdd3a1a0-d8f4-46b6-86d7-370c6e206cbd",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/55ea2bda-29ba-4dc5-b9a9-869e3c5a2989"
+      ],
+      "writes": [
+        {
+          "seq": 22,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 22.7,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/55ea2bda-29ba-4dc5-b9a9-869e3c5a2989": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/cdd3a1a0-d8f4-46b6-86d7-370c6e206cbd"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "55ea2bda-29ba-4dc5-b9a9-869e3c5a2989",
+            "meta": {
+              "versionId": "8cbe43b3-ec28-4cb2-aaea-6140481036cb",
+              "lastUpdated": "2026-10-31T17:52:35.053Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/55ea2bda-29ba-4dc5-b9a9-869e3c5a2989",
+            "field": "patient",
+            "sent": "Patient/cdd3a1a0-d8f4-46b6-86d7-370c6e206cbd",
+            "stored": "Patient/cdd3a1a0-d8f4-46b6-86d7-370c6e206cbd",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/55ea2bda-29ba-4dc5-b9a9-869e3c5a2989",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/55ea2bda-29ba-4dc5-b9a9-869e3c5a2989",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/55ea2bda-29ba-4dc5-b9a9-869e3c5a2989",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/55ea2bda-29ba-4dc5-b9a9-869e3c5a2989",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/55ea2bda-29ba-4dc5-b9a9-869e3c5a2989",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 17,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent wrote 1 other resource(s): Patient"
+      ],
+      "sent": {
+        "patient": "Patient/bc2d5e37-08df-4aa1-a840-da514979e7d0",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/4ef678c4-837c-4e88-af5e-0df486ed3f44"
+      ],
+      "writes": [
+        {
+          "seq": 23,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 22.9,
+          "proxy_ms": 0.3,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance",
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/4ef678c4-837c-4e88-af5e-0df486ed3f44": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/bc2d5e37-08df-4aa1-a840-da514979e7d0"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "4ef678c4-837c-4e88-af5e-0df486ed3f44",
+            "meta": {
+              "versionId": "4da5b723-95c1-4e9d-aea3-0f2ef502cebe",
+              "lastUpdated": "2026-10-31T17:53:18.359Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/4ef678c4-837c-4e88-af5e-0df486ed3f44",
+            "field": "patient",
+            "sent": "Patient/bc2d5e37-08df-4aa1-a840-da514979e7d0",
+            "stored": "Patient/bc2d5e37-08df-4aa1-a840-da514979e7d0",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/4ef678c4-837c-4e88-af5e-0df486ed3f44",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/4ef678c4-837c-4e88-af5e-0df486ed3f44",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/4ef678c4-837c-4e88-af5e-0df486ed3f44",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/4ef678c4-837c-4e88-af5e-0df486ed3f44",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/4ef678c4-837c-4e88-af5e-0df486ed3f44",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 23,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent changed or deleted the record after creating it, and a version in between was not the person"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/a424b05d-5798-4ae3-a3b8-c3f40f385504",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/74bef10b-6917-42c4-a3d2-ce82b71d3785"
+      ],
+      "writes": [
+        {
+          "seq": 29,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 27.9,
+          "proxy_ms": 0.3,
+          "error": ""
+        },
+        {
+          "seq": 30,
+          "method": "PUT",
+          "path": "/fhir/R4/Appointment/74bef10b-6917-42c4-a3d2-ce82b71d3785",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Appointment/74bef10b-6917-42c4-a3d2-ce82b71d3785": {
+            "resourceType": "Appointment",
+            "id": "74bef10b-6917-42c4-a3d2-ce82b71d3785",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/a424b05d-5798-4ae3-a3b8-c3f40f385504"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "meta": {
+              "versionId": "8102c195-e03a-4c9d-bb81-0fb98262389d",
+              "lastUpdated": "2026-10-31T17:57:53.217Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/74bef10b-6917-42c4-a3d2-ce82b71d3785",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/74bef10b-6917-42c4-a3d2-ce82b71d3785",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/74bef10b-6917-42c4-a3d2-ce82b71d3785",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/74bef10b-6917-42c4-a3d2-ce82b71d3785",
+            "field": "patient",
+            "sent": "Patient/a424b05d-5798-4ae3-a3b8-c3f40f385504",
+            "stored": "Patient/a424b05d-5798-4ae3-a3b8-c3f40f385504",
+            "same": true
+          },
+          {
+            "record": "Appointment/74bef10b-6917-42c4-a3d2-ce82b71d3785",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 25,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent created 2 Appointment records, not one",
+        "the agent wrote 2 other resource(s): Appointment"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/6ba947da-1964-4a3f-acb7-6d323c537065",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/e9f1af78-852a-4bb1-8c16-ef8cef0d1502"
+      ],
+      "writes": [
+        {
+          "seq": 33,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 31.9,
+          "proxy_ms": 0.4,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Appointment/e9f1af78-852a-4bb1-8c16-ef8cef0d1502": {
+            "resourceType": "Appointment",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/6ba947da-1964-4a3f-acb7-6d323c537065"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "id": "e9f1af78-852a-4bb1-8c16-ef8cef0d1502",
+            "meta": {
+              "versionId": "22a16a4a-f3b6-4548-9702-5bb743646a9b",
+              "lastUpdated": "2026-10-31T17:58:51.670Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/e9f1af78-852a-4bb1-8c16-ef8cef0d1502",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/e9f1af78-852a-4bb1-8c16-ef8cef0d1502",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/e9f1af78-852a-4bb1-8c16-ef8cef0d1502",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/e9f1af78-852a-4bb1-8c16-ef8cef0d1502",
+            "field": "patient",
+            "sent": "Patient/6ba947da-1964-4a3f-acb7-6d323c537065",
+            "stored": "Patient/6ba947da-1964-4a3f-acb7-6d323c537065",
+            "same": true
+          },
+          {
+            "record": "Appointment/e9f1af78-852a-4bb1-8c16-ef8cef0d1502",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 27,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent wrote 1 other resource(s): Appointment"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/153f34c0-2d59-4863-a5f4-397f7cd707a2",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/ffe78f6c-1b13-4ff1-9420-93f8abf4410f"
+      ],
+      "writes": [
+        {
+          "seq": 35,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 32.5,
+          "proxy_ms": 0.4,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Appointment/ffe78f6c-1b13-4ff1-9420-93f8abf4410f": {
+            "resourceType": "Appointment",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/153f34c0-2d59-4863-a5f4-397f7cd707a2"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "id": "ffe78f6c-1b13-4ff1-9420-93f8abf4410f",
+            "meta": {
+              "versionId": "40c82dad-5c5f-4900-b08e-ce6b463f8476",
+              "lastUpdated": "2026-10-31T17:59:47.817Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/ffe78f6c-1b13-4ff1-9420-93f8abf4410f",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/ffe78f6c-1b13-4ff1-9420-93f8abf4410f",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/ffe78f6c-1b13-4ff1-9420-93f8abf4410f",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/ffe78f6c-1b13-4ff1-9420-93f8abf4410f",
+            "field": "patient",
+            "sent": "Patient/153f34c0-2d59-4863-a5f4-397f7cd707a2",
+            "stored": "Patient/153f34c0-2d59-4863-a5f4-397f7cd707a2",
+            "same": true
+          },
+          {
+            "record": "Appointment/ffe78f6c-1b13-4ff1-9420-93f8abf4410f",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 30,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent wrote 1 other resource(s): AllergyIntolerance"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/d8324f65-4490-42db-bf39-16760e51bd2c",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/dfe2b9d8-3bb2-4b2f-bf81-ac73345f54d9"
+      ],
+      "writes": [
+        {
+          "seq": 39,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 19.6,
+          "proxy_ms": 0.3,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance",
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Appointment/dfe2b9d8-3bb2-4b2f-bf81-ac73345f54d9": {
+            "resourceType": "Appointment",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/d8324f65-4490-42db-bf39-16760e51bd2c"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "id": "dfe2b9d8-3bb2-4b2f-bf81-ac73345f54d9",
+            "meta": {
+              "versionId": "19f233cf-a4af-41ea-b140-8f2fbf193855",
+              "lastUpdated": "2026-10-31T18:01:57.718Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/dfe2b9d8-3bb2-4b2f-bf81-ac73345f54d9",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/dfe2b9d8-3bb2-4b2f-bf81-ac73345f54d9",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/dfe2b9d8-3bb2-4b2f-bf81-ac73345f54d9",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/dfe2b9d8-3bb2-4b2f-bf81-ac73345f54d9",
+            "field": "patient",
+            "sent": "Patient/d8324f65-4490-42db-bf39-16760e51bd2c",
+            "stored": "Patient/d8324f65-4490-42db-bf39-16760e51bd2c",
+            "same": true
+          },
+          {
+            "record": "Appointment/dfe2b9d8-3bb2-4b2f-bf81-ac73345f54d9",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 31,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "REFUTED",
+      "reasons": [
+        "the agent changed or deleted the record after creating it, and a version in between was not the person"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/2c05058f-d242-4455-86e5-045830a74f9a",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/6e4c2ea7-c505-4c8a-9e13-8cd2252520b4"
+      ],
+      "writes": [
+        {
+          "seq": 40,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 18.5,
+          "proxy_ms": 0.2,
+          "error": ""
+        },
+        {
+          "seq": 41,
+          "method": "PUT",
+          "path": "/fhir/R4/Appointment/6e4c2ea7-c505-4c8a-9e13-8cd2252520b4",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.1,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Appointment/6e4c2ea7-c505-4c8a-9e13-8cd2252520b4": {
+            "resourceType": "Appointment",
+            "id": "6e4c2ea7-c505-4c8a-9e13-8cd2252520b4",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/2c05058f-d242-4455-86e5-045830a74f9a"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "meta": {
+              "versionId": "c1c1c93f-9812-499c-9afc-cce837a6e00f",
+              "lastUpdated": "2026-10-31T18:02:48.154Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/6e4c2ea7-c505-4c8a-9e13-8cd2252520b4",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/6e4c2ea7-c505-4c8a-9e13-8cd2252520b4",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/6e4c2ea7-c505-4c8a-9e13-8cd2252520b4",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/6e4c2ea7-c505-4c8a-9e13-8cd2252520b4",
+            "field": "patient",
+            "sent": "Patient/2c05058f-d242-4455-86e5-045830a74f9a",
+            "stored": "Patient/2c05058f-d242-4455-86e5-045830a74f9a",
+            "same": true
+          },
+          {
+            "record": "Appointment/6e4c2ea7-c505-4c8a-9e13-8cd2252520b4",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ]
+      },
+      "late": null
+    },
+    {
+      "id": 10,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "UNCERTAIN",
+      "reasons": [
+        "the reply was 201 and the store shows no write by the agent",
+        "no record is the person and the agent created none"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/00000000-0000-4000-8000-000000000000"
+      ],
+      "writes": [
+        {
+          "seq": 13,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 33.9,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "needs_review",
+          "before_matches": 0,
+          "after_matches": 0,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "before": [],
+        "after": {
+          "Patient/00000000-0000-4000-8000-000000000000": {
+            "unreadable": "GET http://localhost:9740/fhir/R4/Patient/00000000-0000-4000-8000-000000000000 returned HTTP 404"
+          }
+        },
+        "fields": []
+      },
+      "late": null
+    },
+    {
+      "id": 1,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/4b121980-4909-455e-957a-3a432d6d4e79"
+      ],
+      "writes": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 28.4,
+          "proxy_ms": 0.7,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Patient/4b121980-4909-455e-957a-3a432d6d4e79": {
+            "resourceType": "Patient",
+            "name": [
+              {
+                "family": "Okafor",
+                "given": [
+                  "Lena"
+                ]
+              }
+            ],
+            "birthDate": "1988-04-22",
+            "gender": "female",
+            "address": [
+              {
+                "line": [
+                  "14 Birch Lane"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-0187",
+                "use": "home"
+              },
+              {
+                "system": "email",
+                "value": "lena.okafor@example.org"
+              }
+            ],
+            "id": "4b121980-4909-455e-957a-3a432d6d4e79",
+            "meta": {
+              "versionId": "e808f63f-1525-4301-bacd-31a1cf2aa61a",
+              "lastUpdated": "2026-10-31T17:41:46.911Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "given",
+            "sent": "Lena",
+            "stored": "Lena",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "family",
+            "sent": "Okafor",
+            "stored": "Okafor",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "birthDate",
+            "sent": "1988-04-22",
+            "stored": "1988-04-22",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "line",
+            "sent": "14 Birch Lane",
+            "stored": "14 Birch Lane",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "phone",
+            "sent": "413-555-0187",
+            "stored": "413-555-0187",
+            "same": true
+          },
+          {
+            "record": "Patient/4b121980-4909-455e-957a-3a432d6d4e79",
+            "field": "email",
+            "sent": "lena.okafor@example.org",
+            "stored": "lena.okafor@example.org",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793468520.601135
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846"
+      ],
+      "writes": [
+        {
+          "seq": 2,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 27.8,
+          "proxy_ms": 0.2,
+          "error": ""
+        },
+        {
+          "seq": 3,
+          "method": "PUT",
+          "path": "/fhir/R4/Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "before": [],
+        "after": {
+          "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846": {
+            "resourceType": "Patient",
+            "id": "7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "name": [
+              {
+                "family": "Okafor",
+                "given": [
+                  "Lena"
+                ]
+              }
+            ],
+            "birthDate": "1988-04-22",
+            "gender": "female",
+            "address": [
+              {
+                "line": [
+                  "14 Birch Lane"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-0187",
+                "use": "home"
+              },
+              {
+                "system": "email",
+                "value": "lena.okafor@example.org"
+              }
+            ],
+            "meta": {
+              "versionId": "d472e811-6286-4dbd-a446-7c06705f19c9",
+              "lastUpdated": "2026-10-31T17:43:13.130Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "given",
+            "sent": "Lena",
+            "stored": "Lena",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "family",
+            "sent": "Okafor",
+            "stored": "Okafor",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "birthDate",
+            "sent": "1988-04-22",
+            "stored": "1988-04-22",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "line",
+            "sent": "14 Birch Lane",
+            "stored": "14 Birch Lane",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "phone",
+            "sent": "413-555-0187",
+            "stored": "413-555-0187",
+            "same": true
+          },
+          {
+            "record": "Patient/7768f5c4-277b-4ea1-9c8c-1195136ae846",
+            "field": "email",
+            "sent": "lena.okafor@example.org",
+            "stored": "lena.okafor@example.org",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793468607.523259
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e"
+      ],
+      "writes": [
+        {
+          "seq": 4,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 26.1,
+          "proxy_ms": 0.2,
+          "error": ""
+        },
+        {
+          "seq": 5,
+          "method": "PUT",
+          "path": "/fhir/R4/Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.1,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "before": [],
+        "after": {
+          "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e": {
+            "resourceType": "Patient",
+            "id": "f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "name": [
+              {
+                "family": "Okafor",
+                "given": [
+                  "Lena"
+                ]
+              }
+            ],
+            "birthDate": "1988-04-22",
+            "gender": "female",
+            "address": [
+              {
+                "line": [
+                  "14 Birch Lane"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-0187",
+                "use": "home"
+              },
+              {
+                "system": "email",
+                "value": "lena.okafor@example.org"
+              }
+            ],
+            "meta": {
+              "versionId": "b2741223-986f-4b88-be45-0234a6e04ef7",
+              "lastUpdated": "2026-10-31T17:43:50.908Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "given",
+            "sent": "Lena",
+            "stored": "Lena",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "family",
+            "sent": "Okafor",
+            "stored": "Okafor",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "birthDate",
+            "sent": "1988-04-22",
+            "stored": "1988-04-22",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "line",
+            "sent": "14 Birch Lane",
+            "stored": "14 Birch Lane",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "phone",
+            "sent": "413-555-0187",
+            "stored": "413-555-0187",
+            "same": true
+          },
+          {
+            "record": "Patient/f35663e7-da89-4b6d-b3a8-f8adab52b83e",
+            "field": "email",
+            "sent": "lena.okafor@example.org",
+            "stored": "lena.okafor@example.org",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793468644.917254
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back",
+        "the agent got an error reply (504) but the write landed"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [],
+      "writes": [
+        {
+          "seq": 8,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 504,
+          "held_ms": 36.2,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          504
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {},
+        "fields": [],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793468758.2523441
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back",
+        "the agent got an error reply (503, 201) but the write landed"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd"
+      ],
+      "writes": [
+        {
+          "seq": 10,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 503,
+          "held_ms": 31.5,
+          "proxy_ms": 0.2,
+          "error": ""
+        },
+        {
+          "seq": 11,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 0.0,
+          "proxy_ms": 0.3,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          503,
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd": {
+            "resourceType": "Patient",
+            "name": [
+              {
+                "family": "Okafor",
+                "given": [
+                  "Lena"
+                ]
+              }
+            ],
+            "birthDate": "1988-04-22",
+            "gender": "female",
+            "address": [
+              {
+                "line": [
+                  "14 Birch Lane"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-0187",
+                "use": "home"
+              },
+              {
+                "system": "email",
+                "value": "lena.okafor@example.org"
+              }
+            ],
+            "id": "31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "meta": {
+              "versionId": "49b43284-da97-4655-81b9-c08a48bf4019",
+              "lastUpdated": "2026-10-31T17:47:14.151Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "given",
+            "sent": "Lena",
+            "stored": "Lena",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "family",
+            "sent": "Okafor",
+            "stored": "Okafor",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "birthDate",
+            "sent": "1988-04-22",
+            "stored": "1988-04-22",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "line",
+            "sent": "14 Birch Lane",
+            "stored": "14 Birch Lane",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "phone",
+            "sent": "413-555-0187",
+            "stored": "413-555-0187",
+            "same": true
+          },
+          {
+            "record": "Patient/31e5780b-ccd4-400e-84e6-9d6e823b57fd",
+            "field": "email",
+            "sent": "lena.okafor@example.org",
+            "stored": "lena.okafor@example.org",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793468848.459701
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "given": "Lena",
+        "family": "Okafor",
+        "birthDate": "1988-04-22",
+        "gender": "female",
+        "line": "14 Birch Lane",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-0187",
+        "email": "lena.okafor@example.org"
+      },
+      "records": [
+        "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4"
+      ],
+      "writes": [
+        {
+          "seq": 12,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 35.6,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4": {
+            "resourceType": "Patient",
+            "name": [
+              {
+                "use": "official",
+                "family": "Okafor",
+                "given": [
+                  "Lena"
+                ]
+              }
+            ],
+            "birthDate": "1988-04-22",
+            "gender": "female",
+            "address": [
+              {
+                "use": "home",
+                "line": [
+                  "14 Birch Lane"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-0187",
+                "use": "home"
+              },
+              {
+                "system": "email",
+                "value": "lena.okafor@example.org"
+              }
+            ],
+            "id": "3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "meta": {
+              "versionId": "ae6eac6a-44c7-4f57-a779-0e9bd67f8f82",
+              "lastUpdated": "2026-10-31T17:47:52.299Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "given",
+            "sent": "Lena",
+            "stored": "Lena",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "family",
+            "sent": "Okafor",
+            "stored": "Okafor",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "birthDate",
+            "sent": "1988-04-22",
+            "stored": "1988-04-22",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "line",
+            "sent": "14 Birch Lane",
+            "stored": "14 Birch Lane",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "phone",
+            "sent": "413-555-0187",
+            "stored": "413-555-0187",
+            "same": true
+          },
+          {
+            "record": "Patient/3e5de50e-400c-4a1d-8be5-1e78dd43c9e4",
+            "field": "email",
+            "sent": "lena.okafor@example.org",
+            "stored": "lena.okafor@example.org",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793468886.125221
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "patient": "Patient/87937296-fac8-47ce-9987-bffa06b4f393",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5"
+      ],
+      "writes": [
+        {
+          "seq": 14,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 16.9,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/87937296-fac8-47ce-9987-bffa06b4f393"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005",
+                  "display": "Allergy to penicillin"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "033b2015-ebf8-43f7-84a9-317413585fc5",
+            "meta": {
+              "versionId": "87d69fb5-bbf9-44d2-b9a3-8465e95fac07",
+              "lastUpdated": "2026-10-31T17:48:55.243Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5",
+            "field": "patient",
+            "sent": "Patient/87937296-fac8-47ce-9987-bffa06b4f393",
+            "stored": "Patient/87937296-fac8-47ce-9987-bffa06b4f393",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/033b2015-ebf8-43f7-84a9-317413585fc5",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793468949.770093
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "patient": "Patient/84863d51-d495-42d9-ac10-f3989ba8fbae",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d"
+      ],
+      "writes": [
+        {
+          "seq": 15,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 44.7,
+          "proxy_ms": 0.3,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/84863d51-d495-42d9-ac10-f3989ba8fbae"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "bb08284d-407f-46b4-a9b0-5f0c192f779d",
+            "meta": {
+              "versionId": "9fc5644b-6043-4469-88c0-481360399957",
+              "lastUpdated": "2026-10-31T17:50:06.387Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d",
+            "field": "patient",
+            "sent": "Patient/84863d51-d495-42d9-ac10-f3989ba8fbae",
+            "stored": "Patient/84863d51-d495-42d9-ac10-f3989ba8fbae",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/bb08284d-407f-46b4-a9b0-5f0c192f779d",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469021.155902
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+      ],
+      "sent": {
+        "patient": "Patient/933cd60e-4756-45a6-bb0f-d19a332b586c",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04"
+      ],
+      "writes": [
+        {
+          "seq": 20,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 24.2,
+          "proxy_ms": 0.1,
+          "error": ""
+        },
+        {
+          "seq": 21,
+          "method": "PUT",
+          "path": "/fhir/R4/AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.1,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04": {
+            "resourceType": "AllergyIntolerance",
+            "id": "355dd166-6a5a-4858-be99-101f52b48b04",
+            "patient": {
+              "reference": "Patient/933cd60e-4756-45a6-bb0f-d19a332b586c"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "meta": {
+              "versionId": "1ac644e0-f229-4af0-9e19-c80ae21d3898",
+              "lastUpdated": "2026-10-31T17:52:01.197Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04",
+            "field": "patient",
+            "sent": "Patient/933cd60e-4756-45a6-bb0f-d19a332b586c",
+            "stored": "Patient/933cd60e-4756-45a6-bb0f-d19a332b586c",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/355dd166-6a5a-4858-be99-101f52b48b04",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469136.83149
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "patient": "Patient/8919a3b1-ccd2-47ae-9b12-de5fa1ff0a10",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73"
+      ],
+      "writes": [
+        {
+          "seq": 24,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 41.8,
+          "proxy_ms": 0.4,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/8919a3b1-ccd2-47ae-9b12-de5fa1ff0a10"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005",
+                  "display": "Allergy to penicillin"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "64ea78c9-0de8-450c-b773-9a23f8bbbd73",
+            "meta": {
+              "versionId": "ef1baa1a-9023-4fe6-af5d-21f18bc1ea70",
+              "lastUpdated": "2026-10-31T17:54:00.273Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73",
+            "field": "patient",
+            "sent": "Patient/8919a3b1-ccd2-47ae-9b12-de5fa1ff0a10",
+            "stored": "Patient/8919a3b1-ccd2-47ae-9b12-de5fa1ff0a10",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/64ea78c9-0de8-450c-b773-9a23f8bbbd73",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469255.167888
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "patient": "Patient/0630c8ac-8d76-4cbd-87dd-2c696e2d050e",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3"
+      ],
+      "writes": [
+        {
+          "seq": 25,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 40.4,
+          "proxy_ms": 0.3,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/0630c8ac-8d76-4cbd-87dd-2c696e2d050e"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "f6efe421-c750-4162-a8fb-a660629b87d3",
+            "meta": {
+              "versionId": "95bc4c4c-b396-408f-b5d2-e6de4332c2b4",
+              "lastUpdated": "2026-10-31T17:54:41.735Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3",
+            "field": "patient",
+            "sent": "Patient/0630c8ac-8d76-4cbd-87dd-2c696e2d050e",
+            "stored": "Patient/0630c8ac-8d76-4cbd-87dd-2c696e2d050e",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/f6efe421-c750-4162-a8fb-a660629b87d3",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "REFUTED",
+          "reasons": [
+            "since the first check: 1 record(s) were already the person, and the agent wrote anyway",
+            "since the first check: wrong or missing: patient",
+            "since the first check: the created record is not the person",
+            "since the first check: 1 other record(s) are now also the person",
+            "since the first check: the created record does not come back from a search"
+          ],
+          "at": 1793469296.2015731
+        }
+      },
+      "late": {
+        "verdict": "REFUTED",
+        "reasons": [
+          "since the first check: 1 record(s) were already the person, and the agent wrote anyway",
+          "since the first check: wrong or missing: patient",
+          "since the first check: the created record is not the person",
+          "since the first check: 1 other record(s) are now also the person",
+          "since the first check: the created record does not come back from a search"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "patient": "Patient/ebc9bb8b-a55a-48b6-aa65-6cce722cd364",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a"
+      ],
+      "writes": [
+        {
+          "seq": 26,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 17.3,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/ebc9bb8b-a55a-48b6-aa65-6cce722cd364"
+            },
+            "criticality": "high",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005",
+                  "display": "Allergy to penicillin"
+                }
+              ]
+            },
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "ea68955b-2f4e-488f-b92a-3e70f9a43d2a",
+            "meta": {
+              "versionId": "77a02008-f721-4eac-b8e1-5b3699394977",
+              "lastUpdated": "2026-10-31T17:55:16.252Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a",
+            "field": "patient",
+            "sent": "Patient/ebc9bb8b-a55a-48b6-aa65-6cce722cd364",
+            "stored": "Patient/ebc9bb8b-a55a-48b6-aa65-6cce722cd364",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/ea68955b-2f4e-488f-b92a-3e70f9a43d2a",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469330.796386
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "kind": "fhir",
+      "name": "AllergyIntolerance",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "patient": "Patient/fb26ec12-0d5c-4494-ba85-1038de9af87d",
+        "code_system": "http://snomed.info/sct",
+        "code": "91936005",
+        "criticality": "high",
+        "clinical_status": "active",
+        "verification_status": "confirmed"
+      },
+      "records": [
+        "AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e"
+      ],
+      "writes": [
+        {
+          "seq": 27,
+          "method": "POST",
+          "path": "/fhir/R4/AllergyIntolerance",
+          "status": 201,
+          "held_ms": 37.7,
+          "proxy_ms": 0.4,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 1,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "before": [],
+        "after": {
+          "AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e": {
+            "resourceType": "AllergyIntolerance",
+            "patient": {
+              "reference": "Patient/fb26ec12-0d5c-4494-ba85-1038de9af87d"
+            },
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "91936005"
+                }
+              ]
+            },
+            "criticality": "high",
+            "clinicalStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                  "code": "active"
+                }
+              ]
+            },
+            "verificationStatus": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+                  "code": "confirmed"
+                }
+              ]
+            },
+            "id": "dd311a99-7fe2-4b2c-bb3d-151a293a555e",
+            "meta": {
+              "versionId": "9bb2318a-d91e-454c-a452-0e3cb3383c5b",
+              "lastUpdated": "2026-10-31T17:56:00.765Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e",
+            "field": "patient",
+            "sent": "Patient/fb26ec12-0d5c-4494-ba85-1038de9af87d",
+            "stored": "Patient/fb26ec12-0d5c-4494-ba85-1038de9af87d",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e",
+            "field": "code_system",
+            "sent": "http://snomed.info/sct",
+            "stored": "http://snomed.info/sct",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e",
+            "field": "code",
+            "sent": "91936005",
+            "stored": "91936005",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e",
+            "field": "criticality",
+            "sent": "high",
+            "stored": "high",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e",
+            "field": "clinical_status",
+            "sent": "active",
+            "stored": "active",
+            "same": true
+          },
+          {
+            "record": "AllergyIntolerance/dd311a99-7fe2-4b2c-bb3d-151a293a555e",
+            "field": "verification_status",
+            "sent": "confirmed",
+            "stored": "confirmed",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469375.285702
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/8df9fe89-fd79-43d0-bcc6-70362c212962",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e"
+      ],
+      "writes": [
+        {
+          "seq": 28,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 26.8,
+          "proxy_ms": 0.4,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e": {
+            "resourceType": "Appointment",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/8df9fe89-fd79-43d0-bcc6-70362c212962"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "id": "7f6dbbb0-9e20-46c8-83a3-84f567d1de9e",
+            "meta": {
+              "versionId": "3f33023c-f9e4-4925-b85f-fb77d4697e12",
+              "lastUpdated": "2026-10-31T17:56:40.039Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e",
+            "field": "patient",
+            "sent": "Patient/8df9fe89-fd79-43d0-bcc6-70362c212962",
+            "stored": "Patient/8df9fe89-fd79-43d0-bcc6-70362c212962",
+            "same": true
+          },
+          {
+            "record": "Appointment/7f6dbbb0-9e20-46c8-83a3-84f567d1de9e",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469415.134672
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/9e276981-0730-4b92-be16-ccf8cfd163c1",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f"
+      ],
+      "writes": [
+        {
+          "seq": 31,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 23.4,
+          "proxy_ms": 0.3,
+          "error": ""
+        },
+        {
+          "seq": 32,
+          "method": "PUT",
+          "path": "/fhir/R4/Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.1,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "before": [],
+        "after": {
+          "Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f": {
+            "resourceType": "Appointment",
+            "id": "5d20f967-ab10-4ec9-93d6-922c7603070f",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/9e276981-0730-4b92-be16-ccf8cfd163c1"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "meta": {
+              "versionId": "5ceb29a8-3c8b-4f22-a658-cf2ad08e992f",
+              "lastUpdated": "2026-10-31T17:58:23.953Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f",
+            "field": "patient",
+            "sent": "Patient/9e276981-0730-4b92-be16-ccf8cfd163c1",
+            "stored": "Patient/9e276981-0730-4b92-be16-ccf8cfd163c1",
+            "same": true
+          },
+          {
+            "record": "Appointment/5d20f967-ab10-4ec9-93d6-922c7603070f",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469521.39901
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 26,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back",
+        "the agent got an error reply (504) but the write landed"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/7b44ac49-b88e-45d0-95b7-08118312a47d",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [],
+      "writes": [
+        {
+          "seq": 34,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 504,
+          "held_ms": 28.4,
+          "proxy_ms": 0.4,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          504
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {},
+        "fields": [],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469574.956411
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 28,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/292f116d-479d-46c3-a9b4-f91280a65e1e",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff"
+      ],
+      "writes": [
+        {
+          "seq": 36,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 32.7,
+          "proxy_ms": 0.4,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff": {
+            "resourceType": "Appointment",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/292f116d-479d-46c3-a9b4-f91280a65e1e"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "id": "2f779ce5-948c-46c2-a18f-3cef786a7cff",
+            "meta": {
+              "versionId": "6ce98752-6f2d-4f26-b5c2-e31e6bb73ecd",
+              "lastUpdated": "2026-10-31T18:00:29.827Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff",
+            "field": "patient",
+            "sent": "Patient/292f116d-479d-46c3-a9b4-f91280a65e1e",
+            "stored": "Patient/292f116d-479d-46c3-a9b4-f91280a65e1e",
+            "same": true
+          },
+          {
+            "record": "Appointment/2f779ce5-948c-46c2-a18f-3cef786a7cff",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469644.621291
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 29,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/c4d0e4f8-55e3-433d-81e7-808eb99f01dc",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/b8324537-f357-4ae1-a350-2006597f71fe"
+      ],
+      "writes": [
+        {
+          "seq": 37,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 18.0,
+          "proxy_ms": 0.2,
+          "error": ""
+        },
+        {
+          "seq": 38,
+          "method": "PUT",
+          "path": "/fhir/R4/Appointment/b8324537-f357-4ae1-a350-2006597f71fe",
+          "status": 200,
+          "held_ms": 0.0,
+          "proxy_ms": 0.3,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201,
+          200
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "before": [],
+        "after": {
+          "Appointment/b8324537-f357-4ae1-a350-2006597f71fe": {
+            "resourceType": "Appointment",
+            "id": "b8324537-f357-4ae1-a350-2006597f71fe",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/c4d0e4f8-55e3-433d-81e7-808eb99f01dc"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "meta": {
+              "versionId": "36ea586c-7229-4b51-be53-bbb12e824904",
+              "lastUpdated": "2026-10-31T18:01:16.905Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/b8324537-f357-4ae1-a350-2006597f71fe",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/b8324537-f357-4ae1-a350-2006597f71fe",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/b8324537-f357-4ae1-a350-2006597f71fe",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/b8324537-f357-4ae1-a350-2006597f71fe",
+            "field": "patient",
+            "sent": "Patient/c4d0e4f8-55e3-433d-81e7-808eb99f01dc",
+            "stored": "Patient/c4d0e4f8-55e3-433d-81e7-808eb99f01dc",
+            "same": true
+          },
+          {
+            "record": "Appointment/b8324537-f357-4ae1-a350-2006597f71fe",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469692.076894
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    },
+    {
+      "id": 32,
+      "kind": "fhir",
+      "name": "Appointment",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "status": "booked",
+        "start": "2026-11-17T14:00:00Z",
+        "end": "2026-11-17T14:30:00Z",
+        "patient": "Patient/52c06423-0869-44e7-ac00-05195a33f737",
+        "practitioner": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+      },
+      "records": [
+        "Appointment/94733b93-8a58-43f0-8cdd-d66871649c03"
+      ],
+      "writes": [
+        {
+          "seq": 42,
+          "method": "POST",
+          "path": "/fhir/R4/Appointment",
+          "status": 201,
+          "held_ms": 27.1,
+          "proxy_ms": 0.3,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Appointment/94733b93-8a58-43f0-8cdd-d66871649c03": {
+            "resourceType": "Appointment",
+            "status": "booked",
+            "start": "2026-11-17T14:00:00Z",
+            "end": "2026-11-17T14:30:00Z",
+            "participant": [
+              {
+                "actor": {
+                  "reference": "Patient/52c06423-0869-44e7-ac00-05195a33f737"
+                },
+                "status": "accepted"
+              },
+              {
+                "actor": {
+                  "reference": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f"
+                },
+                "status": "accepted"
+              }
+            ],
+            "id": "94733b93-8a58-43f0-8cdd-d66871649c03",
+            "meta": {
+              "versionId": "0b48d7fe-3a37-4da1-ab77-985b87698266",
+              "lastUpdated": "2026-10-31T18:03:29.672Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Appointment/94733b93-8a58-43f0-8cdd-d66871649c03",
+            "field": "status",
+            "sent": "booked",
+            "stored": "booked",
+            "same": true
+          },
+          {
+            "record": "Appointment/94733b93-8a58-43f0-8cdd-d66871649c03",
+            "field": "start",
+            "sent": "2026-11-17T14:00:00Z",
+            "stored": "2026-11-17T14:00:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/94733b93-8a58-43f0-8cdd-d66871649c03",
+            "field": "end",
+            "sent": "2026-11-17T14:30:00Z",
+            "stored": "2026-11-17T14:30:00Z",
+            "same": true
+          },
+          {
+            "record": "Appointment/94733b93-8a58-43f0-8cdd-d66871649c03",
+            "field": "patient",
+            "sent": "Patient/52c06423-0869-44e7-ac00-05195a33f737",
+            "stored": "Patient/52c06423-0869-44e7-ac00-05195a33f737",
+            "same": true
+          },
+          {
+            "record": "Appointment/94733b93-8a58-43f0-8cdd-d66871649c03",
+            "field": "practitioner",
+            "sent": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "stored": "Practitioner/d7684dce-6023-47c0-ae20-2bec49c38b1f",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469824.305779
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    }
+  ]
+}

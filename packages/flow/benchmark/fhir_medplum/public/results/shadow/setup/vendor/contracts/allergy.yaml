@@ -1,0 +1,35 @@
+# Record an allergy for a patient exactly once, checked through FHIR only.
+schema_version: openadapt.ensure-record/v1
+resource_type: AllergyIntolerance
+base_url: ${BENCH_FHIR_URL}
+access_token_env: BENCH_RECORD_TOKEN
+self: ["${BENCH_AGENT_REF}"]
+
+fields:
+  patient: {path: patient.reference}
+  code_system: {path: code.coding.system}
+  code: {path: code.coding.code}
+  criticality: {path: criticality}
+  clinical_status: {path: clinicalStatus.coding.code}
+  verification_status: {path: verificationStatus.coding.code}
+
+identity:
+  - [patient, code]
+search: {patient: patient}
+
+closed: true
+allow:
+  - patient.display
+  - code.text
+  - code.coding.display
+  - clinicalStatus.coding.system="http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical"
+  - clinicalStatus.coding.display
+  - verificationStatus.coding.system="http://terminology.hl7.org/CodeSystem/allergyintolerance-verification"
+  - verificationStatus.coding.display
+
+change_feed:
+  audit: {heartbeat: true}
+  history: true
+  history_author: false
+  sweep_types: [Patient, AllergyIntolerance, Appointment, Observation, Condition, Encounter]
+settle_s: 1

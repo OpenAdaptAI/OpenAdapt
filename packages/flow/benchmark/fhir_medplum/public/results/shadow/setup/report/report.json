@@ -1,0 +1,209 @@
+{
+  "schema": "openadapt.shadow-report/v1",
+  "mode": "fhir",
+  "upstream": "http://127.0.0.1:9740",
+  "started": 1793469969.630649,
+  "first_write_after_s": 0.0,
+  "writes_seen": 1,
+  "checks": 1,
+  "counts": {
+    "REFUTED": 0,
+    "UNCERTAIN": 0,
+    "CONFIRMED": 1,
+    "PENDING": 0
+  },
+  "late_refuted": 0,
+  "rechecks_pending": 0,
+  "refuted_by_kind": {},
+  "overhead_ms": {
+    "held_for_baseline": {
+      "median": 212.2,
+      "max": 212.2
+    },
+    "added_total": {
+      "median": 212.4,
+      "max": 212.4
+    }
+  },
+  "errors": [],
+  "items": [
+    {
+      "id": 1,
+      "kind": "fhir",
+      "name": "Patient",
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "created once, every value read back"
+      ],
+      "sent": {
+        "given": "Imani",
+        "family": "Setup9969",
+        "birthDate": "1959-07-19",
+        "gender": "female",
+        "line": "9 Elm Street",
+        "city": "Springfield",
+        "state": "MA",
+        "postalCode": "01103",
+        "phone": "413-555-9969",
+        "email": "imani.setup9969@example.org"
+      },
+      "records": [
+        "Patient/88883a88-d92d-4807-99a1-12dba9fe4732"
+      ],
+      "writes": [
+        {
+          "seq": 1,
+          "method": "POST",
+          "path": "/fhir/R4/Patient",
+          "status": 201,
+          "held_ms": 212.2,
+          "proxy_ms": 0.2,
+          "error": ""
+        }
+      ],
+      "evidence": {
+        "replies": [
+          201
+        ],
+        "verifier": {
+          "outcome": "created_verified",
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "before": [],
+        "after": {
+          "Patient/88883a88-d92d-4807-99a1-12dba9fe4732": {
+            "resourceType": "Patient",
+            "name": [
+              {
+                "given": [
+                  "Imani"
+                ],
+                "family": "Setup9969"
+              }
+            ],
+            "birthDate": "1959-07-19",
+            "gender": "female",
+            "telecom": [
+              {
+                "system": "phone",
+                "value": "413-555-9969"
+              },
+              {
+                "system": "email",
+                "value": "imani.setup9969@example.org"
+              }
+            ],
+            "address": [
+              {
+                "line": [
+                  "9 Elm Street"
+                ],
+                "city": "Springfield",
+                "state": "MA",
+                "postalCode": "01103"
+              }
+            ],
+            "id": "88883a88-d92d-4807-99a1-12dba9fe4732",
+            "meta": {
+              "versionId": "19a18b61-6837-4a96-88d5-d74d9896342c",
+              "lastUpdated": "2026-10-31T18:06:09.883Z"
+            }
+          }
+        },
+        "fields": [
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "given",
+            "sent": "Imani",
+            "stored": "Imani",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "family",
+            "sent": "Setup9969",
+            "stored": "Setup9969",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "birthDate",
+            "sent": "1959-07-19",
+            "stored": "1959-07-19",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "gender",
+            "sent": "female",
+            "stored": "female",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "line",
+            "sent": "9 Elm Street",
+            "stored": "9 Elm Street",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "city",
+            "sent": "Springfield",
+            "stored": "Springfield",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "state",
+            "sent": "MA",
+            "stored": "MA",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "postalCode",
+            "sent": "01103",
+            "stored": "01103",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "phone",
+            "sent": "413-555-9969",
+            "stored": "413-555-9969",
+            "same": true
+          },
+          {
+            "record": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+            "field": "email",
+            "sent": "imani.setup9969@example.org",
+            "stored": "imani.setup9969@example.org",
+            "same": true
+          }
+        ],
+        "recheck": {
+          "verdict": "CONFIRMED",
+          "reasons": [
+            "since the first check: one record was already the person"
+          ],
+          "at": 1793469983.4868999
+        }
+      },
+      "late": {
+        "verdict": "CONFIRMED",
+        "reasons": [
+          "since the first check: one record was already the person"
+        ]
+      }
+    }
+  ]
+}

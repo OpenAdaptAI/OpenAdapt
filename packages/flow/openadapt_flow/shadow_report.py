@@ -28,6 +28,11 @@ KINDS = (
     ("outside the declared write", "another record changed"),
     ("not given by the task", "holds a value the agent didn't send"),
     ("someone else changed", "changed by someone else"),
+    (
+        "version in between was not the person",
+        "saved as another record first, then corrected",
+    ),
+    ("after creating it", "changed after it was created"),
 )
 
 
