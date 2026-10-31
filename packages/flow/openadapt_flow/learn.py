@@ -526,9 +526,10 @@ def contracts_from_manifest(manifest: Path) -> dict[str, list[Path]]:
     out: dict[str, list[Path]] = defaultdict(list)
     for kind, body in (data.get("kinds") or {}).items():
         for v in (body or {}).get("variants") or []:
-            for key in ("create", "found", "contract"):
-                if v.get(key):
-                    out[str(kind)].append(base / v[key])
+            # Every contract file a variant names (create, update, found).
+            for value in (v or {}).values():
+                if isinstance(value, str) and value.endswith((".yaml", ".yml")):
+                    out[str(kind)].append(base / value)
     return dict(out)
 
 

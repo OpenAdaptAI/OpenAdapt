@@ -1089,6 +1089,33 @@ def test_learned_needs_the_database_frame(tmp_path: Path) -> None:
     ]
 
 
+def test_manifest_contracts_include_every_variant_file(tmp_path: Path) -> None:
+    (tmp_path / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "kinds": {
+                    "fix": {
+                        "variants": [
+                            {
+                                "fields": ["a"],
+                                "update": "c/a.update.yaml",
+                                "found": "c/a.found.yaml",
+                            },
+                        ]
+                    },
+                    "add": {"variants": [{"create": "c/b.create.yaml"}]},
+                }
+            }
+        )
+    )
+    got = learn.contracts_from_manifest(tmp_path / "manifest.yaml")
+    base = tmp_path.resolve()
+    assert {k: set(v) for k, v in got.items()} == {
+        "fix": {base / "c/a.update.yaml", base / "c/a.found.yaml"},
+        "add": {base / "c/b.create.yaml"},
+    }
+
+
 def test_the_cli_proposes_and_approves(tmp_path: Path, capsys: Any) -> None:
     e = Engine(
         "sqlite", {"sqlite_database": str(tmp_path / "x.sqlite")}, lambda *a: None
