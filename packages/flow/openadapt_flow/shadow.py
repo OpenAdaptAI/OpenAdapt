@@ -53,7 +53,9 @@ class Route:
 
     write: re.Pattern[str]  # matched against "METHOD /path"
     contract: Any  # verifier.Contract
-    params: dict[str, str]  # parameter -> dotted path in the request body
+    #: parameter -> dotted path in the request body, or ``{"literal": v}``
+    #: for a value the operator pins (one the body doesn't carry).
+    params: dict[str, Any]
     name: str
 
 
@@ -486,7 +488,10 @@ class Shadow:
         route = next((r for r in self.routes if r.write.fullmatch(line)), None)
         if route is None:
             return self._unchecked(line, "no route matches this write")
-        params = {p: _dotted(doc, where) for p, where in route.params.items()}
+        params = {
+            p: where["literal"] if isinstance(where, dict) else _dotted(doc, where)
+            for p, where in route.params.items()
+        }
         missing = sorted(p for p, v in params.items() if v is _MISSING)
         if missing:
             return self._unchecked(

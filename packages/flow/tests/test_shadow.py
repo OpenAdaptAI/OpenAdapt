@@ -299,3 +299,17 @@ def test_a_late_write_after_a_sql_confirmation_is_refuted_on_the_recheck(
     sh.run_rechecks(now=True)
     sh.stop()
     assert ep.late_verdict == "REFUTED" and sh.results()["late_refuted"] == 1
+
+
+def test_a_pinned_value_binds_without_the_body(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    app = App(db)
+    sh = _shadow(tmp_path, app, db)
+    sh.routes[0].params["lname"] = {"literal": "Quill"}
+    assert (
+        _post(sh.url, {"first": "Ada", "last": "Quill", "email": "ada@example.test"})[0]
+        == 201
+    )
+    sh.stop()
+    (item,) = sh.results()["items"]
+    assert item["verdict"] == "CONFIRMED" and item["sent"]["lname"] == "Quill"

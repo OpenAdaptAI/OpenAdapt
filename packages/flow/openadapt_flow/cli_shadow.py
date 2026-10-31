@@ -128,6 +128,11 @@ def build(cfg: dict[str, Any], out: Path) -> Any:
             params = dict(r.get("params") or {})
             for name in contract.params:
                 params.setdefault(name, name)
+            for name, where in params.items():
+                if isinstance(where, dict) and set(where) != {"literal"}:
+                    raise ShadowConfigError(
+                        f"route {i + 1}: {name} is a body path or {{literal: value}}"
+                    )
             routes.append(
                 Route(
                     re.compile(r["write"]),
