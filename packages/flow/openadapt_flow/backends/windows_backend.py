@@ -188,7 +188,7 @@ def _element_identity_payload(value: object) -> Optional[dict]:
     ):
         return None
     ancestry = value["ancestry"]
-    if not isinstance(ancestry, list) or not 1 <= len(ancestry) <= 64:
+    if not isinstance(ancestry, list) or not 1 <= len(ancestry) <= 24:
         return None
     pairs = []
     for entry in ancestry:
@@ -199,6 +199,10 @@ def _element_identity_payload(value: object) -> Optional[dict]:
         ):
             return None
         pairs.append([entry[0], entry[1]])
+    if pairs[-1][1] != value["window"]:
+        return None
+    if not value["automation_id"] and not (value["role"] and value["name"]):
+        return None
     return {**value, "ancestry": pairs}
 
 
@@ -804,6 +808,11 @@ class WindowsBackend:
         unmapped control types), ``name``, ``automation_id``, ``ancestry`` as
         ``[role, name]`` pairs parent-first up to and including the top-level
         window, the ``window`` name and the ``process`` executable name.
+        ``window`` is the outermost window below the desktop, so an owned
+        dialog's controls name their owner there (the dialog is in
+        ``ancestry``), unlike the innermost ``window_name`` of
+        :meth:`structural_locator_at`. ``process`` may be None when the agent
+        cannot read the executable; never treat two None values as a match.
         Returns None when the agent is unreachable, lacks the endpoint, finds
         no element or answers with anything outside that shape. Never raises.
         """

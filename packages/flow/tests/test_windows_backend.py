@@ -708,6 +708,24 @@ def test_element_identity_at_reads_the_typed_endpoint() -> None:
         (200, {"status": "ok", "identity": {**_IDENTITY, "name": 7}}),
         (200, {"status": "ok", "identity": {**_IDENTITY, "window": "x" * 513}}),
         (200, ["not", "an", "object"]),
+        (200, {"status": "ok", "identity": {**_IDENTITY, "window": "Other"}}),
+        (
+            200,
+            {
+                "status": "ok",
+                "identity": {**_IDENTITY, "automation_id": None, "name": None},
+            },
+        ),
+        (
+            200,
+            {
+                "status": "ok",
+                "identity": {
+                    **_IDENTITY,
+                    "ancestry": [[None, "x"]] * 24 + [[None, "Patient Notes"]],
+                },
+            },
+        ),
     ],
 )
 def test_element_identity_at_is_none_outside_the_contract(status, body) -> None:
