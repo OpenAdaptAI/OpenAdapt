@@ -34,7 +34,7 @@ from openadapt_flow.runtime.effects.effect import (
 #: expected as text compares with a stored number by value
 #: (``record_matches(text_numbers=True)``). A JSON body compares numbers by
 #: value only against a parameter passed as a number.
-TYPED_SUBSTRATES = frozenset({"sql"})
+TYPED_SUBSTRATES = frozenset({"sql", "database"})
 
 
 def drop_record_fields(

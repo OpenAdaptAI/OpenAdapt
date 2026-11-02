@@ -705,3 +705,54 @@ def test_a_write_between_the_two_reads_leaves_the_frame_unchecked(
     result = _run(tmp_path)
     assert _frame(result) == "not_checked"
     assert result["receipt"]["outcome"] != "verified"
+
+
+def test_frame_database_text_numbers_typed(tmp_path: Path) -> None:
+    # A text parameter "2.0" matching an integer column (pid=2) on a
+    # whole-database slice is recognized as typed (TYPED_SUBSTRATES)
+    # instead of falsely failing closed as an undeclared write (#1671).
+    db = _db(tmp_path)
+    doc = _doc(db)
+    doc["record"]["match"].append("pid")
+    doc["record"]["fields"]["pid"] = "pid"
+
+    params = {
+        "fname": "Ada",
+        "lname": "Quill",
+        "email": "ada@example.test",
+        "pid": "2.0",
+    }
+    cfg = parse_verify_config(doc)
+    capture_baseline(cfg, params, tmp_path / "baseline.json")
+    con = sqlite3.connect(db)
+    _save(con)
+    con.commit()
+    con.close()
+
+    res = verify_run(
+        cfg,
+        params=params,
+        run_record={"executor_kind": "agent", "executor_id": "bot"},
+        authorization_ref="test",
+        baseline_path=tmp_path / "baseline.json",
+    )
+    assert _frame(res) == "held", res["receipt"]["reasons"]
+    assert res["receipt"]["outcome"] == "verified"
+
+
+def test_frame_hashed_number_scientific_notation() -> None:
+    # Numbers written in scientific notation ('1e+21', '1e-7') in effect
+    # selectors are hashed via Decimal(literal) so they match canonical
+    # cell hashes stored in the hashed baseline (#1671).
+    from decimal import Decimal
+    from openadapt_flow.runtime.effects.effect import ValueExpr
+
+    key = b"test_key_0123456789012345678901"
+    for num_val, num_str in [(1e21, "1e+21"), (1e-7, "1e-7")]:
+        h_stored = cell_hash(key, num_val, table="metrics", column="reading")
+        v = ValueExpr(literal=num_str, number=True)
+        h_new = cell_hash(
+            key, Decimal(str(v.literal)), table="metrics", column="reading"
+        )
+        assert h_stored == h_new
+

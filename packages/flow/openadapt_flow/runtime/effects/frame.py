@@ -68,11 +68,13 @@ import hashlib
 import json
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.app_profiles import Owner, table_name
+from openadapt_flow.runtime.effects._common import TYPED_SUBSTRATES
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
@@ -1424,7 +1426,7 @@ def judge_frame(
                     record_matches(
                         dict(record),
                         s,
-                        text_numbers=before_state.substrate == "sql",
+                        text_numbers=before_state.substrate in TYPED_SUBSTRATES,
                     )
                     for s in sels
                 ):
@@ -1451,8 +1453,8 @@ def judge_frame(
             continue
         selectors = selectors_for(name)
         hasher = hashers.get(name)
-        # A SQL slice carries the store's column types (``TYPED_SUBSTRATES``).
-        typed = before_state.substrate == "sql"
+        # A SQL or database slice carries the store's column types (``TYPED_SUBSTRATES``).
+        typed = before_state.substrate in TYPED_SUBSTRATES
 
         def declared(record: Mapping[str, Any], hashed: bool = False) -> bool:
             if hashed and hasher is not None:
@@ -1463,7 +1465,12 @@ def judge_frame(
                             k,
                             None
                             if is_null_value(v)
-                            else (str(v) if getattr(v, "number", None) else v),
+                            else (
+                                Decimal(str(v.literal))
+                                if getattr(v, "number", None)
+                                and getattr(v, "literal", None) is not None
+                                else (str(v) if getattr(v, "number", None) else v)
+                            ),
                         )
                         for k, v in s.items()
                     )
