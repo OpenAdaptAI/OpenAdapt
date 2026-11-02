@@ -537,6 +537,46 @@ class QuartzMacAXClient:
         except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
             return None
 
+    def ancestry(
+        self, element: MacElement
+    ) -> Optional[list[tuple[str, Optional[str], Optional[tuple]]]]:
+        """(raw AX role, name, screen bounds) of each ancestor, parent first.
+
+        Ends at the element's ``AXWindow``, which must carry the element's
+        exact window title. None when the walk fails or never reaches it.
+        """
+        try:
+            from ApplicationServices import (
+                kAXParentAttribute,
+                kAXRoleAttribute,
+                kAXSubroleAttribute,
+            )
+
+            node = element.native
+            if node is None:
+                return None
+            trail: list[tuple[str, Optional[str], Optional[tuple]]] = []
+            for _ in range(32):
+                node = self._attr(node, kAXParentAttribute)
+                if node is None:
+                    return None
+                role = str(self._attr(node, kAXRoleAttribute) or "")
+                if not role:
+                    return None
+                subrole = str(self._attr(node, kAXSubroleAttribute) or "")
+                if role == "AXWindow" and subrole in ("AXDialog", "AXSystemDialog"):
+                    shown = subrole
+                else:
+                    shown = role
+                trail.append((shown, self._name(node), self._bounds(node)))
+                if role == "AXWindow":
+                    return trail if self._name(node) == element.window_title else None
+                if role == "AXApplication":
+                    return None
+            return None
+        except Exception:  # noqa: BLE001 - unobservable AX is an ordinary miss
+            return None
+
     def row_census(
         self, pid: int, window_title: str, x: float, y: float, *, limit: int
     ) -> Optional[dict[str, Any]]:
@@ -1297,6 +1337,46 @@ class MacOSBackend(RemoteDisplayBackend):
             name=element.name,
             window_name=window.title,
         )
+
+    def element_identity_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The AX element identity under pixel (x, y), for a repair's new click.
+
+        Shape: :class:`openadapt_flow.repair.element_identity.ElementIdentity`.
+        Scoped to this backend's exact window; None on any miss (never raises).
+        """
+        try:
+            window = self._ensure_captured()
+            screen_x, screen_y = self._pixel_to_screen(window, int(x), int(y))
+            element = self._ax_client.element_at_point(
+                window.pid, window.title, screen_x, screen_y
+            )
+            if element is None or not self._scoped_to_target(element):
+                return None
+            if self._in_window_pixel_rect(window, element.bounds) is None:
+                return None
+            read = getattr(self._ax_client, "ancestry", None)
+            trail = read(element) if callable(read) else None
+            if not trail:
+                return None
+            from openadapt_flow.repair.element_identity import DIALOG_ROLES
+
+            dialog_region = None
+            for role, _name, bounds in trail:
+                if role in DIALOG_ROLES and bounds is not None:
+                    dialog_region = self._in_window_pixel_rect(window, bounds)
+                    break
+            return {
+                "source": "ax",
+                "role": element.role,
+                "name": element.name,
+                "automation_id": element.accessible_id,
+                "ancestry": [[role, name] for role, name, _bounds in trail],
+                "window": window.title,
+                "process": window.owner,
+                "dialog_region": list(dialog_region) if dialog_region else None,
+            }
+        except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
 
     def _unique_candidate(self, locator: StructuralLocator) -> Optional[MacElement]:
         window = self._resolve_window()

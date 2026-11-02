@@ -786,8 +786,11 @@ same way.
 - One halted click per run is repaired, by one corrected click or a bridge of
   up to three actions, in a linear workflow with exactly one save. When the
   patched run halts at another step, the probe fails with that reason.
-- A bridge's new clicks need a DOM identity (a browser) and a readable,
-  non-saving label. A bridge acts on the halted page while it is captured;
+- A bridge's new clicks need a readable, non-saving label, and a record
+  identity the page shows under them. Elsewhere than a browser, a click with
+  no record identity is admitted only when a record check covers every save
+  ([REPAIR_ON_EVERY_BACKEND.md](REPAIR_ON_EVERY_BACKEND.md)), and only a
+  person approves that fix. That path is not yet qualified end to end. A bridge acts on the halted page while it is captured;
   each action is checked first, and the page is discarded afterwards.
 - The probe stops before every step the run gate classifies as a save, the
   same fail-closed classifier the approval gate uses. A step that writes but

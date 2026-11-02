@@ -97,6 +97,13 @@ from openadapt_flow.repair.candidate import (
     TaughtStep,
     sha256_hex,
 )
+from openadapt_flow.repair.element_identity import (
+    BASIS_RECORD_IDENTITY,
+    ClickAdmission,
+    ClickRefused,
+    admit_new_click,
+    record_check_cover,
+)
 
 if TYPE_CHECKING:
     from openadapt_flow.jit.keys import CustomerModelKey
@@ -595,6 +602,14 @@ class _Patch:
     summary: str = ""
     #: The agent's own account of its proposal, shown to the approver as such.
     proposal_note: str = ""
+    #: How each new click was admitted, by step id.
+    admissions: Mapping[str, ClickAdmission] = field(default_factory=dict)
+
+    @property
+    def needs_person(self) -> bool:
+        """A new click rests on the record check, so only a person approves."""
+
+        return any(a.needs_person for a in self.admissions.values())
 
 
 # -- the loop ------------------------------------------------------------------
@@ -1004,8 +1019,14 @@ class SelfRepair:
                     SelfRepairStepRecord(
                         stage="patch",
                         passed=True,
-                        detail=f"{patch.summary}; bundle "
-                        f"{patch.candidate.proposed_content_digest[:16]}"[:1024],
+                        detail=(
+                            f"{patch.summary}; bundle "
+                            f"{patch.candidate.proposed_content_digest[:16]}"
+                            + "".join(
+                                f"; {sid} admitted by {a.describe()}"
+                                for sid, a in patch.admissions.items()
+                            )
+                        )[:1024],
                         attempt=attempt,
                     )
                 )
@@ -1152,6 +1173,8 @@ class SelfRepair:
         new_steps: list[Step] = []
         crops: dict[str, bytes] = {}
         described: list[str] = []
+        admissions: dict[str, ClickAdmission] = {}
+        extra_files: dict[str, bytes] = {}
         screen = live_png
         replaced: Optional[Step] = None
         target_region = tuple(step.anchor.region)
@@ -1215,7 +1238,7 @@ class SelfRepair:
                 persist_heal(event, crop, screen, evidence_dir)
                 continue
             new_id = f"{step.id}_bridge_{index + 1}"
-            new_step, crop, label = self._new_click(
+            new_step, crop, label, admission, files = self._new_click(
                 workflow,
                 new_id,
                 op,
@@ -1226,7 +1249,13 @@ class SelfRepair:
                 session,
             )
             crops[new_id] = crop
-            described.append(f"clicks {label!r}")
+            extra_files.update(files)
+            admissions[new_id] = admission
+            described.append(
+                f"clicks {label!r}"
+                if admission.basis == BASIS_RECORD_IDENTITY
+                else f"clicks {label!r} (checked by the record check)"
+            )
             frame_dir = evidence_dir / "heals" / new_id
             frame_dir.mkdir(parents=True, exist_ok=True)
             (frame_dir / "screen.png").write_bytes(screen)
@@ -1313,6 +1342,10 @@ class SelfRepair:
             path = bundle_out / target.anchor.template
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(crop)
+        for rel, data in extra_files.items():
+            path = bundle_out / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
         _uncertify_patch(patched)
         patched.save(bundle_out, encrypt=bool(workflow.encrypted))
         run_dir = attempt_dir.parent.parent
@@ -1370,6 +1403,7 @@ class SelfRepair:
             checked_step_ids=checked,
             summary=summary,
             proposal_note=str(proposal.note or ""),
+            admissions=admissions,
         )
 
     def _retarget(
@@ -1438,12 +1472,19 @@ class SelfRepair:
         screen: bytes,
         size_like: tuple[int, int, int, int],
         session: AppSession,
-    ) -> tuple[Step, bytes, str]:
-        """A new bridge click: a readable control in the recorded record.
+    ) -> tuple[Step, bytes, str, ClickAdmission, dict[str, bytes]]:
+        """A new bridge click: a readable control that doesn't save.
 
-        The control must not read as a save, and the record identity the DOM
-        shows under it must be one the recording already verified (the same
-        salted hash), so the new step carries an identity check of its own.
+        The control must not read as a save. Its admission
+        (:func:`~openadapt_flow.repair.element_identity.admit_new_click`) is
+        the record identity under it when the backend shows one the recording
+        verified (the same salted hash), so the new step carries an identity
+        check of its own. In a browser that is the only way in. On an
+        accessibility or pixel-only backend a click with no record identity
+        is admitted only when a record check covers the workflow's saves, and
+        its step is identified by the dialog around it (:func:`_dialog_band`),
+        a screen pre-check. Returns the step, its crop, its label, how it was
+        admitted, and any identifier crop to write into the bundle.
         """
 
         from openadapt_flow.ir import Anchor
@@ -1466,13 +1507,35 @@ class SelfRepair:
                 f"the bridge clicks {label!r}, which reads as a save; a bridge may "
                 "only lead to the recorded save"
             )
+        try:
+            admission = admit_new_click(
+                session.backend,
+                point,
+                record_identity=lambda: _recorded_identity(
+                    workflow, session.backend, point
+                ),
+                cover=lambda: record_check_cover(workflow, self.target),
+            )
+        except ClickRefused as exc:
+            raise SelfRepairRefused(str(exc)) from exc
+        identity_template = admission.identity_template
+        identifier_crop = identifier_region = None
+        files: dict[str, bytes] = {}
+        if admission.basis != BASIS_RECORD_IDENTITY:
+            identity_template, identifier_region, band_png = _dialog_band(
+                workflow, admission, screen, point, self.vision
+            )
+            identifier_crop = f"templates/identifiers/{step_id}.png"
+            files[identifier_crop] = band_png
         anchor = Anchor(
             template=f"templates/{step_id}.png",
-            structural=structural,
+            structural=admission.structural(structural),
             region=region,
             click_point=point,
             ocr_text=read,
-            identity_template=_recorded_identity(workflow, session.backend, point),
+            identity_template=identity_template,
+            identifier_crop=identifier_crop,
+            identifier_region=identifier_region,
         )
         step = Step(
             id=step_id,
@@ -1483,7 +1546,7 @@ class SelfRepair:
             anchor=anchor,
             risk="reversible",
         )
-        return step, _crop_png(screen, region), label
+        return step, _crop_png(screen, region), label, admission, files
 
     def _landmarks(
         self,
@@ -1720,7 +1783,9 @@ class SelfRepair:
                 candidate=candidate,
                 patched_bundle=patch.bundle_dir,
             )
-        if self.standard_changes is not None:
+        # A new click that rests on the record check, not on a record identity
+        # the screen shows, is never applied by policy: a person approves it.
+        if self.standard_changes is not None and not patch.needs_person:
             standard = self.standard_changes.apply(
                 self,
                 patch=patch,
@@ -2627,6 +2692,72 @@ def _recorded_identity(workflow: Workflow, backend: Any, point: tuple[int, int])
             "may only act on the recorded record"
         )
     return template
+
+
+def _dialog_band(
+    workflow: Workflow,
+    admission: ClickAdmission,
+    screen: bytes,
+    point: tuple[int, int],
+    vision: Any,
+) -> tuple[Any, tuple[int, int, int, int], bytes]:
+    """The dialog around a new click, as the step's identity band.
+
+    Used for a click admitted on the record check: the band is a screen
+    pre-check (the same dialog shows), never what makes the click safe. The
+    dialog's box comes from the element's ancestry when the tree reads one,
+    otherwise from the drawn box around the click. Its text is hashed with
+    the bundle's salt, as a recorded identity band is. Refuses when there is
+    no dialog around the click or it has no readable text.
+    """
+
+    from openadapt_flow.repair.dialog_identity import enclosing_dialog_region
+    from openadapt_flow.runtime.heal import _crop_png
+    from openadapt_flow.runtime.identity import identifier_text_from_lines
+    from openadapt_flow.runtime.identity_template import (
+        build_identity_template,
+        new_salt_hex,
+    )
+
+    element = admission.element
+    region = element.dialog_region if element is not None else None
+    if region is None:
+        region = enclosing_dialog_region(screen, point)
+    if region is None:
+        raise SelfRepairRefused(
+            "a new click with no record identity must sit in a dialog that "
+            "identifies it; no dialog was found around the click"
+        )
+    x, y, w, h = region
+    if not (x <= point[0] < x + w and y <= point[1] < y + h):
+        raise SelfRepairRefused("the click is outside the dialog around it")
+    try:
+        lines = vision.ocr(screen)
+    except Exception:  # noqa: BLE001 - unreadable is refused
+        lines = []
+    text = identifier_text_from_lines(lines or [], region=region)
+    salt = next(
+        (
+            s.anchor.identity_template.salt
+            for s in workflow.steps
+            if s.anchor is not None and s.anchor.identity_template is not None
+        ),
+        None,
+    )
+    template = (
+        build_identity_template(
+            text,
+            param_examples=dict(workflow.params),
+            salt_hex=salt or new_salt_hex(),
+        )
+        if text
+        else None
+    )
+    if template is None:
+        raise SelfRepairRefused(
+            "the dialog around the new click has no readable text to identify it by"
+        )
+    return template, (int(x), int(y), int(w), int(h)), _crop_png(screen, region)
 
 
 def _expected_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional[bytes]:
