@@ -11554,7 +11554,7 @@ class Replayer:
                 and isinstance(self.backend, RemoteActuationBackend)
                 and isinstance(self.backend, PreparedPointerActuationBackend)
             ):
-                prepared_pointer = pointer_target
+                prepared_pointer = pointer_target or resolution.point
                 try:
                     self.backend.prepare_pointer_actuation(*prepared_pointer)
                 except Exception as exc:  # noqa: BLE001 - backend boundary must halt
