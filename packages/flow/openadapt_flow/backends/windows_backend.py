@@ -171,6 +171,37 @@ def normalize_chord(key: str) -> list[str]:
     return [_pyautogui_key(p) for p in parts]
 
 
+def _optional_text(value: object) -> bool:
+    return value is None or (isinstance(value, str) and 1 <= len(value) <= 512)
+
+
+def _element_identity_payload(value: object) -> Optional[dict]:
+    """Accept only the exact ``/uia/element-identity-at`` identity shape."""
+    keys = {"source", "role", "name", "automation_id", "ancestry", "window", "process"}
+    if not isinstance(value, dict) or set(value) != keys:
+        return None
+    if value["source"] != "uia":
+        return None
+    if not all(
+        _optional_text(value[key])
+        for key in ("role", "name", "automation_id", "window", "process")
+    ):
+        return None
+    ancestry = value["ancestry"]
+    if not isinstance(ancestry, list) or not 1 <= len(ancestry) <= 64:
+        return None
+    pairs = []
+    for entry in ancestry:
+        if (
+            not isinstance(entry, list)
+            or len(entry) != 2
+            or not all(_optional_text(item) for item in entry)
+        ):
+            return None
+        pairs.append([entry[0], entry[1]])
+    return {**value, "ancestry": pairs}
+
+
 class WindowsBackend:
     """`Backend` implementation over the WAA HTTP API.
 
@@ -764,6 +795,24 @@ class WindowsBackend:
             return _json.loads(payload)
         except Exception:
             return None
+
+    def element_identity_at(self, x: int, y: int) -> Optional[dict]:
+        """Return the UIA identity of the element under (x, y), or None.
+
+        Reads ``/uia/element-identity-at``: the nearest actionable element's
+        ARIA-style ``role`` (the ``structural_locator_at`` mapping, null for
+        unmapped control types), ``name``, ``automation_id``, ``ancestry`` as
+        ``[role, name]`` pairs parent-first up to and including the top-level
+        window, the ``window`` name and the ``process`` executable name.
+        Returns None when the agent is unreachable, lacks the endpoint, finds
+        no element or answers with anything outside that shape. Never raises.
+        """
+        typed = self._post_typed_read(
+            "/uia/element-identity-at", {"x": int(x), "y": int(y)}
+        )
+        if not typed.available or typed.payload is None:
+            return None
+        return _element_identity_payload(typed.payload.get("identity"))
 
     def structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:
         """Return a stable UIA locator for the control under (x, y).

@@ -648,3 +648,77 @@ def test_agent_drives_authoring_recording_over_windows_backend(
     )
     assert report.success, [r.model_dump() for r in report.results]
     assert waa.state == 3
+
+
+_IDENTITY = {
+    "source": "uia",
+    "role": "button",
+    "name": "Save Note",
+    "automation_id": "saveButton",
+    "ancestry": [[None, "Note editor"], [None, "Patient Notes"]],
+    "window": "Patient Notes",
+    "process": "powershell",
+}
+
+
+def _serve_identity_route(status: int, body: object):
+    seen: dict[str, object] = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a: object) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length") or 0)
+            seen["path"] = self.path
+            seen["payload"] = json.loads(self.rfile.read(length))
+            raw = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, seen
+
+
+def test_element_identity_at_reads_the_typed_endpoint() -> None:
+    server, seen = _serve_identity_route(200, {"status": "ok", "identity": _IDENTITY})
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.element_identity_at(550, 460) == _IDENTITY
+    finally:
+        server.shutdown()
+    assert seen == {"path": "/uia/element-identity-at", "payload": {"x": 550, "y": 460}}
+
+
+@pytest.mark.parametrize(
+    ("status", "body"),
+    [
+        (404, {"status": "error"}),
+        (503, {"status": "error", "code": "uia_unavailable"}),
+        (200, {"status": "ok", "identity": None}),
+        (200, {"status": "error", "identity": _IDENTITY}),
+        (200, {"status": "ok", "identity": {**_IDENTITY, "source": "dom"}}),
+        (200, {"status": "ok", "identity": {**_IDENTITY, "extra": 1}}),
+        (200, {"status": "ok", "identity": {**_IDENTITY, "ancestry": []}}),
+        (200, {"status": "ok", "identity": {**_IDENTITY, "ancestry": [["a"]]}}),
+        (200, {"status": "ok", "identity": {**_IDENTITY, "name": 7}}),
+        (200, {"status": "ok", "identity": {**_IDENTITY, "window": "x" * 513}}),
+        (200, ["not", "an", "object"]),
+    ],
+)
+def test_element_identity_at_is_none_outside_the_contract(status, body) -> None:
+    server, _ = _serve_identity_route(status, body)
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.element_identity_at(1, 1) is None
+    finally:
+        server.shutdown()
+
+
+def test_element_identity_at_unreachable_agent_is_none() -> None:
+    backend = WindowsBackend("http://127.0.0.1:9", timeout_s=0.5)
+    assert backend.element_identity_at(1, 1) is None

@@ -788,3 +788,91 @@ def test_windows_backend_talks_to_authed_agent(authed_agent: RunningAgent) -> No
     assert unauth.probe() is False
     with pytest.raises(RuntimeError):
         unauth.click(1, 1)
+
+
+def test_element_identity_names_the_element_and_its_window_path(monkeypatch) -> None:
+    button = _FakeControl(
+        "ButtonControl", automation_id="saveButton", name="Save  Note"
+    )
+    group = _FakeControl("PaneControl", name="Note editor")
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(group))
+    group.children = [button]
+    button.parent = group
+    module = sys.modules["uiautomation"]
+    module.ControlFromPoint = lambda _x, _y: button
+
+    result = _perform_uia("element-identity-at", {"x": 550, "y": 460})
+
+    assert result == {
+        "status": "ok",
+        "identity": {
+            "source": "uia",
+            "role": "button",
+            "name": "Save Note",
+            "automation_id": "saveButton",
+            "ancestry": [[None, "Note editor"], [None, "Patient Notes"]],
+            "window": "Patient Notes",
+            "process": None,
+        },
+    }
+
+
+def test_element_identity_climbs_to_the_actionable_control(monkeypatch) -> None:
+    button = _FakeControl("ButtonControl", name="Save Note")
+    label = _FakeControl("TextControl", name="Save Note", parent=button)
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    sys.modules["uiautomation"].ControlFromPoint = lambda _x, _y: label
+
+    identity = _perform_uia("element-identity-at", {"x": 1, "y": 1})["identity"]
+
+    assert identity["role"] == "button"
+    assert identity["automation_id"] is None
+    assert identity["ancestry"] == [[None, "Patient Notes"]]
+
+
+def test_element_identity_without_a_window_is_none(monkeypatch) -> None:
+    orphan = _FakeControl("ButtonControl", name="Save Note")
+    orphan.parent = _FakeControl("PaneControl")
+    monkeypatch.setitem(
+        sys.modules,
+        "uiautomation",
+        types.SimpleNamespace(
+            ControlFromPoint=lambda _x, _y: orphan,
+            UIAutomationInitializerInThread=_FakeUiaContext,
+        ),
+    )
+    assert _perform_uia("element-identity-at", {"x": 1, "y": 1}) == {
+        "status": "ok",
+        "identity": None,
+    }
+
+
+def test_element_identity_with_a_cyclic_parent_chain_is_none(monkeypatch) -> None:
+    button = _FakeControl("ButtonControl", name="Save Note")
+    window = _FakeControl("WindowControl", name="Patient Notes", parent=None)
+    window.parent = window  # a provider that never reaches the root
+    button.parent = window
+    monkeypatch.setitem(
+        sys.modules,
+        "uiautomation",
+        types.SimpleNamespace(
+            ControlFromPoint=lambda _x, _y: button,
+            UIAutomationInitializerInThread=_FakeUiaContext,
+        ),
+    )
+    assert _perform_uia("element-identity-at", {"x": 1, "y": 1})["identity"] is None
+
+
+def test_element_identity_with_nothing_under_the_point_is_none(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module())
+    assert _perform_uia("element-identity-at", {"x": 1, "y": 1}) == {
+        "status": "ok",
+        "identity": None,
+    }
+
+
+def test_element_identity_refuses_extra_fields(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module())
+    with pytest.raises(AgentRequestError) as caught:
+        _perform_uia("element-identity-at", {"x": 1, "y": 1, "depth": 3})
+    assert caught.value.status == 400

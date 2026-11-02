@@ -11,6 +11,8 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /input/guarded     -> frame/context/focus check + bounded input in one
                                serialized request
     POST /uia/locator-at    -> stable UIA locator at a demonstrated point
+    POST /uia/element-identity-at -> role, name, AutomationId, window path and
+                               process of the element at a point
     POST /uia/text-at-point -> structured row text for identity verification
     POST /uia/identity-candidates-at -> rows that read the same as that row
     POST /uia/find          -> zero / unique / ambiguous exact candidates
@@ -554,6 +556,53 @@ def _locator_from_control(control: object) -> Optional[dict[str, Any]]:
     }
 
 
+def _bounded_name(control: object) -> Optional[str]:
+    value = " ".join(str(_control_value(control, "Name", "") or "").split())
+    return value[:512] or None
+
+
+def _element_identity(control: object) -> Optional[dict[str, Any]]:
+    """Describe one element by role, name, AutomationId and its window path.
+
+    The ancestry runs parent-first up to and including the top-level window
+    (the outermost ``WindowControl``). An element with no window above it, or
+    a parent chain deeper than ``_MAX_UIA_DEPTH``, has no trustworthy identity
+    and yields None rather than a truncated one.
+    """
+    chain: list[object] = []
+    node = _parent(control)
+    for _ in range(_MAX_UIA_DEPTH):
+        if node is None:
+            break
+        chain.append(node)
+        node = _parent(node)
+    else:
+        return None
+    window_index = None
+    for index, ancestor in enumerate(chain):
+        if str(_control_value(ancestor, "ControlTypeName", "")) == "WindowControl":
+            window_index = index
+    if window_index is None:
+        return None
+    window = chain[window_index]
+    process_id = _control_value(control, "ProcessId", 0)
+    automation_id = str(_control_value(control, "AutomationId", "") or "")[:512]
+    return {
+        "source": "uia",
+        "role": _role(control),
+        "name": _bounded_name(control),
+        "automation_id": automation_id or None,
+        "ancestry": [
+            [_role(ancestor), _bounded_name(ancestor)]
+            for ancestor in chain[: window_index + 1]
+        ],
+        "window": _bounded_name(window),
+        "process": _process_image_identifier(
+            process_id if isinstance(process_id, int) else 0
+        ),
+    }
+
+
 def _locator_payload(value: object) -> dict[str, Any]:
     data = _exact_object(
         value,
@@ -1050,6 +1099,7 @@ def _perform_uia_initialized(
     """Perform one typed UIA operation in an initialized COM apartment."""
     if operation in {
         "locator-at",
+        "element-identity-at",
         "text-at-point",
         "focused-at-point",
         "identity-candidates-at",
@@ -1068,6 +1118,8 @@ def _perform_uia_initialized(
                 503, "uia_unavailable", "UI Automation is unavailable"
             ) from exc
         if element is None:
+            if operation == "element-identity-at":
+                return {"status": "ok", "identity": None}
             return {"status": "ok", "locator": None}
         actionable: Optional[object] = None
         node: Optional[object] = element
@@ -1115,6 +1167,11 @@ def _perform_uia_initialized(
                 "target_fingerprint": (
                     point_candidate["fingerprint"] if matches else None
                 ),
+            }
+        if operation == "element-identity-at":
+            return {
+                "status": "ok",
+                "identity": _element_identity(actionable or element),
             }
         return {"status": "ok", "locator": _locator_from_control(actionable or element)}
 
@@ -1366,10 +1423,10 @@ def _bounded_application_identifier(name: str) -> Optional[str]:
     return identifier
 
 
-def _foreground_application_identity() -> Optional[str]:
-    """Observe the foreground executable without reading its window title."""
+def _process_image_identifier(pid: int) -> Optional[str]:
+    """Canonical executable basename of one live process, or None."""
 
-    if os.name != "nt":
+    if os.name != "nt" or not isinstance(pid, int) or pid <= 0:
         return None
     try:
         import ctypes  # noqa: PLC0415
@@ -1378,15 +1435,7 @@ def _foreground_application_identity() -> Optional[str]:
         win_dll = getattr(ctypes, "WinDLL", None)
         if win_dll is None:
             return None
-        user32 = win_dll("user32", use_last_error=True)
         kernel32 = win_dll("kernel32", use_last_error=True)
-        user32.GetForegroundWindow.argtypes = []
-        user32.GetForegroundWindow.restype = wintypes.HWND
-        user32.GetWindowThreadProcessId.argtypes = [
-            wintypes.HWND,
-            ctypes.POINTER(wintypes.DWORD),
-        ]
-        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
         kernel32.OpenProcess.argtypes = [
             wintypes.DWORD,
             wintypes.BOOL,
@@ -1402,16 +1451,7 @@ def _foreground_application_identity() -> Optional[str]:
         kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         kernel32.CloseHandle.restype = wintypes.BOOL
-        hwnd = user32.GetForegroundWindow()
-        if not hwnd:
-            return None
-        pid = wintypes.DWORD()
-        if (
-            not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            or not pid.value
-        ):
-            return None
-        process = kernel32.OpenProcess(0x1000, False, pid.value)
+        process = kernel32.OpenProcess(0x1000, False, pid)
         if not process:
             return None
         try:
@@ -1426,6 +1466,40 @@ def _foreground_application_identity() -> Optional[str]:
             kernel32.CloseHandle(process)
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
+
+
+def _foreground_application_identity() -> Optional[str]:
+    """Observe the foreground executable without reading its window title."""
+
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return None
+        user32 = win_dll("user32", use_last_error=True)
+        user32.GetForegroundWindow.argtypes = []
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.GetWindowThreadProcessId.argtypes = [
+            wintypes.HWND,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return None
+        pid = wintypes.DWORD()
+        if (
+            not user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            or not pid.value
+        ):
+            return None
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+    return _process_image_identifier(int(pid.value))
 
 
 def _native_session_digest() -> Optional[str]:
@@ -1642,6 +1716,7 @@ def make_handler_class(
                 "/input/guarded": ("guarded-input", ""),
                 "/context/identity": ("context", "identity"),
                 "/uia/locator-at": ("uia", "locator-at"),
+                "/uia/element-identity-at": ("uia", "element-identity-at"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),
