@@ -1246,7 +1246,7 @@ def _versions_frame(
         return {
             "read": {"kind": "sql", **settings.read, "sql_query": sql},
             "record_field": "id",
-            "target_field": "id",
+            "target_field": _key_alias(b.schema, plan.anchor),
             "target_surface": "record",
             "version_field": "ver",
         }
@@ -1271,7 +1271,7 @@ def _versions_frame(
     return {
         "read": {"kind": "sql", **settings.read, "sql_query": sql},
         "record_field": "id",
-        "target_field": "id",
+        "target_field": _key_alias(b.schema, plan.anchor),
         "target_surface": "record",
         "version_field": "ver",
         "author_field": "author",
@@ -1621,15 +1621,28 @@ class Surface:
         return f"SELECT {cols} FROM {b.qt(self.table)} {self.alias}"
 
 
+def _key_alias(schema: Schema, table: str) -> str:
+    """The name a surface reads the table's key under: ``id``, unless the
+    table has its own ``id`` column that is not the whole primary key (a
+    ``uuid`` key, a key of ``id`` and ``rev``), which must be read as it is."""
+
+    t = schema.tables[table]
+    if t.column("id") is None or t.primary_key == ["id"]:
+        return "id"
+    return "oa_key"
+
+
 def _base_columns(b: SqlBuilder, table: str, alias: str = "t") -> list[tuple[str, str]]:
+    """Every column of ``table`` by its own name, and the key under
+    :func:`_key_alias` when that isn't a column already."""
+
     t = b.schema.tables[table]
     cols: list[tuple[str, str]] = []
     key = b.key(alias, table)
-    if key is not None:
-        cols.append(("id", key))
+    name = _key_alias(b.schema, table)
+    if key is not None and t.column(name) is None:
+        cols.append((name, key))
     for c in t.columns:
-        if c.name == "id" and key is not None:
-            continue
         cols.append((c.name, b.text(alias, table, c.name)))
     return cols
 
@@ -2054,6 +2067,12 @@ def build_contract(
         for s in surfaces.values()
         if s.name.startswith("raw_") and getattr(s, "_new_row_fields", None)
     }
+    for t in judged_by:
+        # A row the contract's own read declares is judged by the table
+        # too, every column exactly. A new one may set any column: the read
+        # checks each (placed, pinned, pinned empty, or named unchecked by
+        # the person).
+        nrf.setdefault(t, sorted(c.name for c in schema.tables[t].columns))
     if nrf:
         db["new_row_fields"] = nrf
     if settings.recheck_after_s:

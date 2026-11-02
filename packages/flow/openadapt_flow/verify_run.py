@@ -376,6 +376,25 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
             raise VerifyRunError(
                 "frame.database.judged_by names no such surface: " + ", ".join(unknown)
             )
+        named = list(database.judged_by.values())
+        twice = sorted({s for s in named if named.count(s) > 1})
+        if twice:
+            raise VerifyRunError(
+                "frame.database.judged_by names one surface for two tables: "
+                + ", ".join(twice)
+            )
+        attribution_spec = cfg.frame.attribution if cfg.frame is not None else None
+        surface_ignore = set(cfg.frame.ignore_fields if cfg.frame is not None else [])
+        if attribution_spec is not None and attribution_spec.kind == "record_field":
+            surface_ignore |= set(attribution_spec.server_set)
+        for table in sorted(database.judged_by):
+            loose = sorted(surface_ignore - set(database.ignore_columns_for(table)))
+            if loose:
+                raise VerifyRunError(
+                    f"frame.database.judged_by: the surface for {table} ignores "
+                    f"{', '.join(loose)}, which the table doesn't ignore "
+                    "(frame.database.ignore_columns)"
+                )
         both = sorted(
             set(database.judged_by) & (set(database.views) | set(database.modes()))
         )
@@ -1028,52 +1047,46 @@ def _read_audit(verifier: Any) -> Optional[list[dict[str, Any]]]:
         return None
 
 
-def _judged_elsewhere(
+def _declared_by_surface(
     table: str,
-    rows: tuple[EffectState, Optional[list[dict[str, Any]]]],
-    surface: tuple[EffectState, Optional[list[dict[str, Any]]]],
+    surface: str,
+    state: tuple[EffectState, Optional[list[dict[str, Any]]]],
+    effects: Sequence[Effect],
+    routes: Mapping[str, Sequence[str]],
     db: _DatabaseFrame,
-) -> tuple[EffectState, Optional[list[dict[str, Any]]]]:
-    """``table``'s moved rows without those its surface saw move.
+) -> set[str]:
+    """Row key MACs of ``table``'s rows that ``surface`` declares
+    (``frame.database.judged_by``): its records, before or after the save,
+    that an effect routed to it selects, matched to the table by primary
+    key. The table judges those rows itself, every column exactly, with the
+    surface's fields as the ones a declared row may change. Empty when a
+    declared record's key can't be read, so nothing is declared there and a
+    declared change stops the write."""
 
-    The surface reads every column of the table (``frame.database.judged_by``)
-    and judges each row it saw change, appear or go. Those rows are left to
-    it, matched by primary key. Nothing is left to it when the surface
-    couldn't be read after the save, when one of its records lacks a column
-    of the table, or when a record's key can't be read: then the table
-    judges every moved row itself, and a declared change it can't see as
-    declared stops the write.
-    """
+    from openadapt_flow.runtime.effects.effect import record_matches
+    from openadapt_flow.runtime.effects.frame import declared_selectors
 
-    from openadapt_flow.runtime.effects.db_snapshot import KEY
-
-    before_state, after_rows = rows
-    surface_before, surface_after = surface
-    snap = db.old.tables.get(table) if db.old is not None else None
-    if surface_after is None or not surface_before.reachable or snap is None:
-        return rows
-    columns = set(snap.columns)
-    seen: dict[str, list[Any]] = {}
-    for side, records in ((0, surface_before.records), (1, surface_after)):
-        for record in records:
-            if not columns <= set(record):
-                return rows
-            k = db.row_key(table, record)
-            pair = seen.setdefault(k or "", [None, None])
-            if k is None or pair[side] is not None:
-                return rows  # no key, or two records with one key
-            pair[side] = json.dumps(dict(record), sort_keys=True, default=str)
-    moved = {k for k, (a, b) in seen.items() if a != b}
-    return (
-        EffectState(
-            substrate=before_state.substrate,
-            reachable=before_state.reachable,
-            records=[r for r in before_state.records if r.get(KEY) not in moved],
-        ),
-        None
-        if after_rows is None
-        else [r for r in after_rows if r.get(KEY) not in moved],
-    )
+    before_state, after_records = state
+    if after_records is None or not before_state.reachable:
+        return set()
+    selectors = [
+        s
+        for i, effect in enumerate(effects)
+        if surface in routes.get(str(i), ())
+        for s in declared_selectors(effect)
+    ]
+    typed = before_state.substrate == "sql"
+    keys: set[str] = set()
+    for record in [*before_state.records, *after_records]:
+        if not any(
+            record_matches(dict(record), s, text_numbers=typed) for s in selectors
+        ):
+            continue
+        k = db.row_key(table, record)
+        if k is None:
+            return set()
+        keys.add(k)
+    return keys
 
 
 def judge_run_frame(
@@ -1153,6 +1166,8 @@ def judge_run_frame(
     elif not database_only:
         slices[""] = (before, _post_records(after))
     identities: Optional[dict[str, str]] = None
+    #: Table -> row key MACs its ``judged_by`` surface declares.
+    declared_rows: dict[str, set[str]] = {}
     if db is not None and db.still_moving:
         tries = db.evidence.get("settle_attempts", 1)
         return FrameVerdict(
@@ -1193,8 +1208,8 @@ def judge_run_frame(
         if spec.database is not None and db.row_key is not None:
             for table, surface in spec.database.judged_by.items():
                 if table in db.slices and surface in slices:
-                    slices[table] = _judged_elsewhere(
-                        table, slices[table], slices[surface], db
+                    declared_rows[table] = _declared_by_surface(
+                        table, surface, slices[surface], bound_effects, routes, db
                     )
         identities = {name: KEY for name in db.slices}
     audit_before: Optional[list[dict[str, Any]]] = None
@@ -1273,6 +1288,7 @@ def judge_run_frame(
         database_evidence=None if db is None else db.evidence,
         excuse=excuse,
         user_ids=None if db is None else db.users_map,
+        declared_rows=declared_rows,
     )
     profile = db.evidence.get("profile") if db is not None else None
     if profile is not None:

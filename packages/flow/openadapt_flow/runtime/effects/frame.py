@@ -302,15 +302,13 @@ class FrameDatabase(BaseModel):
     #: Table -> the surface whose records it holds (``patient_data`` ->
     #: ``patient``): an effect routed to the surface declares rows here too.
     views: dict[str, str] = Field(default_factory=dict)
-    #: Table -> a surface that reads every row and every column of it (a
-    #: contract's own read of its main record). After the save, a row of the
-    #: table that the surface saw change, appear or go (matched by primary
-    #: key) is judged by that surface alone, with the effects' rules; every
-    #: other row is compared here as usual. A recheck reads no surface, so
-    #: there the whole table is compared and any change since the post-save
-    #: read stops the write. A row the surface can't be matched to (no
-    #: single-value key in its records, or a column it doesn't read) is
-    #: compared here.
+    #: Table -> a surface that declares its rows (a contract's own read of
+    #: its main record). After the save, the table's rows that surface's
+    #: records select (by an effect routed to it, matched by primary key)
+    #: are declared rows of the table: the table judges them, every column
+    #: exactly, with the surface's ``target_fields_by_surface`` fields as the
+    #: ones they may change. A recheck reads no surface, so there nothing is
+    #: declared and any change since the post-save read refutes.
     judged_by: dict[str, str] = Field(default_factory=dict)
     #: Table -> columns a new declared or side row may set beyond the fields
     #: the effects name (ids, creation dates, columns the app's form fills
@@ -797,6 +795,7 @@ def judge_frame(
         ]
     ] = None,
     user_ids: Optional[Mapping[str, str]] = None,
+    declared_rows: Optional[Mapping[str, Collection[str]]] = None,
 ) -> FrameVerdict:
     """Judge the frame of ``effects`` over ``slices``.
 
@@ -1351,13 +1350,18 @@ def judge_frame(
     added_by_others: set[tuple[str, str]] = set()
     views_of = dict(database.views) if database is not None else {}
 
+    #: Table -> the surface that declares its rows (``database.judged_by``).
+    judged_of = dict(database.judged_by) if database is not None else {}
+    surface_declared = {t: set(k) for t, k in (declared_rows or {}).items()}
+
     def may_change_for(name: str) -> set[str]:
         by_surface = spec.target_fields_by_surface
         if by_surface is None:
             return may_change
         if name in by_surface:
             return set(by_surface[name])
-        return set(by_surface.get(views_of.get(name, ""), []))
+        surface = views_of.get(name) or judged_of.get(name, "")
+        return set(by_surface.get(surface, []))
 
     declared_keys: set[str] = set()
     #: What an audit entry names for each compared record (``ref_of``).
@@ -1537,8 +1541,10 @@ def judge_frame(
             before = before_map.get(key)
             after = after_map.get(key)
             is_declared = (
-                before is not None and declared(before, hashed=hasher is not None)
-            ) or (after is not None and declared(after))
+                (before is not None and declared(before, hashed=hasher is not None))
+                or (after is not None and declared(after))
+                or str(key) in surface_declared.get(name, ())
+            )
             refs[(name, str(key))] = ref_of(name, key, before, after)
             if is_declared:
                 ref = refs[(name, str(key))][0]
