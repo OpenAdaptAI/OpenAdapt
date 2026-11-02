@@ -37,13 +37,16 @@ element is acted on by the gated physical click, not a bypassing AX action.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
+import secrets
 import re
 import sys
 import time
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from openadapt_flow.backend import FreshActuationRequired, StructuralResolutionRefused
@@ -61,6 +64,7 @@ from openadapt_flow.backends.remote_display import (
     require_pyobjc,
 )
 from openadapt_flow.ir import (
+    ActionDeliveryReceipt,
     StructuralHandle,
     StructuralLocator,
 )
@@ -1442,6 +1446,55 @@ class MacOSBackend(RemoteDisplayBackend):
             target_fingerprint=_fingerprint(candidate),
             candidate_count=1,
             supported_operations=list(candidate.supported_operations),
+        )
+
+    def act_structural(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        """Click the same unique AX element the resolver found, or refuse.
+
+        Re-finds ``locator``'s one element and requires its fingerprint (AX
+        path, role, name, app, window and bounds) to still equal the
+        handle's, then delivers the fully gated physical click at its center.
+        The receipt binds that fingerprint. It proves input delivery only;
+        postconditions and system-of-record effects still decide the outcome.
+        """
+        expected = handle.target_fingerprint
+        if not expected:
+            raise MacOSBackendError("AX actuation requires a target fingerprint")
+        with self._input_lock:
+            window = self._ensure_captured()
+            candidate = self._unique_candidate(locator)
+            if candidate is None:
+                raise MacOSBackendError(
+                    "AX target disappeared between resolution and actuation"
+                )
+            if not hmac.compare_digest(expected, _fingerprint(candidate)):
+                raise MacOSBackendError(
+                    "AX target changed between resolution and actuation; "
+                    "refusing a stale click"
+                )
+            rect = self._in_window_pixel_rect(window, candidate.bounds)
+            if rect is None:
+                raise MacOSBackendError("AX target is no longer inside the window")
+            x, y, w, h = rect
+            point = (x + w // 2, y + h // 2)
+            if point != tuple(handle.point):
+                raise MacOSBackendError(
+                    "AX target moved between resolution and actuation"
+                )
+            self.click(*point, double=double)
+        return ActionDeliveryReceipt(
+            receipt_id=secrets.token_hex(12),
+            operation="physical_double_click" if double else "physical_click",
+            native=False,
+            target_fingerprint=expected,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+            outcome_verified=False,
         )
 
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:

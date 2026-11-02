@@ -202,9 +202,10 @@ def test_macos_backend_now_advertises_structured_identity_capability() -> None:
     assert isinstance(target, Backend)
     assert isinstance(target, IdentityBackend)
     assert isinstance(target, StructuralActionBackend)
-    # It does NOT claim native AXPress actuation: a resolved element is acted on
-    # through the fully gated physical click, not a bypassing AX action.
-    assert not isinstance(target, NativeStructuralActionBackend)
+    # It acts on a resolved element through ``act_structural``, but that is the
+    # fully gated physical click, never a bypassing AX action (see the
+    # act_structural tests below: the receipt is ``physical_click``, not native).
+    assert isinstance(target, NativeStructuralActionBackend)
 
 
 def test_injected_clients_are_headless_safe() -> None:
@@ -611,3 +612,97 @@ def test_record_compile_replay_over_macos_backend(tmp_path) -> None:
     # And the click resolved through the NEW AX structural rung (not a fallback).
     click_result = next(r for r in report.results if r.resolution is not None)
     assert click_result.resolution.rung == "structural"
+
+
+# -- act_structural: the click binds the resolved element (#1710) --------------
+
+SAVE_LOCATOR = StructuralLocator(
+    automation_id="save-button", role="button", name="Save", window_name="oa-trial.txt"
+)
+
+
+def _clicks(client: FakeMacClient) -> list[tuple]:
+    return [c for c in client.calls if c[0] == "mouse" and c[4]]
+
+
+def test_act_structural_clicks_the_element_and_binds_its_fingerprint() -> None:
+    from openadapt_flow.action_evidence import _delivery_receipt_error
+    from openadapt_flow.ir import ActionKind, Anchor, Step
+    from openadapt_flow.runtime.resolver import Resolution
+    from openadapt_flow.runtime.replayer import StepResult
+
+    client = FakeMacClient()
+    target = backend(client)
+    handle = target.locate_structural(SAVE_LOCATOR)
+    assert handle is not None
+    receipt = target.act_structural(SAVE_LOCATOR, handle)
+    assert receipt.operation == "physical_click"
+    assert receipt.native is False
+    assert receipt.outcome_verified is False
+    assert receipt.target_fingerprint == handle.target_fingerprint
+    # The physical click lands at the element's center: pixel (440, 60) is
+    # screen point (230, 50).
+    assert [c[1:3] for c in _clicks(client)] == [(230.0, 50.0)]
+
+    # The durable checkpoint's evidence check accepts it as a structural click.
+    step = Step(
+        id="s",
+        intent="click 'Save'",
+        action=ActionKind.CLICK,
+        anchor=Anchor(
+            template="t.png",
+            region=(400, 40, 80, 40),
+            click_point=(440, 60),
+            structural=SAVE_LOCATOR,
+        ),
+    )
+    result = StepResult(step_id="s", intent=step.intent, ok=True)
+    result.resolution = Resolution(
+        point=handle.point,
+        confidence=1.0,
+        rung="structural",
+        elapsed_ms=1.0,
+        structural_handle=handle,
+    )
+    result.delivery_receipt = receipt
+    result.actuation = "dom"
+    assert _delivery_receipt_error(step, result, params={}) is None
+
+
+def test_act_structural_double_click_receipt() -> None:
+    client = FakeMacClient()
+    target = backend(client)
+    handle = target.locate_structural(SAVE_LOCATOR)
+    assert handle is not None
+    receipt = target.act_structural(SAVE_LOCATOR, handle, double=True)
+    assert receipt.operation == "physical_double_click"
+
+
+@pytest.mark.parametrize(
+    "change, error",
+    [
+        ("moved", "changed between resolution and actuation"),
+        ("gone", "disappeared"),
+        ("ambiguous", "candidate_count=2"),
+        ("no_fingerprint", "requires a target fingerprint"),
+    ],
+)
+def test_act_structural_refuses_a_stale_or_ambiguous_target(change, error) -> None:
+    from dataclasses import replace
+
+    client = FakeMacClient()
+    ax = FakeMacAXClient()
+    target = backend(client, ax)
+    handle = target.locate_structural(SAVE_LOCATOR)
+    assert handle is not None
+    if change == "moved":
+        ax.candidates = [replace(SAVE_ELEMENT, bounds=(210.0, 80.0, 40.0, 20.0))]
+    elif change == "gone":
+        ax.candidates = []
+    elif change == "ambiguous":
+        ax.candidates = [SAVE_ELEMENT, replace(SAVE_ELEMENT, ax_path="0/7/2")]
+    else:
+        handle = handle.model_copy(update={"target_fingerprint": None})
+    with pytest.raises(Exception, match=error):
+        target.act_structural(SAVE_LOCATOR, handle)
+    assert _clicks(client) == []
