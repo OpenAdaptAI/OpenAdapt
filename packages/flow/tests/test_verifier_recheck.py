@@ -688,6 +688,26 @@ def test_a_downgraded_later_write_still_excuses_its_own_window(
     assert _recheck(contract, first).outcome == "REFUTED"
 
 
+def test_a_later_write_whose_frame_was_not_judged_is_refused_as_excuse(
+    tmp_path: Path, due_now: None
+) -> None:
+    # Review #1670, round 2, item 2: a later write whose own frame check gave
+    # UNCERTAIN (not judged) cannot excuse rows, and passing it must refuse
+    # rather than letting the earlier write be falsely refuted.
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert second.recheck is not None
+    unjudged_payload = dict(second.recheck.payload)
+    evidence = dict(unjudged_payload["evidence"])
+    evidence["frame"] = {"status": "not_checked"}
+    unjudged_payload["evidence"] = evidence
+    verifier._issue_recheck(unjudged_payload)
+    unjudged_state = RecheckState(unjudged_payload, params=second.recheck.params)
+
+    with pytest.raises(VerifierError, match=r"excused_by\[0\]'s frame was not judged"):
+        _recheck(contract, first, excused_by=[unjudged_state])
+
+
 # -- settling: a live app moves on its own ------------------------------------------
 
 

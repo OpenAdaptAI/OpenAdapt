@@ -2373,8 +2373,12 @@ def recheck_run(
                 f"excused_by[{i}] started before this write's post-save read"
             )
         window = _later_window(other)
-        if window is not None:
-            windows.append(window)
+        if window is None:
+            raise VerifyRunError(
+                f"excused_by[{i}]'s frame was not judged: what it wrote can't "
+                "be told apart; reconcile it before rechecking this write"
+            )
+        windows.append(window)
     salt = bytes.fromhex(str(state["salt"]))
     detail: dict[str, Any] = {FRAME_DB_DETAIL: dict(post["snapshot"])}
     if post.get("audit") is not None:

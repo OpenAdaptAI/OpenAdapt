@@ -2308,6 +2308,12 @@ def _judge_recheck(
                 f"excused_by[{i}] has no params: load it with RecheckState.load"
                 "(path, params=...)"
             )
+        frame = ((later.payload.get("evidence") or {}).get("frame") or {}).get("status")
+        if frame not in ("held", "refuted"):
+            raise VerifierError(
+                f"excused_by[{i}]'s frame was not judged: what it wrote can't "
+                "be told apart; reconcile it before rechecking this write"
+            )
         excused.append((later.payload, later.params))
     try:
         verdict, read_at = recheck_run(
