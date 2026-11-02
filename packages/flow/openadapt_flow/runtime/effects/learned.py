@@ -13,9 +13,11 @@ A row relates to the write in one of two ways, or not at all:
 
 - ``target``: a row the write declares or adds (its effects' records and
   side records). The frame already knows these rows.
-- ``actor_row``: a row of the acting user. Its ``actor_column`` holds the
-  actor's id, before and after the write. The users table's own row has its
-  key there; a token or user-property row has its user column there.
+- ``actor_row``: a row of the acting user. Each of its ``actor_columns``
+  holds the actor's id, before and after the write. The users table's own
+  row has its key there; a token or user-property row has its user columns
+  there. Every user column the row was seen to hold the actor's id in must
+  hold it: a token the actor issued for someone else is not the actor's.
 
 Nothing else can be excused, however often it moves. A learned excuse names
 a table, the exact columns, the change (``changed`` or ``added``, never a
@@ -54,9 +56,9 @@ class LearnedExcuse(BaseModel):
     columns: list[str] = Field(min_length=1)
     change: LearnedChange
     relation: Relation
-    #: ``actor_row`` only: the column that holds the acting user's id (the
-    #: users table's key, or a user column of another table).
-    actor_column: Optional[str] = None
+    #: ``actor_row`` only: the columns that must all hold the acting user's
+    #: id (the users table's key, or the user columns of another table).
+    actor_columns: Optional[list[str]] = None
 
     @field_validator("table")
     @classmethod
@@ -78,25 +80,33 @@ class LearnedExcuse(BaseModel):
     @model_validator(mode="after")
     def _shape(self) -> "LearnedExcuse":
         if self.relation == "actor_row":
-            if not self.actor_column:
-                raise ValueError("an actor_row excuse names its actor_column")
-            if self.change == "changed" and self.actor_column in self.columns:
+            cols = self.actor_columns or []
+            if not cols or any(not c or c.startswith("__") for c in cols):
+                raise ValueError("an actor_row excuse names its actor_columns")
+            if len(set(cols)) != len(cols):
+                raise ValueError("an actor_row excuse lists each actor column once")
+            self.actor_columns = sorted(cols)
+            if self.change == "changed" and set(cols) & set(self.columns):
                 raise ValueError(
-                    "an actor_row excuse can't let the actor column change: the "
+                    "an actor_row excuse can't let an actor column change: the "
                     "row would move to another user"
                 )
-            if self.change == "added" and self.actor_column not in self.columns:
+            if self.change == "added" and not set(cols) <= set(self.columns):
                 raise ValueError(
-                    "an added actor_row sets its actor column: list it in columns"
+                    "an added actor_row sets its actor columns: list them in columns"
                 )
-        elif self.actor_column is not None:
-            raise ValueError("actor_column goes with relation actor_row")
+        elif self.actor_columns is not None:
+            raise ValueError("actor_columns go with relation actor_row")
         return self
 
     def label(self) -> str:
         """A short, value-free name for receipts: which excuse was used."""
 
-        how = f"{self.relation}:{self.actor_column}" if self.actor_column else "target"
+        how = (
+            f"{self.relation}:{'+'.join(self.actor_columns)}"
+            if self.actor_columns
+            else "target"
+        )
         return f"learned:{self.table}:{self.change}:{how}:{','.join(self.columns)}"
 
 
@@ -125,8 +135,7 @@ class LearnedFrame(BaseModel):
         cols: set[str] = set()
         for e in self.excuses:
             cols |= set(e.columns)
-            if e.actor_column:
-                cols.add(e.actor_column)
+            cols |= set(e.actor_columns or [])
         return sorted(cols)
 
 
@@ -253,13 +262,16 @@ def covers(
         if not set(fields) <= set(excuse.columns):
             continue
         if relation == "actor_row":
-            if actor is None or not excuse.actor_column:
+            if actor is None or not excuse.actor_columns:
                 continue
             if change == "changed" and (before is None or after is None):
                 continue
             if change == "added" and (before is not None or after is None):
                 continue
-            if not holds_actor(excuse.actor_column, actor, before, after, hasher):
+            if not all(
+                holds_actor(c, actor, before, after, hasher)
+                for c in excuse.actor_columns
+            ):
                 continue
         return excuse.label()
     return None

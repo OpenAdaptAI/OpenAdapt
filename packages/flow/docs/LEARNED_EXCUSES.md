@@ -38,7 +38,11 @@ A moved row can be excused only for one of two reasons:
 | `actor_row` | the acting user's own row | the user's `last_login`, the user's token's `last_seen`, a property row added for the user |
 
 The acting user's row is the users table's row whose key is the actor's
-id, or a row whose user column holds the actor's id. You name the users
+id, or a row whose user columns hold the actor's id. When a row has more
+than one user column holding the actor's id (a token's `user_id` and its
+`issued_by`), the excuse names all of them, and each must hold the actor's
+id. A token the agent issued for a colleague has the agent in `issued_by`
+but the colleague in `user_id`, so it is not the agent's row. You name the users
 table (`--users TABLE` or `--users TABLE.KEY`). The user columns of other
 tables come from the schema's foreign keys to that key (`--schema
 schema.json` or `--read read.yaml`). You can confirm more with
@@ -66,12 +70,12 @@ frame:
         columns: [last_login]
         change: changed
         relation: actor_row
-        actor_column: id
+        actor_columns: [id]
       - table: user_property
         columns: [property, user_id, value]
         change: added
         relation: actor_row
-        actor_column: user_id
+        actor_columns: [user_id]
     proposal_sha256: sha256:...
     approved_by: Dana Reviewer
     approved_at: "2026-10-31T12:00:00Z"
@@ -90,10 +94,10 @@ again from this run:
 
 - A `target` excuse covers only rows this write declares. A look-alike row
   in the same table is still collateral.
-- An `actor_row` excuse covers a row only when its actor column holds this
-  run's actor id before and after the write. Another user's row, a row
-  that moved to the actor, or a row added for someone else is still
-  collateral.
+- An `actor_row` excuse covers a row only when every one of its actor
+  columns holds this run's actor id before and after the write. Another
+  user's row, a row the actor issued for someone else, a row that moved to
+  the actor, or a row added for someone else is still collateral.
 - The moved columns must all be in the excuse. Another column of the same
   row is still collateral.
 
@@ -143,10 +147,11 @@ Approving again replaces the earlier `frame.learned` with the new one.
 
 ## Limits
 
-- A learned excuse is only as narrow as the actor column. If a table's
-  user column means "created by" rather than "belongs to", an excuse on it
-  covers every row the agent created. Read the proposal's actor columns
-  before you approve.
+- A learned excuse is only as narrow as its actor columns. If a table's
+  only user column means "created by" rather than "belongs to", an excuse
+  on it covers every row the agent created, other users' rows included.
+  Read the proposal's actor columns before you approve, and reject an
+  excuse whose only actor column is a creator.
 - A learned `added` excuse for the actor's row lets the agent itself add
   such a row too, with any values in the excused columns.
 - `target` excuses apply to tables the whole-database frame compares. A

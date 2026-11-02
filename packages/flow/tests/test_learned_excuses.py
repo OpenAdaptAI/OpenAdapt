@@ -77,7 +77,8 @@ class Engine:
             f"CREATE TABLE app_user (id {key}, name VARCHAR(50), "
             "email VARCHAR(80), last_login VARCHAR(30))",
             f"CREATE TABLE api_token (id {key}, user_id INTEGER NOT NULL "
-            "REFERENCES app_user(id), label VARCHAR(30), last_seen VARCHAR(30))",
+            "REFERENCES app_user(id), issued_by INTEGER REFERENCES app_user(id), "
+            "label VARCHAR(30), last_seen VARCHAR(30))",
             "CREATE TABLE user_property (user_id INTEGER NOT NULL REFERENCES "
             "app_user(id), property VARCHAR(50) NOT NULL, value VARCHAR(50), "
             "PRIMARY KEY (user_id, property))",
@@ -89,8 +90,8 @@ class Engine:
             "(1, 'admin', 'admin@example.test', 't0'), "
             "(2, 'agentbot', 'bot@example.test', 't0'), "
             "(3, 'colleague', 'col@example.test', 't0')",
-            "INSERT INTO api_token (id, user_id, label, last_seen) VALUES "
-            "(1, 2, 'bot', 't0'), (2, 3, 'colleague', 't0')",
+            "INSERT INTO api_token (id, user_id, issued_by, label, last_seen) VALUES "
+            "(1, 2, 2, 'bot', 't0'), (2, 3, 2, 'colleague', 't0')",
             "INSERT INTO asset (id, tag, name, assigned_to, modified_at) VALUES "
             "(1, 'LT-100', 'Laptop A', NULL, 't0'), "
             "(2, 'LT-1000', 'Laptop A', NULL, 't0')",
@@ -313,21 +314,21 @@ LOGIN = {
     "columns": ["last_login"],
     "change": "changed",
     "relation": "actor_row",
-    "actor_column": "id",
+    "actor_columns": ["id"],
 }
 SEEN = {
     "table": "api_token",
     "columns": ["last_seen"],
     "change": "changed",
     "relation": "actor_row",
-    "actor_column": "user_id",
+    "actor_columns": ["user_id"],
 }
 FIRST_LOGIN = {
     "table": "user_property",
     "columns": ["property", "user_id", "value"],
     "change": "added",
     "relation": "actor_row",
-    "actor_column": "user_id",
+    "actor_columns": ["user_id"],
 }
 STAMP = {
     "table": "note",
@@ -410,7 +411,7 @@ def test_bookkeeping_refutes_a_correct_write_until_learned(
     by_table = {m["table"]: m for m in moves}
     assert by_table["app_user"]["actor_columns"] == ["id"]
     assert by_table["app_user"]["columns"] == ["last_login"]
-    assert by_table["api_token"]["actor_columns"] == ["user_id"]
+    assert by_table["api_token"]["actor_columns"] == ["issued_by", "user_id"]
     assert by_table["user_property"]["change"] == "added"
     assert by_table["note"]["target"] is True
     assert by_table["note"]["columns"] == ["stamp"]
@@ -768,12 +769,14 @@ def test_learn_propose_approve_on_real_writes(engine: Engine, tmp_path: Path) ->
         "app_user",
         None if schema else "id",
         schema,
-        [] if schema else ["api_token.user_id", "user_property.user_id"],
+        []
+        if schema
+        else ["api_token.user_id", "api_token.issued_by", "user_property.user_id"],
     )
     if schema is not None:
         # The user columns come from the schema's foreign keys.
         assert users.columns == {
-            "api_token": {"user_id": "foreign_key"},
+            "api_token": {"issued_by": "foreign_key", "user_id": "foreign_key"},
             "user_property": {"user_id": "foreign_key"},
         }
     proposal = learn.propose(episodes, users=users)
@@ -782,14 +785,19 @@ def test_learn_propose_approve_on_real_writes(engine: Engine, tmp_path: Path) ->
     assert kind["ignored"] == 1
     assert kind["ignored_by_reason"] == {"the declared effects didn't hold": 1}
     got = {
-        (e["table"], e["change"], e["relation"], e.get("actor_column")): e["columns"]
+        (
+            e["table"],
+            e["change"],
+            e["relation"],
+            tuple(e.get("actor_columns") or ()),
+        ): e["columns"]
         for e in kind["excuses"]
     }
     assert got == {
-        ("api_token", "changed", "actor_row", "user_id"): ["last_seen"],
-        ("app_user", "changed", "actor_row", "id"): ["last_login"],
-        ("note", "added", "target", None): ["stamp"],
-        ("user_property", "added", "actor_row", "user_id"): [
+        ("api_token", "changed", "actor_row", ("issued_by", "user_id")): ["last_seen"],
+        ("app_user", "changed", "actor_row", ("id",)): ["last_login"],
+        ("note", "added", "target", ()): ["stamp"],
+        ("user_property", "added", "actor_row", ("user_id",)): [
             "property",
             "user_id",
             "value",
@@ -825,6 +833,78 @@ def test_learn_propose_approve_on_real_writes(engine: Engine, tmp_path: Path) ->
     _refuted(
         check(engine, approved, {"title": t, "body": "Body text"}, fault, tmp_path)
     )
+
+    # The colleague's token, which the bot issued: one user column holds the
+    # bot's id, the other the colleague's. The colleague's own request moves
+    # it inside the window (a concurrent edit with no audit trail). The
+    # learned excuse needs both user columns, so it is collateral.
+    t = _title()
+
+    def colleague_request() -> None:
+        write_note(engine, t)
+        engine.run("UPDATE api_token SET last_seen = 'c1' WHERE id = 2")
+
+    _refuted(
+        check(
+            engine,
+            approved,
+            {"title": t, "body": "Body text"},
+            colleague_request,
+            tmp_path,
+        )
+    )
+
+
+def test_actor_row_never_covers_a_row_the_actor_issued_for_another_user(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A token's ``issued_by`` holds the bot's id on the colleague's token
+    too. An excuse learned with every user column of the bot's own token
+    (``issued_by`` and ``user_id``) never covers the colleague's."""
+
+    seen_both = {**SEEN, "actor_columns": ["issued_by", "user_id"]}
+    block = learned_block(LOGIN, seen_both, FIRST_LOGIN, STAMP)
+    t = _title()
+    ok = check(
+        engine,
+        note_contract(engine, block),
+        {"title": t, "body": "Body text"},
+        lambda: write_note(engine, t),
+        tmp_path,
+    )
+    assert ok.outcome.value == "CONFIRMED", ok.reasons
+    t = _title()
+
+    def act() -> None:
+        write_note(engine, t)
+        engine.run("UPDATE api_token SET last_seen = 'c2' WHERE id = 2")
+
+    _refuted(
+        check(
+            engine,
+            note_contract(engine, block),
+            {"title": t, "body": "Body text"},
+            act,
+            tmp_path,
+        )
+    )
+
+
+def test_the_learner_requires_every_user_column_that_holds_the_actor() -> None:
+    users = learn.Users(
+        "app_user",
+        "id",
+        {"api_token": {"issued_by": "foreign_key", "user_id": "foreign_key"}},
+    )
+    eps = [
+        _ep(
+            "k",
+            [_move("api_token", ["last_seen"], actor_columns=["issued_by", "user_id"])],
+        )
+        for _ in range(5)
+    ]
+    (e,) = learn.propose(eps, users=users)["kinds"]["k"]["excuses"]
+    assert e["actor_columns"] == ["issued_by", "user_id"]
 
 
 # -- the learner's rules (no database) -----------------------------------------------
@@ -1060,8 +1140,8 @@ def test_a_contract_without_learned_keeps_its_digest(tmp_path: Path) -> None:
         ({**LOGIN, "change": "removed"}, "change"),
         ({**LOGIN, "columns": ["id", "last_login"]}, "actor column change"),
         ({**FIRST_LOGIN, "columns": ["property", "value"]}, "sets its actor column"),
-        ({**LOGIN, "actor_column": None}, "names its actor_column"),
-        ({**STAMP, "actor_column": "user_id"}, "goes with relation actor_row"),
+        ({**LOGIN, "actor_columns": None}, "names its actor_columns"),
+        ({**STAMP, "actor_columns": ["user_id"]}, "go with relation actor_row"),
         ({**LOGIN, "relation": "any_row"}, "relation"),
     ],
 )

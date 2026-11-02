@@ -264,7 +264,10 @@ def relation_of(move: Mapping[str, Any], users: Optional[Users]) -> tuple[str, s
     )
     if not usable:
         return "", "not the write's own row, and not the acting user's row"
-    return "actor_row", usable[0]
+    # Every user column that holds the actor's id: enforcement requires all
+    # of them, so a row the actor only issued or created for another user
+    # (one user column the actor's, another someone else's) is never covered.
+    return "actor_row", ",".join(usable)
 
 
 def propose(
@@ -320,7 +323,7 @@ def propose(
                 "columns": cols,
                 "change": change,
                 "relation": relation,
-                **({"actor_column": actor_col} if actor_col else {}),
+                **({"actor_columns": actor_col.split(",")} if actor_col else {}),
                 "seen": seen,
                 "of": total,
             }
@@ -332,7 +335,9 @@ def propose(
                 and seen >= need
                 and cols
                 and (
-                    change == "changed" or relation != "actor_row" or actor_col in cols
+                    change == "changed"
+                    or relation != "actor_row"
+                    or set(actor_col.split(",")) <= set(cols)
                 )
             )
             if ok:
@@ -435,7 +440,9 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
                 row = (
                     "the write's own row"
                     if e["relation"] == "target"
-                    else f"the acting user's row (`{e['actor_column']}`)"
+                    else "the acting user's row ("
+                    + ", ".join(f"`{c}`" for c in e["actor_columns"])
+                    + ")"
                 )
                 lines.append(
                     f"| {e['id']} | `{e['table']}` | {', '.join(e['columns'])} | "
@@ -553,7 +560,9 @@ def learned_block(
                 "change": e["change"],
                 "relation": e["relation"],
                 **(
-                    {"actor_column": e["actor_column"]} if e.get("actor_column") else {}
+                    {"actor_columns": list(e["actor_columns"])}
+                    if e.get("actor_columns")
+                    else {}
                 ),
             }
         )
