@@ -231,6 +231,9 @@ _MAX_FRESH_ACTUATION_REACQUISITIONS = 2
 # is refused, and how much a pixel must change to count (remote encoders
 # shift colours by a few levels; a dialog or a new row changes far more).
 _PIXEL_RECHECK_REOBSERVES = 2
+# How far a remote codec moved the same hovered target between frames on real
+# AVC444 sessions (benchmark/rdp_avc_real: one pixel on each axis).
+_REMOTE_HOVER_JITTER_PX = 2
 _PIXEL_RECHECK_LEVEL = 24
 _PIXEL_RECHECK_MIN_PIXELS = 4
 # How long a step that raises a browser dialog waits for it to open.
@@ -750,6 +753,35 @@ PIXEL_CENSUS_OCR_MAX_SIMILARITY = 0.6
 #: How long after a create-new form's save the replayer keeps watching its
 #: submit guard before the next step (a script may submit after the click).
 _FORM_GUARD_SETTLE_S = 2.0
+
+
+def _within_hover_jitter(
+    fresh: tuple[int, int],
+    prepared: tuple[int, int],
+    fresh_region: Optional[Region],
+) -> bool:
+    """Whether a re-resolved point may be the prepared one moved by codec jitter.
+
+    Both points must lie inside the fresh match's own box and differ by at
+    most :data:`_REMOTE_HOVER_JITTER_PX` on each axis. With no box there is
+    nothing to bind the prepared point to. A True answer only permits one
+    re-preparation at the fresh point; the click still needs an exact match.
+    """
+    if fresh_region is None:
+        return False
+    x, y, w, h = fresh_region
+    if w <= 0 or h <= 0:
+        return False
+
+    def inside(point: tuple[int, int]) -> bool:
+        return x <= point[0] < x + w and y <= point[1] < y + h
+
+    return (
+        abs(int(fresh[0]) - int(prepared[0])) <= _REMOTE_HOVER_JITTER_PX
+        and abs(int(fresh[1]) - int(prepared[1])) <= _REMOTE_HOVER_JITTER_PX
+        and inside(fresh)
+        and inside(prepared)
+    )
 
 
 class Replayer:
@@ -11511,15 +11543,47 @@ class Replayer:
             and resolution is not None
             and not arm_keyboard
         )
-        if (
-            pointer_edge_pending
-            and resolution is not None
-            and isinstance(self.backend, RemoteActuationBackend)
-            and isinstance(self.backend, PreparedPointerActuationBackend)
-        ):
-            prepared_pointer = resolution.point
+        # A remote codec can re-render the hovered target a pixel or two from
+        # where it matched before the hover. Re-prepare once at the fresh point
+        # and require an exact match there; every point stays reproducible.
+        pointer_target = resolution.point if resolution is not None else None
+        for jitter_attempt in range(2):
+            if (
+                pointer_edge_pending
+                and resolution is not None
+                and isinstance(self.backend, RemoteActuationBackend)
+                and isinstance(self.backend, PreparedPointerActuationBackend)
+            ):
+                prepared_pointer = pointer_target
+                try:
+                    self.backend.prepare_pointer_actuation(*prepared_pointer)
+                except Exception as exc:  # noqa: BLE001 - backend boundary must halt
+                    if self.governed_authorization is not None:
+                        result.safety_halt = True
+                    detail = _scrub_phi(str(exc)) or type(exc).__name__
+                    return (
+                        resolution,
+                        matched_region,
+                        before_png,
+                        "Pointer preflight HALTED before final target resolution for "
+                        f"step '{step.id}' ({step.intent}): {detail}",
+                    )
             try:
-                self.backend.prepare_pointer_actuation(*prepared_pointer)
+                fresh_png = (
+                    self.backend.acquire_actuation_frame()
+                    if isinstance(self.backend, RemoteActuationBackend)
+                    else (
+                        cast(
+                            GuardedKeyboardActionBackend, self.backend
+                        ).guarded_keyboard_frame()
+                        if (
+                            guarded_keyboard_backend
+                            or guarded_type_pointer_backend
+                            or guarded_click_pointer_backend
+                        )
+                        else self.backend.screenshot()
+                    )
+                )
             except Exception as exc:  # noqa: BLE001 - backend boundary must halt
                 if self.governed_authorization is not None:
                     result.safety_halt = True
@@ -11528,70 +11592,55 @@ class Replayer:
                     resolution,
                     matched_region,
                     before_png,
-                    "Pointer preflight HALTED before final target resolution for "
-                    f"step '{step.id}' ({step.intent}): {detail}",
+                    "Actuation preflight HALTED before input for step "
+                    f"'{step.id}' ({step.intent}): {detail}",
                 )
-        try:
-            fresh_png = (
-                self.backend.acquire_actuation_frame()
-                if isinstance(self.backend, RemoteActuationBackend)
-                else (
-                    cast(
-                        GuardedKeyboardActionBackend, self.backend
-                    ).guarded_keyboard_frame()
-                    if (
-                        guarded_keyboard_backend
-                        or guarded_type_pointer_backend
-                        or guarded_click_pointer_backend
-                    )
-                    else self.backend.screenshot()
-                )
-            )
-        except Exception as exc:  # noqa: BLE001 - backend boundary must halt
-            if self.governed_authorization is not None:
-                result.safety_halt = True
-            detail = _scrub_phi(str(exc)) or type(exc).__name__
-            return (
-                resolution,
-                matched_region,
-                before_png,
-                "Actuation preflight HALTED before input for step "
-                f"'{step.id}' ({step.intent}): {detail}",
-            )
 
-        try:
-            fresh_resolution, fresh_region, error = self._resolve_step(
-                step,
-                fresh_png,
-                bundle_dir,
-                workflow,
-                # Opening an opaque select control can repeat its current value
-                # in the option popup. That text is valid target evidence before
-                # the focusing click, but it is no longer unique afterward. The
-                # second phase therefore requires the retained template or
-                # independent relational landmarks.
-                allow_target_ocr=not (
-                    arm_keyboard and step.action is ActionKind.SELECT_OPTION
-                ),
-            )
-        except (OcrResolutionRefused, StructuralResolutionRefused) as exc:
-            result.safety_halt = True
-            result.safety_refusal_evidence = SafetyRefusalEvidence(
-                stage="actuation_revalidation",
-                code="actuation_observation_changed",
-                detector_input_sha256=sha256_bytes(fresh_png),
-            )
-            return (
-                None,
-                None,
-                fresh_png,
-                "Actuation preflight HALTED because the fresh target was "
-                f"ambiguous for step '{step.id}' ({step.intent}): {exc}",
-            )
-        if error is not None:
-            if self.governed_authorization is not None:
+            try:
+                fresh_resolution, fresh_region, error = self._resolve_step(
+                    step,
+                    fresh_png,
+                    bundle_dir,
+                    workflow,
+                    # Opening an opaque select control can repeat its current value
+                    # in the option popup. That text is valid target evidence before
+                    # the focusing click, but it is no longer unique afterward. The
+                    # second phase therefore requires the retained template or
+                    # independent relational landmarks.
+                    allow_target_ocr=not (
+                        arm_keyboard and step.action is ActionKind.SELECT_OPTION
+                    ),
+                )
+            except (OcrResolutionRefused, StructuralResolutionRefused) as exc:
                 result.safety_halt = True
-            return fresh_resolution, fresh_region, fresh_png, error
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="actuation_revalidation",
+                    code="actuation_observation_changed",
+                    detector_input_sha256=sha256_bytes(fresh_png),
+                )
+                return (
+                    None,
+                    None,
+                    fresh_png,
+                    "Actuation preflight HALTED because the fresh target was "
+                    f"ambiguous for step '{step.id}' ({step.intent}): {exc}",
+                )
+            if error is not None:
+                if self.governed_authorization is not None:
+                    result.safety_halt = True
+                return fresh_resolution, fresh_region, fresh_png, error
+            if (
+                jitter_attempt == 0
+                and prepared_pointer is not None
+                and fresh_resolution is not None
+                and fresh_resolution.point != prepared_pointer
+                and _within_hover_jitter(
+                    fresh_resolution.point, prepared_pointer, fresh_region
+                )
+            ):
+                pointer_target = fresh_resolution.point
+                continue
+            break
         if (
             prepared_pointer is not None
             and fresh_resolution is not None
@@ -16886,15 +16935,29 @@ class Replayer:
         baseline = self.__dict__.get("_hover_frames", {}).get(step.id) or checked_png
         current = resolution
         region = self._active_delivery_region
+        # Every frame the target and identity were confirmed on. A screen that
+        # flips between confirmed states (a blinking caret inside the identity
+        # band) settles on one of them; a click is only sent on a frame that
+        # matches a confirmed one.
+        confirmed: list[tuple[bytes, Resolution, Optional[Region]]] = [
+            (baseline, current, region)
+        ]
         for attempt in range(_PIXEL_RECHECK_REOBSERVES + 1):
             fresh = self.backend.screenshot()
-            changed = self._changed_regions(
-                baseline, fresh, self._check_regions(step, current, region)
-            )
-            if not changed:
-                if current is not resolution:
-                    result.resolution = current
-                return current
+            # Against the latest confirmed frame first; its changes are the ones
+            # reported if no confirmed frame matches.
+            changes = [
+                self._changed_regions(
+                    known, fresh, self._check_regions(step, known_res, known_region)
+                )
+                for known, known_res, known_region in reversed(confirmed)
+            ]
+            for (_, known_res, _), known_changed in zip(reversed(confirmed), changes):
+                if not known_changed:
+                    if known_res is not resolution:
+                        result.resolution = known_res
+                    return known_res
+            changed = changes[0]
             what = ", ".join(changed)
             if attempt == _PIXEL_RECHECK_REOBSERVES:
                 result.check_to_click.append(
@@ -16931,6 +16994,7 @@ class Replayer:
                 CheckToClickRecheck(changed=changed, outcome="reobserved")  # type: ignore[arg-type]
             )
             current, region, baseline = fresh_resolution, fresh_region, fresh
+            confirmed.append((fresh, current, region))
         result.safety_halt = True
         result.failure_category = "safety_halt"
         return (
