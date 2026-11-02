@@ -40,8 +40,8 @@ import hashlib
 import hmac
 import json
 import os
-import secrets
 import re
+import secrets
 import sys
 import time
 import unicodedata

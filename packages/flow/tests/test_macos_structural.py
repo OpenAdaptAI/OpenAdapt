@@ -628,8 +628,8 @@ def _clicks(client: FakeMacClient) -> list[tuple]:
 def test_act_structural_clicks_the_element_and_binds_its_fingerprint() -> None:
     from openadapt_flow.action_evidence import _delivery_receipt_error
     from openadapt_flow.ir import ActionKind, Anchor, Step
-    from openadapt_flow.runtime.resolver import Resolution
     from openadapt_flow.runtime.replayer import StepResult
+    from openadapt_flow.runtime.resolver import Resolution
 
     client = FakeMacClient()
     target = backend(client)
