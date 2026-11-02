@@ -16935,27 +16935,38 @@ class Replayer:
         baseline = self.__dict__.get("_hover_frames", {}).get(step.id) or checked_png
         current = resolution
         region = self._active_delivery_region
-        # Every frame the target and identity were confirmed on. A screen that
-        # flips between confirmed states (a blinking caret inside the identity
-        # band) settles on one of them; a click is only sent on a frame that
-        # matches a confirmed one.
-        confirmed: list[tuple[bytes, Resolution, Optional[Region]]] = [
-            (baseline, current, region)
-        ]
+        # Every frame the target and identity were confirmed on, with that
+        # check. A screen that flips between confirmed states of one layout (a
+        # blinking caret inside the identity band) settles on one of them. An
+        # older frame counts only when its target is where the latest check
+        # put it: a list that keeps swapping two rows never settles.
+        confirmed: list[
+            tuple[bytes, Resolution, Optional[Region], Optional[IdentityCheck]]
+        ] = [(baseline, current, region, result.identity)]
         for attempt in range(_PIXEL_RECHECK_REOBSERVES + 1):
             fresh = self.backend.screenshot()
+            latest = confirmed[-1]
+            eligible = [latest] + [
+                entry
+                for entry in reversed(confirmed[:-1])
+                if entry[1].point == latest[1].point and entry[2] == latest[2]
+            ]
             # Against the latest confirmed frame first; its changes are the ones
             # reported if no confirmed frame matches.
             changes = [
                 self._changed_regions(
                     known, fresh, self._check_regions(step, known_res, known_region)
                 )
-                for known, known_res, known_region in reversed(confirmed)
+                for known, known_res, known_region, _ in eligible
             ]
-            for (_, known_res, _), known_changed in zip(reversed(confirmed), changes):
+            for (_, known_res, _, known_identity), known_changed in zip(
+                eligible, changes
+            ):
                 if not known_changed:
                     if known_res is not resolution:
                         result.resolution = known_res
+                    # The step's identity evidence is the check on this frame.
+                    result.identity = known_identity
                     return known_res
             changed = changes[0]
             what = ", ".join(changed)
@@ -16994,7 +17005,7 @@ class Replayer:
                 CheckToClickRecheck(changed=changed, outcome="reobserved")  # type: ignore[arg-type]
             )
             current, region, baseline = fresh_resolution, fresh_region, fresh
-            confirmed.append((fresh, current, region))
+            confirmed.append((fresh, current, region, result.identity))
         result.safety_halt = True
         result.failure_category = "safety_halt"
         return (

@@ -204,6 +204,21 @@ def test_a_frame_that_matches_no_confirmed_frame_is_still_refused(tmp_path):
     assert error is not None and "kept changing" in error
 
 
+def test_a_target_that_keeps_swapping_places_is_refused(tmp_path):
+    # A list flipping between two layouts: every frame is confirmable on its
+    # own, but the target never stays where the last check put it.
+    moved = _frame(button_y=BUTTON[1] + 30)
+    frames = [moved, _frame(), moved, _frame(), moved]
+    error, result, backend = _click(tmp_path, frames)
+    assert backend.clicks == []
+    assert error is not None and "kept changing" in error
+    assert [e.outcome for e in result.check_to_click] == [
+        "reobserved",
+        "reobserved",
+        "aborted",
+    ]
+
+
 def test_structural_targets_are_not_rechecked(tmp_path):
     backend = _Backend([_frame(dialog=True)])
     replayer = Replayer(backend, vision=vision)
