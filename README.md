@@ -224,7 +224,8 @@ is published. OpenAdapt isn't affiliated with the OpenEMR project.
 
 ## Every backend
 
-The same record, compile and run steps work on every surface; repair and
+Record, compile and run take every surface; the evidence differs by surface
+([BACKEND_PARITY.md](packages/flow/docs/BACKEND_PARITY.md)), and repair and
 rollback run on web apps. Where
 the app exposes its structure, OpenAdapt uses it; on remote desktops it works
 from pixels.
@@ -234,7 +235,7 @@ from pixels.
 | Web apps | The screen, plus the page's DOM | OpenEMR, Odoo and openIMIS test copies; CI runs in-tree apps on every build |
 | Windows apps | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
 | macOS apps | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
-| Linux apps (X11) | The screen, plus AT-SPI | Recording and an AT-SPI read in CI; replay is unit-tested |
+| Linux apps (X11) | The screen, plus AT-SPI | Recording and an AT-SPI read in CI; backend actions are unit-tested |
 | Remote desktop (RDP) | The screen | 105 runs through the stock Remote Desktop client on a real AVC444 session: 55 saves confirmed in the database, 0 wrong-record saves, 40 false stops |
 | Citrix | The screen | A Citrix stand-in app with no DOM: 3 healthy runs, 3 stops on drift |
 

@@ -77,7 +77,7 @@ the live session.
 The `linux-atspi-x11` job in `packages/flow/.github/workflows/ci.yml` is
 written for this, but GitHub runs only the repository root's workflows, so it
 does not run in the monorepo and no current result exists. Root CI records
-under Xvfb and reads a GTK3 button over AT-SPI
+under Xvfb and, after a merge to main, reads a GTK3 button over AT-SPI
 (`packages/capture/tests/test_linux_atspi_integration.py`). The job owns an
 isolated Xvfb display, session
 D-Bus, AT-SPI registry, and minimal GTK3 application. It runs exactly three
