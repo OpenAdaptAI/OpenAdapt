@@ -755,4 +755,3 @@ def test_frame_hashed_number_scientific_notation() -> None:
             key, Decimal(str(v.literal)), table="metrics", column="reading"
         )
         assert h_stored == h_new
-
