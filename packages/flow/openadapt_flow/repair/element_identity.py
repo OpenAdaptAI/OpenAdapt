@@ -89,12 +89,14 @@ class ElementIdentity:
     """One element of an accessibility or DOM tree, as a repair records it.
 
     ``ancestry`` is (role, name) pairs, parent first, ending at the top-level
-    window. ``dialog_region`` is the pixel box of the nearest dialog-like
+    window; a role the tree doesn't map is ``""``. ``window`` is that
+    top-level window (for an owned dialog, its owner; the dialog is in
+    ``ancestry``). ``dialog_region`` is the pixel box of the nearest dialog-like
     ancestor, in the backend's click coordinates, when the backend reads it.
     """
 
     source: str
-    role: str
+    role: Optional[str]
     name: Optional[str]
     automation_id: Optional[str]
     ancestry: tuple[tuple[str, Optional[str]], ...]
@@ -116,7 +118,10 @@ class ElementIdentity:
         role = _text(value.get("role"))
         window = _text(value.get("window"))
         raw_ancestry = value.get("ancestry")
-        if source not in SOURCES or role is None or window is None:
+        automation_id = _text(value.get("automation_id"))
+        if source not in SOURCES or window is None:
+            return None
+        if role is None and automation_id is None:
             return None
         if not isinstance(raw_ancestry, (list, tuple)) or not raw_ancestry:
             return None
@@ -126,10 +131,12 @@ class ElementIdentity:
         for entry in raw_ancestry:
             if not isinstance(entry, (list, tuple)) or len(entry) != 2:
                 return None
-            entry_role = _text(entry[0])
-            if entry_role is None:
+            # A tree may not map every ancestor's role (UIA control types
+            # without an ARIA role), so an entry needs a role or a name.
+            entry_role, entry_name = _text(entry[0]), _text(entry[1])
+            if entry_role is None and entry_name is None:
                 return None
-            ancestry.append((entry_role, _text(entry[1])))
+            ancestry.append((entry_role or "", entry_name))
         region = value.get("dialog_region")
         dialog_region = None
         if region is not None:
@@ -148,7 +155,7 @@ class ElementIdentity:
             source=str(source),
             role=role,
             name=_text(value.get("name")),
-            automation_id=_text(value.get("automation_id")),
+            automation_id=automation_id,
             ancestry=tuple(ancestry),
             window=window,
             process=_text(value.get("process")),
@@ -156,9 +163,9 @@ class ElementIdentity:
         )
 
     def locatable(self) -> bool:
-        """A role with a name or an id: something replay can find again."""
+        """An id, or a role with a name: something replay can find again."""
 
-        return bool(self.role and (self.name or self.automation_id))
+        return bool(self.automation_id or (self.role and self.name))
 
     def ends_at_window(self) -> bool:
         """The ancestry reaches the pinned window by its exact name."""
@@ -244,8 +251,40 @@ def read_element_identity(backend: Any, point: tuple[int, int]) -> ElementIdenti
     return identity
 
 
-def _unique_here(backend: Any, identity: ElementIdentity, point: tuple[int, int]):
-    """The structural handle for ``identity``; refuses a miss or a second match."""
+def _replay_locator(
+    backend: Any, identity: ElementIdentity, point: tuple[int, int]
+) -> Any:
+    """The locator replay will use: the backend's own for this point.
+
+    A backend scopes its locator its own way (Windows names the innermost
+    window, the identity the outermost), so the backend's locator is checked
+    and stored. It must name the same element as the identity. A backend
+    without one uses the identity's.
+    """
+
+    reader = getattr(backend, "structural_locator_at", None)
+    if not callable(reader):
+        return identity.locator()
+    try:
+        locator = reader(int(point[0]), int(point[1]))
+    except Exception:  # noqa: BLE001 - no locator is refused below
+        locator = None
+    if locator is None:
+        raise ClickRefused("the backend gives no locator for the element")
+    if (
+        (locator.role or None) != identity.role
+        or (locator.name or None) != identity.name
+        or (locator.automation_id or None) != identity.automation_id
+    ):
+        raise ClickRefused(
+            "the backend's locator for the click names a different element "
+            "than its element identity"
+        )
+    return locator
+
+
+def _unique_here(backend: Any, locator: Any, point: tuple[int, int]):
+    """The structural handle for ``locator``; refuses a miss or a second match."""
 
     from openadapt_flow.backend import StructuralResolutionRefused
 
@@ -253,7 +292,7 @@ def _unique_here(backend: Any, identity: ElementIdentity, point: tuple[int, int]
     if not callable(locate):
         raise ClickRefused("the backend can't check that the element is unique")
     try:
-        handle = locate(identity.locator())
+        handle = locate(locator)
     except StructuralResolutionRefused as exc:
         raise ClickRefused(f"the element is not unique in its window: {exc}") from exc
     except Exception as exc:  # noqa: BLE001 - an unreadable tree is refused
@@ -312,15 +351,16 @@ class ClickAdmission:
     basis: str
     identity_template: Any = None
     element: Optional[ElementIdentity] = None
+    locator: Any = None
 
     @property
     def needs_person(self) -> bool:
         return self.basis in NEEDS_PERSON
 
     def structural(self, fallback: Any) -> Any:
-        """The locator the new step stores: the element's, else ``fallback``."""
+        """The locator the new step stores: the checked one, else ``fallback``."""
 
-        return self.element.locator() if self.element is not None else fallback
+        return self.locator if self.locator is not None else fallback
 
     def describe(self) -> str:
         if self.element is None:
@@ -362,6 +402,9 @@ def admit_new_click(
         )
     if kind == "accessibility":
         element = read_element_identity(backend, point)
-        _unique_here(backend, element, point)
-        return ClickAdmission(BASIS_ELEMENT_AND_RECORD_CHECK, element=element)
+        locator = _replay_locator(backend, element, point)
+        _unique_here(backend, locator, point)
+        return ClickAdmission(
+            BASIS_ELEMENT_AND_RECORD_CHECK, element=element, locator=locator
+        )
     return ClickAdmission(BASIS_RECORD_CHECK)

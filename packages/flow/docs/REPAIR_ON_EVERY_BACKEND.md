@@ -58,8 +58,9 @@ A backend implements two calls:
   element matches.
 
 The record is evidence and a check, not a selector language. The new step
-stores the usual `StructuralLocator` (role, name, automation id, window), so
-replay uses the existing structural rung. The full identity, ancestry
+stores the backend's own `StructuralLocator` for the point, which must name
+the same role, name and id as the identity; uniqueness is checked with that
+locator, so replay's structural rung finds the same one element. The full identity, ancestry
 included, goes into the repair evidence and into what the approving person
 sees. Its digest is bound into the candidate.
 
@@ -68,7 +69,7 @@ Each backend fills it from what it reads:
 | Backend | `role` and `name` | `ancestry` | `window`, `process` |
 | --- | --- | --- | --- |
 | macOS AX (built) | `AXRole`, title or description | `AXParent` up to the `AXWindow`, sheets and dialogs included | window title, app pid |
-| Windows UIA (asked of the Windows session) | `ControlType`, `Name`, `AutomationId` | `GetParentControl` up to the top-level window | window name, process name |
+| Windows UIA ([#1707](https://github.com/OpenAdaptAI/OpenAdapt/pull/1707)) | `ControlType`, `Name`, `AutomationId` | `GetParentControl` up to the outermost window; an unmapped role is empty | outermost window name (an owned dialog's owner), process name or none |
 | Linux AT-SPI (later) | role, accessible name, accessible id | parent chain up to the frame | frame name, application |
 | Browser | not used for admission | | |
 

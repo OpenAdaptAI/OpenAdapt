@@ -173,7 +173,7 @@ def test_identity_parses_and_binds_its_ancestry() -> None:
         {"window": None},
         {"ancestry": []},
         {"ancestry": [["AXWindow"]]},
-        {"ancestry": [[None, WINDOW]]},
+        {"ancestry": [[None, None]]},
         {"ancestry": [["AXGroup", None]] * 40},
         {"dialog_region": [1, 2, 0, 4]},
         {"dialog_region": [1, 2, True, 4]},
@@ -503,3 +503,74 @@ def test_agent_teach_takes_the_dialog_box_from_the_identity() -> None:
     ]
     assert _element_identity(Screen({**LATER, "window": None}), 1, 2) is None
     assert _element_identity(object(), 1, 2) is None
+
+
+# -- Windows UI Automation's shape (PR #1707) ----------------------------------
+
+UIA_OK = {
+    "source": "uia",
+    "role": "button",
+    "name": "OK",
+    "automation_id": None,
+    "ancestry": [[None, "Update available"], [None, "Patient chart"]],
+    "window": "Patient chart",
+    "process": None,
+}
+
+
+class UIABackend(AXBackend):
+    """Windows scopes its locator by the innermost window, not the owner."""
+
+    def __init__(self, locator: Any = "default", **kwargs: Any) -> None:
+        super().__init__(UIA_OK, **kwargs)
+        self._locator = locator
+
+    def structural_locator_at(self, x: int, y: int) -> Any:
+        from openadapt_flow.ir import StructuralLocator
+
+        if self._locator == "default":
+            return StructuralLocator(
+                role="button", name="OK", window_name="Update available"
+            )
+        return self._locator
+
+
+def test_uia_identity_with_unmapped_ancestor_roles_is_admitted() -> None:
+    identity = ElementIdentity.from_mapping(UIA_OK)
+    assert identity is not None
+    assert identity.ancestry == (("", "Update available"), ("", "Patient chart"))
+    assert identity.process is None
+    admission = _admit(UIABackend())
+    assert admission.basis == BASIS_ELEMENT_AND_RECORD_CHECK
+    # The backend's own locator (innermost window) is what replay stores.
+    assert admission.structural(None).window_name == "Update available"
+
+
+def test_uia_id_without_a_role_is_locatable() -> None:
+    identity = ElementIdentity.from_mapping(
+        {**UIA_OK, "role": None, "name": None, "automation_id": "okButton"}
+    )
+    assert identity is not None and identity.locatable()
+    assert ElementIdentity.from_mapping({**UIA_OK, "role": None}) is None
+    assert (
+        ElementIdentity.from_mapping(
+            {**UIA_OK, "ancestry": [[None, None], [None, "Patient chart"]]}
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "locator, reason",
+    [
+        (None, "gives no locator"),
+        ("cancel", "names a different element"),
+    ],
+)
+def test_backend_locator_must_name_the_identified_element(locator, reason) -> None:
+    from openadapt_flow.ir import StructuralLocator
+
+    if locator == "cancel":
+        locator = StructuralLocator(role="button", name="Cancel", window_name="x")
+    with pytest.raises(ClickRefused, match=reason):
+        _admit(UIABackend(locator))
