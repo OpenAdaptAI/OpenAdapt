@@ -2245,6 +2245,7 @@ class InteractiveRecorder:
         system_of_record_reader: Optional[
             Callable[[], Optional[list[dict[str, Any]]]]
         ] = None,
+        after_action_wait: Optional[Callable[..., Any]] = None,
         stop_when: Optional[Callable[[], bool]] = None,
         surface: str = "web",
         capture_network: bool = False,
@@ -2289,6 +2290,7 @@ class InteractiveRecorder:
         # Recording-only, read-only observation. This does not add an effect
         # verifier to the browser backend or grant the later runtime authority.
         self._system_of_record_reader = system_of_record_reader
+        self._after_action_wait = after_action_wait
         # Optional recording completion condition. It is evaluated only after
         # queued browser events have been persisted, while the page is open.
         self._stop_when = stop_when
@@ -3984,6 +3986,13 @@ class InteractiveRecorder:
             ev["_oaflow_after_frame"] = self.recorder._wait_settled()
             if self._wait_for_writes():
                 ev["_oaflow_after_frame"] = self.recorder._wait_settled()
+            if self._after_action_wait is not None:
+                try:
+                    waited = self._after_action_wait(ev)
+                except TypeError:
+                    waited = self._after_action_wait()
+                if waited:
+                    ev["_oaflow_after_frame"] = self.recorder._wait_settled()
             ev["_oaflow_structural_after"] = self._structural_state()
             self._pending_click = ev
             self._pending_click_pumps = max(
@@ -4206,6 +4215,14 @@ class InteractiveRecorder:
             event["identifier_region"] = [int(v) for v in idr]
         after_png = ev.pop("_oaflow_after_frame", None)
         structural_after = ev.pop("_oaflow_structural_after", None)
+        if structural_after is None and self._after_action_wait is not None:
+            try:
+                waited = self._after_action_wait(ev)
+            except TypeError:
+                waited = self._after_action_wait()
+            if waited and after_png is not None:
+                assert self.recorder is not None
+                after_png = self.recorder._wait_settled()
         self.recorder.record_observed(
             event,
             before_png=self._last_frame,
@@ -4221,6 +4238,11 @@ class InteractiveRecorder:
 
     def _record_key(self, ev: dict[str, Any]) -> None:
         assert self.recorder is not None
+        if self._after_action_wait is not None:
+            try:
+                self._after_action_wait(ev)
+            except TypeError:
+                self._after_action_wait()
         event: dict[str, Any] = {"kind": ev["kind"], "key": ev["key"]}
         if ev["kind"] == "hotkey":
             event["modifiers"] = [str(value) for value in ev.get("modifiers", [])]
@@ -4535,6 +4557,7 @@ def record_interactive(
     system_of_record_reader: Optional[
         Callable[[], Optional[list[dict[str, Any]]]]
     ] = None,
+    after_action_wait: Optional[Callable[..., Any]] = None,
     stop_when: Optional[Callable[[], bool]] = None,
     surface: str = "web",
     **kwargs: Any,
@@ -4575,6 +4598,9 @@ def record_interactive(
             before/after state so compilation can propose effect contracts.
             This observer is recording-only and does not become a runtime
             verifier.
+        after_action_wait: Optional callback invoked after an action settles
+            and before its structural after-state is sampled (e.g. to wait
+            for a backend write to land on a save action).
         stop_when: Optional recording completion condition. It is evaluated
             after queued events are persisted and before the browser closes.
         surface: Recorded surface stamped into ``meta.json`` before the
@@ -4593,6 +4619,7 @@ def record_interactive(
         cdp_endpoint=cdp_endpoint,
         browser_page_url=browser_page_url,
         system_of_record_reader=system_of_record_reader,
+        after_action_wait=after_action_wait,
         stop_when=stop_when,
         surface=surface,
         **kwargs,

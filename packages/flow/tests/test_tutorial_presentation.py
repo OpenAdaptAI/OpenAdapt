@@ -259,3 +259,122 @@ def test_a_slow_save_still_records_its_system_of_record_delta(
     )
     save = tutorial.consequential_step(workflow)
     assert not any(effect.needs_operator_confirmation for effect in save.effects)
+
+
+@pytest.mark.timeout(600)
+def test_interactive_slow_save_still_records_its_system_of_record_delta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An interactive demonstration whose save write lands slowly still observes the delta."""
+    base_url, db, stop = serve()
+    original_add = db.add
+
+    def slow_add(*args: Any, **kwargs: Any) -> Any:
+        import time
+
+        time.sleep(1.0)
+        return original_add(*args, **kwargs)
+
+    monkeypatch.setattr(db, "add", slow_add)
+
+    def drive(page, pump) -> None:
+        def click(selector: str) -> None:
+            page.wait_for_selector(selector, state="visible", timeout=20000)
+            page.click(selector)
+            pump()
+            pump()
+
+        click(".open-btn")
+        click("#new-encounter")
+        click("#type-triage")
+        click("#note")
+        page.keyboard.type("A note demonstrated by the operator")
+        pump()
+        pump()
+        click("#save-encounter")
+        page.wait_for_selector("#saved-banner", state="visible", timeout=20000)
+        pump()
+        pump()
+
+    try:
+        recording_dir = tutorial.record_tutorial_interactive(
+            base_url,
+            tmp_path / "recording",
+            headless=True,
+            script=drive,
+        )
+    finally:
+        stop()
+
+    events = [
+        json.loads(line)
+        for line in (recording_dir / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert events[-1]["kind"] == "click"
+    assert events[-1]["sor_before"] == []
+    assert len(events[-1]["sor_after"]) == 1
+
+    workflow = compile_recording(
+        recording_dir,
+        tmp_path / "bundle",
+        name="interactive-slow-save",
+        mine_effects=True,
+    )
+    save = tutorial.consequential_step(workflow)
+    assert not any(effect.needs_operator_confirmation for effect in save.effects)
+
+
+@pytest.mark.timeout(600)
+def test_interactive_failed_save_refuses_placeholder_effect(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A save that genuinely never reaches the store fails closed (unbound placeholder)."""
+    base_url, db, stop = serve()
+
+    # Never add to db (save genuinely never lands, but server returns 200)
+    monkeypatch.setattr(db, "add", lambda *args, **kwargs: {"id": 999})
+    monkeypatch.setattr(tutorial, "SAVE_LANDS_TIMEOUT_S", 0.2)
+
+    save_done = False
+
+    def drive(page, pump) -> None:
+        def click(selector: str) -> None:
+            page.wait_for_selector(selector, state="visible", timeout=20000)
+            page.click(selector)
+            pump()
+            pump()
+
+        click(".open-btn")
+        click("#new-encounter")
+        click("#type-triage")
+        click("#note")
+        page.keyboard.type("A note demonstrated by the operator")
+        pump()
+        pump()
+        click("#save-encounter")
+        page.wait_for_selector("#saved-banner", state="visible", timeout=20000)
+        pump()
+        pump()
+        nonlocal save_done
+        save_done = True
+
+    try:
+        recording_dir = tutorial.record_tutorial_interactive(
+            base_url,
+            tmp_path / "recording",
+            headless=True,
+            script=drive,
+            stop_when=lambda: save_done,
+        )
+    finally:
+        stop()
+
+    workflow = compile_recording(
+        recording_dir,
+        tmp_path / "bundle",
+        name="interactive-failed-save",
+        mine_effects=True,
+    )
+    with pytest.raises(tutorial.TutorialError, match="UNBOUND placeholder effect"):
+        tutorial.consequential_step(workflow)

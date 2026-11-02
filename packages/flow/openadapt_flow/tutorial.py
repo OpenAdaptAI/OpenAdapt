@@ -298,6 +298,95 @@ def _presentation_replayer_type(replayer_type: type[Any], delay_s: float) -> typ
     return PresentationReplayer
 
 
+class SaveAwareRecordsReader:
+    """Reads system of record, waiting on the save action until the write lands.
+
+    Shared between the scripted and interactive recording routes: both require
+    that the recorder's after-snapshot for the save step is taken only after the
+    write has reached the system of record.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        timeout_s: float = SAVE_LANDS_TIMEOUT_S,
+        baseline: Optional[int] = None,
+        save_selector: str = "#save-encounter",
+    ) -> None:
+        self.base_url = base_url
+        self.timeout_s = timeout_s
+        self.baseline = baseline
+        self.save_selector = save_selector
+        self.armed = False
+        self._watch: dict[str, int] = {}
+
+    def arm(self) -> None:
+        """Arm the reader for an upcoming scripted save action."""
+        self.armed = True
+        self._watch["calls"] = 0
+        if self.baseline is not None:
+            self._watch["baseline"] = self.baseline
+
+    def is_save_action(self, ev: dict[str, Any]) -> bool:
+        """Return True if the recorded event represents the tutorial save action."""
+        if ev.get("kind") != "click":
+            return False
+        structural = ev.get("structural") or {}
+        if isinstance(structural, dict):
+            selector = structural.get("selector") or ""
+            name = structural.get("name") or ""
+            if (
+                selector == self.save_selector
+                or self.save_selector in selector
+                or name.lower() == "save encounter"
+            ):
+                return True
+        if ev.get("selector") == self.save_selector:
+            return True
+        return False
+
+    def after_action_wait(self, ev: Optional[dict[str, Any]] = None) -> bool:
+        """Wait for the save write to land if this event is the save action."""
+        if ev is not None and not self.is_save_action(ev):
+            return False
+        return self.wait_for_save()
+
+    def wait_for_save(self) -> bool:
+        """Poll the system of record until the record count exceeds baseline or timeout."""
+        records = _records(self.base_url)
+        baseline = (
+            self.baseline
+            if self.baseline is not None
+            else self._watch.get("baseline", len(records))
+        )
+        deadline = time.monotonic() + self.timeout_s
+        waited = False
+        while len(records) <= baseline and time.monotonic() < deadline:
+            waited = True
+            time.sleep(0.05)
+            records = _records(self.base_url)
+        return waited
+
+    def __call__(self) -> list[dict[str, Any]]:
+        records = _records(self.base_url)
+        calls = self._watch.get("calls")
+        if calls is None:
+            return records
+        self._watch["calls"] = calls + 1
+        if calls == 0:  # the read before the save click
+            if "baseline" not in self._watch:
+                self._watch["baseline"] = len(records)
+            return records
+        deadline = time.monotonic() + self.timeout_s
+        baseline = self._watch.get("baseline", len(records))
+        while len(records) <= baseline and time.monotonic() < deadline:
+            time.sleep(0.05)
+            records = _records(self.base_url)
+        self._watch.clear()
+        self.armed = False
+        return records
+
+
 def record_tutorial(
     base_url: str,
     recording_dir: Path,
@@ -331,36 +420,18 @@ def record_tutorial(
         # once the screen settles. The screen can settle while the save request
         # is still in flight, so for the save the after-read waits (bounded)
         # for the write to land instead of racing it.
-        save_watch: dict[str, int] = {}
-
-        def read_records() -> list[dict[str, Any]]:
-            records = _records(base_url)
-            calls = save_watch.get("calls")
-            if calls is None:
-                return records
-            save_watch["calls"] = calls + 1
-            if calls == 0:  # the read before the save click
-                save_watch["baseline"] = len(records)
-                return records
-            deadline = time.monotonic() + SAVE_LANDS_TIMEOUT_S
-            while (
-                len(records) <= save_watch["baseline"] and time.monotonic() < deadline
-            ):
-                time.sleep(0.05)
-                records = _records(base_url)
-            save_watch.clear()
-            return records
+        save_reader = SaveAwareRecordsReader(base_url)
 
         recorder = Recorder(
             backend,
             recording_dir,
             app_url=entry_url,
-            system_of_record_reader=read_records,
+            system_of_record_reader=save_reader,
             encryption_key=encryption_key,
         )
 
         def save() -> None:
-            save_watch["calls"] = 0
+            save_reader.arm()
             recorder.click(*_center(page, "#save-encounter"))
 
         def demonstrate(action: Callable[[], None]) -> None:
@@ -380,7 +451,14 @@ def record_tutorial(
         close()
 
 
-def record_tutorial_interactive(base_url: str, recording_dir: Path) -> Path:
+def record_tutorial_interactive(
+    base_url: str,
+    recording_dir: Path,
+    *,
+    headless: bool = False,
+    script: Optional[Callable[[Any, Callable[[], None]], None]] = None,
+    **kwargs: Any,
+) -> Path:
     """Record the bundled workflow from a real human browser demonstration."""
 
     from openadapt_flow.interactive_recorder import record_interactive
@@ -399,13 +477,22 @@ def record_tutorial_interactive(base_url: str, recording_dir: Path) -> Path:
         "\nOpenAdapt records your actions and observes the separate local "
         "system of record."
     )
+    save_reader = SaveAwareRecordsReader(base_url, baseline=baseline_records)
+
+    def default_stop_when() -> bool:
+        return len(_records(base_url)) > baseline_records
+
+    stop_when = kwargs.pop("stop_when", None)
     return record_interactive(
         entry_url,
         recording_dir,
         param_fields=("note",),
-        headless=False,
-        system_of_record_reader=lambda: _records(base_url),
-        stop_when=lambda: len(_records(base_url)) > baseline_records,
+        headless=headless,
+        script=script,
+        system_of_record_reader=save_reader,
+        after_action_wait=save_reader.after_action_wait,
+        stop_when=stop_when if stop_when is not None else default_stop_when,
+        **kwargs,
     )
 
 
