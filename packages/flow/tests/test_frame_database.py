@@ -18,6 +18,7 @@ import pytest
 
 from openadapt_flow.runtime.effects.db_snapshot import (
     CLOCK_DEFAULT,
+    SnapshotError,
     cell_hash,
     is_default,
     take_snapshot,
@@ -351,6 +352,62 @@ def test_skipping_a_table_needs_a_reason(tmp_path: Path) -> None:
         _doc(db, allow_tables=[{"table": "log", "mode": "skip", "reason": "test"}])
     )
     assert cfg.frame is not None and cfg.frame.database is not None
+
+
+def test_schema_wildcard_is_postgresql_only(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    # On SQLite (default), <schema>.* in allow_tables raises ValueError when contract loads
+    with pytest.raises(
+        Exception,
+        match=r"allow_tables entry 'hidden\.\*' \('<schema>\.\*'\) is PostgreSQL only",
+    ):
+        parse_verify_config(
+            _doc(
+                db,
+                allow_tables=[{"table": "hidden.*", "mode": "skip", "reason": "test"}],
+            )
+        )
+
+    # On MySQL, it also raises when contract loads
+    doc_mysql = _doc(
+        db,
+        allow_tables=[{"table": "hidden.*", "mode": "skip", "reason": "test"}],
+    )
+    doc_mysql["frame"]["database"]["dialect"] = "mysql"
+    doc_mysql["frame"]["database"]["read"] = {
+        "sql_driver": "pymysql",
+        "sql_connect_args": {"database": "test"},
+    }
+    with pytest.raises(
+        Exception,
+        match=r"allow_tables entry 'hidden\.\*' \('<schema>\.\*'\) is PostgreSQL only",
+    ):
+        parse_verify_config(doc_mysql)
+
+    # On PostgreSQL, it is accepted by FrameDatabase
+    doc_pg = _doc(
+        db,
+        allow_tables=[{"table": "hidden.*", "mode": "skip", "reason": "test"}],
+    )
+    doc_pg["frame"]["database"]["dialect"] = "postgresql"
+    doc_pg["frame"]["database"]["read"] = {
+        "sql_driver": "psycopg2",
+        "sql_connect_args": {"dbname": "test"},
+    }
+    cfg = parse_verify_config(doc_pg)
+    assert cfg.frame is not None and cfg.frame.database is not None
+
+    # take_snapshot directly also raises SnapshotError for non-PostgreSQL dialects
+    with pytest.raises(
+        SnapshotError,
+        match=r"allow-list entry 'hidden\.\*' \('<schema>\.\*'\) is PostgreSQL only",
+    ):
+        take_snapshot(
+            lambda: sqlite3.connect(str(db)),
+            "sqlite",
+            key=b"k",
+            modes={"hidden.*": "skip"},
+        )
 
 
 def test_a_large_table_holds_a_clean_save_and_catches_a_stray_one(

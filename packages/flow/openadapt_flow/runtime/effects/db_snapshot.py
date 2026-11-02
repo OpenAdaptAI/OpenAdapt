@@ -527,6 +527,7 @@ class _Session:
 
     def __init__(self, connect: Callable[[], Any], dialect: Dialect) -> None:
         self.dialect = dialect
+        self._begun = False
         self.con = connect()
         if dialect == "postgresql":
             # psycopg opens a transaction on the first statement unless told
@@ -538,6 +539,7 @@ class _Session:
                 self.cur.execute(sql)
 
     def begin(self) -> None:
+        self._begun = True
         if self.dialect == "postgresql":
             self.cur.execute("BEGIN ISOLATION LEVEL REPEATABLE READ, READ ONLY")
         elif self.dialect == "mysql":
@@ -578,7 +580,10 @@ class _Session:
 
     def close(self) -> None:
         try:
-            self.cur.execute("COMMIT" if self.dialect == "mysql" else "ROLLBACK")
+            if self._begun:
+                self.cur.execute("COMMIT" if self.dialect == "mysql" else "ROLLBACK")
+        except Exception:  # noqa: BLE001
+            pass
         finally:
             self.con.close()
 
@@ -1558,6 +1563,12 @@ def _snapshot(
     sequences: dict[str, _PgSequence] = {}
     scope: list[str] = []
     default_schema = ""
+    if dialect != "postgresql":
+        wildcards = sorted(t for t in (*modes, *optional_modes) if t.endswith(".*"))
+        if wildcards:
+            raise SnapshotError(
+                f"allow-list entry {wildcards[0]!r} ('<schema>.*') is PostgreSQL only"
+            )
     if dialect == "mysql":
         # Before the snapshot starts: a row committed after this read is in
         # the snapshot, so the counter never runs ahead of what it shows.
