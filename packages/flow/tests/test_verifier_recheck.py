@@ -938,3 +938,26 @@ def test_a_wrong_ledger_says_nothing_was_held(tmp_path: Path, due_now: None) -> 
         "re-resolved" in late.reasons[-1]
         and "hold this write by hand" in late.reasons[-1]
     )
+
+
+def test_an_unvalidated_saved_state_does_not_re_resolve_ledger_attempt(
+    tmp_path: Path, due_now: None
+) -> None:
+    # Review #1669, round 2: a saved state that fails the issued-here,
+    # params, or contract check must not trust correlation_id to re-resolve
+    # another write's attempt in the ledger.
+    contract, db, result = _keyed(tmp_path, "k-safe")
+    assert result.recheck is not None and result.recheck.path is not None
+    saved = RecheckState.load(result.recheck.path, params={"wrong": "params"})
+    late = recheck(contract, saved, params={"wrong": "params"}, actor=BOT)
+    assert late.outcome == "UNCERTAIN"
+    assert (
+        "no ledger attempt was re-resolved (the recheck state failed validation)"
+        in late.reasons[-1]
+    )
+    assert "hold this write by hand" in late.reasons[-1]
+    from openadapt_flow.write_ledger import default_ledger
+
+    attempt = default_ledger().latest(result.write_key)
+    assert attempt is not None
+    assert attempt.resolved.get("outcome") == "CONFIRMED"

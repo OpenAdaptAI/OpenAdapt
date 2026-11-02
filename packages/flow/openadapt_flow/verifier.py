@@ -2145,16 +2145,20 @@ def recheck(
     A write that lands after the recheck's read (``read_at``) is not seen.
     """
 
-    late = _judge_recheck(
+    late, trusted = _judge_recheck(
         contract, write, params=params, actor=actor, excused_by=excused_by, wait=wait
     )
     if late.outcome != "CONFIRMED":
-        late = _hold_after_recheck(ledger, write, late)
+        late = _hold_after_recheck(ledger, write, late, trusted=trusted)
     return late
 
 
 def _hold_after_recheck(
-    ledger: Any, write: WriteResult | RecheckState, late: RecheckResult
+    ledger: Any,
+    write: WriteResult | RecheckState,
+    late: RecheckResult,
+    *,
+    trusted: bool = True,
 ) -> RecheckResult:
     """Resolve the write's ledger attempt again with the recheck's outcome,
     for review: ``REFUTED`` holds it, ``UNCERTAIN`` keeps it uncertain.
@@ -2188,6 +2192,9 @@ def _hold_after_recheck(
                 "hand so a retry isn't handed the earlier CONFIRMED",
             ],
         )
+
+    if not trusted:
+        return unheld("the recheck state failed validation")
 
     try:
         led = _resolve_ledger(ledger)
@@ -2251,7 +2258,7 @@ def _judge_recheck(
     actor: Actor,
     excused_by: Sequence[WriteResult | RecheckState],
     wait: bool,
-) -> RecheckResult:
+) -> tuple[RecheckResult, bool]:
     state = write.recheck if isinstance(write, WriteResult) else write
     receipt = state.payload.get("receipt") if state is not None else None
     if (
@@ -2284,7 +2291,9 @@ def _judge_recheck(
         else None
     ) or recheck_problem(cfg, state.payload, params=params, run_record=run_record)
     if problem is not None:
-        return _replace(base, reasons=[f"{problem}, so the write can't be rechecked"])
+        return _replace(
+            base, reasons=[f"{problem}, so the write can't be rechecked"]
+        ), False
     wait_s = seconds_until(state.due_at)
     if wait_s > 0:
         if not wait:
@@ -2316,9 +2325,14 @@ def _judge_recheck(
     except VerifyRunError as exc:
         raise VerifierError(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - an unreadable store is not a pass
-        return _replace(
-            base,
-            reasons=[f"the database could not be read again ({type(exc).__name__})"],
+        return (
+            _replace(
+                base,
+                reasons=[
+                    f"the database could not be read again ({type(exc).__name__})"
+                ],
+            ),
+            True,
         )
     evidence = verdict.evidence(spec) if spec is not None else {}
     reasons: list[str] = []
@@ -2339,14 +2353,17 @@ def _judge_recheck(
         )
     elif status != "held" and not reasons:
         reasons.append(verdict.reason or "the database could not be judged again")
-    return _replace(
-        base,
-        outcome=_late_outcome(status),
-        frame=verdict.status,
-        reasons=reasons,
-        read_at=read_at,
-        excused=len(excused),
-        evidence=evidence,
+    return (
+        _replace(
+            base,
+            outcome=_late_outcome(status),
+            frame=verdict.status,
+            reasons=reasons,
+            read_at=read_at,
+            excused=len(excused),
+            evidence=evidence,
+        ),
+        True,
     )
 
 
