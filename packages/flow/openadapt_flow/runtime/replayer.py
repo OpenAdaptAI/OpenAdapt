@@ -85,6 +85,7 @@ from openadapt_flow.backend import (
     RemoteFrameContractBackend,
     RichPointerActionBackend,
     SelectOptionBackend,
+    StructuralElementNotActionable,
     StructuralResolutionRefused,
     SubmitBindingBackend,
 )
@@ -648,8 +649,19 @@ class EgressNotPermitted(RuntimeError):
 #: scroll counts it as ready.
 SCROLL_POSITION_SLACK_FRACTION = 0.25
 
+
 #: Rungs that show the target itself on screen: what closed-loop scroll
 #: readiness accepts, and all a step accepts after its scroll missed it.
+class _NotActionableError(str):
+    """The error ``_resolve_step`` returns when the structural rung found
+    exactly one candidate but it is covered or off-viewport.
+
+    A ``str`` so it travels as any resolution error; its type marks it. The
+    step polls on it like any miss, and halts with ``target_not_actionable``
+    when it times out or when the fresh re-resolution before input finds it.
+    """
+
+
 _DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
 
 #: Steps that own the halt when the closed-loop scroll before them never found
@@ -8242,6 +8254,22 @@ class Replayer:
                 resolution, matched_region, error = self._resolve_step_target(
                     step, before_png, bundle_dir, workflow, target_missed
                 )
+            if (
+                error is not None
+                and resolution is None
+                and isinstance(error, _NotActionableError)
+            ):
+                # The one candidate stayed covered or off-viewport for the
+                # whole step timeout. No visual rung ran on it.
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.error = error
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="target_resolution",
+                    code="target_not_actionable",
+                    detector_input_sha256=sha256_bytes(last_frame),
+                )
             if resolution is not None and matched_region is not None:
                 assert step.anchor is not None
                 resolution = self._retain_visual_resolution_evidence(
@@ -9160,7 +9188,11 @@ class Replayer:
             )
             result.safety_refusal_evidence = SafetyRefusalEvidence(
                 stage="target_resolution",
-                code="target_ambiguous",
+                code=(
+                    "target_not_actionable"
+                    if isinstance(exc, StructuralElementNotActionable)
+                    else "target_ambiguous"
+                ),
                 detector_input_sha256=sha256_bytes(last_frame),
             )
         except Exception as exc:  # defensive: report, don't crash the run
@@ -11638,6 +11670,15 @@ class Replayer:
                     "Actuation preflight HALTED because the fresh target was "
                     f"ambiguous for step '{step.id}' ({step.intent}): {exc}",
                 )
+            if isinstance(error, _NotActionableError):
+                # Something covered the target between resolution and input.
+                result.safety_halt = True
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="actuation_revalidation",
+                    code="target_not_actionable",
+                    detector_input_sha256=sha256_bytes(fresh_png),
+                )
+                return None, None, fresh_png, error
             if error is not None:
                 if self.governed_authorization is not None:
                     result.safety_halt = True
@@ -11880,7 +11921,11 @@ class Replayer:
         )
         if resolution is not None and resolution.rung in _DIRECT_TARGET_RUNGS:
             return resolution, region, error
-        if resolution is None and step.anchor is None:
+        if resolution is None and (
+            step.anchor is None or isinstance(error, _NotActionableError)
+        ):
+            # A target still covered when the scroll gave up keeps its own
+            # refusal, so the step halts with ``target_not_actionable``.
             return resolution, region, error
         return (
             None,
@@ -11945,17 +11990,28 @@ class Replayer:
             if self.use_structural and hasattr(self.backend, "locate_structural")
             else None
         )
-        resolved = resolve(
-            step.anchor,
-            screen_png,
-            self.vision,
-            self.grounder if allow_grounder else None,
-            step.intent,
-            template_png=template_png,
-            viewport=_frame_viewport(screen_png),
-            structural=structural,
-            allow_target_ocr=allow_target_ocr,
-        )
+        try:
+            resolved = resolve(
+                step.anchor,
+                screen_png,
+                self.vision,
+                self.grounder if allow_grounder else None,
+                step.intent,
+                template_png=template_png,
+                viewport=_frame_viewport(screen_png),
+                structural=structural,
+                allow_target_ocr=allow_target_ocr,
+            )
+        except StructuralElementNotActionable as exc:
+            return (
+                None,
+                None,
+                _NotActionableError(
+                    f"Target for step '{step.id}' ({step.intent}) is not "
+                    f"actionable: its one structural candidate is covered or "
+                    f"off-viewport ({exc})"
+                ),
+            )
         if resolved is None:
             return (
                 None,
@@ -15155,8 +15211,12 @@ class Replayer:
         ``anchor_resolves`` runs the resolution ladder with NO grounder,
         ``text_present`` / ``text_absent`` use the tolerant OCR presence check,
         ``param_equals`` is a string compare, and ``and`` / ``or`` / ``not``
-        compose. An unknown kind fails safe (does not hold).
+        compose. An unknown kind fails safe (does not hold). An exact
+        ``text_present`` uses :meth:`_exact_text_holds` (OCR, then the DOM).
         """
+        kind = pred.kind.value if hasattr(pred.kind, "value") else pred.kind
+        if kind == "text_present" and pred.exact:
+            return bool(pred.text and self._exact_text_holds(pred.text, frame_png))
         return evaluate_program_predicate(
             pred,
             frame_png,
@@ -15182,7 +15242,8 @@ class Replayer:
             )
             return f"anchor_resolves({label!r})"
         if kind in ("text_present", "text_absent"):
-            return f"{kind}({pred.text!r})"
+            exact = ", exact" if pred.exact else ""
+            return f"{kind}({pred.text!r}{exact})"
         if kind == "param_equals":
             return f"param_equals({pred.param!r}=={pred.value!r})"
         if kind in ("and", "or", "not"):
@@ -17871,11 +17932,13 @@ class Replayer:
                 viewport=_frame_viewport(frame_png),
                 structural=structural,
             )
-        except OcrResolutionRefused:
+        except (OcrResolutionRefused, StructuralElementNotActionable):
             # Readiness is a bounded, non-actuating probe. An ambiguous OCR
-            # candidate means that the target is not ready yet, so the scroll
-            # loop must continue. The later target action runs the full
-            # resolver again and still halts on the same ambiguity.
+            # candidate, or a unique structural candidate that is still
+            # covered (a sticky header) or off-viewport, means the target is
+            # not ready yet, so the scroll loop must continue. The later
+            # target action runs the full resolver again and still halts on
+            # the same refusal. Structural ambiguity is not caught here.
             return miss("unresolved")
         if resolved is None:
             return miss("unresolved")
@@ -18628,7 +18691,8 @@ class Replayer:
             names = ", ".join(pc.candidate_params or ())
             return f"no_duplicate_candidate (no listed row has this run's {names})"
         if kind in ("text_present", "text_absent"):
-            return f"{kind} {pc.text!r}"
+            exact = " (exact)" if getattr(pc, "exact", False) else ""
+            return f"{kind}{exact} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             return f"{kind} (vs. the step's start state)"
         return f"{kind} region={tuple(pc.region) if pc.region else None}"
@@ -18706,6 +18770,8 @@ class Replayer:
             # or split it across boxes — see vision.ocr.text_present.
             if pc.text is None:
                 return False
+            if getattr(pc, "exact", False):
+                return self._exact_text_holds(pc.text, frame_png)
             # Page-structure first: the DOM can PROVE the text is rendered,
             # visible and uncovered (exact normalized substring, stricter
             # than the fuzzy OCR match). It can never prove absence, so a DOM
@@ -18812,6 +18878,25 @@ class Replayer:
                 self._pc_scaled_match = True
                 return True
         return False
+
+    def _exact_text_holds(self, text: str, frame_png: bytes) -> bool:
+        """An exact text check (``Postcondition.exact``, ``Predicate.exact``).
+
+        OCR must read ``text`` exactly once, as a whole line or wrapped lines
+        (``vision.exact_text_count``); a near miss such as "2 matches were
+        found" never passes, and two copies (two result sections) do not
+        either. When OCR reads it nowhere, the DOM may still prove it visibly
+        rendered (an exact normalized substring of one element's text, hit
+        tested). A vision without the exact counter fails closed.
+        """
+
+        counter = getattr(self.vision, "exact_text_count", None)
+        if not callable(counter):
+            return False
+        count = counter(frame_png, text)
+        if count == 1:
+            return True
+        return count == 0 and self._dom_text_visible(text)
 
     def _dom_text_visible(self, text: str) -> bool:
         """True only when the backend proves ``text`` is visibly rendered.

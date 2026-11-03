@@ -29,6 +29,8 @@
 
 ### Fixes
 
+- A covered-band dismiss step takes its dialog box from the window the backend proved covers the band, before any pixel search, so a native message box that the accessibility tree doesn't label as a dialog can be dismissed. Without a proved window the step is refused as before.
+
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
 - Self-repair can take a stop where the app's own dialog covers the next step's identity band: when the backend proves the covering window belongs to the window the last verified step was in, and the part of the band read still matches the record, the dialog is dismissed after the previous click and the step re-checks its identity in full. Another record behind the dialog stays an identity halt. The runtime lets a backend remember a verified record's window (`record_verified_window`); macOS answers `owned_window_over` from the window's proved sheet ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
@@ -119,7 +121,7 @@ A person's approval counts only when a registered approver key signed it, and th
 - Under `problems_only`, problems with an item's own input leave the switch on and send that item to a person; program and environment problems turn it off, and a person re-arms it with one signed tap ([#1517](https://github.com/OpenAdaptAI/OpenAdapt/pull/1517)).
 - Look-alike rows are counted on Windows, macOS, Linux and pixel-only surfaces, so a step that picks a row halts when it cannot tell the target from its twin ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504), [#1518](https://github.com/OpenAdaptAI/OpenAdapt/pull/1518), [#1557](https://github.com/OpenAdaptAI/OpenAdapt/pull/1557)).
 - `openadapt-agent serve --teach-browser` lets a coding agent turn a read-only browser task into a named tool it calls again with new values; `openadapt setup` registers it with Claude Code, Cursor, Codex and Gemini CLI ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)).
-- `induce --held-out` scores each held-out item by running it and checking the record independently ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
+- `openadapt_flow.validation.behavioral_generalization` scores each held-out item by running it and checking the record independently. `induce --held-out` prints structural trace coverage ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
 
 ### Fixes
 
