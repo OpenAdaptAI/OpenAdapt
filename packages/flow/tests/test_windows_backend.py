@@ -740,3 +740,67 @@ def test_element_identity_at_is_none_outside_the_contract(status, body) -> None:
 def test_element_identity_at_unreachable_agent_is_none() -> None:
     backend = WindowsBackend("http://127.0.0.1:9", timeout_s=0.5)
     assert backend.element_identity_at(1, 1) is None
+
+
+@pytest.mark.parametrize("code", ["target_obscured", "target_blocked"])
+def test_a_covered_or_blocked_target_is_a_refusal_not_an_uncertain_click(code) -> None:
+    # Both are refused by the agent before any input; the runtime must stop
+    # cleanly instead of treating the step as a click that may have landed.
+    from openadapt_flow.backend import StructuralResolutionRefused
+    from openadapt_flow.ir import StructuralHandle, StructuralLocator
+
+    server, seen = _serve_identity_route(
+        409, {"status": "error", "code": code, "error": "not accepting input"}
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        with pytest.raises(StructuralResolutionRefused, match=code):
+            backend.act_structural(
+                StructuralLocator(automation_id="saveButton"),
+                StructuralHandle(
+                    point=(10, 10), confidence=1.0, target_fingerprint="a" * 64
+                ),
+            )
+    finally:
+        server.shutdown()
+    assert seen["path"] == "/uia/act"
+
+
+@pytest.mark.parametrize(
+    ("operation", "accepted"),
+    [("win32_bm_click", True), ("uia_invoke", True), ("physical_click", False)],
+)
+def test_native_action_receipts_the_agent_issues(operation, accepted) -> None:
+    # Real lab finding: the agent's posted BM_CLICK receipt was rejected as a
+    # mismatch after the click had been queued.
+    from openadapt_flow.ir import StructuralHandle, StructuralLocator
+
+    fingerprint = "b" * 64
+    server, _ = _serve_identity_route(
+        200,
+        {
+            "status": "ok",
+            "candidate_count": 1,
+            "receipt": {
+                "receipt_id": "uia-1",
+                "operation": operation,
+                "native": True,
+                "target_fingerprint": fingerprint,
+                "delivered_at": "2026-11-03T00:00:00+00:00",
+                "outcome_verified": False,
+            },
+        },
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        handle = StructuralHandle(
+            point=(10, 10), confidence=1.0, target_fingerprint=fingerprint
+        )
+        locator = StructuralLocator(automation_id="saveButton")
+        if accepted:
+            assert backend.act_structural(locator, handle).operation == operation
+        else:
+            with pytest.raises(RuntimeError, match="mismatched"):
+                backend.act_structural(locator, handle)
+    finally:
+        server.shutdown()

@@ -471,7 +471,9 @@ class WindowsBackend:
                     "native_action_failed",
                     "native_action_unavailable",
                     "stale_target",
+                    "target_blocked",
                     "target_not_found",
+                    "target_obscured",
                 }
             ):
                 raise StructuralResolutionRefused(
@@ -1090,7 +1092,10 @@ class WindowsBackend:
         if (
             not parsed.native
             or parsed.target_fingerprint != fingerprint
-            or not parsed.operation.startswith("uia_")
+            or not (
+                parsed.operation.startswith("uia_")
+                or parsed.operation == "win32_bm_click"
+            )
             or parsed.outcome_verified is not False
         ):
             raise RuntimeError(
