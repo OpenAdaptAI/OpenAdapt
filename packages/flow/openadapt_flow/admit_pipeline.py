@@ -369,7 +369,12 @@ def prepare_admission(
     if len(compiled) == 1:
         workflow = Workflow.load(compiled[0])
     else:
-        result = induce_program([Workflow.load(p) for p in compiled])
+        from openadapt_flow.compiler.fixup_passes import read_compile_notes
+
+        result = induce_program(
+            [Workflow.load(p) for p in compiled],
+            compile_notes=[read_compile_notes(p) for p in compiled],
+        )
         if not result.certified or result.workflow is None:
             return stop(
                 "halted",

@@ -8,6 +8,24 @@ compiler mines that check from the recording: the dialog's empty result is an
 exact check on the click that opens the dialog and again before Confirm
 (`compiler/empty_result_guard.py`).
 
+The compiler knows an English vocabulary for that statement. A statement in
+other words ("Keine Treffer gefunden.") is mined from two or more
+demonstrations instead: when the dialog is named, adds exactly one line
+besides its title and button row, and that line reads the same in every
+demonstration although the typed search differs, induction checks it the same
+way. A line that changes with the search, carries a typed value, PHI or a
+number other than 0, or comes from one demonstration only, is not mined; the
+compile notes say why. A check the demonstrations disagree on is dropped and
+noted, never copied from the first recording. A check mined this way was
+chosen because the demonstrations agree, not because of its words, so
+qualification needs a `business_rules` case that halts at it.
+
+Limits: the dialog's title comes from the browser recorder (its accessible
+name), so desktop recordings use the vocabulary only. Telling the statement
+from an empty table's only header needs a recording where the search found
+rows; there is no such contrast check yet. The confirmation pair itself is
+still found from English button labels ("Confirm", "Yes").
+
 OpenEMR lists a chart that shares only a first name with the new patient. On
 the lifecycle soak's synthetic worklist, most of those stops were false: the
 listed chart was clearly someone else, and a person entered the item by hand.

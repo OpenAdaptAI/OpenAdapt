@@ -1798,25 +1798,28 @@ def rule_halt_steps(
     """The steps a rule's run may halt at (``BusinessRuleCase.halt_at``)."""
 
     from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
-    from openadapt_flow.ir import PostconditionKind
+    from openadapt_flow.ir import PostconditionKind, PredicateKind
 
     ids = [step.id for step in workflow.steps]
     if rule.halt_at == "empty_result_guard":
-        # The compiler's exact checks, and an empty-result text check a bundle
-        # compiled before them carries (added by hand after compiling).
+        # The compiler's exact checks (in any language), and an empty-result
+        # text check a bundle compiled before them carries (added by hand
+        # after compiling).
         return {
             step.id
             for step in workflow.steps
             if any(
                 pc.kind is PostconditionKind.TEXT_PRESENT
-                and is_empty_result_statement(pc.text or "")
+                and bool(pc.text)
+                and (pc.exact or is_empty_result_statement(pc.text or ""))
                 for pc in step.expect
             )
             or (
                 step.guard is not None
                 and step.guard.on_unmet == "halt"
+                and step.guard.predicate.kind is PredicateKind.TEXT_PRESENT
                 and step.guard.predicate.exact
-                and is_empty_result_statement(step.guard.predicate.text or "")
+                and bool(step.guard.predicate.text)
             )
         }
     if rule.halt_at == "before_save":
@@ -1831,7 +1834,27 @@ def business_rule_problems(
 ) -> list[str]:
     """What keeps the business-rule cases from running, found before any run."""
 
+    from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
+
     problems: list[str] = []
+    # A dialog check in other words than the English vocabulary was mined
+    # because every demonstration showed it, not because of what it says. A
+    # run on a record the search finds must halt at it before it counts.
+    unworded = sorted(
+        step.id
+        for step in workflow.steps
+        if step.guard is not None
+        and step.guard.predicate.exact
+        and not is_empty_result_statement(step.guard.predicate.text or "")
+    )
+    if unworded and not any(
+        rule.halt_at == "empty_result_guard" for rule in config.business_rules
+    ):
+        problems.append(
+            f"steps {unworded} check a dialog line the demonstrations agreed "
+            "on; add a business_rules case (halt_at: empty_result_guard) whose "
+            "search finds a record, so a run proves the check halts"
+        )
     for rule in config.business_rules:
         unknown = sorted(set(rule.params) - set(params))
         if unknown:
