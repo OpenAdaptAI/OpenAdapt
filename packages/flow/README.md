@@ -376,7 +376,10 @@ claude --mcp-config mcp.json        # then ask: Add an 18.75 expense for parking
 
 Recording, compiling, replaying, and production runs all happen on your
 machine. A healthy run makes no model calls, and model-assisted target finding
-is off unless you turn it on in the CLI or deployment config. That isn't the
+is off unless you turn it on in the CLI or deployment config. Local OCR can
+still read the screen on your machine, and so does the local grounding model when
+you turn it on; see
+[what "no model calls" means](docs/LIMITS.md#what-no-model-calls-means). That isn't the
 same as no network: the app you drive and the record check still talk to
 their own services.
 
@@ -449,7 +452,8 @@ patients. The systems each result ran on, and the boundary of every claim:
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): every benchmark, with method and
   caveats.
 - [Fleet drift patches](docs/FLEET_DRIFT_PATCHES.md): opted-in installs that
-  automate the same application share signed repairs for the same UI change.
+  automate the same application share signed repairs for the same UI change,
+  moved as files or through a local reference hub (there is no hosted feed).
   Each tenant tests a patch on its own cases before it is used.
 - [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a
   model's training episode by reading the record after it ends.

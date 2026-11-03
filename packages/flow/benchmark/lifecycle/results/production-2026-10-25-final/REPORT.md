@@ -1,5 +1,7 @@
 # Lifecycle soak report
 
+> Scope: operator minutes come from a cost model, hand entry is assumed at 3 minutes per item (no person was timed), and the build includes the draft duplicate check #1516. The ratio is modelled, not an observed production saving.
+
 Protocol `lifecycle/2026-10-20.1`, workload `lifecycle-workload/2026-10-24.1`, seed 7, 55 referrals over 10 simulated days. Engine commit `8bfd7f6af841`. App: openemr 8.0.0.3, synthetic data only. Cost model `lifecycle-cost/2026-10-20.1`.
 
 ## Arm `openadapt-production-relabel`

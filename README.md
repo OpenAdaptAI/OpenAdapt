@@ -280,7 +280,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it.
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
-- **Runs locally**: no model calls on healthy runs, patient data redacted, signed receipts.
+- **Runs locally**: no model calls on healthy runs (local OCR can still read the screen; [what that means](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/LIMITS.md#what-no-model-calls-means)), patient data redacted, signed receipts.
 
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
 
