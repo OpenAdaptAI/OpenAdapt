@@ -850,6 +850,8 @@ class MacOSBackend(RemoteDisplayBackend):
         #: Set by ``act_structural`` for the length of its click: re-proves the
         #: AX element right before every mouse-down edge.
         self._pre_edge_check: Optional[Any] = None
+        #: step id -> (window id, pid) the step's verified identity was in.
+        self._verified_windows: dict[str, tuple[int, int]] = {}
         # Opaque AX object captured with the one-shot actuation frame. It is
         # process-local, never serialized/logged, and prevents an unchanged-
         # pixel focus switch from redirecting consequential TYPE/KEY input.
@@ -903,6 +905,47 @@ class MacOSBackend(RemoteDisplayBackend):
     # window's AX element lists exactly that one sheet and exactly one window
     # of the same process has its bounds inside the window
     # (``MacWindowClient.attached_sheet``). Any other window stays refused.
+
+    def record_verified_window(self, step_id: str, x: int, y: int) -> bool:
+        """Remember the window a step's verified identity was in (#1724)."""
+        try:
+            window = self._resolve_window(refresh=True)
+        except Exception:  # noqa: BLE001 - no capture
+            return False
+        self._verified_windows[str(step_id)] = (window.window_id, window.pid)
+        return True
+
+    def owned_window_over(
+        self, region: tuple[int, int, int, int], *, pinned_step_id: str
+    ) -> Optional[dict[str, Any]]:
+        """The pinned window's own sheet, when it covers ``region`` (#1724).
+
+        ``pinned_step_id`` names the step whose verified identity recorded the
+        window (:meth:`record_verified_window`). Only that same window's one
+        proved sheet counts. None on anything else: no capture, the window is
+        gone or another one now, no proved sheet, no overlap, any failure.
+        """
+        captured = self._verified_windows.get(str(pinned_step_id))
+        if captured is None:
+            return None
+        try:
+            window = self._resolve_window(refresh=True)
+            if (window.window_id, window.pid) != captured:
+                return None
+            sheet = self._attached_sheet(window, wait=False)
+            if sheet is None:
+                return None
+            self._ensure_captured()
+            rect = self._in_window_pixel_rect(window, sheet[1])
+        except Exception:  # noqa: BLE001 - no proof
+            return None
+        if rect is None:
+            return None
+        sx, sy, sw, sh = rect
+        x, y, w, h = (int(v) for v in region)
+        if sx < x + w and x < sx + sw and sy < y + h and y < sy + sh:
+            return {"kind": "sheet", "window_id": sheet[0], "pid": window.pid}
+        return None
 
     def _attached_sheet(
         self, window: WindowInfo, *, wait: bool = True
