@@ -5931,16 +5931,19 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
     finally:
         os.close(descriptor)
     try:
-        directory_flags = os.O_RDONLY
-        if hasattr(os, "O_DIRECTORY"):
-            directory_flags |= os.O_DIRECTORY
-        if hasattr(os, "O_NOFOLLOW"):
-            directory_flags |= os.O_NOFOLLOW
-        directory = os.open(ledger_dir, directory_flags)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        # Windows cannot open a directory to flush it; NTFS journals the new
+        # entry, and the marker's own bytes were flushed above.
+        if os.name != "nt":
+            directory_flags = os.O_RDONLY
+            if hasattr(os, "O_DIRECTORY"):
+                directory_flags |= os.O_DIRECTORY
+            if hasattr(os, "O_NOFOLLOW"):
+                directory_flags |= os.O_NOFOLLOW
+            directory = os.open(ledger_dir, directory_flags)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     except OSError:
         print(
             "run REFUSED: qualification attempt ledger could not be persisted safely. "
