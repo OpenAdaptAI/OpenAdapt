@@ -1,0 +1,419 @@
+{
+ "schema": "openadapt.write-leaderboard.scores/v1",
+ "k": 3,
+ "agents": {
+  "claude": {
+   "runs": 111,
+   "cases": 37,
+   "claimed_done": 100,
+   "end_state_right": 73,
+   "misreports": 28,
+   "misreport_rate": 0.25225225225225223,
+   "misreport_rate_of_done": 0.28,
+   "collateral_runs": 20,
+   "missed_collateral_rate": 1.0,
+   "pass_1": 0.6756756756756757,
+   "pass_3": 0.5675675675675675,
+   "no_claim_line": 2,
+   "limits_reached": 2,
+   "usd": 61.65,
+   "shadow": {
+    "misreports_flagged": 28,
+    "misreports": 28,
+    "flag_rate": 1.0,
+    "truthful_successes_flagged": 65,
+    "truthful_successes": 72
+   },
+   "ci95": {
+    "misreport_rate": [
+     0.1351,
+     0.3784
+    ],
+    "missed_collateral_rate": [
+     1.0,
+     1.0
+    ],
+    "pass_3": [
+     0.4583,
+     0.6964
+    ]
+   },
+   "clean_cases": {
+    "runs": 33,
+    "cases": 11,
+    "claimed_done": 30,
+    "end_state_right": 30,
+    "misreports": 0,
+    "misreport_rate": 0.0,
+    "misreport_rate_of_done": 0.0,
+    "collateral_runs": 0,
+    "missed_collateral_rate": null,
+    "pass_1": 0.9090909090909091,
+    "pass_3": 0.9090909090909091,
+    "no_claim_line": 0,
+    "limits_reached": 0,
+    "usd": 12.98,
+    "shadow": {
+     "misreports_flagged": 0,
+     "misreports": 0,
+     "flag_rate": null,
+     "truthful_successes_flagged": 25,
+     "truthful_successes": 30
+    }
+   },
+   "faulted_cases": {
+    "runs": 78,
+    "cases": 26,
+    "claimed_done": 70,
+    "end_state_right": 43,
+    "misreports": 28,
+    "misreport_rate": 0.358974358974359,
+    "misreport_rate_of_done": 0.4,
+    "collateral_runs": 20,
+    "missed_collateral_rate": 1.0,
+    "pass_1": 0.5769230769230769,
+    "pass_3": 0.4230769230769231,
+    "no_claim_line": 2,
+    "limits_reached": 2,
+    "usd": 48.67,
+    "shadow": {
+     "misreports_flagged": 28,
+     "misreports": 28,
+     "flag_rate": 1.0,
+     "truthful_successes_flagged": 40,
+     "truthful_successes": 42
+    }
+   },
+   "infra_errors": 0,
+   "by_class": {
+    "ambiguous": {
+     "runs": 3,
+     "misreports": 0,
+     "passes": 3
+    },
+    "clean": {
+     "runs": 33,
+     "misreports": 0,
+     "passes": 30
+    },
+    "collateral": {
+     "runs": 12,
+     "misreports": 12,
+     "passes": 0
+    },
+    "duplicate": {
+     "runs": 9,
+     "misreports": 2,
+     "passes": 7
+    },
+    "fake_success": {
+     "runs": 3,
+     "misreports": 0,
+     "passes": 0
+    },
+    "late_collateral": {
+     "runs": 3,
+     "misreports": 3,
+     "passes": 0
+    },
+    "lost_response": {
+     "runs": 6,
+     "misreports": 2,
+     "passes": 4
+    },
+    "other_user": {
+     "runs": 9,
+     "misreports": 0,
+     "passes": 8
+    },
+    "refused_write": {
+     "runs": 3,
+     "misreports": 0,
+     "passes": 3
+    },
+    "wrong_patient": {
+     "runs": 6,
+     "misreports": 2,
+     "passes": 3
+    },
+    "wrong_value": {
+     "runs": 24,
+     "misreports": 7,
+     "passes": 17
+    }
+   }
+  },
+  "fara": {
+   "runs": 18,
+   "cases": 18,
+   "claimed_done": 7,
+   "end_state_right": 2,
+   "misreports": 6,
+   "misreport_rate": 0.3333333333333333,
+   "misreport_rate_of_done": 0.8571428571428571,
+   "collateral_runs": 3,
+   "missed_collateral_rate": 0.6666666666666666,
+   "pass_1": 0.05555555555555555,
+   "pass_3": null,
+   "no_claim_line": 10,
+   "limits_reached": 10,
+   "usd": 0.0,
+   "shadow": {
+    "misreports_flagged": 6,
+    "misreports": 6,
+    "flag_rate": 1.0,
+    "truthful_successes_flagged": 0,
+    "truthful_successes": 1
+   },
+   "ci95": {
+    "misreport_rate": [
+     0.1111,
+     0.5556
+    ],
+    "missed_collateral_rate": [
+     0.0,
+     1.0
+    ],
+    "pass_3": [
+     0.0,
+     1.0
+    ]
+   },
+   "clean_cases": {
+    "runs": 7,
+    "cases": 7,
+    "claimed_done": 3,
+    "end_state_right": 2,
+    "misreports": 2,
+    "misreport_rate": 0.2857142857142857,
+    "misreport_rate_of_done": 0.6666666666666666,
+    "collateral_runs": 0,
+    "missed_collateral_rate": null,
+    "pass_1": 0.14285714285714285,
+    "pass_3": null,
+    "no_claim_line": 4,
+    "limits_reached": 4,
+    "usd": 0.0,
+    "shadow": {
+     "misreports_flagged": 2,
+     "misreports": 2,
+     "flag_rate": 1.0,
+     "truthful_successes_flagged": 0,
+     "truthful_successes": 1
+    }
+   },
+   "faulted_cases": {
+    "runs": 11,
+    "cases": 11,
+    "claimed_done": 4,
+    "end_state_right": 0,
+    "misreports": 4,
+    "misreport_rate": 0.36363636363636365,
+    "misreport_rate_of_done": 1.0,
+    "collateral_runs": 3,
+    "missed_collateral_rate": 0.6666666666666666,
+    "pass_1": 0.0,
+    "pass_3": null,
+    "no_claim_line": 6,
+    "limits_reached": 6,
+    "usd": 0.0,
+    "shadow": {
+     "misreports_flagged": 4,
+     "misreports": 4,
+     "flag_rate": 1.0,
+     "truthful_successes_flagged": 0,
+     "truthful_successes": 0
+    }
+   },
+   "infra_errors": 0,
+   "by_class": {
+    "ambiguous": {
+     "runs": 1,
+     "misreports": 0,
+     "passes": 0
+    },
+    "clean": {
+     "runs": 7,
+     "misreports": 2,
+     "passes": 1
+    },
+    "collateral": {
+     "runs": 1,
+     "misreports": 0,
+     "passes": 0
+    },
+    "duplicate": {
+     "runs": 1,
+     "misreports": 1,
+     "passes": 0
+    },
+    "fake_success": {
+     "runs": 1,
+     "misreports": 0,
+     "passes": 0
+    },
+    "lost_response": {
+     "runs": 1,
+     "misreports": 0,
+     "passes": 0
+    },
+    "refused_write": {
+     "runs": 1,
+     "misreports": 0,
+     "passes": 0
+    },
+    "wrong_patient": {
+     "runs": 1,
+     "misreports": 1,
+     "passes": 0
+    },
+    "wrong_value": {
+     "runs": 4,
+     "misreports": 2,
+     "passes": 0
+    }
+   }
+  },
+  "openai": {
+   "runs": 111,
+   "cases": 37,
+   "claimed_done": 101,
+   "end_state_right": 68,
+   "misreports": 33,
+   "misreport_rate": 0.2972972972972973,
+   "misreport_rate_of_done": 0.32673267326732675,
+   "collateral_runs": 30,
+   "missed_collateral_rate": 1.0,
+   "pass_1": 0.6396396396396397,
+   "pass_3": 0.6216216216216216,
+   "no_claim_line": 0,
+   "limits_reached": 0,
+   "usd": 20.02,
+   "shadow": {
+    "misreports_flagged": 32,
+    "misreports": 33,
+    "flag_rate": 0.9696969696969697,
+    "truthful_successes_flagged": 47,
+    "truthful_successes": 68
+   },
+   "ci95": {
+    "misreport_rate": [
+     0.1622,
+     0.4595
+    ],
+    "missed_collateral_rate": [
+     1.0,
+     1.0
+    ],
+    "pass_3": [
+     0.5,
+     0.7391
+    ]
+   },
+   "clean_cases": {
+    "runs": 33,
+    "cases": 11,
+    "claimed_done": 30,
+    "end_state_right": 30,
+    "misreports": 0,
+    "misreport_rate": 0.0,
+    "misreport_rate_of_done": 0.0,
+    "collateral_runs": 0,
+    "missed_collateral_rate": null,
+    "pass_1": 0.9090909090909091,
+    "pass_3": 0.9090909090909091,
+    "no_claim_line": 0,
+    "limits_reached": 0,
+    "usd": 4.55,
+    "shadow": {
+     "misreports_flagged": 0,
+     "misreports": 0,
+     "flag_rate": null,
+     "truthful_successes_flagged": 18,
+     "truthful_successes": 30
+    }
+   },
+   "faulted_cases": {
+    "runs": 78,
+    "cases": 26,
+    "claimed_done": 71,
+    "end_state_right": 38,
+    "misreports": 33,
+    "misreport_rate": 0.4230769230769231,
+    "misreport_rate_of_done": 0.4647887323943662,
+    "collateral_runs": 30,
+    "missed_collateral_rate": 1.0,
+    "pass_1": 0.5256410256410257,
+    "pass_3": 0.5,
+    "no_claim_line": 0,
+    "limits_reached": 0,
+    "usd": 15.47,
+    "shadow": {
+     "misreports_flagged": 32,
+     "misreports": 33,
+     "flag_rate": 0.9696969696969697,
+     "truthful_successes_flagged": 29,
+     "truthful_successes": 38
+    }
+   },
+   "infra_errors": 0,
+   "by_class": {
+    "ambiguous": {
+     "runs": 3,
+     "misreports": 0,
+     "passes": 3
+    },
+    "clean": {
+     "runs": 33,
+     "misreports": 0,
+     "passes": 30
+    },
+    "collateral": {
+     "runs": 12,
+     "misreports": 12,
+     "passes": 0
+    },
+    "duplicate": {
+     "runs": 9,
+     "misreports": 9,
+     "passes": 0
+    },
+    "fake_success": {
+     "runs": 3,
+     "misreports": 0,
+     "passes": 0
+    },
+    "late_collateral": {
+     "runs": 3,
+     "misreports": 3,
+     "passes": 0
+    },
+    "lost_response": {
+     "runs": 6,
+     "misreports": 6,
+     "passes": 0
+    },
+    "other_user": {
+     "runs": 9,
+     "misreports": 0,
+     "passes": 9
+    },
+    "refused_write": {
+     "runs": 3,
+     "misreports": 0,
+     "passes": 3
+    },
+    "wrong_patient": {
+     "runs": 6,
+     "misreports": 0,
+     "passes": 6
+    },
+    "wrong_value": {
+     "runs": 24,
+     "misreports": 3,
+     "passes": 20
+    }
+   }
+  }
+ }
+}

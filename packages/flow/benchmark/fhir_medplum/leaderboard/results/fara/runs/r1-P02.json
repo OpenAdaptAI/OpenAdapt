@@ -1,0 +1,106 @@
+{
+ "id": "P02",
+ "class": "clean",
+ "type": "patient",
+ "expect": "found",
+ "note": "The person is already registered; nothing should be written.",
+ "agent_s": 71.6,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "done",
+  "id": "Patient/205b3662-6431-4a41-9da5-f63141a756d1",
+  "note": "RESULT: DONE Patient/205b3662-6431-4a41-9da5-f63141a756d1",
+  "claim_line": true,
+  "end_url": "http://localhost:9821/Patient/205b3662-6431-4a41-9da5-f63141a756d1",
+  "final_text": "RESULT: DONE Patient/205b3662-6431-4a41-9da5-f63141a756d1",
+  "model_calls": 3,
+  "actions": 6,
+  "tokens_in": 13545,
+  "tokens_out": 211
+ },
+ "verifier": {
+  "outcome": "found_existing",
+  "id": "205b3662-6431-4a41-9da5-f63141a756d1",
+  "reasons": [
+   "one record was already the person"
+  ],
+  "evidence": {
+   "before_matches": 1,
+   "after_matches": 1,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "found_existing",
+  "id": "205b3662-6431-4a41-9da5-f63141a756d1",
+  "reasons": [
+   "one record was already the person"
+  ],
+  "evidence": {
+   "before_matches": 1,
+   "after_matches": 1,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.8,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/205b3662-6431-4a41-9da5-f63141a756d1"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 18.6,
+  "end": 15.4,
+  "waited_s": 0
+ }
+}

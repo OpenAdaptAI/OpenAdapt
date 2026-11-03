@@ -1,0 +1,136 @@
+{
+ "id": "P05",
+ "class": "wrong_value",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path transposes the phone number's last two digits.",
+ "agent_s": 2400.5,
+ "cost_usd": 0.0,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "Scroll down to bring the 'Telecom' section into view so I can add the home phone number",
+  "claim_line": false,
+  "stopped": "time cap: 2400 s",
+  "end_url": "http://localhost:9821/Patient/new",
+  "final_text": "Scroll down to bring the 'Telecom' section into view so I can add the home phone number",
+  "model_calls": 60,
+  "actions": 101,
+  "tokens_in": 517932,
+  "tokens_out": 3646
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "unreadable: GET http://localhost:9820/fhir/R4/AuditEvent returned HTTP 401"
+  ],
+  "evidence": {
+   "unreadable": true
+  },
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "unreadable: GET http://localhost:9820/fhir/R4/AuditEvent returned HTTP 401"
+  ],
+  "evidence": {
+   "unreadable": true
+  },
+  "unreadable": true
+ },
+ "verify_s": 2.3,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate",
+   "changed": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 28.7,
+  "end": 35.4,
+  "waited_s": 630
+ }
+}

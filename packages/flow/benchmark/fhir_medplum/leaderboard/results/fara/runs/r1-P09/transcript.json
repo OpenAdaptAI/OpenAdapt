@@ -1,0 +1,1083 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to locate or create a Patient record for Lena Okafor. Use the global search bar to look up any existing Patient resources with those details.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Patient resource details to verify and, if necessary, update the record to match Lena Okafor.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [214, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to verify whether a Patient record exists for Lena Okafor with the provided details. Using the global search bar with a FHIR query will list matching Patient resources if any exist.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "The current page shows a different patient (Tomasz Wren). To perform a global search for Lena Okafor, navigate to the Patient search results page via the search bar.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"visit_url\", \"url\": \"http://localhost:9821/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender\"}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to look up any Patient resources matching the provided details (name, birth date, gender).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to verify whether a Patient record exists for Lena Okafor with the provided details. Use the global search bar with a FHIR query to list matching Patient resources if any exist.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [289, 32], \"text\": \"Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to open the Patient resource to verify details and, if necessary, update it to match Lena Okafor. Clicking the row should open the resource or navigate to its URL.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [214, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the Patient resource via its ID to verify details and, if necessary, update it to match Lena Okafor.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [214, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "Use the global search bar to run a FHIR query for any Patient resource matching the provided details (name, birth date, gender) to determine whether a matching record exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [203, 32], \"text\": \"Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query didn\u2019t execute. Clicking the Search button should submit the query and show matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query didn\u2019t execute via the button. Press Enter to submit the query and load results for matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search bar input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Press Enter to submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Press Enter to submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Press Enter to submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Press Enter to submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Press Enter to submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"key\", \"keys\": [\"Enter\"]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  },
+  {
+   "reply": "The global search input is focused but the query isn\u2019t executing. Clicking the Search button should submit the FHIR query and load any matching Patient resources (if any).\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [115, 32]}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 212.67080745341616,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "goto",
+   "url": "http://localhost:9821/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender"
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 287.2049689440994,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 212.67080745341616,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 212.67080745341616,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 201.7391304347826,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Patient?name=Lena%20Okafor&birthDate=1988-04-22&gender=female"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 114.28571428571428,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 3037,
+   "out": 110,
+   "usd": 0.0
+  },
+  {
+   "in": 4543,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 6004,
+   "out": 117,
+   "usd": 0.0
+  },
+  {
+   "in": 6189,
+   "out": 91,
+   "usd": 0.0
+  },
+  {
+   "in": 6340,
+   "out": 102,
+   "usd": 0.0
+  },
+  {
+   "in": 6502,
+   "out": 117,
+   "usd": 0.0
+  },
+  {
+   "in": 6679,
+   "out": 73,
+   "usd": 0.0
+  },
+  {
+   "in": 6820,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 6947,
+   "out": 114,
+   "usd": 0.0
+  },
+  {
+   "in": 7129,
+   "out": 65,
+   "usd": 0.0
+  },
+  {
+   "in": 7262,
+   "out": 60,
+   "usd": 0.0
+  },
+  {
+   "in": 7390,
+   "out": 69,
+   "usd": 0.0
+  },
+  {
+   "in": 7527,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 7653,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 7789,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 7915,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 8051,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 8187,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 8323,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 8459,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 8585,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 8721,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 8857,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 8993,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 9129,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 9265,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 9391,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 9527,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 9663,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 9799,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 9935,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 10071,
+   "out": 58,
+   "usd": 0.0
+  },
+  {
+   "in": 10197,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 10333,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 10469,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 10605,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 10741,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 10877,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 11013,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 11149,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 11285,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 11421,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 11557,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 11693,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 11829,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 11965,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 12101,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 12237,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 12373,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 12509,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 12645,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 12781,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 12917,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 13053,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 13189,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 13325,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 13461,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 13597,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 13733,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 13869,
+   "out": 68,
+   "usd": 0.0
+  },
+  {
+   "in": 14005,
+   "out": 68,
+   "usd": 0.0
+  }
+ ]
+}

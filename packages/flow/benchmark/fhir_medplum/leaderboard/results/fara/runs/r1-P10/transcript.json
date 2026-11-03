@@ -1,0 +1,1047 @@
+{
+ "transcript": [
+  {
+   "reply": "We need to search for an existing Patient resource with the given name and birth date to see if a record already exists.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [200, 32], \"text\": \"Lena Okafor 1988-04-22\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the first existing Patient resource to inspect its details and confirm if it matches the required fields.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [216, 302]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to remember that a Patient resource already exists with the required name and birth date, so we know not to create a new one.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"pause_and_memorize_fact\", \"fact\": \"Patient resource with id 4b191189-1e68-45f0-b9d5-7401fbae1354 exists for Lena Okafor, DOB 1988-04-22, gender female.\"}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to open the JSON view to access the telecoms array and add the home phone and email.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [473, 152]}}\n</tool_call>"
+  },
+  {
+   "reply": "Close the JSON modal to return to the Patient detail page so we can access the Edit tab and add telecom fields.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1061, 747]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the OK button to close the JSON modal and return to the Patient detail page.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [1061, 747]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the Edit tab to open the Patient edit form so we can add the home phone and email telecoms.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [190, 152]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to bring the Telecom section fully into view so we can add the home phone and email fields.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll further down to locate the Telecom section to add home phone and email.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll up to locate the Telecom section so we can add home phone and email.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": 808}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Telecom' button to create a new telecom field where we can input the home phone number.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [273, 294]}}\n</tool_call>"
+  },
+  {
+   "reply": "Open the 'value' combobox for the new telecom field so we can input the home phone number.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [910, 296]}}\n</tool_call>"
+  },
+  {
+   "reply": "Enter the home phone number into the telecom value field.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"type\", \"coordinate\": [910, 296], \"text\": \"413-555-0187\", \"press_enter\": true, \"delete_existing_text\": true}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Add Telecom' button to create a new telecom field where we can input the email address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [273, 347]}}\n</tool_call>"
+  },
+  {
+   "reply": "We need to open the address field to input the patient's address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 617]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' field to expand or open its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 617]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' row to expand its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 617]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Address section so we can expand it and input the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' row to expand its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' row to expand its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Address section so we can expand it and input the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' row to expand its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Address section so we can expand it and input the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' row to expand its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Scroll down to locate the Address section so we can expand it and input the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"scroll\", \"pixels\": -808}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' row to expand its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; previous clicks may not have registered or it requires multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' row to expand its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; perhaps previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Click the 'Address' row to expand its input area so we can type the address.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  },
+  {
+   "reply": "Attempt to expand the Address section by clicking the 'Address' row again; maybe previous clicks didn't register or require multiple clicks.\n<tool_call>\n{\"name\": \"computer_use\", \"arguments\": {\"action\": \"left_click\", \"coordinate\": [230, 394]}}\n</tool_call>"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 198.75776397515529,
+   "y": 31.527093596059114,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "Lena Okafor 1988-04-22"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 214.6583850931677,
+   "y": 297.5369458128079,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 470.0621118012422,
+   "y": 149.7536945812808,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1054.4099378881988,
+   "y": 735.960591133005,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 1054.4099378881988,
+   "y": 735.960591133005,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 188.8198757763975,
+   "y": 149.7536945812808,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": -808.0
+  },
+  {
+   "a": "click",
+   "x": 271.30434782608694,
+   "y": 289.6551724137931,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 904.3478260869565,
+   "y": 291.6256157635468,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 904.3478260869565,
+   "y": 291.6256157635468,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Meta",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Backspace"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "413-555-0187"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Enter"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 271.30434782608694,
+   "y": 341.871921182266,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 607.8817733990148,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 607.8817733990148,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 607.8817733990148,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "scroll",
+   "x": 640,
+   "y": 400,
+   "dx": 0,
+   "dy": 808.0
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 228.57142857142856,
+   "y": 388.17733990147786,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  }
+ ],
+ "usage": [
+  {
+   "in": 3037,
+   "out": 90,
+   "usd": 0.0
+  },
+  {
+   "in": 4523,
+   "out": 54,
+   "usd": 0.0
+  },
+  {
+   "in": 5984,
+   "out": 121,
+   "usd": 0.0
+  },
+  {
+   "in": 6176,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 6304,
+   "out": 59,
+   "usd": 0.0
+  },
+  {
+   "in": 6435,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 6560,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 6689,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 6810,
+   "out": 43,
+   "usd": 0.0
+  },
+  {
+   "in": 6925,
+   "out": 44,
+   "usd": 0.0
+  },
+  {
+   "in": 7041,
+   "out": 57,
+   "usd": 0.0
+  },
+  {
+   "in": 7170,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 7298,
+   "out": 74,
+   "usd": 0.0
+  },
+  {
+   "in": 7444,
+   "out": 56,
+   "usd": 0.0
+  },
+  {
+   "in": 7572,
+   "out": 49,
+   "usd": 0.0
+  },
+  {
+   "in": 7693,
+   "out": 55,
+   "usd": 0.0
+  },
+  {
+   "in": 7820,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 7945,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8062,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8187,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8312,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8429,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8554,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8671,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 8796,
+   "out": 45,
+   "usd": 0.0
+  },
+  {
+   "in": 8913,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 9038,
+   "out": 50,
+   "usd": 0.0
+  },
+  {
+   "in": 9160,
+   "out": 62,
+   "usd": 0.0
+  },
+  {
+   "in": 9294,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 9419,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 9552,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 9685,
+   "out": 53,
+   "usd": 0.0
+  },
+  {
+   "in": 9810,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 9943,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 10076,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 10209,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 10342,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 10475,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 10608,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 10741,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 10874,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 11007,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 11140,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 11273,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 11406,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 11539,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 11672,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 11805,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 11938,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 12071,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 12204,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 12337,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 12470,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 12603,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 12736,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 12869,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 13002,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 13135,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 13268,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 13401,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 13534,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 13667,
+   "out": 61,
+   "usd": 0.0
+  },
+  {
+   "in": 13800,
+   "out": 61,
+   "usd": 0.0
+  }
+ ]
+}

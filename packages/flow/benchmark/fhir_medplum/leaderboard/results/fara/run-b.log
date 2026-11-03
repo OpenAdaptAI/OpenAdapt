@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/write-leaderboard-6812f3/packages/flow/benchmark/fhir_medplum/leaderboard/run.py", line 231, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/write-leaderboard-6812f3/packages/flow/benchmark/fhir_medplum/leaderboard/run.py", line 146, in main
+    browser.sign_in(bench.actors.emails["bot"], bench.actors.passwords["bot"])
+  File "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/write-leaderboard-6812f3/packages/flow/benchmark/fhir_medplum/leaderboard/browser.py", line 215, in sign_in
+    raise RuntimeError("the harness couldn't sign in to the Medplum app")
+RuntimeError: the harness couldn't sign in to the Medplum app
+--- relaunch Mon Nov  2 21:46:00 EST 2026
+/opt/homebrew/anaconda3/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
