@@ -119,9 +119,8 @@ _MAX_TEXT_CHARS = 65_536
 _MAX_UIA_NODES = 5_000
 _MAX_UIA_CANDIDATES = 16
 _MAX_UIA_DEPTH = 24
-# A WinForms button whose click opens a modal dialog does not return from
-# Invoke until the dialog closes. Past this wait with the call accepted, the
-# invoke is running and counts as delivered.
+# An Invoke that has not returned after this long (a click handler showing a
+# modal dialog, or an app that is not answering) is an uncertain delivery.
 _INVOKE_RETURN_S = 2.0
 _INVOKE_START_S = 15.0
 
@@ -1304,14 +1303,24 @@ def _perform_uia_initialized(
             "another window or dialog is over the UIA target",
         )
     role = candidate.get("role")
+    user32 = _user32_factory() if os.name == "nt" else None
+    if user32 is not None:
+        _window_guard(user32, _window_handle(control), tuple(candidate["point"]))
     try:
         if role in {"button", "link", "menuitem"}:
             hwnd = _control_value(control, "NativeWindowHandle", 0)
-            if role == "button" and isinstance(hwnd, int) and hwnd and os.name == "nt":
-                _post_button_click(hwnd)
+            if (
+                role == "button"
+                and user32 is not None
+                and isinstance(hwnd, int)
+                and hwnd
+                and _is_push_button(user32, hwnd)
+            ):
+                _post_button_click(user32, hwnd)
+                delivered = "win32_bm_click"
             else:
                 _invoke_off_thread(locator, candidate["fingerprint"])
-            delivered = "uia_invoke"
+                delivered = "uia_invoke"
         elif role == "textbox":
             if control.SetFocus() is False:
                 raise AgentRequestError(
@@ -1373,46 +1382,144 @@ def _hits_target(auto: Any, control: object, candidate: dict[str, Any]) -> bool:
 
 _BM_CLICK = 0x00F5
 _GA_ROOT = 2
+_GA_ROOTOWNER = 3
+_PUSH_BUTTON_CLASSES = ("button", "windowsforms10.button")
 
 
-def _post_button_click(hwnd: int) -> None:
-    """Click a window-backed button by posting it ``BM_CLICK``.
+class _User32:
+    """The user32 calls the native-action guards make (Windows only)."""
 
-    This is the message UI Automation's own Win32 button provider sends for
-    Invoke, but posted: the click runs in the app's message loop and this
-    returns at once, so a click handler that opens a modal dialog cannot
-    hold the agent (or the app's UI Automation provider) inside a call. The
-    button and its top-level window must be enabled; a window disabled by a
-    modal dialog would drop the click without a word.
+    def __init__(self) -> None:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        self._ctypes = ctypes
+        self._wintypes = wintypes
+        dll = ctypes.WinDLL("user32", use_last_error=True)
+        for name, args, res in (
+            ("IsWindow", [wintypes.HWND], wintypes.BOOL),
+            ("IsWindowEnabled", [wintypes.HWND], wintypes.BOOL),
+            ("IsWindowVisible", [wintypes.HWND], wintypes.BOOL),
+            ("GetAncestor", [wintypes.HWND, wintypes.UINT], wintypes.HWND),
+            ("GetForegroundWindow", [], wintypes.HWND),
+            ("WindowFromPoint", [wintypes.POINT], wintypes.HWND),
+            (
+                "GetClassNameW",
+                [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int],
+                ctypes.c_int,
+            ),
+            (
+                "PostMessageW",
+                [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM],
+                wintypes.BOOL,
+            ),
+        ):
+            fn = getattr(dll, name)
+            fn.argtypes = args
+            fn.restype = res
+        self._dll = dll
+
+    def is_window(self, hwnd: int) -> bool:
+        return bool(self._dll.IsWindow(hwnd))
+
+    def is_enabled(self, hwnd: int) -> bool:
+        return bool(self._dll.IsWindowEnabled(hwnd))
+
+    def is_visible(self, hwnd: int) -> bool:
+        return bool(self._dll.IsWindowVisible(hwnd))
+
+    def ancestor(self, hwnd: int, flag: int) -> int:
+        return int(self._dll.GetAncestor(hwnd, flag) or 0)
+
+    def foreground(self) -> int:
+        return int(self._dll.GetForegroundWindow() or 0)
+
+    def window_from_point(self, x: int, y: int) -> int:
+        return int(self._dll.WindowFromPoint(self._wintypes.POINT(x, y)) or 0)
+
+    def class_name(self, hwnd: int) -> str:
+        buffer = self._ctypes.create_unicode_buffer(256)
+        self._dll.GetClassNameW(hwnd, buffer, 256)
+        return buffer.value
+
+    def post(self, hwnd: int, message: int) -> bool:
+        return bool(self._dll.PostMessageW(hwnd, message, 0, 0))
+
+
+#: Replaced in tests; Windows builds the real binding.
+_user32_factory: Callable[[], Any] = _User32
+
+
+def _window_handle(control: object) -> int:
+    """The control's own window handle, or the nearest ancestor's."""
+    node: Optional[object] = control
+    for _ in range(_MAX_UIA_DEPTH):
+        if node is None:
+            break
+        hwnd = _control_value(node, "NativeWindowHandle", 0)
+        if isinstance(hwnd, int) and hwnd:
+            return hwnd
+        node = _parent(node)
+    return 0
+
+
+def _window_guard(user32: Any, hwnd: int, point: tuple[int, int]) -> None:
+    """Refuse a native action that the target's window could not take.
+
+    Checked with Win32 because UI Automation's own hit test passes through
+    windows that are still loading (seen live with Notepad over the app):
+    the window under the point must belong to the target's top-level
+    window, and that window and the target's must be enabled. A window a
+    modal dialog has disabled would drop the action without a word.
     """
-    import ctypes  # noqa: PLC0415
-    from ctypes import wintypes  # noqa: PLC0415
-
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    user32.IsWindow.argtypes = [wintypes.HWND]
-    user32.IsWindow.restype = wintypes.BOOL
-    user32.IsWindowEnabled.argtypes = [wintypes.HWND]
-    user32.IsWindowEnabled.restype = wintypes.BOOL
-    user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
-    user32.GetAncestor.restype = wintypes.HWND
-    user32.PostMessageW.argtypes = [
-        wintypes.HWND,
-        wintypes.UINT,
-        wintypes.WPARAM,
-        wintypes.LPARAM,
-    ]
-    user32.PostMessageW.restype = wintypes.BOOL
-    handle = wintypes.HWND(hwnd)
-    if not user32.IsWindow(handle):
+    if not hwnd or not user32.is_window(hwnd):
         raise AgentRequestError(
             409, "stale_target", "UIA target changed after resolution"
         )
-    root = user32.GetAncestor(handle, _GA_ROOT) or handle
-    if not user32.IsWindowEnabled(handle) or not user32.IsWindowEnabled(root):
+    root = user32.ancestor(hwnd, _GA_ROOT) or hwnd
+    if not user32.is_enabled(hwnd) or not user32.is_enabled(root):
         raise AgentRequestError(
             409, "target_blocked", "the UIA target's window is not accepting input"
         )
-    if not user32.PostMessageW(handle, _BM_CLICK, 0, 0):
+    under = user32.window_from_point(int(point[0]), int(point[1]))
+    if not under or (user32.ancestor(under, _GA_ROOT) or under) != root:
+        raise AgentRequestError(
+            409,
+            "target_obscured",
+            "another window or dialog is over the UIA target",
+        )
+
+
+def _is_push_button(user32: Any, hwnd: int) -> bool:
+    name = user32.class_name(hwnd).casefold()
+    return name == "button" or name.startswith(_PUSH_BUTTON_CLASSES[1])
+
+
+def _post_button_click(user32: Any, hwnd: int) -> None:
+    """Click a Win32 or WinForms push button by posting it ``BM_CLICK``.
+
+    This is the message UI Automation's own Win32 button provider sends for
+    Invoke, but posted: the click runs in the app's message loop and this
+    returns at once, so a click handler that opens a modal dialog cannot hold
+    the agent inside a call. Only a visible push button whose top-level
+    window is the foreground one gets it (Windows documents that BM_CLICK
+    can be dropped by an inactive dialog). The receipt is ``win32_bm_click``:
+    the message was queued, and the outcome is for the run's checks.
+    """
+    if not user32.is_visible(hwnd):
+        raise AgentRequestError(
+            409, "target_obscured", "the UIA target's window is not visible"
+        )
+    owner = user32.ancestor(hwnd, _GA_ROOTOWNER) or hwnd
+    foreground = user32.foreground()
+    if (
+        not foreground
+        or (user32.ancestor(foreground, _GA_ROOTOWNER) or foreground) != owner
+    ):
+        raise AgentRequestError(
+            409, "target_blocked", "the UIA target's window is not in front"
+        )
+    if not user32.post(hwnd, _BM_CLICK):
         raise AgentRequestError(409, "native_action_failed", "native UIA action failed")
 
 
@@ -1421,10 +1528,10 @@ def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
 
     UIA elements belong to the thread that found them, so a worker thread
     resolves the locator again and invokes only the control with the same
-    fingerprint. When the provider has accepted the call but not returned
-    within ``_INVOKE_RETURN_S`` (a click handler showing a modal dialog), the
-    invoke is running and this returns; the worker ends when the dialog
-    closes. A failed or mismatched resolution raises before any input.
+    fingerprint, after hit-testing it again. A call still inside the provider
+    after ``_INVOKE_RETURN_S`` is reported as an uncertain delivery (HTTP 503):
+    a modal loop and a hung app look the same from here. A failed or
+    mismatched resolution raises before any input.
     """
     state: dict[str, Any] = {}
     started = threading.Event()
@@ -1443,9 +1550,14 @@ def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
                 ):
                     state["error"] = "stale_target"
                     return
-                pattern = found[0][0].GetInvokePattern()
+                control, candidate = found[0]
+                if not _hits_target(auto, control, candidate):
+                    state["error"] = "target_obscured"
+                    return
+                pattern = control.GetInvokePattern()
                 started.set()
                 pattern.Invoke()
+                state["returned"] = True
         except Exception as exc:  # noqa: BLE001 - reported below
             state["error"] = type(exc).__name__
         finally:
@@ -1462,6 +1574,17 @@ def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
     if error == "stale_target":
         raise AgentRequestError(
             409, "stale_target", "UIA target changed after resolution"
+        )
+    if error == "target_obscured":
+        raise AgentRequestError(
+            409, "target_obscured", "another window or dialog is over the UIA target"
+        )
+    if error is None and not state.get("returned"):
+        # Still inside the provider: a modal loop, or an app that is not
+        # answering. The two look the same from here, so this is not a
+        # delivery the agent can vouch for.
+        raise AgentRequestError(
+            503, "delivery_uncertain", "the UIA invoke has not returned"
         )
     if error is not None:
         raise AgentRequestError(409, "native_action_failed", "native UIA action failed")
