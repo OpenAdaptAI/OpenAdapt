@@ -699,8 +699,10 @@ class QuartzMacAXClient:
     ) -> Optional[dict[str, Any]]:
         """Census of the rows that read the same as the element at (x, y).
 
-        The element's identity is its own AX text (as ``structured_text``).
-        Its record row is the enclosing ``AXRow``, or the item of an
+        A row reads the way ``structured_text`` reads its cells: an ``AXRow``
+        as the text of every element in it, an ``AXList`` item at the
+        target's child path as that node's own text. Its record row is the
+        enclosing ``AXRow``, or the item of an
         ``AXList``; every sibling row is read at the same child path. Record
         ids are the AX identifier and URL of the row and of the target's
         node. A table that reports more ``AXRows`` than it exposes as
@@ -733,6 +735,8 @@ class QuartzMacAXClient:
                 return None
 
             def identity(row: Any, path: list[int]) -> Optional[str]:
+                if _AXTreeView(self).role(row) == "AXRow":
+                    return self._row_text(row)
                 node = row
                 for index in path:
                     children = _AXTreeView(self).children(node)
@@ -1886,11 +1890,21 @@ class MacOSBackend(RemoteDisplayBackend):
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AX element under (x, y), for a read-back.
 
-        Same read as :meth:`structured_text_at`: on this backend that is the
-        element's own text, not a row. A demonstrated read-back compares it
-        with the expected value for equality.
+        The element's own text, not its row (which :meth:`structured_text_at`
+        reads for identity). A demonstrated read-back compares it with the
+        expected value for equality.
         """
-        return self.structured_text_at(x, y)
+        try:
+            window = self._ensure_captured()
+            screen_x, screen_y = self._pixel_to_screen(window, int(x), int(y))
+            element = self._ax_client.element_at_point(
+                window.pid, window.title, screen_x, screen_y
+            )
+            if element is None or not self._scoped_to_target(element):
+                return None
+            return _clean_text(element.text)
+        except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
 
     def structured_text_at(self, x: int, y: int) -> Optional[str]:
         """Return the exact AX text at/around pixel (x, y), or None."""

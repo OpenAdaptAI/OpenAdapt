@@ -705,7 +705,11 @@ class LinuxBackend:
         if not callable(reader):
             return None
         try:
-            window = self._resolve_window()
+            window = (
+                self._require_same_window(self._captured_window)
+                if self._captured_window is not None
+                else self._resolve_window()
+            )
             element = self._client.focused_element(window)
             if element is None or not self._in_scope(element, window):
                 return None

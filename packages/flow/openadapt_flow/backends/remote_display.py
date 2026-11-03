@@ -168,8 +168,12 @@ def _ax_write_selected_text(element: Any, text: str) -> bool:
     allows it. Some toolkits (Qt's line edits) allow only ``AXValue``: the new
     value is then the current value with ``text`` spliced over the selected
     range (``AXSelectedTextRange``; an empty field needs none), and it counts
-    as delivered only when ``AXValue`` reads back exactly that. Anything else,
-    including a range that can't be read on a non-empty field, is False.
+    as delivered only when ``AXValue`` reads back exactly that. Setting
+    ``AXValue`` is a programmatic edit (in Qt it fires ``textChanged``, not
+    ``textEdited``), so the record check stays the authority on the save.
+    Anything else is False: a range that can't be read on a non-empty field,
+    characters outside the Basic Multilingual Plane (AX ranges count UTF-16
+    units), or a field that changed between the read and the write.
     """
     from ApplicationServices import (
         AXUIElementIsAttributeSettable,
@@ -198,29 +202,44 @@ def _ax_write_selected_text(element: Any, text: str) -> bool:
     )
     if value_error != 0 or not value_settable:
         return False
-    current_error, current = AXUIElementCopyAttributeValue(
-        element, kAXValueAttribute, None
-    )
-    if current_error != 0 or not isinstance(current, str):
+
+    def read() -> Optional[tuple[str, int, int]]:
+        current_error, current = AXUIElementCopyAttributeValue(
+            element, kAXValueAttribute, None
+        )
+        if current_error != 0 or not isinstance(current, str):
+            return None
+        # AX ranges count UTF-16 units; Python indexes code points. They
+        # agree only without characters outside the Basic Multilingual Plane.
+        if any(ord(character) > 0xFFFF for character in current):
+            return None
+        range_error, raw_range = AXUIElementCopyAttributeValue(
+            element, kAXSelectedTextRangeAttribute, None
+        )
+        if range_error == 0 and raw_range is not None:
+            ok, selected = AXValueGetValue(raw_range, kAXValueCFRangeType, None)
+            if not ok:
+                return None
+            try:
+                start, length = (int(part) for part in selected)
+            except TypeError:
+                start, length = int(selected.location), int(selected.length)
+            if start < 0 or length < 0 or start + length > len(current):
+                return None
+            return current, start, length
+        return (current, 0, 0) if current == "" else None
+
+    if any(ord(character) > 0xFFFF for character in text):
         return False
-    range_error, raw_range = AXUIElementCopyAttributeValue(
-        element, kAXSelectedTextRangeAttribute, None
-    )
-    if range_error == 0 and raw_range is not None:
-        ok, selected = AXValueGetValue(raw_range, kAXValueCFRangeType, None)
-        if not ok:
-            return False
-        try:
-            start, length = (int(part) for part in selected)
-        except TypeError:
-            start, length = int(selected.location), int(selected.length)
-        if start < 0 or length < 0 or start + length > len(current):
-            return False
-    elif current == "":
-        start, length = 0, 0
-    else:
+    before = read()
+    if before is None:
         return False
+    current, start, length = before
     expected = current[:start] + text + current[start + length :]
+    # The whole value is replaced: refuse if the field changed since it was
+    # read, so nothing typed or completed meanwhile is overwritten.
+    if read() != before:
+        return False
     if AXUIElementSetAttributeValue(element, kAXValueAttribute, expected) != 0:
         return False
     read_error, delivered = AXUIElementCopyAttributeValue(

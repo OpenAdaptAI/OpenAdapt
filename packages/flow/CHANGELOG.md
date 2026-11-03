@@ -19,11 +19,29 @@
 
 ### Features
 
+- Linux: self-repair admits a fix's new click on its AT-SPI element identity plus the record check, as on macOS and Windows. `LinuxBackend.element_identity_at` reads the role, name, id, ancestry up to the pinned window (exact title, bounds and process) and application; anything else is no identity, and the click is refused. Before, a repair on Linux refused every new click ("reads an accessibility tree but can't read element identity yet") ([#1704](https://github.com/OpenAdaptAI/OpenAdapt/issues/1704)).
+
+- Linux: `LinuxBackend.text_value_at` and `focused_text_value` read an editable field's exact text over AT-SPI, so a TYPE step is verified from the field rather than by OCR. Password fields abstain.
+
+- The monorepo CI runs Linux on real AT-SPI: the `flow-linux-atspi` job (post-merge tier) runs `scripts/qualify_linux_atspi.py` and records, compiles, runs governed and repairs a write workflow on a GTK3 app with SQLite (`benchmark/repair_every_backend/qualify_linux.py`), and uploads both results ([#1704](https://github.com/OpenAdaptAI/OpenAdapt/issues/1704)).
+
+- macOS: record, compile and a governed run on a third-party app. `benchmark/macos_native/qualify_calibre.py` sets a book's tag in calibre (Qt, SQLite library), certified under `clinical-write`, run under `standard` with a SQL record check; a book with the same title by another author stops at the identity check and two identical books are refused as ambiguous, each with nothing written ([#1705](https://github.com/OpenAdaptAI/OpenAdapt/issues/1705)).
+
 - `run --self-repair` (and repair by default) now works outside a browser. `repair.session` in `deploy.yaml` says how to start the app for each probe, fault probe and resumed run (an argv, no shell, kept running while the app is up; `fault_commands`, `close_command`, `ready_s`). The run's configured backend must bind to a window owned by that command's process group, so a session never binds to the halted session or a copy already open; Flow ends the group afterwards, and closes the halted session before each probe. This works where the bound window is on Flow's machine (macOS, and the local RDP or Citrix client window); Windows over its agent and FreeRDP are refused for now. Without `repair.session`, a desktop run refuses repair with that reason, as before.
 
 - Signed write receipts. A verifier verdict, with its scope (stores read, time window, strength) and a plain list of what it did not check, is signed as a COSE_Sign1 in the IETF SCITT shape and appended to a local transparency log. `openadapt-flow receipt verify FILE --issuer-key --log-key` checks one offline and prints the not-checked list every time; a receipt that claims more than its scope is neither issued nor accepted. `verify_write(..., write_receipt=True)`, `issue_write_receipt(result)` and `openadapt-flow shadow --receipts` issue them; `receipt anchor` puts the digest in Rekor. Extra: `openadapt-flow[receipts]`. Design: `docs/WRITE_RECEIPTS.md`.
 
 ### Fixes
+
+- macOS: Qt apps' table cells and inline editors report no `AXTopLevelUIElement`, so `MacOSBackend` couldn't scope them to the window and refused them. Their window is now the nearest `AXWindow` or `AXSheet` up the `AXParent` chain (within 32 levels; reaching the application refuses).
+
+- macOS: a text field that accepts only `AXValue` (Qt's line edits) now takes typed text: the text is spliced over the selection and counts as delivered only when the field reads back exactly that value. It refuses when the field changes between the read and the write, and when the field holds characters outside the Basic Multilingual Plane (AX ranges count UTF-16 units). Before, every such field refused AX text delivery.
+
+- macOS: a table cell's identity text is now its whole row, not the cell alone, and the row census reads rows the same way; a cell under a table that exposes no row (Qt's item views) abstains, so identity falls back to the recorded band. Before, the clicked cell's own text could verify a different record with the same title. A read-back (`displayed_text_at`) still reads the cell's own text. A macOS bundle recorded on a table cell before this change stored the cell's text and halts at that step; record it again.
+
+- macOS: F1 to F12 have key codes. `MacOSBackend` takes `pointer_settle_timeout_s` for slow captures.
+
+- Linux: physical input works on a real session. `focus_window` accepts the pinned window when it is already active (GTK refuses `grab_focus` on a top-level frame, so every physical click and keystroke was refused).
 
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 

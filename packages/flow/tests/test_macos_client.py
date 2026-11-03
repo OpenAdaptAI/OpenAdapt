@@ -254,6 +254,7 @@ def _ax_module(
     readback: str | None = None,
     parent_walk: bool = False,
     walk_reaches_app: bool = False,
+    value_drifts: bool = False,
 ):
     module = types.ModuleType("ApplicationServices")
     module.kAXWindowsAttribute = "windows"
@@ -307,8 +308,14 @@ def _ax_module(
 
     module.AXUIElementCreateApplication = lambda pid: app if pid == 9001 else None
 
+    reads = {"value": 0}
+
     def copy(element, attribute, _error):
         key = (element, attribute)
+        if value_drifts and key == (focused, "value"):
+            # Something else edits the field between two reads.
+            reads["value"] += 1
+            return 0, values[key] + "x" * (reads["value"] - 1)
         return (0, values[key]) if key in values else (1, None)
 
     def set_value(element, attribute, value):
@@ -589,6 +596,10 @@ def test_value_only_field_inserts_at_the_caret(monkeypatch) -> None:
         {"value": "abc", "selected_range": (2, 5)},
         # The value write itself fails.
         {"value": "", "selected_range": (0, 0), "set_result": 7},
+        # The field changes between the read and the write.
+        {"value": "ab", "selected_range": (2, 0), "value_drifts": True},
+        # AX ranges count UTF-16 units: a field outside the BMP is refused.
+        {"value": "\U0001f600ab", "selected_range": (3, 0)},
     ],
 )
 def test_value_only_field_fails_closed(monkeypatch, case) -> None:
