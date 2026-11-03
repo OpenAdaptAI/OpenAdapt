@@ -1733,9 +1733,7 @@ def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
 
 
 _MAX_OWNER_CHAIN = 32
-_WINDOW_OPERATIONS = frozenset(
-    {"window-root-at", "window-bounds", "owned-window-over"}
-)
+_WINDOW_OPERATIONS = frozenset({"window-root-at", "window-bounds", "owned-window-over"})
 
 
 def _intersects(
@@ -1797,8 +1795,7 @@ def _window_operation(
         )
         hwnd, pid = data["hwnd"], data["pid"]
         if any(
-            not isinstance(v, int) or isinstance(v, bool) or v <= 0
-            for v in (hwnd, pid)
+            not isinstance(v, int) or isinstance(v, bool) or v <= 0 for v in (hwnd, pid)
         ):
             raise AgentRequestError(400, "invalid_schema", "hwnd and pid required")
         if (

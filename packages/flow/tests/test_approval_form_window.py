@@ -147,7 +147,10 @@ def _windows_backend(captures, conflicted=(), answer=None):
 def test_the_windows_backend_names_the_one_window_its_steps_were_in():
     backend, sent = _windows_backend(
         {"s1": (7, 10), "s2": (7, 10), "save": (99, 10)},
-        answer={"status": "ok", "window": {"hwnd": 7, "pid": 10, "bounds": [0, 0, 800, 600]}},
+        answer={
+            "status": "ok",
+            "window": {"hwnd": 7, "pid": 10, "bounds": [0, 0, 800, 600]},
+        },
     )
     assert backend.approval_form_region("save") == (0, 0, 800, 600)
     assert sent == [("/window/bounds", {"hwnd": 7, "pid": 10})]
@@ -160,11 +163,34 @@ def test_the_windows_backend_names_the_one_window_its_steps_were_in():
         ({"s1": (7, 10), "s2": (8, 10)}, (), None),
         ({"s1": (7, 10)}, ("s2",), None),
         ({"s1": (7, 10)}, (), {"status": "ok", "window": None}),
-        ({"s1": (7, 10)}, (), {"status": "ok", "window": {"hwnd": 8, "pid": 10, "bounds": [0, 0, 9, 9]}}),
-        ({"s1": (7, 10)}, (), {"status": "ok", "window": {"hwnd": 7, "pid": 10, "bounds": [0, 0, 0, 9]}}),
-        ({"s1": (7, 10)}, (), {"status": "ok", "window": {"hwnd": 7, "pid": 10, "bounds": [0, 0, True, 9]}}),
+        (
+            {"s1": (7, 10)},
+            (),
+            {"status": "ok", "window": {"hwnd": 8, "pid": 10, "bounds": [0, 0, 9, 9]}},
+        ),
+        (
+            {"s1": (7, 10)},
+            (),
+            {"status": "ok", "window": {"hwnd": 7, "pid": 10, "bounds": [0, 0, 0, 9]}},
+        ),
+        (
+            {"s1": (7, 10)},
+            (),
+            {
+                "status": "ok",
+                "window": {"hwnd": 7, "pid": 10, "bounds": [0, 0, True, 9]},
+            },
+        ),
     ],
-    ids=["none-verified", "two-windows", "conflicted", "gone", "other-window", "empty", "malformed"],
+    ids=[
+        "none-verified",
+        "two-windows",
+        "conflicted",
+        "gone",
+        "other-window",
+        "empty",
+        "malformed",
+    ],
 )
 def test_the_windows_backend_refuses_a_doubtful_window(captures, conflicted, answer):
     backend, _sent = _windows_backend(captures, conflicted, answer)
