@@ -82,8 +82,6 @@ PG_SANDBOX_SCHEMA = "oa_sandbox"
 SANDBOX_RECHECK_S = 3
 #: A planted bookkeeping time: far from any write's own time.
 FAR_TIME = "2001-02-03 04:05:06"
-#: At most this many faults of one class per held-out write.
-MAX_PER_CLASS = 12
 
 
 class ZeroTouchError(RuntimeError):
@@ -114,6 +112,9 @@ class Sandbox:
             else PG_SANDBOX_SCHEMA
         )
         self.schema: Optional[Schema] = None
+        #: Foreign keys the sandbox couldn't copy. Contracts built without
+        #: them differ from production ones, and are then not admitted.
+        self.fk_errors: list[str] = []
 
     # Connections --------------------------------------------------------------------
 
@@ -182,6 +183,19 @@ class Sandbox:
                     cur.execute(
                         f"INSERT INTO {self.t(name)} SELECT * FROM {src}.{self.q(name)}"
                     )
+                # Declared foreign keys too: the generator reads them, so the
+                # sandbox's contracts must see the same schema as the app's.
+                cur.execute("SET FOREIGN_KEY_CHECKS=0")
+                for name, t in sorted(schema.tables.items()):
+                    for fk in t.foreign_keys:
+                        try:
+                            cur.execute(
+                                f"ALTER TABLE {self.t(name)} ADD FOREIGN KEY "
+                                f"({self.q(fk.column)}) REFERENCES "
+                                f"{self.t(fk.table)} ({self.q(fk.ref_column)})"
+                            )
+                        except Exception as exc:  # noqa: BLE001 - recorded
+                            self.fk_errors.append(f"{name}.{fk.column}: {exc}")
                 user, _, host = reader.partition("@")
                 cur.execute(
                     f"GRANT SELECT, SHOW VIEW, TRIGGER ON {self.q(self.name)}.* "
@@ -201,6 +215,16 @@ class Sandbox:
                         f"INSERT INTO {self.t(name)} OVERRIDING SYSTEM VALUE "
                         f"SELECT * FROM {src}.{self.q(name)}"
                     )
+                for name, t in sorted(schema.tables.items()):
+                    for fk in t.foreign_keys:
+                        try:
+                            cur.execute(
+                                f"ALTER TABLE {self.t(name)} ADD FOREIGN KEY "
+                                f"({self.q(fk.column)}) REFERENCES "
+                                f"{self.t(fk.table)} ({self.q(fk.ref_column)}) NOT VALID"
+                            )
+                        except Exception as exc:  # noqa: BLE001 - recorded
+                            self.fk_errors.append(f"{name}.{fk.column}: {exc}")
                 cur.execute(
                     f"GRANT USAGE ON SCHEMA {self.q(self.name)} TO {self.q(reader)}"
                 )
@@ -278,6 +302,15 @@ class Sandbox:
         )
         return [{c: store.cell_text(v) for c, v in zip(cols, r)} for r in got]
 
+    def distinct(self, table: str, column: str, limit: int = 5) -> list[str]:
+        """Up to ``limit`` values the column holds, as text."""
+
+        got = self._exec(
+            f"SELECT DISTINCT {self.q(column)} FROM {self.t(table)} "
+            f"WHERE {self.q(column)} IS NOT NULL LIMIT {int(limit)}"
+        )
+        return [v for v in (store.cell_text(r[0]) for r in got) if v is not None]
+
     def max_key(self, table: str) -> Optional[int]:
         t = self._table(table)
         if len(t.primary_key) != 1:
@@ -302,6 +335,15 @@ class Sandbox:
         conn = self._connect()
         try:
             cur = conn.cursor()
+            # A planted fault may break a foreign key on purpose (a row the
+            # write points to is gone): the store must take it.
+            if self.dialect == "mysql":
+                cur.execute("SET FOREIGN_KEY_CHECKS=0")
+            else:
+                try:  # a superuser only; else a key-breaking fault fails closed
+                    cur.execute("SET session_replication_role = replica")
+                except Exception:  # noqa: BLE001
+                    pass
             cur.execute(f"DELETE FROM {self.t(table)} WHERE {where}", tuple(args))
             if row is not None:
                 cols = [c for c in t.column_names if c in row]
@@ -412,24 +454,53 @@ def shift_times(
 class Case:
     """One validation run on a held-out write. ``write`` is put after
     ``begin_write``; ``late`` after a ``CONFIRMED`` and before the recheck.
-    ``correct``: the run must be confirmed; else it must be stopped."""
+    ``correct``: the run must be confirmed; else it must be stopped.
+    ``unplantable``: why no fault could be planted here (the case fails)."""
 
     name: str
     cls: str
     write: list[Op]
     late: list[Op] = field(default_factory=list)
     correct: bool = False
+    unplantable: str = ""
+
+
+#: Fault classes every kind's held-out writes must have produced before the
+#: kind can be admitted. A create also needs ``CREATE_CLASSES``, an update
+#: ``UPDATE_CLASSES``.
+REQUIRED_CLASSES = ("missing", "unrelated_edit", "delayed", "other_table")
+CREATE_CLASSES = ("duplicate", "look_alike")
+UPDATE_CLASSES = ("wrong_record",)
+
+_UUID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+def _fresh_uuid() -> str:
+    import uuid
+
+    return str(uuid.uuid4())
 
 
 def mutate(table: Table, column: str, text: Optional[str]) -> Optional[str]:
-    """Another value of the column's type, plainly different."""
+    """Another value of the column's type, plainly different, or None when
+    the type has no generator. Text keeps its length (a length limit or a
+    fixed-width column still takes it)."""
 
     col = table.column(column)
     kind = col.kind if col else "text"
+    dtype = (col.data_type if col else "").lower()
+    if dtype in ("json", "jsonb"):
+        return '{"oa_fault": 1}' if text != '{"oa_fault": 1}' else '{"oa_fault": 2}'
+    if dtype == "uuid" or (text is not None and _UUID.match(text)):
+        return _fresh_uuid()
     if kind == "datetime":
         return FAR_TIME if text != FAR_TIME else "2002-03-04 05:06:07"
     if kind == "date":
         return "2001-02-03" if text != "2001-02-03" else "2002-03-04"
+    if kind == "time":
+        return "01:02:03" if text != "01:02:03" else "02:03:04"
     if kind == "bool":
         return "false" if text in ("true", "1") else "true"
     if kind == "number":
@@ -437,10 +508,36 @@ def mutate(table: Table, column: str, text: Optional[str]) -> Optional[str]:
             n = float(text) if text is not None else 0.0
         except ValueError:
             return None
-        return str(int(n) + 7) if n.is_integer() else str(n + 7)
+        return str(int(n) + 1) if n.is_integer() else str(n + 1)
+    if kind == "binary":
+        if text and text.startswith("0x") and len(text) > 2:
+            last = int(text[-2:], 16) ^ 0x01
+            return text[:-2] + f"{last:02x}"
+        return "0x01"
     if kind == "text":
-        return (text or "") + " (x)"
+        if not text:
+            return "x"
+        return text[:-1] + ("x" if text[-1] != "x" else "y")
     return None
+
+
+def plant_value(
+    sb: "Sandbox", table: Table, column: str, current: Optional[str]
+) -> Optional[str]:
+    """A value to plant in ``table.column`` instead of ``current``: another
+    row's key for a declared foreign key, else a value the column already
+    holds in another row (the store accepts it), else :func:`mutate`."""
+
+    fk = next((f for f in table.foreign_keys if f.column == column), None)
+    if fk is not None:
+        for r in sb.rows(fk.table, 20):
+            v = r.get(fk.ref_column)
+            if v is not None and v != current:
+                return v
+    for v in sb.distinct(table.name, column, 5):
+        if v is not None and v != current:
+            return v
+    return mutate(table, column, current)
 
 
 def _text_values(values: Mapping[str, Any]) -> set[str]:
@@ -478,170 +575,179 @@ def _is_value(text: Optional[str], values: set[str]) -> bool:
     return False
 
 
-def faults(schema: Schema, sb: Sandbox, demo: Demo, write: list[Op]) -> list[Case]:
+def _new_key(
+    sb: "Sandbox", t: Table, row: Mapping[str, Optional[str]]
+) -> Optional[dict[str, Optional[str]]]:
+    """A key for a copy of ``row`` that no row holds yet, or None."""
+
+    if len(t.primary_key) != 1:
+        return None
+    pk = t.primary_key[0]
+    top = sb.max_key(t.name)
+    if top is not None:
+        return {pk: str(top + 1000)}
+    current = row.get(pk)
+    if current is not None and _UUID.match(current):
+        return {pk: _fresh_uuid()}
+    return None
+
+
+def _copy_row(
+    t: Table, row: Mapping[str, Optional[str]], key: Mapping[str, Optional[str]]
+) -> dict[str, Optional[str]]:
+    """``row`` under ``key``, with every UUID-shaped cell made new (a unique
+    token copied twice is refused by the store, not by the contract)."""
+
+    out = dict(row)
+    out.update(key)
+    for c, v in list(out.items()):
+        if c not in key and v is not None and _UUID.match(v):
+            out[c] = _fresh_uuid()
+    return out
+
+
+def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[Case]:
     """Faults planted from one held-out write: its diff, the schema and its
-    task's values. The contracts are never read here."""
+    task's values. The contracts are never read here.
+
+    Every column of every row the write adds or changes gets its own fault,
+    NULL cells included; a column no value can be planted in gets an
+    ``unplantable`` case, which fails admission."""
 
     values = _text_values(demo.values)
     out: list[Case] = [Case("missing", "missing", [])]
     touched = {op.table for op in write}
-    counts: dict[str, int] = {}
 
-    def add(case: Case) -> None:
-        n = counts.get(case.cls, 0)
-        if n < MAX_PER_CLASS:
-            counts[case.cls] = n + 1
-            out.append(case)
+    def swap(i: int, op: Op, row: dict[str, Optional[str]]) -> list[Op]:
+        return write[:i] + [Op(op.table, op.key, row)] + write[i + 1 :]
+
+    def column_fault(cls: str, i: int, op: Op, col: str) -> None:
+        t = schema.tables[op.table]
+        assert op.row is not None
+        new = plant_value(sb, t, col, op.row.get(col))
+        name = f"{cls}:{op.table}.{col}"
+        if new is None:
+            out.append(Case(name, cls, [], unplantable=f"no value of type "
+                            f"{t.column(col).data_type if t.column(col) else '?'} can be planted"))  # fmt: skip
+            return
+        row = dict(op.row)
+        row[col] = new
+        out.append(Case(name, cls, swap(i, op, row)))
 
     for i, op in enumerate(write):
         t = schema.tables[op.table]
+        if len(write) > 1:
+            # Part of the write is lost (a child row, a journal entry).
+            out.append(
+                Case(f"partial:{op.table}", "partial", write[:i] + write[i + 1 :])
+            )
         if op.row is None:
             continue
         before = sb.get(op.table, op.key)
         is_new = before is None
-        fks = {fk.column: fk for fk in t.foreign_keys}
-        for c in t.columns:
-            if c.name in t.primary_key:
-                continue
-            cur = op.row.get(c.name)
-            if not is_new and before is not None and before.get(c.name) == cur:
-                continue  # not changed by the write: see collateral_target
-            if is_new and cur is None:
-                continue
-            new = None
-            if c.name in fks:
-                others = [
-                    r
-                    for r in sb.rows(fks[c.name].table, 20)
-                    if r.get(fks[c.name].ref_column) not in (None, cur)
-                ]
-                new = others[0].get(fks[c.name].ref_column) if others else None
-            if new is None:
-                new = mutate(t, c.name, cur)
-            if new is None:
-                continue
-            cls = "wrong_value" if _is_value(cur, values) else "bookkeeping"
-            row = dict(op.row)
-            row[c.name] = new
-            add(
-                Case(
-                    f"{cls}:{op.table}.{c.name}",
-                    cls,
-                    write[:i] + [Op(op.table, op.key, row)] + write[i + 1 :],
-                )
-            )
+        changed = [
+            c.name
+            for c in t.columns
+            if c.name not in t.primary_key
+            and (is_new or before is None or before.get(c.name) != op.row.get(c.name))
+        ]
+        for col in changed:
+            cls = "wrong_value" if _is_value(op.row.get(col), values) else "bookkeeping"
+            column_fault(cls, i, op, col)
         if not is_new and before is not None:
-            # The write's changes landed on another row of the table.
-            changed = {c for c in t.column_names if before.get(c) != op.row.get(c)}
-            for other in sb.rows(op.table, 20):
-                if store.row_key(t, other) == store.row_key(t, op.key):
-                    continue
+            for c in t.columns:
+                if c.name not in t.primary_key and c.name not in changed:
+                    column_fault("collateral_target", i, op, c.name)
+            # The write's changes land on another row of the table: an
+            # existing one, or a copy of the target when there is none.
+            other = next((r for r in sb.rows(op.table, 20)
+                          if store.row_key(t, r) != store.row_key(t, op.key)), None)  # fmt: skip
+            if other is None:
+                key = _new_key(sb, t, before)
+                other = _copy_row(t, before, key) if key is not None else None
+            if other is not None:
                 moved = dict(other)
                 for c in changed:
                     moved[c] = op.row.get(c)
-                add(
-                    Case(
-                        f"wrong_record:{op.table}",
-                        "wrong_record",
-                        write[:i] + write[i + 1 :] + [Op(op.table, other, moved)],
-                    )
-                )
-                break
-            # A column the write didn't change, changed on the target.
-            for c in t.columns:
-                if c.name in t.primary_key or c.name in changed:
-                    continue
-                new = mutate(t, c.name, op.row.get(c.name))
-                if new is None:
-                    continue
-                row = dict(op.row)
-                row[c.name] = new
-                add(
-                    Case(
-                        f"collateral_target:{op.table}.{c.name}",
-                        "collateral_target",
-                        write[:i] + [Op(op.table, op.key, row)] + write[i + 1 :],
-                    )
-                )
+                out.append(Case(f"wrong_record:{op.table}", "wrong_record",
+                                write[:i] + write[i + 1 :] + [Op(op.table, other, moved)]))  # fmt: skip
+                # The same change on another row: an excuse must hold only
+                # on the rows the write declares.
+                for c in changed:
+                    if other.get(c) == op.row.get(c):
+                        continue
+                    edit = dict(other)
+                    edit[c] = op.row.get(c)
+                    out.append(Case(f"unrelated_edit:{op.table}.{c}", "unrelated_edit",
+                                    write + [Op(op.table, other, edit)]))  # fmt: skip
+            # A late change to the target itself: its first changed column.
+            if changed:
+                late = dict(op.row)
+                v = plant_value(sb, t, changed[0], op.row.get(changed[0]))
+                if v is not None:
+                    late[changed[0]] = v
+                    out.append(Case(f"delayed:{op.table}.{changed[0]}", "delayed",
+                                    list(write), late=[Op(op.table, op.key, late)]))  # fmt: skip
         if is_new:
-            top = sb.max_key(op.table)
-            if top is not None:
-                pk = t.primary_key[0]
-                dup = dict(op.row)
-                dup[pk] = str(top + 1000)
-                add(
-                    Case(
-                        f"duplicate:{op.table}",
-                        "duplicate",
-                        write + [Op(op.table, {pk: dup[pk]}, dup)],
-                    )
-                )
-            # The values landed on an existing look-alike instead.
+            key = _new_key(sb, t, op.row)
+            if key is None:
+                out.append(Case(f"duplicate:{op.table}", "duplicate", [],
+                                unplantable="no new key can be made for a copy"))  # fmt: skip
+            else:
+                dup = _copy_row(t, op.row, key)
+                out.append(Case(f"duplicate:{op.table}", "duplicate",
+                                write + [Op(op.table, key, dup)]))  # fmt: skip
+            # The values land on an existing look-alike instead.
             for other in sb.rows(op.table, 20):
                 look = dict(op.row)
                 for c in t.primary_key:
                     look[c] = other.get(c)
-                add(
-                    Case(
-                        f"look_alike:{op.table}",
-                        "look_alike",
-                        write[:i] + write[i + 1 :] + [Op(op.table, other, look)],
-                    )
-                )
+                out.append(Case(f"look_alike:{op.table}", "look_alike",
+                                write[:i] + write[i + 1 :] + [Op(op.table, other, look)]))  # fmt: skip
                 break
-    # Another row of a touched table, and a new row in an untouched one.
+    # Another row of each touched table, now and late.
     for name in sorted(touched):
         t = schema.tables[name]
         mine = {store.row_key(t, op.key) for op in write if op.table == name}
-        for other in sb.rows(name, 20):
-            if store.row_key(t, other) in mine:
-                continue
-            for c in t.columns:
-                if c.name in t.primary_key:
-                    continue
-                new = mutate(t, c.name, other.get(c.name))
-                if new is None:
-                    continue
-                row = dict(other)
-                row[c.name] = new
-                add(
-                    Case(
-                        f"unrelated_edit:{name}.{c.name}",
-                        "unrelated_edit",
-                        write + [Op(name, other, row)],
-                    )
-                )
-                add(
-                    Case(
-                        f"delayed:{name}.{c.name}",
-                        "delayed",
-                        list(write),
-                        late=[Op(name, other, row)],
-                    )
-                )
-                break
-            break
-    for name in sorted(set(schema.tables) - touched):
-        top = sb.max_key(name)
-        sample = sb.rows(name, 1)
-        if top is None or not sample:
-            continue
-        row = dict(sample[0])
-        pk = schema.tables[name].primary_key[0]
-        row[pk] = str(top + 1000)
-        add(
-            Case(
-                f"other_table:{name}",
-                "other_table",
-                write + [Op(name, {pk: row[pk]}, row)],
-            )
+        other = next(
+            (r for r in sb.rows(name, 20) if store.row_key(t, r) not in mine), None
         )
-        if counts.get("other_table", 0) >= 2:
+        if other is None:
+            continue
+        for c in t.columns:
+            if c.name in t.primary_key:
+                continue
+            v = plant_value(sb, t, c.name, other.get(c.name))
+            if v is None:
+                continue
+            row = dict(other)
+            row[c.name] = v
+            out.append(Case(f"unrelated_edit:{name}.{c.name}", "unrelated_edit",
+                            write + [Op(name, other, row)]))  # fmt: skip
+            out.append(Case(f"delayed:{name}.{c.name}", "delayed", list(write),
+                            late=[Op(name, other, row)]))  # fmt: skip
+            break
+    planted = 0
+    for name in sorted(set(schema.tables) - touched):
+        t = schema.tables[name]
+        sample = sb.rows(name, 1)
+        key = _new_key(sb, t, sample[0]) if sample else None
+        if key is None:
+            continue
+        out.append(Case(f"other_table:{name}", "other_table",
+                        write + [Op(name, key, _copy_row(t, sample[0], key))]))  # fmt: skip
+        planted += 1
+        if planted >= 2:
             break
     return out
 
 
 # -- running a case ---------------------------------------------------------------
+
+#: Verdicts the verifier gives for a state it read and didn't pass. Only
+#: these count as a stopped fault: an error, a missing contract or a fault
+#: that couldn't be planted never does.
+STOP_VERDICTS = ("REFUTED", "UNCERTAIN", "RECHECK_REFUTED", "RECHECK_UNCERTAIN")
 
 
 @dataclass
@@ -655,9 +761,12 @@ class Outcome:
 
     @property
     def ok(self) -> bool:
-        """Confirmed when correct; stopped when a fault."""
+        """Confirmed when correct; for a fault, a verifier verdict that
+        stops it, on a state that was planted."""
 
-        return self.passed if self.correct else not self.passed
+        if self.correct:
+            return self.passed
+        return not self.passed and self.outcome in STOP_VERDICTS
 
 
 def _put_all(sb: Sandbox, ops: Sequence[Op]) -> None:
@@ -680,6 +789,9 @@ def run_case(
 
     from openadapt_flow.verifier import Actor, begin_write, recheck, verify_write
 
+    if case.unplantable:
+        return Outcome(case.name, case.cls, case.correct, "NOT_PLANTED", False,
+                       [case.unplantable])  # fmt: skip
     undo = backward(demo.diff.changes)
     all_ops = undo + case.write + case.late
     saved: dict[
@@ -746,7 +858,7 @@ def auto_answers(
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """The answers this module gives, and a ledger saying by which rule."""
 
-    answers: dict[str, Any] = {"now_checks": True}
+    answers: dict[str, Any] = {"now_checks": True, "strict_pins": True}
     ledger: list[dict[str, Any]] = [
         {
             "key": "now_checks",
@@ -754,6 +866,11 @@ def auto_answers(
             "rule": "an unchecked or excused time stamp of the main record must hold a time near the read",
         },
     ]
+    ledger.append({
+        "key": "strict_pins",
+        "answer": True,
+        "rule": "a new-row column two readings fit in every demonstration is checked both ways",
+    })  # fmt: skip
     for q in report.get("questions") or []:
         key = str(q.get("key"))
         proposed = q.get("proposal")
@@ -827,12 +944,21 @@ def validate(
     extra: Mapping[str, Any],
     log: Callable[[str], None] = lambda s: None,
     record: Optional[list[dict[str, Any]]] = None,
+    modes: Optional[dict[str, set[str]]] = None,
 ) -> dict[str, list[Outcome]]:
-    """Every held-out write, replayed and faulted, by kind."""
+    """Every held-out write, replayed and faulted, by kind. ``modes`` is
+    filled with which rows each kind's held-out writes added or changed."""
+
+    if modes is None:
+        modes = {}
 
     assert sb.schema is not None
     by_kind: dict[str, list[Outcome]] = {}
     for demo in holdout:
+        for ch in demo.diff.changes:
+            modes.setdefault(demo.kind, set()).add(
+                "create" if ch.kind == "added" else "update"
+            )
         values = _text_values(demo.values)
         write = shift_times(sb.schema, forward(demo.diff.changes), demo, values)
         cases = [Case("correct", "correct", write, correct=True)]
@@ -859,22 +985,37 @@ def validate(
 
 
 def summarize(
-    by_kind: Mapping[str, Sequence[Outcome]], kinds: Sequence[str]
+    by_kind: Mapping[str, Sequence[Outcome]],
+    kinds: Sequence[str],
+    modes: Mapping[str, set[str]] = {},
 ) -> dict[str, Any]:
+    """Per kind: admitted only when it has a held-out write, every held-out
+    write was confirmed, every fault was planted and stopped, and every
+    required class was planted. ``modes``: kind -> ``{"create", "update"}``,
+    which rows its held-out writes added or changed."""
+
     out: dict[str, Any] = {}
     for k in kinds:
         rs = list(by_kind.get(k) or [])
         correct = [r for r in rs if r.correct]
         fl = [r for r in rs if not r.correct]
+        need = list(REQUIRED_CLASSES)
+        if "create" in modes.get(k, set()):
+            need += CREATE_CLASSES
+        if "update" in modes.get(k, set()):
+            need += UPDATE_CLASSES
+        planted = {r.cls for r in fl if r.outcome != "NOT_PLANTED"}
+        missing = [c for c in need if c not in planted]
         out[k] = {
-            "admitted": bool(correct) and all(r.ok for r in rs),
+            "admitted": bool(correct) and all(r.ok for r in rs) and not missing,
             "correct_writes": len(correct),
             "false_stops": [
                 f"{r.outcome}: {'; '.join(r.reasons[:2])}" for r in correct if not r.ok
             ],
             "faults": len(fl),
             "faults_stopped": sum(1 for r in fl if r.ok),
-            "faults_passed": [r.case for r in fl if not r.ok],
+            "faults_passed": [f"{r.case} ({r.outcome})" for r in fl if not r.ok],
+            "classes_not_planted": missing,
             "by_class": {
                 c: f"{sum(1 for r in fl if r.cls == c and r.ok)}/{sum(1 for r in fl if r.cls == c)}"
                 for c in sorted({r.cls for r in fl})
@@ -904,12 +1045,119 @@ def exceptions_md(summary: Mapping[str, Any], report: Mapping[str, Any]) -> str:
         for fs in s["false_stops"]:
             lines.append(f"   - a held-out correct write stopped: {fs}")
         for f in s["faults_passed"]:
-            lines.append(f"   - a planted fault passed: {f}")
+            lines.append(f"   - a fault was not planted and stopped: {f}")
+        for c in s.get("classes_not_planted") or []:
+            lines.append(f"   - no `{c}` fault could be planted")
         for r in ((report.get("kinds") or {}).get(k) or {}).get("refused") or []:
             lines.append(f"   - generator: {r}")
     if n == 0:
         lines.append("Every kind is admitted.")
     return "\n".join(lines) + "\n"
+
+
+def check_holdout(
+    demos: Sequence[Demo], holdout: Sequence[Demo], kinds: Sequence[str]
+) -> None:
+    """Refuse a held-out set that isn't held out: a held-out write with the
+    same kind and values as a demonstration, or the same diff, or a kind
+    with no held-out write."""
+
+    def key(d: Demo) -> str:
+        return json.dumps([d.kind, d.values], sort_keys=True, default=str)
+
+    def diff_key(d: Demo) -> str:
+        return json.dumps(d.diff.to_json(), sort_keys=True, default=str)
+
+    seen = {key(d) for d in demos}
+    seen_diffs = {diff_key(d) for d in demos}
+    for d in holdout:
+        if key(d) in seen or diff_key(d) in seen_diffs:
+            raise ZeroTouchError(
+                f"held-out write {d.name} repeats a demonstration; a held-out "
+                "write must have values the generator never saw"
+            )
+    missing = sorted(set(kinds) - {d.kind for d in holdout})
+    if missing:
+        raise ZeroTouchError(
+            "no held-out write for kind(s): "
+            + ", ".join(missing)
+            + "; every kind needs at least one to be validated"
+        )
+
+
+_INTERVAL = re.compile(r"INTERVAL (?:'\d+ seconds'|\d+ SECOND)")
+
+
+def _normal(doc: Any) -> Any:
+    """A contract with what differs between the sandbox and the app's own
+    store taken out: connections, the recheck window and the time-check
+    window that follows from it."""
+
+    if isinstance(doc, Mapping):
+        return {
+            k: _normal(v)
+            for k, v in doc.items()
+            if k
+            not in (
+                "sql_connect_args",
+                "sql_password_env",
+                "recheck_after_s",
+                "environment_id",
+            )  # fmt: skip
+        }
+    if isinstance(doc, list):
+        return [_normal(v) for v in doc]
+    if isinstance(doc, str):
+        return _INTERVAL.sub("INTERVAL <w>", doc)
+    return doc
+
+
+def fingerprint(manifest_dir: Path, kind: str) -> str:
+    """A digest of one kind's listed contracts and manifest entry, as
+    :func:`_normal` sees them."""
+
+    import hashlib
+
+    manifest = _load_yaml(manifest_dir / "manifest.yaml") or {}
+    entry = (manifest.get("kinds") or {}).get(kind)
+    files: dict[str, Any] = {}
+    for var in (entry or {}).get("variants") or []:
+        for k, f in var.items():
+            if k in ("create", "update", "found") and isinstance(f, str):
+                files[f] = _normal(_load_yaml(manifest_dir / f))
+    body = json.dumps({"entry": _normal(entry), "files": files}, sort_keys=True,
+                      default=str)  # fmt: skip
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
+def install(staged: Path, final: Path, admitted: Sequence[str]) -> None:
+    """Keep only the admitted kinds in ``staged`` (manifest entries, pinned
+    digests and contract files), then move it to ``final`` in one rename."""
+
+    import shutil
+
+    path = staged / "manifest.yaml"
+    manifest = _load_yaml(path) or {}
+    dropped = [k for k in list(manifest.get("kinds") or {}) if k not in admitted]
+    for k in dropped:
+        manifest["kinds"].pop(k)
+        for sub in ("contracts", "field_sets"):
+            shutil.rmtree(staged / sub / k, ignore_errors=True)
+    listed = (manifest.get("field_sets") or {}).get("listed_sha256") or {}
+    for rel in list(listed):
+        if not (staged / rel).exists():
+            listed.pop(rel)
+    manifest["zero_touch"] = {"admitted": sorted(admitted)}
+    path.write_text(yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True),
+                    encoding="utf-8")  # fmt: skip
+    if final.exists():
+        old = final.with_name(final.name + ".old")
+        shutil.rmtree(old, ignore_errors=True)
+        final.rename(old)
+        staged.rename(final)
+        shutil.rmtree(old, ignore_errors=True)
+    else:
+        staged.rename(final)
 
 
 def onboard(
@@ -931,7 +1179,11 @@ def onboard(
 
     t0 = time.time()
     kinds = gen.load_kinds(kinds_path)
+    kind_names = [k.kind for k in kinds]
+    if Path(holdout_dir).resolve() == Path(demo_dir).resolve():
+        raise ZeroTouchError("the held-out folder is the demonstrations folder")
     holdout = gen.load_demos(holdout_dir)
+    check_holdout(gen.load_demos(demo_dir), holdout, kind_names)
     schema = store.read_schema(store.connector(read), store.dialect_of(read))
     sb = Sandbox(admin, read)
     sb.create(schema, reader)
@@ -945,66 +1197,80 @@ def onboard(
         for key, params in options.items():
             for name, n in params.items():
                 trials += [{key: {name: i}} for i in range(n)]
-        kind_names = [k.kind for k in kinds]
         best: dict[str, Any] = {}
         results: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
-        for picks in trials:
-            answers, ledger = auto_answers(report, picks)
-            sans = {**answers, "recheck_after_s": SANDBOX_RECHECK_S}
-            tag = (
-                "base"
-                if not picks
-                else "pick-"
-                + "-".join(
-                    f"{k}.{p}.{i}" for k, d in picks.items() for p, i in d.items()
-                )
-            )
+
+        def answer(picks: Mapping[str, Mapping[str, int]], tag: str) -> tuple[Any, Any]:
+            # The bookkeeping proposal depends on where values are placed: ask
+            # with the picks first, then answer with that run's own proposal.
+            first = gen.propose(read=sread, kinds=kinds, demo_dir=demo_dir,
+                                out=work / tag / "q", actor_params=actor_params,
+                                answers={**{k: dict(v) for k, v in picks.items()},
+                                         "recheck_after_s": SANDBOX_RECHECK_S})  # fmt: skip
+            return auto_answers(first, picks)
+
+        def trial(picks: Mapping[str, Mapping[str, int]], tag: str) -> dict[str, Any]:
             log(f"propose ({tag})")
-            rep = gen.propose(read=sread, kinds=kinds, demo_dir=demo_dir, out=work / tag,
-                              actor_params=actor_params, answers=sans)  # fmt: skip
+            try:
+                answers, ledger = answer(picks, tag)
+                sans = {**answers, "recheck_after_s": SANDBOX_RECHECK_S}
+                rep = gen.propose(read=sread, kinds=kinds, demo_dir=demo_dir,
+                                  out=work / tag, actor_params=actor_params,
+                                  answers=sans)  # fmt: skip
+            except gen.GenerateError as exc:
+                # These answers don't fit together: nothing is admitted.
+                why = f"the generator refused these answers: {exc}"
+                return {"answers": {}, "ledger": [], "report": {}, "cases": [],
+                        "dir": work / tag,
+                        "summary": {k: {"admitted": False, "why": why, "correct_writes": 0,
+                                        "false_stops": [], "faults": 0, "faults_stopped": 0,
+                                        "faults_passed": [], "classes_not_planted": [],
+                                        "by_class": {}} for k in kind_names}}  # fmt: skip
             cases: list[dict[str, Any]] = []
+            modes: dict[str, set[str]] = {}
             by_kind = validate(sb, work / tag / "manifest.yaml", holdout, actor_id,
-                               dict(actor_params), log, cases)  # fmt: skip
-            summary = summarize(by_kind, kind_names)
-            results.append((picks, answers, summary))
-            best = best or {"answers": answers, "ledger": ledger, "summary": summary,
-                            "report": rep, "cases": cases}  # fmt: skip
+                               dict(actor_params), log, cases, modes)  # fmt: skip
+            return {"answers": answers, "ledger": ledger, "report": rep, "cases": cases,
+                    "dir": work / tag, "summary": summarize(by_kind, kind_names, modes)}  # fmt: skip
+
+        for picks in trials:
+            tag = "base" if not picks else "pick-" + "-".join(
+                f"{k}.{p}.{i}" for k, d in picks.items() for p, i in d.items())  # fmt: skip
+            got = trial(picks, tag)
+            results.append((picks, got["answers"], got["summary"]))
+            best = best or got
         # A location pick is kept when exactly one candidate admits its kind.
         final_picks: dict[str, dict[str, int]] = {}
         for key, params in options.items():
             kind = key.split(".", 1)[1]
             for name in params:
-                ok = [
-                    p[key][name]
-                    for p, _, s in results
-                    if key in p and name in p[key] and s[kind]["admitted"]
-                ]
+                ok = [p[key][name] for p, _, s in results
+                      if key in p and name in p[key] and s[kind]["admitted"]]  # fmt: skip
                 if len(ok) == 1:
                     final_picks.setdefault(key, {})[name] = ok[0]
-        answers, ledger = auto_answers(report, final_picks)
-        if final_picks:
-            sans = {**answers, "recheck_after_s": SANDBOX_RECHECK_S}
-            rep = gen.propose(read=sread, kinds=kinds, demo_dir=demo_dir, out=work / "final",
-                              actor_params=actor_params, answers=sans)  # fmt: skip
-            cases = []
-            summary = summarize(validate(sb, work / "final" / "manifest.yaml", holdout,
-                                         actor_id, dict(actor_params), log, cases), kind_names)  # fmt: skip
-        else:
-            summary, rep, cases = best["summary"], best["report"], best["cases"]
+        chosen = trial(final_picks, "final") if final_picks else best
+        answers, ledger = chosen["answers"], chosen["ledger"]
+        summary, cases = chosen["summary"], chosen["cases"]
+        validated = chosen["dir"]
     finally:
         if not keep_sandbox:
             sb.drop()
-    # The production contracts: the same answers, against the app's own store.
-    prod = gen.propose(read=read, kinds=kinds, demo_dir=demo_dir, out=out / "contracts",
+    # The production contracts: the same answers, against the app's own
+    # store, staged beside the final folder. A kind is kept only when its
+    # contracts are the validated ones, connections and windows aside.
+    staged = out / ".contracts.staged"
+    import shutil
+
+    shutil.rmtree(staged, ignore_errors=True)
+    prod = gen.propose(read=read, kinds=kinds, demo_dir=demo_dir, out=staged,
                        actor_params=actor_params, answers=answers)  # fmt: skip
-    manifest_path = out / "contracts" / "manifest.yaml"
-    manifest = _load_yaml(manifest_path)
+    for k, s in summary.items():
+        if s["admitted"] and fingerprint(staged, k) != fingerprint(validated, k):
+            s["admitted"] = False
+            s["why"] = ("the contracts proposed against the app's own store differ "
+                        "from the ones validated in the sandbox")  # fmt: skip
     admitted = sorted(k for k, s in summary.items() if s["admitted"])
-    for k in list((manifest.get("kinds") or {})):
-        if k not in admitted:
-            manifest["kinds"].pop(k)
-    manifest["zero_touch"] = {"admitted": admitted}
-    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False))
+    install(staged, out / "contracts", admitted)
     result = {
         "minutes": round((time.time() - t0) / 60, 2),
         "person_decisions": 0,

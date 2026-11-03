@@ -233,3 +233,182 @@ def test_without_the_time_check_the_time_stamp_fault_passes(
         r for r in onboarded["control"] if r["case"] == "bookkeeping:issues.created_on"
     ]
     assert hit and not any(r["ok"] for r in hit), hit
+
+
+# -- the admission gate, without a database (review round 1, B1-B5, S7) -------
+
+
+class _FakeSandbox:
+    """Rows as a sandbox would read them; nothing is written."""
+
+    def __init__(self, rows: dict[str, list[dict[str, Any]]]) -> None:
+        self._rows = rows
+
+    def get(self, table: str, key: Any) -> Any:
+        return None
+
+    def rows(self, table: str, limit: int = 50) -> list[dict[str, Any]]:
+        return self._rows.get(table, [])[:limit]
+
+    def max_key(self, table: str) -> int:
+        return 1
+
+    def distinct(self, table: str, column: str, limit: int = 5) -> list[str]:
+        return []
+
+
+def _wide() -> tuple[Any, Any, Any, list[Any]]:
+    from openadapt_flow.generate.sql_store import Column, Schema, Table
+
+    cols = [Column("id", "int", False, None, auto=True)]
+    cols += [Column(f"c{i:02d}", "varchar", True, None) for i in range(20)]
+    cols += [Column("meta", "json", True, None), Column("blob", "blob", True, None),
+             Column("sex", "enum", True, None), Column("note", "varchar", True, None),
+             Column("t", "time", True, None), Column("u", "uuid", True, None)]  # fmt: skip
+    patient = Table("patient", cols, ["id"])
+    other = Table(
+        "other",
+        [Column("id", "int", False, None), Column("x", "int", True, None)],
+        ["id"],
+    )
+    schema = Schema("mysql", "app", {"patient": patient, "other": other})
+    sb = _FakeSandbox({"other": [{"id": "1", "x": "5"}],
+                       "patient": [{"id": "1", **{c.name: "old" for c in cols[1:]}}]})  # fmt: skip
+
+    class D:
+        values = {"name": "Ann"}
+
+    row = {"id": "2", **{f"c{i:02d}": f"v{i}" for i in range(20)}, "meta": '{"a": 1}',
+           "blob": "0xff", "sex": "F", "note": None, "t": "10:00:00",
+           "u": "123e4567-e89b-12d3-a456-426614174000"}  # fmt: skip
+    return schema, sb, D(), [zt.Op("patient", {"id": "2"}, row)]
+
+
+def test_b2_b3_b4_every_column_of_a_wide_row_gets_a_planted_fault() -> None:
+    schema, sb, demo, write = _wide()
+    cases = zt.faults(schema, sb, demo, write)
+    faulted = {c.name.split(".")[-1] for c in cases
+               if c.cls in ("bookkeeping", "wrong_value") and not c.unplantable}  # fmt: skip
+    assert faulted == set(write[0].row) - {"id"}  # note (NULL) included
+    note = next(c for c in cases if c.name == "bookkeeping:patient.note")
+    assert note.write[0].row["note"] is not None  # B4: a non-NULL plant
+    meta = next(c for c in cases if c.name == "bookkeeping:patient.meta")
+    assert json.loads(meta.write[0].row["meta"]) != {"a": 1}  # B3: valid JSON
+    sex = next(c for c in cases if c.name == "bookkeeping:patient.sex")
+    assert len(sex.write[0].row["sex"]) == 1  # text keeps its length
+
+
+def test_b3_a_type_with_no_generator_blocks_admission() -> None:
+    from openadapt_flow.generate.sql_store import Column, Schema, Table
+
+    t = Table(
+        "p",
+        [Column("id", "int", False, None), Column("geo", "geometry", True, None)],
+        ["id"],
+    )
+    schema = Schema("mysql", "app", {"p": t})
+    cases = zt.faults(schema, _FakeSandbox({}), type("D", (), {"values": {}})(),
+                      [zt.Op("p", {"id": "2"}, {"id": "2", "geo": "0101"})])  # fmt: skip
+    geo = [c for c in cases if c.name.endswith("p.geo")]
+    assert geo and geo[0].unplantable
+    out = zt.run_case(None, Path("."), None, geo[0], "a", {})  # type: ignore[arg-type]
+    assert out.outcome == "NOT_PLANTED" and not out.ok
+
+
+def test_b1_a_fault_that_errors_is_not_stopped() -> None:
+    correct = zt.Outcome("correct", "correct", True, "CONFIRMED", True)
+    for verdict in ("ERROR", "NO_CONTRACT", "NOT_PLANTED"):
+        bad = zt.Outcome("bookkeeping:p.sex", "bookkeeping", False, verdict, False)
+        assert not bad.ok
+        s = zt.summarize({"k": [correct, bad]}, ["k"])["k"]
+        assert not s["admitted"], verdict
+    assert zt.Outcome("x", "missing", False, "REFUTED", False).ok
+    assert zt.Outcome("x", "delayed", False, "RECHECK_REFUTED", False).ok
+
+
+def test_b5_a_kind_without_the_core_fault_classes_is_not_admitted() -> None:
+    correct = zt.Outcome("correct", "correct", True, "CONFIRMED", True)
+    missing = zt.Outcome("missing", "missing", False, "UNCERTAIN", False)
+    s = zt.summarize({"k": [correct, missing]}, ["k"], {"k": {"create"}})["k"]
+    assert not s["admitted"]
+    assert {
+        "unrelated_edit",
+        "delayed",
+        "other_table",
+        "duplicate",
+        "look_alike",
+    } <= set(s["classes_not_planted"])
+    full = [correct] + [zt.Outcome(c, c, False, "REFUTED", False)
+                        for c in (*zt.REQUIRED_CLASSES, *zt.CREATE_CLASSES)]  # fmt: skip
+    assert zt.summarize({"k": full}, ["k"], {"k": {"create"}})["k"]["admitted"]
+
+
+def test_s7_a_held_out_write_that_repeats_a_demonstration_is_refused() -> None:
+    from openadapt_flow.generate.demo_analysis import Demo
+    from openadapt_flow.generate.sql_store import Diff
+
+    a = Demo("k", {"x": 1}, Diff([]), {}, name="a")
+    b = Demo("k", {"x": 2}, Diff([]), {}, name="b")
+    with pytest.raises(zt.ZeroTouchError):
+        zt.check_holdout([a], [Demo("k", {"x": 1}, Diff([]), {}, name="c")], ["k"])
+    with pytest.raises(zt.ZeroTouchError):
+        zt.check_holdout([a], [b], ["k", "other_kind"])
+
+
+def test_s1_s2_install_keeps_only_admitted_kinds_and_fingerprints_ignore_connections(
+    tmp_path: Path,
+) -> None:
+    staged = tmp_path / "staged"
+    for k in ("a", "b"):
+        (staged / "contracts" / k).mkdir(parents=True)
+        (staged / "contracts" / k / "x.create.yaml").write_text(yaml.safe_dump(
+            {"verifier": {"sql_connect_args": {"port": 1}, "sql_query": "SELECT 1"},
+             "frame": {"database": {"recheck_after_s": 3}}}))  # fmt: skip
+    manifest = {"kinds": {k: {"mode": "create", "variants": [
+        {"fields": ["x"], "create": f"contracts/{k}/x.create.yaml"}]} for k in ("a", "b")},
+        "field_sets": {"listed_sha256": {f"contracts/{k}/x.create.yaml": "d" for k in ("a", "b")}}}  # fmt: skip
+    (staged / "manifest.yaml").write_text(yaml.safe_dump(manifest))
+    other = tmp_path / "validated"
+    shutil_copy = __import__("shutil").copytree
+    shutil_copy(staged, other)
+    doc = yaml.safe_load((other / "contracts/a/x.create.yaml").read_text())
+    doc["verifier"]["sql_connect_args"]["port"] = 2
+    doc["frame"]["database"]["recheck_after_s"] = 300
+    (other / "contracts/a/x.create.yaml").write_text(yaml.safe_dump(doc))
+    assert zt.fingerprint(staged, "a") == zt.fingerprint(other, "a")
+    doc["verifier"]["sql_query"] = "SELECT 2"
+    (other / "contracts/a/x.create.yaml").write_text(yaml.safe_dump(doc))
+    assert zt.fingerprint(staged, "a") != zt.fingerprint(other, "a")
+    zt.install(staged, tmp_path / "contracts", ["a"])
+    got = yaml.safe_load((tmp_path / "contracts" / "manifest.yaml").read_text())
+    assert list(got["kinds"]) == ["a"]
+    assert list(got["field_sets"]["listed_sha256"]) == ["contracts/a/x.create.yaml"]
+    assert not (tmp_path / "contracts" / "contracts" / "b").exists()
+    assert not staged.exists()
+
+
+def test_strict_pins_checks_both_readings_and_is_off_by_default() -> None:
+    from openadapt_flow.generate.demo_analysis import ColumnRole
+    from openadapt_flow.generate.sql_store import Column, ForeignKey, Schema, Table
+
+    item = Table("item", [Column("id", "int", False, None), Column("cur", "varchar", True, None),
+                          Column("prod", "int", True, None)], ["id"],
+                 [ForeignKey("prod", "product", "id")])  # fmt: skip
+    product = Table("product", [Column("id", "int", False, None),
+                                Column("cur", "varchar", True, None)], ["id"])  # fmt: skip
+    schema = Schema("mysql", "d", {"item": item, "product": product})
+    copied = {"table": "product", "column": "cur", "ref_column": "id", "via": "prod"}
+    role = ColumnRole("varies", detail={"why": "a constant or a copy: can't tell",
+                                        "strict": {"constant": "EUR", "copied": copied}})  # fmt: skip
+    assert gen._strict({"cur": role}, False)["cur"].role == "varies"
+    strict = gen._strict({"cur": role}, True)["cur"]
+    assert strict.role == "strict"
+    b = gen.SqlBuilder(schema)
+    surf = gen.Surface("record", "item", [])
+    match: dict[str, Any] = {}
+    gen._pin(b, surf, "item", "cur", strict, match, {})
+    exprs = dict(surf.columns)
+    assert match == {"pin__cur": {"literal": "1"}, "copy__cur": {"literal": "1"}}
+    assert "'EUR'" in exprs["pin__cur"] and "`product`" in exprs["copy__cur"]
+    with pytest.raises(gen.Unpinned):
+        gen._pin(b, gen.Surface("record", "item", []), "item", "cur", role, {}, {})

@@ -84,15 +84,46 @@ Class names follow `openadapt_flow.fault_gate` where the class is the same.
 | Class | What is planted |
 | --- | --- |
 | `missing` | Nothing is written |
-| `wrong_value` | A cell holding a task value gets another value of its type (a key gets another existing row's key) |
-| `bookkeeping` | A cell the write changed that holds no task value gets a far value (a time stamp in 2001, a number plus 7, text plus " (x)") |
-| `wrong_record` | An update's changes land on another row of the same table |
-| `look_alike` | A create's values land on an existing row instead |
-| `duplicate` | Every added row is added twice |
+| `partial` | One row of a multi-row write is lost (a child row, a journal entry) |
+| `wrong_value` | A cell holding a task value gets another value |
+| `bookkeeping` | A cell holding no task value gets another value, NULL cells included |
 | `collateral_target` | A column of the target the write didn't change is changed |
-| `unrelated_edit` | Another row of a table the write touched is changed |
+| `wrong_record` | An update's changes land on another row of the same table (a copy of the target when the table has no other row) |
+| `look_alike` | A create's values land on an existing row instead |
+| `duplicate` | Each added row is added again under a new key |
+| `unrelated_edit` | Each column the update changed is changed the same way on another row; and one other row of each touched table is edited |
 | `other_table` | A row is added to a table the write didn't touch |
-| `delayed` | The write is correct; a change lands after the check and before the recheck |
+| `delayed` | The write is correct; a change to the target, or to another row, lands after the check and before the recheck |
+
+**Every column, no cap.** Every column of every row the write adds or
+changes gets its own fault. The value planted is, in order: another row's
+key for a declared foreign key; a value the column already holds in another
+row (so the store accepts it); or a value made by the column's type (a date
+in 2001, a number plus one, text of the same length with its last character
+changed, valid JSON, a new UUID, a flipped byte, another time). A column
+whose type has no generator gets an `unplantable` case.
+
+**Only a verdict counts.** A fault counts as stopped only when the verifier
+read the planted state and returned `REFUTED` or `UNCERTAIN` (at the check
+or the recheck). A plant the store rejects, a case that errors, a fault
+with no contract and an unplantable column all count as not stopped, so the
+kind is not admitted.
+
+**Required classes.** A kind is admitted only if its held-out writes
+produced `missing`, `unrelated_edit`, `delayed` and `other_table` faults,
+plus `duplicate` and `look_alike` for a create and `wrong_record` for an
+update. A class that couldn't be planted is listed in `EXCEPTIONS.md`.
+
+**Held out means held out.** A held-out write with the same kind and values
+as a demonstration, or the same diff, is refused, and so is a kind with no
+held-out write.
+
+**Production equals validated.** The sandbox copies the declared foreign
+keys, because the generator reads them. The production contracts are
+proposed again against the app's own store; a kind is kept only if its
+contracts and manifest entry match the validated ones once connections and
+the recheck window are set aside. The manifest is filtered (entries, pinned
+digests and files) in a staging folder and moved into place in one rename.
 
 The `bookkeeping` class is what keeps excuses honest. Every cell the write
 changes is either a task value (checked), a value a rule checks (the acting

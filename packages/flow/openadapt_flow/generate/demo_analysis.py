@@ -672,13 +672,14 @@ def column_roles(
                     if copy is not None
                     else "a link to a row the write added"
                 )
-                out[name] = ColumnRole(
-                    "varies",
-                    detail={
-                        "why": f"the acting user's id or {other}: the "
-                        "demonstrations can't tell"
-                    },
-                )
+                detail: dict[str, Any] = {
+                    "why": f"the acting user's id or {other}: the "
+                    "demonstrations can't tell"
+                }
+                if copy is not None:
+                    # Both fit every row: ``strict_pins`` checks both.
+                    detail["strict"] = {"actor": actor[0], "copied": copy}
+                out[name] = ColumnRole("varies", detail=detail)
                 continue
             out[name] = ColumnRole("actor", detail={"param": actor[0]})
             continue
@@ -706,7 +707,9 @@ def column_roles(
                 "varies",
                 detail={
                     "why": f"a constant or a copy of {copied['table']}."
-                    f"{copied['column']}: the demonstrations can't tell"
+                    f"{copied['column']}: the demonstrations can't tell",
+                    # Both fit every row: ``strict_pins`` checks both.
+                    "strict": {"constant": values[0], "copied": copied},
                 },
             )
             continue

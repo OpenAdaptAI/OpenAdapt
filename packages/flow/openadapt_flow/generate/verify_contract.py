@@ -89,6 +89,41 @@ def _computed(role: ColumnRole) -> bool:
     return why.startswith("the ") and "of a date the task gives" in why
 
 
+def _strict(roles: Mapping[str, ColumnRole], on: bool) -> dict[str, ColumnRole]:
+    """``roles`` with each column two readings fit made a ``strict`` role
+    (checked both ways) when ``strict_pins`` is on; else unchanged."""
+
+    if not on:
+        return dict(roles)
+    return {
+        c: ColumnRole("strict", detail=dict(r.detail["strict"]))
+        if r.role == "varies" and r.detail.get("strict")
+        else r
+        for c, r in roles.items()
+    }
+
+
+def _strict_pins(
+    b: "SqlBuilder", surf: "Surface", table: str, col: str, detail: Mapping[str, Any],
+    match: dict[str, Any],
+) -> None:  # fmt: skip
+    """Both checks of a ``strict`` role: the constant (or the acting user),
+    and the copy of the column its key points to."""
+
+    if "constant" in detail:
+        alias = _add_column(
+            surf, f"pin__{_alias(col)}", b.pin("t", table, col, detail["constant"])
+        )
+        match[alias] = {"literal": "1"}
+    if "actor" in detail:
+        match.setdefault(col, {"param": detail["actor"]})
+    if detail.get("copied"):
+        alias = _add_column(
+            surf, f"copy__{_alias(col)}", b.copied("t", detail["copied"], table, col)
+        )
+        match[alias] = {"literal": "1"}
+
+
 class GenerateError(RuntimeError):
     """The generator can't go on; the message says why."""
 
@@ -1863,6 +1898,11 @@ class Settings:
     #: target's excused bookkeeping on an update) must hold a time near the
     #: read, instead of any value.
     now_checks: bool = False
+    #: ``strict_pins`` answered true: a new-row column two readings fit in
+    #: every demonstration (a constant and a copy of a column a key points
+    #: to, or the acting user and such a copy) is checked both ways, instead
+    #: of refusing the kind.
+    strict_pins: bool = False
 
     @property
     def now_window_s(self) -> int:
@@ -1966,7 +2006,10 @@ def build_contract(
         # ``found`` pins the same constants as ``create`` (a soft-delete
         # flag, a status, a type): a trashed record with the task's values
         # is not "already there". Who created it may differ.
-        roles = _anchor_roles(schema, plan, variant, settings.actor_params)
+        roles = _strict(
+            _anchor_roles(schema, plan, variant, settings.actor_params),
+            settings.strict_pins,
+        )
         for col, role in sorted(roles.items()):
             if flavor == "found" and role.role in ("actor", "copied"):
                 continue
@@ -2098,7 +2141,7 @@ def build_contract(
                     m[key] = {"literal": "1"}
                 else:
                     m[key] = _value_expr(pname, loc.rule)
-            for col, role in sorted(g.roles.items()):
+            for col, role in sorted(_strict(g.roles, settings.strict_pins).items()):
                 if role.role == "link" or (found and role.role in ("actor", "copied")):
                     continue
                 _pin(
@@ -2201,7 +2244,8 @@ def build_contract(
         if found or (side.unless is not None and side.unless in fields):
             continue
         m = {}
-        for col, role in sorted(side.roles.items()):
+        side_roles = _strict(side.roles, settings.strict_pins)
+        for col, role in sorted(side_roles.items()):
             if role.role == "constant" and role.value is not None:
                 m[col] = {"literal": role.value}
             elif role.role == "actor":
@@ -2215,7 +2259,7 @@ def build_contract(
                 side.table,
                 m,
                 side.count,
-                side.roles,
+                side_roles,
                 f"{side.count} row(s) the app adds to {side.table}",
             )
         )
@@ -2331,6 +2375,9 @@ def _pin(
     actor_params: Mapping[str, str],
     unchecked: Mapping[str, set[str]] = {},
 ) -> None:
+    if role.role == "strict":
+        _strict_pins(b, surf, table, col, role.detail, match)
+        return
     if (
         role.role == "varies"
         and col not in unchecked.get(table, set())
@@ -2434,6 +2481,10 @@ def _raw_effect(
             continue
         role = roles.get(c.name)
         if role is not None and role.role == "constant" and role.value is None:
+            continue
+        if role is not None and role.role == "strict":
+            _strict_pins(b, surf, table, c.name, role.detail, m)
+            nrf.add(c.name)
             continue
         if (
             role is None
@@ -3253,6 +3304,8 @@ def propose(
             (g.table, g.roles) for g in [*p.children.values(), *p.lists.values()]
         ]
         groups += [(sd.table, sd.roles) for sd in p.sides]
+        strict_on = _answer(answers, "strict_pins") is True
+        groups = [(t, _strict(r, strict_on)) for t, r in groups]
         for table, group_roles in groups:
             for col, role in group_roles.items():
                 if role.role in OPEN_ROLES:
@@ -3428,6 +3481,7 @@ def propose(
         env,
         unchecked=unchecked_named,
         now_checks=_answer(answers, "now_checks") is True,
+        strict_pins=_answer(answers, "strict_pins") is True,
     )
 
     # Tables whose name the SQL guard refuses: a view, or a refusal.
