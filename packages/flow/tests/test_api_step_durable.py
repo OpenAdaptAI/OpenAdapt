@@ -275,8 +275,20 @@ def test_a_save_the_record_check_refutes_is_not_redone_by_resume(fx):
     assert report.success is False and fx.records() == []
     assert fx.store().read_pending().resume_from_index == 1
 
+    # The save was sent, so its pause is delivery-uncertain: an ordinary
+    # resume is refused before anything runs.
+    assert fx.store().read_pending().delivery_uncertainty is not None
     second = ScriptedActuator(fx.url, ActuationStatus.ACTUATED)
-    resumed = resume(fx.run_dir, fx.replayer(second), approval=fx.approval())
+    with pytest.raises(ApprovalRequired, match="may already have actuated"):
+        resume(fx.run_dir, fx.replayer(second), approval=fx.approval())
+    assert second.calls == 0 and fx.backend.actions == []
+
+    # Even a resume that authorizes one uncertain retry never resends it.
+    resumed = resume(
+        fx.run_dir,
+        fx.replayer(second),
+        approval=fx.approval(authorize_uncertain_retry=True),
+    )
     assert second.calls == 0 and fx.backend.actions == []
     assert resumed.success is False
     assert "never sends it again" in resumed.results[-1].error

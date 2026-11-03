@@ -476,6 +476,8 @@ def _deployment_runtime(
         cfg.runtime.allow_model_grounding
         or getattr(args, "allow_model_grounding", False)
     )
+    if getattr(args, "local_grounding", False):
+        cfg.runtime = cfg.runtime.model_copy(update={"local_grounding": True})
     return cfg, effect_verifier, api_actuator, durable, allow_egress
 
 
@@ -879,10 +881,16 @@ def _build_and_run_replayer(
     readback_pipeline=None,
     secret_env_overrides: Optional[Mapping[str, str]] = None,
     api_steps_off_reason: Optional[str] = None,
+    rollback_plan=None,
+    fresh_session=None,
 ):
     """Build the shared Replayer configuration and execute one workflow.
 
     ``api_steps_off_reason`` turns API steps off for this run and says why.
+    ``rollback_plan`` (``openadapt_flow.rollback``) reads the system of
+    record before the run and, after a stop, runs the approved
+    compensations and proves the store is back; ``fresh_session`` returns
+    the backend to a signed-out start for a GUI compensation.
     """
     replayer = _configured_replayer(
         backend,
@@ -912,7 +920,21 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
-    return replayer.run(
+    _refuse_rollback_durable(rollback_plan, durable)
+    if rollback_plan is not None:
+        _require_undo_or_person(
+            workflow, rollback_plan, approval_gate, api_only=fresh_session is None
+        )
+    before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
+    if rollback_plan is not None and before is None:
+        # Without the first read nothing after a stop can be proven, and the
+        # undo-or-person rule let undoable saves run without a person.
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, but the system of record, "
+            "its audit log, or the run's own user for attribution couldn't be "
+            "read before the run, so a stop couldn't be rolled back. Nothing ran."
+        )
+    report = replayer.run(
         workflow,
         params=params,
         worklists=worklists,
@@ -930,6 +952,102 @@ def _build_and_run_replayer(
             else run_id
         ),
     )
+    if rollback_plan is not None and not report.success:
+        from openadapt_flow.rollback import ReplayerRunner
+
+        run_item = getattr(approval_gate, "_item", None)
+        if approval_gate is not None:
+            # A compensation is the undo a person approved: it doesn't need
+            # an undo of its own.
+            approval_gate.undo_or_person = False
+
+        def make_compensation_replayer():
+            if approval_gate is not None and run_item is not None:
+                # It acts on the run's own item, so the save gate checks the
+                # same record the run's save did.
+                approval_gate.next_item(run_item)
+            # The run's backend, verifier, API actuator and approval gate. No
+            # governed authorization or qualification guard: those bind the
+            # run's own workflow, and a compensation is its own approved undo.
+            return _configured_replayer(
+                backend,
+                workflow=workflow,
+                allow_egress=allow_egress,
+                effect_verifier=effect_verifier,
+                api_actuator=api_actuator,
+                durable=False,
+                use_structural=use_structural,
+                pixel_verify_enabled=pixel_verify_enabled,
+                runtime_config=runtime_config,
+                approval_gate=approval_gate,
+            )
+
+        report = rollback_plan.finish(
+            report,
+            workflow,
+            before=before,
+            run_dir=Path(run_dir),
+            bundle_dir=Path(bundle),
+            runner=ReplayerRunner(make_compensation_replayer, fresh_session),
+        )
+    return report
+
+
+def _refuse_rollback_durable(rollback_plan, durable: bool) -> None:
+    """A resumed run has no first read to roll back to, and a rollback at a
+    pause would leave a resumable run half undone: refuse the pair. (The
+    Standard and Regulated profiles require durable runs.)"""
+    if rollback_plan is not None and durable:
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and it doesn't run on a "
+            "durable (pausable) run yet, which the Standard and Regulated "
+            "profiles require. Turn one of them off. Nothing ran."
+        )
+
+
+def _refuse_rollback_unwired(cfg, where: str) -> None:
+    """Rollback runs only on a single web run; refuse rather than run without it."""
+    section = getattr(cfg, "rollback", None)
+    if section is not None and section.enabled:
+        raise SystemExit(
+            f"REFUSED before the run: rollback is on, and it doesn't run on {where} "
+            "yet. Turn rollback off for this deployment, or run a single web "
+            "item. Nothing ran."
+        )
+
+
+def _require_undo_or_person(
+    workflow, rollback_plan, approval_gate, *, api_only: bool = False
+) -> None:
+    """With rollback on, every save is either undoable or approved by a person
+    before it runs (docs/ROLLBACK.md).
+
+    A gate that can ask a person checks each save (``undo_or_person``); with
+    no such gate, a run that holds a save no approved compensation can undo
+    is refused before it starts.
+    """
+    from openadapt_flow.approval_mode.model import ApprovalMode
+    from openadapt_flow.rollback import saves_without_undo
+
+    if approval_gate is not None:
+        approval_gate.undo_or_person = True
+        approval_gate.undo_allows_delete = bool(rollback_plan.allow_delete)
+        approval_gate.undo_api_only = api_only
+        if getattr(approval_gate, "mode", None) is not ApprovalMode.NOT_GATED:
+            return
+    missing = saves_without_undo(
+        workflow, allow_delete=rollback_plan.allow_delete, api_only=api_only
+    )
+    if missing:
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and these saves have no "
+            "compensation a person approved (or only a delete this deployment "
+            "doesn't allow): "
+            + ", ".join(missing)
+            + ". A write that can't be undone needs a person's approval first: "
+            "qualify and approve a compensation (rollback qualify, undo accept), "
+            "or run with an approval mode that asks a person. Nothing ran."
+        )
 
 
 def _replay_outcome_epilogue(
@@ -1087,6 +1205,11 @@ def _finish_replay(
         ledger = _change_ledger_epilogue(report, run_dir, args)
         if ledger:
             print(f"\n{ledger}")
+        from openadapt_flow.rollback import rollback_lines
+
+        rolled = rollback_lines(report)
+        if rolled:
+            print("\n" + "\n".join(rolled))
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
     _maybe_attest_run(run_dir, report, args)
@@ -2376,6 +2499,11 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
     task's first screen before starting it; any other screen fails step 1's
     checks before input. Leaving the context only drops the DevTools
     connection. Every refusal raises :class:`SystemExit` before any input.
+
+    The tab was opened before this run attached, so its page loaded before
+    the WebSocket guard (:func:`~openadapt_flow.backends.playwright_backend.prepare_ws_guard`)
+    and a create-form save on it refuses to hold. The guard is installed on
+    attach: a document the tab loads after that (reload it) can hold one.
     """
 
     from openadapt_flow.interactive_recorder import (
@@ -2419,6 +2547,10 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
             )
         except BrowserAttachError as exc:
             raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Documents the tab loads from now on are guarded from their start.
+        prepare_ws_guard(page)
         recorded = getattr(workflow, "viewport", None)
         if recorded:
             try:
@@ -2545,6 +2677,10 @@ def _build_surface_backends(surface_cfgs, *, page) -> dict:
                 if browser is None:
                     raise
                 opened = browser.new_page(viewport=page.viewport_size)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(opened)
             opened.goto(url)
             try:
                 opened.wait_for_load_state("load")
@@ -2567,6 +2703,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow.ir import Workflow
 
     bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle, target_url=getattr(args, "url", None))
     refuse_replay_composition(bundle)
     refuse_replay_process(bundle)
     from openadapt_flow.cli_variants import refuse_replay_variants
@@ -2643,6 +2782,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     pool_policy = requested_pool(args, cfg)
     if pool_policy is not None:
+        _refuse_rollback_unwired(cfg, "a worklist pool")
         return _replay_worklist_pool(
             args,
             cfg,
@@ -2659,6 +2799,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             surface_cfgs=surface_cfgs,
         )
     if _normalize_kind(backend_cfg.kind) != "web":
+        _refuse_rollback_unwired(cfg, "a desktop or remote-display backend")
         return _replay_desktop(
             args,
             backend_cfg,
@@ -2693,6 +2834,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     headed = args.headed or cfg.backend.headed
     url = args.url or cfg.backend.url
+    refuse_unqualified_skill(bundle, target_url=url)
     if url and args.drift:
         raise SystemExit(
             "--drift only applies to the bundled MockMed demo app; "
@@ -2712,6 +2854,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         backend = build_backend(backend_cfg, page=page)
         held_backend.append(backend)
         surface_backends = _build_surface_backends(surface_cfgs, page=page)
+        from openadapt_flow.rollback import plan_from_deployment, web_fresh_session
+
+        rollback_plan = plan_from_deployment(cfg, effect_verifier)
         return _build_and_run_replayer(
             backend,
             workflow=workflow,
@@ -2750,6 +2895,17 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             qualification_fault_driver=fault_driver,
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            # Never reset the operator's own attached browser: that would
+            # sign them out. Only API-only compensations run there.
+            fresh_session=(
+                web_fresh_session(page, entry_url or page.url)
+                if rollback_plan is not None
+                and not (
+                    backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+                )
+                else None
+            ),
         )
 
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
@@ -2794,10 +2950,15 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                     viewport=_VIEWPORT,
                     record_video_dir=video_dir,
                     record_video_size=_VIEWPORT,
+                    service_workers="block",
                 )
                 page = context.new_page()
             else:
-                page = browser.new_page(viewport=_VIEWPORT)
+                page = browser.new_page(viewport=_VIEWPORT, service_workers="block")
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(url)
             try:
                 report = run_on_page(page, entry_url=url)
@@ -2838,6 +2999,40 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
+
+
+def _pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
+    from openadapt_flow.cli_self_repair import pinned_lineage
+
+    return pinned_lineage(args, cfg)
+
+
+#: The run-authorization fields a managed dispatch must agree on with the
+#: authorization this runner builds for the same bundle and inputs.
+MANAGED_SAFETY_FIELDS = (
+    "bundle_content_digest",
+    "runtime_inputs_digest",
+    "admitted_policy_name",
+    "admitted_policy_contract_sha256",
+    "execution_profile",
+    "minimum_effect_tier",
+    "qualified_effect_requirements",
+    "required_identity_step_ids",
+    "unverified_write_approvals",
+)
+
+
+def managed_authorization_mismatch(authorization: Any, local: Any) -> bool:
+    """Whether Cloud's run authorization disagrees with the local one.
+
+    Cloud may admit only API steps the bundle itself admits. An API step Cloud
+    doesn't name runs on the GUI, so naming fewer is allowed.
+    """
+
+    return any(
+        getattr(authorization, field) != getattr(local, field)
+        for field in MANAGED_SAFETY_FIELDS
+    ) or any(row not in local.api_steps for row in authorization.api_steps)
 
 
 def _replay_worklist_pool(
@@ -2955,6 +3150,60 @@ def _replay_worklist_pool(
     wirings = [_deployment_runtime(args, params=params) for _ in accounts]
     salt = getattr(getattr(workflow, "manifest", None), "content_digest", "") or ""
 
+    # After an item that halted before any write, when the session takes the
+    # next one, clean the screen, confirm the start screen and read the
+    # records back (docs/HALT_CLEANUP.md). Without a qualified halt_cleanup,
+    # the default only re-enters and checks.
+    from openadapt_flow import halt_cleanup as _hc
+    from openadapt_flow.after_stop import records_reader as _records_reader
+    from openadapt_flow.runtime import Replayer as _Replayer
+
+    item_cleanup = _hc.runnable_cleanup(workflow)
+
+    def _reenter(source, open_entry):
+        def reenter() -> None:
+            if open_entry is not None:
+                open_entry(source)
+            else:
+                source.goto(entry_url)
+
+        return reenter
+
+    def clean_session(source, cleanup_dir, *, wiring, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        read_records = _records_reader(wiring[1])
+        if read_records is None:
+            # Without a read-back, a cleanup that saves (autosave on leave)
+            # would go unseen and the item would count as unwritten.
+            return _hc.CleanupResult(
+                dirty="the deployment's effect verifier can't read the records "
+                "back, so a cleanup can't be shown to save nothing"
+            )
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.run_cleanup(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=cleanup_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+            read_records=read_records,
+        )
+
+    def start_check(source, check_dir, *, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.check_start(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=check_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+        )
+
     if kind == "web":
         workers = []
         for i, account in enumerate(accounts):
@@ -2988,6 +3237,15 @@ def _replay_worklist_pool(
                     run_item_on_page=partial(run_item, wirings[i], page_mode=True),
                     sign_in=sign_in,
                     open_entry=open_entry,
+                    clean=partial(
+                        clean_session,
+                        wiring=wirings[i],
+                        page_mode=True,
+                        open_entry=open_entry,
+                    ),
+                    start_check=partial(
+                        start_check, page_mode=True, open_entry=open_entry
+                    ),
                     cdp_endpoint=account.browser_cdp_endpoint if account else None,
                     headed=bool(args.headed or cfg.backend.headed),
                     readback_window=policy.readback_window,
@@ -3022,6 +3280,8 @@ def _replay_worklist_pool(
                     backend_cfg, rdp_transport=session, rdp_connect=False
                 ),
                 run_item_on_backend=partial(run_item, wirings[i], page_mode=False),
+                clean=partial(clean_session, wiring=wirings[i], page_mode=False),
+                start_check=partial(start_check, page_mode=False),
                 fingerprint=hashlib.sha256(
                     f"{backend_cfg.rdp_host}|{account.rdp_username}".encode()
                 ).hexdigest(),
@@ -3120,6 +3380,110 @@ def _approval_wait_seconds(args: argparse.Namespace) -> float:
     return max(0.0, min(float(raw), MAX_APPROVAL_WAIT_S))
 
 
+def _deployment_approvers(args: argparse.Namespace) -> Any:
+    """The deployment config's ``approvers`` section, or ``None``.
+
+    Parsed once per command: every later reader in this process sees the
+    same pin, even if the file is swapped while the run goes on.
+    """
+
+    if hasattr(args, "_approvers_section"):
+        return args._approvers_section
+    args._approvers_section = _load_deployment_approvers(args)
+    return args._approvers_section
+
+
+def _load_deployment_approvers(args: argparse.Namespace) -> Any:
+    config = getattr(args, "config", None)
+    if not config:
+        return None
+    from openadapt_flow.deployment import load_deployment
+
+    try:
+        return load_deployment(config, allow_unresolved=True).approvers
+    except (OSError, ValueError) as exc:
+        # A config that can't be read must not quietly drop its pin and let
+        # a caller-set root count instead.
+        raise SystemExit(
+            f"REFUSED (deployment_config_unreadable): {config} can't be read, so "
+            f"its approver pin can't be checked ({exc}). Nothing was executed."
+        ) from None
+
+
+def _args_key_dir(args: argparse.Namespace) -> Optional[Path]:
+    """The ``--key-dir`` the operator chose, or ``None`` for the default.
+
+    Never read from a run directory: the approval files there are writable by
+    any process, so a path stored in them would let a forger pick the registry.
+    A deployment config that pins ``approvers.key_dir`` names the only key
+    directory a run accepts: ``--key-dir`` elsewhere is refused.
+    """
+
+    key_dir = getattr(args, "key_dir", None)
+    pinned = _deployment_approvers(args)
+    if pinned is not None and pinned.key_dir:
+        want = Path(pinned.key_dir).expanduser().resolve()
+        if key_dir and Path(key_dir).expanduser().resolve() != want:
+            raise SystemExit(
+                f"REFUSED (approver_key_dir_mismatch): the deployment config pins "
+                f"the approver key directory {want}; --key-dir names another. "
+                "Nothing was executed."
+            )
+        return want
+    return Path(key_dir) if key_dir else None
+
+
+def _approver_pin(args: argparse.Namespace, *, config_only: bool) -> dict[str, Any]:
+    """The pin a run's item-approval store checks answers against.
+
+    ``config_only`` (a governed run, or one an agent started): only the
+    deployment config's ``approvers.root_public_key`` counts; ``--approver-root``
+    and ``OPENADAPT_APPROVER_ROOT`` are ignored, since whoever starts the run
+    sets them. Without a config pin such a run refuses every person's answer.
+    """
+
+    pinned = _deployment_approvers(args)
+    return {
+        "approver_root": getattr(args, "approver_root", None),
+        "config_root": pinned.root_public_key if pinned is not None else None,
+        "config_only": config_only,
+        "config_head": tuple(pinned.head)
+        if pinned is not None and pinned.head
+        else None,
+    }
+
+
+def _run_is_config_pinned(args: argparse.Namespace) -> bool:
+    """A governed run (or its resume), or one an agent started."""
+
+    return (
+        bool(getattr(args, "started_by", None))
+        or getattr(args, "_governed_run_authorization", None) is not None
+        or bool(getattr(args, "_resume_governed", False))
+    )
+
+
+def _args_approver_root(args: argparse.Namespace) -> Optional[str]:
+    """The approver root this command pins (approval_mode/approver_roster).
+
+    The deployment config's ``approvers.root_public_key``, ``--approver-root``
+    and ``OPENADAPT_APPROVER_ROOT``; two that disagree are refused.
+    """
+
+    from openadapt_flow.approval_mode.approver_roster import RosterError, pinned_root
+
+    pinned = _deployment_approvers(args)
+    try:
+        return pinned_root(
+            getattr(args, "approver_root", None),
+            config_root=pinned.root_public_key if pinned is not None else None,
+        )
+    except RosterError as exc:
+        raise SystemExit(
+            f"REFUSED ({exc.code}): {exc}. Nothing was executed."
+        ) from None
+
+
 def _approver_settings(args: argparse.Namespace):
     """The run's approver grant and delegated approver, from its flags.
 
@@ -3145,7 +3509,7 @@ def _approver_settings(args: argparse.Namespace):
     loaded = None
     path = getattr(args, "approver_policy", None)
     if path:
-        loaded = load_approver_policy(path, default_key_dir())
+        loaded = load_approver_policy(path, _args_key_dir(args) or default_key_dir())
         if loaded.refusal is not None:
             from openadapt_flow.cli_hints import command
 
@@ -3181,9 +3545,15 @@ def _prepare_approval_store(
         ItemApprovalStore,
     )
 
-    store = ItemApprovalStore(run_dir)
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=_args_key_dir(args),
+        **_approver_pin(args, config_only=_run_is_config_pinned(args)),
+    )
     loaded, approver = _approver_settings(args)
     try:
+        if record_initiator:
+            store.write_approver_root()
         if loaded is not None and loaded.signed is not None:
             store.write_grant(loaded.signed)
         elif loaded is not None and loaded.refusal is None:
@@ -3197,6 +3567,25 @@ def _prepare_approval_store(
     return store, approver
 
 
+def _record_approver_pin(args: argparse.Namespace, run_dir: Path) -> None:
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=_args_key_dir(args),
+        **_approver_pin(args, config_only=True),
+    )
+    try:
+        store.write_approver_root()
+    except ItemApprovalRefused as exc:
+        raise SystemExit(
+            f"run REFUSED: {exc} ({exc.code}). Nothing was executed."
+        ) from None
+
+
 def _approval_gate_for_run(
     args: argparse.Namespace,
     run_dir: Path,
@@ -3207,6 +3596,10 @@ def _approval_gate_for_run(
 
     mode = getattr(args, "_approval_mode", None)
     if mode is None:
+        if _run_is_config_pinned(args):
+            # No gate, but a durable stop may still need a person's signed
+            # approval later: record the pin a resume will check now.
+            _record_approver_pin(args, run_dir)
         return None
     from openadapt_flow.approval_mode.gate import ApprovalGate
 
@@ -3317,6 +3710,27 @@ def _cmd_attach_seal(args: argparse.Namespace) -> int:
     return 1
 
 
+def _verify_run_sources(args: argparse.Namespace) -> dict[str, Any]:
+    """``--provenance`` and ``--source`` for verify-run's round trip."""
+
+    from openadapt_flow.verify_run import VerifyRunError
+
+    path = getattr(args, "provenance", None)
+    sources = list(getattr(args, "source", None) or [])
+    if not path:
+        if sources:
+            raise VerifyRunError("--source needs --provenance")
+        return {}
+    from openadapt_flow.provenance import load_provenance, read_sources
+
+    try:
+        provenance = load_provenance(path)
+        documents = read_sources([Path(p) for p in sources])
+    except (OSError, ValueError) as exc:
+        raise VerifyRunError(f"cannot read the provenance or a source: {exc}") from exc
+    return {"provenance": provenance, "documents": documents}
+
+
 def _cmd_verify_run(args: argparse.Namespace) -> int:
     """``verify-run``: judge an effect another executor claims, from the store."""
     from openadapt_flow.verify_run import (
@@ -3379,6 +3793,7 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
             approver=_json(args.approver) if args.approver else None,
             remediates=args.remediates,
             correlation_id=args.correlation_id,
+            **_verify_run_sources(args),
         )
     except VerifyRunError as exc:
         print(f"verify-run REFUSED: {exc}", file=sys.stderr)
@@ -3430,6 +3845,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.runtime.authorization import runtime_inputs_digest
 
     bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle)
     if is_composition_artifact(bundle):
         from openadapt_flow.cli_compose import cmd_run_composition
 
@@ -3529,6 +3947,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 2
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
+    # A pulled skill runs only on the instance it was qualified on: the
+    # deployment's app address, not only an explicit --url.
+    refuse_unqualified_skill(
+        bundle,
+        target_url=getattr(args, "url", None) or getattr(backend_cfg, "url", None),
+    )
     will_actuate = not bool(getattr(args, "dry_run", False))
     authority_file = getattr(args, "qualification_authority_file", None)
     dispatch_file = getattr(args, "managed_dispatch_file", None)
@@ -3591,6 +4015,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         require_encryption=not bool(getattr(args, "allow_unencrypted", False)),
         pinned_content_digest=getattr(args, "pin_digest", None),
         pinned_compiler_version=getattr(args, "pin_version", None),
+        pinned_lineage=_pinned_lineage(args, cfg),
         profile_contract=profile,
         effective_durable=effective_durable if profile is not None else None,
         effective_require_settled=(
@@ -3627,25 +4052,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
             params=runtime_params,
             worklists=runtime_worklists,
         )
-        safety_fields = (
-            "bundle_content_digest",
-            "runtime_inputs_digest",
-            "admitted_policy_name",
-            "admitted_policy_contract_sha256",
-            "execution_profile",
-            "minimum_effect_tier",
-            "qualified_effect_requirements",
-            "required_identity_step_ids",
-            "unverified_write_approvals",
-        )
         if (
             selected_profile is None
             or selected_profile.value not in {"standard", "regulated"}
             or workflow.manifest is None
-            or any(
-                getattr(authorization, field) != getattr(local_authorization, field)
-                for field in safety_fields
-            )
+            or managed_authorization_mismatch(authorization, local_authorization)
             or (
                 authorization.bundle_content_digest != workflow.manifest.content_digest
                 or authorization.validate_workflow(workflow) is not None
@@ -3909,7 +4320,13 @@ def _resume_approval_mode(args: argparse.Namespace, authorization):
     return None
 
 
-def _carry_item_approval_to_pause(run_dir: Path, store, pending):
+def _carry_item_approval_to_pause(
+    run_dir: Path,
+    store,
+    pending,
+    key_dir: Optional[Path] = None,
+    pin: Optional[dict[str, Any]] = None,
+):
     """Answer a waiting ``item_approval`` pause from an unused approval, if any.
 
     Returns the pause as it now stands (unchanged when there's no approval).
@@ -3922,7 +4339,9 @@ def _carry_item_approval_to_pause(run_dir: Path, store, pending):
     try:
         manifest = store.read_manifest()
         found = (
-            ItemApprovalStore(run_dir).find_unused_approval(
+            ItemApprovalStore(
+                run_dir, key_dir=key_dir, **(pin or {})
+            ).find_unused_approval(
                 run_id=manifest.run_id,
                 step_id=pending.step_id,
                 step_index=pending.step_index,
@@ -3962,6 +4381,13 @@ def _resume_approval_gate(
     )
 
 
+def _was_rolled_back(run_dir: Path) -> bool:
+    """Did a compensating rollback start undoing this run?"""
+    from openadapt_flow.runtime.durable.resume import was_compensated
+
+    return was_compensated(run_dir)
+
+
 def _cmd_resume(args: argparse.Namespace) -> int:
     from openadapt_flow import crypto
     from openadapt_flow.runtime.durable import resume, resume_point
@@ -3988,12 +4414,30 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             "Nothing was executed."
         )
         return 3
+    if _was_rolled_back(run_dir):
+        print(
+            "Resume REFUSED: this run was rolled back after it stopped, so its "
+            "earlier writes are undone and resuming would carry them as done. "
+            "Start a new run. Nothing was executed."
+        )
+        return 3
+    # A governed run's resume takes its approver pin only from the deployment
+    # config, everywhere it checks an answer (the run directory and the
+    # environment are never the anchor).
+    _early_manifest = store.read_manifest()
+    args._resume_governed = bool(
+        _early_manifest is not None
+        and _early_manifest.governed_authorization is not None
+    )
+    resume_pin = _approver_pin(args, config_only=_run_is_config_pinned(args))
     if pending.category == "item_approval" and pending.status == "pending":
         # The person may have approved while the run was giving up waiting,
         # before this pause existed for `item-approval approve` to answer.
         # Carry that approval to the pause now; the resumed run still checks
         # the answer itself and uses it once.
-        pending = _carry_item_approval_to_pause(run_dir, store, pending)
+        pending = _carry_item_approval_to_pause(
+            run_dir, store, pending, _args_key_dir(args), resume_pin
+        )
     if args.require_approval and pending.status != "approved":
         from openadapt_flow.cli_hints import command
 
@@ -4020,7 +4464,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
         if (
-            ItemApprovalStore(run_dir).find_unused_approval(
+            ItemApprovalStore(
+                run_dir, key_dir=_args_key_dir(args), **resume_pin
+            ).find_unused_approval(
                 run_id=manifest.run_id,
                 step_id=pending.step_id,
                 step_index=pending.step_index,
@@ -4035,6 +4481,44 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 "Nothing was executed."
             )
             return 3
+    elif pending.category != "business_decision":
+        # An item's authority is its signed answer, checked above and again by
+        # the run; a business decision carries its own signed receipt. Any
+        # other stored approval must be signed by a registered approver key:
+        # approval.json is a file any process could write.
+        from openadapt_flow.jit.lifecycle import default_key_dir
+        from openadapt_flow.runtime.durable.approval import stored_approval_refusal
+
+        stored = store.read_approval()
+        if stored is not None:
+            from openadapt_flow.approval_mode.item_approval import (
+                ItemApprovalStore as _PinStore,
+            )
+
+            # The run's own recorded pin and roster head when it has one; a
+            # governed run's resume otherwise takes only the config's root.
+            pin = _PinStore(
+                run_dir,
+                key_dir=_args_key_dir(args) or default_key_dir(),
+                **_approver_pin(
+                    args,
+                    config_only=manifest.governed_authorization is not None,
+                ),
+            )
+            root, head, pin_refusal = pin._root_pin()
+            code = pin_refusal or stored_approval_refusal(
+                stored,
+                _args_key_dir(args) or default_key_dir(),
+                root=root,
+                at_least=head,
+            )
+            if code is not None:
+                print(
+                    f"Resume REFUSED ({code}): the approval isn't signed by a "
+                    "registered approver key. Approve with openadapt flow approve "
+                    "--approver-key. Nothing was executed."
+                )
+                return 3
     resume_mode = _resume_approval_mode(args, manifest.governed_authorization)
     if isinstance(resume_mode, int):
         return resume_mode
@@ -4275,6 +4759,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=not headed)
                     page = browser.new_page(viewport=_VIEWPORT)
+                    from openadapt_flow.backends.playwright_backend import (
+                        prepare_ws_guard,
+                    )
+
+                    # Guard the page's WebSockets from its first document (wire check).
+                    prepare_ws_guard(page)
                     page.goto(url)
                     try:
                         report = _resume_with(build_backend(backend_cfg, page=page))
@@ -4318,6 +4808,35 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     return 0 if report.success else 1
 
 
+def _approver_signer(args: argparse.Namespace, *, method: str) -> Any:
+    """The registered approver key from ``--approver-key``, or ``None`` after
+    printing why. A person's approval is signed with it; nothing else counts."""
+
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        load_signer,
+    )
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    key_path = getattr(args, "approver_key", None)
+    if not key_path:
+        print(
+            "A person's approval is signed with their registered approver key: "
+            "pass --approver-key (with OPENADAPT_JIT_KEY_PASSPHRASE set). "
+            "Create one with jit keygen; an approver on the roster adds it with "
+            "jit approver add (or jit approver init starts the roster)."
+        )
+        return None
+    key_dir = _args_key_dir(args) or default_key_dir()
+    try:
+        return load_signer(  # type: ignore[arg-type]
+            key_path, key_dir, method=method, root=_args_approver_root(args)
+        )
+    except AttestationRefused as exc:
+        print(f"Approval refused ({exc.code}): {exc}")
+        return None
+
+
 def _cmd_approve(args: argparse.Namespace) -> int:
     """Record an AUTHENTICATED approval for a durably-paused run (P0-5).
 
@@ -4327,8 +4846,6 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     approval is refused). Also flips the pending escalation's ``status`` to
     ``approved`` for the audit trail / back-compat.
     """
-    import getpass
-
     from openadapt_flow import crypto
     from openadapt_flow.runtime.durable.approval import (
         ResumeRefused,
@@ -4378,9 +4895,18 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # The approver identity defaults to the invoking OS user (a resume with a
-    # blank approver is refused by the durable library); --approver overrides.
-    approver = args.approver or getpass.getuser()
+    # The approver is whoever the registered approver key belongs to. A name
+    # on the command line, or the OS user, is a claim any process can make.
+    signer = _approver_signer(args, method="person_key")
+    if signer is None:
+        return 1
+    if args.approver and args.approver != signer.principal_id:
+        print(
+            f"--approver {args.approver!r} doesn't match the approver key, which "
+            f"is registered as {signer.principal_id!r}."
+        )
+        return 1
+    approver = signer.principal_id
     try:
         bundle_ver = bundle_version(manifest.bundle_dir)
     except OSError:
@@ -4418,6 +4944,11 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         run_dir=run_dir,
         authorize_uncertain_retry=authorize_uncertain_retry,
     )
+    from openadapt_flow.approval_mode.human_attestation import RESUME_DOMAIN
+
+    approval = approval.model_copy(
+        update={"attestation": signer.attest(RESUME_DOMAIN, approval.signed_payload())}
+    )
     # Bind the exact authority and pause-state transition in one filesystem
     # transaction. A concurrent resume cannot replace the retained approver or
     # leave approval.json describing authority that the live attempt did not use.
@@ -4436,6 +4967,18 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_head(value: Optional[str]) -> Optional[tuple[int, str]]:
+    """``SEQ:sha256:HEX`` (or ``SEQ:HEX``) as a roster head, or ``None``."""
+
+    if not value:
+        return None
+    seq, _, digest = str(value).partition(":")
+    if not seq.isdigit() or not digest:
+        raise SystemExit(f"REFUSED: --approver-head {value!r} isn't SEQ:SHA256")
+    digest = digest if digest.startswith("sha256:") else "sha256:" + digest
+    return int(seq), digest
+
+
 def _cmd_item_approval(args: argparse.Namespace) -> int:
     """List, approve or decline per-item approval requests (Desktop's Run it).
 
@@ -4450,6 +4993,7 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
     """
     import json
 
+    from openadapt_flow.approval_mode.human_attestation import AttestationRefused
     from openadapt_flow.approval_mode.item_approval import (
         ItemApprovalRefused,
         ItemApprovalStore,
@@ -4459,7 +5003,13 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
 
     verb = args.item_approval_cmd
     run_dir = Path(args.run_dir)
-    store = ItemApprovalStore(run_dir)
+    key_dir = getattr(args, "key_dir", None)
+    store = ItemApprovalStore(
+        run_dir,
+        key_dir=Path(key_dir) if key_dir else None,
+        approver_root=getattr(args, "approver_root", None),
+        config_head=_parse_head(getattr(args, "approver_head", None)),
+    )
     if verb == "show":
         rows = [request_summary(store, request) for request in store.requests()]
         if not args.all:
@@ -4524,6 +5074,52 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             "approver_invalid",
             "a Cloud approver needs --auth-method cloud_aal2 or cloud_aal1",
         )
+    signer = None
+    if delegate is None:
+        from openadapt_flow.approval_mode.human_attestation import (
+            ROUTE_METHOD,
+            load_signer,
+            stdio_signer,
+        )
+
+        method = ROUTE_METHOD.get(args.route)
+        if method is None:
+            return refuse("route_not_allowed", "a person answers from desktop_run_it")
+        public_key = getattr(args, "approver_public_key", None)
+        external = getattr(args, "approver_signer", None)
+        if bool(public_key) != bool(external):
+            return refuse(
+                "approver_invalid",
+                "--approver-signer stdio and --approver-public-key go together",
+            )
+        if public_key and getattr(args, "approver_key", None):
+            return refuse(
+                "approver_invalid",
+                "pass --approver-key or --approver-signer stdio, not both",
+            )
+        if not public_key and not getattr(args, "approver_key", None):
+            return refuse(
+                "human_answer_unsigned",
+                "a person's answer is signed with the Desktop approver key: pass "
+                "--approver-key. --decided-by human on its own proves nothing",
+            )
+        try:
+            if public_key:
+                signer = stdio_signer(
+                    public_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
+            else:
+                signer = load_signer(
+                    args.approver_key,
+                    store.key_directory(),
+                    method=method,
+                    root=store.approver_root,
+                )
+        except AttestationRefused as exc:
+            return refuse(exc.code, str(exc))
     try:
         request = store.read_request(args.request_id)
         if args.request_sha256 != request.digest():
@@ -4550,9 +5146,10 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             decline_reason=getattr(args, "reason", None),
             approver=delegate,
             policy=store.context(),
+            signer=signer,
         )
         store.write_answer(answer)
-    except ItemApprovalRefused as exc:
+    except (ItemApprovalRefused, AttestationRefused) as exc:
         return refuse(exc.code, str(exc))
     resume_required = _answer_durable_item_pause(run_dir, request, answer)
     print(
@@ -4684,6 +5281,10 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         with sync_playwright() as p:
             browser = launch_chromium(p.chromium, headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(target_url)
             try:
                 yield PlaywrightBackend(page)
@@ -4829,6 +5430,7 @@ def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
         recording=optional_path("recording"),
         bundle=optional_path("bundle"),
         complete_read=bool(getattr(args, "complete_read", False)),
+        fault_gate=bool(getattr(args, "fault_gate", False)),
     )
     if built is not None:
         print(built.summary)
@@ -6173,7 +6775,9 @@ def _cmd_disambiguate(args: argparse.Namespace) -> int:
 
 def _cmd_emit_skill(args: argparse.Namespace) -> int:
     from openadapt_flow.emit.skill import emit_skill
+    from openadapt_flow.skills import refuse_unqualified_skill
 
+    refuse_unqualified_skill(args.bundle)
     skill_dir = emit_skill(Path(args.bundle), Path(args.out))
     print(f"Skill written to {skill_dir}")
     return 0
@@ -6181,7 +6785,9 @@ def _cmd_emit_skill(args: argparse.Namespace) -> int:
 
 def _cmd_emit_mcp(args: argparse.Namespace) -> int:
     from openadapt_flow.emit.mcp_tool import emit_mcp_server
+    from openadapt_flow.skills import refuse_unqualified_skill
 
+    refuse_unqualified_skill(args.bundle)
     server_path = emit_mcp_server(Path(args.bundle), Path(args.out))
     print(f"MCP server written to {server_path}")
     return 0
@@ -7464,9 +8070,61 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_approver_key_flags(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--approver-key",
+        default=None,
+        help=(
+            "The person's encrypted approver key (jit keygen; on the approver "
+            "roster via jit approver init or add). Its passphrase comes from "
+            "OPENADAPT_JIT_KEY_PASSPHRASE. A person's approval is signed with "
+            "it; without it the approval is refused"
+        ),
+    )
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        help="Key directory with the approver roster (default "
+        "$OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)",
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The root approver key (64 hex) this run trusts: a person's answer "
+            "counts only when its signer is on the signed approver roster this "
+            "key vouches for. Also set by the deployment config's "
+            "approvers.root_public_key or OPENADAPT_APPROVER_ROOT; without one, "
+            "a person's answer is refused"
+        ),
+    )
+
+
 def _add_approval_flags(p: argparse.ArgumentParser) -> None:
     """Add the per-item approval flags to ``run``, ``resume`` and ``run-case``."""
 
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The root approver key (64 hex) this run trusts: a person's answer "
+            "counts only when its signer is on the signed approver roster this "
+            "key vouches for. Also set by the deployment config's "
+            "approvers.root_public_key or OPENADAPT_APPROVER_ROOT; without one, "
+            "a person's answer is refused"
+        ),
+    )
+    p.add_argument(
+        "--key-dir",
+        default=None,
+        help=(
+            "Key directory with the signed approver roster (approvers.json) that "
+            "approvals are checked against; use the one you approved with "
+            "(default $OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)"
+        ),
+    )
     p.add_argument(
         "--approver-policy",
         default=None,
@@ -7546,6 +8204,18 @@ def _add_deployment_flags(
 ) -> None:
     """Add the shared deployment-wiring flags (config + effects + actuation +
     durable, optionally a worklist) to a replay-family subparser."""
+    p.add_argument(
+        "--config-sha256",
+        default=None,
+        metavar="HEX",
+        help=(
+            "The SHA-256 of --config's bytes. Flow opens the file once (not "
+            "through a symlink; it must be a regular file), refuses it if the "
+            "digest differs, and from then on parses only those bytes whenever "
+            "this command loads that path, so replacing the file, or a symlink "
+            "put in its place, changes nothing"
+        ),
+    )
     p.add_argument(
         "--config",
         default=None,
@@ -8218,9 +8888,15 @@ def build_parser() -> argparse.ArgumentParser:
         "induce",
         help=(
             "Induce a parameterized PROGRAM bundle from MULTIPLE recordings "
-            "(multi-trace induction: infer params / loops / branches). REFUSES "
-            "(nonzero exit, no bundle) when intent is underdetermined, printing "
-            "a record-next worklist of missing demonstrations"
+            "(multi-trace induction: infer params / loops / branches). Loops: "
+            "back-to-back repeats and search, open, act, return worklists, "
+            "including rows that differ; not pagination (a next-page step "
+            "between rows) or a list nested inside each row. Certified and "
+            "governed runs refuse a loop that opens each row's record by its "
+            "values (a record-selecting click) until qualification covers it. "
+            "REFUSES (nonzero exit, no bundle) when intent is "
+            "underdetermined, printing a record-next worklist of missing "
+            "demonstrations"
         ),
     )
     p.add_argument(
@@ -8245,8 +8921,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--held-out",
         action="store_true",
         help=(
-            "Also run leave-one-out held-out validation and print the per-fold "
-            "reproduction scores (needs >= 2 traces)"
+            "Also print the leave-one-out STRUCTURAL held-out coverage (needs "
+            ">= 2 traces). It compares program shape with each held-out trace, "
+            "executes nothing and checks neither identity nor effects; for a "
+            "generalization claim run held-out items with openadapt_flow."
+            "validation.behavioral_generalization"
         ),
     )
     p.add_argument(
@@ -8642,6 +9321,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
         "--allow-model-grounding",
         action="store_true",
         help=(
@@ -8728,6 +9417,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "JSON object of parameter bindings; keeps values out of process "
             "arguments for managed execution"
+        ),
+    )
+    p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
         ),
     )
     p.add_argument(
@@ -8997,6 +9696,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Read the store now and write a private baseline, then exit",
     )
     p.add_argument(
+        "--provenance",
+        default=None,
+        metavar="JSON",
+        help=(
+            "Where each parameter came from (openadapt.param-provenance/v1, as "
+            "intake writes it). The saved record is then compared with the "
+            "source document, not only with --params"
+        ),
+    )
+    p.add_argument(
+        "--source",
+        action="append",
+        default=None,
+        metavar="FILE",
+        help="A source document the provenance cites (repeatable)",
+    )
+    p.add_argument(
         "--out", default=None, metavar="DIR", help="Directory for effect-receipt.json"
     )
     p.add_argument(
@@ -9136,8 +9852,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--approver",
         default=None,
         help=(
-            "Approver identity recorded on the approval (defaults to the "
-            "invoking OS user; a blank identity is refused at resume)"
+            "Optional check: the approver id the --approver-key must be "
+            "registered as. The approval names the key's registered approver"
         ),
     )
     p.add_argument(
@@ -9156,6 +9872,7 @@ def build_parser() -> argparse.ArgumentParser:
             "retry of the possibly dispatched step (ordinary approval refuses)"
         ),
     )
+    _add_approver_key_flags(p)
     p.set_defaults(func=_cmd_approve)
 
     p = sub.add_parser(
@@ -9233,6 +9950,31 @@ def build_parser() -> argparse.ArgumentParser:
             "--unauthenticated",
             action="store_true",
             help="Desktop was signed out: record the answer without a name",
+        )
+        _add_approver_key_flags(q)
+        q.add_argument(
+            "--approver-signer",
+            choices=["stdio"],
+            default=None,
+            help=(
+                "The process that started this one holds the approver key and "
+                "signs over stdin/stdout (Desktop's Keychain key). Flow writes "
+                "one sign request line and reads one response line"
+            ),
+        )
+        q.add_argument(
+            "--approver-public-key",
+            default=None,
+            help="With --approver-signer: the registered approver key's public key (hex)",
+        )
+        q.add_argument(
+            "--approver-head",
+            default=None,
+            metavar="SEQ:SHA256",
+            help=(
+                "A roster head the answering side recorded (Desktop's Keychain): "
+                "the approver roster must extend it"
+            ),
         )
         if verb == "decline":
             q.add_argument(
@@ -9325,8 +10067,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_silent_saves)
 
     from openadapt_flow.registry import add_parser as _add_pull_parser
+    from openadapt_flow.skills import add_parser as _add_skill_parser
 
     _add_pull_parser(sub)
+    _add_skill_parser(sub)
 
     from openadapt_flow.intake.cli import add_parser as _add_intake_parser
 
@@ -9408,6 +10152,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Declare that the reads return everything the save can change "
             "(one store, no other tables). Recorded as declared, not proven"
+        ),
+    )
+    p.add_argument(
+        "--fault-gate",
+        action="store_true",
+        help=(
+            "With --db: write each bad save to a copy of the database and let "
+            "the check read it through its own read (the fault gate). A fault "
+            "the read can't see keeps the check a draft"
         ),
     )
     p.add_argument(
@@ -11088,6 +11841,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
         "--allow-model-grounding",
         action="store_true",
         help=(
@@ -11321,6 +12084,26 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    from openadapt_flow.cli_rollback import register as _register_rollback
+
+    _register_rollback(sub)
+
+    from openadapt_flow.cli_shadow import register as _register_shadow
+
+    _register_shadow(sub)
+
+    from openadapt_flow.cli_receipt import register as _register_receipt
+
+    _register_receipt(sub)
+
+    from openadapt_flow.learn import register as _register_learn
+
+    _register_learn(sub)
+
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+
+    _register_cleanup(sub)
+
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 
     _add_jit_parser(sub)
@@ -11393,7 +12176,13 @@ def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
             "effects": effects_cfg,
             "actuation": actuation_cfg,
             "runtime": cfg.runtime.model_copy(
-                update={"allow_model_grounding": allow_egress}
+                update={
+                    "allow_model_grounding": allow_egress,
+                    "local_grounding": bool(
+                        cfg.runtime.local_grounding
+                        or getattr(args, "local_grounding", False)
+                    ),
+                }
             ),
         }
     )
@@ -11853,6 +12642,25 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     no_outbound.enforce_from_env()
     args = build_parser().parse_args(argv)
+    if getattr(args, "config_sha256", None):
+        if not getattr(args, "config", None):
+            print("REFUSED: --config-sha256 needs --config", file=sys.stderr)
+            return 2
+        # Pin by the absolute path: a relative path plus a later chdir would
+        # otherwise name a different, unpinned file.
+        import os
+
+        from openadapt_flow.deployment import pin_deployment_bytes
+
+        args.config = os.path.abspath(args.config)
+        try:
+            # Read the config once, check it, and parse only those bytes.
+            pin_deployment_bytes(args.config, args.config_sha256)
+            # The approver pin comes from those same bytes, now.
+            _deployment_approvers(args)
+        except (OSError, ValueError) as exc:
+            print(f"REFUSED (deployment_config_changed): {exc}", file=sys.stderr)
+            return 2
     from openadapt_flow import sealed_set
 
     try:

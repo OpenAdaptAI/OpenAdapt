@@ -1,0 +1,111 @@
+{
+  "counted": "Seals that verify against the pinned keys and have a valid transparency-log anchor",
+  "excluded": {
+    "duplicate": 0,
+    "item_reused": 0,
+    "not_valid": 0,
+    "unanchored": 0
+  },
+  "generated_at": "2026-10-20T15:54:05Z",
+  "operators": {
+    "seal-ed25519-ca08dd7f42a4be01": {
+      "apps": [
+        "openemr"
+      ],
+      "first_anchored_at": "2026-10-20T15:53:36Z",
+      "last_anchored_at": "2026-10-20T15:53:45Z",
+      "linked_identity": [
+        {
+          "checked_against": "https://github.com/abrichr.keys now",
+          "handle": "github:abrichr",
+          "provider": "ssh-github",
+          "run_authorization_sha256": "bdfda160138f89a708caa122904af6fec66b29ad41c2d8cb25e458e2da5104d3",
+          "ssh_key_fingerprint": "SHA256:x+1MwCSAsNNHpc+UcIdbktY/Z+/FByyqfhuwiRzeO9A"
+        }
+      ],
+      "other_outcomes": {},
+      "outcomes": {
+        "completed_unverified": 0,
+        "failed": 0,
+        "stopped_before_effect": 1,
+        "verified": 3
+      },
+      "programs": [
+        "openemr-create-synthetic-patient"
+      ],
+      "public_key": "UQOSlj3iCypSdSwrUYYOcLbS6yy25yM6syjHVnqcHBg=",
+      "public_key_sha256": "ca08dd7f42a4be017301c3f6e7dab39ff0671fab22a16ec6d8ad8353d165c2ad",
+      "rekor_log_indexes": [
+        3339635766,
+        3339636256,
+        3339636914,
+        3339637492
+      ],
+      "run_list": [
+        {
+          "anchor": {
+            "integrated_time": 1792511616,
+            "log_index": 3339635766,
+            "uuid": "108e9186e8c5677aa7543418cff84038fcf0b8503bf878af6bf8d4f906821840f5ac10e710b45fd0"
+          },
+          "app": "openemr",
+          "execution_outcome": "VERIFIED",
+          "issued_at": "2026-10-20T15:53:26Z",
+          "outcome": "verified",
+          "program": "openemr-create-synthetic-patient",
+          "scope_item": "r3",
+          "seal_sha256": "548ba574914dffee8443b54d33a340ee106923e0fe672b41d7756621124d9a4d",
+          "transaction_outcome": "VERIFIED"
+        },
+        {
+          "anchor": {
+            "integrated_time": 1792511619,
+            "log_index": 3339636256,
+            "uuid": "108e9186e8c5677a034e57e78270445688b507e30b2098787ccfa9e37edd267f473f4439dc1da50f"
+          },
+          "app": "openemr",
+          "execution_outcome": "VERIFIED",
+          "issued_at": "2026-10-20T15:53:27Z",
+          "outcome": "verified",
+          "program": "openemr-create-synthetic-patient",
+          "scope_item": "r4",
+          "seal_sha256": "e27585b3f86dd9b79ef3fc368ffca13cd34824e03352987697ae1e33f228808e",
+          "transaction_outcome": "VERIFIED"
+        },
+        {
+          "anchor": {
+            "integrated_time": 1792511622,
+            "log_index": 3339636914,
+            "uuid": "108e9186e8c5677abddac2ca5a6ab882f1fef08af621e0f2315a15000099f51bd60cfda82ba445f1"
+          },
+          "app": "openemr",
+          "execution_outcome": "VERIFIED",
+          "issued_at": "2026-10-20T15:53:27Z",
+          "outcome": "verified",
+          "program": "openemr-create-synthetic-patient",
+          "scope_item": "r5",
+          "seal_sha256": "65d6dea5a3d696215e1de1da9621f6ce345e5523fee32b7c02abb60fdd755f12",
+          "transaction_outcome": "VERIFIED"
+        },
+        {
+          "anchor": {
+            "integrated_time": 1792511625,
+            "log_index": 3339637492,
+            "uuid": "108e9186e8c5677ae048d92273984a18a560bc8237b32a5924424c1367a2aa9a6200b3dc196c3491"
+          },
+          "app": "openemr",
+          "execution_outcome": "HALTED",
+          "issued_at": "2026-10-20T15:53:28Z",
+          "outcome": "stopped_before_effect",
+          "program": "openemr-create-synthetic-patient",
+          "scope_item": "r6",
+          "seal_sha256": "04d05033f9e0c2d39759a2f9ca44845d5c21b3e7b37f8be4601b25bfd971c826",
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        }
+      ],
+      "runs": 4,
+      "seal_key_id": "seal-ed25519-ca08dd7f42a4be01"
+    }
+  },
+  "schema": "openadapt.operator-profile/v1"
+}

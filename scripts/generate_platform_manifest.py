@@ -44,6 +44,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import NamedTuple
 
 from render_platform_versions import render_markdown
 
@@ -92,6 +93,20 @@ COMPONENT_REPOSITORIES = {
     role: f"OpenAdaptAI/{package}" for role, package in COMPONENTS.items()
 }
 COMPONENT_REPOSITORIES["launcher"] = "OpenAdaptAI/OpenAdapt"
+
+# Components folded into the monorepo publish from it: each package lives
+# under packages/<dir>, and its release workflow tags it <package>-v<version>
+# (openadapt-flow-v2.2.0). Releases from before the fold stay bound to the
+# frozen standalone repository and its v<version> tags (COMPONENT_REPOSITORIES).
+MONOREPO_REPOSITORY = "OpenAdaptAI/OpenAdapt"
+MONOREPO_PACKAGE_DIRS = {
+    "flow": "packages/flow",
+    "capture": "packages/capture",
+    "privacy": "packages/privacy",
+    "types": "packages/types",
+    "desktop": "packages/desktop",
+    "agent": "packages/agent",
+}
 
 RUNTIME_UNIT_NAMES = {
     "launcher_environment",
@@ -171,7 +186,8 @@ SCHEMA_PROBES = {
 SUPPORTED_OS = ["windows", "macos", "linux"]
 
 # Qualification evidence pointers. IDs are stable; consumers resolve them to
-# the referenced documents. The public status document is the live summary;
+# the referenced documents. A component's evidence path is relative to the
+# package; the manifest records it in the repository of the selected release. The public status document is the live summary;
 # the flow evidence packs are versioned, replayable evidence bundles.
 QUALIFICATION_EVIDENCE = [
     {
@@ -188,7 +204,6 @@ QUALIFICATION_EVIDENCE = [
         "id": "flow-public-demo-evidence-packs",
         "kind": "evidence-pack-collection",
         "source_component": "flow",
-        "repository": "OpenAdaptAI/openadapt-flow",
         "path": "public-demo/evidence-packs",
         "description": (
             "Versioned public evidence packs with per-pack manifest files, "
@@ -199,7 +214,6 @@ QUALIFICATION_EVIDENCE = [
         "id": "flow-effectbench-task-pack",
         "kind": "benchmark-manifest",
         "source_component": "flow",
-        "repository": "OpenAdaptAI/openadapt-flow",
         "path": "benchmark/effectbench/task_pack/manifest.json",
         "description": (
             "Effect-verification benchmark task pack manifest used by the "
@@ -351,7 +365,8 @@ def _schema_compatibility(components: dict[str, dict]) -> dict[str, dict]:
         versions: set[int] = set()
         optional = bool(probe.get("optional"))
         missing_optional = False
-        for path, patterns in probe["sources"].items():
+        for package_path, patterns in probe["sources"].items():
+            path = _source_path(component["provenance"], package_path)
             key = (repository, commit, path)
             if key not in cache:
                 cache[key] = _github_source_file(
@@ -489,10 +504,70 @@ def _release_ref_candidates(role: str, version: str) -> tuple[str, ...]:
     return (f"v{version}",)
 
 
+class ReleaseSource(NamedTuple):
+    """Where one published component version may have been tagged."""
+
+    repository: str
+    release_ref: str
+    # The package's directory in the repository; "" for a standalone repository.
+    source_root: str
+
+
+def _release_sources(role: str, version: str) -> tuple[ReleaseSource, ...]:
+    """Return the tags that may identify this component version, in order.
+
+    A folded component is looked up in the monorepo first, then in its frozen
+    standalone repository for releases from before the fold. The generator binds
+    the first tag that exists; it does not invent a tag name.
+    """
+    standalone = tuple(
+        ReleaseSource(COMPONENT_REPOSITORIES[role], release_ref, "")
+        for release_ref in _release_ref_candidates(role, version)
+    )
+    source_root = MONOREPO_PACKAGE_DIRS.get(role)
+    if source_root is None:
+        return standalone
+    monorepo = ReleaseSource(
+        MONOREPO_REPOSITORY, f"{COMPONENTS[role]}-v{version}", source_root
+    )
+    return (monorepo, *standalone)
+
+
+def _provenance_source(provenance: dict) -> ReleaseSource:
+    return ReleaseSource(
+        str(provenance.get("repository")),
+        str(provenance.get("release_ref")),
+        str(provenance.get("source_root", "")),
+    )
+
+
+def _source_path(provenance: dict, package_path: str) -> str:
+    """Return a package-relative path as a path in the release's repository."""
+    source_root = str(provenance.get("source_root", ""))
+    return f"{source_root}/{package_path}" if source_root else package_path
+
+
+def _evidence_location(evidence: dict, provenance: dict) -> tuple[str, str]:
+    """Return the repository and repository path of one evidence pointer."""
+    return str(provenance["repository"]), _source_path(provenance, evidence["path"])
+
+
+def _desktop_lock_url(provenance: dict) -> str:
+    """Return the locked environment the native sidecar was built from."""
+    source_root = str(provenance.get("source_root", ""))
+    if not source_root:
+        return DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(
+            release_ref=provenance["release_ref"]
+        )
+    return (
+        f"https://raw.githubusercontent.com/{provenance['repository']}/"
+        f"{provenance['release_ref']}/{source_root}/uv.lock"
+    )
+
+
 def _source_provenance(role: str, version: str) -> dict:
-    repository = COMPONENT_REPOSITORIES[role]
-    candidates = _release_ref_candidates(role, version)
-    for release_ref in candidates:
+    candidates = _release_sources(role, version)
+    for repository, release_ref, source_root in candidates:
         url = GITHUB_COMMIT_URL_TEMPLATE.format(
             repository=repository, release_ref=release_ref
         )
@@ -511,16 +586,21 @@ def _source_provenance(role: str, version: str) -> dict:
                 f"FATAL: {url} did not resolve an exact commit and tree for "
                 f"{repository}@{release_ref}."
             )
-        return {
+        provenance = {
             "repository": repository,
             "release_ref": release_ref,
             "commit": commit,
             "tree": tree,
             "url": f"https://github.com/{repository}/tree/{release_ref}",
         }
+        if source_root:
+            provenance["source_root"] = source_root
+            provenance["url"] += f"/{source_root}"
+        return provenance
+    tried = ", ".join(f"{c.repository}@{c.release_ref}" for c in candidates)
     raise DriftError(
-        f"FATAL: {repository} has no published release tag for {version}. "
-        f"Tried {', '.join(candidates)}."
+        f"FATAL: {COMPONENTS[role]} has no published release tag for {version}. "
+        f"Tried {tried}."
     )
 
 
@@ -685,11 +765,12 @@ def _runtime_unit_requirements(
 
 
 def _desktop_sidecar_lock(
-    source_ref: str, required_packages: set[str]
+    provenance: dict, required_packages: set[str]
 ) -> tuple[str, str, str, dict[str, str]]:
     """Read the immutable package closure used by the native sidecar build."""
 
-    url = DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(release_ref=source_ref)
+    source_ref = str(provenance["release_ref"])
+    url = _desktop_lock_url(provenance)
     lock_text = _fetch_text(url)
     try:
         lock = tomllib.loads(lock_text)
@@ -723,7 +804,7 @@ def _runtime_units(components: dict[str, dict]) -> dict[str, dict]:
     requirements = _runtime_unit_requirements(components)
     sidecar_ref, sidecar_lock_url, sidecar_lock_sha256, sidecar_resolved = (
         _desktop_sidecar_lock(
-            components["desktop"]["provenance"]["release_ref"],
+            components["desktop"]["provenance"],
             set(requirements["desktop_sidecar"]),
         )
     )
@@ -920,12 +1001,13 @@ def _qualification_evidence(components: dict[str, dict]) -> list[dict]:
         role = row.get("source_component")
         if isinstance(role, str):
             provenance = components[role]["provenance"]
-            repository = row["repository"]
-            if repository != provenance["repository"]:
-                raise DriftError(
-                    f"FATAL: evidence {row['id']} repository does not match "
-                    f"selected {role} provenance."
-                )
+            repository, path = _evidence_location(row, provenance)
+            located: dict = {}
+            for key, value in row.items():
+                located[key] = path if key == "path" else value
+                if key == "source_component":
+                    located["repository"] = repository
+            row = located
             tree_key = (repository, provenance["tree"])
             if tree_key not in trees:
                 trees[tree_key] = _github_tree_entries(*tree_key)

@@ -147,6 +147,13 @@ def test_wrong_saves_are_refuted(server: Any, fault: str, expected: Verdict) -> 
     _save(url, fault)
     verdicts = [verifier.verify(effect, before) for effect in _effects(0.3)]
     assert any(v.verdict is expected for v in verdicts)
+    if fault == "partial":
+        # The note check fails, and its reason names what was read: the
+        # application's record page, never a system of record.
+        refuted = verdicts[1]
+        assert refuted.verdict is Verdict.REFUTED
+        assert "system of record" not in refuted.reason
+        assert "record page" in refuted.reason
 
 
 def test_a_wrong_reader_password_cannot_read(server: Any) -> None:
@@ -155,8 +162,12 @@ def test_a_wrong_reader_password_cannot_read(server: Any) -> None:
     probe = verifier.test_connection()
     assert probe.ok is False
     assert "wrong" not in probe.reason
-    verdict = verifier.verify(_effects()[0], verifier.capture_pre_state())
+    before = verifier.capture_pre_state()
+    assert before.reachable is False
+    verdict = verifier.verify(_effects()[0], before)
     assert verdict.verdict is Verdict.INDETERMINATE
+    assert verdict.unavailable is True
+    assert "wrong" not in verdict.reason
 
 
 @pytest.mark.parametrize("transport", ["fetch", "beacon", "xhr", "form"])

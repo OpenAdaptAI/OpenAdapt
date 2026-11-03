@@ -54,14 +54,17 @@ Prompt caching:
 from __future__ import annotations
 
 import base64
-import os
 import re
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Callable
 
-MODEL = "claude-sonnet-5"
+from openadapt_flow.anthropic_defaults import (  # noqa: F401 (re-exported)
+    MODEL,
+    SCROLL_PX_PER_UNIT,
+    load_api_key,
+)
+
 COMPUTER_USE_BETA = "computer-use-2025-11-24"
 COMPUTER_TOOL_TYPE = "computer_20251124"
 #: List price, USD per million tokens (see module docstring re: intro rate).
@@ -86,8 +89,6 @@ _SUPPORTED_ACTIONS = (
     "screenshot, left_click, double_click, triple_click, type, key, "
     "scroll, wait, mouse_move"
 )
-#: Pixels dispatched per computer-use ``scroll_amount`` unit (wheel click).
-SCROLL_PX_PER_UNIT = 120
 
 
 #: Auth/billing/credit failure fingerprints: HTTP 400-403 as standalone
@@ -109,32 +110,6 @@ def _looks_like_billing_error(message: str) -> bool:
         past).
     """
     return bool(_BILLING_ERROR_RE.search(message))
-
-
-def load_api_key() -> str:
-    """Resolve the Anthropic API key.
-
-    Reads ``ANTHROPIC_API_KEY`` from the environment, falling back to the
-    file ``~/.anthropic/api_key``.
-
-    Returns:
-        The API key string.
-
-    Raises:
-        RuntimeError: If neither source provides a key.
-    """
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if key:
-        return key
-    path = Path.home() / ".anthropic" / "api_key"
-    if path.is_file():
-        key = path.read_text().strip()
-        if key:
-            return key
-    raise RuntimeError(
-        "No Anthropic API key: set ANTHROPIC_API_KEY or write the key to "
-        "~/.anthropic/api_key"
-    )
 
 
 def triage_task_prompt(note_text: str) -> str:

@@ -72,7 +72,7 @@ def test_an_api_save_reads_back_while_the_next_item_runs(tmp_path):
     assert saved["success"] is True
 
 
-def test_a_durable_api_save_reads_back_inline_and_says_why(tmp_path):
+def test_a_durable_api_save_without_an_encrypted_store_reads_back_inline(tmp_path):
     pipeline = ReadbackPipeline()
     try:
         report, settled, actuator, records = _run(
@@ -83,7 +83,10 @@ def test_a_durable_api_save_reads_back_inline_and_says_why(tmp_path):
 
     assert settled is None and report.success is True
     assert report.results[-1].effect_verified is True
-    assert pipeline.inline_reason == "durable runs verify inline"
+    assert pipeline.inline_reason == (
+        "a durable run without an encrypted checkpoint store verifies inline "
+        "(the deferred check keeps record rows)"
+    )
 
 
 def test_self_repair_runs_a_repaired_bundle_on_the_gui(tmp_path):

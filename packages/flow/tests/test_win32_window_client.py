@@ -939,3 +939,55 @@ def test_native_dpi_access_denied_returns_queried_actual_level(monkeypatch) -> N
     monkeypatch.setattr(api, "_user32", AlreadySetUser32())
     monkeypatch.setattr(api, "_current_dpi_awareness", lambda: "system")
     assert api.ensure_dpi_awareness() == "system"
+
+
+# -- pinned target window -----------------------------------------------------
+
+
+def _seamless_backend() -> tuple[RemoteDisplayBackend, FakeWin32Api]:
+    """Two RemoteApp seamless windows from one client process."""
+    api = FakeWin32Api(
+        [
+            FakeWindow(101, title="Chart - RemoteApp"),
+            FakeWindow(102, title="Inbox - RemoteApp", bounds=(0.0, 0.0, 600.0, 400.0)),
+        ],
+        foreground=101,
+    )
+    client, api = _client(api)
+    backend = RemoteDisplayBackend(
+        client=client,
+        owner_substr="wfica32",
+        title_substr="Chart - RemoteApp",
+        settle_s=0.0,
+    )
+    return backend, api
+
+
+def test_retitled_seamless_window_stays_the_unique_input_target() -> None:
+    """A seamless window mirrors the remote title, so it retitles freely.
+
+    The pinned HWND keeps the input target unique even though the client
+    process owns a second window.
+    """
+    backend, api = _seamless_backend()
+    backend.screenshot()
+    api.windows[0].title = "Chart (signed) - RemoteApp"
+
+    backend.screenshot()
+    backend.click(100, 50)
+
+    downs = [c for c in api.calls if c[0] == "mouse_button" and c[4] is True]
+    assert downs and downs[0][1] == pytest.approx(400.0)
+    assert backend._frame_window is not None
+    assert backend._frame_window.window_id == 101
+
+
+def test_closed_seamless_window_is_not_replaced_by_its_sibling() -> None:
+    backend, api = _seamless_backend()
+    backend.screenshot()
+    api.windows = [w for w in api.windows if w.hwnd != 101]
+    api.windows.append(FakeWindow(103, title="Chart - RemoteApp"))
+
+    with pytest.raises(RemoteDisplayError, match="pinned target window closed"):
+        backend.screenshot()
+    assert not any(c[0] == "mouse_button" for c in api.calls)

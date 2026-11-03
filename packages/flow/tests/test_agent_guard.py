@@ -318,7 +318,7 @@ def test_observe_only_never_blocks_and_still_reads_back(sor, tmp_path):
     assert guard.summary.would_block[-1]["code"] == "already_committed"
 
 
-def test_each_item_holds_the_save_until_a_person_approves(sor, tmp_path):
+def test_each_item_holds_the_save_until_a_person_approves(sor, tmp_path, approver):
     page = FakePage(FakeAgent(sor[0]), "p1")
     guard = _guard(sor, tmp_path, page, approval="each_item")
     page.save()
@@ -333,7 +333,9 @@ def test_each_item_holds_the_save_until_a_person_approves(sor, tmp_path):
     assert waiting is not None
     g = waiting[0]
     request = g._request
-    person_approves(str(g.dir), request.request_id, request.digest())
+    person_approves(
+        str(g.dir), request.request_id, request.digest(), signer=approver[1]
+    )
     guard.poll()
     assert page.sent == ["r1"]
     guard.poll()

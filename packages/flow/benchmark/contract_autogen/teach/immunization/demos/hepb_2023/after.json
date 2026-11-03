@@ -1,0 +1,26 @@
+[
+ {
+  "resourceType": "Immunization",
+  "status": "completed",
+  "vaccineCode": {
+   "coding": [
+    {
+     "system": "http://hl7.org/fhir/sid/cvx",
+     "code": "43",
+     "display": "Hepatitis B vaccine, adult dosage"
+    }
+   ]
+  },
+  "patient": {
+   "reference": "Patient/8b4f18d1-b882-4713-b9d7-aae549dbc7a1"
+  },
+  "occurrenceDateTime": "2023-06-21",
+  "primarySource": false,
+  "lotNumber": "HB4Z391",
+  "id": "af2539d1-a216-4a17-b770-a2d6d918954b",
+  "meta": {
+   "versionId": "c339f8f3-31fb-4a4c-b649-84c7e754cf36",
+   "lastUpdated": "2026-10-29T20:38:45.783Z"
+  }
+ }
+]

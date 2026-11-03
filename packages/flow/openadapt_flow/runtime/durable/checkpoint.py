@@ -61,6 +61,7 @@ from openadapt_flow.ir import (
     ProgramExceptionEvidence,
     ProgramTransitionEvidence,
     Resolution,
+    StepResult,
     SurfaceObservation,
 )
 from openadapt_flow.runtime.authorization import (
@@ -274,6 +275,36 @@ class RunCheckpoint(BaseModel):
         return data
 
 
+class DeferredReadback(BaseModel):
+    """A save's record check that runs while the next item starts.
+
+    Under a durable run, pipelined read-back (``--readback-window``) writes
+    the pending check into the durable pause before it hands the check to the
+    side thread. The save was sent, so the pause carries
+    ``delivery_uncertainty`` and an ordinary resume never repeats it. A
+    resume re-runs only this check, against the snapshot of the system of
+    record taken before the save, and then either records the save as
+    verified or leaves a reconciliation pause. It never sends the save again.
+
+    The snapshot holds record rows, so the durable store must be encrypted
+    (the runtime refuses to defer otherwise).
+    """
+
+    #: The save step, and the actuation path whose record check this is
+    #: (``gui`` or ``api``).
+    step_index: int
+    step_id: str
+    actuation: Literal["gui", "api"]
+    #: ``EffectState`` captured before the save, in its JSON form.
+    before: dict
+    #: The save's result when it was sent, before the verdict.
+    result: StepResult
+    #: Multi-surface runs only: the surface active after the save and each
+    #: surface's last-seen identity observation, for the save's checkpoint.
+    active_surface: Optional[str] = None
+    surface_observations: dict[str, SurfaceObservation] = Field(default_factory=dict)
+
+
 class PendingEscalation(BaseModel):
     """A durable pause: the run HALTED for an operator instead of dying.
 
@@ -361,7 +392,18 @@ class PendingEscalation(BaseModel):
     #: must not re-enter it automatically: a human-completed verification
     #: checkpoint or a fresh explicit uncertain-retry authorization is needed.
     delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
+    #: A save whose record check was deferred (pipelined read-back) and had
+    #: not settled when this pause was written. Omitted when unset, so every
+    #: other pause serializes exactly as before.
+    deferred_readback: Optional[DeferredReadback] = None
     created_at: str = Field(default_factory=_now)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler):  # type: ignore[no-untyped-def]
+        data = handler(self)
+        if isinstance(data, dict) and data.get("deferred_readback") is None:
+            data.pop("deferred_readback", None)
+        return data
 
 
 #: Suffix appended to a durable artifact's filename when it is encrypted at

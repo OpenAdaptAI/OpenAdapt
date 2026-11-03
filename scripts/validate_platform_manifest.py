@@ -79,9 +79,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
     import tomli as tomllib  # type: ignore[no-redef]
 
 from generate_platform_manifest import (
-    COMPONENT_REPOSITORIES,
     COMPONENTS,
-    DESKTOP_NATIVE_LOCK_URL_TEMPLATE,
     GITHUB_COMMIT_URL_TEMPLATE,
     PYPI_VERSION_URL_TEMPLATE,
     QUALIFICATION_EVIDENCE,
@@ -89,11 +87,14 @@ from generate_platform_manifest import (
     DriftError,
     _compatibility_status,
     _dependency_edges,
+    _desktop_lock_url,
+    _evidence_location,
     _generation_metadata,
     _github_tree_entries,
     _openadapt_dependency_constraints,
     _openadapt_requirements,
-    _release_ref_candidates,
+    _provenance_source,
+    _release_sources,
     _runtime_unit_requirements,
     _schema_compatibility,
     _substrates_from_status,
@@ -219,17 +220,21 @@ def check_structure(manifest: dict, report: Report) -> None:
         if component.get("source") != "pypi":
             report.error(f"component {role} source must be 'pypi'")
         provenance = component.get("provenance", {})
-        expected_repository = COMPONENT_REPOSITORIES.get(role)
-        expected_refs = _release_ref_candidates(role, str(component.get("version")))
-        if provenance.get("repository") != expected_repository:
+        expected_sources = (
+            _release_sources(role, str(component.get("version")))
+            if role in COMPONENTS
+            else ()
+        )
+        if _provenance_source(provenance) not in expected_sources:
+            expected = [
+                f"{source.repository}@{source.release_ref}"
+                + (f" ({source.source_root})" if source.source_root else "")
+                for source in expected_sources
+            ]
             report.error(
-                f"component {role} provenance repository is "
-                f"{provenance.get('repository')!r}, expected {expected_repository!r}"
-            )
-        if provenance.get("release_ref") not in expected_refs:
-            report.error(
-                f"component {role} release_ref is "
-                f"{provenance.get('release_ref')!r}, expected one of {expected_refs!r}"
+                f"component {role} provenance is "
+                f"{provenance.get('repository')!r}@{provenance.get('release_ref')!r}, "
+                f"expected one of {expected!r}"
             )
         for digest in ("commit", "tree"):
             if not re.fullmatch(r"[0-9a-f]{40}", str(provenance.get(digest, ""))):
@@ -288,6 +293,16 @@ def check_structure(manifest: dict, report: Report) -> None:
             continue
         expected = expected_evidence.get(evidence.get("id"))
         if expected is not None:
+            expected = dict(expected)
+            expected_role = expected.get("source_component")
+            if expected_role is not None:
+                provenance = components.get(expected_role, {}).get("provenance", {})
+                try:
+                    expected["repository"], expected["path"] = _evidence_location(
+                        expected, provenance
+                    )
+                except KeyError:
+                    expected["repository"] = None
             for field in ("kind", "source_component", "repository", "path"):
                 if expected.get(field) != evidence.get(field):
                     report.error(
@@ -434,16 +449,15 @@ def check_structure(manifest: dict, report: Report) -> None:
         )
 
     sidecar = runtime_units.get("desktop_sidecar", {})
-    expected_sidecar_ref = (
-        components.get("desktop", {}).get("provenance", {}).get("release_ref")
-    )
+    desktop_provenance = components.get("desktop", {}).get("provenance", {})
+    expected_sidecar_ref = desktop_provenance.get("release_ref")
     if sidecar.get("source_ref") != expected_sidecar_ref:
         report.error(
             f"desktop_sidecar source_ref is {sidecar.get('source_ref')!r}, "
             f"expected {expected_sidecar_ref!r}"
         )
-    expected_lock_url = DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(
-        release_ref=expected_sidecar_ref
+    expected_lock_url = (
+        _desktop_lock_url(desktop_provenance) if expected_sidecar_ref else None
     )
     if sidecar.get("lock_url") != expected_lock_url:
         report.error(
@@ -931,17 +945,22 @@ def check_source_provenance(
 ) -> None:
     for role, component in manifest.get("components", {}).items():
         provenance = component.get("provenance", {})
-        release_ref = provenance.get("release_ref")
-        expected_refs = _release_ref_candidates(role, str(component.get("version")))
-        if release_ref not in expected_refs:
+        source = _provenance_source(provenance)
+        expected_sources = (
+            _release_sources(role, str(component.get("version")))
+            if role in COMPONENTS
+            else ()
+        )
+        if source not in expected_sources:
             report.error(
-                f"{role} source provenance uses release_ref {release_ref!r}, "
-                f"expected one of {expected_refs!r}"
+                f"{role} source provenance uses "
+                f"{source.repository}@{source.release_ref}, which is not a "
+                "release tag for its version"
             )
             continue
         url = GITHUB_COMMIT_URL_TEMPLATE.format(
-            repository=COMPONENT_REPOSITORIES[role],
-            release_ref=release_ref,
+            repository=source.repository,
+            release_ref=source.release_ref,
         )
         try:
             doc = _fetch_json(url)
@@ -1073,14 +1092,17 @@ def check_desktop_sidecar_lock(
     unit = manifest.get("runtime_units", {}).get("desktop_sidecar", {})
     version = unit.get("version")
     source_ref = unit.get("source_ref")
-    expected_refs = _release_ref_candidates("desktop", str(version))
-    if source_ref not in expected_refs:
+    provenance = manifest.get("components", {}).get("desktop", {}).get("provenance", {})
+    expected_refs = tuple(
+        source.release_ref for source in _release_sources("desktop", str(version))
+    )
+    if source_ref not in expected_refs or source_ref != provenance.get("release_ref"):
         report.error(
             f"desktop_sidecar source_ref is {source_ref!r}, "
             f"expected one of {expected_refs!r}"
         )
         return
-    url = DESKTOP_NATIVE_LOCK_URL_TEMPLATE.format(release_ref=source_ref)
+    url = _desktop_lock_url(provenance)
     try:
         lock_text = _fetch_text(url)
         resolved = _locked_openadapt_versions(

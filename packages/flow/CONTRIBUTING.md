@@ -71,7 +71,12 @@ evidence, static assets, models or configuration (`.json`, `.yaml`, `.png` and
 the other suffixes it names). A pull request that adds, removes or renames such
 a file runs `python scripts/check_release_consistency.py
 --write-public-artifact-inventory` and commits the changed list; editing an
-already-listed file needs no inventory change. The list deliberately carries no
+already-listed file needs no inventory change. Files inside the approved
+evidence folders (`PUBLIC_ARTIFACT_APPROVED_DIRECTORIES`: the scoreboard and
+other benchmark results folders, the showcase folders, evidence packs, bundles
+and test fixtures) need no row at all, so adding evidence there doesn't touch
+the list. Adding a folder to the approved set is a reviewed change to that
+constant. The list deliberately carries no
 hashes: hash rows changed with every edit to `claims.yaml` or a fixture, so
 parallel pull requests conflicted on them. The bytes are pinned at release
 instead. The release workflow runs `--stamp-release-inventory` on the exact

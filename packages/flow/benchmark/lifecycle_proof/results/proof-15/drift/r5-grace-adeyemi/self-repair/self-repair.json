@@ -1,0 +1,20 @@
+{
+  "status": "not_repairable",
+  "reason": "the run ended REJECTED_POLICY; self-repair handles only a halt before any effect",
+  "halted_run_dir": null,
+  "halted_step_id": null,
+  "agent_id": "lifecycle-proof-label-agent",
+  "agent_dialect": "anthropic",
+  "attempts": 0,
+  "model_calls": 0,
+  "est_model_cost_usd": 0.0,
+  "candidate_id": null,
+  "prior_bundle_digest": "0c985b8bb0fd4886f7fa371fbd12c5fd8082bcd5e9ac71e4dfaedf8c77d73a93",
+  "patched_bundle_digest": null,
+  "approved_by": null,
+  "approval_route": null,
+  "steps": [],
+  "standard_change": null,
+  "readmitted_bundle_digest": null,
+  "lineage_hop": null
+}

@@ -1,0 +1,3 @@
+run,label,outcome,halted_step,delivery_attempted,risk,stop,blocker,unsettled,error
+item-270/run,item-270,RECONCILIATION_REQUIRED,step_015,False,irreversible,target:not_found,reconciliation:effect_not_settled,step_002 step_012,Could not resolve target for step 'step_015' (click recorded visual target): the preceding scroll 'step_014' used 1200px of its 1500px budget and the target never came into view; no deterministic rung
+item-271/run,item-271,RECONCILIATION_REQUIRED,step_015,False,irreversible,target:not_found,reconciliation:effect_not_settled,step_002 step_012,Could not resolve target for step 'step_015' (click recorded visual target): the preceding scroll 'step_014' used 1200px of its 1500px budget and the target never came into view; no deterministic rung

@@ -48,6 +48,12 @@ from typing import TYPE_CHECKING, Callable, Iterator, Optional
 
 from loguru import logger
 
+from openadapt_capture.window_input_focus import (
+    FocusOwner,
+    InputFocusProbe,
+    platform_input_focus_probe,
+)
+
 if TYPE_CHECKING:
     from PIL import Image
 
@@ -140,20 +146,48 @@ class WindowCaptureUnavailableError(WindowCaptureError):
     """The exact-window capture provider is not available."""
 
 
+INPUT_KEYBOARD_FOCUS_ELSEWHERE = "keyboard_focus_elsewhere"
+INPUT_KEYBOARD_FOCUS_UNKNOWN = "keyboard_focus_unknown"
+INPUT_POINTER_OVER_OTHER_WINDOW = "pointer_over_other_window"
+INPUT_POINTER_TARGET_UNKNOWN = "pointer_target_unknown"
+INPUT_TARGET_NOT_ON_SCREEN = "target_not_on_screen"
+_NOT_PROBED = object()
+
+
+class WindowInputNotOnTarget(WindowCaptureError):
+    """Native input went to a window other than the recorded target.
+
+    This is not a capture failure. The recorder drops the input and records a
+    marker with ``reason``. The exception never carries key identity, text, or
+    an exact point, so another application's input cannot reach a recording.
+    """
+
+    def __init__(self, reason: str) -> None:
+        """Record a stable reason code."""
+        super().__init__(f"native input was not on the target window ({reason})")
+        self.reason = reason
+
+
 @dataclass(frozen=True)
 class WindowTarget:
     """How to find the window to record: case-insensitive substrings.
 
     Matches openadapt-flow ``RemoteDisplayBackend``'s window identification
     (owner substring, optional title substring to disambiguate).
+
+    ``window_id`` is set only by :class:`WindowCaptureScope` after it pins the
+    window the selectors first matched. A resolver given ``window_id`` returns
+    that exact window (or ``None``) and ignores the title, because a browser
+    retitles its window on every navigation.
     """
 
     owner: str | None = None
     title: str | None = None
+    window_id: int | None = None
 
     def __post_init__(self) -> None:
         """Validate that at least one selector is provided."""
-        if not (self.owner or self.title):
+        if not (self.owner or self.title or self.window_id is not None):
             raise ValueError(
                 "WindowTarget requires an 'owner' and/or 'title' substring "
                 "(e.g. WindowTarget(owner='Parallels'))"
@@ -240,8 +274,17 @@ CapturerFn = Callable[[TargetWindow], "Image.Image"]
 class WindowCaptureScope:
     """Thread-safe tracker of the target window's bounds/scale during recording.
 
-    The screen-reader thread calls :meth:`capture_frame` (which re-resolves the
-    window each frame — windows move and resize); native observer threads call
+    The owner/title selectors choose the window once, on the first resolve.
+    The scope then pins that window's identity (window id, owning pid and
+    process start time) and every later frame and action finds that exact
+    window by id, whatever its title becomes. Browsers retitle their window
+    on every navigation, so a title selector alone cannot follow a browser
+    task. The pinned window is still re-resolved each frame (windows move
+    and resize), and the scope fails closed when it closes or its process
+    exits or restarts.
+
+    The screen-reader thread calls :meth:`capture_frame`; native observer
+    threads call
     :meth:`translate` concurrently to convert global input coordinates into
     the captured frame's pixel space using the freshest bounds.
 
@@ -255,9 +298,15 @@ class WindowCaptureScope:
         resolver: ResolverFn | None = None,
         capturer: CapturerFn | None = None,
         frame_rate: float | None = None,
+        focus_probe: InputFocusProbe | None = None,
     ) -> None:
-        """Initialize the scope for ``target``."""
+        """Initialize the scope for ``target``.
+
+        ``focus_probe`` reports keyboard focus and the topmost window at a
+        point. It defaults to the platform probe; tests inject a fake.
+        """
         self.target = target
+        self._focus_probe = focus_probe or platform_input_focus_probe()
         self._resolver = resolver or resolve_window
         self._capture_provider = None
         if capturer is None and sys.platform == "darwin":
@@ -291,6 +340,11 @@ class WindowCaptureScope:
         self._published_scale_y: float | None = None
         self._published_content_rect: tuple[int, int, int, int] | None = None
         self._bound_identity: tuple[int, int, float | None, str] | None = None
+        # The window the selectors matched first. Every later resolve looks
+        # it up by window id instead of by title.
+        self._pinned: TargetWindow | None = None
+        # Set on the frame whose title differs from the previous frame's.
+        self._title_change: dict | None = None
         self._display_topology: dict | None = None
         self._display_topology_guard: Callable[..., None] | None = None
         # Window of the last CAPTURED frame (not merely resolved): the
@@ -342,23 +396,52 @@ class WindowCaptureScope:
     def resolve(self) -> TargetWindow:
         """Resolve the target window without changing captured-frame geometry.
 
+        The first call matches the owner/title selectors and pins the window
+        it finds. Later calls look up the pinned window id only.
+
         Raises:
-            WindowCaptureError: If no matching window can be captured safely.
+            WindowCaptureError: If no matching window can be captured safely,
+                or the pinned window closed or its process exited or restarted.
         """
-        win = self._resolver(self.target)
-        if win is None:
-            raise WindowCaptureError(
-                f"no window matching owner {self.target.owner!r} "
-                f"title {self.target.title!r}; is the target application "
-                "running with a capturable window?"
+        with self._lock:
+            pinned = self._pinned
+        if pinned is None:
+            win = self._resolver(self.target)
+            if win is None:
+                raise WindowCaptureError(
+                    f"no window matching owner {self.target.owner!r} "
+                    f"title {self.target.title!r}; is the target application "
+                    "running with a capturable window?"
+                )
+            if (
+                self.target.title
+                and self.target.title.casefold() not in win.title.casefold()
+            ):
+                raise WindowCaptureError(
+                    "the window resolver returned a title outside the configured selector"
+                )
+        else:
+            win = self._resolver(
+                WindowTarget(owner=self.target.owner, window_id=pinned.window_id)
             )
+            if win is None:
+                raise WindowCaptureError(
+                    f"the pinned target window {pinned.window_id} closed or is "
+                    "no longer capturable"
+                )
+            if win.window_id != pinned.window_id:
+                raise WindowCaptureError(
+                    "the resolved target changed window identity: the resolver "
+                    "returned a window other than the pinned one"
+                )
+            if win.identity != pinned.identity:
+                raise WindowCaptureError(
+                    f"the process that owns pinned window {pinned.window_id} "
+                    "exited or restarted during recording"
+                )
         if self.target.owner and self.target.owner.casefold() not in win.owner.casefold():
             raise WindowCaptureError(
                 "the window resolver returned an owner outside the configured selector"
-            )
-        if self.target.title and self.target.title.casefold() not in win.title.casefold():
-            raise WindowCaptureError(
-                "the window resolver returned a title outside the configured selector"
             )
         if not win.on_screen and not win.visibility_independent:
             raise WindowCaptureError(
@@ -378,7 +461,30 @@ class WindowCaptureScope:
         if not win.coordinate_source.strip():
             raise WindowCaptureError("the resolved target has no coordinate source")
         self._assert_window_topology_compatibility(win)
+        if pinned is None:
+            self._pin(win)
         return win
+
+    def _pin(self, win: TargetWindow) -> None:
+        """Bind the session to the window the selectors matched first."""
+        with self._lock:
+            if self._pinned is None:
+                self._pinned = win
+                if self._bound_identity is None:
+                    self._bound_identity = win.identity
+                logger.info(
+                    "window-scoped capture pinned window {} (pid {}); later "
+                    "frames track it by id, not by title",
+                    win.window_id,
+                    win.pid,
+                )
+                return
+            pinned = self._pinned
+        # Another thread pinned first. Both must have found the same window.
+        if win.identity != pinned.identity:
+            raise WindowCaptureError(
+                "concurrent first resolves matched different target windows"
+            )
 
     def _assert_window_topology_compatibility(self, win: TargetWindow) -> None:
         """Require an X11 root-pixel window to fit the retained monitor union."""
@@ -542,6 +648,10 @@ class WindowCaptureScope:
             )
             if self._bound_identity is None:
                 self._bound_identity = win.identity
+            title_change = None
+            if prev is not None and prev.title != win.title:
+                title_change = {"from": prev.title, "to": win.title}
+            self._title_change = title_change
             if geometry_signature != self._geometry_signature:
                 self._geometry_generation += 1
                 self._geometry_signature = geometry_signature
@@ -549,6 +659,12 @@ class WindowCaptureScope:
             generation = self._geometry_generation
             if publish:
                 self._publish_locked(generation)
+        if title_change is not None:
+            # Titles can hold patient or account data, so log only the fact.
+            logger.info(
+                "pinned window {} changed title; still recording it",
+                win.window_id,
+            )
         changed = (
             prev is None
             or prev.window_id != win.window_id
@@ -596,10 +712,73 @@ class WindowCaptureScope:
         px, py, _generation = self.translate_with_generation(x, y)
         return px, py
 
+    def keyboard_focus_at_receipt(self) -> FocusOwner | None:
+        """Read keyboard focus inside a native input hook; ``None`` if unknown."""
+        try:
+            return self._focus_probe.keyboard_focus(at_receipt=True)
+        except Exception:
+            return None
+
+    def assert_input_on_target(
+        self,
+        window: TargetWindow,
+        *,
+        point: tuple[float, float] | None = None,
+        keyboard_focus_at_receipt: object = _NOT_PROBED,
+    ) -> None:
+        """Refuse input that ``window`` did not receive.
+
+        A pointer event (``point`` set) needs ``window`` topmost at the point.
+        A keyboard event needs keyboard focus on ``window`` or its process,
+        both at native receipt (when a receipt reading is given) and now. An
+        unknown answer or a probe failure is a refusal.
+
+        Raises:
+            WindowInputNotOnTarget: With a stable reason code.
+        """
+        if point is not None:
+            if not window.on_screen:
+                # A visibility-independent provider can capture a covered
+                # window, but a click there reached another window.
+                raise WindowInputNotOnTarget(INPUT_TARGET_NOT_ON_SCREEN)
+            try:
+                owner = self._focus_probe.window_at(float(point[0]), float(point[1]))
+            except Exception:
+                owner = None
+            if owner is None:
+                raise WindowInputNotOnTarget(INPUT_POINTER_TARGET_UNKNOWN)
+            if owner.window_id != window.window_id:
+                raise WindowInputNotOnTarget(INPUT_POINTER_OVER_OTHER_WINDOW)
+            return
+        try:
+            live = self._focus_probe.keyboard_focus()
+        except Exception:
+            live = None
+        readings = [live]
+        if keyboard_focus_at_receipt is not _NOT_PROBED:
+            readings.append(keyboard_focus_at_receipt)
+        for owner in readings:
+            if not isinstance(owner, FocusOwner):
+                raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_UNKNOWN)
+            if owner.window_id is None and owner.pid is None:
+                raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_UNKNOWN)
+            on_target = (owner.window_id is not None and owner.window_id == window.window_id) or (
+                owner.pid is not None and owner.pid == window.pid
+            )
+            if not on_target:
+                raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_ELSEWHERE)
+
     def _geometry_for_action(
         self,
+        *,
+        point: tuple[float, float] | None = None,
+        keyboard: bool = False,
     ) -> tuple[TargetWindow, float, float, tuple[int, int, int, int], int]:
-        """Return the published geometry after exact live revalidation."""
+        """Return the published geometry after exact live revalidation.
+
+        With ``point`` or ``keyboard`` set, the input must also have gone to
+        the target (:meth:`assert_input_on_target`).
+        """
         self._assert_display_topology()
         with self._lock:
             window = self._published_window
@@ -624,6 +803,8 @@ class WindowCaptureScope:
                 "the target moved or resized after the last published frame; "
                 "wait for a matching frame before recording input"
             )
+        if point is not None or keyboard:
+            self.assert_input_on_target(live, point=point)
         self._assert_display_topology()
         return window, scale_x, scale_y, content_rect, generation
 
@@ -684,8 +865,8 @@ class WindowCaptureScope:
         )
 
     def generation_for_action(self) -> int:
-        """Bind a non-pointer action to the exact published frame epoch."""
-        return self._geometry_for_action()[4]
+        """Bind a keyboard action to the exact published frame epoch."""
+        return self._geometry_for_action(keyboard=True)[4]
 
     def assert_current(self) -> None:
         """Revalidate the bound process, bounds, and display topology."""
@@ -693,7 +874,9 @@ class WindowCaptureScope:
 
     def translate_with_generation(self, x: float, y: float) -> tuple[float, float, int]:
         """Translate against the exact published frame after revalidation."""
-        window, scale_x, scale_y, content_rect, generation = self._geometry_for_action()
+        window, scale_x, scale_y, content_rect, generation = self._geometry_for_action(
+            point=(x, y)
+        )
         return (
             (x - window.bounds[0]) * scale_x + content_rect[0],
             (y - window.bounds[1]) * scale_y + content_rect[1],
@@ -725,6 +908,8 @@ class WindowCaptureScope:
             stream_generation = self._stream_generation
             generation = self._geometry_generation
             topology = self._display_topology
+            pinned = self._pinned
+            title_change = self._title_change
         if window is None:
             raise WindowCaptureError("no resolved window; call capture_frame() first")
         x, y, w, h = window.bounds
@@ -756,6 +941,10 @@ class WindowCaptureScope:
             "content_rect": list(content_rect) if content_rect else None,
             "fit_scale": fit_scale,
             "on_screen": window.on_screen,
+            # The window is pinned by id, so its title may change (a browser
+            # retitles on navigation). These record that evidence.
+            "pinned_title": pinned.title if pinned is not None else None,
+            "title_change": dict(title_change) if title_change else None,
         }
         state["geometry_epoch_sha256"] = window_geometry_epoch_sha256(state)
         state["capture_evidence_sha256"] = window_capture_evidence_sha256(state)
@@ -1732,19 +1921,23 @@ def _macos_window_minimized(
 
 
 def _resolve_window_macos(target: WindowTarget) -> TargetWindow | None:
-    """macOS: CGWindowList by owner/title substring.
+    """macOS: CGWindowList by owner/title substring, or by exact window number.
 
+    With ``target.window_id`` set (a pinned window) the title is ignored.
     ScreenCaptureKit can capture an occluded window or a window on another
     Space. Older macOS versions retain the visible-window Quartz behavior.
     """
     import Quartz
 
     visibility_independent = _macos_visibility_independent_capture_available()
+    pinned_id = target.window_id
     owner_l = target.owner.lower() if target.owner else None
-    title_l = target.title.lower() if target.title else None
+    title_l = target.title.lower() if target.title and pinned_id is None else None
     wins = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionAll, Quartz.kCGNullWindowID)
     matches: list[TargetWindow] = []
     for w in wins or []:
+        if pinned_id is not None and int(w.get("kCGWindowNumber", 0) or 0) != pinned_id:
+            continue
         owner = str(w.get("kCGWindowOwnerName", "") or "")
         name = str(w.get("kCGWindowName", "") or "")
         if owner_l is not None and owner_l not in owner.lower():
@@ -1791,7 +1984,7 @@ def _resolve_window_macos(target: WindowTarget) -> TargetWindow | None:
         match
         for match in matches
         if (target.owner is None or match.owner.casefold() == target.owner.casefold())
-        and (target.title is None or match.title.casefold() == target.title.casefold())
+        and (title_l is None or match.title.casefold() == target.title.casefold())
     ]
     candidates = exact or matches
     if len(candidates) != 1:
@@ -1983,8 +2176,10 @@ def _resolve_window_windows(target: WindowTarget) -> TargetWindow | None:
 
     ``owner`` matches the owning process's executable name (e.g. ``prl_client``
     for Parallels Client, ``wfica32`` for Citrix Workspace); ``title`` matches
-    the window title. Both case-insensitive substrings; the largest visible
-    match wins (parity with the macOS resolver). Bounds prefer the DWM
+    the window title. Both case-insensitive substrings. An exact owner/title
+    match wins over substring matches, and more than one remaining candidate
+    is refused (parity with the macOS resolver). With ``target.window_id`` set
+    (a pinned window) only that exact HWND matches and the title is ignored. Bounds prefer the DWM
     extended frame (excludes the invisible resize border GetWindowRect
     includes) so captured pixels align with the visible window.
     """
@@ -1994,20 +2189,25 @@ def _resolve_window_windows(target: WindowTarget) -> TargetWindow | None:
     import psutil
 
     user32 = ctypes.windll.user32
+    pinned_id = target.window_id
     owner_l = target.owner.lower() if target.owner else None
-    title_l = target.title.lower() if target.title else None
+    title_l = target.title.lower() if target.title and pinned_id is None else None
 
     matches: list[TargetWindow] = []
 
     @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
     def _enum_cb(hwnd: int, _lparam: int) -> bool:
+        if pinned_id is not None and int(hwnd or 0) != pinned_id:
+            return True
         if not user32.IsWindowVisible(hwnd):
             return True
+        if user32.IsIconic(hwnd) or _window_cloaked(hwnd):
+            return True  # minimized, or hidden by DWM (another virtual desktop)
         length = user32.GetWindowTextLengthW(hwnd)
         buf = ctypes.create_unicode_buffer(length + 1)
         user32.GetWindowTextW(hwnd, buf, length + 1)
         title = buf.value
-        if not title:
+        if not title and pinned_id is None:
             return True  # unnamed tool/host windows
         if title_l is not None and title_l not in title.lower():
             return True
@@ -2047,7 +2247,62 @@ def _resolve_window_windows(target: WindowTarget) -> TargetWindow | None:
     user32.EnumWindows(_enum_cb, 0)
     if not matches:
         return None
-    return max(matches, key=lambda m: m.bounds[2] * m.bounds[3])
+    return _unique_window_match(matches, target, title_l is not None)
+
+
+def _unique_window_match(
+    matches: list[TargetWindow],
+    target: WindowTarget,
+    match_title: bool,
+) -> TargetWindow:
+    """Return the one match, preferring exact selectors; refuse ambiguity.
+
+    The selectors choose the window that the session then pins, so picking
+    one of several candidates (the largest, the frontmost) could pin the
+    wrong window for the whole recording.
+    """
+    exact = [
+        match
+        for match in matches
+        if (target.owner is None or match.owner.casefold() == target.owner.casefold())
+        and (
+            not match_title
+            or target.title is None
+            or match.title.casefold() == target.title.casefold()
+        )
+    ]
+    candidates = exact or matches
+    if len(candidates) != 1:
+        raise WindowCaptureAmbiguousError(
+            f"window selectors matched {len(candidates)} capturable windows; "
+            "provide the complete window title"
+        )
+    return candidates[0]
+
+
+def _window_cloaked(hwnd: int) -> bool:
+    """Return whether DWM cloaks ``hwnd``; an unreadable state counts as cloaked.
+
+    A cloaked window (on another virtual desktop, or a suspended UWP frame)
+    passes ``IsWindowVisible`` but shows no pixels, so a region grab of its
+    bounds would capture whatever else is on screen there.
+    """
+    import ctypes
+    import ctypes.wintypes as wintypes
+
+    try:
+        dwmapi = ctypes.windll.dwmapi
+    except (AttributeError, OSError):  # pragma: no cover - supported Windows has DWM
+        return True
+    DWMWA_CLOAKED = 14
+    cloaked = wintypes.DWORD()
+    res = dwmapi.DwmGetWindowAttribute(
+        wintypes.HWND(hwnd),
+        wintypes.DWORD(DWMWA_CLOAKED),
+        ctypes.byref(cloaked),
+        ctypes.sizeof(cloaked),
+    )
+    return res != 0 or cloaked.value != 0
 
 
 def _window_rect(hwnd: int) -> tuple[int, int, int, int] | None:

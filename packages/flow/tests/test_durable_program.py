@@ -67,7 +67,12 @@ from openadapt_flow.runtime.effects import (
 from openadapt_flow.runtime.replayer import Replayer, _ProgramHalt
 
 # Reuse the scripted fakes + the scripted system-of-record verifier.
-from tests.test_durable_runtime import FakeSoRVerifier, _approval, _vision_ok
+from tests.test_durable_runtime import (
+    FakeSoRVerifier,
+    _approval,
+    _retry_approval,
+    _vision_ok,
+)
 from tests.test_replayer import FakeBackend, FakeVision, make_png
 
 # -- builders ----------------------------------------------------------------
@@ -836,7 +841,7 @@ def test_program_resume_restores_interpreter_and_completes(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
-    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
 
     assert resumed.success is True
     assert resumed.terminal_outcome == "success"
@@ -872,7 +877,7 @@ def test_program_resume_report_lists_every_loop_row_binding(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
-    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
     assert resumed.success is True
     assert [
         (b.loop_state_id, b.row_index, b.params["patient"])
@@ -895,7 +900,7 @@ def test_program_resume_does_not_reperform_confirmed_write(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
-    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
 
     assert resumed.success is True
     # The confirmed row's consequential write is NEVER re-performed: Alice's TYPE
@@ -1083,7 +1088,7 @@ def test_program_resume_refused_when_app_state_diverged(tmp_path):
         poll_interval_s=0.01,
     )
     with pytest.raises(StateDiverged):
-        resume(run_dir, resume_replayer, approval=_approval(bundle))
+        resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
 
 
 def test_program_resume_refused_when_confirmed_effect_no_longer_holds(tmp_path):
@@ -1101,7 +1106,7 @@ def test_program_resume_refused_when_confirmed_effect_no_longer_holds(tmp_path):
         poll_interval_s=0.01,
     )
     with pytest.raises(StateDiverged):
-        resume(run_dir, resume_replayer, approval=_approval(bundle))
+        resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
 
 
 def test_program_resume_revalidates_every_retained_effect_before_input(tmp_path):
@@ -1144,7 +1149,7 @@ def test_program_resume_revalidates_every_retained_effect_before_input(tmp_path)
                 effect_verifier=verifier,
                 poll_interval_s=0.01,
             ),
-            approval=_approval(bundle),
+            approval=_retry_approval(bundle),
         )
 
     assert backend.actions == []

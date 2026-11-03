@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from concurrent.futures import Future
@@ -396,6 +397,114 @@ def make_process_fake(
             return ItemRun(state=VERIFIED, pending_readback=fut)
 
     return _W(name, fingerprint=f"fp-{name}")
+
+
+def make_failing_open_fake(name: str) -> Any:
+    """Factory whose worker raises on open (the child is already running)."""
+
+    class _W(FakeWorker):
+        def open(self) -> None:
+            raise RuntimeError("bad password")
+
+    return _W(name)
+
+
+def make_hung_close_fake(name: str) -> Any:
+    """Factory whose worker never finishes closing."""
+
+    class _W(FakeWorker):
+        def close(self) -> None:
+            time.sleep(600)
+
+    return _W(name)
+
+
+@pytest.fixture(autouse=True)
+def _no_child_outlives_the_test() -> Any:
+    """Fail a test that leaves a worker process running, then end it."""
+    import multiprocessing
+
+    yield
+    deadline = time.monotonic() + 5.0
+    while multiprocessing.active_children() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    leaked = multiprocessing.active_children()
+    for child in leaked:  # never leave a spinning orphan behind a failure
+        child.kill()
+        child.join()
+    assert not leaked, f"worker processes outlived the test: {leaked}"
+
+
+def test_process_worker_failed_open_ends_its_child() -> None:
+    from openadapt_flow.runtime.worklist_pool import ProcessWorker
+
+    worker = ProcessWorker(
+        "o", "tests.test_worklist_pool:make_failing_open_fake", {"name": "o"}
+    )
+    with pytest.raises(RuntimeError, match="bad password"):
+        worker.open()
+    assert worker._proc is None
+
+
+def test_process_worker_close_kills_a_child_that_will_not_close(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from openadapt_flow.runtime import worklist_pool
+    from openadapt_flow.runtime.worklist_pool import ProcessWorker
+
+    monkeypatch.setattr(worklist_pool, "_CHILD_CLOSE_S", 0.5)
+    monkeypatch.setattr(worklist_pool, "_CHILD_EXIT_S", 0.5)
+    worker = ProcessWorker(
+        "h", "tests.test_worklist_pool:make_hung_close_fake", {"name": "h"}
+    )
+    worker.open()
+    proc = worker._proc
+    with pytest.raises(RuntimeError, match="no reply"):
+        worker.close()
+    assert proc is not None and not proc.is_alive()
+
+
+def test_pool_closes_process_workers_when_a_sibling_fails_to_open(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.runtime.worklist_pool import ProcessWorker
+
+    workers = [
+        ProcessWorker(
+            "ok", "tests.test_worklist_pool:make_process_fake", {"name": "ok"}
+        ),
+        ProcessWorker(
+            "bad", "tests.test_worklist_pool:make_failing_open_fake", {"name": "bad"}
+        ),
+    ]
+    with pytest.raises(PoolRefusal):
+        run_worklist_pool(_rows(4), workers, run_dir=tmp_path, policy=_policy(2))
+
+
+def test_child_exits_when_its_parent_is_gone() -> None:
+    import multiprocessing
+
+    from openadapt_flow.runtime import worklist_pool
+
+    ctx = multiprocessing.get_context("spawn")
+    parent_end, child_end = ctx.Pipe()
+    # A parent pid that is not ours stands in for a parent that has died.
+    proc = ctx.Process(
+        target=worklist_pool._child_main,
+        args=(
+            child_end,
+            "tests.test_worklist_pool:make_process_fake",
+            {"name": "w"},
+            os.getpid() + 10_000_000,
+        ),
+        daemon=True,
+    )
+    proc.start()
+    child_end.close()
+    proc.join(timeout=worklist_pool._PARENT_POLL_S * 5)
+    alive = proc.is_alive()
+    parent_end.close()
+    assert not alive, "child kept running after its parent was gone"
 
 
 def test_process_workers_run_in_their_own_processes(tmp_path: Path) -> None:

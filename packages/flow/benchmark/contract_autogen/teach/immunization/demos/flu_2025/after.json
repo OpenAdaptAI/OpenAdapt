@@ -1,0 +1,26 @@
+[
+ {
+  "resourceType": "Immunization",
+  "status": "completed",
+  "vaccineCode": {
+   "coding": [
+    {
+     "system": "http://hl7.org/fhir/sid/cvx",
+     "code": "140",
+     "display": "Influenza, seasonal, injectable, preservative free"
+    }
+   ]
+  },
+  "patient": {
+   "reference": "Patient/3d1c8d5c-b42a-4768-903f-167bef286c5a"
+  },
+  "occurrenceDateTime": "2025-10-14",
+  "primarySource": false,
+  "lotNumber": "UT8842AA",
+  "id": "b5f2fe46-d541-4993-bc8e-7b6dc767b618",
+  "meta": {
+   "versionId": "f4aca948-21b5-4e6a-addb-9e13166f90fc",
+   "lastUpdated": "2026-10-29T20:38:45.703Z"
+  }
+ }
+]

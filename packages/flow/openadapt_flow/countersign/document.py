@@ -497,6 +497,9 @@ class CountersignReport:
     #: The check level the receipt states, or None on a receipt
     #: issued before ``checked_how`` existed.
     checked_how: Optional[str] = None
+    #: Which parts of the claim behind ``verified`` were checked (delta,
+    #: frame, source), or None on a receipt issued before ``checked``.
+    checked: Optional[dict[str, Any]] = None
     seal: dict[str, Any] = field(default_factory=dict)
     evidence: dict[str, Any] = field(default_factory=dict)
     statement: dict[str, Any] = field(default_factory=dict)
@@ -620,6 +623,11 @@ def verify_countersigned(
         outcome=receipt.get("outcome"),
         oracle_tier=receipt.get("oracle_tier"),
         checked_how=receipt.get("checked_how"),
+        checked=(
+            dict(receipt["checked"])
+            if isinstance(receipt.get("checked"), dict)
+            else None
+        ),
         accept_non_flow=accept_non_flow,
     )
     if schema not in (EXECUTE_RECEIPT_SCHEMA, EFFECT_RECEIPT_SCHEMA):
@@ -641,6 +649,24 @@ def verify_countersigned(
         )
         if stated_tier is None or stated_tier != receipt.get("verification_tier"):
             report.problems.append("checked_how_mismatch")
+    if schema == EFFECT_RECEIPT_SCHEMA and "checked" in receipt:
+        parts = receipt.get("checked")
+        if not isinstance(parts, dict) or set(parts) - {"coverage"} != {
+            "delta",
+            "frame",
+            "source",
+        }:
+            report.problems.append("checked_malformed")
+        elif receipt.get("outcome") in _SEALABLE and (
+            parts.get("delta") != "held"
+            or parts.get("frame") != "held"
+            or parts.get("source") not in ("held", "instruction")
+            or (
+                "coverage" in parts
+                and (parts.get("coverage") or {}).get("policy") != "met"
+            )
+        ):
+            report.problems.append("verified_without_every_part")
     # Seal signature: openadapt_types.seal, unchanged.
     try:
         keys = parse_key_registry(list(registry))
@@ -677,6 +703,7 @@ def verify_countersigned(
                 != receipt.get("verification_tier")
                 or (ev.get("readback") or {}).get("checked_how")
                 != receipt.get("checked_how")
+                or ev.get("checked") != receipt.get("checked")
             )
         report.evidence = {
             "status": "evidence_mismatch" if mismatch else "bound",

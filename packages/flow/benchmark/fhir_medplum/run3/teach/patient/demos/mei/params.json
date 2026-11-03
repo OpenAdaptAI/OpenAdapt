@@ -1,0 +1,12 @@
+{
+ "given": "Mei",
+ "family": "Tanaka",
+ "birthDate": "1958-07-27",
+ "gender": "female",
+ "line": "3 Shore Rd",
+ "city": "Portland",
+ "state": "ME",
+ "postalCode": "04101",
+ "phone": "207-555-0198",
+ "email": "mei.tanaka@example.org"
+}

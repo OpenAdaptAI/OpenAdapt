@@ -1,0 +1,38 @@
+schema_version: openadapt.ensure-record/v1
+resource_type: Appointment
+base_url: ${MEDPLUM_FHIR_URL}
+access_token_env: MEDPLUM_RECORD_TOKEN
+self:
+- ${MEDPLUM_BOT_REF}
+fields:
+  status:
+    path: status
+  start:
+    path: start
+    compare: instant
+  end:
+    path: end
+    compare: instant
+  patient:
+    path: participant[actor.reference^=Patient/].actor.reference
+  practitioner:
+    path: participant[actor.reference^=Practitioner/].actor.reference
+identity:
+- - patient
+  - start
+search:
+  patient: patient
+closed: true
+change_feed:
+  audit:
+    heartbeat: true
+  history: true
+  history_author: false
+  sweep_types:
+  - Appointment
+settle_s: 1.0
+allow:
+- participant.status="accepted"
+void:
+- status="entered-in-error"
+- status="cancelled"

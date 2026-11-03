@@ -381,6 +381,10 @@ single-surface run does, and no gate is weakened:
   recomputed observation.
 - **Durable runs work.** Checkpoints are written per step as usual. The step
   results carry their surface.
+- **An API step runs on its surface.** An admitted API step whose steps all run
+  on one browser surface, with no switch, open or close among them, runs on that
+  surface's session at the surface's origin. Its folded steps record that
+  surface ([API_TIER.md](API_TIER.md#in-a-multi-surface-program)).
 
 ### Resume
 

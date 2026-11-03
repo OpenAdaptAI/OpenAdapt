@@ -325,3 +325,50 @@ def test_sealed_template_tampering_fails_authentication(
     # The sealed index catches the changed bytes before any decryption.
     with pytest.raises(sealed_set.SealedSetError, match="changed after sealing"):
         Workflow.load(destination, key=_KEY, verify_integrity=True)
+
+
+def test_a_qualified_bundle_seals_and_must_be_certified_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A bundle certified by a qualification campaign also carries a governed
+    # authorization template, rebuilt from its certification on every load.
+    # Sealing expires that certification, so the template goes with it;
+    # before, the sealed copy could not load at all.
+    from openadapt_flow.policy import load_policy
+    from openadapt_flow.qualification import certify_project, save_qualified_workflow
+    from openadapt_flow.verification import VerificationTier
+    from tests.test_qualification_project import (
+        _configure,
+        _qualification_visual_fixture,
+        _record_passing_campaign,
+        _workflow,
+    )
+
+    source = tmp_path / "qualified"
+    (source / "templates").mkdir(parents=True)
+    (source / "templates" / "save.png").write_bytes(_qualification_visual_fixture()[1])
+    workflow = _workflow()
+    workflow.save(source)
+    workflow = Workflow.load(source)
+    _configure(workflow, tier=VerificationTier.INDEPENDENT_SYSTEM)
+    _record_passing_campaign(workflow, tmp_path / "evidence")
+    assert certify_project(
+        workflow,
+        policy=load_policy("clinical-write"),
+        evidence_root=tmp_path / "evidence",
+    ).passed
+    save_qualified_workflow(workflow, source)
+    qualified = Workflow.load(source)
+    assert qualified.manifest is not None
+    assert qualified.manifest.provenance.governed_authorization_template is not None
+    monkeypatch.setenv(crypto.ENV_KEY, _KEY)
+
+    result = seal_bundle(source, tmp_path / "sealed")
+
+    assert result.certification_invalidated
+    sealed = Workflow.load(tmp_path / "sealed", key=_KEY, verify_integrity=True)
+    assert sealed.manifest is not None
+    assert sealed.manifest.provenance.certified is False
+    assert sealed.manifest.provenance.governed_authorization_template is None
+    assert sealed.qualification is not None
+    assert sealed.qualification.last_certification is None

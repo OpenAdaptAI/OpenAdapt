@@ -19,14 +19,21 @@ it must agree with. Other repositories contribute source data only:
 - PyPI is the authority for published versions, artifact URLs, and digests.
 - Each exact public release tag is the authority for its release source commit
   and tree. This reference is not, by itself, a build-provenance attestation.
-- The exact published Desktop release tag (`desktop-vX.Y.Z` when that native
-  tag exists, otherwise `vX.Y.Z`) and its `uv.lock` are the authority for the
-  package versions frozen into `openadapt-engine`.
+  A component released from this monorepo is tagged `<package>-vX.Y.Z`
+  (`openadapt-flow-v2.3.0`) here, and its sources, evidence and lock are read
+  under `packages/<dir>/`; the manifest records that directory as the
+  provenance `source_root`. A release from before the fold is tagged `vX.Y.Z`
+  in its standalone repository. The generator binds whichever tag exists, the
+  monorepo first.
+- The exact published Desktop release tag (`openadapt-desktop-vX.Y.Z` here, or
+  in the standalone repository `desktop-vX.Y.Z` when that native tag exists,
+  otherwise `vX.Y.Z`) and its `uv.lock` are the authority for the package
+  versions frozen into `openadapt-engine`.
 - `https://openadapt.ai/status.json` (maintained in `openadapt-web`,
   `public/status.json`) is the authority for substrate availability, release
   channel, and the public qualification summary.
-- `openadapt-flow` holds the versioned qualification evidence packs the
-  manifest points at (`public-demo/evidence-packs/*/manifest.json` and the
+- The selected Flow release holds the versioned qualification evidence packs
+  the manifest points at (`public-demo/evidence-packs/*/manifest.json` and the
   effectbench task pack manifest).
 
 ## How it is generated

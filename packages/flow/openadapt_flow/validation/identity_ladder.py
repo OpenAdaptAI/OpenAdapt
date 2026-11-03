@@ -279,12 +279,26 @@ class _Backend:
             raise AttributeError("pixel-only substrate has no structured text")
         return self._structured_at
 
+    # The DOM row census (IdentityCandidatesBackend). Each case screen shows
+    # one record row: the homonym under test differs from the recorded row in
+    # its identifier glyphs, so no other shown row reads the same.
+    def identity_candidates_at(self, x, y):
+        if self._structured_at is None:
+            return None
+        return {
+            "record_key": None,
+            "incomplete": False,
+            "top_level": True,
+            "candidates": [{"self": True, "record_key": None, "dx": 0, "dy": 0}],
+        }
+
 
 def _make_backend(viewport, live_png, structured_live):
     b = _Backend(viewport, live_png)
     if structured_live is None:
         # pixel-only: remove structured_text_at so the tier is UNAVAILABLE.
         b.structured_text_at = None  # type: ignore[assignment]
+        b.identity_candidates_at = None  # type: ignore[assignment]
     else:
         b._structured_at = structured_live
     return b

@@ -81,8 +81,23 @@ class QualifyError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
+def _evidence_bytes(path: Path) -> bytes:
+    """A file's bytes; a file inside a sealed run directory is decrypted.
+
+    Runs of a sealed bundle write a sealed run directory, whose report is
+    ``report.json`` only by its logical name. Its evidence digest is over the
+    plaintext; the sealed set authenticates the ciphertext on disk.
+    """
+
+    if path.is_file():
+        return path.read_bytes()
+    from openadapt_flow import sealed_set
+
+    return sealed_set.read_bytes(path)
+
+
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(_evidence_bytes(path)).hexdigest()
 
 
 def write_json(path: Path, value: Any) -> Path:
@@ -155,10 +170,34 @@ def record_effects(config: VerifyConfig) -> list[Any]:
         probe=f"exactly {record.expected_count} {record.name} record(s) written",
         timeout_s=record.timeout_s,
     )
-    if record.duplicate_key is not None:
+    if isinstance(record.duplicate_key, str):
         written.idempotency_key = record.expr(record.duplicate_key)
         written.key_field = record.duplicate_key
+    elif record.duplicate_key:
+        written.composite_key = {
+            name: record.expr(name) for name in record.duplicate_key
+        }
     effects = [written]
+    if record.exact_new_set:
+        # Exactly these records were added since the snapshot before the
+        # save, and nothing else, read by every declared field.
+        selector_all = {
+            name: record.expr(name) for name in [*record.match, *record.fields]
+        }
+        effects.append(
+            Effect(
+                kind=EffectKind.EXACT_NEW_SET,
+                new_records=[dict(selector_all)] * record.expected_count,
+                expected_count=record.expected_count,
+                identity_field=record.identity_field,
+                risk="reversible",
+                probe=(
+                    f"exactly {record.expected_count} new {record.name} record(s) "
+                    "added, and nothing else"
+                ),
+                timeout_s=record.timeout_s,
+            )
+        )
     for name in record.fields:
         if name in record.match:
             continue
@@ -209,11 +248,30 @@ def apply_verify_config(
             }
         )
     elif config.record.duplicate_key is not None:
+        key = config.record.duplicate_key
         for effect in save.effects:
-            if effect.kind.value == "record_written" and effect.idempotency_key is None:
-                effect.idempotency_key = ValueExpr(param=config.record.duplicate_key)
-                effect.key_field = config.record.duplicate_key
-                notes.append({"change": "duplicate_key", "step": save.id})
+            if (
+                effect.kind.value != "record_written"
+                or effect.idempotency_key is not None
+                or effect.composite_key
+            ):
+                continue
+            if isinstance(key, str):
+                effect.idempotency_key = ValueExpr(param=key)
+                effect.key_field = key
+            else:
+                # The compiled check names its fields in ``match``; a key
+                # field it does not name is a typo or a field it cannot read.
+                missing = [name for name in key if name not in effect.match]
+                if missing:
+                    raise QualifyConfigError(
+                        f"record.duplicate_key names {missing}, which the record "
+                        f"check on {save.id} does not select by "
+                        f"({sorted(effect.match)}); give record.fields, or name "
+                        "fields the check selects by"
+                    )
+                effect.composite_key = {name: effect.match[name] for name in key}
+            notes.append({"change": "duplicate_key", "step": save.id})
     if (
         config.minimum_readback is not None
         and workflow.minimum_readback != config.minimum_readback
@@ -286,6 +344,13 @@ def check_ready(
             problems.append(
                 f"record.fields.{name} uses parameter {expr.param!r}, which has no input"
             )
+    from openadapt_flow.runtime.target_param import (
+        UNQUALIFIED_SELECTION_REASON,
+        record_selecting_steps,
+    )
+
+    for step in record_selecting_steps(workflow):
+        problems.append(f"step {step.id} {UNQUALIFIED_SELECTION_REASON}")
     if save.anchor is None or not save.identity_armed:
         problems.append(f"save step {save.id} has no armed identity check")
     if not save.effects:
@@ -297,12 +362,15 @@ def check_ready(
         problems.append(
             f"save step {save.id} has an unconfirmed placeholder record check"
         )
+    structural = save.anchor.structural if save.anchor is not None else None
     if save.anchor is not None and (
-        save.anchor.structural is None or not save.anchor.structural.selector
+        structural is None
+        or not (structural.selector or (structural.role and structural.name))
     ):
         problems.append(
-            f"save step {save.id} has no structural selector: the web fault "
-            "driver needs it for the ambiguity and identity faults"
+            f"save step {save.id} has no structural locator (a selector, or a "
+            "role and a name): the web fault driver needs it for the ambiguity "
+            "and identity faults"
         )
     return problems
 
@@ -372,9 +440,21 @@ def configure_project(
         runtime_version=FLOW_VERSION,
         required_capabilities=capabilities,
     )
+    # Re-qualifying a bundle that already has a project (a sealed copy, a
+    # repaired copy, or one certified before) replaces the project with a new
+    # revision of it: the same project id, revision + 1, linked to the prior
+    # revision's digest. Every case runs again; nothing carries over.
+    prior = workflow.qualification
     project = init_project(
-        workflow, environment=boundary, minimum_effect_tier=minimum_effect_tier
+        workflow,
+        environment=boundary,
+        minimum_effect_tier=minimum_effect_tier,
+        replace=prior is not None,
     )
+    if prior is not None:
+        project.project_id = prior.project_id
+        project.revision = prior.revision + 1
+        project.previous_revision_sha256 = prior.revision_digest()
     record = config.record.name
     for step in workflow.steps:
         irreversible = step.risk == "irreversible"
@@ -695,6 +775,12 @@ def _run(
                 for s in workflow.steps
             ),
         )
+        if workflow.encrypted:
+            # An encrypted bundle's runs keep their durable checkpoints under
+            # the same key (Standard and Regulated require them encrypted).
+            from openadapt_flow import crypto
+
+            kwargs["checkpoint_key"] = crypto.resolve_key(None)
         if hooks.replayer_kwargs is not None:
             kwargs.update(hooks.replayer_kwargs(ctx))
         # The signed lookup settings win over any hook, so a hook can't turn
@@ -788,10 +874,19 @@ def case_result(
     if project is None:
         raise QualifyError("the workflow's qualification project disappeared")
     run_dir = trial_dir / "run"
+    from openadapt_flow import sealed_set
+
+    # A sealed bundle's run directory is a sealed set: its files are bound by
+    # their logical names and plaintext digests, as the run report names them.
+    run_files = (
+        sealed_set.list_files(run_dir)
+        if sealed_set.is_sealed_path(run_dir)
+        else [path for path in run_dir.rglob("*") if path.is_file()]
+    )
     run_artifacts = [
         _evidence_ref(root, path, "other")
-        for path in sorted(run_dir.rglob("*"))
-        if path.is_file() and path.name != "report.json"
+        for path in sorted(run_files)
+        if path.name != "report.json"
     ]
     faults = (
         [

@@ -216,7 +216,10 @@ def test_wrong_patient_is_refuted(cfg, sor, tmp_path):
     base, _db = sor
     result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base, fault="wrong_record"))
     assert result["receipt"]["effect_verdict"] == "REFUTED"
-    assert result["receipt"]["outcome"] == "halted_before_effect"
+    # The intended record is absent, but a record was written to another
+    # patient: the frame sees it, so this is not "nothing happened".
+    assert result["receipt"]["checked"]["frame"] == "refuted"
+    assert result["receipt"]["outcome"] == "reconciliation_required"
 
 
 def test_duplicate_write_needs_reconciliation(cfg, sor, tmp_path):
@@ -459,6 +462,7 @@ def test_receipt_keeps_every_execute_v1_field(cfg, sor, tmp_path):
         "executor_ref_sha256",
         "effect_verdict",
         "verification_tier",
+        "checked",
         "checked_how",
     }
     assert receipt["schema_version"] == EFFECT_RECEIPT_SCHEMA

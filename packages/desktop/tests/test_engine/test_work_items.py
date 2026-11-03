@@ -398,7 +398,7 @@ def test_a_proven_no_write_stop_can_run_again_once(task) -> None:
     item = first["item"]
     assert item["halt_kind"] == "wrong_record"
     assert item["expected"] == "M-1" and item["observed"] == "M-9"
-    assert item["actions"] == ["retry", "skip", "decline", "teach"]
+    assert item["actions"] == ["retry", "skip", "decline", "teach", "done_by_person"]
     inbox = disp.dispatch("list_attention_items", {})["items"]
     assert [entry["item_id"] for entry in inbox] == [item["item_id"]]
     assert disp.dispatch("get_needs_attention", {})["count"] == 1
