@@ -1049,3 +1049,19 @@ def test_an_approvers_section_without_a_root_is_unreadable(tmp_path):
     config.write_text("approvers:\n  key_dir: /tmp/keys\n")
     with pytest.raises(ValueError):
         load_deployment(str(config), allow_unresolved=True)
+
+
+def test_the_pin_hashes_the_exact_bytes_crlf_included(tmp_path):
+    """On Windows a text-mode read turns CRLF into LF; the pin must hash and
+    keep the bytes as written, line endings included."""
+    import hashlib
+
+    from openadapt_flow.deployment import _PINNED_CONFIG_BYTES, pin_deployment_bytes
+
+    config = tmp_path / "deployment.yaml"
+    raw = b"name: clinic\r\nbackend:\r\n  kind: web\r\n"
+    config.write_bytes(raw)
+    try:
+        assert pin_deployment_bytes(config, hashlib.sha256(raw).hexdigest()) == raw
+    finally:
+        _PINNED_CONFIG_BYTES.clear()

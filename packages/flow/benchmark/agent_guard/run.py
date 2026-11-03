@@ -34,6 +34,7 @@ import argparse
 import json
 import os
 import queue
+import re
 import signal
 import subprocess
 import sys
@@ -56,6 +57,8 @@ NOTE = "Agent guard benchmark triage note"
 OTHER_NOTE = "A note that belongs to another task"
 PERSON = "Bench Reviewer"
 ARMS = ("agent_alone", "guard", "observe_only")
+#: The guard's progress line for its recording (``openadapt-flow guard``).
+_KEPT = re.compile(r"guard: recording kept (\d+) browser events")
 
 
 @dataclass(frozen=True)
@@ -228,6 +231,8 @@ class _GuardProcess:
         )
         self.lines: "queue.Queue[str]" = queue.Queue()
         self.stderr: list[str] = []
+        #: Browser events the guard's recording has kept a frame for.
+        self.kept = 0
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self) -> None:
@@ -235,6 +240,22 @@ class _GuardProcess:
         for line in self.proc.stderr:
             self.stderr.append(line)
             self.lines.put(line)
+            match = _KEPT.match(line)
+            if match:
+                self.kept = int(match.group(1))
+
+    def wait_kept(self, events: int, timeout_s: float = 30.0) -> None:
+        """Wait until the recording has kept ``events`` browser events.
+
+        Past the timeout the agent acts anyway; the recorder then refuses
+        the run, which the caller sees as ``no_recording``.
+        """
+
+        deadline = time.monotonic() + timeout_s
+        while self.kept < events and time.monotonic() < deadline:
+            if self.proc.poll() is not None:
+                return
+            time.sleep(0.05)
 
     def wait_attached(self, timeout_s: float = 90.0) -> None:
         deadline = time.monotonic() + timeout_s
@@ -327,6 +348,9 @@ def run_one(
                 args.append("--no-teach")
             guard = _GuardProcess(args)
             guard.wait_attached()
+            if teach:
+                # Act only once the recording has kept the last action.
+                agent.before_action = guard.wait_kept
         started = time.monotonic()
         acted = agent.add_triage_note(patient=scenario.patient, note=scenario.note)
         # A handed-over run compiles the draft after the read-back.

@@ -454,8 +454,21 @@ class FallbackGrounder:
                 return match
         return None
 
+    def locate_anchor(self, screen_png: bytes, template_png: bytes) -> list[Any]:
+        """The look-alikes from the first chained local grounding model
+        (:mod:`openadapt_flow.runtime.local_grounder`), or none."""
+        for g in self._grounders:
+            locate_anchor = getattr(g, "locate_anchor", None)
+            if locate_anchor is not None:
+                return list(locate_anchor(screen_png, template_png))
+        return []
 
-def build_grounder(fallback: Optional[Any] = None) -> Optional[Any]:
+
+def build_grounder(
+    fallback: Optional[Any] = None,
+    *,
+    local_model: Optional[Any] = None,
+) -> Optional[Any]:
     """Assemble the runtime's preferred grounder.
 
     Order of preference:
@@ -467,11 +480,20 @@ def build_grounder(fallback: Optional[Any] = None) -> Optional[Any]:
        ``RemoteGrounder``) for text-less surfaces. Passed in by the caller so
        this module stays decoupled from ``runtime.remote_vlm``.
 
+    ``local_model`` (a :class:`~openadapt_flow.runtime.local_grounder.
+    LocalGroundingModel`, off unless the operator turns on local grounding)
+    joins the chain for the pixel-surface look-alike rung.
+
     Returns a single grounder, a :class:`FallbackGrounder` chaining both, or
     None when neither is available (equivalent to :class:`NullGrounder`: the
     ladder simply has no grounder rung — the safe, model-free default).
     """
     chain: list[Any] = []
+    if local_model is not None:
+        # The local grounding model only answers ``locate_anchor`` (it needs
+        # the recorded crop); its ``locate`` abstains, so it never shadows
+        # the grounders behind it.
+        chain.append(local_model)
     ocr = OCRAnchorGrounder.available()
     if ocr is not None:
         chain.append(ocr)

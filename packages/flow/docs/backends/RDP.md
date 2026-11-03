@@ -138,12 +138,15 @@ API the backend expects. Construct it from plain credentials:
 from openadapt_flow.backends.rdp_backend import AardwolfTransport, FreeRDPBackend
 
 transport = AardwolfTransport.from_credentials(
-    "10.0.0.5", "clinicuser", "password",
-    domain=None,          # omit for a local account; set for a Windows domain
+    "10.0.0.5",
+    "clinicuser",
+    "password",
+    domain=None,  # omit for a local account; set for a Windows domain
     port=3389,
-    width=1280, height=800,
+    width=1280,
+    height=800,
 )
-backend = FreeRDPBackend(transport)   # connects on construction
+backend = FreeRDPBackend(transport)  # connects on construction
 png = backend.screenshot()
 backend.click(640, 400)
 backend.close()
@@ -170,7 +173,11 @@ command line or in a log, and the transport doesn't keep it.
 
 ```python
 from openadapt_flow.backends.rdp_backend import FreeRDPBackend
-from openadapt_flow.backends.xfreerdp import RdpTarget, SessionProfile, XFreeRDPTransport
+from openadapt_flow.backends.xfreerdp import (
+    RdpTarget,
+    SessionProfile,
+    XFreeRDPTransport,
+)
 
 transport = XFreeRDPTransport(
     RdpTarget("10.0.0.5", 3389, username="svc-records"),

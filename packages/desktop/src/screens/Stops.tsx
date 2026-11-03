@@ -409,6 +409,12 @@ export function Stops({
           </Callout>
         )
       )}
+      {keyReady && keyReady.ready && keyReady.pinned === false && list.length > 0 && (
+        <Callout tone="warn" title="No approver root is pinned on this computer">
+          Answers here won't count until an administrator pins the root with{" "}
+          <code>openadapt-desktop approver-pin</code>.
+        </Callout>
+      )}
       {help && (
         <Callout tone="info" title="Keys">
           1-9 answer this stop. J or ↓ next, K or ↑ previous. X adds this stop to a batch

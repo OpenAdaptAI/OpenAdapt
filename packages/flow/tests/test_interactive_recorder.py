@@ -137,6 +137,14 @@ def test_field_labels_captured_passively_on_type_events(recording: Path) -> None
     assert SECRET not in json.dumps(labels)
 
 
+def test_a_parameters_type_event_carries_its_field_rect(recording: Path) -> None:
+    # Compile drops a click's label as a fragment of a typed value only
+    # inside the field it was typed into (_label_shows_param_value).
+    (note,) = [e for e in _events(recording) if e.get("param") == "note"]
+    x, y, w, h = note["field_rect"]
+    assert w > 0 and h > 0
+
+
 def test_unparameterized_label_yields_flagged_proposal_only(bundle: Path) -> None:
     """The username field was typed WITHOUT --param, so its label yields a
     flagged proposal (sidecar) -- and nothing else: the compiled step stays a

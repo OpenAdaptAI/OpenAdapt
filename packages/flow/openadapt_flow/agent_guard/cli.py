@@ -153,6 +153,11 @@ def cmd_guard(args: argparse.Namespace) -> int:
                 file=sys.stderr,
                 flush=True,
             ),
+            on_recorded=lambda kept: print(
+                f"guard: recording kept {kept} browser events",
+                file=sys.stderr,
+                flush=True,
+            ),
             stop=lambda: bool(stopping),
         )
     except BrowserAttachError as exc:

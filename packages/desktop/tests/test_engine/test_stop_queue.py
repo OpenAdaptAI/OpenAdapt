@@ -337,7 +337,13 @@ def test_without_an_approver_key_nothing_changes(tmp_path):
     disp = EngineDispatcher(config, services=EngineServices(config, db=db, audit=_Audit()))
     _stop(db, "item-40", lname="Fairwick")
     listed = disp.dispatch("list_stop_cards", {})
-    assert listed["approver_key"] == {"ready": False, "in_app": False, "touch_id": False}
+    assert listed["approver_key"] == {
+        "ready": False,
+        "in_app": False,
+        "touch_id": False,
+        "pinned": False,
+        "anchored": False,
+    }
 
     answer = disp.dispatch(
         "answer_stop_cards", {"card_ids": [listed["cards"][0]["card_id"]], "choice": "same"}

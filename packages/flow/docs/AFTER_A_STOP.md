@@ -1,6 +1,7 @@
 # After a stop
 
-A stop isn't a rollback. A workflow can save a record on one tab, then stop on
+A stop isn't a rollback. (To have Flow roll a stopped run back on its own and
+prove it with a read of the whole database, see [ROLLBACK.md](ROLLBACK.md).) A workflow can save a record on one tab, then stop on
 another tab because a check failed. The first save is still in the
 application. Flow doesn't hide that or guess about it. It tells a person what
 may need undoing, flags programs that write before they check, and runs a
@@ -198,7 +199,9 @@ from openadapt_flow.after_stop import approve_undo, offer_undos, run_undo
 
 offers = offer_undos(run_dir, workflow)
 approve_undo(run_dir, workflow, "undo-triage", approver="nurse-a")
-result = run_undo(run_dir, workflow, "undo-triage", replayer=replayer, bundle_dir=bundle)
+result = run_undo(
+    run_dir, workflow, "undo-triage", replayer=replayer, bundle_dir=bundle
+)
 assert result.status == "verified"
 ```
 

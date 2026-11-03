@@ -42,6 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Reads the launcher's newest green run on main.
+      actions: read
 
     steps:
       - name: Checkout the exact launcher candidate
@@ -49,11 +51,19 @@ jobs:
         with:
           ref: ${{ github.ref }}
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+
+      - name: Require the newest green main run for the launcher
+        # The same rule every package releases by: the newest commit on main
+        # that changed the launcher must have a passed Python CI push run.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/newest_green.py launcher --tip HEAD
 
       - name: Verify the pinned Flow and agent releases against PyPI
         run: python scripts/verify_release_components.py

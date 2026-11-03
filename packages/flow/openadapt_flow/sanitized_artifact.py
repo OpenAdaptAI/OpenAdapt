@@ -254,6 +254,7 @@ _RECORDING_STRUCTURAL_JSON_KEYS = frozenset(
         "source",
         "structural",
         "structured_identity",
+        "structured_ambiguous",
         "structured_row",
         "t",
         "task_description",

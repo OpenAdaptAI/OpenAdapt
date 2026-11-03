@@ -1,0 +1,243 @@
+{
+  "arms": {
+    "openadapt-production-relabel": {
+      "bands": {
+        "x0.5": {
+          "maintenance_min": 3.75,
+          "manual_only_hours": 0.05,
+          "manual_only_items_per_hour": 40.0,
+          "operator_hours": 0.153,
+          "operator_hours_with_cleanup": 0.153,
+          "per_item_operator_min": 1.458,
+          "per_item_operator_min_total": 2.92,
+          "setup_min": 2.5,
+          "verified_completed_per_operator_hour": 6.55,
+          "verified_completed_per_operator_hour_with_cleanup": 6.55,
+          "work_removed_fraction": -2.056
+        },
+        "x1": {
+          "maintenance_min": 7.5,
+          "manual_only_hours": 0.1,
+          "manual_only_items_per_hour": 20.0,
+          "operator_hours": 0.306,
+          "operator_hours_with_cleanup": 0.306,
+          "per_item_operator_min": 2.917,
+          "per_item_operator_min_total": 5.83,
+          "setup_min": 5.0,
+          "verified_completed_per_operator_hour": 3.27,
+          "verified_completed_per_operator_hour_with_cleanup": 3.27,
+          "work_removed_fraction": -2.056
+        },
+        "x2": {
+          "maintenance_min": 15.0,
+          "manual_only_hours": 0.2,
+          "manual_only_items_per_hour": 10.0,
+          "operator_hours": 0.611,
+          "operator_hours_with_cleanup": 0.611,
+          "per_item_operator_min": 5.833,
+          "per_item_operator_min_total": 11.67,
+          "setup_min": 10.0,
+          "verified_completed_per_operator_hour": 1.64,
+          "verified_completed_per_operator_hour_with_cleanup": 1.64,
+          "work_removed_fraction": -2.056
+        }
+      },
+      "by_exception": {
+        "clean": {
+          "correct": 1,
+          "false_stop": 1
+        }
+      },
+      "complete": true,
+      "cost_model": "lifecycle-cost/2026-10-20.1",
+      "describe": {
+        "api_tier": "where admissible (refused on the OpenEMR referral by its own proposal; the GUI save runs)",
+        "approval": "problems_only (local stand-in for Cloud's switch status)",
+        "authorization": "governed run gate on the certified, encrypted bundle",
+        "checkpoint_store": "encrypted",
+        "configuration": "benchmark/lifecycle_proof (proof-15)",
+        "duplicate_check": "no_duplicate_candidate on step_039 (rows tr.oneresult; a row with the item's last name or date of birth stops the item)",
+        "durable": true,
+        "model_calls": "none on any path",
+        "pin": "admitted digest; repaired versions only through signed lineage",
+        "policy": "clinical-write",
+        "profile": "regulated",
+        "qualification_trials": 1,
+        "readback": "pipelined, window 1; the harness waits for each check",
+        "recovery": "relabel",
+        "repair": "self-repair on a halt before any effect (rule-based agent, no model)"
+      },
+      "done_by_hand": 1,
+      "false_stop_rate": {
+        "ci95": [
+          0.0945,
+          0.9055
+        ],
+        "definition": "stops with nothing written on items whose data was right and that carried no item-level fault, over all such items",
+        "k": 1,
+        "n": 2,
+        "rate": 0.5,
+        "with_ui_change_in_force": 1
+      },
+      "final_correct": 2,
+      "headline": {
+        "bands": {
+          "x0.5": {
+            "after_app_change": [
+              {
+                "first_seq": 1,
+                "first_verified_seq": 1,
+                "items_false_stopped": 1,
+                "items_in_window": 2,
+                "kind": "relabel_save",
+                "maintenance_operator_min": 6.25,
+                "seconds_to_running_again": 1133.8
+              }
+            ],
+            "operator_min_per_stop": 2.5,
+            "operator_min_run": 6.67,
+            "operator_min_setup": 2.5,
+            "verified_per_operator_minute": 0.15,
+            "verified_per_operator_minute_with_setup": 0.109
+          },
+          "x1": {
+            "after_app_change": [
+              {
+                "first_seq": 1,
+                "first_verified_seq": 1,
+                "items_false_stopped": 1,
+                "items_in_window": 2,
+                "kind": "relabel_save",
+                "maintenance_operator_min": 12.5,
+                "seconds_to_running_again": 1133.8
+              }
+            ],
+            "operator_min_per_stop": 5.0,
+            "operator_min_run": 13.33,
+            "operator_min_setup": 5.0,
+            "verified_per_operator_minute": 0.075,
+            "verified_per_operator_minute_with_setup": 0.055
+          },
+          "x2": {
+            "after_app_change": [
+              {
+                "first_seq": 1,
+                "first_verified_seq": 1,
+                "items_false_stopped": 1,
+                "items_in_window": 2,
+                "kind": "relabel_save",
+                "maintenance_operator_min": 25.0,
+                "seconds_to_running_again": 1133.8
+              }
+            ],
+            "operator_min_per_stop": 10.0,
+            "operator_min_run": 26.67,
+            "operator_min_setup": 10.0,
+            "verified_per_operator_minute": 0.037,
+            "verified_per_operator_minute_with_setup": 0.027
+          }
+        },
+        "definition": "verified completed items (oracle-correct, not done by hand) per operator-minute; operator minutes are every charged approval, stop, reconciliation, resume, repair review and item done by hand, plus maintenance; *_with_setup also charges admission",
+        "false_stops_per_100_items": 50.0,
+        "items": 2,
+        "manual_entry_min": 3.0,
+        "stops_by_cause": {
+          "false_stop": {
+            "duplicate check listed a chart": 1
+          }
+        },
+        "stops_per_100_items": 50.0,
+        "verified_completed": 1
+      },
+      "items": 2,
+      "model": {
+        "calls": 0,
+        "cost_usd": 0.0
+      },
+      "operator_actions": {
+        "accept_repair": 1,
+        "approve": 1,
+        "do_by_hand": 1
+      },
+      "operator_requests": {
+        "approval": 1,
+        "repair_review": 1,
+        "stop": 1
+      },
+      "outcomes": {
+        "correct": 1,
+        "false_stop": 1
+      },
+      "per_drift": {
+        "relabel_save": {
+          "first_seq": 1,
+          "items": 2,
+          "outcomes": {
+            "correct": 1,
+            "false_stop": 1
+          },
+          "repair_reviews": 1
+        }
+      },
+      "silent_wrong_rate": {
+        "ci95": [
+          0.0,
+          0.7935
+        ],
+        "definition": "items the arm claimed done that the independent oracle judged wrong, over all items the arm claimed done",
+        "k": 0,
+        "n": 1,
+        "of_all_items": 0.0,
+        "rate": 0.0
+      },
+      "stops": 1,
+      "verified_completed": 1,
+      "wall": {
+        "load_1m_max": 20.7,
+        "load_1m_median": 20.7,
+        "median_item_s": 1133.0,
+        "total_s": 1395.0
+      }
+    }
+  },
+  "run": {
+    "app": {
+      "api_url": "https://127.0.0.1:9400",
+      "app": "openemr",
+      "baseline_sha256": "015bef02fb30530e2ed64c17e8035623a39801a9008f2df307eaf53e420e98ba",
+      "images": {
+        "mariadb": "mariadb:11.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4",
+        "openemr": "openemr/openemr:8.0.0.3@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab"
+      },
+      "project": "openadapt-openemr-compose",
+      "ui_url": "http://127.0.0.1:9401",
+      "version": "8.0.0.3"
+    },
+    "argv": null,
+    "cost_model": {
+      "admit_s": 300.0,
+      "approval_s": 20.0,
+      "calibration": "No timings from real operators exist yet. Desktop and the console record when a request was raised and when it was answered, but every answer on record was given by a script, so those gaps measure the harness, not a person. Until Desktop has real operator telemetry, the per-touch numbers below are assumptions: keystroke-level estimates for reading a card and clicking (approval), plus looking a record up in the app (stop, reconcile), and a typed-entry estimate for a 12-field registration form (manual entry: about 120 characters at 40 words a minute, plus reading the referral and the duplicate search). The interrupt charge is the resumption lag reported in interruption studies (tens of seconds).",
+      "compile_review_s": 600.0,
+      "interrupt_s": 30.0,
+      "manual_entry_s": 180.0,
+      "question_s": 60.0,
+      "reconcile_s": 120.0,
+      "repair_review_s": 120.0,
+      "stop_s": 90.0,
+      "teach_prep_s": 300.0,
+      "version": "lifecycle-cost/2026-10-20.1"
+    },
+    "cpus": 12,
+    "days": 1,
+    "engine_commit": "fd0bdcbac8078732334b66666929a15321fce3a1",
+    "host": "MacBook-Pro-5",
+    "items": 2,
+    "platform": "macOS-15.7.3-arm64-arm-64bit",
+    "protocol": "lifecycle/2026-10-20.1",
+    "seed": 7,
+    "stop_after": null,
+    "type": "run_start",
+    "workload": "lifecycle-workload/2026-10-20.2"
+  }
+}

@@ -30,7 +30,7 @@ or a report export. It reports success only when the record matches what it
 entered.
 
 It drives web apps through Playwright; Windows, macOS, and Linux apps through
-their accessibility APIs; and Citrix or remote desktops through screen pixels.
+their accessibility APIs; and remote desktops (RDP, Citrix) through screen pixels.
 Agents can call a compiled workflow as one tool over MCP; see
 [Give your agent a program, not a mouse](#give-your-agent-a-program-not-a-mouse).
 
@@ -182,9 +182,9 @@ saw. Neither run makes a model call. The run artifacts are in
 
 Record the task against a test copy of your web app, compile it, and replay
 it. An agent can drive the recording through the authoring tools in a
-browser, in macOS, Linux, and native Windows apps, and over RDP or Citrix. On
+browser, in macOS, Linux, and native Windows apps, and through the RDP and Citrix backends. On
 Windows the agent's input goes through the same synthetic-input path that
-replay uses. RDP and Citrix are screen-only: the agent works from the client
+replay uses. On RDP and Citrix the agent works from the client
 window's pixels and keys, as a person would. The recording says whether an
 agent or a person did each step, and a person accepts the result. With
 several recordings of the same task, `induce` finds which values
@@ -217,8 +217,7 @@ print(report.transaction_outcome)  # COMPLETED_UNVERIFIED: a rehearsal
 Python 3.10 through 3.12 is supported. On Windows `cmd.exe`, use double
 quotes: `pip install "openadapt-flow[browser]"`.
 
-`lint` lists what the bundle doesn't cover yet, such as a write with no record
-check. It exits 1 only for an `error`; a fresh recording usually has a few
+`lint` lists what the bundle still needs, such as a record check for a write. It exits 1 only for an `error`; a fresh recording usually has a few
 warnings. `replay` is a rehearsal: it runs the steps but doesn't read the
 record back. It ends `COMPLETED_UNVERIFIED` (finished, not checked) and exits
 0, so exit 0 from `replay` doesn't mean the save was confirmed.
@@ -404,49 +403,31 @@ OpenAdapt Cloud at `app.openadapt.ai` is an optional hosted control plane for
 browser workflows. Desktop and Citrix runs are self-hosted
 ([docs/HOSTED.md](docs/HOSTED.md)).
 
-## Limits
+## When it fits
 
-- If the app has an API for the task, call the API.
-- Each workflow takes setup: a recording, a description of its writes, and a
-  second read path. For a task you'll run a few times, doing it by hand or
-  pointing an agent at it costs less.
-- A record check sees only what its read path covers. In a fault test with
-  injected bad writes, a screen-only check passed 54 of
-  the 72 runs that left the record wrong. One API read let 9 of the 72
-  through, all writes to a table it didn't read
+- The same entry repeats in an app with no API for the task. If the app has
+  an API, call the API.
+- The system of record can be read through a second path: an API, the
+  database, FHIR, a report export or a separate signed-in session. The record
+  check reads whatever that path covers. In a fault test with injected bad
+  writes, a screen-only check passed 54 of the 72 runs that left the record
+  wrong, one API read passed 9, and a read of every table passed none
   ([`EFFECT_E2E.md`](benchmark/effect_e2e/EFFECT_E2E.md)).
-- The identity check runs only on steps where the recording captured
-  identifying context. The live OpenEMR bundle had it on 4 to 7 of 12 clicks.
-  On pixel surfaces a recording can now keep an icon-only click's hover
-  response (highlight or tooltip) as evidence; replay compares it and stops
-  before the click when it differs. It needs a backend that can move the
-  pointer without clicking (browser, remote-display, FreeRDP).
-- On a pixel surface, a record ID with 1/l or 0/O used to stop the run at
-  every render but the recorded one. Before stopping, the check now takes
-  extra looks; with a copy of the ID from the screen and the ID as a run
-  parameter, false stops on a rendered dense record list went from 232 to 24
-  of 288, and wrong-record accepts stayed 0
-  ([IDENTITY_LOOKS.md](benchmark/identity_looks/IDENTITY_LOOKS.md)). The copy
-  needs selectable text and, on RDP or Citrix, clipboard redirection.
-- On a remote desktop, a change in display scaling (125% to 175%) or
-  ClearType no longer stops a run by itself. This was measured on in-process
-  renderings of two kiosks, not over a live RDP or Citrix session. A run
-  still stops when the identity check can't confirm the record at the new
-  scale: in a workflow that always opens the recorded record, record IDs
-  with 1/l or 0/O stopped at every render but the recorded one. In the browser with the element locator off, zoom and font-size
-  changes still stop the run at its first step.
-- The Citrix path was tested on a stand-in with no DOM (3 healthy runs and 3
-  stops on drift), not a live Citrix ICA/HDX session. Each deployment has to
-  be tested on its own Citrix setup.
-- A stop isn't a rollback. Steps before the stop may already have changed the
-  app. The run report lists each change made before the stop, and undo steps
-  declared in the workflow can reverse them once a person approves
+- On pixel surfaces, the identity check takes extra looks before it stops on
+  a look-alike record ID: false stops on a dense record list fell from 232 to
+  24 of 288 with 0 wrong-record accepts
+  ([IDENTITY_LOOKS.md](benchmark/identity_looks/IDENTITY_LOOKS.md)). A change
+  in display scaling (125% to 175%) or ClearType doesn't stop a run by
+  itself; a run stops when the record can't be confirmed at the new scale
+  ([benchmark/pixel_scale](benchmark/pixel_scale/README.md)).
+- After a stop, the run report lists each change made before it, and undo
+  steps declared in the workflow reverse them once a person approves
   ([AFTER_A_STOP.md](docs/AFTER_A_STOP.md)).
-- The MockMed comparison numbers above are from July 2026, on Flow 0.1.0,
-  with 20 agent runs. The OpenEMR numbers are from October 2026 on one local
-  test copy with synthetic data.
 
-The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
+The MockMed comparison above is from July 2026 (Flow 0.1.0, 20 agent runs);
+the OpenEMR numbers are from October 2026 on a local test copy with synthetic
+patients. The systems each result ran on, and the boundary of every claim:
+[docs/LIMITS.md](docs/LIMITS.md).
 
 ## More documentation
 

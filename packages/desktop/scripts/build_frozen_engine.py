@@ -40,12 +40,44 @@ EXCLUDED_MODULES = (
     # application artifact.
     "setuptools",
     "_distutils_hack",
-    "openadapt_flow.benchmark",
     "openadapt_flow.validation.adversary_corpus",
     "openadapt_flow.validation.adversary_corpus_v2",
     "openadapt_flow.validation.adversary_corpus_v3",
     "openadapt_flow.validation.identity_roc",
 )
+
+#: The only benchmark modules the product imports: Flow's jit adapters read a
+#: constant from ``agent_baseline`` (standard library only at import time).
+#: Every other module of ``openadapt_flow.benchmark`` stays out.
+KEPT_BENCHMARK_MODULES = frozenset({"agent_baseline"})
+
+
+def excluded_benchmark_modules(benchmark_dir: Path | None = None) -> tuple[str, ...]:
+    """Each ``openadapt_flow.benchmark`` submodule the engine leaves out.
+
+    Read from the installed Flow at build time (without importing it), so a
+    benchmark module a later Flow adds is excluded too. Without a Flow to
+    read, the whole package is excluded.
+    """
+
+    import importlib.util
+    import pkgutil
+
+    if benchmark_dir is None:
+        spec = importlib.util.find_spec("openadapt_flow")
+        if spec is None or not spec.submodule_search_locations:
+            return ("openadapt_flow.benchmark",)
+        benchmark_dir = Path(list(spec.submodule_search_locations)[0]) / "benchmark"
+    if not benchmark_dir.is_dir():
+        return ("openadapt_flow.benchmark",)
+    return tuple(
+        sorted(
+            f"openadapt_flow.benchmark.{module.name}"
+            for module in pkgutil.iter_modules([str(benchmark_dir)])
+            if module.name not in KEPT_BENCHMARK_MODULES
+        )
+    )
+
 
 # The mobile decision portal supervises ``openadapt-flow console --attend`` in
 # a second process image of this same executable, so the attended console must
@@ -246,7 +278,7 @@ def build_command(
         command.extend(("--add-data", f"{source}:{destination}"))
     notice_bundle = notice_bundle or (ROOT / ".build-frozen-notices")
     command.extend(("--add-data", f"{notice_bundle}:{NOTICE_BUNDLE_MEMBER}"))
-    for module in EXCLUDED_MODULES:
+    for module in (*EXCLUDED_MODULES, *excluded_benchmark_modules()):
         command.extend(("--exclude-module", module))
     # A Developer ID build must sign the binaries *inside* PyInstaller's
     # one-file archive with the same identity Tauri later applies to the

@@ -1,0 +1,85 @@
+{
+  "admitted": false,
+  "refusals": [],
+  "to_confirm": [
+    "identity: Immunization has no reviewed template; proposed ['patient', 'vaccine_code']"
+  ],
+  "provenance": {
+    "fields.lot_number.path": "bound in 3 of 3 demonstrations",
+    "fields.occurrence_date.path": "bound in 3 of 3 demonstrations",
+    "fields.occurrence_date.compare": "a FHIR date element, and every stored value is a date",
+    "fields.patient.path": "bound in 3 of 3 demonstrations",
+    "fields.vaccine_code.path": "bound in 3 of 3 demonstrations",
+    "fields.vaccine_display.path": "bound in 3 of 3 demonstrations",
+    "allow.primarySource=false": "the same value in every demonstration",
+    "allow.status=\"completed\"": "the same value in every demonstration",
+    "allow.vaccineCode.coding.system=\"http://hl7.org/fhir/sid/cvx\"": "the same value in every demonstration",
+    "identity.patient+vaccine_code": "proposed: every bound field a reference or token search finds",
+    "search.patient": "CapabilityStatement + SearchParameter: patient (reference)",
+    "search.vaccine_code": "CapabilityStatement + SearchParameter: vaccine-code (token)",
+    "closed": "always: generation never opens the record",
+    "change_feed.audit": "facts: the audit trail logs writes and names the actor",
+    "change_feed.audit.heartbeat": "always on: an empty audit window proves nothing unless the verifier's own read shows up",
+    "change_feed.history": "facts: history_lists_versions",
+    "change_feed.history_author": "facts: meta_author_returned",
+    "change_feed.sweep_types": "the resource type",
+    "settle_s": "facts: 3 x the slowest audit lag measured, at least 1 s"
+  },
+  "checks": [
+    "3 demonstrations read back right and closed; 5 field perturbations and one extra element caught in each"
+  ],
+  "contract": {
+    "schema_version": "openadapt.ensure-record/v1",
+    "resource_type": "Immunization",
+    "base_url": "${MEDPLUM_FHIR_URL}",
+    "access_token_env": "MEDPLUM_RECORD_TOKEN",
+    "self": [
+      "${MEDPLUM_BOT_REF}"
+    ],
+    "fields": {
+      "lot_number": {
+        "path": "lotNumber"
+      },
+      "occurrence_date": {
+        "path": "occurrenceDateTime",
+        "compare": "date"
+      },
+      "patient": {
+        "path": "patient.reference"
+      },
+      "vaccine_code": {
+        "path": "vaccineCode.coding.code"
+      },
+      "vaccine_display": {
+        "path": "vaccineCode.coding.display"
+      }
+    },
+    "identity": [
+      [
+        "patient",
+        "vaccine_code"
+      ]
+    ],
+    "search": {
+      "patient": "patient",
+      "vaccine_code": "vaccine-code"
+    },
+    "closed": true,
+    "allow": [
+      "primarySource=false",
+      "status=\"completed\"",
+      "vaccineCode.coding.system=\"http://hl7.org/fhir/sid/cvx\""
+    ],
+    "change_feed": {
+      "audit": {
+        "heartbeat": true
+      },
+      "history": true,
+      "history_author": false,
+      "sweep_types": [
+        "Immunization"
+      ]
+    },
+    "settle_s": 1.0
+  }
+}

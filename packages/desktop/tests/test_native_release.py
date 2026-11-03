@@ -73,10 +73,24 @@ def _job_steps(job: dict) -> dict[str, dict]:
     return {str(step.get("name") or step.get("uses")): step for step in job["steps"]}
 
 
+def _action_uses(steps: list[dict]) -> list[str]:
+    """Every action the steps use, with a local composite action's own steps in its place."""
+
+    uses = []
+    for step in steps:
+        if "uses" not in step:
+            continue
+        if step["uses"].startswith("./.github/actions/"):
+            action = yaml.safe_load((ROOT.parents[1] / step["uses"] / "action.yml").read_text())
+            assert action["runs"]["using"] == "composite"
+            uses.extend(_action_uses(action["runs"]["steps"]))
+        else:
+            uses.append(step["uses"])
+    return uses
+
+
 def _workflow_uses(payload: dict) -> list[str]:
-    return [
-        step["uses"] for job in payload["jobs"].values() for step in job["steps"] if "uses" in step
-    ]
+    return [use for job in payload["jobs"].values() for use in _action_uses(job["steps"])]
 
 
 def test_native_versions_are_synchronized() -> None:
@@ -110,7 +124,7 @@ def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
     assert all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", use) for use in uses)
 
     trigger = release[True]
-    assert set(trigger) == {"workflow_run", "workflow_dispatch"}
+    assert set(trigger) == {"workflow_run", "schedule", "workflow_dispatch"}
     assert trigger["workflow_run"] == {
         "workflows": ["Packages"],
         "types": ["completed"],
@@ -204,7 +218,7 @@ def test_qualification_runs_the_in_tree_tray_protocol_peer() -> None:
         step for step in steps if step.get("name") == "Exercise the Desktop and Tray IPC contract"
     )
     assert contract["env"] == {"OPENADAPT_TRAY_SOURCE": "../tray/src"}
-    assert contract["run"] == "uv run pytest tests/test_tray_integration.py -v"
+    assert contract["run"] == "uv run --locked pytest tests/test_tray_integration.py -v"
     assert (ROOT / contract["env"]["OPENADAPT_TRAY_SOURCE"] / "openadapt_tray" / "ipc.py").is_file()
 
 
@@ -215,7 +229,7 @@ def test_linux_sidecar_installs_browser_libraries_before_the_frozen_smoke() -> N
         step for step in steps if step.get("name") == "Install Linux Chromium runtime libraries"
     )
     assert libraries["if"] == "runner.os == 'Linux'"
-    assert libraries["run"] == "uv run python -m playwright install-deps chromium"
+    assert libraries["run"] == "uv run --locked python -m playwright install-deps chromium"
     aliases = next(
         step for step in steps if step.get("name") == "Alias lowercase X11 names for Flow 1.34.0"
     )

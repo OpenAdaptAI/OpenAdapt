@@ -1,0 +1,121 @@
+{
+  "schema": "openadapt.rollback-measurement/v1",
+  "app": "openemr",
+  "mode": "live (pinned OpenEMR fixture, real browser, whole-database read)",
+  "bundle": "scoreboard openemr_referral program bundle (New Patient)",
+  "profile": "openemr",
+  "measured_at": "2026-10-30T01:54:18-0400",
+  "host": "macOS-15.7.3-arm64-arm-64bit",
+  "load_1m": 9.61,
+  "seconds": 189.0,
+  "rows": {
+    "before_save_no_profile": {
+      "stopped_at": "step_028",
+      "stop_error": "Step 'step_028' (scroll by (0, -3600)): closed-loop scroll exhausted its budget (7200px of 9000px allowed, 2.5x the recorded distance) without the anchor of step 'step_029' (click 'Unassigned') resolving \u2014 target never came into view; run aborted",
+      "steps_run": 29,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "rollback_status": "not_rolled_back",
+      "rollback_reason": "rollback.attribution isn't set (or the run's own user couldn't be resolved), so another user's edit to these rows can't be told from the run's; nothing was compensated. Different now: background_services: 2 changed, columns next_run; log: 8 added; log_comment_encrypt: 8 added; users: 4 changed, columns last_updated, uuid; uuid_mapping: 9 added; uuid_registry: 13 added",
+      "after_stop_diff": {
+        "background_services": {
+          "added": 0,
+          "removed": 0,
+          "changed": 2,
+          "changed_columns": [
+            "next_run"
+          ]
+        },
+        "log": {
+          "added": 8,
+          "removed": 0,
+          "changed": 0
+        },
+        "log_comment_encrypt": {
+          "added": 8,
+          "removed": 0,
+          "changed": 0
+        },
+        "users": {
+          "added": 0,
+          "removed": 0,
+          "changed": 4,
+          "changed_columns": [
+            "last_updated",
+            "uuid"
+          ]
+        },
+        "uuid_mapping": {
+          "added": 9,
+          "removed": 0,
+          "changed": 0
+        },
+        "uuid_registry": {
+          "added": 13,
+          "removed": 0,
+          "changed": 0
+        }
+      },
+      "remaining_diff": {
+        "background_services": {
+          "added": 0,
+          "removed": 0,
+          "changed": 2,
+          "changed_columns": [
+            "next_run"
+          ]
+        },
+        "log": {
+          "added": 8,
+          "removed": 0,
+          "changed": 0
+        },
+        "log_comment_encrypt": {
+          "added": 8,
+          "removed": 0,
+          "changed": 0
+        },
+        "users": {
+          "added": 0,
+          "removed": 0,
+          "changed": 4,
+          "changed_columns": [
+            "last_updated",
+            "uuid"
+          ]
+        },
+        "uuid_mapping": {
+          "added": 9,
+          "removed": 0,
+          "changed": 0
+        },
+        "uuid_registry": {
+          "added": 13,
+          "removed": 0,
+          "changed": 0
+        }
+      },
+      "profile_id": null,
+      "cross_checked": null,
+      "steps": [],
+      "diff_file_written": true,
+      "model_calls": 0,
+      "seconds": 26.9
+    },
+    "before_save_app_profile": {
+      "stopped_at": "step_028",
+      "stop_error": "Step 'step_028' (scroll by (0, -3600)): closed-loop scroll exhausted its budget (7200px of 9000px allowed, 2.5x the recorded distance) without the anchor of step 'step_029' (click 'Unassigned') resolving \u2014 target never came into view; run aborted",
+      "steps_run": 29,
+      "transaction_outcome": "RECONCILIATION_REQUIRED",
+      "rollback_status": "not_rolled_back",
+      "rollback_reason": "the read shows nothing the run did, but the change ledger says step step_002 may have written (no compensation to read it back); the read can't see that write (an allow-listed table, a column the app profile leaves out, or a read of one collection), so a person checks",
+      "after_stop_diff": {},
+      "remaining_diff": {},
+      "profile_id": "openemr/openemr-frame-profile/2026-10-29.5",
+      "cross_checked": null,
+      "steps": [],
+      "diff_file_written": false,
+      "model_calls": 0,
+      "seconds": 21.6
+    }
+  }
+}

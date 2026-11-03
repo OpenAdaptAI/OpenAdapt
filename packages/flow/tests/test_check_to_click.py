@@ -21,6 +21,7 @@ from openadapt_flow.runtime.replayer import Replayer
 
 SIZE = (640, 400)
 BUTTON = (100, 120, 140, 44)  # x, y, w, h of the recorded target
+ROW_FIELD = (380, 120, 60, 44)  # a field on the target's row, in the identity check
 
 
 def _frame(
@@ -29,6 +30,7 @@ def _frame(
     dialog: bool = False,
     clock: str = "10:00",
     noise: int = 0,
+    caret: bool = False,
 ) -> bytes:
     img = Image.new("RGB", SIZE, (244, 246, 248))
     d = ImageDraw.Draw(img)
@@ -38,6 +40,8 @@ def _frame(
     d.rectangle((x, button_y + 70, x + w, button_y + 70 + h), fill=(180, 60, 60))
     d.text((x + 22, button_y + 85), "Delete", fill="white")
     d.text((560, 380), clock, fill="black")  # a clock far from the target
+    if caret:  # a text caret blinking in a field on the target's row
+        d.line((400, button_y + 14, 400, button_y + 28), fill="black")
     if dialog:
         d.rectangle((60, 90, 420, 260), fill="white", outline="black")
         d.text((80, 110), "Session expires soon. Continue?", fill="black")
@@ -81,7 +85,7 @@ class _Backend:
         pass
 
 
-def _bundle(tmp_path: Path) -> tuple[Path, Step, Workflow]:
+def _bundle(tmp_path: Path, identifier_region=None) -> tuple[Path, Step, Workflow]:
     checked = Image.open(io.BytesIO(_frame()))
     x, y, w, h = BUTTON
     (tmp_path / "templates").mkdir()
@@ -94,13 +98,19 @@ def _bundle(tmp_path: Path) -> tuple[Path, Step, Workflow]:
             template="templates/t.png",
             region=(x, y, w + 1, h + 1),
             click_point=(x + w // 2, y + h // 2),
+            identifier_region=identifier_region,
         ),
     )
     return tmp_path, step, Workflow(name="c2c", params={}, steps=[step])
 
 
-def _click(tmp_path: Path, frames: list[bytes], rung: str = "template"):
-    bundle, step, wf = _bundle(tmp_path)
+def _click(
+    tmp_path: Path,
+    frames: list[bytes],
+    rung: str = "template",
+    identifier_region=None,
+):
+    bundle, step, wf = _bundle(tmp_path, identifier_region)
     backend = _Backend(frames)
     replayer = Replayer(backend, vision=vision)
     x, y, w, h = BUTTON
@@ -161,6 +171,44 @@ def test_moved_target_is_reobserved_and_clicked_where_it_is_now(tmp_path):
 
 def test_a_screen_that_keeps_changing_is_refused(tmp_path):
     frames = [_frame(button_y=BUTTON[1] + d) for d in (10, 20, 30, 40)]
+    error, result, backend = _click(tmp_path, frames)
+    assert backend.clicks == []
+    assert error is not None and "kept changing" in error
+    assert [e.outcome for e in result.check_to_click] == [
+        "reobserved",
+        "reobserved",
+        "aborted",
+    ]
+
+
+def test_a_blinking_caret_settles_on_a_confirmed_frame(tmp_path):
+    # Measured on real AVC444 frames (benchmark/rdp_avc_real): the caret in a
+    # focused field inside the identity band stopped 13 runs that each
+    # compared a frame only with the one before it.
+    frames = [_frame(caret=on) for on in (True, False, True, False, True)]
+    error, result, backend = _click(tmp_path, frames, identifier_region=ROW_FIELD)
+    assert error is None
+    assert backend.clicks == [(170, 142)]
+    assert [e.outcome for e in result.check_to_click] == ["reobserved"]
+
+
+def test_a_frame_that_matches_no_confirmed_frame_is_still_refused(tmp_path):
+    frames = [
+        _frame(caret=True),
+        _frame(button_y=BUTTON[1] + 20),
+        _frame(button_y=BUTTON[1] + 40),
+        _frame(button_y=BUTTON[1] + 60),
+    ]
+    error, result, backend = _click(tmp_path, frames, identifier_region=ROW_FIELD)
+    assert backend.clicks == []
+    assert error is not None and "kept changing" in error
+
+
+def test_a_target_that_keeps_swapping_places_is_refused(tmp_path):
+    # A list flipping between two layouts: every frame is confirmable on its
+    # own, but the target never stays where the last check put it.
+    moved = _frame(button_y=BUTTON[1] + 30)
+    frames = [moved, _frame(), moved, _frame(), moved]
     error, result, backend = _click(tmp_path, frames)
     assert backend.clicks == []
     assert error is not None and "kept changing" in error

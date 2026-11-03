@@ -1,0 +1,65 @@
+{
+  "schema": "openadapt.rollback-measurement/v1",
+  "app": "mockmed",
+  "mode": "live (real browser, in-process app declared a test copy)",
+  "measured_at": "2026-10-29T21:24:11-0400",
+  "host": "macOS-15.7.3-arm64-arm-64bit",
+  "load_1m": 8.72,
+  "seconds": 68.7,
+  "rows": {
+    "qualify": {
+      "exit_code": 0,
+      "summary": {
+        "before_save_clean": 1,
+        "halt_points": 2,
+        "halt_points_rolled_back": 2,
+        "saves_with_qualified_compensation": 1,
+        "saving_steps": 1
+      }
+    },
+    "after_save": {
+      "exit_code": 1,
+      "stopped_at": "stop_here",
+      "transaction_outcome": "ROLLED_BACK",
+      "rollback_status": "rolled_back",
+      "rollback_reason": "every change the run made was compensated and the system of record matches the read from before the run",
+      "after_stop_diff": {
+        "records": {
+          "added": 1,
+          "removed": 0,
+          "changed": 0
+        }
+      },
+      "remaining_diff": {},
+      "steps": [
+        {
+          "step_id": "step_010",
+          "decision": "compensated",
+          "fresh_read": null
+        }
+      ],
+      "diff_file_written": false,
+      "records_left": 0,
+      "model_calls": 0
+    },
+    "before_save": {
+      "exit_code": 1,
+      "stopped_at": "stop_here",
+      "transaction_outcome": "HALTED_BEFORE_EFFECT",
+      "rollback_status": "nothing_landed",
+      "rollback_reason": "after the stop nothing the run did is in the system of record",
+      "after_stop_diff": {},
+      "remaining_diff": {},
+      "steps": [],
+      "diff_file_written": false,
+      "records_left": 0,
+      "model_calls": 0
+    },
+    "after_save_unapproved": {
+      "refused_before_run": true,
+      "message": "REFUSED before the run: rollback is on, and these saves have no compensation a person approved (or only a delete this deployment doesn't allow): step_010. A write that can't be undone needs a person's approval first: qualify and approve a compensation (rollback qualify, undo accept), or run with an approval mode that asks a person. Nothing ran.",
+      "report_written": false,
+      "records_left": 0
+    }
+  }
+}
