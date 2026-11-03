@@ -315,7 +315,9 @@ def test_a_named_containment_lets_children_start(tmp_path):
 
 
 def test_an_unknown_containment_stops_startup(tmp_path):
-    proc = _child("import openadapt_flow", tmp_path, OPENADAPT_NO_OUTBOUND_CHILDREN="yes")
+    proc = _child(
+        "import openadapt_flow", tmp_path, OPENADAPT_NO_OUTBOUND_CHILDREN="yes"
+    )
     assert proc.returncode != 0
     assert "OPENADAPT_NO_OUTBOUND_CHILDREN" in proc.stderr
 

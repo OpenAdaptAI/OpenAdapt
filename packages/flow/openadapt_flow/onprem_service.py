@@ -203,7 +203,10 @@ def run_service(
     for key in ("inbox", "processing", "failed", "runs", "audit"):
         p[key].mkdir(parents=True, exist_ok=True)
     cenv = child_env(cfg, base)
-    if not cfg.allow_outbound and not str(cenv.get(no_outbound.ENV_CHILDREN, "")).strip():
+    if (
+        not cfg.allow_outbound
+        and not str(cenv.get(no_outbound.ENV_CHILDREN, "")).strip()
+    ):
         print(
             "service: refusing to start: strict no-outbound mode cannot see the "
             "sockets of the queue and the programs it starts (bash, FreeRDP, "

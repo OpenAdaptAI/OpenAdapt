@@ -613,6 +613,8 @@ def test_child_env_names_pf_only_when_the_installer_recorded_it(tmp_path):
     (tmp_path / "service" / "firewall.json").write_text(json.dumps({"pf": "installed"}))
     assert child_env(cfg, {})["OPENADAPT_NO_OUTBOUND_CHILDREN"] == "pf"
     assert "OPENADAPT_NO_OUTBOUND_CHILDREN" not in child_env(
-        ServiceConfig(root=tmp_path, queue_script=tmp_path / "q.sh", allow_outbound=True),
+        ServiceConfig(
+            root=tmp_path, queue_script=tmp_path / "q.sh", allow_outbound=True
+        ),
         {},
     )
