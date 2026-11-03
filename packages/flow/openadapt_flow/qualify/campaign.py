@@ -1880,10 +1880,11 @@ def business_rule_problems(
     # A dialog check in other words than the English vocabulary was mined
     # because every demonstration showed it, not because of what it says. A
     # run on a record the search finds must halt at it before it counts.
+    dialog_guards = _dialog_guard_texts(workflow)
     unworded = sorted(
         step.id
         for step in _all_steps(workflow)
-        if step.id in _dialog_guard_texts(workflow)
+        if step.id in dialog_guards
         and step.guard is not None
         and not is_empty_result_statement(step.guard.predicate.text or "")
     )

@@ -272,6 +272,17 @@ def test_a_disagreeing_guard_off_the_straight_path_refuses() -> None:
         _refuse_unreconciled_guards([col], set(), result)
         assert bool(result.uncertainties) is refused, texts
 
+    # The opener's exact postcondition is compared the same way.
+    opener = Step(id="step_002", intent="click 'Create'", action=ActionKind.CLICK)
+    col = _Column(("click", "select:button"), "single")
+    col.tokens[0] = _SingleTok(opener)
+    col.tokens[1] = _SingleTok(
+        opener.model_copy(update={"expect": [exact_checks("No results found")[0]]})
+    )
+    result = InductionResult(n_traces=2)
+    _refuse_unreconciled_guards([col], set(), result)
+    assert [u.kind for u in result.uncertainties] == ["ambiguous_guard"]
+
 
 def test_a_guard_every_demonstration_mined_is_kept(compiled: dict) -> None:
     result = _induce(compiled, "en_weber", "en_weber")

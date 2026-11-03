@@ -21,7 +21,8 @@ induction checks it the same way. The line is not mined when:
 - it comes from one demonstration only.
 
 The PHI check on the line runs only when the optional privacy scrubber is
-installed. The compile notes of each recording say why a line was not mined.
+installed. The compile notes of each recording, and of a bundle `admit`
+induces, say why a line was not mined.
 When the demonstrations disagree on a mined check, induction refuses
 (`ambiguous_guard`). It never copies the first recording's check, and it
 never drops the check quietly.
@@ -37,7 +38,9 @@ Limits:
 - Agreement alone can't tell the statement from other fixed text that is the
   dialog's only line, such as an empty table's single header or an
   instruction. That needs a recording where the search found rows, and there
-  is no such contrast check yet. The business-rule run is what catches it.
+  is no such contrast check yet. The business-rule run is what catches it,
+  and the qualification campaign reads linear bundles only, so an induced
+  bundle that carries such a check can't be qualified yet.
 - The confirmation pair itself is still found from English button labels
   ("Confirm", "Yes").
 

@@ -1679,7 +1679,15 @@ def _refuse_unreconciled_guards(columns, handled, result) -> None:
     from openadapt_flow.vision.ocr import text_key
 
     def checks(steps: Sequence[Step]) -> tuple[str, ...]:
-        return tuple(text_key(_exact_guard_text(step) or "") for step in steps)
+        # A Confirm click's guard, and an opener's exact postcondition.
+        return tuple(
+            text_key(_exact_guard_text(step) or "")
+            + "|"
+            + ",".join(
+                sorted(text_key(pc.text or "") for pc in step.expect if pc.exact)
+            )
+            for step in steps
+        )
 
     for idx, col in enumerate(columns):
         if idx in handled:
@@ -1688,7 +1696,7 @@ def _refuse_unreconciled_guards(columns, handled, result) -> None:
         for tok in col.tokens.values():
             rows = [[tok.step]] if tok.kind == "single" else tok.iterations
             shapes.update(checks(row) for row in rows)
-        if not any(any(shape) for shape in shapes) or len(shapes) == 1:
+        if len(shapes) == 1 or all(check == "|" for shape in shapes for check in shape):
             continue
         _add_uncertainty(
             result,
