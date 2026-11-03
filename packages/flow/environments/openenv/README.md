@@ -105,12 +105,13 @@ refuses a task pack with anything but the public split.
 
 ```bash
 pip install -e packages/flow/environments/prime/openadapt_web_envs
-eval openadapt-web-envs --env.taskset.base-url http://127.0.0.1:8000 \
-  --env.player.runtime.type subprocess --no-push -m <model>
+python -m openadapt_web_envs.run_eval --env.taskset.base-url http://127.0.0.1:8000 -m <model>
 ```
 
-`--no-push` matters: by default `eval` uploads traces to the Prime Intellect
-account logged in on the machine. `environments/prime/scripted_model.py` is an
+Use `run_eval`, not verifiers' `eval` directly: `eval` uploads every run's
+traces to the Prime Intellect account logged in on the machine unless told
+not to. `run_eval` always passes `--no-push` and runs locally; uploading needs
+`--allow-upload`. `environments/prime/scripted_model.py` is an
 OpenAI-compatible stub that answers with the reference actions, so the whole
 path runs with no model.
 

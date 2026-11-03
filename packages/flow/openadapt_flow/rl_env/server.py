@@ -33,6 +33,10 @@ def build_app(env_dir: str | Path, *, max_concurrent_envs: int = 8) -> Any:
     from openadapt_flow.rl_env.tasks import load_environment
 
     loaded = load_environment(env_dir)
+    if loaded.manifest.app.kind == "external":
+        # One app database serves every session, and a reset restores it for
+        # everyone: concurrent episodes would see and wipe each other's writes.
+        max_concurrent_envs = 1
     factory = functools.partial(
         OpenAdaptWebEnvironment,
         str(loaded.directory),

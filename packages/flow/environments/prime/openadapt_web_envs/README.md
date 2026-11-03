@@ -10,11 +10,12 @@ the app's record to decide it, and the model's report never does.
 ```bash
 uv pip install -e .
 python -m openadapt_flow.rl_env.server ../../openenv/mockmed --port 8000 &
-eval openadapt-web-envs --env.taskset.base-url http://127.0.0.1:8000 \
-  --env.player.runtime.type subprocess --no-push -m <model> -n 14 -c 4
+python -m openadapt_web_envs.run_eval --env.taskset.base-url http://127.0.0.1:8000 \
+  -m <model> -n 11 -c 4
 ```
 
 `OPENADAPT_ENV_BASE_URL` can stand in for `--env.taskset.base-url`, and
-`--env.taskset.split` picks a split (default `public`). Pass `--no-push` unless
-you mean to upload the traces to the Prime Intellect account logged in on this
-machine.
+`--env.taskset.split` picks a split (default `public`). `run_eval` wraps
+verifiers' `eval` and never uploads traces to the Prime Intellect account
+logged in on the machine unless you pass `--allow-upload`; calling `eval`
+directly uploads by default.

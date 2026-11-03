@@ -49,7 +49,9 @@ def make_handler(
             )
             payload = _payload(body.get("messages", [])) or {}
             obs = payload.get("observation", {})
-            steps = solutions.get(obs.get("task_id", ""), [])
+            # The observation carries no task id, so the stub matches the
+            # instruction, which is unique per task.
+            steps = solutions.get(obs.get("instruction", ""), [])
             step = int(obs.get("step", 0))
             action = dict(steps[step]) if step < len(steps) else {"kind": "done"}
             if claim and action.get("kind") == "done":
@@ -92,7 +94,7 @@ def main() -> int:
     from openadapt_flow.rl_env.tasks import load_environment
 
     env = load_environment(args.env_dir)
-    solutions = {task.id: task.solution for task in env.tasks}
+    solutions = {task.instruction: task.solution for task in env.tasks}
     server = ThreadingHTTPServer(
         ("127.0.0.1", args.port), make_handler(solutions, args.claim)
     )

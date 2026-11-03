@@ -187,20 +187,80 @@ def test_staged_space_passes_openenv_static_validation(
     assert (out / "server" / "app.py").is_file()
 
 
-def test_heldout_faults_never_ship_in_a_public_pack() -> None:
-    spec = importlib.util.spec_from_file_location(
-        "make_mock_tasks", ENVS / "make_mock_tasks.py"
-    )
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+def test_public_packs_hold_no_heldout_family_and_no_fault_in_ids() -> None:
     mockmed = load_environment(ENVS / "mockmed")
-    assert not {t.fault for t in mockmed.tasks} & module.HELDOUT_MOCKMED
+    heldout = {"no_persist", "wrong_record", "duplicate"}
+    assert not {t.fault for t in mockmed.tasks} & heldout
     assert load_environment(ENVS / "mockloan").tasks == []
-    assert module.packs("heldout")["mockloan"]
+    for task in mockmed.tasks:
+        assert task.fault not in task.id and task.fault not in task.tags
+
+
+def test_extra_tasks_cannot_skip_the_write_requests_rule(tmp_path, monkeypatch):
+    extra = tmp_path / "x.jsonl"
+    extra.write_text(
+        json.dumps(_task(id="x-1", split="heldout", feasible=False)) + "\n"
+    )
+    env_dir = tmp_path / "env"
+    import shutil
+
+    import yaml
+
+    shutil.copytree(ENVS / "mockloan", env_dir)
+    manifest = yaml.safe_load((env_dir / "env.yaml").read_text())
+    manifest["agent"]["write_requests"] = []
+    (env_dir / "env.yaml").write_text(yaml.safe_dump(manifest))
+    monkeypatch.setenv(EXTRA_TASKS_ENV, str(extra))
+    with pytest.raises(TaskError, match="write_requests"):
+        load_environment(env_dir)
+
+
+def test_missing_environment_files_fail_as_task_errors() -> None:
+    with pytest.raises(TaskError):
+        load_environment(ENVS / "openimis_claims")
 
 
 def test_manifest_states_its_checks_and_hashes_its_pack() -> None:
     env = load_environment(ENVS / "mockmed")
     assert env.manifest.checks
     assert env.pack_sha256["public.jsonl"].startswith("sha256:")
+
+
+PRIME = ROOT / "environments" / "prime"
+
+
+def _run_eval_module():
+    path = PRIME / "openadapt_web_envs" / "openadapt_web_envs" / "run_eval.py"
+    spec = importlib.util.spec_from_file_location("run_eval", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_eval_wrapper_never_uploads_without_the_explicit_flag() -> None:
+    run_eval = _run_eval_module()
+    argv = run_eval.build_argv(["--env.taskset.base-url", "http://x", "-m", "m"])
+    assert argv[0] == "openadapt-web-envs"
+    assert "--no-push" in argv
+    assert argv[argv.index("--env.player.runtime.type") + 1] == "subprocess"
+    with pytest.raises(SystemExit, match="allow-upload"):
+        run_eval.build_argv(["--push", "True"])
+    allowed = run_eval.build_argv(["--allow-upload"])
+    assert "--no-push" not in allowed and "--allow-upload" not in allowed
+
+
+def test_our_tooling_calls_eval_only_through_the_wrapper() -> None:
+    import re
+
+    direct = re.compile(
+        r"(^|[\s\"'/])(uv run )?(vf-)?eval(\"|')?[\s,]+(\"|')?openadapt-web-envs"
+    )
+    offenders = []
+    for path in (ROOT / "environments").rglob("*"):
+        if path.suffix not in {".py", ".md", ".sh", ".toml", ".yaml"}:
+            continue
+        for number, line in enumerate(path.read_text().splitlines(), 1):
+            if direct.search(line) and "run_eval" not in line:
+                offenders.append(f"{path.relative_to(ROOT)}:{number}")
+    assert offenders == []

@@ -5,7 +5,8 @@
 Starts the OpenEnv server and the scripted-model stub, then runs verifiers'
 ``eval`` twice with the ``openadapt-web-envs`` taskset: once with the
 reference claims and once claiming success every time (trusting the screen).
-Traces stay local (``--no-push``). The summary is each task's
+Traces stay local: the run goes through ``openadapt_web_envs.run_eval``,
+which never uploads without ``--allow-upload``. The summary is each task's
 ``openenv_reward``.
 """
 
@@ -30,11 +31,12 @@ from openadapt_flow.rl_env.validate import _free_port, start_server  # noqa: E40
 
 
 def _eval(base_url: str, model_url: str, out: Path, n: int) -> dict[str, float]:
-    bin_dir = Path(sys.executable).parent
+    # Through the wrapper, which adds --no-push and the local runtime.
     subprocess.run(
         [
-            str(bin_dir / "eval"),
-            "openadapt-web-envs",
+            sys.executable,
+            "-m",
+            "openadapt_web_envs.run_eval",
             "--env.taskset.base-url",
             base_url,
             "--model",
@@ -43,15 +45,12 @@ def _eval(base_url: str, model_url: str, out: Path, n: int) -> dict[str, float]:
             model_url,
             "--client.api-key-var",
             "OPENADAPT_STUB_KEY",
-            "--env.player.runtime.type",
-            "subprocess",
             "--env.player.max-turns",
             "25",
             "-n",
             str(n),
             "-c",
             "4",
-            "--no-push",
             "-o",
             str(out),
         ],

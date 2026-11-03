@@ -7,7 +7,7 @@ observation and the action schema, replies with one JSON action per turn,
 and the episode reward is the server's, which comes from verify-run reading
 the app's record, never from the model's report.
 
-    uv run eval openadapt-web-envs --env.taskset.base-url http://127.0.0.1:8000
+    python -m openadapt_web_envs.run_eval --env.taskset.base-url http://127.0.0.1:8000
 """
 
 from __future__ import annotations

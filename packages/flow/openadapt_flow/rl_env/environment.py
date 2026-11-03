@@ -116,7 +116,6 @@ class WebAction(Action):
 
 class WebObservation(Observation):
     contract: str = CONTRACT_VERSION
-    task_id: str = ""
     instruction: str = ""
     url: str = ""
     title: str = ""
@@ -187,6 +186,16 @@ def _serve_records(
         server.server_close()
 
     return f"http://127.0.0.1:{server.server_address[1]}", stop
+
+
+def _norm(value: str) -> str:
+    """Compare values as the app may send them: trimmed, and numbers by value."""
+    text = " ".join(value.split())
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    return repr(number) if number == number else text
 
 
 def _scalars(body: str) -> set[str]:
@@ -360,7 +369,10 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         def route(route: Any) -> None:
             request = route.request
             if self._allowed(request.url, request.method):
-                self._note_write(request)
+                try:
+                    self._note_write(request)
+                except Exception:  # noqa: BLE001 - unread write stays unattempted
+                    pass
                 route.continue_()
             else:
                 route.abort("blockedbyclient")
@@ -412,23 +424,33 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             task = pool[pick]
         if screenshots is not None:
             self.screenshots = screenshots
+        # Nothing of the last episode survives a reset that fails part-way:
+        # until every step below succeeds there is no task, judge or live state.
         if self._judge is not None:
             self._judge.close()
-        self._task = task
+        self._task = None
+        self._judge = None
         self._judgement = None
         self._attempted = False
+        self._state = WebState(env_name=self.env.manifest.name, done=True)
         app_url = self._ensure_app()
         self._reset_app(task)
         cfg = render_verify_config(
             task.verify_text or self.env.verify_text, app_url, self._records_url
         )
         episode = episode_id or uuid.uuid4().hex
-        self._judge = EpisodeJudge(cfg, task.params, episode_id=episode)
-        self._ensure_page()
-        page = self._new_context()
-        page.goto(app_url + task.start_path, wait_until="load")
-        if self.env.manifest.app.prepare:
-            _import(self.env.manifest.app.prepare)(page, app_url)
+        judge = EpisodeJudge(cfg, task.params, episode_id=episode)
+        try:
+            self._ensure_page()
+            page = self._new_context()
+            page.goto(app_url + task.start_path, wait_until="load")
+            if self.env.manifest.app.prepare:
+                _import(self.env.manifest.app.prepare)(page, app_url)
+        except BaseException:
+            judge.close()
+            raise
+        self._task = task
+        self._judge = judge
         self._state = WebState(
             env_name=self.env.manifest.name,
             episode_id=episode,
@@ -575,15 +597,15 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
                 prefix
             ):
                 continue
-            sent = _scalars(request.post_data or "")
-            if all(str(v) in sent for v in self._task.params.values()):
+            sent = {_norm(value) for value in _scalars(request.post_data or "")}
+            if all(_norm(str(v)) in sent for v in self._task.params.values()):
                 self._attempted = True
                 return
 
     def _goto(self, path: str) -> Optional[str]:
         assert self._task is not None
-        if "://" in path or path.startswith("//"):
-            return "goto takes a path on the app's origin, not a URL"
+        if not path.startswith(("/", "#")) or path.startswith("//"):
+            return "goto takes a path on the app's origin (starting with / or #)"
         start = urlsplit(self._task.start_path)
         target = urlsplit(path)
         if target.path or target.query:
@@ -647,7 +669,6 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             done=done,
             reward=reward,
             metadata={"env": self.env.manifest.name, **(extra or {})},
-            task_id=self._task.id,
             instruction=self._task.instruction,
             url=url,
             title=title,

@@ -233,17 +233,12 @@ def load_environment(directory: str | Path) -> EnvDirectory:
     try:
         raw = yaml.safe_load((root / "env.yaml").read_text(encoding="utf-8"))
         manifest = EnvManifest.model_validate(raw)
+        verify_text = (root / manifest.verify).read_text(encoding="utf-8")
+        pack = root / manifest.tasks
+        tasks = read_tasks(pack, public_only=True, base=root)
     except (OSError, yaml.YAMLError) as exc:
-        raise TaskError(f"cannot read {root / 'env.yaml'}: {exc}") from exc
-    verify_text = (root / manifest.verify).read_text(encoding="utf-8")
-    pack = root / manifest.tasks
-    tasks = read_tasks(pack, public_only=True, base=root)
+        raise TaskError(f"cannot load the environment in {root}: {exc}") from exc
     hashes = {pack.name: _sha256(pack)}
-    if any(not t.feasible for t in tasks) and not manifest.agent.write_requests:
-        raise TaskError(
-            f"{manifest.name} has infeasible tasks but no agent.write_requests, "
-            "so a failure report could not be told from not trying"
-        )
     extra = os.environ.get(EXTRA_TASKS_ENV)
     if extra:
         extra_path = Path(extra).resolve()
@@ -257,6 +252,11 @@ def load_environment(directory: str | Path) -> EnvDirectory:
             if task.id in known:
                 raise TaskError(f"extra task {task.id} repeats a public task id")
             tasks.append(task)
+    if any(not t.feasible for t in tasks) and not manifest.agent.write_requests:
+        raise TaskError(
+            f"{manifest.name} has infeasible tasks but no agent.write_requests, "
+            "so a failure report could not be told from not trying"
+        )
     return EnvDirectory(
         directory=root,
         manifest=manifest,
