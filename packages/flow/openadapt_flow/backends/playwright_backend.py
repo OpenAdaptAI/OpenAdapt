@@ -605,6 +605,10 @@ _INSTALL_GUARD_BODY_JS = (
 """
 )
 
+# True when the element is fully transparent. Such a control is laid over its
+# own visible box on purpose, so the bind guard refusing it is not occlusion.
+_TRANSPARENT_JS = "el => Number(window.getComputedStyle(el).opacity || '1') === 0"
+
 _BIND_STRUCTURAL_TARGET_JS = (
     "(el, args) => { const describe = "
     + _DESCRIBE_TARGET_JS
@@ -3219,9 +3223,12 @@ class PlaywrightBackend:
         """Locate ``locator``'s element in the live DOM; return its center.
 
         Resolves by the recorded ``selector`` first, else by ``role`` +
-        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing,
-        off-viewport, or covered element returns None; ambiguity is an explicit
-        structural refusal and cannot fall through to a weaker pixel match.
+        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing
+        element (or a transparent one, ``opacity: 0``) returns None.
+        Ambiguity raises ``StructuralResolutionRefused``; one candidate that
+        is covered, off-viewport, zero-sized or outside its recorded frame
+        chain raises ``StructuralElementNotActionable``. Neither may fall
+        through to a weaker pixel match.
         The returned handle binds an opaque one-shot token to the exact Element
         and its enclosing-row identity for same-operation delivery.
         """
@@ -3272,12 +3279,19 @@ class PlaywrightBackend:
                     raise StructuralElementNotActionable(
                         f"DOM candidate center is outside the viewport: point={point}, viewport=({vw}, {vh})"
                     )
+                if not isinstance(observed, dict) and loc.evaluate(_TRANSPARENT_JS):
+                    # A transparent control laid over its own visible box (a
+                    # styled checkbox, radio, switch or file input) never
+                    # binds, and can't be shown covered either. It keeps the
+                    # visual ladder, as before.
+                    self._cleanup_guard(token, scope)
+                    return None
                 if not isinstance(observed, dict) or not self._frame_chain_matches(
                     scope, tuple(locator.frame_path or ()), box
                 ):
                     self._cleanup_guard(token, scope)
                     raise StructuralElementNotActionable(
-                        "DOM candidate is occluded or not in hit-tested frame chain"
+                        "DOM candidate is covered or outside its recorded frame chain"
                     )
                 # The handle's region is the target's VISIBLE box: its
                 # bounding box clipped to the viewport. A control that runs a

@@ -365,8 +365,11 @@ class StructuralActionBackend(Protocol):
       find the element on the LIVE surface and return its center point.
 
     Each returns None when the capability is momentarily unavailable, the
-    element is absent/ambiguous, or the substrate has no structured layer at
-    that point (never raises) -- resolution then uses the visual ladder.
+    element is absent, or the substrate has no structured layer at that
+    point -- resolution then uses the visual ladder. ``locate_structural``
+    may instead raise ``StructuralResolutionRefused`` (ambiguous) or its
+    subclass ``StructuralElementNotActionable`` (one candidate, covered or
+    off-viewport); both stop the step and never fall through to pixels.
     """
 
     def structural_locator_at(self, x: int, y: int) -> Optional["StructuralLocator"]:

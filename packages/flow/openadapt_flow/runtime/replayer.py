@@ -649,12 +649,18 @@ class EgressNotPermitted(RuntimeError):
 #: scroll counts it as ready.
 SCROLL_POSITION_SLACK_FRACTION = 0.25
 
+
 #: Rungs that show the target itself on screen: what closed-loop scroll
 #: readiness accepts, and all a step accepts after its scroll missed it.
-# The error ``_resolve_step`` returns when the structural rung found exactly
-# one candidate but it is covered or off-viewport. The step polls on it like
-# any miss, and halts with ``target_not_actionable`` when it times out.
-_NOT_ACTIONABLE_ERROR = "structural candidate is not actionable"
+class _NotActionableError(str):
+    """The error ``_resolve_step`` returns when the structural rung found
+    exactly one candidate but it is covered or off-viewport.
+
+    A ``str`` so it travels as any resolution error; its type marks it. The
+    step polls on it like any miss, and halts with ``target_not_actionable``
+    when it times out or when the fresh re-resolution before input finds it.
+    """
+
 
 _DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
 
@@ -8251,7 +8257,7 @@ class Replayer:
             if (
                 error is not None
                 and resolution is None
-                and _NOT_ACTIONABLE_ERROR in error
+                and isinstance(error, _NotActionableError)
             ):
                 # The one candidate stayed covered or off-viewport for the
                 # whole step timeout. No visual rung ran on it.
@@ -11664,6 +11670,15 @@ class Replayer:
                     "Actuation preflight HALTED because the fresh target was "
                     f"ambiguous for step '{step.id}' ({step.intent}): {exc}",
                 )
+            if isinstance(error, _NotActionableError):
+                # Something covered the target between resolution and input.
+                result.safety_halt = True
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="actuation_revalidation",
+                    code="target_not_actionable",
+                    detector_input_sha256=sha256_bytes(fresh_png),
+                )
+                return None, None, fresh_png, error
             if error is not None:
                 if self.governed_authorization is not None:
                     result.safety_halt = True
@@ -11906,7 +11921,11 @@ class Replayer:
         )
         if resolution is not None and resolution.rung in _DIRECT_TARGET_RUNGS:
             return resolution, region, error
-        if resolution is None and step.anchor is None:
+        if resolution is None and (
+            step.anchor is None or isinstance(error, _NotActionableError)
+        ):
+            # A target still covered when the scroll gave up keeps its own
+            # refusal, so the step halts with ``target_not_actionable``.
             return resolution, region, error
         return (
             None,
@@ -11987,9 +12006,10 @@ class Replayer:
             return (
                 None,
                 None,
-                (
-                    f"Could not resolve target for step '{step.id}' "
-                    f"({step.intent}): {_NOT_ACTIONABLE_ERROR} ({exc})"
+                _NotActionableError(
+                    f"Target for step '{step.id}' ({step.intent}) is not "
+                    f"actionable: its one structural candidate is covered or "
+                    f"off-viewport ({exc})"
                 ),
             )
         if resolved is None:

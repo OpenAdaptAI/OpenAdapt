@@ -50,6 +50,11 @@ _HTML = """<!doctype html>
   <button id="btn-covered">Save Covered</button>
   <div id="overlay">Modal Overlay</div>
   <button id="btn-offscreen">Save Offscreen</button>
+  <label id="switch-box" style="position:absolute;top:300px;left:300px;width:40px;height:20px;background:#3a3;">
+    <input type="checkbox" id="agree"
+      style="position:absolute;inset:0;margin:0;width:100%;height:100%;opacity:0;z-index:1">
+  </label>
+  <button id="btn-zero" style="position:absolute;top:320px;left:500px;width:0;height:0;padding:0;border:0">Zero</button>
 </body>
 </html>
 """
@@ -214,7 +219,7 @@ def test_persistent_overlay_halts_with_target_not_actionable_after_timeout(
     assert res.safety_refusal_evidence is not None
     assert res.safety_refusal_evidence.stage == "target_resolution"
     assert res.safety_refusal_evidence.code == "target_not_actionable"
-    assert "structural candidate is not actionable" in (res.error or "")
+    assert "is not actionable" in (res.error or "")
     # Never fell through to pixel template matching on the overlay!
     assert len(vision.template_calls) == 0
 
@@ -281,3 +286,17 @@ def test_sticky_header_during_scroll_readiness(tmp_path) -> None:
     )
     assert ready_2 is True
     assert misses_2 == []
+
+
+def test_a_transparent_control_over_its_own_box_keeps_the_visual_ladder(page) -> None:
+    # A styled switch: the real checkbox is transparent and laid over its
+    # visible box. It is the hit-test winner, never covered, so it must not
+    # halt as "not actionable"; it keeps the old fall-through.
+    backend = PlaywrightBackend(page)
+    assert backend.locate_structural(StructuralLocator(selector="#agree")) is None
+
+
+def test_a_zero_sized_candidate_is_not_actionable(page) -> None:
+    backend = PlaywrightBackend(page)
+    with pytest.raises(StructuralElementNotActionable):
+        backend.locate_structural(StructuralLocator(selector="#btn-zero"))

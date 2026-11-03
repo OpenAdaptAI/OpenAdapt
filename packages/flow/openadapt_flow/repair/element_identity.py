@@ -286,13 +286,18 @@ def _replay_locator(
 def _unique_here(backend: Any, locator: Any, point: tuple[int, int]):
     """The structural handle for ``locator``; refuses a miss or a second match."""
 
-    from openadapt_flow.backend import StructuralResolutionRefused
+    from openadapt_flow.backend import (
+        StructuralElementNotActionable,
+        StructuralResolutionRefused,
+    )
 
     locate = getattr(backend, "locate_structural", None)
     if not callable(locate):
         raise ClickRefused("the backend can't check that the element is unique")
     try:
         handle = locate(locator)
+    except StructuralElementNotActionable as exc:
+        raise ClickRefused(f"the element is covered or off screen: {exc}") from exc
     except StructuralResolutionRefused as exc:
         raise ClickRefused(f"the element is not unique in its window: {exc}") from exc
     except Exception as exc:  # noqa: BLE001 - an unreadable tree is refused
