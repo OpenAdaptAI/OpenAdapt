@@ -224,17 +224,23 @@ is published. OpenAdapt isn't affiliated with the OpenEMR project.
 
 ## Every backend
 
-The same record, compile, run and repair steps work on every surface. Where
+Record, compile and run take every surface; the evidence differs by surface
+([BACKEND_PARITY.md](packages/flow/docs/BACKEND_PARITY.md)). Self-repair is
+qualified on browser runs ([benchmark/auto_repair](packages/flow/benchmark/auto_repair/README.md))
+and end to end on native macOS AX ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)). Outside a browser it
+runs with `repair.session` ([#1717](https://github.com/OpenAdaptAI/OpenAdapt/pull/1717)), and native and pixel backends admit
+its new clicks by element identity ([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709)). Teaching the fix for a
+halted run and rollback are tested on browser runs. Where
 the app exposes its structure, OpenAdapt uses it; on remote desktops it works
 from pixels.
 
 | Surface | What OpenAdapt reads | Validated on |
 |---|---|---|
-| Web apps | The screen, plus the page's DOM | OpenEMR and openIMIS test copies, plus required CI on every build |
+| Web apps | The screen, plus the page's DOM | OpenEMR, Odoo and openIMIS test copies; CI runs in-tree apps on every build |
 | Windows apps | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
 | macOS apps | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
-| Linux apps (X11) | The screen, plus AT-SPI | A GTK3 app in CI |
-| Remote desktop (RDP) | The screen | 3 of 3 trials into Windows 11 over a real network |
+| Linux apps (X11) | The screen, plus AT-SPI | Recording and an AT-SPI read in CI; backend actions are unit-tested |
+| Remote desktop (RDP) | The screen | 105 runs through the stock Remote Desktop client on a real AVC444 session: 55 saves confirmed in the database, 0 wrong-record saves, 40 false stops |
 | Citrix | The screen | A Citrix stand-in app with no DOM: 3 healthy runs, 3 stops on drift |
 
 Each application on each surface needs its own qualification.
@@ -278,7 +284,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Confirms the right record before every write and reads the saved record back** from the system of record, never just the screen.
 - **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
-- **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it.
+- **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified on browser runs and end to end on native macOS).
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
 - **Runs locally**: no calls to a hosted AI model on healthy runs, patient data redacted, signed receipts.
 
