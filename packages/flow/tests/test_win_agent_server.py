@@ -1232,7 +1232,6 @@ def test_an_invoke_that_raises_is_a_failed_action(monkeypatch) -> None:
     with pytest.raises(AgentRequestError) as caught:
         _act_click(_fingerprint())
     assert caught.value.code == "native_action_failed"
-<<<<<<< HEAD
 
 
 class _FakeDesktop:
@@ -1475,5 +1474,3 @@ def test_window_root_at_names_the_top_level_window(monkeypatch) -> None:
         "status": "ok",
         "window": {"hwnd": _FakeDesktop.PINNED, "pid": 10},
     }
-=======
->>>>>>> origin/main

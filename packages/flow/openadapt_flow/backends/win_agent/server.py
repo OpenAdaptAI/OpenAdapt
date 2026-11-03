@@ -1413,7 +1413,6 @@ class _User32:
                 [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM],
                 wintypes.BOOL,
             ),
-<<<<<<< HEAD
             ("GetWindow", [wintypes.HWND, wintypes.UINT], wintypes.HWND),
             (
                 "GetWindowThreadProcessId",
@@ -1430,14 +1429,11 @@ class _User32:
                 [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int],
                 ctypes.c_int,
             ),
-=======
->>>>>>> origin/main
         ):
             fn = getattr(dll, name)
             fn.argtypes = args
             fn.restype = res
         self._dll = dll
-<<<<<<< HEAD
         self._enum_proc = ctypes.WINFUNCTYPE(
             wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
         )
@@ -1455,8 +1451,6 @@ class _User32:
             self._dwm = dwm
         except OSError:
             self._dwm = None
-=======
->>>>>>> origin/main
 
     def is_window(self, hwnd: int) -> bool:
         return bool(self._dll.IsWindow(hwnd))
@@ -1484,7 +1478,6 @@ class _User32:
     def post(self, hwnd: int, message: int) -> bool:
         return bool(self._dll.PostMessageW(hwnd, message, 0, 0))
 
-<<<<<<< HEAD
     def top_level_windows(self) -> list[int]:
         """Every top-level window, topmost first (EnumWindows is z-order)."""
         found: list[int] = []
@@ -1542,8 +1535,6 @@ class _User32:
             return None
         return value.value != 0
 
-=======
->>>>>>> origin/main
 
 #: Replaced in tests; Windows builds the real binding.
 _user32_factory: Callable[[], Any] = _User32
@@ -1689,7 +1680,6 @@ def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
         raise AgentRequestError(409, "native_action_failed", "native UIA action failed")
 
 
-<<<<<<< HEAD
 _MAX_OWNER_CHAIN = 32
 _WINDOW_OPERATIONS = frozenset({"window-root-at", "owned-window-over"})
 
@@ -1810,8 +1800,6 @@ def _window_operation(
     return {"status": "ok", "window": owned}
 
 
-=======
->>>>>>> origin/main
 def _perform_uia(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Perform one typed UIA operation on one COM-affine server thread."""
     if operation in _WINDOW_OPERATIONS:
