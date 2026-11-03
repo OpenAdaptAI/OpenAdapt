@@ -1068,6 +1068,47 @@ class RollbackSection(BaseModel):
 UNRESOLVED = "UNRESOLVED"
 
 
+class RepairSessionSpec(BaseModel):
+    """How self-repair opens a fresh app session outside a browser.
+
+    A probe, each fault probe and the resumed run each need the app freshly
+    started; the halted session stays as it is. Each command is an argv run
+    on the machine Flow runs on, with no shell, and must leave exactly one
+    window of the app that ``backend:`` binds to. For RDP or Citrix, the
+    command restarts the app in the remote session (for example over the
+    host's remote-management channel).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Starts the app for a probe or the resumed run.
+    command: list[str] = Field(min_length=1)
+    #: Name -> argv that starts the app showing a fault the repaired run must
+    #: stop before the save (another patient's chart, a missing record).
+    fault_commands: dict[str, list[str]] = Field(default_factory=dict)
+    #: Stops the app after the session. Without it, Flow ends the process it
+    #: started; a launcher that exits at once then needs one.
+    close_command: list[str] = Field(default_factory=list)
+    #: Whether ``command`` exits once the app is up (``open -n``, a launcher
+    #: script). False: it must still be running after ``ready_s``.
+    launcher_exits: bool = False
+    #: Seconds to wait for the window before binding the backend.
+    ready_s: float = Field(default=2.0, ge=0.0, le=120.0)
+
+    @model_validator(mode="after")
+    def _argvs(self) -> "RepairSessionSpec":
+        for name, argv in self.fault_commands.items():
+            if not name or not argv:
+                raise ValueError(
+                    "each repair.session fault command needs a name and an argv"
+                )
+        if self.launcher_exits and not self.close_command:
+            raise ValueError(
+                "repair.session.launcher_exits needs a close_command to stop the app"
+            )
+        return self
+
+
 class RepairSection(BaseModel):
     """Automatic repair of stops that wrote nothing (docs/SELF_REPAIR.md).
 
@@ -1100,6 +1141,9 @@ class RepairSection(BaseModel):
     #: bundle accepts it (openadapt_flow/repair/readmission.py).
     requalify: Optional[str] = None
     requalify_trials: int = Field(default=1, ge=1, le=10)
+    #: Outside a browser: how each probe, fault probe and the resumed run open
+    #: a fresh app session. Required to repair a desktop, RDP or Citrix run.
+    session: Optional[RepairSessionSpec] = None
 
 
 class ApproversSection(BaseModel):

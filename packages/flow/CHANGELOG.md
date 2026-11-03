@@ -15,6 +15,12 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Features
+
+- `run --self-repair` (and repair by default) now works outside a browser. `repair.session` in `deploy.yaml` says how to start the app for each probe, fault probe and resumed run (an argv, no shell; `fault_commands`, `close_command`, `launcher_exits`, `ready_s`), and the run's configured backend binds to it. Without it, a desktop run refuses repair with that reason, as before.
+
 ## v2.5.0 (2026-11-02)
 
 Shadow mode checks the writes of an agent you already run against the system of record without blocking any of them, the whole-database frame works on PostgreSQL, a write that lands after the verdict can be caught by a recheck, and several verifier checks that could be unreadable or pass on the wrong value now read and compare exactly.

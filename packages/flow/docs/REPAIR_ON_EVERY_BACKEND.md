@@ -203,9 +203,8 @@ differs as "delivery uncertain". The benchmark README lists these findings.
 - `WindowsBackend.element_identity_at` and the `win_agent` endpoint behind it.
   The Windows session owns that code.
 - Qualification on Windows UI Automation and over RDP, on the Windows lab.
-- `openadapt-flow run --self-repair` and `--hold-on-halt` for desktop and
-  remote backends. Today the CLI repairs browser runs only; the Python API
-  takes any backend.
+- `--hold-on-halt` (teach the fix over MCP) for desktop and remote backends.
+  `run --self-repair` takes them with `repair.session`.
 - Input to an app's own dialog windows (macOS sheets, Windows owned windows):
   today's backends pin one window and refuse input to another.
 - Linux AT-SPI.

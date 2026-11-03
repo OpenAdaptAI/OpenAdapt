@@ -184,7 +184,10 @@ def load_agent(spec: str) -> Any:
 
 
 def _refusal(
-    args: argparse.Namespace, backend_cfg: Any, url: Optional[str]
+    args: argparse.Namespace,
+    backend_cfg: Any,
+    url: Optional[str],
+    repair_cfg: Any = None,
 ) -> Optional[str]:
     from openadapt_flow.backends.factory import _normalize_kind
     from openadapt_flow.compatibility import REPAIR_MANAGED, REPAIR_QUALIFIED
@@ -203,10 +206,14 @@ def _refusal(
             "bundle's verify.yaml so a fix is re-qualified and re-admitted"
         )
     if _normalize_kind(backend_cfg.kind) != "web":
-        return "only browser runs can be repaired for now"
-    if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
+        if getattr(repair_cfg, "session", None) is None:
+            return (
+                "outside a browser, repair.session in deploy.yaml must say how "
+                "to start the app for each probe"
+            )
+    elif backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
         return "an attached browser can't be reopened for a probe"
-    if not url:
+    elif not url:
         return "--url is required"
     for flag in ("hold_on_halt", "save_healed_to", "record_video"):
         if getattr(args, flag, None):
@@ -253,8 +260,77 @@ def pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
     return lineage_check(Path(store))
 
 
+class _AppProcess:
+    """One app session started by ``repair.session``; stopped on close."""
+
+    def __init__(self, spec: Any, argv: list[str]) -> None:
+        import subprocess
+        import time
+
+        from openadapt_flow.repair.self_repair import SelfRepairRefused
+
+        self.spec = spec
+        try:
+            self.proc = subprocess.Popen(
+                list(argv),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            raise SelfRepairRefused(
+                f"repair.session could not start the app ({type(exc).__name__})"
+            ) from exc
+        time.sleep(spec.ready_s)
+        code = self.proc.poll()
+        if spec.launcher_exits:
+            if code is None:
+                self.proc.wait(timeout=60)
+                code = self.proc.returncode
+            if code != 0:
+                self.close()
+                raise SelfRepairRefused(
+                    f"repair.session's launcher exited with status {code}"
+                )
+        elif code is not None:
+            self.close()
+            raise SelfRepairRefused(
+                "repair.session's app exited at once; a single-instance app hands "
+                "the launch to the running window, which is not a fresh session "
+                "(set launcher_exits and a close_command for a launcher)"
+            )
+
+    def close(self) -> None:
+        import subprocess
+
+        if self.spec.close_command:
+            try:
+                subprocess.run(
+                    list(self.spec.close_command),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=60,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        if self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+
 class CliTarget:
-    """Open sessions at ``--url`` and run the engine the way ``run`` does."""
+    """Open sessions the way ``run`` does and run the engine on them.
+
+    In a browser each session is a new page at ``--url`` (a fault probe's at
+    its fault URL). Elsewhere each session starts the app with
+    ``repair.session`` (a fault probe with its fault command) and binds the
+    configured backend to it.
+    """
 
     def __init__(
         self,
@@ -289,14 +365,58 @@ class CliTarget:
         self._run_replayer = run_replayer
         self._approval_gate_for_run = approval_gate_for_run
         self.headed = bool(args.headed or cfg.backend.headed)
+        from openadapt_flow.backends.factory import _normalize_kind
+
+        self.web = _normalize_kind(backend_cfg.kind) == "web"
+        repair_cfg = getattr(cfg, "repair", None)
+        self.session_spec = repair_cfg.session if repair_cfg is not None else None
+        contract = gate_kwargs.get("profile_contract")
+        profile = getattr(contract, "profile", None)
+        #: The run's profile name, for the record-check cover a repair needs
+        #: outside a browser (repair.element_identity.record_check_cover).
+        self.profile = getattr(profile, "value", profile)
+
+    def fault_probes(self) -> tuple[str, ...]:
+        """The fault names a desktop run's repair probes (its fault commands)."""
+
+        if self.web or self.session_spec is None:
+            return ()
+        return tuple(self.session_spec.fault_commands)
 
     def open(self, fault: Optional[str] = None) -> "AppSession":
-        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
-        from openadapt_flow.repair.self_repair import AppSession
+        from openadapt_flow.repair.self_repair import AppSession, SelfRepairRefused
 
-        backend, close = PlaywrightBackend.launch(
-            fault or self.url, headless=not self.headed
-        )
+        if self.web:
+            from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+            backend, close = PlaywrightBackend.launch(
+                fault or self.url, headless=not self.headed
+            )
+            return AppSession(backend=backend, close=close)
+        from openadapt_flow.backends.factory import build_backend
+
+        spec = self.session_spec
+        if spec is None:
+            raise SelfRepairRefused("repair.session is not configured")
+        if fault is not None and fault not in spec.fault_commands:
+            raise SelfRepairRefused(f"repair.session has no fault command {fault!r}")
+        app = _AppProcess(spec, spec.fault_commands[fault] if fault else spec.command)
+        try:
+            backend = build_backend(self.backend_cfg)
+        except Exception as exc:
+            app.close()
+            raise SelfRepairRefused(
+                f"the backend could not bind the started app: {exc}"
+            ) from exc
+
+        def close() -> None:
+            closer = getattr(backend, "close", None)
+            try:
+                if callable(closer):
+                    closer()
+            finally:
+                app.close()
+
         return AppSession(backend=backend, close=close)
 
     def execute(
@@ -343,8 +463,26 @@ class CliTarget:
                 workflow, report, params=self.params, worklists=self.worklists
             )
             gate = approval_gate
-        page_url = session.backend.page.url
-        parts = urlsplit(page_url)
+        if self.web:
+            page_url = session.backend.page.url
+            parts = urlsplit(page_url)
+            target: dict[str, Any] = {
+                "execution_target_kind": "web",
+                "execution_origin": f"{parts.scheme}://{parts.netloc}",
+                "execution_entry_url": page_url,
+            }
+        else:
+            from openadapt_flow.__main__ import (
+                _report_backend_kind,
+                _surface_target_origin_or_none,
+            )
+
+            target = {
+                "execution_target_kind": _report_backend_kind(self.backend_cfg.kind),
+                "execution_target_origin": _surface_target_origin_or_none(
+                    self.backend_cfg
+                ),
+            }
         return self._run_replayer(
             session.backend,
             workflow=workflow,
@@ -361,10 +499,8 @@ class CliTarget:
             pixel_verify_enabled=self.cfg.runtime.pixel_verify_enabled,
             governed_authorization=authorization,
             runtime_config=self.cfg.runtime,
-            execution_target_kind="web",
-            execution_origin=f"{parts.scheme}://{parts.netloc}",
-            execution_entry_url=page_url,
             approval_gate=gate,
+            **target,
             deployment_surface=self.backend_cfg.deployment_surface,
             # A probe or the resumed run of a repaired bundle runs the GUI
             # step the person approved (repair.self_repair.keep_gui_for_repair).
@@ -411,7 +547,7 @@ def cmd_run_self_repair(
     )
 
     url = args.url or cfg.backend.url
-    refusal = _refusal(args, backend_cfg, url)
+    refusal = _refusal(args, backend_cfg, url, getattr(cfg, "repair", None))
     if refusal is None and (
         worklists
         or getattr(args, "workers", None)
@@ -482,7 +618,7 @@ def cmd_run_self_repair(
             ),
             model_key=model_key,
             max_attempts=args.repair_attempts,
-            fault_probes=tuple(args.repair_fault_url),
+            fault_probes=tuple(args.repair_fault_url) + target.fault_probes(),
             approval_wait_s=args.repair_approval_wait,
             on_approval_request=announce,
             requalification=_requalification(args),
@@ -508,7 +644,10 @@ def cmd_run_self_repair(
         # Playwright drivers can't run on one thread, so every session of
         # this run shares one browser process (each still gets a fresh
         # context: no cookies or storage carry over).
-        with shared_browser(headless=not target.headed):
+        if target.web:
+            with shared_browser(headless=not target.headed):
+                result = auto.run(bundle, run_dir)
+        else:
             result = auto.run(bundle, run_dir)
     except SelfRepairRefused as exc:
         print(f"Self-repair stopped: {exc}. Nothing was saved by self-repair.")
