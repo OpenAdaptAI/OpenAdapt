@@ -172,15 +172,30 @@ def contract_fields(contract: Any) -> list[str]:
     return sorted(n for n in names if n)
 
 
+def query_fields(path: str) -> set[str]:
+    """The parameter names in a request target's query string."""
+
+    from urllib.parse import parse_qsl, urlsplit
+
+    return {k for k, _ in parse_qsl(urlsplit(path).query, keep_blank_values=True)}
+
+
 def record_bodies(shadow: Any) -> Any:
-    """Make a ``shadow.Shadow`` also record, per episode, the names of every
-    field the agent's requests sent (``episode.sent_fields``), so a column
-    the agent sets is never learned as the app's own. A body the shadow
-    can't parse leaves the episode with no record (no target excuse)."""
+    """Make a ``shadow.Shadow`` also record the names of every field the
+    agent's requests sent (``episode.sent_fields``), so a column the agent
+    sets is never learned as the app's own: each write's body fields, and
+    the query-string parameter names of every request through the shadow,
+    of any method, up to the episode's check. A body the shadow can't parse
+    leaves the episode with no record (nothing is learned from it)."""
 
     from openadapt_flow.shadow import _body_doc
 
     observe = shadow._observe
+    forward = shadow._forward
+    check = shadow._check
+    #: Query parameter names of every request so far (names only).
+    queries: set[str] = set()
+    lock = threading.Lock()
 
     def _observe(method: str, path: str, headers: Any, body: bytes) -> Any:
         write, episode = observe(method, path, headers, body)
@@ -190,10 +205,25 @@ def record_bodies(shadow: Any) -> Any:
             episode.bodies_unreadable = True
         elif not getattr(episode, "bodies_unreadable", False):
             prior = getattr(episode, "sent_fields", None) or set()
-            episode.sent_fields = set(prior) | body_fields(doc)
+            episode.sent_fields = set(prior) | body_fields(doc) | query_fields(path)
         return write, episode
 
+    def _forward(method: str, path: str, headers: Any, body: bytes) -> Any:
+        with lock:
+            queries.update(query_fields(path))
+        return forward(method, path, headers, body)
+
+    def _check(episode: Any) -> Any:
+        if not getattr(episode, "bodies_unreadable", False):
+            with lock:
+                seen = set(queries)
+            prior = getattr(episode, "sent_fields", None) or set()
+            episode.sent_fields = set(prior) | seen
+        return check(episode)
+
     shadow._observe = _observe
+    shadow._forward = _forward
+    shadow._check = _check
     return shadow
 
 
@@ -564,11 +594,19 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
                 "",
             ]
         if k["excuses"]:
+            warnings: list[str] = []
             lines += [
                 "| Id | Table | Columns | Change | Row | Seen |",
                 "| --- | --- | --- | --- | --- | --- |",
             ]
             for e in k["excuses"]:
+                warnings.append(
+                    f"- {e['id']}: check that the agent never sets "
+                    + ", ".join(f"`{c}`" for c in e["columns"])
+                    + " itself. A request field with another name for the same "
+                    "column isn't caught. Approve only columns the app sets on "
+                    "its own, such as times and counters."
+                )
                 row = (
                     "the acting user's row ("
                     + ", ".join(f"`{c}`" for c in e["actor_columns"])
@@ -584,6 +622,7 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
                     f"{e['change']} | {row} | {e['seen']} of {e['of']} |"
                 )
             lines.append("")
+            lines += ["Warning, for each excuse:", "", *warnings, ""]
         else:
             lines += ["No excuse proposed.", ""]
         for e in k["below_threshold"]:

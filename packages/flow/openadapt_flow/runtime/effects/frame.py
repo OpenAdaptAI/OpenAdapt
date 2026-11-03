@@ -2026,7 +2026,8 @@ def _moves(
                 "table": c.surface,
                 "change": c.change,
                 "columns": sorted(columns),
-                "target": bool(c.on_target and not c.other_on_target),
+                # The written row, whoever else also wrote it: never learned.
+                "target": bool(c.on_target),
                 "attribution": c.attribution,
                 "actor_columns": actor_columns(
                     actor, before, after, hashers.get(c.surface)

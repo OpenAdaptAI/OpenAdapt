@@ -1075,7 +1075,111 @@ def test_an_excuse_covers_exactly_its_column_set(
     )
 
 
+def test_the_written_row_is_never_learned_when_another_actor_also_wrote_it(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Round 2's attack. Each learning write leaves the declared name as it
+    was, and an app worker under another account reassigns the same asset.
+    The row is the written row (and the actor owns it, so it would look like
+    the actor's row): it is never learned, and a later reassignment of
+    another asset the actor owns is refuted."""
+
+    engine.run("ALTER TABLE asset ADD COLUMN modified_by INTEGER")
+    engine.run("ALTER TABLE asset ADD COLUMN owner_id INTEGER")
+    engine.run("UPDATE asset SET owner_id = 2, modified_by = 2")
+
+    def contract(block: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        c = asset_contract(engine, block)
+        c["frame"]["attribution"] = {
+            "kind": "record_field",
+            "actor_field": "modified_by",
+            "self": ["2"],
+            "server_set": ["modified_by"],
+        }
+        return c
+
+    collector = learn.Collector(tmp_path / "ep.jsonl")
+    for i in range(5):
+
+        def act(i: int = i) -> None:
+            request_bookkeeping(engine)
+            engine.run("UPDATE asset SET name = 'Laptop A' WHERE tag = 'LT-100'")
+            engine.run(
+                "UPDATE asset SET assigned_to = %s, modified_by = 9 "
+                "WHERE tag = 'LT-100'",
+                5 + i,
+            )
+
+        result = check(
+            engine, contract(), {"tag": "LT-100", "name": "Laptop A"}, act, tmp_path
+        )
+        moves = [m for m in result.evidence["frame"]["moves"] if m["table"] == "asset"]
+        assert moves and all(m["target"] is True for m in moves)
+        collector(
+            _Ep(
+                i + 1,
+                "rename",
+                Contract.from_dict(contract()),
+                sent_fields={"tag", "name"},
+            ),
+            result,
+        )
+        engine.run("UPDATE asset SET modified_by = 2 WHERE tag = 'LT-100'")
+    users = learn.users_from(
+        "app_user",
+        "id",
+        None,
+        [
+            "asset.owner_id",
+            "api_token.user_id",
+            "api_token.issued_by",
+            "user_property.user_id",
+        ],
+    )
+    proposal = learn.propose(learn.read_episodes([collector.path]), users=users)
+    kind = proposal["kinds"]["rename"]
+    assert [e for e in kind["excuses"] if e["table"] == "asset"] == []
+    assert any(
+        s["table"] == "asset" and s["why"].startswith("the written row")
+        for s in kind["stays_a_stop"]
+    )
+    path = tmp_path / "asset.yaml"
+    path.write_text(yaml.safe_dump(contract()))
+    learn.approve(proposal, by="R", contracts={"rename": [path]})
+    approved = yaml.safe_load(path.read_text())
+    engine.run("UPDATE asset SET modified_by = 7 WHERE id = 2")
+
+    def wrong() -> None:
+        request_bookkeeping(engine)
+        engine.run(
+            "UPDATE asset SET name = 'Laptop X', modified_by = 2 WHERE tag = 'LT-100'"
+        )
+        engine.run("UPDATE asset SET assigned_to = 3, modified_by = 2 WHERE id = 2")
+
+    _refuted(
+        check(engine, approved, {"tag": "LT-100", "name": "Laptop X"}, wrong, tmp_path)
+    )
+
+
 # -- the learner's rules (no database) -----------------------------------------------
+
+
+def test_the_proposal_warns_on_every_actor_row_excuse(tmp_path: Path) -> None:
+    eps = [
+        _ep(
+            "k",
+            [
+                _move("app_user", ["last_login"], actor_columns=["id"]),
+                _move("api_token", ["last_seen"], actor_columns=["user_id"]),
+            ],
+        )
+    ] * 5
+    p = learn.propose(eps, users=USERS)
+    md = learn.render_markdown(p)
+    for e in p["kinds"]["k"]["excuses"]:
+        line = next(x for x in md.splitlines() if x.startswith(f"- {e['id']}:"))
+        assert "another name for the same column isn't caught" in line
+        assert all(f"`{c}`" in line for c in e["columns"])
 
 
 def test_a_column_the_contract_or_the_agent_names_is_never_learned() -> None:
@@ -1501,6 +1605,26 @@ class _App:
             def log_message(self, *_: Any) -> None:
                 pass
 
+            def _email(self, con: Any) -> None:
+                # A query parameter the app stores on the acting user's row.
+                from urllib.parse import parse_qs, urlsplit
+
+                q = parse_qs(urlsplit(self.path).query)
+                if "email" in q:
+                    con.execute(
+                        "UPDATE app_user SET email = ? WHERE id = 2", (q["email"][0],)
+                    )
+
+            def do_GET(self) -> None:
+                con = sqlite3.connect(app.db)
+                self._email(con)
+                con.commit()
+                con.close()
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
             def do_POST(self) -> None:
                 doc = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 con = sqlite3.connect(app.db)
@@ -1508,6 +1632,7 @@ class _App:
                     "UPDATE app_user SET last_login = ? WHERE id = 2",
                     (secrets.token_hex(4),),
                 )
+                self._email(con)
                 con.execute(
                     "INSERT INTO note (title, body, stamp) VALUES (?, ?, 's')",
                     (doc["title"], doc["body"]),
@@ -1587,3 +1712,68 @@ def test_collect_through_the_shadow_hook(tmp_path: Path) -> None:
                 "attribution",
                 "actor_columns",
             }
+
+
+@pytest.mark.parametrize("how", ["write", "read"])
+def test_query_string_fields_count_as_sent(tmp_path: Path, how: str) -> None:
+    """Round 2: the agent sends ``email`` in a query string (on the write
+    itself, or on a read inside the write's window) and the app stores it
+    on the actor's own row. ``email`` counts as sent, so the actor's row
+    moving ``email`` with ``last_login`` is never learned."""
+
+    import http.client
+
+    from openadapt_flow.shadow import Route, Shadow
+
+    e = _sqlite(tmp_path)
+    for statement in e.ddl():
+        e.run(statement)
+    app = _App(Path(e.read["sqlite_database"]))
+    contract = Contract.from_dict(note_contract(e), name="note")
+    collector = learn.Collector(tmp_path / "episodes.jsonl")
+    sh = Shadow(
+        upstream=app.url,
+        mode="sql",
+        routes=[
+            Route(
+                re.compile(r"POST /api/notes"),
+                contract,
+                {"title": "title", "body": "body"},
+                "create_note",
+            )
+        ],
+        actor_id=ACTOR,
+        out=tmp_path / "out",
+        quiet_s=60,
+    ).start()
+    learn.record_bodies(sh)
+    sh.on_checked = collector
+    try:
+        host, port = sh.server.server_address[:2]
+        for i in range(5):
+            query = f"?email=bot{i}%40example.test"
+            conn = http.client.HTTPConnection(host, port)
+            conn.request(
+                "POST",
+                "/api/notes" + (query if how == "write" else ""),
+                json.dumps({"title": f"Note {i}", "body": "B"}),
+                {"Content-Type": "application/json"},
+            )
+            assert conn.getresponse().status == 201
+            conn.close()
+            if how == "read":
+                conn = http.client.HTTPConnection(host, port)
+                conn.request("GET", "/api/me" + query)
+                assert conn.getresponse().status == 200
+                conn.close()
+            sh.flush()
+    finally:
+        sh.stop()
+    eps = learn.read_episodes([collector.path])
+    assert len(eps) == 5 and all("email" in ep["sent_fields"] for ep in eps)
+    p = learn.propose(eps, users=learn.users_from("app_user", "id", None))
+    k = p["kinds"]["create_note"]
+    assert [x for x in k["excuses"] if x["table"] == "app_user"] == []
+    assert any(
+        s["table"] == "app_user" and "email" in s["why"] for s in k["stays_a_stop"]
+    )

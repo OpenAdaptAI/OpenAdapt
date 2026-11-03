@@ -75,8 +75,9 @@ same mistake in every write (it renames the record, and also reassigns it)
 would look like the app's bookkeeping. The learner never proposes an
 excuse for a column that:
 
-- any of the agent's requests sent, by name, at any depth of the body
-  (`learn collect` records the names of every field in each request body);
+- any of the agent's requests sent, by name: a field at any depth of a
+  write's body, or a query-string parameter of any request through the
+  shadow up to the check (`learn collect` records these names);
 - a run parameter names; or
 - the contract names (its effects' selectors and record fields, and the
   frame's target fields).
@@ -199,7 +200,8 @@ Approving again replaces the earlier `frame.learned` with the new one.
 - The rule against columns the agent sets compares names. It is why the
   written row is never learned at all; on the acting user's own rows it
   still lets through a column the agent sets under a field of another name.
-  Read each excuse before you approve.
+  The proposal warns on every excuse: approve only columns the app sets on
+  its own, such as times and counters.
 - Learning reads SQL mode only. FHIR mode has no database frame.
 - Over `frame.database.max_rows` (2,000 rows by default) a table's baseline
   keeps only some columns per row, so a change in another column can't be
