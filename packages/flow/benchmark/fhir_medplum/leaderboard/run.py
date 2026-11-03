@@ -164,8 +164,16 @@ def main(argv: Optional[list[str]] = None) -> int:
                 path = runs_dir / f"r{rep}-{case['id']}.json"
                 if path.exists() and not json.loads(path.read_text()).get("infra_error"):
                     continue
+                waited = _wait_for_load()
+                load_start = os.getloadavg()[0]
                 row = _one(bench, case, agent, proxy, path)
                 row["rep"] = rep
+                # Host load, for timing (machine rule: pause above 35).
+                row["host_load"] = {
+                    "start": round(load_start, 1),
+                    "end": round(os.getloadavg()[0], 1),
+                    "waited_s": waited,
+                }
                 path.write_text(json.dumps(row, indent=1, default=str) + "\n")
                 o = (row.get("oracle") or {}).get("verdict", "error")
                 c = (row.get("claim") or {}).get("status", "-")
@@ -209,6 +217,21 @@ def _one(bench: Bench, case: dict[str, Any], agent: Any, proxy: FaultProxy, path
             last = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()[-1500:]}"
             time.sleep(10)
     return {"id": case["id"], "class": case["class"], "type": case["type"], "infra_error": last[:3000]}
+
+
+LOAD_LIMIT = float(os.environ.get("LEADERBOARD_LOAD_LIMIT", 35))
+
+
+def _wait_for_load() -> int:
+    """Hold the next run while the host's 1-minute load is over the limit."""
+
+    waited = 0
+    while os.getloadavg()[0] > LOAD_LIMIT:
+        if waited % 600 == 0:
+            print(f"   waiting: host load {os.getloadavg()[0]:.0f} > {LOAD_LIMIT:.0f}", flush=True)
+        time.sleep(30)
+        waited += 30
+    return waited
 
 
 def _wait_app(url: str, wait_s: float = 300) -> None:
