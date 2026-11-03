@@ -2687,6 +2687,14 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any]
             f"{step.id} stopped on the record check ({halted.identity.status}); a "
             "wrong-record halt is never repaired"
         )
+    refusal = halted.safety_refusal_evidence
+    if refusal is not None and refusal.code == "target_not_actionable":
+        # The target is on the page, but covered. A new target picked from
+        # the screen could be whatever covers it.
+        return (
+            f"{step.id} stopped because its target is covered or off screen; "
+            "a covered target is never retargeted"
+        )
     if step.action not in _POINTER_KINDS or step.anchor is None:
         return f"{step.id} is not a click on an on-screen target"
     # Only the ladder's own refusals count as "the screen changed": it found

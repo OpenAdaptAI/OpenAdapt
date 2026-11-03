@@ -4532,6 +4532,7 @@ class SafetyRefusalEvidence(BaseModel):
     ]
     code: Literal[
         "target_ambiguous",
+        "target_not_actionable",
         "identity_conflict",
         "identity_unverifiable",
         "actuation_observation_changed",
