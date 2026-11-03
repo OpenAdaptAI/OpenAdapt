@@ -88,7 +88,7 @@ needs a person at an interactive terminal who types `yes`.
 | JIT capture (`compile_agent(..., teach_authorization=TeachAuthority(...))`) | The capture's scope is bound from the statement; a `teach_scope` may only narrow it. The statement is kept beside the draft, and its digest is in the signed recorder block | Admission refuses (`teach_auth_not_recorded`) |
 | `compile-agent` (`--teach-authorization`, `FirstRunCompiler`, `compile_first_run`, `SkillCache`) | Run 1's scope is the statement's alone; the command's `--expect`, `--on-screen` and `--allow-text` don't widen it. For `SkillCache`, the statement names `SkillCache.task_id(prompt, params)` | Admission refuses |
 | Teach over MCP (`serve --teach --teach-authorization`; `teach_act`) | Run 1 runs under the statement's scope, under its task id; the agent's declared inputs must be the statement's | Admission (`teach_admit`, `compile-agent admit`) refuses |
-| Browser teach writes (`serve --teach-browser`, `teach_start` with a contract) | Not bound: this lane has no teach scope guard to bind the statement to | Refused: no write tool is taught, and a write tool taught before doesn't run. The read-only lane sends no write and is unchanged |
+| Browser teach writes (`serve --teach-browser --teach-authorization`, `teach_start` with a contract) | Run 1 starts only when the statement verifies for task `taught.<name>`, names the app's origin, names the contract as its `record_kind` and a write adapter, takes run 1's inputs, and has exactly the contract's checked record fields as its identity and fields, with run 1's values. During run 1 the adapter reads every write before it is sent, and only the statement's values may be typed. The tool keeps the statement and is signed with the local admission key; every call checks both again, with the statement's expiry | No write tool is taught, and a write tool without a statement that holds doesn't run. The read-only lane sends no write and needs none |
 | Agent-demonstrated fix (`teach_repair`, `serve --teach-authorization`) | Before the click, the desk verifies a statement that covers `repair` and names the program's workflow name as its task; the repair store keeps it. Approval checks it again, for that workflow | The fix is proposed, and `RepairStore.approve` refuses it |
 | Self-repair of an agent-taught program (`admit_repair`) | The prior admission's authorization must cover `repair` and verify now; its statement is copied into the repaired bundle | The repair's admission (probe or full) refuses |
 | Airbag handoff (`agent_guard.handoff`) | Not bound: the guarded run 1 runs under the guard's task file, and the handoff can't attach a person's signature to it yet | Admission refuses its draft (`teach_auth_not_recorded`). Teach the task through `compile-agent` or `serve --teach` with an authorization instead |
@@ -110,12 +110,18 @@ Programs and tools made before teach authorizations carry none, so:
 - an admitted JIT program still runs, but a self-repair of it is refused
   until a person teaches it again with an authorization that covers
   `repair` and admits it.
-- a write tool taught in browser teach doesn't run.
+- a write tool taught in browser teach before teach authorizations doesn't
+  run. Teach it again under a statement.
 - the benchmarks that compile an agent's run and `examples/jit/run_mockmed.py`
   now sign a throwaway authorization for each run
   (`teach_authorization_fixture.demo_authority`), standing in for the person.
 
 ## Limits
+- A browser-teach write tool is bound to its statement's values for run 1
+  only. Later calls take new inputs; the contract's read-back and the pinned
+  run-1 writes bound them, and each call checks the statement's signature,
+  roster, purpose, task and expiry again. When the statement expires (at
+  most 90 days on), the tool stops until it is taught again.
 
 - The approver root comes from the caller: a flag, the environment or a
   deployment config. A process that controls both the environment and the

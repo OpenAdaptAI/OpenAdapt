@@ -318,9 +318,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="STATEMENT",
         help=(
-            "With --teach: a person's signed teach authorization (openadapt-flow "
-            "teach-authorization). Run 1 is scoped by it; without one, drafts "
-            "are refused at admission. With --repair-access: it lets a calling "
+            "With --teach or --teach-browser: a person's signed teach "
+            "authorization (openadapt-flow teach-authorization). Run 1 is scoped "
+            "by it; without one, --teach drafts are refused at admission and "
+            "--teach-browser teaches and runs no write. With --repair-access: it lets a calling "
             "agent's fix be approved (it must cover repair). Its signer is checked under the deployment config's approvers section (--config) only."
         ),
     )
@@ -1279,6 +1280,9 @@ def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
             headless=not args.headed,
             contracts=contracts,
             secrets=sign_in,
+            # What lets a write be taught: a person's signed statement,
+            # checked under the deployment config's approvers only.
+            teach_authorization=_teach_authority(args, None),
         )
     except ValueError as exc:
         print(f"serve: {exc}", file=sys.stderr)

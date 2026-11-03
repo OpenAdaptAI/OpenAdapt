@@ -7,8 +7,8 @@ button. The server counts what it receives.
 * Teaching: a write the contract doesn't list (Close account) is stopped
   before it is sent, and run 1 ends.
 * Teaching: a sign-in value can't be typed into the search box (it would go
-  into an address) or into the order form; a request whose address carries
-  one, in any encoding, never leaves.
+  into an address) or into the order form, and typed as plain text it isn't
+  a value the person's teach authorization allows.
 * Calling the tool: a page that adds a field to the order, or a second write,
   is stopped before it is sent, and the result is never done.
 * No form of the password (raw, percent, form, JSON, base64) appears in any
@@ -29,17 +29,13 @@ from typing import Iterator
 
 import pytest
 
-# Browser teach refuses taught writes: no person's signed teach authorization
-# binds them (docs/TEACH_AUTHORIZATION.md; tests/test_browser_teach.py checks
-# the refusal). These tests return when the lane binds one.
-pytestmark = pytest.mark.skip(reason="browser teach refuses taught writes")
-
 pytest.importorskip("playwright")
 
 from openadapt_flow.agent.bridge import BridgeError  # noqa: E402
 from openadapt_flow.agent.browser_teach import BrowserTeachBridge  # noqa: E402
 from openadapt_flow.verify import WriteContract  # noqa: E402
 from openadapt_flow.wire_check import secret_forms  # noqa: E402
+from tests._teach_authorization_support import order_authority  # noqa: E402
 
 PASSWORD = "p@ss w0rd&x"
 
@@ -179,6 +175,10 @@ def bridge(
         contracts={"order": _contract(app.base)},
         secrets={"username": "P_USER", "password": "P_PW"},
         verify_dir=tmp_path / "verify",
+        # A person signed that an agent may teach an order for Acme.
+        teach_authorization=order_authority(
+            tmp_path / "authorization", app.base, {"customer": "Acme"}
+        ),
     )
 
 
@@ -250,13 +250,14 @@ def test_a_sign_in_value_stays_out_of_addresses_and_records(
                 {"action": "type", "ref": _ref(page, label), "input": "password"},
             )
         seen.append(str(refused.value))
-    # Even typed as plain text, a request carrying it never leaves.
-    page = bridge.dispatch(
-        "teach_act", {"action": "type", "ref": _ref(page, "Search"), "text": PASSWORD}
-    )["page"]
-    with pytest.raises(BridgeError, match="sign-in value in its address") as ended:
-        bridge.dispatch("teach_act", {"action": "click", "ref": _ref(page, "Find")})
-    seen.append(str(ended.value))
+    # Typed as plain text, it is not a value the signed teach authorization
+    # allows, so it isn't typed at all.
+    with pytest.raises(BridgeError, match="doesn't allow typing") as refused:
+        bridge.dispatch(
+            "teach_act",
+            {"action": "type", "ref": _ref(page, "Search"), "text": PASSWORD},
+        )
+    seen.append(str(refused.value))
     _assert_no_password(seen)
 
 

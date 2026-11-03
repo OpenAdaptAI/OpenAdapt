@@ -13,7 +13,7 @@ import json
 import re
 import urllib.request
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 import pytest
 
@@ -311,35 +311,257 @@ def test_controls_in_a_named_frame_are_listed_and_found(
     _on(browser, check)
 
 
-def test_taught_writes_are_refused(tmp_path: Path) -> None:
-    """No person's teach authorization binds a write taught in this lane."""
+# -- taught writes need a person's signed teach authorization ---------------------
+# Real approver keys on a real roster, the real verifier, real write contracts.
+# Every refusal here comes before a browser opens. tests/e2e/
+# test_browser_teach_write_e2e.py teaches and runs one end to end.
 
-    bridge = bt.BrowserTeachBridge(tmp_path, tmp_path / "files")
-    with pytest.raises(BridgeError, match="taught writes are refused"):
-        bridge.dispatch(
-            "teach_start",
-            {
-                "name": "file_order",
-                "task": "File the order",
-                "url": "http://127.0.0.1:1/",
-                "inputs": {"item": "Widget"},
-                "contract": "order",
+APP = "http://127.0.0.1:1"
+ORDER = {"customer": "Acme Ltd", "product": "Desk lamp", "units": "3"}
+
+
+def _order_contract() -> Any:
+    from openadapt_flow.verify import WriteContract
+
+    return WriteContract.from_dict(
+        {
+            "schema_version": "openadapt.verify/v1",
+            "writes": ["POST /login", "POST /orders"],
+            "verifier": {
+                "kind": "rest",
+                "base_url": APP,
+                "records_path": "/api/orders",
+                "records_key": "records",
             },
-        )
-    folder = tmp_path / "file_order"
-    folder.mkdir()
-    (folder / bt.PROGRAM_FILE).write_text(
-        json.dumps(
-            {
-                "schema": bt.PROGRAM_SCHEMA,
-                "name": "file_order",
-                "task": "File the order",
-                "inputs": ["item"],
-                "result": {"kind": "write", "contract": "order"},
-            }
-        )
+            "effects": [
+                {
+                    "kind": "record_written",
+                    "match": {k: {"param": k} for k in ORDER},
+                    "expected_count": 1,
+                    "count_new_only": True,
+                    "timeout_s": 1.0,
+                }
+            ],
+        },
+        name="order",
     )
-    bridge = bt.BrowserTeachBridge(tmp_path, tmp_path / "files")
-    result = bridge.dispatch("taught_file_order", {"inputs": {"item": "Widget"}})
+
+
+def _bridge(tmp_path: Path, authority: Any = None) -> bt.BrowserTeachBridge:
+    return bt.BrowserTeachBridge(
+        tmp_path / "tools",
+        tmp_path / "files",
+        contracts={"order": _order_contract()},
+        teach_authorization=authority,
+    )
+
+
+def _teach(bridge: bt.BrowserTeachBridge, name: str = "add_order", **inputs: str):
+    return bridge.dispatch(
+        "teach_start",
+        {
+            "name": name,
+            "url": f"{APP}/login",
+            "task": "Add an order",
+            "contract": "order",
+            "inputs": {**ORDER, **inputs},
+        },
+    )
+
+
+def _refused(bridge: bt.BrowserTeachBridge, code: str, **kw: Any) -> None:
+    with pytest.raises(BridgeError, match=re.escape(code)):
+        _teach(bridge, **kw)
+
+
+def test_a_covering_authorization_binds_run_1(tmp_path: Path) -> None:
+    from tests._teach_authorization_support import order_authority
+
+    bridge = _bridge(tmp_path, order_authority(tmp_path / "auth", APP, ORDER))
+    verification, statement, scope = bridge._authorize_write(
+        "add_order", f"{APP}/login", _order_contract(), ORDER, {}
+    )
+    assert verification.ok and statement.is_file()
+    assert dict(scope.record) == {"customer": "Acme Ltd"}
+    assert dict(scope.fields) == {"product": "Desk lamp", "units": "3"}
+    # The adapter reads run 1's save before it is sent.
+    body = b"customer=Acme+Ltd&product=Desk+lamp&units=3"
+    assert scope.request_refusal("POST", f"{APP}/orders", body) is None
+    other = b"customer=Birch+Co&product=Desk+lamp&units=3"
+    assert scope.request_refusal("POST", f"{APP}/orders", other) == (
+        "write_wrong_record"
+    )
+    assert scope.request_refusal("POST", f"{APP}/login", b"u=x") is None
+    assert scope.request_refusal("POST", f"{APP}/account/close", b"") == (
+        "write_unattributed"
+    )
+
+
+def test_no_statement_refuses_a_taught_write(tmp_path: Path) -> None:
+    _refused(_bridge(tmp_path), "teach_auth_missing")
+
+
+def test_a_statement_that_does_not_cover_the_write_refuses(tmp_path: Path) -> None:
+    from tests._teach_authorization_support import order_authority
+
+    cases = {
+        "another record kind": dict(record_kind="invoice"),
+        "no write adapter": dict(write_adapter=None),
+        "another tool": dict(name="close_account"),
+    }
+    for i, (_why, kw) in enumerate(cases.items()):
+        authority = order_authority(tmp_path / f"auth{i}", APP, ORDER, **kw)
+        code = (
+            "teach_auth_task_mismatch"
+            if "name" in kw
+            else "teach_auth_write_not_covered"
+        )
+        _refused(_bridge(tmp_path / f"b{i}", authority), code)
+    # Fewer fields than the contract checks.
+    narrow = order_authority(
+        tmp_path / "narrow", APP, {"customer": "Acme Ltd"}, identity=("customer",)
+    )
+    _refused(_bridge(tmp_path / "bn", narrow), "teach_auth_input_not_declared")
+    # Run 1's values aren't the signed ones.
+    authority = order_authority(tmp_path / "values", APP, ORDER)
+    _refused(
+        _bridge(tmp_path / "bv", authority),
+        "teach_auth_input_mismatch",
+        customer="Birch Co",
+    )
+    # Another app.
+    elsewhere = order_authority(tmp_path / "else", "http://127.0.0.1:2", ORDER)
+    _refused(_bridge(tmp_path / "be", elsewhere), "teach_auth_write_not_covered")
+
+
+def test_an_expired_statement_refuses(tmp_path: Path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
+    from tests._teach_authorization_support import order_spec
+
+    person = LocalAuthorizer(tmp_path / "approvers", "clinic-lead")
+    statement = person.issue(
+        tmp_path / "statement",
+        order_spec(APP, ORDER),
+        now=datetime.now(timezone.utc) - timedelta(days=3),
+        valid_for=timedelta(days=1),
+    )
+    _refused(_bridge(tmp_path, person.authority(statement)), "teach_auth_expired")
+
+
+def test_an_edited_statement_refuses(tmp_path: Path) -> None:
+    from tests._teach_authorization_support import order_authority
+
+    authority = order_authority(tmp_path / "auth", APP, ORDER)
+    data = json.loads(authority.statement.read_text())
+    data["writes"]["fields"]["units"]["value"] = "300"
+    data["inputs"]["units"]["value"] = "300"
+    authority.statement.write_text(json.dumps(data))
+    _refused(_bridge(tmp_path, authority), "teach_auth_bad_signature", units="300")
+
+
+def test_the_wrong_signer_refuses(tmp_path: Path) -> None:
+    from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
+    from tests._teach_authorization_support import order_spec
+
+    person = LocalAuthorizer(tmp_path / "approvers", "clinic-lead")
+    # A key on no roster.
+    stranger = LocalAuthorizer(person.key_dir, "night-desk", register=False)
+    statement = stranger.issue(tmp_path / "s1", order_spec(APP, ORDER))
+    _refused(
+        _bridge(tmp_path / "b1", person.authority(statement)),
+        "teach_auth_unknown_signer",
+    )
+    # A key that signs in the approver's name.
+    forged = stranger.issue(
+        tmp_path / "s2", order_spec(APP, ORDER), authorizer="clinic-lead"
+    )
+    _refused(
+        _bridge(tmp_path / "b2", person.authority(forged)),
+        "teach_auth_bad_signature",
+    )
+
+
+# -- running a taught write tool checks the authorization again --------------------
+
+
+def _taught_tool(tmp_path: Path, person: Any = None, **issue: Any) -> tuple:
+    """A sealed write tool on disk, as teach_finish leaves it."""
+
+    from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
+    from tests._teach_authorization_support import order_spec
+
+    person = person or LocalAuthorizer(tmp_path / "approvers", "clinic-lead")
+    statement = person.issue(tmp_path / "statement", order_spec(APP, ORDER), **issue)
+    authority = person.authority(statement)
+    bridge = _bridge(tmp_path, authority)
+    from openadapt_flow import teach_authorization as ta
+
+    verification = ta.verify(statement, key_dir=person.key_dir, root=person.root)
+    folder = bridge.tools_dir / "add_order"
+    folder.mkdir(parents=True)
+    program = bridge._seal_program(
+        {
+            "schema": bt.PROGRAM_SCHEMA,
+            "name": "add_order",
+            "task": "Add an order",
+            "url": f"{APP}/login",
+            "origin": APP,
+            "inputs": sorted(ORDER),
+            "steps": [],
+            "writes": [],
+            "result": {"kind": "write", "contract": "order"},
+        },
+        (verification, statement),
+        folder,
+    )
+    (folder / bt.PROGRAM_FILE).write_text(json.dumps(program))
+    # A server started now lists the tool.
+    return _bridge(tmp_path, authority), program, person
+
+
+def test_a_taught_tool_runs_only_while_its_authorization_holds(tmp_path: Path) -> None:
+    bridge, program, person = _taught_tool(tmp_path)
+    assert bridge._write_refusal(program) is None
+    # The server restarted without the authorization's trust.
+    assert "needs a teach authorization" in _bridge(tmp_path)._write_refusal(program)
+    # An edited program.
+    assert "changed after it was taught" in bridge._write_refusal(
+        {**program, "origin": "http://127.0.0.1:2"}
+    )
+    # The signer was removed from the roster.
+    from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
+
+    root = LocalAuthorizer(tmp_path / "r2" / "approvers", "admin")
+    lead = LocalAuthorizer(root.key_dir, "clinic-lead", added_by=root)
+    bridge2, program2, _ = _taught_tool(tmp_path / "r2", person=lead)
+    assert bridge2._write_refusal(program2) is None
+    root.remove(lead)
+    assert "teach_auth_unknown_signer" in bridge2._write_refusal(program2)
+
+
+def test_a_taught_tool_stops_when_its_authorization_expires(tmp_path: Path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    bridge, program, _ = _taught_tool(
+        tmp_path,
+        now=datetime.now(timezone.utc) - timedelta(days=3),
+        valid_for=timedelta(days=1),
+    )
+    assert "teach_auth_expired" in bridge._write_refusal(program)
+    result = bridge.dispatch("taught_add_order", {"inputs": ORDER})
     assert result["outcome"] == "did_not_run"
     assert "nothing was written" in result["what_happened"]
+
+
+def test_a_taught_tool_with_a_swapped_statement_does_not_run(tmp_path: Path) -> None:
+    from openadapt_flow import teach_authorization as ta
+    from tests._teach_authorization_support import order_spec
+
+    bridge, program, person = _taught_tool(tmp_path)
+    other = person.issue(tmp_path / "other", order_spec(APP, ORDER))
+    kept = bridge.tools_dir / "add_order" / ta.KEPT_DIR
+    for name in (ta.STATEMENT_FILE, ta.SIGNATURE_FILE):
+        (kept / name).write_bytes(other.with_name(name).read_bytes())
+    assert "teach_auth_digest_mismatch" in bridge._write_refusal(program)

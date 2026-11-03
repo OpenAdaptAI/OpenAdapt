@@ -98,10 +98,23 @@ A verified result proves the system of record holds what was declared. It doesn'
 
 ## Teach a write as a tool
 
-A write an agent teaches needs a person's signed teach authorization
-([TEACH_AUTHORIZATION.md](TEACH_AUTHORIZATION.md)). Browser teach
-(`openadapt-agent serve --teach-browser`) can't bind one, so it refuses a
-`teach_start` that names a write contract, and a write tool taught there
-earlier doesn't run. Teach the write with `openadapt-agent serve --teach
---teach-authorization STATEMENT`: run 1 runs under the signed scope, and the
-program is admitted only with the signature. The read-only lane is unchanged.
+`openadapt-agent serve --teach-browser --contracts ./contracts --teach-authorization STATEMENT --config deploy.yaml` lets your agent teach a browser write once, against a contract, and call it again as a `taught_<name>` tool. Each call makes the write and returns the same verified receipt or refusal.
+
+A person first signs what the agent may teach: a teach authorization ([TEACH_AUTHORIZATION.md](TEACH_AUTHORIZATION.md)) for the task `taught.<name>`. It must name the app's origin, the contract as its `record_kind`, a write adapter for the app, run 1's inputs, and exactly the record fields the contract checks, as its identity and fields, with run 1's values. The sign-in's path goes in `allowed_write_paths`. The server checks it against the approver roster in the deployment config's `approvers` section. Run 1 starts only when it verifies and covers the write; while teaching, the write adapter reads every write before it is sent, and only the statement's values may be typed. Every later call checks the kept statement again (signature, roster, purpose, task, expiry) and the tool's own signature. Without one, or with one that doesn't cover the write, nothing is taught or run.
+
+For a taught write, the contract also lists the requests the write may send:
+
+```yaml
+writes: ["POST /login", "POST /orders"]   # the sign-in and the save
+```
+
+The browser stops any other write before it is sent, while teaching and on every call. The tool sends exactly the writes it was taught, in order and with the same fields, and a call where the page tries anything else ends in `needs_review`, never `done`.
+
+Sign-in values stay with the server. They go only into a password field or another field of a sign-in form, never into an address, and no form of them (encoded or not) reaches the agent:
+
+```bash
+openadapt-agent serve --teach-browser --contracts ./contracts \
+  --sign-in username=PORTAL_USER --sign-in password=PORTAL_PASSWORD
+```
+
+The example app has a sign-in and a New Order form to try it on: `openadapt agent example-app`, with user `clerk` and password `portal-demo`. Its write adapter is `openadapt_flow.agent.example_app:OrderWrites`.

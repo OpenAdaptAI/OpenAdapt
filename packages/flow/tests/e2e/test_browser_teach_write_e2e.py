@@ -29,11 +29,6 @@ from typing import Any, Iterator, Optional
 import anyio
 import pytest
 
-# Browser teach refuses taught writes: no person's signed teach authorization
-# binds them (docs/TEACH_AUTHORIZATION.md; tests/test_browser_teach.py checks
-# the refusal). These tests return when the lane binds one.
-pytestmark = pytest.mark.skip(reason="browser teach refuses taught writes")
-
 pytest.importorskip("mcp")
 pytest.importorskip("playwright")
 
@@ -48,6 +43,7 @@ from openadapt_flow.agent.example_app import (  # noqa: E402
 )
 from openadapt_flow.agent.mcp import build_server  # noqa: E402
 from openadapt_flow.verify import WriteContract  # noqa: E402
+from tests._teach_authorization_support import order_authority  # noqa: E402
 
 FIRST = {"customer": "Acme Ltd", "product": "Desk lamp", "units": "3"}
 SECOND = {"customer": "Birch Co", "product": "Office chair", "units": "5"}
@@ -149,6 +145,8 @@ def test_teach_a_write_then_call_it_verified(
         contracts={"order": _contract(app)},
         secrets={"username": "PORTAL_USER", "password": "PORTAL_PASSWORD"},
         verify_dir=tmp_path / "verify",
+        # A person signed that an agent may teach exactly this order write.
+        teach_authorization=order_authority(tmp_path / "authorization", app, FIRST),
     )
     server = build_server(teach=bridge)
     seen: list[str] = []
@@ -264,6 +262,8 @@ def test_a_taught_write_without_its_sign_in_does_not_run(
         contracts={"order": _contract(app)},
         secrets={"username": "PORTAL_USER", "password": "PORTAL_PASSWORD"},
         verify_dir=tmp_path / "verify",
+        # A person signed that an agent may teach exactly this order write.
+        teach_authorization=order_authority(tmp_path / "authorization", app, FIRST),
     )
     with pytest.raises(Exception, match="PORTAL_PASSWORD"):
         bridge.dispatch(
