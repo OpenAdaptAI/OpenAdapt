@@ -170,6 +170,60 @@ def test_removed_records_and_shared_parameter_values_are_reported_not_proposed()
     assert "parameters a, b share one value" in notes
 
 
+def test_short_values_and_bare_numerics_not_bound_by_value_alone():
+    # Issue #1474: With quantity="1" typed into refills, refills must not become the quantity parameter.
+    diff = diff_snapshots(
+        [],
+        [{"id": 1, "refills": "1", "quantity": "1", "code": "ab", "other": "ab"}],
+    )
+    proposal = propose_effects(diff, {"quantity": "1", "code": "ab"})
+    [effect] = proposal.effects
+    assert effect.match == {
+        "quantity": ValueExpr(param="quantity"),
+        "refills": ValueExpr(literal="1"),
+        "code": ValueExpr(param="code"),
+        "other": ValueExpr(literal="ab"),
+    }
+
+
+def test_a_value_two_fields_hold_binds_only_by_name():
+    diff = diff_snapshots(
+        [],
+        [{"id": 9, "start": "2026-01-05", "end": "2026-01-05", "note": "Ann Lee"}],
+    )
+    proposal = propose_effects(diff, {"visit_date": "2026-01-05", "who": "Ann Lee"})
+    [effect] = proposal.effects
+    assert effect.match == {
+        "start": ValueExpr(literal="2026-01-05"),
+        "end": ValueExpr(literal="2026-01-05"),
+        "note": ValueExpr(param="who"),
+    }
+    notes = " ".join(proposal.not_proposed)
+    assert "field 'start' equals parameter 'visit_date'" in notes
+    assert "held by more than one field" in notes
+
+
+def test_a_numeric_identity_never_binds_to_an_unrelated_parameter():
+    before = [{"id": 7, "status": "open"}]
+    after = [{"id": 7, "status": "closed"}]
+    diff = diff_snapshots(before, after)
+    proposal = propose_effects(diff, {"quantity": "7", "state": "closed"})
+    [effect] = proposal.effects
+    assert effect.match == {"id": ValueExpr(literal="7")}
+    assert effect.value == ValueExpr(param="state")
+    assert "it is short, a number or a flag" in " ".join(proposal.not_proposed)
+
+
+def test_decimals_and_flags_never_bind_by_value_alone():
+    diff = diff_snapshots(
+        [], [{"id": 1, "quantity": "30", "refills": "1.0", "active": True}]
+    )
+    proposal = propose_effects(diff, {"qty": "1.0", "consent": "True"})
+    [effect] = proposal.effects
+    assert effect.match["refills"] == ValueExpr(literal="1.0")
+    assert effect.match["active"] == ValueExpr(literal="True")
+
+
 # -- observer ------------------------------------------------------------------
 
 
