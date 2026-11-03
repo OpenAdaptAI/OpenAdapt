@@ -5785,6 +5785,23 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
     import os
     import stat
 
+    def _recheck_ledger_identity(path: Path, initial: os.stat_result) -> None:
+        try:
+            final = os.lstat(path)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger could not be inspected"
+            ) from exc
+        if (
+            stat.S_ISLNK(final.st_mode)
+            or not stat.S_ISDIR(final.st_mode)
+            or final.st_dev != initial.st_dev
+            or final.st_ino != initial.st_ino
+        ):
+            raise ValueError(
+                "qualification attempt ledger changed while it was inspected"
+            )
+
     def private_directory(path: Path, *, migrate_owned_root: bool = False) -> Path:
         """Open a private directory without trusting a pathname after inspection."""
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -5796,6 +5813,18 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
             ) from exc
         if stat.S_ISLNK(initial.st_mode) or not stat.S_ISDIR(initial.st_mode):
             raise ValueError("qualification attempt ledger is not a private directory")
+        if os.name == "nt":
+            # Windows cannot open a directory as a file descriptor. Refuse a
+            # junction or symbolic link (a reparse point) instead, and rely on
+            # the identity recheck below; the folder sits in this user's
+            # profile, whose default ACL is private to the user.
+            reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+            if getattr(initial, "st_file_attributes", 0) & reparse:
+                raise ValueError(
+                    "qualification attempt ledger is not a private directory"
+                )
+            _recheck_ledger_identity(path, initial)
+            return path
         flags = os.O_RDONLY
         if hasattr(os, "O_DIRECTORY"):
             flags |= os.O_DIRECTORY
@@ -5831,21 +5860,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
                     )
         finally:
             os.close(descriptor)
-        try:
-            final = os.lstat(path)
-        except OSError as exc:
-            raise ValueError(
-                "qualification attempt ledger could not be inspected"
-            ) from exc
-        if (
-            stat.S_ISLNK(final.st_mode)
-            or not stat.S_ISDIR(final.st_mode)
-            or final.st_dev != initial.st_dev
-            or final.st_ino != initial.st_ino
-        ):
-            raise ValueError(
-                "qualification attempt ledger changed while it was inspected"
-            )
+        _recheck_ledger_identity(path, initial)
         return path
 
     case = args._qualification_case_execution["case"]
