@@ -1,9 +1,16 @@
 """Agents that drive the compile-agent harness on run 1.
 
 :class:`ClaudeAgent` is a live Claude computer-use loop on the customer's own
-key, in one of two observation modes:
+key, in one of three observation modes:
 
-``selective`` (default)
+``code`` (default)
+    Code as action (:mod:`.code_action`): one ``run`` tool that takes a short
+    script. The model queries the structure, acts by role and name, reads
+    back, keeps notes in a sandboxed working directory, and asks for a
+    screenshot only when it wants one. Several actions fit in one call. Every
+    save is read back from the system of record before the agent goes on.
+    Default model: ``claude-sonnet-5-5`` (:data:`CODE_DEFAULT_MODEL`).
+``selective``
     The model reads the page's structure (:mod:`.observe`) and acts on refs
     with ``click``, ``type_text`` and ``press_key``. A screenshot enters its
     context only when it calls ``screenshot``, and after an action that
@@ -11,13 +18,7 @@ key, in one of two observation modes:
 ``every_turn``
     The baseline: Claude's computer toolset (``computer_toolset_20260801``),
     with a screenshot returned after every action.
-``code``
-    Code as action (:mod:`.code_action`): one ``run`` tool that takes a short
-    script. The model queries the structure, acts by role and name, reads
-    back, keeps notes in a sandboxed working directory, and asks for a
-    screenshot only when it wants one. Several actions fit in one call.
-
-Both modes perform every action through the same harness and capture computer,
+All modes perform every action through the same harness and capture computer,
 so both are recorded and compiled the same way. Each model call's token usage
 and time go into an :class:`AgentLedger`.
 
@@ -41,6 +42,7 @@ from openadapt_flow.teach_scope import ScopeViolation
 
 __all__ = [
     "AgentLedger",
+    "CODE_DEFAULT_MODEL",
     "BudgetExceeded",
     "ClaudeAgent",
     "DEFAULT_MODEL",
@@ -50,6 +52,8 @@ __all__ = [
 ]
 
 DEFAULT_MODEL = "claude-opus-5-5"
+#: The model the code-as-action agent was measured with (scoreboard arm 7).
+CODE_DEFAULT_MODEL = "claude-sonnet-5-5"
 #: Opus 5.5 and later take computer use only as this toolset (no beta header).
 COMPUTER_TOOLSET = "computer_toolset_20260801"
 
@@ -389,8 +393,10 @@ class ClaudeAgent:
     """A live Claude computer-use loop on the customer's own key.
 
     Args:
-        vision: ``selective`` (structure first) or ``every_turn`` (baseline).
-        model: The model id. Default ``claude-opus-5-5``.
+        vision: ``code`` (code as action, the default), ``selective``
+            (structure first) or ``every_turn`` (the screenshot baseline).
+        model: The model id. Default ``claude-sonnet-5-5`` for ``code``,
+            ``claude-opus-5-5`` for the others.
         effort: ``output_config.effort``. Opus 5.5 defaults to ``medium``.
         max_turns: Model calls before the run is ended.
         max_cost_usd: Estimated spend before the run is ended
@@ -400,8 +406,8 @@ class ClaudeAgent:
         principal_id: The registered agent identity this loop records as.
     """
 
-    vision: str = "selective"
-    model: str = DEFAULT_MODEL
+    vision: str = "code"
+    model: str = ""
     effort: Optional[str] = "medium"
     max_turns: int = 40
     max_cost_usd: float = 2.0
@@ -416,6 +422,8 @@ class ClaudeAgent:
     def __post_init__(self) -> None:
         if self.vision not in VISION_MODES:
             raise ValueError(f"vision must be one of {VISION_MODES}")
+        if not self.model:
+            self.model = CODE_DEFAULT_MODEL if self.vision == "code" else DEFAULT_MODEL
         if self.prices is None and self.model not in PRICES_PER_MTOK:
             raise ValueError(
                 f"no price for {self.model!r}, so the cost cap can't hold; pass "

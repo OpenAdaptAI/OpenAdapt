@@ -1,0 +1,169 @@
+{
+  "ledger": {
+    "agent": "claude",
+    "model": "claude-sonnet-5-5",
+    "vision": "code",
+    "model_calls": 4,
+    "input_tokens": 10,
+    "output_tokens": 250,
+    "cache_creation_input_tokens": 2241,
+    "cache_read_input_tokens": 5012,
+    "prompt_tokens": 7263,
+    "images_in_requests": 0,
+    "cost_usd": 0.009125,
+    "wall_seconds": 5.828,
+    "model_seconds": 3.808,
+    "finished": true,
+    "summary": "Saved Triage encounter with the note for Jane Sample.",
+    "tool_errors": 0,
+    "calls": [
+      {
+        "turn": 1,
+        "input_tokens": 4,
+        "output_tokens": 50,
+        "cache_creation_input_tokens": 1453,
+        "cache_read_input_tokens": 0,
+        "seconds": 0.855,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 2,
+        "input_tokens": 2,
+        "output_tokens": 50,
+        "cache_creation_input_tokens": 206,
+        "cache_read_input_tokens": 1453,
+        "seconds": 0.971,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 3,
+        "input_tokens": 2,
+        "output_tokens": 84,
+        "cache_creation_input_tokens": 241,
+        "cache_read_input_tokens": 1659,
+        "seconds": 1.063,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      },
+      {
+        "turn": 4,
+        "input_tokens": 2,
+        "output_tokens": 66,
+        "cache_creation_input_tokens": 341,
+        "cache_read_input_tokens": 1900,
+        "seconds": 0.918,
+        "stop_reason": "tool_use",
+        "images_in_request": 0
+      }
+    ]
+  },
+  "harness": {
+    "observations": 0,
+    "screenshots_requested": 0,
+    "screenshots_at_gate": 0,
+    "screenshots_every_turn": 0,
+    "actions": 6,
+    "gate_checks": 1,
+    "gate_evidence_screenshots": 1,
+    "gate_refusals": 0,
+    "readbacks": 1
+  },
+  "trace": {
+    "surface": "dom",
+    "scripts": 4,
+    "lines": 8,
+    "actions": 5,
+    "errors": 0,
+    "screenshots": 0,
+    "shell_commands": 0,
+    "shell_isolation": "sandbox-exec",
+    "by_structure": 5,
+    "with_recorded_locator": 5,
+    "locator_agrees": 5,
+    "locator_unique": 5,
+    "commits": 1,
+    "readbacks": {
+      "landed": 1
+    },
+    "identity_read_before_commit": [
+      "identity:Jane Sample",
+      "identity:MRN P1"
+    ],
+    "read_back_after_commit": []
+  },
+  "scripts": [
+    {
+      "script": "tree",
+      "output": "$ tree\npage: MockMed (http://127.0.0.1:18765/?...#tasks)\nMockMed\nClinical demo \u2014 all data is fake\n# Referral Tasks\nrow: Patient | Reason | Priority | Action\nrow: Jane Sample | Knee pain referral | High | @1 button \"Open\"\nrow: Alex Testcase | Cardiology follow-up | Medium | @2 button \"Open\"\nrow: Sam Specimen | Dermatology consult | Low | @3 button \"Open\"",
+      "images": 0
+    },
+    {
+      "script": "click @1\ntree",
+      "output": "$ click @1\nok: click button \"Open\"\npage: MockMed (http://127.0.0.1:18765/?...#patient/p1)\n$ tree\npage: MockMed (http://127.0.0.1:18765/?...#patient/p1)\nMockMed\nClinical demo \u2014 all data is fake\nJane Sample \u2014 MRN P1 \u2014 DOB 1980-01-01\n@1 button \"New Encounter\"\n# Encounters\nNo encounters yet.",
+      "images": 0
+    },
+    {
+      "script": "click @1\ntree",
+      "output": "$ click @1\nok: click button \"New Encounter\"\npage: MockMed (http://127.0.0.1:18765/?...#encounter)\n$ tree\npage: MockMed (http://127.0.0.1:18765/?...#encounter)\nMockMed\nClinical demo \u2014 all data is fake\nJane Sample \u2014 MRN P1 \u2014 DOB 1980-01-01\n# New Encounter\nEncounter Type\n@1 button \"Triage\"\n@2 button \"Consult\"\nNote\n@3 textbox \"Note\" value=\"\"\n@4 button \"Save Encounter\"",
+      "images": 0
+    },
+    {
+      "script": "click @1\nfill @3 value=\"Synthetic follow-up note 26: recheck in 19 days\"\nclick @4\ntree",
+      "output": "$ click @1\nok: click button \"Triage\"\npage: MockMed (http://127.0.0.1:18765/?...#encounter)\n$ fill @3 value=\"Synthetic follow-up note 26: recheck in 19 days\"\nok: fill textbox \"Note\" value=\"Synthetic follow-up note 26: recheck in 19 days\"\npage: MockMed (http://127.0.0.1:18765/?...#encounter)\n$ click @4\nok: click button \"Save Encounter\" (save gate passed)\nread back: 1 record(s) with patient_id=p1, type=Triage saved\npage: MockMed (http://127.0.0.1:18765/?...#patient/p1)\n(a write was committed; 1 lines not run. Read the screen to check the result.)",
+      "images": 0
+    }
+  ],
+  "result": {
+    "record_status": "needs_human_admit",
+    "detail": null,
+    "gates": [
+      {
+        "control": "Save Encounter",
+        "missing": [],
+        "decision": "passed_no_hold"
+      }
+    ],
+    "readbacks": [
+      {
+        "control": "Save Encounter",
+        "outcome": "landed",
+        "detail": "1 record(s) with patient_id=p1, type=Triage saved",
+        "fields": [
+          "id",
+          "key",
+          "note",
+          "patient_id",
+          "source",
+          "type"
+        ]
+      }
+    ],
+    "program_check": {
+      "trace_steps_with_locator": 5,
+      "distilled_steps": [],
+      "in_program": 5,
+      "missing_steps": [],
+      "program_structural_steps": 5,
+      "passed": true
+    },
+    "steps": 6,
+    "canary_status": "VERIFIED",
+    "canary_detail": null,
+    "canary_halt": null,
+    "admitted": true,
+    "params": {
+      "lifted": [
+        {
+          "also_typed_in": [],
+          "field_label": "Note",
+          "masked_example": "Sy*******************************************ys",
+          "name": "note",
+          "step_id": "step_004"
+        }
+      ],
+      "unlifted": {}
+    }
+  }
+}
