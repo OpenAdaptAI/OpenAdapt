@@ -47,7 +47,14 @@ def sha(data: bytes) -> str:
 
 
 def _tags(task: Mapping[str, Any]) -> dict[str, str]:
-    return dict(t.split(":", 1) for t in task["tags"] if ":" in t)
+    """A task's app, schema, kind and family, from its private plan (``_meta``)."""
+    m = task["_meta"]
+    return {
+        "app": str(m["app"]),
+        "schema": f"v{m['schema']}",
+        "kind": str(m["kind"]),
+        "family": str(m["family"]),
+    }
 
 
 def matches(task: Mapping[str, Any], rule: Mapping[str, Any]) -> bool:
@@ -109,6 +116,8 @@ def load_validated(pack: Path) -> list[tuple[dict[str, Any], Path]]:
         if line.strip():
             t = json.loads(line)
             if t["id"] in keep:
+                plan = json.loads((pack / "validation" / f"{t['id']}.json").read_text())
+                t["_meta"] = plan
                 out.append((t, pack))
     return out
 
@@ -131,6 +140,7 @@ def write_release(
         lines = []
         digests = {}
         for t in tasks:
+            t = {k: v for k, v in t.items() if k != "_meta"}
             t = {**t, "split": name}
             src = source[t["id"]] / t["verify"]
             shutil.copyfile(src, sdir / t["verify"])

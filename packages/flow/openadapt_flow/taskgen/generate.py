@@ -105,9 +105,15 @@ def finish_contract(
     return doc
 
 
-def task_id(prof: Profile, draft: F.Draft, seed: int) -> str:
+def task_name(prof: Profile, draft: F.Draft, seed: int) -> str:
+    """The descriptive name, kept in the private validation plan only."""
     form = "pos" if draft.positive else "adv"
     return f"{prof.app}-v{prof.version}-{draft.kind}-{draft.family}-{form}-{seed}"
+
+
+def task_id(name: str, prefix: str) -> str:
+    """An opaque id: an agent can't read the family from it."""
+    return f"{prefix}-{hashlib.sha256(name.encode()).hexdigest()[:12]}"
 
 
 def write_pack(
@@ -136,7 +142,8 @@ def write_pack(
                         draft = F.build(prof, kind, family, positive, n)
                     except F.NotApplicable:
                         break
-                    tid = task_id(prof, draft, n)
+                    name = task_name(prof, draft, n)
+                    tid = task_id(name, f"{prof.app}-v{prof.version}")
                     ck = contract_kind(prof, kind)
                     src = contract_file(manifest, ck, draft.write.values)
                     doc = yaml.safe_load(src.read_text(encoding="utf-8"))
@@ -171,11 +178,12 @@ def write_pack(
                         "feasible": True,
                         "fault": draft.family,
                         "solution": draft.solution,
-                        "tags": draft.tags
-                        + [
+                        # The family stays out of the tags (and the id): only
+                        # the private validation plan names it.
+                        "tags": [
                             f"app:{prof.app}",
                             f"schema:v{prof.version}",
-                            f"contract:{ck}",
+                            f"kind:{kind}",
                         ],
                         "verify": f"contracts/{tid}.yaml",
                     }
@@ -183,8 +191,9 @@ def write_pack(
                     vplan = {
                         "schema_version": TASK_SCHEMA,
                         "id": tid,
+                        "name": name,
                         "app": prof.app,
-                        "profile_version": prof.version,
+                        "schema": prof.version,
                         "kind": kind,
                         "family": family,
                         "positive": draft.positive,

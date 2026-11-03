@@ -319,6 +319,12 @@ def _flow_worker(args: tuple[int, str, str, list[str], str]) -> list[dict[str, A
     return rows
 
 
+def task_meta(pack: Path, tid: str) -> dict[str, Any]:
+    """App, schema, kind and family of a task, from its private plan."""
+    plan = json.loads((pack / "validation" / f"{tid}.json").read_text())
+    return {k: plan[k] for k in ("app", "schema", "kind", "family", "positive", "name")}
+
+
 def summarize(pack: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
     tasks = [
         json.loads(line)
@@ -362,10 +368,10 @@ def summarize(pack: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "family": defaultdict(list),
     }
     for t in tasks:
-        tags = dict(tag.split(":", 1) for tag in t["tags"] if ":" in tag)
-        groups["app"][tags["app"]].append(t["id"])
-        groups["kind"][tags["kind"]].append(t["id"])
-        groups["family"][tags["family"]].append(t["id"])
+        m = task_meta(pack, t["id"])
+        groups["app"][m["app"]].append(t["id"])
+        groups["kind"][m["kind"]].append(t["id"])
+        groups["family"][m["family"]].append(t["id"])
     planted_counts = Counter(
         e["episode"].split(":")[0] + ":" + e["verdict"]
         for e in rows

@@ -108,7 +108,7 @@ def test_lookalike_differs_by_a_swap() -> None:
 def _task(tid: str, app: str, kind: str, family: str, schema: int = 1) -> dict:
     return {
         "id": tid,
-        "tags": [f"app:{app}", f"kind:{kind}", f"family:{family}", f"schema:v{schema}"],
+        "_meta": {"app": app, "kind": kind, "family": family, "schema": schema},
     }
 
 

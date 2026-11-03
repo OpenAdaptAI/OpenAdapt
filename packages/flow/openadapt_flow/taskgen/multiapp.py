@@ -32,7 +32,7 @@ import yaml
 from openadapt_flow.generate import verify_contract as vc
 from openadapt_flow.taskgen import families as F
 from openadapt_flow.taskgen import kinds as K
-from openadapt_flow.taskgen.generate import contract_file
+from openadapt_flow.taskgen.generate import contract_file, task_id
 from openadapt_flow.taskgen.kinds import contract_kind
 from openadapt_flow.taskgen.profile import load_profile
 
@@ -158,7 +158,8 @@ def write_flows(
     for i in range(count):
         n = seed + i
         built = build_flow(flow, n)
-        tid = f"flow-{flow['name']}-{n}"
+        name = f"flow-{flow['name']}-{n}"
+        tid = task_id(name, f"flow-{flow['name']}")
         apps: dict[str, Any] = {}
         for prof, world, write in zip(
             built["profiles"], built["worlds"], built["writes"]
@@ -188,18 +189,23 @@ def write_flows(
             "feasible": True,
             "fault": "multi_app",
             "solution": built["solution"],
-            "tags": [
-                "kind:multi_app",
-                "family:multi_app",
-                "adversarial",
-                f"app:{flow['name']}",
-                "schema:v1",
-                f"flow:{flow['name']}",
-            ],
+            "tags": [f"app:{flow['name']}", "schema:v1", "kind:multi_app"],
         }
         tasks.append(task)
         (out / "validation" / f"{tid}.json").write_text(
-            json.dumps({"id": tid, "planted": built["planted"]}, indent=1)
+            json.dumps(
+                {
+                    "id": tid,
+                    "name": name,
+                    "app": flow["name"],
+                    "schema": 1,
+                    "kind": "multi_app",
+                    "family": "multi_app",
+                    "positive": False,
+                    "planted": built["planted"],
+                },
+                indent=1,
+            )
         )
     with (out / "tasks.jsonl").open("w") as fh:
         for t in tasks:
