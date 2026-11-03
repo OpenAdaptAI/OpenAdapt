@@ -182,6 +182,47 @@ See [Measured](#measured) for how often it works.
 The re-run is safe because self-repair handles only a halt before any
 effect. The item was never partly saved.
 
+## Outside a browser
+
+On a desktop, RDP or Citrix backend, each probe, each fault probe and the
+resumed run need the app freshly started. `repair.session` says how:
+
+```yaml
+# deploy.yaml
+backend:
+  kind: macos
+  app: Chart
+  window_title: Chart
+repair:
+  agent: mypkg.agents:make_agent
+  screen_access_by: ops-lead
+  session:
+    command: ["/Applications/Chart.app/Contents/MacOS/Chart", "--profile", "test"]
+    fault_commands:
+      other_patient: ["/Applications/Chart.app/Contents/MacOS/Chart", "--patient", "5512"]
+    ready_s: 2
+```
+
+Each command is an argv, run with no shell on the machine Flow runs on. It
+must keep running while the app is up, and the one window `backend:` binds
+to must belong to it or to a process of its group: Flow checks that, so a
+session never binds to the halted session or a copy that was already open.
+When the session ends, Flow ends the command's whole process group, then runs
+`close_command` if there is one; a non-zero exit is refused. An app that
+exits at once handed the launch to a running window and is refused. Fault
+commands are the fault probes, as `fault_urls` are in a browser. Two
+sessions can't run side by side, so self-repair closes the halted session
+before each probe.
+
+Flow has to see which process owns the bound window, so this works where the
+window is on the machine Flow runs on: macOS, and the local client window of
+RDP or Citrix. Windows over its agent, and FreeRDP, are refused for now.
+
+Without `repair.session`, repair is off for a desktop run: the stop waits
+for a person, and `--self-repair` is refused. When it is set, Flow starts the
+app for the run itself, so close any copy already open: two windows refuse
+the run.
+
 ## Approving the fix
 
 The request is a normal per-item approval request, so the existing surfaces
@@ -795,8 +836,9 @@ same way.
 - The probe stops before every step the run gate classifies as a save, the
   same fail-closed classifier the approval gate uses. A step that writes but
   that the classifier misses would run during a probe.
-- The CLI supports browser runs that Flow launches. The Python API takes any
-  backend whose sessions you can open, but the DOM-based checks
+- The CLI repairs a browser run that Flow launches, or a desktop, RDP or
+  Citrix run whose `repair.session` says how to start the app (see
+  [Outside a browser](#outside-a-browser)). The DOM-based checks
   (`same_fields`, the structural locator) apply only in a browser. Elsewhere
   `same_fields` falls back to on-screen text.
 - An encrypted bundle is written back encrypted, but this path has no test.
