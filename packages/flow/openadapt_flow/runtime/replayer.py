@@ -12911,25 +12911,29 @@ class Replayer:
         except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
             return None
 
-    #: Height of the row read around each resolved field for a screen form
-    #: state, in frame pixels.
-    _APPROVAL_FORM_ROW_PX = 48
-
     def _approval_form_regions(
         self, frame_png: Optional[bytes]
     ) -> Optional[list[tuple[int, int, int, int]]]:
-        """The rows of this item's fields, for a screen-text form state.
+        """The app window's part of the frame, for a screen-text form state.
 
-        Every step this run has already resolved before the save is a field
-        the item filled or a control it used; its row, across the frame, is
-        where an edit would show. The save step itself is left out, so the
-        approval request (taken before the save resolves) and the recheck
-        after the answer read the same rows. None, and the whole screen is
-        read, when no step has resolved yet.
+        A backend that knows the window this item's verified steps were in
+        (``approval_form_region``) bounds the read to that window, so the
+        whole form the person saw is read, and the clock or a notification
+        outside it is not. The save step is left out, so the approval
+        request (taken before the save resolves) and the recheck after the
+        answer ask about the same window; its frame is part of the digest, so
+        a moved or resized window halts the save. None, and the whole screen
+        is read, when the backend cannot say.
         """
 
-        report = self._approval_report
-        if report is None or frame_png is None:
+        region_of = getattr(self.backend, "approval_form_region", None)
+        if not callable(region_of) or frame_png is None:
+            return None
+        try:
+            region = region_of(self._approval_form_step_id)
+        except Exception:  # noqa: BLE001 - no window means the whole screen
+            return None
+        if region is None:
             return None
         try:
             from PIL import Image
@@ -12938,18 +12942,12 @@ class Replayer:
                 width, height = image.size
         except Exception:  # noqa: BLE001 - no size means the whole screen
             return None
-        from openadapt_flow.approval_mode.form_state import field_rows
-
-        save_step = self._approval_form_step_id
-        return field_rows(
-            [
-                int(prior.resolution.point[1])
-                for prior in report.results
-                if prior.step_id != save_step and prior.resolution is not None
-            ],
-            (width, height),
-            self._APPROVAL_FORM_ROW_PX,
-        )
+        x, y, w, h = (int(v) for v in region)
+        left, top = max(0, x), max(0, y)
+        right, bottom = min(width, x + w), min(height, y + h)
+        if right <= left or bottom <= top:
+            return None
+        return [(left, top, right - left, bottom - top)]
 
     def _is_qualification_fault_step(self, step: Step) -> bool:
         """Whether ``step`` is the fault step of the fault case this run is.

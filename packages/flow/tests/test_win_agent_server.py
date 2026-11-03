@@ -1815,3 +1815,22 @@ def test_locator_at_keeps_a_unique_automation_id(monkeypatch) -> None:
         _perform_uia("locator-at", {"x": 560, "y": 400})["locator"]["automation_id"]
         == "noteBox"
     )
+
+
+def test_window_bounds_reports_the_visible_frame(monkeypatch) -> None:
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    desktop = _FakeDesktop()
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    pinned = _FakeDesktop.PINNED
+    assert _perform_uia("window-bounds", {"hwnd": pinned, "pid": 10}) == {
+        "status": "ok",
+        "window": {"hwnd": pinned, "pid": 10, "bounds": [0, 0, 800, 600]},
+    }
+    # Another process now owns the handle, or the window is hidden: no frame.
+    assert _perform_uia("window-bounds", {"hwnd": pinned, "pid": 11})["window"] is None
+    desktop.add(0x200, visible=False)
+    assert _perform_uia("window-bounds", {"hwnd": 0x200, "pid": 10})["window"] is None
+    with pytest.raises(AgentRequestError):
+        _perform_uia("window-bounds", {"hwnd": True, "pid": 10})

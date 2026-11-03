@@ -1733,7 +1733,7 @@ def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
 
 
 _MAX_OWNER_CHAIN = 32
-_WINDOW_OPERATIONS = frozenset({"window-root-at", "owned-window-over"})
+_WINDOW_OPERATIONS = frozenset({"window-root-at", "window-bounds", "owned-window-over"})
 
 
 def _intersects(
@@ -1788,6 +1788,33 @@ def _window_operation(
         return {
             "status": "ok",
             "window": {"hwnd": root, "pid": user32.pid_of(root)},
+        }
+    if operation == "window-bounds":
+        data = _exact_object(
+            payload, required=frozenset({"hwnd", "pid"}), label=operation
+        )
+        hwnd, pid = data["hwnd"], data["pid"]
+        if any(
+            not isinstance(v, int) or isinstance(v, bool) or v <= 0 for v in (hwnd, pid)
+        ):
+            raise AgentRequestError(400, "invalid_schema", "hwnd and pid required")
+        if (
+            not user32.is_window(hwnd)
+            or user32.pid_of(hwnd) != pid
+            or not user32.is_visible(hwnd)
+        ):
+            return {"status": "ok", "window": None}
+        rect = user32.rect(hwnd)
+        if rect is None or rect[2] <= rect[0] or rect[3] <= rect[1]:
+            return {"status": "ok", "window": None}
+        return {
+            "status": "ok",
+            "window": {
+                "hwnd": hwnd,
+                "pid": pid,
+                # The visible frame (DWM bounds), in screenshot pixels.
+                "bounds": [rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]],
+            },
         }
     data = _exact_object(
         payload, required=frozenset({"hwnd", "pid", "region"}), label=operation
@@ -2483,6 +2510,7 @@ def make_handler_class(
                             "guarded_input_v1",
                             "uia_v1",
                             "uia_read_v1",
+                            "window_bounds_v1",
                             *(
                                 ["legacy_waa_input_v1"]
                                 if config.allow_legacy_exec
@@ -2522,6 +2550,7 @@ def make_handler_class(
                 "/uia/element-identity-at": ("uia", "element-identity-at"),
                 "/window/root-at": ("uia", "window-root-at"),
                 "/window/owned-over": ("uia", "owned-window-over"),
+                "/window/bounds": ("uia", "window-bounds"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),
