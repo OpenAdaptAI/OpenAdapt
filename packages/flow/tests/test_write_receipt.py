@@ -404,3 +404,39 @@ def test_anchoring_is_refused_in_no_outbound_mode(
     with pytest.raises(AnchorError, match="held_no_outbound"):
         wr.anchor(one.path, submit=lambda *a: calls.append(a))
     assert calls == []
+
+
+# FHIR shadow episodes, with test_shadow_fhir.py's stubbed ensure_record.
+from tests.test_shadow_fhir import _allergy, _send, env  # noqa: E402, F401
+
+
+def test_a_fhir_shadow_confirmation_is_provisional_until_its_recheck(
+    env: dict[str, Any],
+) -> None:
+    from datetime import datetime, timezone
+
+    sh = env["sh"]
+    sh.receipts = True
+    env["calls"]["ev"] = {"window_until": datetime.now(timezone.utc).isoformat()}
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    sh.flush()
+    (ep,) = sh.episodes
+    assert ep.verdict == "CONFIRMED" and ep.recheck_at, ep.receipt_note
+    p = _verify(Path(ep.receipts[0]).read_bytes()).payload
+    assert p.source == "shadow.fhir" and p.provisional and p.recheck_due_at
+    assert p.scope.stores[0] == "fhir" and p.scope.window.read_at
+    for line in wr.FHIR_NOT_COVERED:
+        assert line in p.not_checked
+
+
+def test_a_fhir_confirmation_with_no_read_window_gets_no_receipt(
+    env: dict[str, Any],
+) -> None:
+    sh = env["sh"]
+    sh.receipts = True
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p1"))
+    sh.flush()
+    (ep,) = sh.episodes
+    # The verdict stands; the receipt that couldn't state a window isn't made.
+    assert ep.verdict == "CONFIRMED" and ep.receipts == []
+    assert ep.receipt_note.startswith("not issued: overclaim")
