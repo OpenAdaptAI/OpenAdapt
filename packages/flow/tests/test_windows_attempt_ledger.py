@@ -43,6 +43,52 @@ def test_a_held_ledger_cannot_be_renamed(tmp_path):
     os.rename(ledger, tmp_path / "moved")
 
 
+def test_a_parent_of_a_held_ledger_cannot_be_renamed(tmp_path):
+    from openadapt_flow._windows_directory import hold_private_directory
+
+    parent = tmp_path / "state"
+    ledger = parent / "ledger"
+    ledger.mkdir(parents=True)
+    held = hold_private_directory(ledger)
+    try:
+        with pytest.raises(PermissionError):
+            os.rename(parent, tmp_path / "moved")
+    finally:
+        held.close()
+
+
+def test_the_marker_lands_in_the_held_ledger_through_a_swapped_junction(
+    case, tmp_path, monkeypatch
+):
+    """A junction above the ledger, swapped after the check, cannot move
+    the claim: the marker is written under the ledger's resolved path."""
+    import openadapt_flow._windows_directory as windows_directory
+
+    main, bundle, inputs_path, called = case
+    real = tmp_path / "real"
+    real.mkdir()
+    decoy = tmp_path / "decoy"
+    (decoy / "state" / "qualification-attempts").mkdir(parents=True)
+    link = tmp_path / "j"
+    _junction(link, real)
+    monkeypatch.setenv("OPENADAPT_HOME", str(link / "state"))
+    hold = windows_directory.hold_private_directory
+    held_count = []
+
+    def hold_then_swap(path):
+        held = hold(path)
+        held_count.append(path)
+        if len(held_count) == 2:  # both directories checked and held
+            os.rmdir(link)
+            _junction(link, decoy)
+        return held
+
+    monkeypatch.setattr(windows_directory, "hold_private_directory", hold_then_swap)
+    assert _run_case(main, bundle, inputs_path, tmp_path / "run") == 0
+    assert list((real / "state" / "qualification-attempts").glob("*.json"))
+    assert list((decoy / "state" / "qualification-attempts").iterdir()) == []
+
+
 def test_a_junction_is_refused(tmp_path):
     from openadapt_flow._windows_directory import hold_private_directory
 

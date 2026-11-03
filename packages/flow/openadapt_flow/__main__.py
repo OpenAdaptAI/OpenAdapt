@@ -5905,7 +5905,12 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
                 "Nothing was executed."
             )
             return False
-        marker = ledger_dir / f"{attempt_key}.json"
+        # On Windows the marker goes under the held ledger's resolved path,
+        # so a junction higher up that is swapped after the check cannot
+        # redirect it.
+        marker = (
+            Path(held_directories[-1].final_path) if held_directories else ledger_dir
+        ) / f"{attempt_key}.json"
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
