@@ -1151,8 +1151,14 @@ def _pg_sequences(
         f"WHERE n.nspname IN {_pg_in(scope)} ORDER BY 1, 2"
     ):
         schema, name, inc, start, low, high, cycle, typ, ok, tschema, table, col = row
-        out[_pg_name(str(schema), str(name), default)] = _PgSequence(
-            _pg_name(str(schema), str(name), default),
+        qname = _pg_name(str(schema), str(name), default)
+        if qname in out:
+            raise SnapshotError(
+                f"sequence name collision: {qname!r} refers to both {out[qname].relation} "
+                f"and {_pg_relation(str(schema), str(name))}"
+            )
+        out[qname] = _PgSequence(
+            qname,
             _pg_relation(str(schema), str(name)),
             int(inc),
             bool(ok),
@@ -1216,6 +1222,11 @@ def _pg_definitions(
             parents.append([schema, table])
             continue
         name = _pg_name(str(schema), str(table), default)
+        if name in out:
+            raise SnapshotError(
+                f"table name collision: {name!r} refers to both {out[name].relation} "
+                f"and {_pg_relation(str(schema), str(table))}"
+            )
         tables[int(oid)] = (name, str(schema), [kind, persistence, rls, force])
         d = out[name] = _Def(
             [], [], None, {}, {}, "", relation=_pg_relation(str(schema), str(table))
