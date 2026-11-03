@@ -6,8 +6,16 @@
     Opens the operator's app (``--url`` or ``--config``) and starts run 1 of a
     task the agent names, with its inputs, the record fields the save must
     produce, and the record's identity as the screen shows it.
+``teach_run`` (web apps; the default way to act)
+    The agent writes the action code: a short script that reads the page,
+    acts on elements by role and name, and reads the result back
+    (:mod:`openadapt_flow.compile_agent.code_action`). Every save goes through
+    the same gate, and is read back from the system of record before the
+    script goes on; a save on a record the task does not name ends run 1.
+    When a person approves saves, the script stops before each one and the
+    client's form asks the person; the approval covers that one line.
 ``teach_observe``, ``teach_act``, ``teach_screen``
-    The agent does the task one action at a time. Every action goes through
+    Or the agent does the task one action at a time. Every action goes through
     the compile-agent harness (:mod:`openadapt_flow.compile_agent.harness`):
     on the web it checks that the right record is on screen before each save;
     on Windows, macOS, Linux, RDP and Citrix it can't, so a person approves
@@ -52,6 +60,7 @@ __all__ = ["TEACH_TOOLS", "TaughtEngine", "TeachBridge", "TeachConfig"]
 TEACH_TOOLS = (
     "teach_start",
     "teach_observe",
+    "teach_run",
     "teach_act",
     "teach_screen",
     "teach_finish",
@@ -87,6 +96,12 @@ _LOCAL = {
     "idempotentHint": True,
     "openWorldHint": False,
 }
+
+
+def _code_commands() -> str:
+    from openadapt_flow.compile_agent.code_action import COMMANDS
+
+    return COMMANDS
 
 
 def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -273,8 +288,9 @@ class TeachBridge:
                 description=(
                     "Teach OpenAdapt a task by doing it once. OpenAdapt opens the "
                     f"app this server was set up for ({self.backend_kind}) and "
-                    "records what you do; you then call teach_observe and "
-                    "teach_act until the task is done, and teach_finish. This "
+                    "records what you do; you then call teach_run with short "
+                    "scripts (or teach_observe and teach_act, one action at a "
+                    "time) until the task is done, and teach_finish. This "
                     "run makes a real entry in that app, so use test records. "
                     "task is the instruction with {name} for each input; inputs "
                     "are this run's values; record_fields are fields the saved "
@@ -344,6 +360,49 @@ class TeachBridge:
                 ),
                 input_schema=_obj({}, []),
                 annotations=_READ_ONLY,
+            ),
+            *(
+                [
+                    ToolSpec(
+                        name="teach_run",
+                        description=(
+                            "Do the next part of run 1 by writing it as a short "
+                            "script, one command per line: tree / find / text / "
+                            "read to read the page; click, fill, select, press "
+                            "and scroll to act on elements by role and name "
+                            '(click role=button name="Save" near="Jane Sample"); '
+                            "sh for a read-only shell over files you saved. "
+                            "Lines run in order and stop at the first error or "
+                            "after a save. After every save the gate detects, "
+                            "OpenAdapt reads the app's records back and tells you "
+                            "what landed; a write on a record the task does not "
+                            "name ends run 1. "
+                            + (
+                                "A person approves each save first: the script "
+                                "stops before it with status needs_person, and "
+                                "you send the rest of the script again."
+                                if self.config.hold
+                                else "Before any save the harness checks that the "
+                                "record's identity is shown next to it."
+                            )
+                            + "\n"
+                            + _code_commands()
+                        ),
+                        input_schema=_obj(
+                            {
+                                "script": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 8000,
+                                }
+                            },
+                            ["script"],
+                        ),
+                        annotations=_ACTS,
+                    )
+                ]
+                if on_web
+                else []
             ),
             ToolSpec(
                 name="teach_act",
@@ -514,15 +573,19 @@ class TeachBridge:
 
     # -- what the MCP layer asks a person ------------------------------------------
 
-    def hold_needed(self, arguments: Mapping[str, Any]) -> Optional[dict[str, Any]]:
-        """For ``teach_act``: when a person must approve this action first,
-        what it may commit, a description, and the binding the approval
-        covers (this run, this action, the app as it is now). Else None."""
+    def hold_needed(
+        self, arguments: Mapping[str, Any], tool: str = "teach_act"
+    ) -> Optional[dict[str, Any]]:
+        """For ``teach_act`` and ``teach_run``: when a person must approve this
+        action (a script's first line) first, what it may commit, a
+        description, and the binding the approval covers (this run, this
+        action, the app as it is now). Else None."""
 
         run = self._active()
         if not run.person_approves_saves:
             return None
-        answer = self._run_call("preview", arguments)
+        kind = "run_preview" if tool == "teach_run" else "preview"
+        answer = self._run_call(kind, arguments)
         if "error" in answer or not answer.get("commit"):
             return None  # teach_act reports any error, performing nothing
         return answer
@@ -595,6 +658,8 @@ class TeachBridge:
         }
         if name == "teach_act":
             return self._act(args, held_by_person=held_by_person or None)
+        if name == "teach_run":
+            return self._run_script(args, held_by_person=held_by_person or None)
         if name == "teach_confirm_checks":
             return self._confirm_checks(args, person)
         if name not in handlers or not self.handles(name):
@@ -735,7 +800,12 @@ class TeachBridge:
             "person_approves_saves": run.person_approves_saves,
             "warning": RECORDING_WARNING,
             "observation": observation.get("observation"),
-            "next": "teach_act until the task is done, then teach_finish",
+            "next": (
+                "teach_run with a script (start with: tree) until the task is "
+                "done, then teach_finish"
+                if compiler.backend_kind == "web"
+                else "teach_act until the task is done, then teach_finish"
+            ),
         }
 
     def _observe(self) -> dict[str, Any]:
@@ -785,6 +855,43 @@ class TeachBridge:
                 "performed": False,
             }
         return {"status": "ok", "observation": answer.get("observation")}
+
+    def _run_script(
+        self, args: Mapping[str, Any], *, held_by_person: Optional[str]
+    ) -> dict[str, Any]:
+        run = self._active()
+        if self.backend_kind != "web":
+            raise BridgeError("teach_run runs on web apps; on this app use teach_act")
+        payload = {"script": str(args.get("script") or "")}
+        if held_by_person:
+            payload["_held_by_person"] = held_by_person
+        answer = self._run_call("run", payload)
+        if "refused" in answer:
+            run.done.wait(120)
+            return {
+                "status": "refused",
+                "detail": answer["refused"],
+                "run_over": True,
+                "next": "teach_finish shows the result; nothing was compiled",
+            }
+        if "error" in answer:
+            return {
+                "status": "error",
+                "error": answer["error"],
+                "detail": answer.get("detail"),
+                "performed": False,
+            }
+        out: dict[str, Any] = {
+            "status": "needs_person" if answer.get("pending") else "ok",
+            "output": answer.get("output"),
+        }
+        if answer.get("pending"):
+            out["next"] = (
+                "a person must approve the save on the first line of this "
+                "script; send it with teach_run again"
+            )
+            out["script"] = answer["pending"]["script"]
+        return out
 
     def _abort(self) -> dict[str, Any]:
         run = self._active()

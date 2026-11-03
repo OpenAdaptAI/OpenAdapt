@@ -45,6 +45,7 @@ from openadapt_flow.compile_agent.harness import (
     Harness,
     SaveGate,
     SurfaceHarness,
+    record_readback,
 )
 from openadapt_flow.jit import lifecycle
 from openadapt_flow.jit.compile_agent import (
@@ -236,7 +237,8 @@ class CompileResult:
     ``status`` is ``admitted`` (later runs make no model calls), ``draft``
     (run 1 passed; checks or admission wait for a person), ``needs_person``
     (outside the agent's admission policy), or why nothing can be admitted:
-    ``refused_wrong_record``, ``refused_by_hold``, ``record_check_failed``,
+    ``refused_wrong_record``, ``refused_by_hold``, ``readback_wrong_record``
+    (a save landed on a record the task does not name), ``record_check_failed``,
     ``canary_failed``, ``capture_failed``, ``unsupported``, ``scope_refused``
     (run 1 went outside the task's declared scope), ``readback_refused``
     (the system of record did not show exactly the declared write).
@@ -300,8 +302,11 @@ class _HarnessedAgent:
         keep: Sequence[str],
         evidence_dir: Path,
         principal_id: Optional[str],
+        readback: Optional[Callable[[], Any]] = None,
     ) -> None:
         self.inner = inner
+        #: Read after every save that goes through the gate (harness module).
+        self.readback = readback
         self.dialect = str(inner.dialect)
         self.gate = gate
         self.keep = list(keep)
@@ -320,9 +325,17 @@ class _HarnessedAgent:
         # window, an RDP or Citrix client window) gets the surface harness.
         harness_type = Harness if computer.page is not None else SurfaceHarness
         self.harness = harness_type(
-            computer, self.gate, keep=self.keep, evidence_dir=self.evidence_dir
+            computer,
+            self.gate,
+            keep=self.keep,
+            evidence_dir=self.evidence_dir,
+            readback=self.readback,
         )
         try:
+            if self.readback is not None:
+                from openadapt_flow.compile_agent.harness import _start_readback
+
+                _start_readback(self.harness)
             self.ledger = self.inner.drive(request, self.harness)
         except BaseException as exc:
             self.error = f"{type(exc).__name__}: {exc}"
@@ -619,6 +632,14 @@ class FirstRunCompiler:
             keep=[*self.on_screen, *values.values(), *self.expect.values()],
             evidence_dir=attempt / "gates",
             principal_id=principal_id or getattr(agent, "principal_id", None),
+            # Every save in run 1 is read back from the system of record and
+            # compared with the read taken when run 1 started.
+            readback=record_readback(
+                lambda: self.observer.system_of_record,
+                self.expect,
+                lambda: self._baseline,
+                values=values,
+            ),
         )
         jit.agent = harnessed
         jit.dialect = harnessed.dialect
@@ -635,6 +656,10 @@ class FirstRunCompiler:
             "agent": harnessed.ledger.to_dict() if harnessed.ledger else None,
             "harness": harness.stats.to_dict() if harness else None,
             "gates": harness.gate_log if harness else [],
+            "readbacks": [
+                {k: v for k, v in r.items() if k != "at"}
+                for r in (harness.readback_log if harness else [])
+            ],
             "agent_error": harnessed.error,
         }
         trace_data: Optional[dict[str, Any]] = None
@@ -668,6 +693,11 @@ class FirstRunCompiler:
                 if decision == "refused_by_hold"
                 else "refused_wrong_record"
             )
+            stops = [r["outcome"] for r in harness.readback_log]
+            if any(o in ("wrong_record", "duplicate") for o in stops):
+                status = "readback_wrong_record"
+            elif any(o in ("landed_late", "unreadable") for o in stops):
+                status = "readback_refused"
             if jit.candidate() is not None:
                 # An agent that caught the refusal and went on still made a
                 # draft; it must never be admitted.
