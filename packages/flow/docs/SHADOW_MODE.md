@@ -137,8 +137,83 @@ reads in about two minutes:
 The report holds field names and the values of the writes it describes.
 Keep it where the system of record's data may be kept.
 
+## Database mode: a client with no HTTP to proxy
+
+A desktop client (a WinForms practice-management app, say) writes to its
+database directly, so there is nothing for a proxy to stand in front of. In
+database mode (`mode: db`) the shadow has no proxy. It watches the database,
+and the agent tells it what it is about to do, before and after the click
+that saves:
+
+```
+POST http://127.0.0.1:9670/begin  {"action": "create_patient", "values": {"lname": "Quill", ...}}
+POST http://127.0.0.1:9670/end    {"action_id": 3, "claimed": "done"}
+```
+
+`begin` reads the database before the action (the baseline) and replies
+when it has. The reply carries the `action_id` for `end`. `end` has the
+action checked as SQL mode checks a write: the action's contract (it must
+set `frame.database`) judges what the action should have written and every
+other change in the database, and the contract's recheck runs later.
+`claimed` is what the agent believes happened. When it isn't `done` and
+nothing of the action landed, the verdict is `UNCERTAIN`, not `REFUTED`.
+
+```yaml
+schema_version: openadapt.shadow/v1
+mode: db
+actor: "7"                  # the agent's own user id in the app
+audit_sql: "SELECT SecurityLogNum FROM securitylog WHERE UserNum = %(actor)s"
+actions:
+  - name: create_patient
+    contract: patient.verify.yaml
+    params: {lname: lname, fname: fname, birthdate: birthdate}
+```
+
+`params` map each contract parameter to a key in `begin`'s `values`, or to
+`{literal: value}`.
+
+**Between actions.** The shadow reads the whole database at the start, at
+each `end`, after each `begin`'s baseline, and at the stop. It compares each
+read with the one before it, so every moment from the start to the stop is
+inside an announced action or a gap between actions. A change in a gap is
+one no announced action covers:
+
+- `REFUTED` when `audit_sql`, run on the same read-only connection, returns
+  an entry for the agent's own user that wasn't there at the gap's start
+  (the agent wrote without announcing it);
+- `UNCERTAIN` when the database changed but the audit names no write by the
+  agent, when there is no `audit_sql`, or when the audit can't be read;
+- nothing, when the database didn't change.
+
+The reads use the contract's own allow-list, ignored columns and app
+profile, so the app's own logs don't show as changes. As in the frame, a
+read account that can't see the database's triggers (on MySQL it needs the
+`TRIGGER` privilege) makes every gap `UNCERTAIN`: a trigger planted between
+two reads could pass unseen.
+
+**Overlap.** Actions are bracketed one at a time. An action begun while
+another is open or not yet checked makes both `UNCERTAIN`: the database
+can't say which change belongs to which. `begin` waits for the action before
+it to be checked, for at most `hold_ms` (default 30,000 ms in this mode).
+
+**Guard.** With `--guard`, the shadow is a gate the agent consults:
+
+- `begin` refuses (HTTP 409, `{"refused": why}`) an action it doesn't know,
+  one begun while another is open, one whose baseline can't be read, one
+  after a change between actions, and any action after a check that isn't
+  `CONFIRMED`;
+- `end` waits for the check and answers with the verdict and its reasons.
+
+An agent that obeys stops at the first write that isn't right. The guard
+can't stop a client that doesn't ask it: that write shows as a change
+between actions.
+
 ## Limits
 
+- Database mode sees changes in the database only: a client's write to
+  a file, a message queue or another service doesn't show. The whole
+  database is read at each `begin`, `end` and gap, so on a large schema
+  each read takes longer (in SQL mode, Dolibarr's baseline read added 292 ms median).
 - Only writes that pass through the proxy are seen as the agent's. A write
   the agent makes another way shows only as a change the frame or the change
   feed sees, inside another write's check.
