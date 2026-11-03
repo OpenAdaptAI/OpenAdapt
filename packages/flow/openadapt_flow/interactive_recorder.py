@@ -2043,9 +2043,16 @@ _INIT_JS = r"""
     if (!e.isTrusted) return;
     const fs = frameSpace();
     if (fs === null) { refuseFrame(); return; }
+    // The label is what the select shows and what replay reads back
+    // (option.label: the label attribute, else the text). Replay can only
+    // choose by label, so a label two options share (case aside) is refused:
+    // type-ahead would pick the first of them.
     const option = el.multiple ? null : el.options[el.selectedIndex];
-    const text = option ? String(option.text).replace(/\s+/g, ' ').trim() : '';
-    if (!text || secretStateForInput(el)) {
+    const squashLabel = (o) => String(o.label || o.text || '').replace(/\s+/g, ' ').trim();
+    const text = option ? squashLabel(option) : '';
+    const sameLabel = text ? Array.from(el.options).filter(
+      (o) => squashLabel(o).toLowerCase() === text.toLowerCase()).length : 0;
+    if (!text || sameLabel !== 1 || secretStateForInput(el)) {
       emit({kind: 'control_refusal', control: 'select'});
       return;
     }
@@ -3455,10 +3462,11 @@ class InteractiveRecorder:
         if kind == "control_refusal":
             control = str(event.get("control") or "control")
             self._listener_error = BrowserAttachError(
-                f"a native <{control}> selection is not a qualified browser "
-                "recording action; recording stopped so the demonstrated "
-                "selection cannot be silently absent from the compiled "
-                "workflow"
+                f"this native <{control}> choice can't be recorded (a "
+                "multiple select, a secret field, or a label two options "
+                "share, which replay can't tell apart); recording stopped so "
+                "the demonstrated choice cannot be silently absent from the "
+                "compiled workflow"
             )
             self.done = True
             return

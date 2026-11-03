@@ -1,15 +1,15 @@
-"""Save buttons with no ``id`` still get a structural selector.
+"""Id-less controls: which get a structural selector, and which never do.
 
-Many apps' save buttons carry only a name: Trac's ``<input type=submit
-name=submit value="Create ticket">``, NetBox's ``<button name=_create>``.
-The Playwright backend used to build a selector from a unique ``id`` only, so
-such a save step had none, and qualification refused it ("save step ... has no
-structural selector"). It also called an ``<input type=submit>`` a textbox
-named after its ``name`` attribute.
+A field with no ``id`` but a unique ``name`` (Trac's ``field_summary``) gets
+``input[name=...]``. A button never does: its ``name`` is the form field it
+submits (Trac's ``<input type=submit name=submit>``, NetBox's
+``<button name=_create>``), which another button can carry at replay, so a
+button keeps its role and label. A bracketed name (``items[0][qty]``) is a row
+position and never a selector either.
 
 These run in real headless Chromium: the backend's locator on a create form,
 then a scripted recording through the real ``Recorder`` compiled by the real
-compiler, whose save step must carry the selector.
+compiler.
 """
 
 from __future__ import annotations
@@ -68,7 +68,9 @@ def _center(page: Any, selector: str) -> tuple[int, int]:
     return int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
 
 
-def test_locator_names_idless_save_buttons(browser: Any, page_url: str) -> None:
+def test_locator_names_idless_buttons_by_their_label(
+    browser: Any, page_url: str
+) -> None:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
     page = browser.new_page(viewport={"width": 1280, "height": 800})
@@ -78,13 +80,21 @@ def test_locator_names_idless_save_buttons(browser: Any, page_url: str) -> None:
 
         trac = backend.structural_locator_at(*_center(page, "input[name=submit]"))
         assert trac is not None
-        assert trac.selector == 'input[name="submit"]'
+        # A button is named by its own label, never by the field name it
+        # submits: `name` alone could find another button at replay.
+        assert trac.selector is None
         assert (trac.role, trac.name) == ("button", "Create ticket")
 
         netbox = backend.structural_locator_at(*_center(page, "button[name=_create]"))
         assert netbox is not None
-        assert netbox.selector == 'button[name="_create"]'
+        assert netbox.selector is None
         assert (netbox.role, netbox.name) == ("button", "Create")
+
+        summary = backend.structural_locator_at(
+            *_center(page, "input[name=field_summary]")
+        )
+        assert summary is not None
+        assert summary.selector == 'input[name="field_summary"]'
 
         # Two identical unnamed buttons: no selector that could pick the
         # wrong one, only role and name.
@@ -116,14 +126,14 @@ def test_recorded_create_step_carries_its_selector(
     workflow = compile_recording(tmp_path / "rec", tmp_path / "bundle", name="ticket")
     save = workflow.steps[-1]
     assert save.anchor is not None and save.anchor.structural is not None
-    assert save.anchor.structural.selector == 'input[name="submit"]'
+    assert save.anchor.structural.selector is None
     assert save.anchor.structural.role == "button"
     assert save.anchor.structural.name == "Create ticket"
 
 
 SHADOW_PAGE = """<!doctype html><html><head><meta charset="utf-8"></head>
 <body style="font:16px Arial;margin:24px">
-<p><button name="save" onclick="window.actions.push('light')">Save</button></p>
+<p><button data-testid="save" onclick="window.actions.push('light')">Save</button></p>
 <save-panel></save-panel>
 <script>
 window.actions = [];
@@ -131,7 +141,7 @@ customElements.define('save-panel', class extends HTMLElement {
   constructor() {
     super();
     const root = this.attachShadow({mode: 'open'});
-    root.innerHTML = '<button name="save" style="margin-top:40px">Save</button>';
+    root.innerHTML = '<button data-testid="save" style="margin-top:40px">Save</button>';
     root.querySelector('button').addEventListener(
       'click', () => window.actions.push('shadow'));
   }
@@ -144,7 +154,7 @@ def test_a_lookalike_in_another_root_never_names_the_clicked_button(
     browser: Any, tmp_path: Path
 ) -> None:
     """A Save inside a shadow root, and a look-alike Save in the page with
-    the same name. ``button[name="save"]`` matches exactly one element in the
+    the same name. ``button[data-testid="save"]`` matches exactly one element in the
     document, the look-alike, so a count alone would call it unique for the
     shadow button and a replay would click the wrong Save."""
 
@@ -163,7 +173,7 @@ def test_a_lookalike_in_another_root_never_names_the_clicked_button(
 
         # The page's own hit test stops at the shadow host.
         located = backend.structural_locator_at(x, y)
-        assert located is None or located.selector != 'button[name="save"]'
+        assert located is None or located.selector != 'button[data-testid="save"]'
 
         # A hit test that reaches the button inside the shadow root (as a
         # piercing one would): still no selector, because the only match in
@@ -189,6 +199,6 @@ def test_a_lookalike_in_another_root_never_names_the_clicked_button(
         located = backend.structural_locator_at(
             int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
         )
-        assert located is not None and located.selector == 'button[name="save"]'
+        assert located is not None and located.selector == 'button[data-testid="save"]'
     finally:
         page.close()

@@ -19,7 +19,7 @@ import http.server
 import json
 import threading
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Any, Callable, Iterator, Optional
 
 import pytest
 
@@ -45,6 +45,12 @@ width:200px">
 <option value="">Choose</option>
 <option value="v-alpha">Label Alpha</option>
 <option value="v-beta">Label Beta</option>
+</select>
+<select id="dup" name="dup" style="position:absolute;left:260px;top:240px;
+width:200px">
+<option value="">Choose</option>
+<option value="p-1">Main clinic</option>
+<option value="p-2">main clinic</option>
 </select>
 <select id="site" name="site" tabindex="-1" aria-hidden="true"
   class="tomselected ts-hidden-accessible"
@@ -214,6 +220,48 @@ def test_native_select_records_its_label(fixture_url: str, tmp_path: Path) -> No
     assert [step.action.value for step in workflow.steps] == ["click", "type", "click"]
 
 
+def _replay_native_select(
+    fixture_url: str, tmp_path: Path, value: str
+) -> tuple[Any, Optional[str]]:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime import Replayer
+
+    sync_api = pytest.importorskip("playwright.sync_api")
+    rec = _record_native_select(fixture_url, tmp_path / "rec", ("sel",))
+    bundle = tmp_path / "bundle"
+    workflow = compile_recording(rec, bundle, name="select")
+    typed = next(step for step in workflow.steps if step.action.value == "type")
+    assert typed.param == "sel"
+    with sync_api.sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.goto(fixture_url)
+            page.wait_for_selector("#sel", state="visible")
+            report = Replayer(PlaywrightBackend(page)).run(
+                Workflow.load(bundle),
+                params={"sel": value},
+                bundle_dir=bundle,
+                run_dir=tmp_path / "run",
+            )
+            chosen = page.evaluate("document.getElementById('sel').value")
+        finally:
+            browser.close()
+    return report, chosen
+
+
+def test_native_select_stops_when_typeahead_lands_on_another_option(
+    fixture_url: str, tmp_path: Path
+) -> None:
+    # "Label" is no option: type-ahead stops on the first option it prefixes
+    # (Label Alpha). The read-back names another label, so the step fails.
+    report, _chosen = _replay_native_select(fixture_url, tmp_path, "Label")
+    assert not report.success
+    typed = next(r for r in report.results if not r.ok)
+    assert typed.step_id.startswith("step_")
+
+
 def test_native_select_replays_another_option(fixture_url: str, tmp_path: Path) -> None:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.ir import Workflow
@@ -244,6 +292,29 @@ def test_native_select_replays_another_option(fixture_url: str, tmp_path: Path) 
     assert report.success, [(r.step_id, r.ok, r.error) for r in report.results]
     # Recorded as Label Beta; replayed with another option.
     assert chosen == "v-alpha"
+
+
+def test_native_select_with_a_shared_label_is_refused(
+    fixture_url: str, tmp_path: Path
+) -> None:
+    # Two options read "Main clinic" (case aside): replay can only choose by
+    # label, so it would pick the first. The choice is refused, not recorded.
+    def drive(page, pump) -> None:
+        page.wait_for_selector("#dup", state="visible", timeout=20000)
+        page.locator("#dup").click()
+        _settle(pump)
+        page.keyboard.press("ArrowDown")
+        page.keyboard.press("ArrowDown")
+        _settle(pump)
+
+    try:
+        rec = record_interactive(
+            fixture_url, tmp_path / "rec", headless=True, script=drive
+        )
+    except Exception as exc:  # the recorder may stop on the refusal
+        assert "select" in str(exc).lower()
+        return
+    assert not [e for e in _events(rec) if e["kind"] == "type"]
 
 
 def test_widget_over_a_hidden_select_records_its_clicks(

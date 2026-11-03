@@ -1579,20 +1579,19 @@ _STRUCTURAL_LOCATOR_AT_JS = (
     const inputType = (actionable.getAttribute('type') || '').toLowerCase();
     const inputButton = tag === 'input' &&
         ['submit', 'button', 'reset', 'image'].includes(inputType);
-    // No unique id: the same unique attributes the interactive recorder uses,
-    // then a button's own label (`input[type=submit][value=...]`). Many save
-    // buttons have only a name (`<input type=submit name=submit>`,
-    // `<button name=_create>`).
+    // No unique id: the same unique attributes the interactive recorder uses.
+    // A button's `name` alone names the form field it submits, not the
+    // button: `button[name=action]` would find Deny where Approve was
+    // recorded, so a button keeps its role and label. A bracketed name
+    // (`items[0][qty]`) is a row position, which a reordered list moves to
+    // another row. Neither is a selector.
+    const buttonLike = inputButton || tag === 'button';
     for (const attr of ['data-testid', 'data-test', 'name']) {
         if (selector) break;
         const value = actionable.getAttribute(attr);
         if (!value) continue;
+        if (attr === 'name' && (buttonLike || /\[/.test(value))) continue;
         const candidate = tag + '[' + attr + '="' + CSS.escape(value) + '"]';
-        if (unique(candidate)) selector = candidate;
-    }
-    if (!selector && inputButton && actionable.getAttribute('value')) {
-        const candidate = 'input[type="' + inputType + '"][value="' +
-            CSS.escape(actionable.getAttribute('value')) + '"]';
         if (unique(candidate)) selector = candidate;
     }
     let role = actionable.getAttribute('role');
