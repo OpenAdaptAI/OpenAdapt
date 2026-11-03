@@ -188,3 +188,29 @@ def test_click_target_probes_once_and_reads_the_hit_last() -> None:
     order.clear()
     target._assert_click_target(*OUTSIDE_SHEET)
     assert order == ["sheet", "hit"]
+
+
+# -- #1724: the pinned window's own sheet over a band ----------------------------
+
+
+def test_owned_window_over_needs_the_verified_window_and_an_overlap() -> None:
+    client = SheetClient()
+    target = backend(client)
+    target.screenshot()
+    # No capture for the step: no answer.
+    assert target.owned_window_over((0, 0, 800, 600), pinned_step_id="s1") is None
+    assert target.record_verified_window("s1", 10, 10)
+    # The sheet's screen rect (110, 60, 200, 150) is window pixels
+    # ((110-10)*2, (60-20)*2, 400, 300) = (200, 80, 400, 300).
+    hit = target.owned_window_over((300, 100, 50, 20), pinned_step_id="s1")
+    assert hit == {"kind": "sheet", "window_id": SHEET_ID, "pid": TARGET_WINDOW.pid}
+    assert target.owned_window_over((0, 0, 50, 20), pinned_step_id="s1") is None
+    assert target.owned_window_over((300, 100, 50, 20), pinned_step_id="s2") is None
+
+
+def test_owned_window_over_refuses_without_a_proved_sheet() -> None:
+    client = SheetClient(sheet=False)
+    target = backend(client)
+    target.screenshot()
+    target.record_verified_window("s1", 10, 10)
+    assert target.owned_window_over((0, 0, 800, 600), pinned_step_id="s1") is None
