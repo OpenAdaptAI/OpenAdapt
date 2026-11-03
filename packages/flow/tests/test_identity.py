@@ -322,7 +322,9 @@ class TestBandMatch:
         # consumption, no partial containment ('Phil' in 'Philip' is a
         # sibling, not a join; see TestSiblingProbes).
         assert band_match("ShowActive", "Show Active") == (1.0, 0, 0, 0, 0, 0, 0, False)
-        assert band_match("Show Active", "ShowActive") == (1.0, 0, 0, 0, 0, 0, 0, False)
+        # "Show" and "Active" are UI words, not identity-bearing: the join
+        # matches in full, and the band alone cannot identify a record.
+        assert band_match("Show Active", "ShowActive") == (1.0, 0, 0, 0, 0, 0, 0, True)
         # ... and with digit-class OCR noise inside the split form:
         assert band_match("ShowActive", "Sh0w Active") == (1.0, 0, 0, 0, 0, 0, 0, False)
 
@@ -382,16 +384,24 @@ class TestOperatingPoint:
         # numerics dropout). FLIPPED by the identifying-field rule: '1234' is
         # an identifier the recording held and OCR did not return, and the
         # band matched no second kind of identifying field, so the OCR tier
-        # abstains (see identity_evidence_shortfall).
+        # abstains (see identity_evidence_shortfall). Capitalised words, so
+        # they count toward coverage (lowercase words are not
+        # identity-bearing: identity.identity_bearing).
         check = verify_target_identity(
-            "abcd efgh ijkl mnop 1234", "abcd efgh ijkl mnop"
+            "Abcd Efgh Ijkl Mnop 1234", "Abcd Efgh Ijkl Mnop"
         )
         assert check.status == "abstain"
         # A 5-char numeric absence still fails the generic run cap.
         check = verify_target_identity(
-            "abcd efgh ijkl mnop 12345", "abcd efgh ijkl mnop"
+            "Abcd Efgh Ijkl Mnop 12345", "Abcd Efgh Ijkl Mnop"
         )
         assert check.status == "mismatch"
+        # With lowercase words only the id bears identity; its absence
+        # leaves no coverage at all.
+        check = verify_target_identity(
+            "abcd efgh ijkl mnop 1234", "abcd efgh ijkl mnop"
+        )
+        assert check.status != "verified"
 
     def test_replacement_at_same_coverage_mismatches(self):
         """The same 4-char gap with a foreign token IN ITS PLACE is a
