@@ -1,0 +1,121 @@
+{
+ "id": "P11",
+ "class": "refused_write",
+ "type": "patient",
+ "expect": "create",
+ "note": "The server refuses the create (503) and nothing lands.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 97.1,
+ "cost_usd": 0.233536,
+ "claim": {
+  "status": "done",
+  "id": "Patient/38800e85-7ad0-48ce-a796-62c67c94ced5",
+  "note": "RESULT: DONE Patient/38800e85-7ad0-48ce-a796-62c67c94ced5",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient/38800e85-7ad0-48ce-a796-62c67c94ced5/timeline",
+  "final_text": "There is now one Patient record for Lena Okafor, and I created it. Before creating it, I checked the Patient list and searched for \"Okafor\", and both came back empty. A search for \"Okafor\" now returns only this record.\n\nI wrote only the values you listed: name, birth date (1988-04-22), gender (female), the address at 14 Birch Lane, Springfield, MA 01103, a home phone (413-555-0187), and the email (lena.okafor@example.org).\n\nRESULT: DONE Patient/38800e85-7ad0-48ce-a796-62c67c94ced5",
+  "model_calls": 22,
+  "actions": 48,
+  "tokens_in": 502365,
+  "tokens_out": 4185
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/38800e85-7ad0-48ce-a796-62c67c94ced5"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/38800e85-7ad0-48ce-a796-62c67c94ced5": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "refuse"
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 11.9,
+  "end": 9.8,
+  "waited_s": 0
+ }
+}

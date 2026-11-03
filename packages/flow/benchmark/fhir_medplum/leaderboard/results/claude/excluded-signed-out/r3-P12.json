@@ -1,0 +1,56 @@
+{
+ "id": "P12",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration, without the sentence that says which elements to write.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 12.1,
+ "cost_usd": 0.030015,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE <Medplum is showing the sign-in page and I have no credentials, so I couldn't search for or create the Patient record.>",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't check for or create a Patient record for Lena Okafor. The browser is on the Medplum sign-in page, not signed in as the task said. I have no credentials to sign in with, and reloading the page didn't change that. I didn't use the Register link, because that would create a new account, which isn't part of the task. No records were read or changed.\n\nRESULT: NOT DONE <Medplum is showing the sign-in page and I have no credentials, so I couldn't search for or create the Patient record.>",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23244,
+  "tokens_out": 404
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 24.8,
+  "end": 31.9,
+  "waited_s": 0
+ }
+}

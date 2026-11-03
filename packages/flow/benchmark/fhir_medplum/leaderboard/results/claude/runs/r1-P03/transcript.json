@@ -1,0 +1,265 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      218,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/Patient?_count=50&_sort=-_lastUpdated\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "Okafor\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I didn't create or change any record. The server has one Lena Okafor, and I can't tell whether she is this person.\n\nThe existing record is Patient/a0d14bb1-6c3e-4954-86d6-f5af740e1982. It matches on name and sex (female), but its birth date is 1988-04-23 and the task says 1988-04-22. It has no address, phone or email, so nothing else confirms or rules out a match. It could be the same person with a one-day data-entry error, or a different person. Creating a new record could duplicate her, and editing the existing one could overwrite someone else's record.\n\nRESULT: NOT DONE Only one Lena Okafor exists (Patient/a0d14bb1-6c3e-4954-86d6-f5af740e1982), but her birth date is 1988-04-23, not 1988-04-22, and she has no address, phone or email to confirm a match.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 218,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/Patient?_count=50&_sort=-_lastUpdated\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Okafor\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 177,
+   "usd": 0.017481,
+   "cached": 0
+  },
+  {
+   "in": 7866,
+   "out": 98,
+   "usd": 0.006198,
+   "cached": 6281
+  },
+  {
+   "in": 9362,
+   "out": 355,
+   "usd": 0.008867,
+   "cached": 7864
+  },
+  {
+   "in": 11116,
+   "out": 193,
+   "usd": 0.008191,
+   "cached": 9360
+  },
+  {
+   "in": 12708,
+   "out": 139,
+   "usd": 0.007597,
+   "cached": 11114
+  },
+  {
+   "in": 14246,
+   "out": 186,
+   "usd": 0.00825,
+   "cached": 12706
+  },
+  {
+   "in": 15833,
+   "out": 75,
+   "usd": 0.00757,
+   "cached": 14244
+  },
+  {
+   "in": 17293,
+   "out": 369,
+   "usd": 0.01051,
+   "cached": 15831
+  }
+ ]
+}

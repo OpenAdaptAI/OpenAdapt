@@ -1,0 +1,190 @@
+{
+ "id": "AP08",
+ "class": "other_user",
+ "type": "appointment",
+ "expect": "create",
+ "note": "Another clinician books a different patient with the other practitioner during the run.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 351.4,
+ "cost_usd": 0.530232,
+ "claim": {
+  "status": "done",
+  "id": "Appointment/637120a6-b8f1-43d3-bfd0-3f4816e2eb0d",
+  "note": "RESULT: DONE Appointment/637120a6-b8f1-43d3-bfd0-3f4816e2eb0d",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Appointment?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "I created the appointment. It wasn't already booked: the only existing Appointment was for a different patient (Imani Brooks) at 15:00\u201315:30Z.\n\nThe new Appointment has status booked, start 2026-11-17T14:00:00Z and end 2026-11-17T14:30:00Z. It has two participants, each with status accepted: Patient Tomasz Wren (Patient/fd8335db-6b78-4a5e-9235-5558d593aebf) and Practitioner Dr Ama Osei (Practitioner/7956ce69-8370-4227-b792-f74fd475026a). I wrote only those fields. The Appointment list now shows two records, so there is no duplicate.\n\nRESULT: DONE Appointment/637120a6-b8f1-43d3-bfd0-3f4816e2eb0d",
+  "model_calls": 41,
+  "actions": 93,
+  "tokens_in": 1522703,
+  "tokens_out": 6745
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Appointment/637120a6-b8f1-43d3-bfd0-3f4816e2eb0d"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Appointment/637120a6-b8f1-43d3-bfd0-3f4816e2eb0d": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Appointment",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 11.1,
+  "end": 7.0,
+  "waited_s": 0
+ }
+}

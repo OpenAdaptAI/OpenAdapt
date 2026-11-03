@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't check or record Rosa Delgado's penicillin allergy because Medplum is showing its sign-in page, not a signed-in session. The task said I'd already be signed in. Reloading the page didn't change that. I don't have a login for this system, and I won't guess credentials or use the Register link. I haven't looked at any patient records or made any changes.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not a signed-in session, and I have no credentials to log in.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 101,
+   "usd": 0.002289,
+   "cached": 6353
+  },
+  {
+   "in": 7831,
+   "out": 162,
+   "usd": 0.00319,
+   "cached": 7829
+  },
+  {
+   "in": 9389,
+   "out": 160,
+   "usd": 0.007065,
+   "cached": 7829
+  }
+ ]
+}

@@ -1,0 +1,1271 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1147,
+      167
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "Okafor\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      290,
+      33
+     ]
+    },
+    {
+     "text": "Lena\n"
+    },
+    {
+     "duration": 4
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      1231,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Using the JSON tab is easiest.",
+   "actions": [
+    {
+     "coordinate": [
+      99,
+      131
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      400
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "{\"resourceType\":\"Patient\",\"name\":[{\"given\":[\"Lena\"],\"family\":\"Okafor\"}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"use\":\"home\",\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"use\":\"home\",\"value\":\"413-555-0187\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+    },
+    {
+     "coordinate": [
+      1057,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      640,
+      500
+     ]
+    },
+    {
+     "text": "ctrl+a"
+    },
+    {
+     "text": "BackSpace"
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+Home"
+    },
+    {
+     "text": "ctrl+shift+End"
+    },
+    {
+     "text": "Delete"
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "start_coordinate": [
+      200,
+      213
+     ],
+     "coordinate": [
+      800,
+      400
+     ]
+    },
+    {
+     "text": "Delete"
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      400
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "{\"resourceType\":\"Patient\",\"name\":[{\"given\":[\"Lena\"],\"family\":\"Okafor\"}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"use\":\"home\",\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"use\":\"home\",\"value\":\"413-555-0187\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+    },
+    {
+     "coordinate": [
+      1057,
+      718
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now scroll down to find the Create button.",
+   "actions": [
+    {
+     "coordinate": [
+      1180,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 15
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1057,
+      731
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1180,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 30
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      134
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      1180,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 60
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      1180,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 60
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      30
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      200,
+      33
+     ]
+    },
+    {
+     "text": "Okafor\n"
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      468,
+      340
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      468,
+      297
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      440,
+      149
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      760,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 60
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1194,
+      729
+     ]
+    },
+    {
+     "region": [
+      0,
+      500,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "Escape"
+    },
+    {
+     "coordinate": [
+      760,
+      400
+     ],
+     "scroll_direction": "up",
+     "scroll_amount": 60
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "This is fde8091c (the newer duplicate). Delete it.",
+   "actions": [
+    {
+     "coordinate": [
+      760,
+      500
+     ],
+     "scroll_direction": "down",
+     "scroll_amount": 60
+    },
+    {
+     "coordinate": [
+      1194,
+      733
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      500,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      1172,
+      685
+     ]
+    },
+    {
+     "duration": 1
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      800
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      358,
+      285
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Possibly still loading; wait and refresh.",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "coordinate": [
+      1147,
+      167
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 5
+    },
+    {
+     "region": [
+      0,
+      0,
+      1280,
+      500
+     ]
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "There is now exactly one Patient record for Lena Okafor: Patient/ea51adcb-fe23-417b-9489-783c95c7cd6e. It holds the name, birth date 1988-04-22, female, 14 Birch Lane, Springfield, MA 01103, home phone 413-555-0187 and email lena.okafor@example.org.\n\nThe Patient list was empty when I started, and a search for \"Okafor\" found nothing, so I created her record. My first click on OK created it without any confirmation on screen, and I clicked OK again, which created a second identical record (fde8091c-cb89-45b7-8a6b-1a5d0e81142e). I deleted that second record. After reloading the page, the Patient list shows only the one record.\n\nRESULT: DONE Patient/ea51adcb-fe23-417b-9489-783c95c7cd6e",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 1147,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Okafor\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 290,
+   "y": 33,
+   "button": "left",
+   "count": 3,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Lena\n"
+  },
+  {
+   "a": "wait",
+   "s": 4.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 1231,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 99,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 400,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"Patient\",\"name\":[{\"given\":[\"Lena\"],\"family\":\"Okafor\"}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"use\":\"home\",\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"use\":\"home\",\"value\":\"413-555-0187\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+  },
+  {
+   "a": "click",
+   "x": 1057,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 640,
+   "y": 500,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "BackSpace"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "Home"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "shift",
+    "End"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     200,
+     213
+    ],
+    [
+     800,
+     400
+    ]
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Delete"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\"resourceType\":\"Patient\",\"name\":[{\"given\":[\"Lena\"],\"family\":\"Okafor\"}],\"birthDate\":\"1988-04-22\",\"gender\":\"female\",\"address\":[{\"use\":\"home\",\"line\":[\"14 Birch Lane\"],\"city\":\"Springfield\",\"state\":\"MA\",\"postalCode\":\"01103\"}],\"telecom\":[{\"system\":\"phone\",\"use\":\"home\",\"value\":\"413-555-0187\"},{\"system\":\"email\",\"value\":\"lena.okafor@example.org\"}]}"
+  },
+  {
+   "a": "click",
+   "x": 1057,
+   "y": 718,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 1180,
+   "y": 500,
+   "dx": 0,
+   "dy": 1800
+  },
+  {
+   "a": "click",
+   "x": 1057,
+   "y": 731,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 1180,
+   "y": 400,
+   "dx": 0,
+   "dy": -3600
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 134,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "scroll",
+   "x": 1180,
+   "y": 500,
+   "dx": 0,
+   "dy": 7200
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 1180,
+   "y": 400,
+   "dx": 0,
+   "dy": -7200
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 200,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Okafor\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 468,
+   "y": 340,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 468,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 440,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "scroll",
+   "x": 760,
+   "y": 500,
+   "dx": 0,
+   "dy": 7200
+  },
+  {
+   "a": "click",
+   "x": 1194,
+   "y": 729,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "a": "scroll",
+   "x": 760,
+   "y": 400,
+   "dx": 0,
+   "dy": -7200
+  },
+  {
+   "a": "scroll",
+   "x": 760,
+   "y": 500,
+   "dx": 0,
+   "dy": 7200
+  },
+  {
+   "a": "click",
+   "x": 1194,
+   "y": 733,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1172,
+   "y": 685,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 358,
+   "y": 285,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 1147,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 5.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 135,
+   "usd": 0.017061,
+   "cached": 0
+  },
+  {
+   "in": 7824,
+   "out": 205,
+   "usd": 0.007163,
+   "cached": 6281
+  },
+  {
+   "in": 9430,
+   "out": 83,
+   "usd": 0.006413,
+   "cached": 7822
+  },
+  {
+   "in": 10890,
+   "out": 285,
+   "usd": 0.00839,
+   "cached": 9428
+  },
+  {
+   "in": 12577,
+   "out": 161,
+   "usd": 0.008009,
+   "cached": 10888
+  },
+  {
+   "in": 14148,
+   "out": 120,
+   "usd": 0.007646,
+   "cached": 12575
+  },
+  {
+   "in": 15658,
+   "out": 400,
+   "usd": 0.010608,
+   "cached": 14146
+  },
+  {
+   "in": 17483,
+   "out": 173,
+   "usd": 0.009428,
+   "cached": 15656
+  },
+  {
+   "in": 19064,
+   "out": 215,
+   "usd": 0.009603,
+   "cached": 17481
+  },
+  {
+   "in": 20685,
+   "out": 222,
+   "usd": 0.010089,
+   "cached": 19062
+  },
+  {
+   "in": 22307,
+   "out": 349,
+   "usd": 0.011686,
+   "cached": 20683
+  },
+  {
+   "in": 24065,
+   "out": 134,
+   "usd": 0.0102,
+   "cached": 22305
+  },
+  {
+   "in": 25585,
+   "out": 152,
+   "usd": 0.010137,
+   "cached": 24063
+  },
+  {
+   "in": 27135,
+   "out": 154,
+   "usd": 0.010536,
+   "cached": 25583
+  },
+  {
+   "in": 28675,
+   "out": 281,
+   "usd": 0.012091,
+   "cached": 27133
+  },
+  {
+   "in": 30367,
+   "out": 151,
+   "usd": 0.011479,
+   "cached": 28673
+  },
+  {
+   "in": 31916,
+   "out": 195,
+   "usd": 0.0119,
+   "cached": 30365
+  },
+  {
+   "in": 33545,
+   "out": 131,
+   "usd": 0.011769,
+   "cached": 31914
+  },
+  {
+   "in": 35085,
+   "out": 324,
+   "usd": 0.013803,
+   "cached": 33543
+  },
+  {
+   "in": 36807,
+   "out": 289,
+   "usd": 0.014216,
+   "cached": 35083
+  },
+  {
+   "in": 38557,
+   "out": 127,
+   "usd": 0.01301,
+   "cached": 36805
+  },
+  {
+   "in": 40070,
+   "out": 90,
+   "usd": 0.012397,
+   "cached": 38555
+  },
+  {
+   "in": 41533,
+   "out": 180,
+   "usd": 0.013475,
+   "cached": 40068
+  },
+  {
+   "in": 43110,
+   "out": 181,
+   "usd": 0.014063,
+   "cached": 41531
+  },
+  {
+   "in": 44702,
+   "out": 115,
+   "usd": 0.013756,
+   "cached": 43108
+  },
+  {
+   "in": 46215,
+   "out": 153,
+   "usd": 0.014257,
+   "cached": 44700
+  },
+  {
+   "in": 47791,
+   "out": 147,
+   "usd": 0.014657,
+   "cached": 46213
+  },
+  {
+   "in": 49348,
+   "out": 243,
+   "usd": 0.015884,
+   "cached": 47789
+  },
+  {
+   "in": 50987,
+   "out": 366,
+   "usd": 0.017631,
+   "cached": 49346
+  }
+ ]
+}

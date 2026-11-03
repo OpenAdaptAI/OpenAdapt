@@ -1,0 +1,56 @@
+{
+ "id": "AP04",
+ "class": "wrong_value",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path books the other practitioner.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.2,
+ "cost_usd": 0.012811,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is showing the sign-in page, not a signed-in session, and no credentials were provided.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't check whether this appointment is already booked, and I didn't book it. Medplum is showing its sign-in page, not a signed-in session, even though you said I'd already be signed in. I reloaded the page and got the same sign-in screen. You haven't given me any credentials, and I shouldn't register a new account, so I couldn't search for Tomasz Wren or for Dr Ama Osei's existing appointments. I haven't changed anything in the record.\n\nIf you sign in or give me login details, I can start with the existing-appointment check.\n\nRESULT: NOT DONE Medplum is showing the sign-in page, not a signed-in session, and no credentials were provided.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23325,
+  "tokens_out": 458
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 27.4,
+  "end": 25.8,
+  "waited_s": 0
+ }
+}

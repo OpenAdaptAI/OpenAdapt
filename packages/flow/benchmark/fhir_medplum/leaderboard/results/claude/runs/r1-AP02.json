@@ -1,0 +1,122 @@
+{
+ "id": "AP02",
+ "class": "clean",
+ "type": "appointment",
+ "expect": "found",
+ "note": "The appointment is already booked; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 95.8,
+ "cost_usd": 0.157297,
+ "claim": {
+  "status": "done",
+  "id": "Appointment/9a54acbc-a5fe-4e83-9796-1ebe1be63cda",
+  "note": "RESULT: DONE Appointment/9a54acbc-a5fe-4e83-9796-1ebe1be63cda",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Practitioner?_count=20&_fields=id,_lastUpdated,name&_sort=-_lastUpdated",
+  "final_text": "The appointment is already booked, so I didn't create another one. The existing Appointment has these details:\n- **Status:** booked\n- **Start:** 2026-11-17T14:00:00Z\n- **End:** 2026-11-17T14:30:00Z\n- **Participants:** Patient Tomasz Wren (Patient/dbe4dc09-dcc6-46b3-9b40-71477a77d42e) and Practitioner Dr Ama Osei (Practitioner/7956ce69-8370-4227-b792-f74fd475026a), each with status accepted.\n\nIt is the only Appointment on the server, and I changed nothing.\n\nRESULT: DONE Appointment/9a54acbc-a5fe-4e83-9796-1ebe1be63cda",
+  "model_calls": 17,
+  "actions": 32,
+  "tokens_in": 316879,
+  "tokens_out": 2332
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Appointment/9a54acbc-a5fe-4e83-9796-1ebe1be63cda"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 27.0,
+  "end": 14.1,
+  "waited_s": 0
+ }
+}

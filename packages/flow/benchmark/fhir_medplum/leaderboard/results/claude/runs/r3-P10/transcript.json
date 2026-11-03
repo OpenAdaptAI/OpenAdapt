@@ -1,0 +1,314 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      221,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "This one has the matching email but no address or phone. I'll check the other record.",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/Patient/54f2a735-5532-4111-bd4d-b7f4e2638da5/json\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Odd history. Click the logo to go to the Patient list instead.",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      30
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      467,
+      340
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      722,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I didn't create or change anything, because I can't tell which of the two existing records is Lena Okafor's.\n\nThe Patient list has two records with the same name, date of birth (1988-04-22) and sex (female):\n- **Patient/cae7d226-2f82-44da-9830-5d5aea9d82ae** also has the email lena.okafor@example.org, but no address or phone.\n- **Patient/54f2a735-5532-4111-bd4d-b7f4e2638da5** has no address, phone or email at all.\n\nThe first record's email matches, but the second one has nothing that rules it out. It could be the same person entered twice, or a different person with the same name and birth date. Creating a third record would make the duplication worse, and choosing one record to update would be a guess.\n\nRESULT: NOT DONE Two existing Patient records (cae7d226-2f82-44da-9830-5d5aea9d82ae and 54f2a735-5532-4111-bd4d-b7f4e2638da5) both match name, DOB and sex, and I can't tell which is hers or whether they're duplicates.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 221,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/Patient/54f2a735-5532-4111-bd4d-b7f4e2638da5/json\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 467,
+   "y": 340,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 139,
+   "usd": 0.017101,
+   "cached": 0
+  },
+  {
+   "in": 7828,
+   "out": 106,
+   "usd": 0.006183,
+   "cached": 6281
+  },
+  {
+   "in": 9324,
+   "out": 181,
+   "usd": 0.007119,
+   "cached": 7826
+  },
+  {
+   "in": 10904,
+   "out": 164,
+   "usd": 0.007458,
+   "cached": 9322
+  },
+  {
+   "in": 12486,
+   "out": 128,
+   "usd": 0.007419,
+   "cached": 10902
+  },
+  {
+   "in": 14004,
+   "out": 106,
+   "usd": 0.007356,
+   "cached": 12484
+  },
+  {
+   "in": 15500,
+   "out": 103,
+   "usd": 0.007574,
+   "cached": 14002
+  },
+  {
+   "in": 17001,
+   "out": 98,
+   "usd": 0.007836,
+   "cached": 15498
+  },
+  {
+   "in": 18497,
+   "out": 558,
+   "usd": 0.012724,
+   "cached": 16999
+  }
+ ]
+}

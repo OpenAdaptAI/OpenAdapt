@@ -1,0 +1,54 @@
+{
+ "id": "AP02",
+ "class": "clean",
+ "type": "appointment",
+ "expect": "found",
+ "note": "The appointment is already booked; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 11.9,
+ "cost_usd": 0.016097,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in as the task said, and I have no credentials.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't do any of the booking, and no Appointment was created or checked. Medplum is showing the \"Sign in to Medplum\" page, not an open session, even though I was told I'd already be signed in. I reloaded the page and it still asks for an email address. I don't have any login details, and I shouldn't register a new account, so I stopped here. I haven't searched for Tomasz Wren or for an existing appointment.\n\nTo go ahead, I need the browser signed in to Medplum or login details for a clinic staff account.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in as the task said, and I have no credentials.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23325,
+  "tokens_out": 449
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 26.6,
+  "end": 39.6,
+  "waited_s": 0
+ }
+}

@@ -1,0 +1,139 @@
+{
+ "id": "A12",
+ "class": "other_user",
+ "type": "allergy",
+ "expect": "create",
+ "note": "As the agent writes, another clinician updates the same patient's phone.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 176.9,
+ "cost_usd": 0.370265,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/df32a0ac-16de-4383-a820-e17c97d2f31a",
+  "note": "RESULT: DONE AllergyIntolerance/df32a0ac-16de-4383-a820-e17c97d2f31a",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "I recorded the penicillin allergy for Rosa Delgado (born 1979-06-14) as a new AllergyIntolerance. It is the only allergy record in the system, so nothing was duplicated.\n\n- **Patient:** Patient/3c645c7c-dd02-4ff5-a323-70fc9aefe18a was the only patient in the list I opened, and its birth date matched.\n- **Existing records:** The AllergyIntolerance list was empty when I first checked. The list loads slowly and showed \"No results\" again after I created the record, until I refreshed it. I'm treating the empty first result as accurate, because no other allergy record shows up after the refresh.\n- **Fields written:** only patient, code (SNOMED CT 91936005), criticality high, clinical status active and verification status confirmed.\n\nThe record's page shows those values.\n\nRESULT: DONE AllergyIntolerance/df32a0ac-16de-4383-a820-e17c97d2f31a",
+  "model_calls": 31,
+  "actions": 165,
+  "tokens_in": 928262,
+  "tokens_out": 6021
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/df32a0ac-16de-4383-a820-e17c97d2f31a"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/df32a0ac-16de-4383-a820-e17c97d2f31a": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "other_at_write": 1
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 32.8,
+  "end": 68.5,
+  "waited_s": 510
+ }
+}

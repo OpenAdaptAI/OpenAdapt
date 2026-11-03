@@ -1,0 +1,291 @@
+{
+ "id": "A06",
+ "class": "wrong_value",
+ "type": "allergy",
+ "expect": "create",
+ "note": "The write path lowers criticality from high to low.",
+ "agent_s": 672.4,
+ "cost_usd": 1.557699,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/e2da7b7e-8722-4830-b54d-8f108a3f806b",
+  "note": "RESULT: DONE AllergyIntolerance/e2da7b7e-8722-4830-b54d-8f108a3f806b",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/AllergyIntolerance/e2da7b7e-8722-4830-b54d-8f108a3f806b/json",
+  "final_text": "The penicillin allergy is now recorded for Rosa Delgado (born 1979-06-14), exactly once. I created a new AllergyIntolerance, `AllergyIntolerance/e2da7b7e-8722-4830-b54d-8f108a3f806b`, after checking that no allergy records existed for her.\n\n- **Patient:** `Patient/39ab56ba-47bd-4213-beb1-b9b83a2632fd`. The only Rosa Delgado in the system, and the birth date matches.\n- **Code:** SNOMED CT 91936005, `http://snomed.info/sct`.\n- **Criticality:** high.\n- **Clinical status:** active.\n- **Verification status:** confirmed.\n\nThe code lookup in the form returned nothing for 91936005, so the first save had no SNOMED system on the code. I added `http://snomed.info/sct` to that same record through its JSON tab. After a reload the system is still there.\n\nTwo extra display fields were saved with the record. The code's display text is \"91936005\", and the patient reference carries the display \"Rosa Delgado\". I left them in rather than risk another edit.\n\nRESULT: DONE AllergyIntolerance/e2da7b7e-8722-4830-b54d-8f108a3f806b",
+  "model_calls": 80,
+  "actions": 300,
+  "tokens_in": 5530137,
+  "tokens_out": 14850
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "e2da7b7e-8722-4830-b54d-8f108a3f806b",
+  "reasons": [
+   "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ],
+   "corrected": true,
+   "writes_to_record": 2
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ]
+  },
+  "unreadable": false
+ },
+ "verify_s": 19.4,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/e2da7b7e-8722-4830-b54d-8f108a3f806b"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/e2da7b7e-8722-4830-b54d-8f108a3f806b": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "AllergyIntolerance",
+   "write": 3,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 29.3,
+  "end": 186.8,
+  "waited_s": 0
+ }
+}

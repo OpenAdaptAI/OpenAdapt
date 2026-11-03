@@ -1,0 +1,56 @@
+{
+ "id": "AP12",
+ "class": "clean",
+ "type": "appointment",
+ "expect": "create",
+ "note": "A plain booking, without the sentence that says which elements to write.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.3,
+ "cost_usd": 0.030724,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE The Medplum session is signed out and I have no credentials, so I couldn't find the patient or check for an existing appointment.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't book or check the appointment, because Medplum is showing a \"Sign in to Medplum\" page instead of the signed-in app, even though I was told I was already signed in. I reloaded the page and it stayed on the sign-in screen. I wasn't given an email or password, so I didn't try to sign in or register a new account. I haven't looked up Tomasz Wren or Dr Ama Osei, and I haven't created or changed any records.\n\nRESULT: NOT DONE The Medplum session is signed out and I have no credentials, so I couldn't find the patient or check for an existing appointment.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23319,
+  "tokens_out": 463
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 23.1,
+  "end": 25.8,
+  "waited_s": 0
+ }
+}

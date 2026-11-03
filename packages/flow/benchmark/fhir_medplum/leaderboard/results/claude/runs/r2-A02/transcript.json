@@ -1,0 +1,366 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      223,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/AllergyIntolerance\n"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      31
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      124,
+      90
+     ]
+    },
+    {
+     "text": "AllergyIntolerance"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": null
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      83,
+      138
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "There's one existing AllergyIntolerance. I'll open it.",
+   "actions": [
+    {
+     "coordinate": [
+      471,
+      297
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      722,
+      142
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Rosa Delgado (born 1979-06-14) already has the penicillin allergy recorded, so I didn't add another. Hers was the only Patient record in the list, and the only AllergyIntolerance on the server is this one, linked to her.\n\nThe existing record matches the task on every field:\n- **Patient:** Patient/23b02165-99c8-4c6e-907e-da07233dd5eb\n- **Code:** SNOMED CT 91936005, \"Allergy to penicillin\" (http://snomed.info/sct)\n- **Criticality:** high\n- **Clinical status:** active (http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical)\n- **Verification status:** confirmed (http://terminology.hl7.org/CodeSystem/allergyintolerance-verification)\n\nRESULT: DONE AllergyIntolerance/e0917715-26a3-4599-b61b-523458accbda",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 223,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/AllergyIntolerance\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 31,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 124,
+   "y": 90,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "AllergyIntolerance"
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 83,
+   "y": 138,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 471,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 142,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 59,
+   "usd": 0.016481,
+   "cached": 0
+  },
+  {
+   "in": 7789,
+   "out": 194,
+   "usd": 0.0068,
+   "cached": 6353
+  },
+  {
+   "in": 9381,
+   "out": 101,
+   "usd": 0.006551,
+   "cached": 7787
+  },
+  {
+   "in": 10867,
+   "out": 319,
+   "usd": 0.008785,
+   "cached": 9379
+  },
+  {
+   "in": 12585,
+   "out": 169,
+   "usd": 0.008162,
+   "cached": 10865
+  },
+  {
+   "in": 14144,
+   "out": 125,
+   "usd": 0.007668,
+   "cached": 12583
+  },
+  {
+   "in": 15678,
+   "out": 83,
+   "usd": 0.007497,
+   "cached": 14142
+  },
+  {
+   "in": 17138,
+   "out": 98,
+   "usd": 0.007769,
+   "cached": 15676
+  },
+  {
+   "in": 18634,
+   "out": 75,
+   "usd": 0.007921,
+   "cached": 17136
+  },
+  {
+   "in": 20094,
+   "out": 80,
+   "usd": 0.00818,
+   "cached": 18632
+  },
+  {
+   "in": 21559,
+   "out": 125,
+   "usd": 0.008935,
+   "cached": 20092
+  },
+  {
+   "in": 23082,
+   "out": 98,
+   "usd": 0.009103,
+   "cached": 21557
+  },
+  {
+   "in": 24578,
+   "out": 309,
+   "usd": 0.01145,
+   "cached": 23080
+  }
+ ]
+}

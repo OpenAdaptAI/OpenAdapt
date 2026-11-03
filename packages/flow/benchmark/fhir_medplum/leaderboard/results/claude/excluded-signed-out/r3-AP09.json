@@ -1,0 +1,56 @@
+{
+ "id": "AP09",
+ "class": "wrong_value",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path saves the booking as proposed instead of booked.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.8,
+ "cost_usd": 0.012516,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in as expected, and I have no credentials to sign in.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't book or check the appointment. Medplum is showing its sign-in page, not a signed-in session, even though I was told I'd already be signed in. I reloaded the page and got the same sign-in screen.\n\nI wasn't given an email or password, so I can't sign in. I didn't use the Register link, because that would create a new account instead of using the clinic's. No Patient or Appointment records were searched, created or changed.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in as expected, and I have no credentials to sign in.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23331,
+  "tokens_out": 427
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 20.0,
+  "end": 18.5,
+  "waited_s": 0
+ }
+}

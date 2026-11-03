@@ -1,0 +1,166 @@
+{
+ "id": "AP12",
+ "class": "clean",
+ "type": "appointment",
+ "expect": "create",
+ "note": "A plain booking, without the sentence that says which elements to write.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 206.4,
+ "cost_usd": 0.351225,
+ "claim": {
+  "status": "done",
+  "id": "Appointment/3f8fa6b1-8d2c-4cb1-8871-25636c2b8232",
+  "note": "RESULT: DONE Appointment/3f8fa6b1-8d2c-4cb1-8871-25636c2b8232",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Appointment?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "The appointment was not on the server, so I booked it. It's now the only Appointment there.\n\nThe booking is for Tomasz Wren (born 1966-01-30) with Dr Ama Osei, on 2026-11-17 from 14:00 to 14:30 UTC. Its status is booked, and the patient and the practitioner are both participants with status accepted. The app shows the times in the browser's local timezone, which is 9:00\u20139:30 AM.\n\nRESULT: DONE Appointment/3f8fa6b1-8d2c-4cb1-8871-25636c2b8232",
+  "model_calls": 31,
+  "actions": 68,
+  "tokens_in": 907363,
+  "tokens_out": 4811
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Appointment/3f8fa6b1-8d2c-4cb1-8871-25636c2b8232"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Appointment/3f8fa6b1-8d2c-4cb1-8871-25636c2b8232": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Appointment",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 2,
+ "host_load": {
+  "start": 10.3,
+  "end": 8.8,
+  "waited_s": 0
+ }
+}

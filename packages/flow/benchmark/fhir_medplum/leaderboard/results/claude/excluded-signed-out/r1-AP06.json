@@ -1,0 +1,56 @@
+{
+ "id": "AP06",
+ "class": "lost_response",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The booking lands, but the agent gets a 504 instead of the reply.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 10.9,
+ "cost_usd": 0.012208,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't book or check the appointment because Medplum is showing its sign-in page, not a signed-in session. The task said I'd already be signed in. I reloaded the page and it still asks for an email. I wasn't given any credentials, and I won't register a new account. So I haven't searched for Tomasz Wren or Dr Ama Osei, and I haven't changed anything.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23320,
+  "tokens_out": 399
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 29.2,
+  "end": 29.9,
+  "waited_s": 0
+ }
+}

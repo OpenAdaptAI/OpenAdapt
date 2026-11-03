@@ -1,0 +1,87 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      218,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Lena Okafor already has a Patient record, so I didn't create another. It was the only Patient in the list (1 of 1, no filters). Its name, birth date (1988-04-22), gender (female), phone (413-555-0187), email (lena.okafor@example.org) and address (14 Birch Lane, Springfield, MA 01103) all match the task. I changed nothing.\n\nRESULT: DONE Patient/81eededc-9838-4179-91b2-e06c6dd92f3f",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 218,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 180,
+   "usd": 0.017511,
+   "cached": 0
+  },
+  {
+   "in": 7869,
+   "out": 187,
+   "usd": 0.007095,
+   "cached": 6281
+  },
+  {
+   "in": 9446,
+   "out": 162,
+   "usd": 0.00714,
+   "cached": 7867
+  }
+ ]
+}

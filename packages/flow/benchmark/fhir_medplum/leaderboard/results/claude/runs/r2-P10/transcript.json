@@ -1,0 +1,463 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      223,
+      297
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      472,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Now the other one.",
+   "actions": [
+    {
+     "text": "ctrl+l"
+    },
+    {
+     "text": "localhost:3000/Patient/94e59036-532b-48b2-8175-a6356131ad8b/json\n"
+    },
+    {
+     "duration": 3
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "Go back to the list.",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "alt+Left"
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      32,
+      30
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      223,
+      340
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "The sidebar was open and I clicked the wrong item. Harmless navigation. Back to Patient.",
+   "actions": [
+    {
+     "coordinate": [
+      68,
+      178
+     ]
+    },
+    {
+     "duration": 3
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "coordinate": [
+      473,
+      340
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "coordinate": [
+      722,
+      149
+     ]
+    },
+    {
+     "duration": 2
+    },
+    {
+     "}": 0
+    }
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I didn't create or change anything. Two Patient records already match Lena Okafor, born 1988-04-22, female, and I can't tell which one is hers.\n\n- **Patient/d8b4b29a-ed79-4f36-939b-c4289d31454e:** has the email lena.okafor@example.org. It has no address or phone.\n- **Patient/94e59036-532b-48b2-8175-a6356131ad8b:** has only the name, birth date and gender. It has no contact details, so nothing separates it from the first record.\n\nThe email makes the first record the likelier match. But the second could be the same person entered twice, or a different person with the same name and birth date. Creating a third record would add another duplicate. Someone needs to decide whether these two should be merged or kept apart.\n\nRESULT: NOT DONE Two existing Patient records match name, DOB and sex (d8b4b29a-ed79-4f36-939b-c4289d31454e and 94e59036-532b-48b2-8175-a6356131ad8b), so I can't tell which is hers.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 223,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ctrl",
+    "l"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "localhost:3000/Patient/94e59036-532b-48b2-8175-a6356131ad8b/json\n"
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "alt",
+    "Left"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 32,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 223,
+   "y": 340,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 68,
+   "y": 178,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  },
+  {
+   "a": "click",
+   "x": 473,
+   "y": 340,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 2.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6285,
+   "out": 128,
+   "usd": 0.016991,
+   "cached": 0
+  },
+  {
+   "in": 7817,
+   "out": 98,
+   "usd": 0.006075,
+   "cached": 6281
+  },
+  {
+   "in": 9313,
+   "out": 155,
+   "usd": 0.006857,
+   "cached": 7815
+  },
+  {
+   "in": 10848,
+   "out": 145,
+   "usd": 0.007154,
+   "cached": 9311
+  },
+  {
+   "in": 12400,
+   "out": 129,
+   "usd": 0.007343,
+   "cached": 10846
+  },
+  {
+   "in": 13928,
+   "out": 152,
+   "usd": 0.007824,
+   "cached": 12398
+  },
+  {
+   "in": 15479,
+   "out": 99,
+   "usd": 0.007657,
+   "cached": 13926
+  },
+  {
+   "in": 16974,
+   "out": 125,
+   "usd": 0.008087,
+   "cached": 15477
+  },
+  {
+   "in": 18497,
+   "out": 142,
+   "usd": 0.008626,
+   "cached": 16972
+  },
+  {
+   "in": 20062,
+   "out": 137,
+   "usd": 0.008986,
+   "cached": 18495
+  },
+  {
+   "in": 21597,
+   "out": 142,
+   "usd": 0.009274,
+   "cached": 20060
+  },
+  {
+   "in": 23162,
+   "out": 536,
+   "usd": 0.013595,
+   "cached": 21595
+  }
+ ]
+}

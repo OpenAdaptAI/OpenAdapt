@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't check Rosa Delgado's record or add the penicillin allergy, because Medplum is showing its sign-in page instead of a signed-in session. The task said I'd already be signed in. I reloaded the page and it still asks for an email. I have no credentials, and I didn't try to register an account. Nothing in the record was changed.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in as the task said, and I have no credentials to log in.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6357,
+   "out": 92,
+   "usd": 0.002199,
+   "cached": 6353
+  },
+  {
+   "in": 7822,
+   "out": 138,
+   "usd": 0.006322,
+   "cached": 6353
+  },
+  {
+   "in": 9356,
+   "out": 155,
+   "usd": 0.006953,
+   "cached": 7820
+  }
+ ]
+}

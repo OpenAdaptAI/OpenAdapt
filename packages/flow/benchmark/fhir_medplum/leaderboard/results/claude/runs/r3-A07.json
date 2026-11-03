@@ -1,0 +1,169 @@
+{
+ "id": "A07",
+ "class": "duplicate",
+ "type": "allergy",
+ "expect": "create",
+ "note": "The write path sends the create twice.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 277.0,
+ "cost_usd": 0.569271,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/67057a56-2e7d-4510-a64b-d74f80404954",
+  "note": "RESULT: DONE AllergyIntolerance/67057a56-2e7d-4510-a64b-d74f80404954",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "Rosa Delgado (born 1979-06-14) now has the penicillin allergy recorded exactly once.\n\n- **No existing record:** No AllergyIntolerance records existed before I started.\n- **Fields written:** I created one linked to Patient/601168ca-7466-45bc-a47c-c7dd0626a5f6. It has code SNOMED CT 91936005 (Allergy to penicillin), criticality high, clinical status active and verification status confirmed. No other fields are set.\n- **Duplicate removed:** My submit button registered twice and created a second identical record (35123715-3fc0-4be0-b900-6831999b457a). I deleted that one, and the list now shows only the remaining record.\n\nRESULT: DONE AllergyIntolerance/67057a56-2e7d-4510-a64b-d74f80404954",
+  "model_calls": 42,
+  "actions": 641,
+  "tokens_in": 1625854,
+  "tokens_out": 7967
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/67057a56-2e7d-4510-a64b-d74f80404954"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/67057a56-2e7d-4510-a64b-d74f80404954": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "duplicate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "DELETE",
+   "type": "AllergyIntolerance",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 17.4,
+  "end": 23.4,
+  "waited_s": 0
+ }
+}

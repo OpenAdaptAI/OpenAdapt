@@ -1,0 +1,161 @@
+{
+ "id": "P08",
+ "class": "lost_response",
+ "type": "patient",
+ "expect": "create",
+ "note": "The create lands, but the agent gets a 504 instead of the reply.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 120.0,
+ "cost_usd": 0.27892,
+ "claim": {
+  "status": "done",
+  "id": "Patient/5c0fed3b-27f7-4bf1-8ce7-1faf9f0d9986",
+  "note": "RESULT: DONE Patient/5c0fed3b-27f7-4bf1-8ce7-1faf9f0d9986",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient?_count=20&_fields=id,_lastUpdated,name,birthDate,gender&_sort=-_lastUpdated",
+  "final_text": "Lena Okafor now has exactly one Patient record on the server: Patient/5c0fed3b-27f7-4bf1-8ce7-1faf9f0d9986.\n\nThe Patient list was empty when I started, so I created her record with the values you gave: name, date of birth 1988-04-22, female, the Birch Lane address, the home phone and the email.\n\nI accidentally submitted the form twice, which created a second identical record (Patient/9c3b6747-85a3-4c5b-b844-f330a8244324). I deleted that duplicate and confirmed the Patient list now shows only one record.\n\nRESULT: DONE Patient/5c0fed3b-27f7-4bf1-8ce7-1faf9f0d9986",
+  "model_calls": 25,
+  "actions": 61,
+  "tokens_in": 634618,
+  "tokens_out": 4924
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/5c0fed3b-27f7-4bf1-8ce7-1faf9f0d9986"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/5c0fed3b-27f7-4bf1-8ce7-1faf9f0d9986": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "drop_response"
+  },
+  {
+   "fault": "drop_response",
+   "upstream_status": 201
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "DELETE",
+   "type": "Patient",
+   "write": 3,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 9.5,
+  "end": 14.5,
+  "waited_s": 0
+ }
+}

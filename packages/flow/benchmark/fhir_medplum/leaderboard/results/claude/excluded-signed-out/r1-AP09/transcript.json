@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't do any of this task, because Medplum is showing its sign-in page instead of being signed in. I don't have a login for it. I reloaded the page and the same sign-in screen came back. I haven't searched for Tomasz Wren's Patient record or checked for an existing appointment, and I haven't created or changed anything.\n\nIf you give me credentials or get the session signed in, I can start with the patient search.\n\nRESULT: NOT DONE Medplum is on the sign-in page (not signed in) and I have no credentials, so I couldn't check for or create the appointment.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 93,
+   "usd": 0.002194,
+   "cached": 6279
+  },
+  {
+   "in": 7749,
+   "out": 146,
+   "usd": 0.003013,
+   "cached": 7747
+  },
+  {
+   "in": 9291,
+   "out": 184,
+   "usd": 0.007248,
+   "cached": 7747
+  }
+ ]
+}

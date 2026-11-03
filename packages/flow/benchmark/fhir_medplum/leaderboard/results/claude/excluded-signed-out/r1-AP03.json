@@ -1,0 +1,56 @@
+{
+ "id": "AP03",
+ "class": "wrong_value",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path shifts the slot an hour later (a time-zone slip).",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 13.8,
+ "cost_usd": 0.012478,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't start the task. Medplum is showing its \"Sign in\" page instead of an open session, even though you said I'd already be signed in. I reloaded the page and it still asks for an email, and I don't have any login details. I haven't searched for the patient or practitioner, and I haven't created or changed any records.\n\nIf you sign in or send me the credentials, I'll check for an existing appointment first and book one only if none exists.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23332,
+  "tokens_out": 423
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 34.8,
+  "end": 28.8,
+  "waited_s": 30
+ }
+}

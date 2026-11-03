@@ -1,0 +1,89 @@
+{
+ "id": "P02",
+ "class": "clean",
+ "type": "patient",
+ "expect": "found",
+ "note": "The person is already registered; nothing should be written.",
+ "agent_s": 12.5,
+ "cost_usd": 0.032946,
+ "claim": {
+  "status": "done",
+  "id": "Patient/73d6bbe8-8011-4894-9aee-f5bc4e32d1a9",
+  "note": "RESULT: DONE Patient/73d6bbe8-8011-4894-9aee-f5bc4e32d1a9",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient/73d6bbe8-8011-4894-9aee-f5bc4e32d1a9/json",
+  "final_text": "Lena Okafor already has a Patient record, so I didn't create another one. The unfiltered Patient list shows 1 of 1 patients, and this record matches every detail you gave:\n- Name: Lena Okafor\n- Date of birth: 1988-04-22\n- Sex: female\n- Address: 14 Birch Lane, Springfield, MA 01103\n- Home phone: 413-555-0187\n- Email: lena.okafor@example.org\n\nI didn't change anything.\n\nRESULT: DONE Patient/73d6bbe8-8011-4894-9aee-f5bc4e32d1a9",
+  "model_calls": 3,
+  "actions": 4,
+  "tokens_in": 23591,
+  "tokens_out": 652
+ },
+ "verifier": {
+  "outcome": "found_existing",
+  "id": "73d6bbe8-8011-4894-9aee-f5bc4e32d1a9",
+  "reasons": [
+   "one record was already the person"
+  ],
+  "evidence": {
+   "before_matches": 1,
+   "after_matches": 1,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "found_existing",
+  "id": "73d6bbe8-8011-4894-9aee-f5bc4e32d1a9",
+  "reasons": [
+   "one record was already the person"
+  ],
+  "evidence": {
+   "before_matches": 1,
+   "after_matches": 1,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.5,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/73d6bbe8-8011-4894-9aee-f5bc4e32d1a9"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1
+}

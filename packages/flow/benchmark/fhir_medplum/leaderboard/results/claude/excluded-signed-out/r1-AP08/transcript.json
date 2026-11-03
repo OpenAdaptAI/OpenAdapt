@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't book or check the appointment, because Medplum is showing its sign-in page instead of the signed-in app. I wasn't given any login credentials. A page reload didn't help, and I didn't try registering a new account. So I haven't looked up Tomasz Wren's Patient record or Dr Ama Osei's Practitioner record, and I haven't checked for an existing appointment or created one.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6283,
+   "out": 93,
+   "usd": 0.002194,
+   "cached": 6279
+  },
+  {
+   "in": 7749,
+   "out": 147,
+   "usd": 0.003023,
+   "cached": 7747
+  },
+  {
+   "in": 9292,
+   "out": 170,
+   "usd": 0.007111,
+   "cached": 7747
+  }
+ ]
+}

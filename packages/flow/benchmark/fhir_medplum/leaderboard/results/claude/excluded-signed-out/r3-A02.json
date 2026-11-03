@@ -1,0 +1,54 @@
+{
+ "id": "A02",
+ "class": "clean",
+ "type": "allergy",
+ "expect": "found",
+ "note": "The allergy is already recorded; nothing should be written.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 13.4,
+ "cost_usd": 0.015855,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't record the allergy because Medplum is showing its \"Sign in to Medplum\" page, not a signed-in session. The task said I'd already be signed in. I reloaded the page and it showed the same sign-in screen. I don't have any login credentials, and I shouldn't register a new account, so I stopped without touching any records. I haven't looked up Rosa Delgado or checked for an existing penicillin allergy.\n\nRESULT: NOT DONE Medplum is on the sign-in page, not signed in, and I have no credentials to log in.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23555,
+  "tokens_out": 420
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 32.3,
+  "end": 38.4,
+  "waited_s": 150
+ }
+}

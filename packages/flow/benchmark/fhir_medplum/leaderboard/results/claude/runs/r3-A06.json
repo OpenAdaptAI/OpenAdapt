@@ -1,0 +1,145 @@
+{
+ "id": "A06",
+ "class": "wrong_value",
+ "type": "allergy",
+ "expect": "create",
+ "note": "The write path lowers criticality from high to low.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 186.7,
+ "cost_usd": 0.385481,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/3bf854ec-4651-4954-afb7-aee4d85f6d12",
+  "note": "RESULT: DONE AllergyIntolerance/3bf854ec-4651-4954-afb7-aee4d85f6d12",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/AllergyIntolerance?_count=20&_fields=id,_lastUpdated&_sort=-_lastUpdated",
+  "final_text": "There was no allergy recorded for Rosa Delgado (born 1979-06-14), so I created one. It is now the only AllergyIntolerance in the system.\n\nIt holds the patient, code SNOMED CT 91936005 (Allergy to penicillin), criticality high, clinical status active and verification status confirmed. I also set the code's display text to \"Allergy to penicillin\".\n\nAfter I created it, the record showed criticality \"low\", although I had submitted \"high\". I don't know why. I edited it back to \"high\", and the history shows that as the only change.\n\nRESULT: DONE AllergyIntolerance/3bf854ec-4651-4954-afb7-aee4d85f6d12",
+  "model_calls": 32,
+  "actions": 65,
+  "tokens_in": 984750,
+  "tokens_out": 6079
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/3bf854ec-4651-4954-afb7-aee4d85f6d12"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/3bf854ec-4651-4954-afb7-aee4d85f6d12": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "AllergyIntolerance",
+   "write": 2,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 16.6,
+  "end": 17.4,
+  "waited_s": 0
+ }
+}

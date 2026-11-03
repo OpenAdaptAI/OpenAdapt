@@ -1,0 +1,56 @@
+{
+ "id": "A10",
+ "class": "late_collateral",
+ "type": "allergy",
+ "expect": "create",
+ "note": "A stray allergy for another patient lands after the check has finished.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9800/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 15.3,
+ "cost_usd": 0.015748,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't reach any patient records.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/signin?next=%2F",
+  "final_text": "I couldn't record the allergy because Medplum is showing its sign-in page, not a signed-in session, even though the task said I'd already be signed in. I have no login credentials, and I reloaded the page and it still asked for an email. I haven't searched for Rosa Delgado or changed any records.\n\nI didn't use the \"Register\" link, since creating an account isn't part of this task.\n\nRESULT: NOT DONE Medplum is on the sign-in page and I have no credentials, so I couldn't reach any patient records.",
+  "model_calls": 3,
+  "actions": 2,
+  "tokens_in": 23557,
+  "tokens_out": 409
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no AllergyIntolerance was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 25.6,
+  "end": 27.7,
+  "waited_s": 0
+ }
+}

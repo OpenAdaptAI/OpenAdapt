@@ -1,0 +1,125 @@
+{
+ "id": "P10",
+ "class": "ambiguous",
+ "type": "patient",
+ "expect": "ambiguous",
+ "note": "Two records already match the person; a person has to merge them.",
+ "agent_s": 57.4,
+ "cost_usd": 0.100833,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Two existing Patient records (d9ba94f3-ca65-4325-b099-95e3290b3866 and b844d90b-b103-45a0-b74f-ac31f4b5051c) both match name, DOB and sex, so I can't tell which is theirs.",
+  "claim_line": true,
+  "end_url": "http://localhost:9801/Patient/b844d90b-b103-45a0-b74f-ac31f4b5051c/json",
+  "final_text": "I didn't change anything, because the server already holds two Patient records that could both be Lena Okafor.\n\n- **Patient/d9ba94f3-ca65-4325-b099-95e3290b3866:** Lena Okafor, born 1988-04-22, female. Its email is lena.okafor@example.org, which matches the task. It has no phone or address.\n- **Patient/b844d90b-b103-45a0-b74f-ac31f4b5051c:** Lena Okafor, born 1988-04-22, female. It has no phone, email or address, so nothing separates it from the first record.\n\nBoth records have the same name, date of birth and sex. The second has nothing that contradicts the person in the task, so I can't rule it out as theirs. The first is the likelier match because of the email, but I can't confirm that. Creating a third record would add another duplicate, and I can't merge or delete records here. Someone needs to confirm which record is correct, or merge the duplicates.\n\nRESULT: NOT DONE Two existing Patient records (d9ba94f3-ca65-4325-b099-95e3290b3866 and b844d90b-b103-45a0-b74f-ac31f4b5051c) both match name, DOB and sex, so I can't tell which is theirs.",
+  "model_calls": 11,
+  "actions": 22,
+  "tokens_in": 153182,
+  "tokens_out": 2065
+ },
+ "verifier": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "2 records were already the person"
+  ],
+  "evidence": {
+   "before_matches": 2,
+   "after_matches": 2,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "2 records were already the person"
+  ],
+  "evidence": {
+   "before_matches": 2,
+   "after_matches": 2,
+   "agent_writes": 0,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": []
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.8,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "needs_person",
+  "reasons": [
+   "2 records already match; a person must merge them"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AuditEvent",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 30.4,
+  "end": 36.1,
+  "waited_s": 210
+ }
+}

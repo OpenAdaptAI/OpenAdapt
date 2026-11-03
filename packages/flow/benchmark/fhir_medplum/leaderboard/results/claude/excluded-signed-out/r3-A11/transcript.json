@@ -1,0 +1,61 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "actions": [
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "",
+   "actions": [
+    {
+     "text": "F5"
+    },
+    {
+     "duration": 3
+    },
+    {}
+   ],
+   "stop": "tool_use"
+  },
+  {
+   "text": "I couldn't get into the record, so I haven't checked Rosa Delgado's chart or added anything. Medplum is showing its sign-in page instead of a signed-in session, even after a page reload. I don't have login credentials, and registering a new account isn't something I should do here. If you sign in or give me credentials, I can find the right Rosa Delgado (born 1979-06-14), check whether the penicillin allergy is already recorded, and add it only if it's missing.\n\nRESULT: NOT DONE Medplum is on the sign-in page rather than signed in, and I have no credentials to log in.",
+   "actions": [],
+   "stop": "end_turn"
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "F5"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 3.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 6329,
+   "out": 98,
+   "usd": 0.0168,
+   "cached": 0
+  },
+  {
+   "in": 7800,
+   "out": 155,
+   "usd": 0.006502,
+   "cached": 6325
+  },
+  {
+   "in": 9356,
+   "out": 193,
+   "usd": 0.007384,
+   "cached": 7798
+  }
+ ]
+}
