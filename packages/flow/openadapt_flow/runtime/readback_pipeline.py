@@ -16,9 +16,13 @@ What still holds:
   step, the Replayer first waits for the read-back and halts on a failure, as
   it would inline.
 - Only read-backs that don't use the screen are deferred (an on-screen
-  read-back needs the browser, which the next item is using). Durable and
-  idempotency-ledger runs always verify inline, because their terminal state
-  is written once.
+  read-back needs the browser, which the next item is using).
+- A durable run defers only its last step's read-back, and only on a linear
+  run with an encrypted checkpoint store: the check is written into the
+  durable pause first, so a stopped process re-runs only the check on
+  resume. Durable program runs, resumed durable runs and idempotency-ledger
+  runs verify inline (see ``Replayer._may_pipeline_readback`` and
+  docs/THROUGHPUT.md).
 - The worker bounds how many read-backs may wait (the window), and the pool
   stops every worker on the first failed one.
 """
