@@ -946,7 +946,9 @@ class BrowserTeachBridge:
 
     Duck-types :class:`~openadapt_flow.agent.teach.TeachBridge`: the MCP layer
     calls ``handles``, ``list_tool_specs``, ``hold_needed`` and ``dispatch``.
-    No action here needs a person's approval, because none can change data.
+    No action here needs a person's approval. Without a write contract
+    nothing can change data. With one, the wire check lets only the
+    contract's writes leave the browser.
     """
 
     @property
@@ -1011,7 +1013,11 @@ class BrowserTeachBridge:
     def handles(self, name: str) -> bool:
         return name in BROWSER_TEACH_TOOLS or name in self.programs
 
-    def hold_needed(self, arguments: Mapping[str, Any]) -> None:
+    def hold_needed(
+        self, arguments: Mapping[str, Any], tool: str = "teach_act"
+    ) -> None:
+        """Always None: this bridge has no person holds. ``tool`` is ignored."""
+
         return None
 
     def list_tool_specs(self) -> list[ToolSpec]:

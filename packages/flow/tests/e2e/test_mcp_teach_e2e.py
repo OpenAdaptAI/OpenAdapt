@@ -380,9 +380,10 @@ def test_a_save_on_the_wrong_record_fails_the_read_back(
         server, teach, _ = _server(tmp_path, mockmed, fault="wrong_record")
         async with connect(server) as client:
             result = await _teach_once(client)
-            # The teach scope's own read-back of run 1 refuses it first.
-            assert result["status"] == "readback_refused", result
-            assert "readback_wrong_record" in result["detail"]
+            # The read-back right after the save stops run 1 at the save,
+            # before the teach scope's read-back at the end of run 1.
+            assert result["status"] == "readback_wrong_record", result
+            assert "the task does not name" in result["detail"]
             assert result["needs_person"] == []
             status = await client.call("teach_status", {"task_key": result["task_key"]})
             assert status["status"] == "no_draft"

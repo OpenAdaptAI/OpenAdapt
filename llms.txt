@@ -51,7 +51,8 @@ monorepo and installable from source.
    Person-signed grants let named agents answer. Released.
 8. **Repairs itself, with a person approving.** Governed repair (propose,
    review, campaign, canary, rollback), agent-demonstrated fixes for a halted
-   run, and fleet drift patches shared with no patient data are released.
+   run, and fleet drift patches shared with no patient data (moved as files
+   or through a local reference hub) are released.
    Self-repair, where an agent proposes a fix and Flow probes it up to the save
    without saving, is on main.
 9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
@@ -59,8 +60,8 @@ monorepo and installable from source.
    ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), `verify-run`
    to judge any executor's write from the system of record, and Agent Skills and
    a CLI for coding agents. Released except where a PR is named.
-10. **Runs locally and keeps data private.** Healthy runs make no model calls
-    and send nothing out. Personal and health data are redacted from text,
+10. **Runs locally and keeps data private.** Healthy runs make no calls to a
+    hosted AI model and send nothing out. Personal and health data are redacted from text,
     screenshots and structure (scrub-by-default for anything that leaves the
     machine is on main); a strict no-outbound mode, an unattended on-prem
     service, and signed, timestamped receipts are released.
