@@ -19,6 +19,7 @@ from openadapt_flow.backends.remote_display import MacWindowClient
 
 
 def test_frontmost_pid_applies_pending_workspace_updates(monkeypatch) -> None:
+    pytest.importorskip("AppKit")  # the read itself needs AppKit
     calls: list[str] = []
     monkeypatch.setattr(
         MacWindowClient,
