@@ -85,13 +85,14 @@ document.getElementById('ticket').addEventListener('submit', () => {
   const ws = new WebSocket('ws://' + location.host + '/ws');
   ws.onopen = () => ws.send('close-account');
 }, true);""" + _SCRIPTS["fetch"]
-# The save goes out with fetch, and 2.6 s later, after the replayer's settle
-# window, the page sends the same create again.
+# The save goes out with fetch, and the page keeps a way to send the same
+# create again later; the test calls it after the save's run has ended (after
+# the replayer's settle window), so no wall-clock timing decides the order.
 _SCRIPTS["fetchlate"] = """
 document.getElementById('ticket').addEventListener('submit', (e) => {
   const body = new URLSearchParams(new FormData(e.target, e.submitter)).toString();
-  setTimeout(() => fetch('/ticket', {method: 'POST', headers: {
-    'Content-Type': 'application/x-www-form-urlencoded'}, body}).catch(() => 0), 2600);
+  window.__sendLate = () => fetch('/ticket', {method: 'POST', headers: {
+    'Content-Type': 'application/x-www-form-urlencoded'}, body}).catch(() => 0);
 }, true);""" + _SCRIPTS["fetch"]
 _POPUP = """<!doctype html><title>Popup</title>
 <form method="post" action="/account/close"><input name="confirm" value="yes"></form>
@@ -1133,9 +1134,9 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
     with sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
-            page = browser.new_context(service_workers="block").new_page(
-                viewport={"width": 1280, "height": 800}
-            )
+            page = browser.new_context(
+                service_workers="block", viewport={"width": 1280, "height": 800}
+            ).new_page()
             prepare_ws_guard(page.context)
             page.goto(f"{server.url}?v=fetchlate")
             page.wait_for_selector("[name=field_summary]", state="visible")
@@ -1149,8 +1150,10 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
                 bundle_dir=bundle,
                 run_dir=tmp_path_factory.mktemp("run"),
             )
-            # The late submit fires (and is aborted) after the save's run.
-            page.wait_for_timeout(1500)
+            # The page submits again after the save's run has ended; the
+            # wire check, still armed, aborts it.
+            page.evaluate("() => window.__sendLate()")
+            page.wait_for_timeout(500)
             assert backend.form_submit_guard_armed
             actuator = _ContextRequestActuator(page, server)
             span_bundle = tmp_path_factory.mktemp("span")
@@ -1172,6 +1175,12 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
     assert not report.success
     assert [r.step_id for r in report.results] == ["step_000"]
     halt = report.results[0]
+    assert halt.actuation == "api" and halt.api_fallback is None
     assert halt.safety_halt and halt.failure_category == "safety_halt"
     assert not halt.delivery_attempted
-    assert "after the previous save" in (halt.error or ""), halt.error
+    # The span's halt names the earlier save's refusal; the check stays armed,
+    # so the end-of-run read words the same refusal "after an earlier save".
+    assert "second submission" in (halt.error or ""), halt.error
+    assert "after the previous save" in (halt.error or "") or (
+        "after an earlier save" in (halt.error or "")
+    ), halt.error
