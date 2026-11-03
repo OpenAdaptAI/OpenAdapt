@@ -461,6 +461,17 @@ class FrameDatabase(BaseModel):
             raise ValueError("frame.database.read reads every table; drop sql_query")
         return self
 
+    @model_validator(mode="after")
+    def _schema_wildcards_postgresql_only(self) -> "FrameDatabase":
+        if self.dialect != "postgresql":
+            for entry in self.allow_tables:
+                if entry.table.endswith(".*"):
+                    raise ValueError(
+                        f"allow_tables entry {entry.table!r} ('<schema>.*') is "
+                        "PostgreSQL only"
+                    )
+        return self
+
 
 class FrameSpec(BaseModel):
     """``frame:`` in ``verify.yaml``: the slice that must otherwise not move."""

@@ -1524,6 +1524,13 @@ def take_snapshot(
         SnapshotError: the database can't be read as the frame needs it.
     """
 
+    if dialect != "postgresql":
+        # Before any connection: only PostgreSQL has schemas to skip.
+        wildcards = sorted(t for t in (*modes, *optional_modes) if t.endswith(".*"))
+        if wildcards:
+            raise SnapshotError(
+                f"allow-list entry {wildcards[0]!r} ('<schema>.*') is PostgreSQL only"
+            )
     try:
         s = _Session(connect, dialect)
     except Exception as exc:  # noqa: BLE001
