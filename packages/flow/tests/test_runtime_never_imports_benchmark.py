@@ -32,9 +32,20 @@ def _is_benchmark(module: str) -> bool:
     )
 
 
-def _imports_benchmark(tree: ast.AST) -> list[int]:
+def _imports_benchmark(tree: ast.AST, *, lazy_ok: bool = False) -> list[int]:
     lines: list[int] = []
-    for node in ast.walk(tree):
+    # An allowed module may import the harness only inside a function, where
+    # it runs on demand from a checkout.
+    nodes = (
+        [
+            n
+            for n in ast.iter_child_nodes(tree)
+            if isinstance(n, (ast.Import, ast.ImportFrom))
+        ]
+        if lazy_ok
+        else ast.walk(tree)
+    )
+    for node in nodes:
         if isinstance(node, ast.ImportFrom):
             module = node.module or ""
             if node.level == 0 and _is_benchmark(module):
@@ -61,10 +72,10 @@ def test_product_modules_never_import_the_benchmark_package() -> None:
     offenders: list[str] = []
     for path in sorted(ROOT.rglob("*.py")):
         rel = path.relative_to(ROOT).as_posix()
-        if rel in ALLOWED:
-            continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        offenders += [f"{rel}:{n}" for n in _imports_benchmark(tree)]
+        offenders += [
+            f"{rel}:{n}" for n in _imports_benchmark(tree, lazy_ok=rel in ALLOWED)
+        ]
     assert not offenders, (
         "product code imports the benchmark harness (the wheel and a frozen "
         "build leave it out); move the shared name to "

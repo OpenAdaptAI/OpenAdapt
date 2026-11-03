@@ -17,6 +17,10 @@
 
 ## Unreleased
 
+### Changed
+
+- The wheel no longer ships the benchmark harnesses. `openadapt_flow.benchmark` and `openadapt_flow.instrument` moved to `packages/flow/benchmark/harness/` in the source tree (import `benchmark.harness`); `openadapt-flow benchmark` runs from a source checkout and says so from a wheel. The engine audit for application-specific code is in `docs/GENERALITY_AUDIT.md`. Code that imported `openadapt_flow.benchmark` or `openadapt_flow.instrument` from an installed wheel imports `benchmark.harness` from a source checkout instead.
+
 ### Features
 
 - `run --self-repair` (and repair by default) now works outside a browser. `repair.session` in `deploy.yaml` says how to start the app for each probe, fault probe and resumed run (an argv, no shell, kept running while the app is up; `fault_commands`, `close_command`, `ready_s`). The run's configured backend must bind to a window owned by that command's process group, so a session never binds to the halted session or a copy already open; Flow ends the group afterwards, and closes the halted session before each probe. This works where the bound window is on Flow's machine (macOS, and the local RDP or Citrix client window); Windows over its agent and FreeRDP are refused for now. Without `repair.session`, a desktop run refuses repair with that reason, as before.
@@ -24,8 +28,6 @@
 - Signed write receipts. A verifier verdict, with its scope (stores read, time window, strength) and a plain list of what it did not check, is signed as a COSE_Sign1 in the IETF SCITT shape and appended to a local transparency log. `openadapt-flow receipt verify FILE --issuer-key --log-key` checks one offline and prints the not-checked list every time; a receipt that claims more than its scope is neither issued nor accepted. `verify_write(..., write_receipt=True)`, `issue_write_receipt(result)` and `openadapt-flow shadow --receipts` issue them; `receipt anchor` puts the digest in Rekor. Extra: `openadapt-flow[receipts]`. Design: `docs/WRITE_RECEIPTS.md`.
 
 ### Fixes
-
-- The wheel no longer ships the benchmark harnesses. `openadapt_flow.benchmark` and `openadapt_flow.instrument` moved to `packages/flow/benchmark/harness/` in the source tree (import `benchmark.harness`); `openadapt-flow benchmark` runs from a source checkout and says so from a wheel. The engine audit for application-specific code is in `docs/GENERALITY_AUDIT.md`.
 
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
