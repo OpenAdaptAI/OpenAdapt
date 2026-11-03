@@ -26,7 +26,7 @@ from benchmark.effectbench.reference_fault_model import (
     build_reference_episodes,
 )
 from benchmark.fault_model import faults as F
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     AgentReport,
     DivergenceCategory,
     Effect,
@@ -44,7 +44,7 @@ from openadapt_flow.benchmark.effectbench import (
     summarize,
     wilson_interval,
 )
-from openadapt_flow.benchmark.effectbench.metrics import bootstrap_ci, rate
+from benchmark.harness.effectbench.metrics import bootstrap_ci, rate
 
 # ---------------------------------------------------------------------------
 # 1. Reference re-expression regression (the headline result)
@@ -334,7 +334,7 @@ def test_record_and_note_effects_are_reexported() -> None:
 
 def test_score_episode_end_to_end() -> None:
     """The runner orchestrator: capture pre-state, run the arm, verify, label."""
-    from openadapt_flow.benchmark.effectbench import AgentReport, score_episode
+    from benchmark.harness.effectbench import AgentReport, score_episode
 
     box = {"acted": False}
 
@@ -367,7 +367,7 @@ def test_score_episode_end_to_end() -> None:
 
 
 def test_score_episode_raises_on_unreadable_oracle() -> None:
-    from openadapt_flow.benchmark.effectbench import AgentReport, score_episode
+    from benchmark.harness.effectbench import AgentReport, score_episode
 
     with pytest.raises(ValueError):
         score_episode(
@@ -433,8 +433,8 @@ def test_summary_filters_by_arm(episodes: list[EpisodeRecord]) -> None:
 
 
 def test_episode_record_predicates_match_outcome() -> None:
-    from openadapt_flow.benchmark.effectbench import Verdict
-    from openadapt_flow.benchmark.effectbench.schema import OracleVerdict
+    from benchmark.harness.effectbench import Verdict
+    from benchmark.harness.effectbench.schema import OracleVerdict
 
     ep = EpisodeRecord(
         episode_id="e1",

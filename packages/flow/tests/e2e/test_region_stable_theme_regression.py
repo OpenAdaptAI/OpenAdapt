@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
-from openadapt_flow.benchmark.dom_arm import verify_final_state
+from benchmark.harness.dom_arm import verify_final_state
 from openadapt_flow.compiler import compile_recording
 from openadapt_flow.demo_driver import record_triage_demo
 from openadapt_flow.ir import Workflow

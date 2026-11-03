@@ -1,6 +1,6 @@
 """EffectBench runner CLI — the CI-fast dry-run over the MockMed reference pack.
 
-``python -m openadapt_flow.benchmark.effectbench.runner`` drives the nine MockMed
+``python -m benchmark.harness.effectbench.runner`` drives the nine MockMed
 reference tasks through the in-repo LIVE arms (compiler, screen-only ablation,
 mock) over a real in-process HTTP fault server — no Docker, no paid API, no
 spend — and prints the per-arm summary. It proves the pipeline end-to-end: the
@@ -25,16 +25,16 @@ import json
 import sys
 from typing import Optional, Sequence
 
-from openadapt_flow.benchmark.effectbench.metrics import BenchmarkSummary, summarize
-from openadapt_flow.benchmark.effectbench.runner import LIVE_ARMS
-from openadapt_flow.benchmark.effectbench.runner.arms import AgentArm
-from openadapt_flow.benchmark.effectbench.runner.baselines import SCAFFOLDED_ARMS
-from openadapt_flow.benchmark.effectbench.runner.harness import run_matrix
-from openadapt_flow.benchmark.effectbench.runner.reference_tasks import (
+from benchmark.harness.effectbench.metrics import BenchmarkSummary, summarize
+from benchmark.harness.effectbench.runner import LIVE_ARMS
+from benchmark.harness.effectbench.runner.arms import AgentArm
+from benchmark.harness.effectbench.runner.baselines import SCAFFOLDED_ARMS
+from benchmark.harness.effectbench.runner.harness import run_matrix
+from benchmark.harness.effectbench.runner.reference_tasks import (
     MockMedEnvProvider,
     reference_tasks,
 )
-from openadapt_flow.benchmark.effectbench.schema import EpisodeRecord
+from benchmark.harness.effectbench.schema import EpisodeRecord
 
 
 def _select_arms(names: Optional[str]) -> list[AgentArm]:
@@ -128,7 +128,7 @@ def run_dry_run(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m openadapt_flow.benchmark.effectbench.runner",
+        prog="python -m benchmark.harness.effectbench.runner",
         description="EffectBench multi-baseline runner — MockMed dry-run.",
     )
     parser.add_argument("--trials", type=int, default=3)

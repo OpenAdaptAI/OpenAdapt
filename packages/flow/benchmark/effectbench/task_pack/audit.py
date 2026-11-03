@@ -41,7 +41,7 @@ from benchmark.effectbench.task_pack.mockmed_tasks import (
     _note_effect,
     _record_effect,
 )
-from openadapt_flow.benchmark.effectbench import RestRecordVerifier, Verdict
+from benchmark.harness.effectbench import RestRecordVerifier, Verdict
 
 _HTTP_TIMEOUT_S = 5.0
 TRIAL_NOTE = "triage note trial-unique-AUDIT"

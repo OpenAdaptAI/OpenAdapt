@@ -16,20 +16,20 @@ from urllib.parse import urlsplit
 import cv2
 import numpy as np
 
-import openadapt_flow.benchmark.verify as benchmark_verify
-from openadapt_flow.benchmark import agent_baseline, openemr_benchmark
-from openadapt_flow.benchmark.agent_baseline import (
+import benchmark.harness.verify as benchmark_verify
+from benchmark.harness import agent_baseline, openemr_benchmark
+from benchmark.harness.agent_baseline import (
     openemr_task_prompt,
     run_agent,
 )
-from openadapt_flow.benchmark.openemr_benchmark import (
+from benchmark.harness.openemr_benchmark import (
     aggregate_openemr_results,
     note_for,
     render_openemr_markdown,
     run_openemr_benchmark,
     write_openemr_outputs,
 )
-from openadapt_flow.benchmark.verify import verify_note_saved
+from benchmark.harness.verify import verify_note_saved
 from openadapt_flow.vision import OcrLine
 
 NOTE = "Insurance card copied and coverage verified by phone."
@@ -848,7 +848,7 @@ class TestCrashedRunSpendAccounting:
         )
 
     def test_mid_run_crash_row_carries_partial_cost(self, monkeypatch: Any) -> None:
-        from openadapt_flow.benchmark.run_benchmark import _agent_run
+        from benchmark.harness.run_benchmark import _agent_run
 
         _fake_launch(monkeypatch, FakeBackend())
         row = _agent_run("http://x", NOTE, client=self.crashing_client(), task="task")

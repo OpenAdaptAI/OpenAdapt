@@ -2,7 +2,7 @@
 
 Date: 2026-07-21. This is the genuinely independent, end-to-end measurement of the
 silent-wrong-effect (SWER) result. Unlike the definitional
-`openadapt_flow.benchmark.silent_wrong_action` (raw `requests.post`; effect
+`benchmark.harness.silent_wrong_action` (raw `requests.post`; effect
 verifier and ground truth read the SAME in-process object; the effect contract
 restates the ground-truth definition -- so its `0/90` is circular by
 construction), every write below goes through the ACTUAL governed replay path

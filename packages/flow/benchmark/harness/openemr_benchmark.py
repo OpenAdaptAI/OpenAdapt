@@ -7,7 +7,7 @@ resets daily. The workflow is the 18-step add-patient-note demonstration
 recorded by ``scripts/openemr_demo.py`` (fake demo patients only).
 
 Both arms are judged by the same criterion, implemented once
-(:func:`openadapt_flow.benchmark.verify.verify_note_saved`): OCR of the
+(:func:`benchmark.harness.verify.verify_note_saved`): OCR of the
 final screen must show the run's parameterized note text in the patient
 message list. Each run — in BOTH arms — uses a distinct note value, so a
 pass proves parameter substitution against live state, not replay of a
@@ -60,16 +60,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from openadapt_flow.benchmark import agent_baseline
-from openadapt_flow.benchmark.agent_baseline import _looks_like_billing_error
-from openadapt_flow.benchmark.run_benchmark import (
+from benchmark.harness import agent_baseline
+from benchmark.harness.agent_baseline import _looks_like_billing_error
+from benchmark.harness.run_benchmark import (
     _agent_run,
     _arm_aggregate,
     _compiled_run,
     identity_coverage_block,
     render_chart,
 )
-from openadapt_flow.benchmark.verify import verify_note_saved
+from benchmark.harness.verify import verify_note_saved
 
 DEMO_URL = "https://demo.openemr.io/openemr/index.php"
 N_COMPILED = 20
@@ -481,7 +481,7 @@ def write_openemr_outputs(results: dict[str, Any], out_dir: Path) -> None:
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    from openadapt_flow.benchmark.chart_fonts import safe_render
+    from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_chart, results, out_dir / "latency_cost.png")
     (out_dir / "BENCHMARK.md").write_text(render_openemr_markdown(results))

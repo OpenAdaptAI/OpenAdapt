@@ -15,8 +15,8 @@ import cv2
 import numpy as np
 import pytest
 
-from openadapt_flow.benchmark import agent_baseline, hybrid_benchmark
-from openadapt_flow.benchmark.hybrid_benchmark import (
+from benchmark.harness import agent_baseline, hybrid_benchmark
+from benchmark.harness.hybrid_benchmark import (
     AGENT_SLOTS,
     DRIFT_TYPES,
     FALLBACK_MAX_ACTIONS,
@@ -610,7 +610,7 @@ class TestHybridRun:
         assert "no failing step recorded" in seen["task"]
 
     def test_failed_result_index_edge_cases(self) -> None:
-        from openadapt_flow.benchmark.hybrid_benchmark import (
+        from benchmark.harness.hybrid_benchmark import (
             _failed_result_index,
         )
 
@@ -978,7 +978,7 @@ class TestOrchestratorGuardrails:
         the run helpers), not on the orchestrator-stamped condition labels
         — the labels come from the same schedule lookup the orchestrator
         uses to build the URLs, so asserting on them alone is circular."""
-        from openadapt_flow.benchmark.hybrid_benchmark import (
+        from benchmark.harness.hybrid_benchmark import (
             AGENT_SLOTS,
             condition_url,
         )

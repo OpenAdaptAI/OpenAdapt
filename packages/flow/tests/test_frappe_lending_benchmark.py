@@ -19,7 +19,7 @@ from benchmark.frappe_lending.fixture import (
     FrappeFixture,
     audit_table_deltas,
 )
-from openadapt_flow.benchmark.frappe_lending import (
+from benchmark.harness.frappe_lending import (
     ARMS,
     CONDITIONS,
     FrappeLoanApplicationOracle,

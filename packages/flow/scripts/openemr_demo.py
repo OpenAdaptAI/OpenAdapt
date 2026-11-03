@@ -19,7 +19,7 @@ Not shipped in the package — this is the showcase driver:
 
 Showcase artifacts land in docs/showcase-openemr/; ``benchmark`` records
 a fresh demonstration into a temporary directory and writes results to
-benchmark/openemr/ (see openadapt_flow.benchmark.openemr_benchmark).
+benchmark/openemr/ (see benchmark.harness.openemr_benchmark).
 """
 
 from __future__ import annotations
@@ -189,7 +189,7 @@ def _note_visible(final_png: bytes, note: str) -> bool:
     Delegates to the benchmark's shared arm-independent check
     (``verify_note_saved``) so the criterion is implemented exactly once.
     """
-    from openadapt_flow.benchmark.verify import verify_note_saved
+    from benchmark.harness.verify import verify_note_saved
 
     return verify_note_saved(final_png, note).success
 
@@ -280,15 +280,15 @@ def benchmark() -> None:
     (incremental, per run) plus results.json / BENCHMARK.md /
     latency_cost.png to benchmark/openemr/.
 
-    Hard cost guardrails (see openadapt_flow.benchmark.openemr_benchmark):
+    Hard cost guardrails (see benchmark.harness.openemr_benchmark):
     an API preflight before any spend, a $1.50 per-run cap, an $8.00
     total agent-arm ceiling, and an abort on consecutive billing errors.
     All at list price — billed cost under the intro rate is lower.
     """
     import tempfile
 
-    from openadapt_flow.benchmark import agent_baseline
-    from openadapt_flow.benchmark.openemr_benchmark import (
+    from benchmark.harness import agent_baseline
+    from benchmark.harness.openemr_benchmark import (
         MAX_TOTAL_COST_USD,
         run_openemr_benchmark,
     )

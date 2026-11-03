@@ -2,7 +2,7 @@
 runner, cost-capped.
 
 This EXTENDS the self-directed silent-wrong-action benchmark
-(``openadapt_flow.benchmark.silent_wrong_action``, #67) from "our own runtime"
+(``benchmark.harness.silent_wrong_action``, #67) from "our own runtime"
 to "any external computer-use agent." The measurement is identical — did a
 wrong / absent / duplicate business effect land in the system of record while
 the actor reported success (a *silent wrong-action*)? — but the actor is now an
@@ -53,7 +53,7 @@ from urllib.parse import urlsplit, urlunsplit
 # judge, and the #63 effect contract. We REUSE these from the self-directed
 # benchmark rather than re-deriving them so the external-agent instrument and
 # the self-directed instrument grade with byte-identical semantics.
-from openadapt_flow.benchmark.silent_wrong_action import (
+from benchmark.harness.silent_wrong_action import (
     NOTE,
     SCENARIOS,
     Scenario,
@@ -888,7 +888,7 @@ def write_outputs(report: InstrumentReport, out_dir: Path | str) -> None:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    """CLI: ``python -m openadapt_flow.instrument.competitor_drift``.
+    """CLI: ``python -m benchmark.harness.instrument.competitor_drift``.
 
     Ships only the offline stub adapter and a dry-run estimator — a real
     external adapter is wired programmatically (see

@@ -39,7 +39,7 @@ def main() -> None:
 
     from playwright.sync_api import sync_playwright
 
-    from openadapt_flow.benchmark.openemr_local import OpenEMRPatientOracle
+    from benchmark.harness.openemr_local import OpenEMRPatientOracle
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 

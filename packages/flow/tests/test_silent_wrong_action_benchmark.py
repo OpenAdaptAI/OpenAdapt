@@ -16,7 +16,7 @@ test protects the aggregate METRIC the benchmark reports.
 
 from __future__ import annotations
 
-from openadapt_flow.benchmark.silent_wrong_action import (
+from benchmark.harness.silent_wrong_action import (
     SCENARIOS,
     aggregate,
     render_markdown,

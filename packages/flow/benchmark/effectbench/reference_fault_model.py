@@ -31,16 +31,16 @@ hand-authored fault taxonomy, not expected field or production rates. See
 How it re-expresses the study, faithfully and without hardcoding verdicts:
 
 - Each of the study's nine scenarios (``benchmark.fault_model.faults.FAULTS``)
-  becomes a :class:`~openadapt_flow.benchmark.effectbench.schema.TaskSpec` plus
+  becomes a :class:`~benchmark.harness.effectbench.schema.TaskSpec` plus
   the KNOWN post-action system-of-record state that fault produces (the same DB
   states the study's own taxonomy tests assert). The states live in
   :data:`SCENARIOS` — the record shapes are MockMed ``FaultDB`` rows.
 - The TRUE effect is read by the substrate-agnostic
-  :class:`~openadapt_flow.benchmark.effectbench.oracle.RecordSnapshotOracle`
+  :class:`~benchmark.harness.effectbench.oracle.RecordSnapshotOracle`
   running the SAME shared ``judge_records`` decision logic the runtime uses —
   once for the at-most-once/collateral ``record_written`` contract and once for
   the ``field_equals`` note read-back — reduced by
-  :func:`~openadapt_flow.benchmark.effectbench.oracle.combine_true_states`.
+  :func:`~benchmark.harness.effectbench.oracle.combine_true_states`.
 - Two arms are scored against the identical independent oracle: ``screen_only``
   (the weak banner oracle — reports success whenever the screen looks saved) and
   ``effect_verify`` (the agent halts unless the oracle CONFIRMS). Only the
@@ -56,7 +56,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from benchmark.fault_model import faults as F
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     AgentReport,
     DivergenceCategory,
     Effect,
@@ -72,7 +72,7 @@ from openadapt_flow.benchmark.effectbench import (
     oracle_verdict_of,
     summarize,
 )
-from openadapt_flow.benchmark.effectbench.schema import OracleChannel
+from benchmark.harness.effectbench.schema import OracleChannel
 
 # The consequential-save contract the study verifies: exactly one Triage
 # encounter for the target patient (at-most-once + no collateral loss) whose

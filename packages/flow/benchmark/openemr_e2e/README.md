@@ -10,7 +10,7 @@ compile → replay → effect-verify (system of record) → catch a silent wrong
 ```
 
 It does **not** duplicate the existing OpenEMR *benchmark*
-(`openadapt_flow.benchmark.openemr_benchmark`, which measures the compiled arm
+(`benchmark.harness.openemr_benchmark`, which measures the compiled arm
 vs. a paid agent arm on the **live** public demo and is explicitly *not*
 CI-reproducible). This harness *orchestrates* the runtime components that
 benchmark assumes work — the compiler, the `Replayer`, the `EffectVerifier`, the

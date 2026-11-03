@@ -2,20 +2,20 @@
 
 Drives every agent *arm* through one common interface against the IDENTICAL task
 and INDEPENDENT oracle, records one
-:class:`~openadapt_flow.benchmark.effectbench.schema.EpisodeRecord` per
+:class:`~benchmark.harness.effectbench.schema.EpisodeRecord` per
 (task × arm × trial), and summarizes per arm with
-:func:`~openadapt_flow.benchmark.effectbench.metrics.summarize`. Built on the
-stable contract in :mod:`openadapt_flow.benchmark.effectbench` (schema / oracle /
+:func:`~benchmark.harness.effectbench.metrics.summarize`. Built on the
+stable contract in :mod:`benchmark.harness.effectbench` (schema / oracle /
 metrics) — this package adds only the runner, never re-implements the taxonomy.
 
 Layers:
 
 - :mod:`.arms` — the ``AgentArm`` interface + the concrete in-repo arms:
-  :class:`~openadapt_flow.benchmark.effectbench.runner.arms.CompilerArm`
+  :class:`~benchmark.harness.effectbench.runner.arms.CompilerArm`
   (record→compile→replay, effect-gated),
-  :class:`~openadapt_flow.benchmark.effectbench.runner.arms.ScreenOnlyArm`
+  :class:`~benchmark.harness.effectbench.runner.arms.ScreenOnlyArm`
   (the silent-wrong-effect ablation), and a substrate-free
-  :class:`~openadapt_flow.benchmark.effectbench.runner.arms.MockArm` for CI.
+  :class:`~benchmark.harness.effectbench.runner.arms.MockArm` for CI.
 - :mod:`.substrate` — the arm-facing action+perception channel (the reference
   MockMed session), isolated from the oracle read path.
 - :mod:`.compound` — the compound consequential-save verifier (record + note).
@@ -25,19 +25,19 @@ Layers:
 - :mod:`.harness` — ``run_episode`` / ``run_matrix``: wire each arm through
   ``score_episode`` with the task's oracle, fairly and identically.
 
-Run the dry-run: ``python -m openadapt_flow.benchmark.effectbench.runner``.
+Run the dry-run: ``python -m benchmark.harness.effectbench.runner``.
 """
 
 from __future__ import annotations
 
-from openadapt_flow.benchmark.effectbench.runner.arms import (
+from benchmark.harness.effectbench.runner.arms import (
     AgentArm,
     ArmResult,
     CompilerArm,
     MockArm,
     ScreenOnlyArm,
 )
-from openadapt_flow.benchmark.effectbench.runner.baselines import (
+from benchmark.harness.effectbench.runner.baselines import (
     SCAFFOLDED_ARMS,
     BaselineRequirements,
     ClaudeComputerUseArm,
@@ -46,21 +46,21 @@ from openadapt_flow.benchmark.effectbench.runner.baselines import (
     SkyvernArm,
     UITarsArm,
 )
-from openadapt_flow.benchmark.effectbench.runner.compound import (
+from benchmark.harness.effectbench.runner.compound import (
     CompoundEffectVerifier,
 )
-from openadapt_flow.benchmark.effectbench.runner.harness import (
+from benchmark.harness.effectbench.runner.harness import (
     EnvFactory,
     EpisodeEnv,
     run_episode,
     run_matrix,
 )
-from openadapt_flow.benchmark.effectbench.runner.reference_tasks import (
+from benchmark.harness.effectbench.runner.reference_tasks import (
     MockMedEnvProvider,
     mockmed_env_factory,
     reference_tasks,
 )
-from openadapt_flow.benchmark.effectbench.runner.substrate import (
+from benchmark.harness.effectbench.runner.substrate import (
     MockMedFault,
     MockMedSession,
     ScreenObservation,

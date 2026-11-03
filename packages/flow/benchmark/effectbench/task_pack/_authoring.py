@@ -3,10 +3,10 @@
 These build the two things every consequential-write task needs:
 
 - the DECLARED expected effect (a typed
-  :class:`~openadapt_flow.benchmark.effectbench.Effect`), parameterized by run
-  params via :class:`~openadapt_flow.benchmark.effectbench.ValueExpr` so the
+  :class:`~benchmark.harness.effectbench.Effect`), parameterized by run
+  params via :class:`~benchmark.harness.effectbench.ValueExpr` so the
   record CHECKED is the record this trial WROTE (trial-unique payload); and
-- the :class:`~openadapt_flow.benchmark.effectbench.OracleSpec` that declares
+- the :class:`~benchmark.harness.effectbench.OracleSpec` that declares
   the independent read channel and the non-gameability attestations the
   adversarial audit signs off on.
 
@@ -21,13 +21,13 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     Effect,
     EffectKind,
     OracleSpec,
     ValueExpr,
 )
-from openadapt_flow.benchmark.effectbench.schema import OracleChannel
+from benchmark.harness.effectbench.schema import OracleChannel
 
 # Canonical run-param names a trial binds a trial-unique value to. The driver
 # derives each from the trial seed so the oracle checks THIS run's exact write.

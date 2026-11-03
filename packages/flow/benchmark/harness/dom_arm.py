@@ -10,7 +10,7 @@ runs that experiment instead of arguing about it.
 Three arms, one frozen schedule, one arm-independent success check:
 
 - **compiled**: the existing vision-anchored compiled replay
-  (:func:`openadapt_flow.benchmark.run_benchmark._compiled_run`), healing
+  (:func:`benchmark.harness.run_benchmark._compiled_run`), healing
   enabled as always.
 - **dom** (positional) and **dom_named** (name-filtered):
   :func:`dom_script` — a Playwright script written the way a competent
@@ -29,7 +29,7 @@ Both arms run (a) the hybrid benchmark's exact frozen 20-slot schedule
 drift modes (:data:`PERTURBATIONS`: lookalike, missing, grow, sort, theme,
 rename, move, typelabel). Success is judged for BOTH arms by the hybrid
 benchmark's own arm-independent check
-(:func:`~openadapt_flow.benchmark.hybrid_benchmark.verify_hybrid_final`):
+(:func:`~benchmark.harness.hybrid_benchmark.verify_hybrid_final`):
 OCR of the final screenshot must show the saved-encounter evidence AND the
 right patient, with wrong-type writes flagged — so this head-to-head is
 judged by the identical bar. Wrong-action events are recorded per arm:
@@ -51,7 +51,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from openadapt_flow.benchmark.hybrid_benchmark import (
+from benchmark.harness.hybrid_benchmark import (
     _NOTE_POOL,
     DRIFT_TYPES,
     SCHEDULE,
@@ -465,7 +465,7 @@ def dom_arm_aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
         Aggregate dict: base stats plus clean/drift splits, outcome
         counts, wrong-action count, and (DOM arm) maintenance events.
     """
-    from openadapt_flow.benchmark.run_benchmark import _arm_aggregate
+    from benchmark.harness.run_benchmark import _arm_aggregate
 
     agg = _arm_aggregate(rows)
     agg["clean"] = _split_rate([r for r in rows if r.get("condition") == "clean"])
@@ -621,7 +621,7 @@ def render_dom_chart(results: dict[str, Any], out_png: Path) -> Path:
     Returns:
         The written PNG path.
     """
-    from openadapt_flow.benchmark.chart_fonts import configure_bundled_font
+    from benchmark.harness.chart_fonts import configure_bundled_font
 
     plt = configure_bundled_font()
     from matplotlib.patches import Rectangle
@@ -1177,7 +1177,7 @@ row's Open button — the literal reading — and **DOM (name-filtered)**
 clicks the Open button in the row named `{TARGET_PATIENT}` — the
 identity reading, hardcoding the demonstrated patient exactly as the
 compiled arm's recorded identity band does. Every selector choice is
-documented in `openadapt_flow/benchmark/dom_arm.py`.
+documented in `benchmark/harness/dom_arm.py`.
 
 ## Verdict
 
@@ -1333,7 +1333,7 @@ Unmeasured variants, for completeness:
 ## Reproduce
 
 ```
-.venv/bin/python -m openadapt_flow.benchmark.dom_arm --out benchmark/dom --n-per-perturbation 2
+.venv/bin/python -m benchmark.harness.dom_arm --out benchmark/dom --n-per-perturbation 2
 ```
 
 (`--n-per-perturbation 2` matches the committed results.) No API key
@@ -1350,7 +1350,7 @@ def write_dom_outputs(results: dict[str, Any], out_dir: Path) -> None:
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
-    from openadapt_flow.benchmark.chart_fonts import safe_render
+    from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_dom_chart, results, out_dir / "outcome_matrix.png")
     (out_dir / "BENCHMARK.md").write_text(render_dom_markdown(results))
@@ -1388,7 +1388,7 @@ def run_dom_benchmark(
     Returns:
         The results dict (also written to ``results.json``).
     """
-    from openadapt_flow.benchmark.run_benchmark import _compiled_run
+    from benchmark.harness.run_benchmark import _compiled_run
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.demo_driver import record_triage_demo
     from openadapt_flow.mockmed.server import serve
@@ -1499,7 +1499,7 @@ def run_dom_benchmark(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    """CLI entry point: ``python -m openadapt_flow.benchmark.dom_arm``."""
+    """CLI entry point: ``python -m benchmark.harness.dom_arm``."""
     parser = argparse.ArgumentParser(
         description=(
             "DOM-selector benchmark arm vs. compiled vision replay on "

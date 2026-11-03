@@ -1,6 +1,6 @@
 """Anthropic defaults that product code shares with the benchmark harness.
 
-These live here, not in ``openadapt_flow.benchmark``, because the product
+These live here, not in ``benchmark.harness`` (the checkout's harness), because the product
 imports them and a frozen build leaves the benchmark package out
 (``tests/test_runtime_never_imports_benchmark.py`` enforces the rule).
 """

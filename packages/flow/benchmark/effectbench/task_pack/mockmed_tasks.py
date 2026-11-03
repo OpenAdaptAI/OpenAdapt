@@ -8,7 +8,7 @@ through :mod:`.driver` end-to-end, so the whole authoring→oracle→classifier
 path is exercised in CI (no mocked verdicts).
 
 Each entry is a :class:`MockMedTask`: an agent-agnostic
-:class:`~openadapt_flow.benchmark.effectbench.TaskSpec` (goal = intent only)
+:class:`~benchmark.harness.effectbench.TaskSpec` (goal = intent only)
 plus a :class:`MockMedDrive` — the environment recipe the live driver replays
 to MANIFEST the divergence (which ``?fault=`` mode to inject, the write the
 agent performs, decoy/concurrent rows to seed, and the documented banner
@@ -34,9 +34,9 @@ from benchmark.effectbench.task_pack._authoring import (
     param,
     record_written_effect,
 )
-from openadapt_flow.benchmark.effectbench import DivergenceCategory as DC
-from openadapt_flow.benchmark.effectbench import Effect, Substrate, TaskSpec
-from openadapt_flow.benchmark.effectbench.schema import OracleChannel
+from benchmark.harness.effectbench import DivergenceCategory as DC
+from benchmark.harness.effectbench import Effect, Substrate, TaskSpec
+from benchmark.harness.effectbench.schema import OracleChannel
 
 TARGET_PATIENT = "p1"
 TARGET_TYPE = "Triage"

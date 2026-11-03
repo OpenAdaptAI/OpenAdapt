@@ -21,7 +21,7 @@ here as docstring contracts):
    side channel to the system of record; the independent oracle, not the agent,
    judges the effect.
 3. **Record every model call.** Append one
-   :class:`~openadapt_flow.benchmark.effectbench.schema.ModelCall` per API
+   :class:`~benchmark.harness.effectbench.schema.ModelCall` per API
    request with token counts and the pinned list price, so ``cost_usd`` is
    auditable ``sum(model_calls)``. An RPA tool with a flat run fee records a
    single ``ModelCall`` carrying that fee.
@@ -38,9 +38,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-from openadapt_flow.benchmark.effectbench.runner.arms import ArmResult
-from openadapt_flow.benchmark.effectbench.runner.substrate import SubstrateSession
-from openadapt_flow.benchmark.effectbench.schema import TaskSpec
+from benchmark.harness.effectbench.runner.arms import ArmResult
+from benchmark.harness.effectbench.runner.substrate import SubstrateSession
+from benchmark.harness.effectbench.schema import TaskSpec
 
 
 class ScaffoldNotWired(NotImplementedError):

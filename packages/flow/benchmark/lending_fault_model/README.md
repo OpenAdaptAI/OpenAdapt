@@ -39,7 +39,7 @@ judged by an independent ledger read, with zero model calls.
 
 2. **Silent Wrong-Effect Rate, three-arm verification ladder** - `swer.py`
    scores the same faults through the shared EffectBench contract
-   (`openadapt_flow.benchmark.effectbench.score_episode` + `summarize`) under
+   (`benchmark.harness.effectbench.score_episode` + `summarize`) under
    screen-only, single-surface, and complete-read-path arms. ->
    `swer_results.json`, `SWER.md`.
    Headline: screen-only SWER is 24/36, a disbursements-only verifier leaves the

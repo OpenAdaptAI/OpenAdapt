@@ -1,7 +1,7 @@
 """In-guest WAA-contract HTTP shim (runs INSIDE the Windows VM).
 
 Serves the desktop benchmark harness
-(``openadapt_flow.benchmark.desktop_benchmark``):
+(``benchmark.harness.desktop_benchmark``):
 
     GET  /screenshot          -> raw PNG bytes of the desktop (Flask send_file)
     GET  /health              -> ``{"status": "ok", ...}`` liveness probe

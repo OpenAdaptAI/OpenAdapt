@@ -207,7 +207,7 @@ def check(values: dict[str, str], before_ids: set[str]) -> str:
 
 
 def oracle_verifier(values: dict[str, str]) -> Any:
-    from openadapt_flow.benchmark.openemr_local import (
+    from benchmark.harness.openemr_local import (
         OpenEMRPatientOracle,
         SyntheticPatientSpec,
     )

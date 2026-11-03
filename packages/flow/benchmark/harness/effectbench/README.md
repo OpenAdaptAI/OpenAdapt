@@ -5,7 +5,7 @@
 > system-of-record oracle* disagrees. Reported jointly with **over-halt rate**,
 > **task success**, and the **success–effect gap**.
 
-This package (`openadapt_flow.benchmark.effectbench`) is the **stable contract**
+This package (`benchmark.harness.effectbench`) is the **stable contract**
 that two downstream efforts build on:
 
 1. the **multi-baseline runner adapter** — drives each agent arm through a common
