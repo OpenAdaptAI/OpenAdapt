@@ -1562,7 +1562,16 @@ class SelfRepair:
         files: dict[str, bytes] = {}
         if admission.basis != BASIS_RECORD_IDENTITY:
             identity_template, identifier_region, band_png = _dialog_band(
-                workflow, admission, screen, point, self.vision
+                workflow,
+                admission,
+                screen,
+                point,
+                self.vision,
+                proved_region=(
+                    _cover_region(self._covered.cover)
+                    if self._covered is not None
+                    else None
+                ),
             )
             identifier_crop = f"templates/identifiers/{step_id}.png"
             files[identifier_crop] = band_png
@@ -3234,13 +3243,17 @@ def _dialog_band(
     screen: bytes,
     point: tuple[int, int],
     vision: Any,
+    *,
+    proved_region: Optional[tuple[int, int, int, int]] = None,
 ) -> tuple[Any, tuple[int, int, int, int], bytes]:
     """The dialog around a new click, as the step's identity band.
 
     Used for a click admitted on the record check: the band is a screen
     pre-check (the same dialog shows), never what makes the click safe. The
     dialog's box comes from the element's ancestry when the tree reads one,
-    otherwise from the drawn box around the click. Its text is hashed with
+    otherwise from the drawn box around the click. ``proved_region`` is a
+    box the backend already proved is the dialog's window (a covered band's
+    ``owned_window_over``); it is used first. Its text is hashed with
     the bundle's salt, as a recorded identity band is. Refuses when there is
     no dialog around the click or it has no readable text.
     """
@@ -3254,7 +3267,9 @@ def _dialog_band(
     )
 
     element = admission.element
-    region = element.dialog_region if element is not None else None
+    region = proved_region
+    if region is None and element is not None:
+        region = element.dialog_region
     if region is None:
         region = enclosing_dialog_region(screen, point)
     if region is None:
