@@ -69,6 +69,13 @@ jobs:
           python ../../scripts/ci/locked_install.py --lock .github/ci-tools:win-agent
           --lock 'packages/flow[dev]'
           --editable packages/types --editable packages/flow
+      - name: Windows file-system guards (the attempt ledger, the approval window)
+        # The default temp folder is in the user's profile, where the ledger
+        # must live; the runner's temp drive is not.
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
+            tests/test_approval_form_window.py --junitxml=runs/windows-guards-junit.xml
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
@@ -84,12 +91,6 @@ jobs:
         run: |
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wg" \
             tests/e2e/test_windows_hosted_governed.py --junitxml=runs/windows-governed-junit.xml
-      - name: Windows file-system guards (the attempt ledger, the approval window)
-        # The default temp folder is in the user's profile, where the ledger
-        # must live; the runner's temp drive is not.
-        run: |
-          pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
-            tests/test_approval_form_window.py --junitxml=runs/windows-guards-junit.xml
       - name: The replay ran (no skips)
         run: |
           python - <<'PY'
