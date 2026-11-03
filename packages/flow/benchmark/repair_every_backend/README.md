@@ -13,11 +13,11 @@ the screen capture, the input and the database are real.
 python benchmark/repair_every_backend/qualify_macos.py --kind ax --kind pixel
 ```
 
-## Results, 2026-11-02 (macOS 15, Apple silicon)
+## Results, 2026-11-03 (macOS 15, Apple silicon)
 
 **AX passes end to end, with the app's caret held steady** (`--steady-caret`,
-finding 5). With a blinking caret it stops safely at the save. Pixels only
-doesn't pass yet. No run wrote a wrong row.
+finding 5). With a blinking caret it stops safely before the save. Pixels
+only doesn't pass yet. No run wrote a wrong row.
 
 | Check | AX (`MacOSBackend`) | Pixels only (`RemoteDisplayBackend`) |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ doesn't pass yet. No run wrote a wrong row.
 | Probe up to the save: nothing written, target found, same record, same fields | Yes | Not reached |
 | Replay campaign and fault campaign (another patient's chart stops before the save) | Yes, 1/1 each | Not reached |
 | One approval, by the scripted approver, signed through the decision portal's own code with a throwaway roster key | Yes | Not reached |
-| Resumed run, checked against SQLite | `VERIFIED`, exactly one new row for the patient (steady caret); refused at the save with a blinking caret, nothing written | Not reached |
+| Resumed run, checked against SQLite | Steady caret: `VERIFIED`, exactly one new row for the patient. Blinking caret: not reached; see below | Not reached |
 | With a `demo` profile the click is refused, nobody is asked, nothing is written | Yes | Not reached |
 | With no verifier the run gate refuses, nothing is written | Yes | Yes |
 
@@ -35,9 +35,15 @@ The AX run needs [#1710](https://github.com/OpenAdaptAI/OpenAdapt/issues/1710)'s
 fix (`MacOSBackend.act_structural`) and the glued-words `same_fields` check.
 
 Evidence, each from a clean tree (the JSON records `git_sha` and
-`git_dirty`): [`results/macos-ax-steady-caret-20261102.json`](results/macos-ax-steady-caret-20261102.json),
-[`results/macos-ax-20261102.json`](results/macos-ax-20261102.json) (blinking
-caret), [`results/macos-pixel-20261102.json`](results/macos-pixel-20261102.json).
+`git_dirty`): [`results/macos-ax-steady-caret-20261103.json`](results/macos-ax-steady-caret-20261103.json),
+[`results/macos-ax-20261103.json`](results/macos-ax-20261103.json) (blinking
+caret), [`results/macos-pixel-20261103.json`](results/macos-pixel-20261103.json).
+
+With a blinking caret, both clean-tree runs stopped in the probe at the note
+field's identity check: OCR read only part of the patient banner (coverage
+0.54), so the click was refused and nothing was written. An earlier run from
+an uncommitted tree got past that check and was refused at the save by the
+frame lease (finding 5).
 
 ## Findings
 
@@ -76,8 +82,9 @@ Each is a fail-closed refusal, not a wrong action.
    ([#1713](https://github.com/OpenAdaptAI/OpenAdapt/issues/1713)). The
    field keeps focus, and the caret's 5 by 32 pixel strip changes between
    the runtime's frame lease and the click, so the fresh-frame retries run
-   out. `--steady-caret` launches the app with AppKit's blink period set so
-   the caret stays on; that run is the `VERIFIED` one above.
+   out (`changed_bbox` 5 by 32 pixels at the end of the typed text, not
+   touching the button). `--steady-caret` launches the app with AppKit's blink
+   period set so the caret stays on; that run is the `VERIFIED` one above.
 6. OCR glues a field's words together (`REPAIREDRUNFOLLOWUPINTHREEWEEKS`), so
    the probe's `same_fields` check on a screen with no form to read now also
    accepts a value of two or more words that equals a run of whole OCR words
