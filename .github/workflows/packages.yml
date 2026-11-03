@@ -413,7 +413,9 @@ jobs:
     # the group.
     if: github.event.pull_request.draft != true && (needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # The nightly tier (a schedule or a dispatch) also measures coverage,
+    # which slows the suite by about a third; it gets 60 minutes.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 60 || 40 }}
     strategy:
       fail-fast: false
       matrix:
@@ -503,6 +505,9 @@ jobs:
           OPENADAPT_TEST_LANE: ${{ github.event_name == 'pull_request' && 'fast' || 'full' }}
           # Each shard keeps its coverage data; flow-coverage combines them.
           COVERAGE_FILE: runs/coverage-shard-${{ matrix.shard }}.data
+          # Coverage only on the nightly tier, so it adds no time to a pull
+          # request's ten-minute `ci` or to main's post-merge run.
+          COVERAGE_ARGS: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '--cov --cov-report=' || '' }}
         # -n auto: one xdist worker per core. --dist loadfile keeps each file
         # on one worker, so module fixtures and file-local state stay in one
         # process. xdist gives each worker its own directory under --basetemp
@@ -511,10 +516,11 @@ jobs:
           set -euo pipefail
           mkdir -p runs
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
+          # shellcheck disable=SC2086 # COVERAGE_ARGS is empty or two flags.
           pytest -n auto --dist loadfile -v --durations=20 --basetemp=runs/ci \
-            --cov --cov-report= "${files[@]}"
+            $COVERAGE_ARGS "${files[@]}"
       - name: Upload coverage data
-        if: always()
+        if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: flow-coverage-shard-${{ matrix.shard }}
@@ -527,10 +533,11 @@ jobs:
     # not gate yet: the floor is set at the measured value once it is known
     # (docs/design/DECOMPOSITION.md, section 9). Keep the include list in sync
     # with the strict mypy list above and CODEOWNERS. It is not in
-    # packages-gate.
+    # packages-gate, and runs on the nightly tier only, where flow-unit
+    # collects the data.
     name: flow safety-path coverage (reported, not gating)
     needs: [scope, flow-unit]
-    if: always() && github.event.pull_request.draft != true && needs.scope.outputs.flow == 'true' && github.event_name != 'merge_group'
+    if: always() && needs.scope.outputs.flow == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
