@@ -2868,6 +2868,38 @@ def test_identity_verified_clicks_normally(bundle, run_dir):
     assert report.results[0].identity.mode == "context"
 
 
+def test_a_verified_identity_lets_the_backend_remember_its_window(bundle, run_dir):
+    """#1724: the backend records the verified record's window, nothing else."""
+
+    class Remembering(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.remembered = []
+
+        def record_verified_window(self, step_id, x, y):
+            self.remembered.append((step_id, x, y))
+            return True
+
+    vision = resolving_vision()
+    vision.ocr_lines = [OcrLine("Jane Sample Knee pain referral High")]
+    backend = Remembering()
+    step = context_click_step("Jane Sample Knee pain referral High")
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is True
+    # The gate runs again just before input; the capture is the same.
+    assert set(backend.remembered) == {(step.id, 110, 105)}
+
+    mismatched = Remembering()
+    vision = resolving_vision()
+    vision.ocr_lines = [OcrLine("Taylor Duplicate Knee pain referral High")]
+    Replayer(mismatched, vision=vision).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir / "b"
+    )
+    assert mismatched.remembered == []
+
+
 def test_consequential_identity_click_refuses_raw_local_coordinates(bundle, run_dir):
     class RawCoordinateBackend:
         def __init__(self):

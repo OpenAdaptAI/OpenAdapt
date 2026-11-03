@@ -10732,6 +10732,19 @@ class Replayer:
                     observed="exact local pixel evidence could not be retained",
                 )
         result.identity = check
+        if check.status == "verified":
+            # Let a backend remember which top-level window this verified
+            # record was in. Self-repair later asks it whether the app's own
+            # dialog covers a following step's band (owned_window_over). It
+            # grants nothing here; a backend without the hook is unaffected.
+            remember = getattr(self.backend, "record_verified_window", None)
+            if callable(remember):
+                try:
+                    remember(
+                        step.id, int(resolution.point[0]), int(resolution.point[1])
+                    )
+                except Exception:  # noqa: BLE001 - no capture means no pinned window
+                    pass
         # Under a governed run, an armed step needs a verified identity before
         # it acts, whether or not the authorization lists it: the durable
         # checkpoint demands the same (step.identity_armed), and it only runs

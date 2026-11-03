@@ -2739,19 +2739,19 @@ def _covered_band_halt(
     if not cover or not _uncovered_band_matches(step, halted.identity.observed):
         return None
     previous = workflow.steps[index - 1]
-    result = next((r for r in report.results if r.step_id == previous.id), None)
-    rung = result.resolution.rung if result and result.resolution else None
+    acted = next((r for r in report.results if r.step_id == previous.id), None)
+    rung = acted.resolution.rung if acted and acted.resolution else None
     if (
-        result is None
-        or not result.ok
-        or result.delivery_attempted is not True
+        acted is None
+        or not acted.ok
+        or acted.delivery_attempted is not True
         or previous.action not in _POINTER_KINDS
         or previous.anchor is None
         or rung not in TRUSTED_RUNGS
         or is_consequential(previous, workflow)
     ):
         return None
-    return previous, "after", result
+    return previous, "after", acted
 
 
 #: The least share of the recorded band the uncovered part must match.
