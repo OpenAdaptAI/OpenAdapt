@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.26.0 (2026-11-03)
+
+### Features
+
+- encrypt recordings, bundles and checkpoints at rest by default
+
+
+
 ## v0.25.0 (2026-10-28)
 
 ### Features
