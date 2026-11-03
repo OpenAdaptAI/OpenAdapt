@@ -25,7 +25,9 @@
 
 ### Fixes
 
-- A person's approval of a desktop save is no longer voided by text that changes by itself elsewhere on the screen, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen; it now reads only the rows of the steps the item has already resolved, each row kept apart, so an edited field still stops the save ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
+- A person's approval of a desktop save is no longer voided by text that changes by itself outside the app, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen. On Windows it now reads the app window the item's verified steps were in, in reading order, with the window's frame in the digest, so any change inside that window, or a moved window, still stops the save. Elsewhere the whole screen is read as before ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
+
+- A covered-band dismiss step takes its dialog box from the window the backend proved covers the band, before any pixel search, so a native message box that the accessibility tree doesn't label as a dialog can be dismissed. Without a proved window the step is refused as before.
 
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
