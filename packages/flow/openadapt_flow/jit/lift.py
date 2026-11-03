@@ -77,25 +77,42 @@ def _match(workflow: Workflow, value: str) -> tuple[list[str], list[str]]:
     return whole, inside
 
 
-def _saved_fields(workflow: Workflow) -> dict[str, set[str]]:
-    """Record field -> demonstrated values, from the mined record checks.
+def _bound_fields(workflow: Workflow, param: str) -> set[str]:
+    """Record fields (``field_key``) a mined check already binds to ``param``."""
+
+    bound: set[str] = set()
+    for record_field, expr in _check_pairs(workflow):
+        if getattr(expr, "param", None) == param:
+            bound.add(field_key(record_field))
+    return bound - {""}
+
+
+def _check_pairs(workflow: Workflow) -> list[tuple[str, Any]]:
+    """(record field, value expression) of every mined record check.
 
     Only mined checks count: a placeholder the operator must still bind says
     nothing about what was saved.
     """
 
-    held: dict[str, set[str]] = {}
+    pairs: list[tuple[str, Any]] = []
     for step in workflow.steps:
         for effect in step.effects:
             if effect.needs_operator_confirmation:
                 continue
-            pairs = list((effect.match or {}).items())
+            pairs.extend((effect.match or {}).items())
             if effect.field and effect.value is not None:
                 pairs.append((effect.field, effect.value))
-            for name, expr in pairs:
-                literal = getattr(expr, "literal", None)
-                if literal is not None:
-                    held.setdefault(name, set()).add(str(literal))
+    return pairs
+
+
+def _saved_fields(workflow: Workflow) -> dict[str, set[str]]:
+    """Record field -> demonstrated values, from the mined record checks."""
+
+    held: dict[str, set[str]] = {}
+    for name, expr in _check_pairs(workflow):
+        literal = getattr(expr, "literal", None)
+        if literal is not None:
+            held.setdefault(name, set()).add(str(literal))
     return held
 
 
@@ -127,6 +144,20 @@ def _pick_match(
         if len(step_ids) == 1
         else f"typed in {len(step_ids)} steps ({listed})"
     )
+    steps = {step.id: step for step in workflow.steps}
+    bound = _bound_fields(workflow, name)
+    if bound:
+        # A mined check already binds a record field to this input: that
+        # field is where the input goes, and nowhere else.
+        at = [sid for sid in step_ids if _field_names(steps[sid]) & bound]
+        if len(at) == 1:
+            return at[0], ""
+        return None, (
+            f"{where}; the record check binds {name!r} to field(s) "
+            f"{', '.join(sorted(bound))}, and "
+            + ("no" if not at else "more than one")
+            + " typed step writes them"
+        )
     held = _saved_fields(workflow)
     if not held:
         if len(step_ids) == 1:
@@ -136,7 +167,6 @@ def _pick_match(
     if not holders:
         return None, f"{where}; the saved record holds it in no field"
     distinctive = _distinctive(value)
-    steps = {step.id: step for step in workflow.steps}
 
     def confirmed(step_id: str) -> bool:
         names = _field_names(steps[step_id])

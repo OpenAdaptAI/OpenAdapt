@@ -554,6 +554,17 @@ def test_lift_never_moves_a_short_value_off_its_param_bound_field(
     assert report.lifted == []
 
 
+def test_lift_goes_to_the_field_a_check_already_binds_to_the_input(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.runtime.effects import ValueExpr
+
+    record = {"sex": ValueExpr(param="sex"), "sex_identified": "Female"}
+    bundle = _detour_bundle(tmp_path, ["sex", "sex_identified"], record)
+    report = lift_params(bundle, {"sex": "Female"})
+    assert [item.step_id for item in report.lifted] == ["step_000"]
+
+
 # -- the gates (no browser) --------------------------------------------------
 
 
