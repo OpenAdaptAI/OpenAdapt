@@ -115,3 +115,28 @@ def test_mcp_tools_and_typed_actions_reach_the_same_reward(env) -> None:
         1.0,
         "CONFIRMED",
     )
+
+
+def test_trl_adapter_over_a_live_server_reads_the_record_reward() -> None:
+    from openadapt_flow.rl_env.trainers import trl_environment, trl_reward
+    from openadapt_flow.rl_env.validate import _free_port, start_server
+
+    port = _free_port()
+    server = start_server(MOCKMED, port)
+    try:
+        env = trl_environment(f"http://127.0.0.1:{port}")()
+        assert "MockMed" in env.reset(task_id="mockmed-01")
+        task = OpenAdaptWebEnvironment(MOCKMED).env.task("mockmed-01")
+        for action in task.solution[:-1]:
+            if action["kind"] == "fill":
+                env.fill(action["selector"], action["text"])
+            elif action["kind"] == "click":
+                env.click(action["selector"])
+            else:
+                env.session.act(action)
+        env.done("success")
+        assert trl_reward([env]) == [1.0] and env.outcome["completion"] is True
+        env.session.close()
+    finally:
+        server.terminate()
+        server.wait(timeout=30)
