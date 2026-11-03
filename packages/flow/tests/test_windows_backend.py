@@ -909,3 +909,76 @@ def test_owned_window_over_with_a_dead_agent_is_none() -> None:
     backend._verified_windows["step_002"] = (0x100, 10)
     assert backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
     assert backend.owned_window_over(("x", 0, 5, 5), pinned_step_id="step_002") is None
+
+
+def test_a_second_capture_of_the_same_window_keeps_it() -> None:
+    server, _ = _serve_window_routes(
+        {
+            "/window/root-at": (
+                200,
+                {"status": "ok", "window": {"hwnd": 0x100, "pid": 10}},
+            ),
+            "/window/owned-over": (200, {"status": "ok", "window": _OWNED}),
+        }
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.record_verified_window("step_002", 1, 1) is True
+        assert backend.record_verified_window("step_002", 1, 1) is True
+        assert backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002")
+    finally:
+        server.shutdown()
+
+
+@pytest.mark.parametrize(
+    "second", [{"hwnd": 0x101, "pid": 10}, {"hwnd": 0x100, "pid": 11}]
+)
+def test_a_second_capture_of_another_window_drops_the_step(second) -> None:
+    # The runtime captures at the identity gate and again just before input;
+    # two different windows for one step mean neither can be trusted.
+    answers = iter(
+        [
+            {"hwnd": 0x100, "pid": 10},
+            second,
+            {"hwnd": 0x100, "pid": 10},  # even a later match does not restore it
+        ]
+    )
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a: object) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length") or 0)
+            self.rfile.read(length)
+            body = (
+                {"status": "ok", "window": next(answers)}
+                if self.path == "/window/root-at"
+                else {"status": "ok", "window": _OWNED}
+            )
+            raw = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.record_verified_window("step_002", 1, 1) is True
+        assert backend.record_verified_window("step_002", 1, 1) is False
+        assert (
+            backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+        )
+        assert backend.record_verified_window("step_002", 1, 1) is False
+        assert (
+            backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+        )
+        backend.clear_verified_windows()
+        assert (
+            backend.record_verified_window("step_002", 1, 1) is False
+        )  # iterator empty
+    finally:
+        server.shutdown()

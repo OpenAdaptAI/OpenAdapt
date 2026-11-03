@@ -265,8 +265,10 @@ class WindowsBackend:
         self._auth_token = auth_token or None
         self._pin_fingerprint = pin_fingerprint or None
         self._allow_legacy_exec = bool(allow_legacy_exec)
-        # Top-level window (HWND, PID) each verified step was in, by step id.
+        # Top-level window (HWND, PID) each verified step was in, by step id;
+        # steps whose captures disagreed have none, for good.
         self._verified_windows: dict[str, tuple[int, int]] = {}
+        self._conflicted_windows: set[str] = set()
         self._guarded_coordinate: Optional[
             tuple[tuple[int, int], dict[str, Optional[str]]]
         ] = None
@@ -810,7 +812,9 @@ class WindowsBackend:
         Call it when that step's identity check verifies, at the verified
         target's point, before anything else can open. The agent refuses a
         window that is not the foreground app's (a topmost window that slid
-        over the point in between): later,
+        over the point in between). Calling it again for the same step with
+        the same window changes nothing; a different window drops that step's
+        capture for good, so :meth:`owned_window_over` answers None for it: later,
         :meth:`owned_window_over` compares live window state against this
         capture instead of hit-testing at a halted step, where a dialog would
         answer for itself. Returns False (and records nothing) when the agent
@@ -830,12 +834,22 @@ class WindowsBackend:
         ):
             self._verified_windows.pop(step_id, None)
             return False
-        self._verified_windows[step_id] = (window["hwnd"], window["pid"])
+        capture = (window["hwnd"], window["pid"])
+        earlier = self._verified_windows.get(step_id)
+        if step_id in self._conflicted_windows or (
+            earlier is not None and earlier != capture
+        ):
+            # The step was seen in two different windows: neither is trusted.
+            self._verified_windows.pop(step_id, None)
+            self._conflicted_windows.add(step_id)
+            return False
+        self._verified_windows[step_id] = capture
         return True
 
     def clear_verified_windows(self) -> None:
         """Forget every capture (call between runs: step ids repeat)."""
         self._verified_windows.clear()
+        self._conflicted_windows.clear()
 
     def owned_window_over(
         self, region: tuple[int, int, int, int], *, pinned_step_id: str
