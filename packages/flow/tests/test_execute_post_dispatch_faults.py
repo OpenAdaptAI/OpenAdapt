@@ -264,3 +264,21 @@ def test_live_replay_refuses_a_target_it_cannot_drive(tmp_path: Path) -> None:
     ) as err:
         live_replay(admission, None, tmp_path / "run")  # type: ignore[arg-type]
     assert err.value.pre_effect
+
+
+def test_a_synthetic_admission_cannot_name_a_target(tmp_path: Path) -> None:
+    from openadapt_flow.execute.dispatch import DispatchError, default_runner
+    from openadapt_flow.execute.models import AdmittedBundle
+
+    admission = AdmittedBundle(
+        qualification_id="q",
+        workflow_version="v1",
+        workflow_digest="sha256:" + "0" * 64,
+        environment_id="env",
+        minimum_effect_strength="independent_system_of_record",
+        synthetic=True,
+        target_url="https://app.example/emr",
+    )
+    with pytest.raises(DispatchError, match="synthetic admission") as err:
+        default_runner(admission, None, tmp_path / "run")  # type: ignore[arg-type]
+    assert err.value.pre_effect

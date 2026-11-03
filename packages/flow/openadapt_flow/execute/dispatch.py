@@ -64,6 +64,12 @@ def default_runner(
 ) -> DispatchResult:
     """Run synthetic MockMed or local governed replay."""
 
+    if admission.synthetic and admission.target_url:
+        # A synthetic outcome describes the demo app, never another target.
+        raise DispatchError(
+            "a synthetic admission can't name a target_url; nothing was executed",
+            pre_effect=True,
+        )
     if admission.synthetic or not admission.bundle_dir:
         return synthetic_mockmed(admission, request)
     return live_replay(admission, request, run_dir)

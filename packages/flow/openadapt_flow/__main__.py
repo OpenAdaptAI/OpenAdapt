@@ -2835,8 +2835,13 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     headed = args.headed or cfg.backend.headed
     url = args.url or cfg.backend.url
     demo_app = bool(getattr(args, "demo_app", False))
-    if url and demo_app:
-        raise SystemExit("--demo-app serves its own app; drop --url (or backend.url).")
+    if demo_app and (
+        url or backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+    ):
+        raise SystemExit(
+            "--demo-app serves its own app; drop --url, backend.url or the "
+            "attached browser."
+        )
     if args.drift and not demo_app:
         raise SystemExit(
             "--drift only applies to the bundled MockMed demo app (--demo-app); "
