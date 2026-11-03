@@ -35,8 +35,8 @@ the happy path.
 from openadapt_flow.emit.l1_artifact import emit_l1_artifact
 
 ref = emit_l1_artifact(
-    downloaded_pdf,                # produced by a replayed workflow step
-    extraction_dir,                # the root the L2 layer watches
+    downloaded_pdf,  # produced by a replayed workflow step
+    extraction_dir,  # the root the L2 layer watches
     file_number="P1",
     date="2026-07-06",
     doctype="referral",

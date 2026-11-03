@@ -137,8 +137,14 @@ class FakeSession:
 
 def test_pool_runs_jobs_in_parallel_one_per_session():
     sessions = [FakeSession() for _ in range(3)]
+    # The first three jobs wait for each other. A pool that ran them one at a
+    # time would break the barrier, so passing it proves they ran together,
+    # without a wall-clock bound that a loaded host can miss.
+    together = threading.Barrier(len(sessions), timeout=30)
 
     def work(s, job):
+        if job < len(sessions):
+            together.wait()
         with s.lock:
             s.busy += 1
             s.max_busy = max(s.max_busy, s.busy)
@@ -156,7 +162,7 @@ def test_pool_runs_jobs_in_parallel_one_per_session():
     assert run.jobs == 9 and run.ok == 8
     assert all(s.max_busy == 1 for s in sessions)
     assert {r.session for r in run.results} == {0, 1, 2}
-    assert run.wall_s < 9 * 0.05
+    assert not together.broken
     failed = [r for r in run.results if not r.ok]
     assert failed[0].error == "RuntimeError"
     assert run.summary()["failed"] == 1

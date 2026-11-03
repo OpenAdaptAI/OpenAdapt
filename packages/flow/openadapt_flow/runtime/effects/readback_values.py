@@ -38,13 +38,16 @@ from typing import Literal, Optional
 __all__ = [
     "OCR_CONFUSABLE",
     "Comparison",
+    "ReadbackKind",
     "ValueKind",
     "compare_value",
     "infer_value_kind",
     "normalize_value",
 ]
 
-ValueKind = Literal["text", "code", "date", "currency"]
+ValueKind = Literal["text", "code", "date", "currency", "phone", "email"]
+#: The kinds an on-screen read-back field compares in (``ReadbackField``).
+ReadbackKind = Literal["text", "code", "date", "currency"]
 Comparison = Literal["match", "mismatch", "ambiguous"]
 ReadSource = Literal["ocr", "structure"]
 
@@ -72,6 +75,42 @@ _DAY_MONTH = ("%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y")
 _MONTH_DAY = ("%m/%d/%Y", "%m-%d-%Y", "%m.%d.%Y")
 
 
+#: A phone number: digits and the punctuation people type between them, with
+#: at most one extension at the end. Anything else (a word, a note) makes the
+#: value not a phone number, so it never matches one.
+_PHONE = re.compile(
+    r"^\s*(?P<main>[\d\s()+\-./]+?)\s*"
+    r"(?:(?:x|ext\.?|extension)\s*(?P<ext>\d+))?\s*$",
+    re.IGNORECASE,
+)
+#: An ISO date, alone or followed by a time of day only.
+_ISO_WITH_TIME = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?$"
+)
+
+
+def _phone(value: str) -> Optional[str]:
+    """The digits, with an extension kept apart (``6175550142x12``)."""
+
+    match = _PHONE.match(value)
+    if match is None:
+        return None
+    digits = re.sub(r"\D", "", match["main"])
+    if not digits:
+        return None
+    return digits + (f"x{match['ext']}" if match["ext"] else "")
+
+
+def _email(value: str) -> Optional[str]:
+    """One address, case folded (the local part too: in practice mail
+    systems treat it case-insensitively, though the RFCs don't require it)."""
+
+    text = value.strip()
+    if text.count("@") != 1 or any(c.isspace() for c in text):
+        return None
+    return text.lower()
+
+
 def _text(value: str) -> str:
     return " ".join(value.lower().split())
 
@@ -84,6 +123,9 @@ def _dates(value: str, order: Optional[str]) -> set[date]:
     """Every calendar date ``value`` can mean."""
 
     cleaned = " ".join(value.split())
+    stamped = _ISO_WITH_TIME.match(cleaned)
+    if stamped:
+        cleaned = stamped.group(1)  # a stored date-time: its date
     found: set[date] = set()
     for layout in _DATE_FORMATS:
         try:
@@ -136,6 +178,10 @@ def normalize_value(
 
     if kind == "code":
         return _code(value) or None
+    if kind == "phone":
+        return _phone(value)
+    if kind == "email":
+        return _email(value)
     if kind == "date":
         found = _dates(value, date_order)
         return found.pop().isoformat() if len(found) == 1 else None
@@ -169,6 +215,12 @@ def compare_value(
     """
 
     ocr = source == "ocr"
+    if kind in ("phone", "email"):
+        seen_form = normalize_value(observed, kind)
+        want_form = normalize_value(expected, kind)
+        if seen_form is not None and seen_form == want_form:
+            return "match"
+        return "mismatch"
     if kind == "date":
         seen = _dates(observed, date_order)
         want = _dates(expected, date_order)
@@ -229,7 +281,7 @@ _MONEY = re.compile(
 _CODE_SHAPE = re.compile(r"^(?=.*\d)(?=.*[A-Za-z])[A-Za-z0-9\-./]{4,}$")
 
 
-def infer_value_kind(value: str) -> ValueKind:
+def infer_value_kind(value: str) -> ReadbackKind:
     """Guess the kind of a demonstrated value, conservatively.
 
     Only clear shapes are recognized: an ISO or numeric date, an amount with a

@@ -23,7 +23,6 @@ import pytest
 from openadapt_flow.approval_mode.gate import ApprovalGate, SaveContext, StepContext
 from openadapt_flow.approval_mode.item_approval import (
     ItemApprovalStore,
-    make_answer,
 )
 from openadapt_flow.approval_mode.model import ItemDecisionKind
 from openadapt_flow.execution_profiles import ExecutionProfile
@@ -41,15 +40,18 @@ from tests.test_execution_profiles import (
     _ReadyVision,
     _sealed,
 )
+from tests._approver_keys import answer_as_person
 from tests.test_replayer import FakeBackend
 
-APPROVER = "cloud-user-0001"
+# Every person in these tests signs with a registered Desktop approver key.
+pytestmark = pytest.mark.usefixtures("approver")
+
 APPROVE: dict[str, Any] = dict(
     decision="approve",
     decided_by="human",
     route="desktop_run_it",
-    approver_id=APPROVER,
-    auth_method="cloud_aal2",
+    approver_id=None,
+    auth_method="none",
 )
 
 
@@ -95,7 +97,7 @@ class Person:
             decision = self.decisions.pop(0) if self.decisions else None
             if decision is None:
                 continue
-            self.store.write_answer(make_answer(request, **decision))
+            self.store.write_answer(answer_as_person(self.store, request, **decision))
 
 
 def _save_delivered(backend: FakeBackend) -> bool:
@@ -196,7 +198,7 @@ def test_the_run_waits_and_saves_only_after_a_persons_approval(tmp_path):
     assert (row.decided_by, row.route, row.approver_id) == (
         "human",
         "desktop_run_it",
-        APPROVER,
+        None,
     )
     assert any(
         check.code == "each_item" and check.detail == "approved_by_person"
@@ -271,7 +273,7 @@ def test_no_answer_in_time_stops_before_the_save_and_a_later_approval_resumes(
 
     # Later, the person approves the request in Desktop's Run it.
     request = item.store.requests()[0]
-    answer = make_answer(request, **APPROVE)
+    answer = answer_as_person(item.store, request, **APPROVE)
     item.store.write_answer(answer)
     assert _answer_durable_item_pause(item.run_dir, request, answer) is True
     assert item.pending().status == "approved"
@@ -308,7 +310,7 @@ def test_an_approval_that_raced_the_timeout_is_carried_to_the_pause_by_resume(
     item.run()
     assert item.pending().status == "pending"
     request = item.store.requests()[0]
-    answer = make_answer(request, **APPROVE)
+    answer = answer_as_person(item.store, request, **APPROVE)
     item.store.write_answer(answer)
 
     store = CheckpointStore(item.run_dir, key=_KEY)
@@ -335,19 +337,20 @@ def test_resume_carries_only_a_persons_approval(tmp_path, monkeypatch, answer_ki
     request = item.store.requests()[0]
     if answer_kind == "decline":
         item.store.write_answer(
-            make_answer(
+            answer_as_person(
+                item.store,
                 request,
                 decision="decline",
                 decided_by="human",
                 route="desktop_run_it",
-                approver_id=APPROVER,
-                auth_method="cloud_aal2",
+                approver_id=None,
+                auth_method="none",
                 decline_reason="wrong_values",
             )
         )
     elif answer_kind == "not_a_person":
         # Written around the command, so nothing checked it on the way in.
-        good = make_answer(request, **APPROVE)
+        good = answer_as_person(item.store, request, **APPROVE)
         item.store.write_answer(
             ItemApprovalAnswer.model_validate(
                 {**good.model_dump(mode="json"), "decided_by": "automation"}
@@ -432,7 +435,9 @@ def test_an_answer_written_around_the_cli_is_still_checked_by_the_run(
     def forge():
         for request in item.store.requests():
             if item.store.status(request) == "waiting":
-                payload = make_answer(request, **APPROVE).model_dump(mode="json")
+                payload = answer_as_person(item.store, request, **APPROVE).model_dump(
+                    mode="json"
+                )
                 payload.update(tamper)
                 path = item.store.dir / f"answer-{request.request_id}.json"
                 path.write_text(json.dumps(payload))

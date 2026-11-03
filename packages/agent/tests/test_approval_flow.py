@@ -149,8 +149,44 @@ def test_nobody_answers_needs_review_and_the_server_never_kills_the_wait(mockmed
     assert _records(mockmed["base_url"]) == []
 
 
-def test_a_person_approves_and_the_run_saves_once(mockmed):
+def _approver_key(tmp_path, monkeypatch):
+    """A person's approver key, the root of a throwaway roster the run pins.
+
+    The run and the answer both read that directory, so only an answer this
+    key signed counts as the person's.
+    """
+    from openadapt_flow.approval_mode.approver_roster import (
+        ROOT_ENV,
+        file_key_signer,
+        init_root,
+    )
+    from openadapt_flow.jit.authority import (
+        KEY_PASSPHRASE_ENV,
+        generate_encrypted_key,
+        load_encrypted_key,
+    )
+    from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
+
+    key_dir = tmp_path / "keys"
+    monkeypatch.setenv(KEY_DIR_ENV, str(key_dir))
+    monkeypatch.setenv(KEY_PASSPHRASE_ENV, "synthetic")
+    key_path = key_dir / "front-desk.approver.pem"
+    public = generate_encrypted_key(key_path)
+    # The person's key is the roster's root, and the run pins it.
+    init_root(
+        key_dir,
+        principal="front-desk",
+        public_key=public,
+        sign=file_key_signer(load_encrypted_key(key_path)),
+    )
+    monkeypatch.setenv(ROOT_ENV, public)
+    return key_path
+
+
+def test_a_person_approves_and_the_run_saves_once(mockmed, tmp_path, monkeypatch):
     import urllib.request
+
+    key_path = _approver_key(tmp_path, monkeypatch)
 
     urllib.request.urlopen(
         urllib.request.Request(f"{mockmed['base_url']}api/reset", data=b"{}", method="POST"),
@@ -190,6 +226,8 @@ def test_a_person_approves_and_the_run_saves_once(mockmed):
         "--route",
         "desktop_run_it",
         "--unauthenticated",
+        "--approver-key",
+        str(key_path),
     )
     assert approved.returncode == 0, approved.stdout + approved.stderr
     final = bridge.dispatch("get_run", {"run_id": result["run_id"], "wait_seconds": 120})

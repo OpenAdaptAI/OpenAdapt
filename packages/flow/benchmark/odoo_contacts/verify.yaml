@@ -1,0 +1,58 @@
+# Qualify the Odoo new-contact workflow on the local fixture.
+#
+#   PYTHONPATH=.:benchmark/odoo_contacts openadapt-flow qualify path/to/bundle \
+#     --verify benchmark/odoo_contacts/verify.yaml --out runs/odoo-qual \
+#     --certify clinical-write
+#
+# Synthetic contacts only. The record check reads the contact back from
+# Odoo's database through a read-only role (oa_record_check), never the
+# screen: one parameterized SELECT of the typed fields, keyed by email.
+schema_version: openadapt.verify/v1
+environment_id: odoo-local-fixture-18.0
+minimum_effect_strength: independent_system_of_record
+
+app:
+  target: web
+  name: Odoo 18 Community (local fixture, synthetic contacts)
+  url: http://localhost:9412/
+  version: odoo:18.0 (benchmark/odoo_contacts lock)
+  # Signs the dedicated user in and opens a new contact; the reset archives
+  # the contacts the cases created.
+  session: qualify_hooks:open_session
+  reset:
+    python: qualify_hooks:reset
+
+verifier:
+  kind: sql
+  sql_query: >-
+    SELECT id::text AS id, name, email, phone, street, city, zip
+    FROM res_partner WHERE email = %(email)s AND active
+  sql_query_params:
+    email: {param: email}
+  sql_driver: psycopg2
+  sql_connect_args: {host: 127.0.0.1, port: 9413, user: oa_record_check, dbname: oa}
+  # Set by the hooks module (qualify_hooks.record_password) from the fixture.
+  sql_password_env: ODOO_RECORD_PASSWORD
+
+record:
+  name: contact
+  match: [email]
+  identity_field: id
+  fields:
+    name: name
+    email: email
+    phone: phone
+    street: street
+    city: city
+    zip: zip
+
+# The form's save button.
+save_step: step_013
+
+inputs:
+  source: recorded
+
+campaign:
+  id: odoo-local-new-contact-v1
+  trials: 1
+  policy: clinical-write

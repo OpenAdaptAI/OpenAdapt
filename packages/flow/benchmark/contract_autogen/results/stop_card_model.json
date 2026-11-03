@@ -1,0 +1,115 @@
+{
+  "stops": 16,
+  "machine": {
+    "undo": {
+      "runs": 8,
+      "median_s": 0.021,
+      "p90_s": 0.023,
+      "failed_read_backs": 0
+    },
+    "fix": {
+      "runs": 6,
+      "median_s": 0.021,
+      "p90_s": 0.022,
+      "failed_read_backs": 0
+    }
+  },
+  "by_category": {
+    "undo": {
+      "stops": 8,
+      "median_words": 23.0,
+      "median_person_s": {
+        "0.5": 36.150000000000006,
+        "1.0": 42.3,
+        "2.0": 54.5
+      }
+    },
+    "fix": {
+      "stops": 6,
+      "median_words": 24.0,
+      "median_person_s": {
+        "0.5": 36.3,
+        "1.0": 42.55,
+        "2.0": 55.0
+      }
+    },
+    "open": {
+      "stops": 2,
+      "median_words": 18.0,
+      "median_person_s": {
+        "0.5": 184.55,
+        "1.0": 339.1,
+        "2.0": 648.2
+      }
+    }
+  },
+  "caught_harm_median_person_s": {
+    "0.5": 36.2,
+    "1.0": 42.3,
+    "2.0": 54.5
+  },
+  "halved_v1": true,
+  "run1_retrospective": {
+    "rows": [
+      {
+        "class": "wrong_value caught",
+        "stops": 2,
+        "category": "fix",
+        "card_s": 42.55,
+        "v1_s": 420.0
+      },
+      {
+        "class": "collateral caught",
+        "stops": 2,
+        "category": "undo",
+        "card_s": 42.3,
+        "v1_s": 420.0
+      },
+      {
+        "class": "side_record caught",
+        "stops": 1,
+        "category": "undo",
+        "card_s": 42.3,
+        "v1_s": 420.0
+      },
+      {
+        "class": "mixed caught",
+        "stops": 2,
+        "category": "open",
+        "card_s": 339.1,
+        "v1_s": 420.0
+      },
+      {
+        "class": "misleading_referral caught",
+        "stops": 2,
+        "category": "open",
+        "card_s": 339.1,
+        "v1_s": 420.0
+      },
+      {
+        "class": "duplicate caught",
+        "stops": 1,
+        "category": "undo",
+        "card_s": 42.3,
+        "v1_s": 420.0
+      },
+      {
+        "class": "false stop",
+        "stops": 3,
+        "category": "approve",
+        "card_s": null,
+        "v1_s": 120.0
+      },
+      {
+        "class": "correct stop",
+        "stops": 1,
+        "category": "approve",
+        "card_s": null,
+        "v1_s": 120.0
+      }
+    ],
+    "card_person_s": 1610.7,
+    "v1_person_s": 4200.0,
+    "note": "retrospective: run 1's verdict is unchanged"
+  }
+}

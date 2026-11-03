@@ -307,6 +307,13 @@ PERSON = ("--decided-by", "human", "--route", "desktop_run_it")
 SIGNED_IN = ("--approver-id", "cloud-user-0001", "--auth-method", "cloud_aal2")
 
 
+def _signed(approver) -> tuple[str, ...]:
+    """A person in Run it: Desktop's registered approver key signs the answer."""
+
+    key_path, _signer = approver
+    return ("--unauthenticated", "--approver-key", str(key_path))
+
+
 def _json(capsys) -> dict:
     return json.loads(capsys.readouterr().out.strip().splitlines()[-1])
 
@@ -325,21 +332,25 @@ def test_show_lists_what_the_person_must_answer(tmp_path, capsys):
     assert Path(row["screenshot"]).is_file()
 
 
-def test_a_person_approves_once(tmp_path, capsys):
+def test_a_person_approves_once(tmp_path, capsys, approver):
     import openadapt_flow.__main__ as main
 
     store, request = _request(tmp_path)
-    assert main.main(_answer_argv(store, request, "approve", *PERSON, *SIGNED_IN)) == 0
+    argv = _answer_argv(store, request, "approve", *PERSON, *_signed(approver))
+    assert main.main(argv) == 0
     result = _json(capsys)
     assert result["ok"] is True and result["decision"] == "approve"
     assert result["resume_required"] is False
     assert store.status(request) == "approved"
+    answer = store.read_answer(request.request_id)
+    assert answer.attestation is not None
+    assert answer.attestation.signer == "front-desk"
 
-    assert main.main(_answer_argv(store, request, "approve", *PERSON, *SIGNED_IN)) == 2
+    assert main.main(argv) == 2
     assert _json(capsys)["code"] == "request_approved"
 
 
-def test_a_signed_out_decline_is_recorded_without_a_name(tmp_path, capsys):
+def test_a_signed_out_decline_is_recorded_without_a_name(tmp_path, capsys, approver):
     import openadapt_flow.__main__ as main
 
     store, request = _request(tmp_path)
@@ -348,7 +359,7 @@ def test_a_signed_out_decline_is_recorded_without_a_name(tmp_path, capsys):
         request,
         "decline",
         *PERSON,
-        "--unauthenticated",
+        *_signed(approver),
         "--reason",
         "wrong_values",
     )
@@ -356,21 +367,34 @@ def test_a_signed_out_decline_is_recorded_without_a_name(tmp_path, capsys):
     answer = store.read_answer(request.request_id)
     assert answer.approver_kind == "unauthenticated" and answer.approver_id is None
     assert answer.decline_reason == "wrong_values"
+    assert answer.attestation is not None
 
 
 @pytest.mark.parametrize(
     ("argv_tail", "code"),
     [
         (
-            ("--decided-by", "automation", "--route", "desktop_run_it", *SIGNED_IN),
+            (
+                "--decided-by",
+                "automation",
+                "--route",
+                "desktop_run_it",
+                "--unauthenticated",
+            ),
             "not_decided_by_a_person",
         ),
         (
-            ("--decided-by", "unknown", "--route", "desktop_run_it", *SIGNED_IN),
+            (
+                "--decided-by",
+                "unknown",
+                "--route",
+                "desktop_run_it",
+                "--unauthenticated",
+            ),
             "not_decided_by_a_person",
         ),
         (
-            ("--decided-by", "human", "--route", "phone", *SIGNED_IN),
+            ("--decided-by", "human", "--route", "phone", "--unauthenticated"),
             "route_not_allowed",
         ),
         ((*PERSON,), "approver_invalid"),
@@ -382,39 +406,88 @@ def test_a_signed_out_decline_is_recorded_without_a_name(tmp_path, capsys):
         ),
     ],
 )
-def test_anything_but_a_person_in_run_it_is_refused(tmp_path, capsys, argv_tail, code):
+def test_anything_but_a_person_in_run_it_is_refused(
+    tmp_path, capsys, approver, argv_tail, code
+):
     import openadapt_flow.__main__ as main
 
+    key_path, _signer = approver
     store, request = _request(tmp_path)
-    assert main.main(_answer_argv(store, request, "approve", *argv_tail)) == 2
+    argv = _answer_argv(
+        store, request, "approve", *argv_tail, "--approver-key", str(key_path)
+    )
+    assert main.main(argv) == 2
     assert _json(capsys)["code"] == code
     assert store.status(request) == "waiting"
 
 
-def test_an_answer_for_a_request_the_person_didnt_see_is_refused(tmp_path, capsys):
+def test_a_person_without_the_approver_key_is_refused(tmp_path, capsys, approver):
+    """--decided-by human on its own is a claim any process can make."""
+
     import openadapt_flow.__main__ as main
 
     store, request = _request(tmp_path)
-    argv = _answer_argv(store, request, "approve", *PERSON, *SIGNED_IN)
+    argv = _answer_argv(store, request, "approve", *PERSON, "--unauthenticated")
+    assert main.main(argv) == 2
+    assert _json(capsys)["code"] == "human_answer_unsigned"
+    assert store.status(request) == "waiting"
+
+
+def test_a_claimed_cloud_sign_in_is_refused_even_with_the_key(
+    tmp_path, capsys, approver
+):
+    """Nothing here can verify a Cloud sign-in, so naming one is refused."""
+
+    import openadapt_flow.__main__ as main
+
+    key_path, _signer = approver
+    store, request = _request(tmp_path)
+    argv = _answer_argv(
+        store,
+        request,
+        "approve",
+        *PERSON,
+        *SIGNED_IN,
+        "--approver-key",
+        str(key_path),
+    )
+    assert main.main(argv) == 2
+    assert _json(capsys)["code"] == "auth_method_unverified"
+    assert store.status(request) == "waiting"
+
+
+def test_an_answer_for_a_request_the_person_didnt_see_is_refused(
+    tmp_path, capsys, approver
+):
+    import openadapt_flow.__main__ as main
+
+    store, request = _request(tmp_path)
+    argv = _answer_argv(store, request, "approve", *PERSON, *_signed(approver))
     argv[argv.index("--request-sha256") + 1] = "sha256:" + "9" * 64
     assert main.main(argv) == 2
     assert _json(capsys)["code"] == "request_digest_mismatch"
 
-    argv = _answer_argv(store, request, "approve", *PERSON, *SIGNED_IN)
+    argv = _answer_argv(store, request, "approve", *PERSON, *_signed(approver))
     argv[argv.index("--request-id") + 1] = "0" * 32
     assert main.main(argv) == 2
     assert _json(capsys)["code"] == "request_unknown"
 
 
-def test_decline_requires_a_closed_reason(tmp_path):
+def test_decline_requires_a_closed_reason(tmp_path, approver):
     import openadapt_flow.__main__ as main
 
     store, request = _request(tmp_path)
     with pytest.raises(SystemExit):
-        main.main(_answer_argv(store, request, "decline", *PERSON, *SIGNED_IN))
+        main.main(_answer_argv(store, request, "decline", *PERSON, *_signed(approver)))
     with pytest.raises(SystemExit):
         main.main(
             _answer_argv(
-                store, request, "decline", *PERSON, *SIGNED_IN, "--reason", "because"
+                store,
+                request,
+                "decline",
+                *PERSON,
+                *_signed(approver),
+                "--reason",
+                "because",
             )
         )

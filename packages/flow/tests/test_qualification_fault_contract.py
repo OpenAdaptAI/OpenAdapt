@@ -361,6 +361,14 @@ class _ObservedBackend:
     def structured_text_at(self, _x: int, _y: int) -> str:
         return "Wrong record" if self.wrong_identity else "Synthetic record"
 
+    def identity_candidates_at(self, x, y):
+        # One record row on this screen (IdentityCandidatesBackend).
+        return {
+            "record_key": None,
+            "incomplete": False,
+            "candidates": [{"self": True, "record_key": None, "dx": 0, "dy": 0}],
+        }
+
     def qualification_environment_identity(self) -> tuple[str, str, str, str]:
         return "https://fixture.example", "1", _SESSION, _ENVIRONMENT
 

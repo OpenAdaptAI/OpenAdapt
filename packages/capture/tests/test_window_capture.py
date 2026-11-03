@@ -52,6 +52,7 @@ from openadapt_capture.window_capture import (
     build_window_scope,
     translate_point,
 )
+from openadapt_capture.window_input_focus import FocusOwner
 
 
 def test_record_closes_window_scope_when_startup_fails(monkeypatch, tmp_path):
@@ -777,6 +778,7 @@ def test_input_observation_precedes_an_in_flight_window_frame(fake):
         WindowTarget(owner="FakeApp"),
         resolver=fake.resolver,
         capturer=capturer,
+        focus_probe=fake,
     )
     scope.bind_display_topology(
         {
@@ -2069,18 +2071,45 @@ class TestWindowTarget:
 # ---------------------------------------------------------------------------
 
 
+TARGET = "target"
+
+
 class FakePlatform:
-    """Injectable resolver/capturer simulating a movable Retina window."""
+    """Injectable resolver/capturer/focus probe simulating a movable Retina window.
+
+    ``keyboard_owner`` and ``pointer_owner`` model which window receives
+    input: ``TARGET`` (the fake window), a ``FocusOwner`` for another
+    window, ``None`` (unknown), or an exception instance to raise.
+    """
 
     def __init__(self, bounds=(300.0, 150.0, 800.0, 600.0), scale=2.0):
         self.bounds = bounds
         self.scale = scale
         self.window_id = 42
+        self.pid = 1234
         self.title = "Fake Window"
         self.missing = False
         self.on_screen = True
         self.visibility_independent = False
         self.process_start_time = 123.5
+        self.keyboard_owner = TARGET
+        self.pointer_owner = TARGET
+        self.receipt_keyboard_owner = None  # None: same as keyboard_owner
+
+    def _owner(self, value):
+        if value == TARGET:
+            return FocusOwner(window_id=self.window_id, pid=self.pid)
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+    def keyboard_focus(self, *, at_receipt=False):
+        if at_receipt and self.receipt_keyboard_owner is not None:
+            return self._owner(self.receipt_keyboard_owner)
+        return self._owner(self.keyboard_owner)
+
+    def window_at(self, x, y):
+        return self._owner(self.pointer_owner)
 
     def resolver(self, target: WindowTarget):
         if self.missing:
@@ -2089,7 +2118,7 @@ class FakePlatform:
             window_id=self.window_id,
             owner="FakeApp",
             title=self.title,
-            pid=1234,
+            pid=self.pid,
             bounds=self.bounds,
             on_screen=self.on_screen,
             visibility_independent=self.visibility_independent,
@@ -2114,6 +2143,7 @@ def scope(fake):
         WindowTarget(owner="FakeApp"),
         resolver=fake.resolver,
         capturer=fake.capturer,
+        focus_probe=fake,
     )
     result.bind_display_topology(
         {
@@ -2145,6 +2175,7 @@ class TestWindowCaptureScope:
             WindowTarget(owner="FakeApp"),
             resolver=fake.resolver,
             capturer=capturer,
+            focus_probe=fake,
         )
         capture_scope.bind_display_topology(
             {
@@ -2209,6 +2240,7 @@ class TestWindowCaptureScope:
             WindowTarget(owner="FakeApp"),
             resolver=fake.resolver,
             capturer=lambda _window: next(images),
+            focus_probe=fake,
         )
         scope.bind_display_topology(
             {
@@ -2356,11 +2388,27 @@ class FakeDesktop:
     Selectors match case-insensitive substrings and refuse more than one
     match. A ``window_id`` lookup returns that exact window and ignores the
     title, as the macOS, Windows and X11 resolvers do.
+
+    It is also the scope's focus probe, so these identity tests never ask
+    the real display who has input: the first window opened has keyboard
+    focus, and the last window opened is topmost at a point.
     """
 
     def __init__(self) -> None:
         self.windows: dict[int, TargetWindow] = {}
         self.lookups: list[WindowTarget] = []
+
+    def keyboard_focus(self, *, at_receipt: bool = False) -> FocusOwner | None:
+        del at_receipt
+        first = next(iter(self.windows.values()), None)
+        return FocusOwner(window_id=first.window_id, pid=first.pid) if first else None
+
+    def window_at(self, x: float, y: float) -> FocusOwner | None:
+        for window in reversed(list(self.windows.values())):
+            left, top, width, height = window.bounds
+            if left <= x < left + width and top <= y < top + height:
+                return FocusOwner(window_id=window.window_id, pid=window.pid)
+        return None
 
     def open(self, window_id: int, title: str, *, pid: int = 1234, start: float = 50.0):
         self.windows[window_id] = TargetWindow(
@@ -2413,6 +2461,7 @@ class TestPinnedWindowIdentity:
             WindowTarget(owner="Chrome", title="Spike Login"),
             resolver=desktop.resolver,
             capturer=desktop.capturer,
+            focus_probe=desktop,
         )
         scope.bind_display_topology(
             {
@@ -2510,6 +2559,7 @@ class TestPinnedWindowIdentity:
             WindowTarget(owner="Chrome", title="Spike Login"),
             resolver=desktop.resolver,
             capturer=desktop.capturer,
+            focus_probe=desktop,
         )
 
         with pytest.raises(WindowCaptureAmbiguousError):

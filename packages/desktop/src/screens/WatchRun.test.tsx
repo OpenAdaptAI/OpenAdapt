@@ -529,7 +529,9 @@ it("keeps an unsaved first result on screen until local history succeeds", async
       name: "Review identity, effects, and policy",
     }),
   ).toBeNull();
-  expect(onPersistencePendingChange).toHaveBeenLastCalledWith(true);
+  await waitFor(() =>
+    expect(onPersistencePendingChange).toHaveBeenLastCalledWith(true),
+  );
 
   fireEvent.click(
     screen.getByRole("button", { name: "Retry local history save" }),
@@ -539,5 +541,8 @@ it("keeps an unsaved first result on screen until local history succeeds", async
       name: "Review identity, effects, and policy",
     }),
   ).toBeTruthy();
-  expect(onPersistencePendingChange).toHaveBeenLastCalledWith(false);
+  // The parent hears about it from an effect, which can land after the button.
+  await waitFor(() =>
+    expect(onPersistencePendingChange).toHaveBeenLastCalledWith(false),
+  );
 });

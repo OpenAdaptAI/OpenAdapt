@@ -97,6 +97,13 @@ def _signal_hash(salt: bytes, text: str) -> str:
     return hmac.new(salt, text.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+def salted_digest(salt_hex: str, text: str) -> str:
+    """Full salted digest of ``text`` under a stored salt (the env salt wins),
+    for identity evidence that is compared whole rather than per token."""
+
+    return _signal_hash(_salt_bytes(salt_hex), text)
+
+
 def new_salt_hex() -> str:
     """Fresh per-bundle salt (hex). Empty when an external env salt is set, so
     the bundle stores no salt and the hashes are one-way without the secret."""
@@ -217,6 +224,9 @@ def build_identity_template(
     structured_identity: Optional[str] = None,
     param_examples: Optional[dict[str, str]] = None,
     salt_hex: Optional[str] = None,
+    record_key: Optional[str] = None,
+    structured_row: Optional[bool] = None,
+    structured_ambiguous: bool = False,
 ) -> Optional[IdentityTemplate]:
     """Build a PHI-free identity template from the recorded plaintext band.
 
@@ -228,6 +238,15 @@ def build_identity_template(
         param_examples: ``workflow.params`` (param name -> demo value), used to
             mark which band tokens were a parameter value (param-mode re-anchor).
         salt_hex: Reuse an existing per-bundle salt; a fresh one otherwise.
+        record_key: The stable record id of the target's row at record time
+            (``IdentityCandidatesBackend``). Hashed in only when the
+            structured identity embeds no parameter: a parameterized row is a
+            different record on every run, so the demonstrated id is not the
+            run's.
+        structured_row: Whether the structured identity came from a record
+            row at teach time (None: unknown).
+        structured_ambiguous: Teach time saw a look-alike row no record id
+            separated.
 
     Returns:
         An :class:`IdentityTemplate`, or None when there is neither a usable
@@ -252,6 +271,10 @@ def build_identity_template(
             param_examples=param_examples,
             names=structured_params,
         )
+        if record_key and not structured_params:
+            tmpl.record_key = record_key_hash(salt, record_key)
+        tmpl.structured_row = structured_row
+        tmpl.teach_ambiguous = bool(structured_ambiguous)
 
     # Mirror the compiler's context_from_lines gate: a band shorter than
     # MIN_CONTEXT_CHARS is too generic to discriminate and is never stored (any
@@ -356,6 +379,22 @@ def build_identity_template(
 # ---------------------------------------------------------------------------
 # Match (replay time — has observed plaintext + recorded hashes)
 # ---------------------------------------------------------------------------
+
+
+def record_key_hash(salt: bytes, record_key: str) -> str:
+    """Full-width salted hash of a row's stable record id."""
+
+    return _signal_hash(salt, "record_key|" + record_key)
+
+
+def record_key_matches(tmpl: IdentityTemplate, live_key: Optional[str]) -> bool:
+    """Whether a live row's record id is the one the template recorded."""
+
+    if tmpl.record_key is None or not live_key:
+        return False
+    return hmac.compare_digest(
+        tmpl.record_key, record_key_hash(_salt_bytes(tmpl.salt), live_key)
+    )
 
 
 def _keyfn(salt: bytes):
