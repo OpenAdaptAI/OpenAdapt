@@ -226,6 +226,7 @@ _CREDENTIAL_PARTS: Final = frozenset(
     }
 )
 _NAME_PARTS: Final = re.compile(r"[a-z0-9]+")
+_CAMEL_BOUNDARY: Final = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
 def is_credential_name(name: str, *, header: bool = False) -> bool:
@@ -239,12 +240,18 @@ def is_credential_name(name: str, *, header: bool = False) -> bool:
     credential. A parameter or header named so is redacted in every app and
     cannot be kept.
     """
-    parts = _NAME_PARTS.findall(name.lower())
+    # camelCase splits too: sessionToken, accessToken, RequestVerificationToken.
+    spaced = _CAMEL_BOUNDARY.sub(" ", name)
+    parts = _NAME_PARTS.findall(spaced.lower())
+    # A session id header spelled as two parts (Session-Id, x-session-id).
+    # Only headers: a report's own fields such as dispatch_session_id name a
+    # run's internal session, not a credential.
+    joined = {a + b for a, b in zip(parts, parts[1:])} if header else set()
     return any(
         part in _CREDENTIAL_PARTS
         or part.startswith(("csrf", "xsrf"))
         or (header and part == "authorization")
-        for part in parts
+        for part in [*parts, *joined]
     )
 
 

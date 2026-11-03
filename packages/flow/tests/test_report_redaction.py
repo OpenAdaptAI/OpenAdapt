@@ -421,3 +421,26 @@ def test_an_approval_named_authorization_is_not_a_credential():
     redacted, found = redact_report(report)
     assert redacted["governed_authorization_id"] == "approval-123"
     assert not found
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "/app?sessionToken={v}&x=1",
+        "/app?accessToken={v}",
+        "/app?__RequestVerificationToken={v}",
+        "Session-Id: {v}",
+        "x-session-id: {v}",
+    ],
+)
+def test_camel_case_and_two_part_session_names_are_credentials(text):
+    value = _token()
+    out, reasons = redact_text(text.format(v=value))
+    assert value not in out and reasons
+
+
+def test_report_fields_naming_a_session_stay_readable():
+    report = {"dispatch_session_id": "run-42", "authenticated_session_id_sha256": "ab"}
+    redacted, found = redact_report(report)
+    assert redacted == report
+    assert not found
