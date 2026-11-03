@@ -378,9 +378,28 @@ DEFAULT_FAMILIES: tuple[FaultFamily, ...] = (
 )
 
 
+SERVER_FAULT_MODES: dict[str, str] = {
+    "duplicate": "duplicate",
+    "double": "duplicate",
+    "wrong_record": "wrong_record",
+    "partial": "partial_write",
+    "optimistic": "optimistic_success",
+    "no_persist": "optimistic_success",
+    "collateral": "unauthorized_side_effect",
+}
+"""The MockMed and MockLoan fault-server modes (``?fault=``) that produce the
+same wrong end state as a family here, so a packaged task's ``fault: <mode>``
+names a family. ``ok`` and ``idempotent`` are controls; ``timeout``,
+``session`` and ``stale`` have no trajectory-edit counterpart."""
+
+
 def families_spec(families: Sequence[FaultFamily] = DEFAULT_FAMILIES) -> dict[str, Any]:
     """The shareable description of a family set (no code)."""
-    return {"format": FORMAT_ID, "families": [f.spec() for f in families]}
+    return {
+        "format": FORMAT_ID,
+        "families": [f.spec() for f in families],
+        "server_fault_modes": dict(SERVER_FAULT_MODES),
+    }
 
 
 def load_families(module_name: str) -> tuple[FaultFamily, ...]:

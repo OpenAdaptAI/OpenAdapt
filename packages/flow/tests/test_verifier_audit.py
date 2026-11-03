@@ -157,4 +157,6 @@ def test_family_spec_is_shareable_json():
         "late_write",
         "incidental_change",
     }
+    ids = {f["id"] for f in spec["families"]}
+    assert set(spec["server_fault_modes"].values()) <= ids
     json.dumps(spec)
