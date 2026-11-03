@@ -833,8 +833,7 @@ def blocking_uncertain_fields(
     if not uncertain:
         return []
     selector_fields = set(effect.match)
-    if effect.idempotency_key is not None:
-        selector_fields.add(effect.key_field)
+    selector_fields.update(effect.key_selector())
     if effect.kind is EffectKind.EXACT_NEW_SET:
         for member in effect.new_records:
             selector_fields.update(member)
@@ -845,8 +844,7 @@ def blocking_uncertain_fields(
         else set()
     )
     wanted = {k: str(v) for k, v in effect.match.items()}
-    if effect.idempotency_key is not None:
-        wanted[effect.key_field] = str(effect.idempotency_key)
+    wanted.update({k: str(v) for k, v in effect.key_selector().items()})
     blocking: set[str] = set()
     for index, record in enumerate(records):
         unsure = {name for row, name in uncertain if row == index}

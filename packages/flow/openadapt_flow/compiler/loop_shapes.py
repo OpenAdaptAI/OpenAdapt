@@ -426,5 +426,9 @@ def bind_effect_columns(
             updates["value"] = rebind(eff.value)
         if eff.idempotency_key is not None:
             updates["idempotency_key"] = rebind(eff.idempotency_key)
+        if eff.composite_key:
+            updates["composite_key"] = {
+                k: rebind(v) for k, v in eff.composite_key.items()
+            }
         out.append(eff.model_copy(update=updates, deep=True))
     return out, used

@@ -17,8 +17,10 @@ openadapt-capture is optional. When it is not importable the watcher reports
 
 from __future__ import annotations
 
+import functools
 import json
 import os
+import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -97,10 +99,43 @@ def _outcome_from_status(status: Any) -> tuple[str, str | None]:
     )
 
 
+def check_owner_only(
+    path: Path, *, platform: str = sys.platform, control: Any | None = None
+) -> None:
+    """Raise unless only the current user can access ``path``.
+
+    The recorder writes ``capture-state.json`` owner-only: mode 0600 on POSIX,
+    and on Windows a protected DACL that grants only the current user. A file
+    another account could have written is not evidence of anything.
+
+    On Windows this uses openadapt-capture's own verify-only ACL check. If that
+    check is unavailable, it raises, so the outcome is unknown (fail closed).
+
+    Raises:
+        PermissionError: The file is not provably owner-only.
+    """
+    if platform == "win32":
+        if control is None:
+            control = _load_control()
+        verify_acl = getattr(control, "_set_and_verify_windows_owner_acl", None)
+        if verify_acl is None:
+            raise PermissionError("The Windows owner-only check is unavailable.")
+        try:
+            verify_acl(path, _apply=False)
+        except Exception as e:
+            raise PermissionError(f"{path} is not owner-only: {e}") from e
+        return
+    details = path.lstat()
+    uid = os.getuid()  # posix-only: the win32 branch returned above
+    if details.st_mode & 0o077 or details.st_uid != uid:
+        raise PermissionError(f"{path} is not owner-only")
+
+
 def read_terminal_outcome(
     capture_dir: str,
     session_id: str,
     verify_seal: Callable[[str], Any] | None = None,
+    check_owner: Callable[[Path], None] = check_owner_only,
 ) -> tuple[str, str | None]:
     """Read the outcome a recorder left in ``capture-state.json``.
 
@@ -112,12 +147,12 @@ def read_terminal_outcome(
     """
     path = Path(capture_dir) / _TERMINAL_STATE_FILENAME
     try:
-        details = path.lstat()
+        path.lstat()
         if path.is_symlink():
             return OUTCOME_UNKNOWN, "state_file_unreadable"
-        if os.name == "posix" and (
-            details.st_mode & 0o077 or details.st_uid != os.getuid()
-        ):
+        try:
+            check_owner(path)
+        except Exception:
             return OUTCOME_UNKNOWN, "state_file_not_owner_only"
         with path.open("rb") as stream:
             raw = stream.read(_MAX_STATE_BYTES + 1)
@@ -185,6 +220,7 @@ class CaptureWatcher:
         control: Any | None = None,
         status_timeout_s: float = 1.0,
         verify_seal: Callable[[str], Any] | None = None,
+        check_owner: Callable[[Path], None] | None = None,
     ):
         """Create a watcher.
 
@@ -196,6 +232,8 @@ class CaptureWatcher:
             status_timeout_s: Timeout for one status request.
             verify_seal: Checks a capture's seal; raises when it is invalid.
                 Defaults to ``openadapt_capture.terminal.verify_capture_artifacts``.
+            check_owner: Raises unless a state file is owner-only. Defaults to
+                :func:`check_owner_only`.
         """
         self._on_event = on_event
         self._interval_s = interval_s
@@ -203,6 +241,11 @@ class CaptureWatcher:
         self._status_timeout_s = status_timeout_s
         self._verify_seal = (
             verify_seal if verify_seal is not None else _load_seal_verifier()
+        )
+        self._check_owner = (
+            check_owner
+            if check_owner is not None
+            else functools.partial(check_owner_only, control=self._control)
         )
         self._sessions: dict[str, _Tracked] = {}
         # Held while polling AND while dispatching, so the watcher thread and
@@ -288,7 +331,7 @@ class CaptureWatcher:
             if tracked.stage == ENDED:
                 continue
             outcome, error = read_terminal_outcome(
-                tracked.capture_dir, session_id, self._verify_seal
+                tracked.capture_dir, session_id, self._verify_seal, self._check_owner
             )
             events.append(self._event(ENDED, session_id, tracked, outcome, error))
         return events

@@ -1,6 +1,8 @@
 """Tests for the tray-owned ``openadapt-flow record`` launcher."""
 
+import os
 import signal
+import subprocess
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,6 +10,8 @@ import pytest
 from openadapt_tray.local_record import (
     LocalRecorder,
     LocalRecordError,
+    interrupt_signal,
+    spawn_options,
     unique_output_dir,
 )
 
@@ -56,7 +60,8 @@ class TestStartStop:
         ]
         assert popen.call_args.kwargs["start_new_session"] is True
         assert run.log_path == tmp_path / "login-demo.record.log"
-        assert run.log_path.stat().st_mode & 0o777 == 0o600
+        if os.name == "posix":  # Windows: the folder's ACL applies instead
+            assert run.log_path.stat().st_mode & 0o777 == 0o600
         assert recorder.is_running()
 
     def test_refuses_a_second_recording(self, tmp_path):
@@ -154,20 +159,56 @@ class TestStopWithin:
         assert process.signals == [signal.SIGINT]
 
     def test_ctrl_c_ignored_escalates_after_the_deadline(self, tmp_path):
-        run, process = self._run(tmp_path, {signal.SIGTERM})
+        run, process = self._run(tmp_path, {"terminate"})
         outcome, elapsed = self._stop(run)
         assert outcome == "terminated"
         assert 30.0 <= elapsed < 31.0
-        assert process.signals == [signal.SIGINT, signal.SIGTERM]
+        assert process.signals == [signal.SIGINT, "terminate"]
 
     def test_nothing_obeyed_is_reported(self, tmp_path):
         run, process = self._run(tmp_path, set())
         outcome, _ = self._stop(run)
         assert outcome == "still_running"
-        assert process.signals == [signal.SIGINT, signal.SIGTERM, signal.SIGKILL]
+        assert process.signals == [signal.SIGINT, "terminate", "kill"]
 
     def test_not_running_does_nothing(self, tmp_path):
         run, process = self._run(tmp_path, {signal.SIGINT})
         process.returncode = 0
         assert self._stop(run)[0] == "not_running"
         assert process.signals == []
+
+
+class TestPortableProcessControl:
+    def test_posix_detaches_with_a_new_session(self):
+        assert spawn_options("darwin") == {"start_new_session": True}
+        assert interrupt_signal("darwin") == signal.SIGINT
+
+    def test_windows_uses_a_new_process_group_and_ctrl_break(self):
+        options = spawn_options("win32")
+        assert options == {
+            "creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
+        }
+        assert "start_new_session" not in options
+        expected = getattr(signal, "CTRL_BREAK_EVENT", signal.SIGINT)
+        assert interrupt_signal("win32") == expected
+
+    def test_escalation_uses_popen_methods_not_posix_signals(self, tmp_path):
+        process = MagicMock()
+        process.poll.return_value = None
+        recorder = LocalRecorder(
+            platform="darwin",
+            which=lambda _: "/bin/openadapt-flow",
+            popen=MagicMock(return_value=process),
+        )
+        run = recorder.start("a", tmp_path)
+        now = [0.0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        assert run.stop_within(1.0, 1.0, clock=lambda: now[0], sleep=sleep) == (
+            "still_running"
+        )
+        process.send_signal.assert_called_once_with(signal.SIGINT)
+        process.terminate.assert_called_once_with()
+        process.kill.assert_called_once_with()

@@ -99,6 +99,9 @@ class ParamProvenance(BaseModel):
     extractor: str = Field(min_length=1)
     #: ``text`` | ``code`` | ``date`` | ``currency``. Unset: inferred.
     value_kind: Optional[Literal["text", "code", "date", "currency"]] = None
+    #: How the source document writes a numeric date (``03/07/1984``):
+    #: ``mdy`` or ``dmy``. Unset, a date that reads two ways is ambiguous.
+    date_order: Optional[Literal["mdy", "dmy"]] = None
     #: The text as the source wrote it, when intake converted it (``value`` is
     #: the converted form, for example a date as ISO).
     raw_value: Optional[str] = None
@@ -247,7 +250,7 @@ def same_value(a: str, b: str, kind: str) -> bool:
 class FieldCheck:
     name: str
     #: ``agree`` | ``disagree`` | ``missing`` | ``instruction`` |
-    #: ``not_independent`` | ``no_document``
+    #: ``not_independent`` | ``no_document`` | ``ambiguous``
     result: str
     #: In memory only: never put in a receipt (values are data).
     first: Optional[str] = None
@@ -345,17 +348,48 @@ class RoundTrip:
         }
 
 
-def bound_fields(effects: Any) -> dict[str, str]:
-    """Parameter name -> record field, from the effects' selectors and values."""
+def bindings(effects: Any) -> dict[str, tuple[str, Any]]:
+    """Parameter name -> (record field, value expression), each pair taken
+    from one place in one effect, so a field's transform is never another
+    field's. A parameter bound two different ways is left out: its round
+    trip can't be compared, so it stays unchecked."""
 
-    out: dict[str, str] = {}
+    out: dict[str, tuple[str, Any]] = {}
+    ambiguous: set[str] = set()
+
+    def add(param: str, record_field: str, expr: Any) -> None:
+        seen = out.get(param)
+        transform = (expr.map, expr.stored)
+        if seen is None:
+            out[param] = (record_field, expr)
+        elif seen[0] != record_field or (seen[1].map, seen[1].stored) != transform:
+            ambiguous.add(param)
+
     for effect in effects:
         for record_field, expr in effect.match.items():
             if expr.param is not None:
-                out.setdefault(expr.param, record_field)
+                add(expr.param, record_field, expr)
         if effect.field and effect.value is not None and effect.value.param:
-            out.setdefault(effect.value.param, effect.field)
-    return out
+            add(effect.value.param, effect.field, effect.value)
+    return {k: v for k, v in out.items() if k not in ambiguous}
+
+
+def bound_fields(effects: Any) -> dict[str, str]:
+    """Parameter name -> record field (:func:`bindings`)."""
+
+    return {param: field for param, (field, _expr) in bindings(effects).items()}
+
+
+def bound_maps(effects: Any) -> dict[str, Any]:
+    """Parameter name -> the value expression that says how its field stores
+    what was entered: a label's code (``map``), a stored form (``stored``).
+    From the same effect as the field (:func:`bindings`)."""
+
+    return {
+        param: expr
+        for param, (_field, expr) in bindings(effects).items()
+        if expr.map or expr.stored or expr.kind
+    }
 
 
 def round_trip(
@@ -364,6 +398,7 @@ def round_trip(
     fields: Mapping[str, str],
     documents: Mapping[str, Any],
     second: Extractor,
+    maps: Optional[Mapping[str, Any]] = None,
 ) -> RoundTrip:
     """Compare ``record`` (as read back) with the source of each value.
 
@@ -398,9 +433,55 @@ def round_trip(
             checks.append(FieldCheck(name, "no_document"))
             continue
         source_value = second.read(document, name, prov.source)
+        mapping = (maps or {}).get(name)
+        kind = None if isinstance(mapping, Mapping) else getattr(mapping, "kind", None)
+        if mapping is not None and source_value is not None:
+            # The document shows the label, the record stores its code (a
+            # state's name and "MA", a provider's name and their id), or a
+            # stored form (a street in capitals).
+            source_value = (
+                mapping.get(source_value.strip())
+                if isinstance(mapping, Mapping)
+                else mapping.stored_form(source_value.strip())
+            )
         stored = "" if record.get(record_field) is None else str(record[record_field])
+        coded = mapping is not None and (
+            isinstance(mapping, Mapping) or getattr(mapping, "map", None) is not None
+        )
         if source_value is None:
             checks.append(FieldCheck(name, "missing", stored))
+        elif coded:
+            # A code is the exact stored value, as ``field_equals`` compares
+            # it: "PR1a" is not "pr1A", the label's kind doesn't apply, and an
+            # empty code agrees only with an empty (or unsaved) field.
+            result = "agree" if stored == source_value else "disagree"
+            checks.append(FieldCheck(name, result, stored, source_value))
+        elif kind is not None:
+            # A declared kind: the stored value against the document's, in
+            # canonical form. The document is read in its own date order (the
+            # provenance's), never the app's; without one, a date it prints
+            # two ways is ambiguous and stays unchecked.
+            from openadapt_flow.runtime.effects.readback_values import compare_value
+
+            verdict = compare_value(
+                stored,
+                source_value,
+                kind=kind,
+                source="structure",
+                date_order=prov.date_order,
+            )
+            checks.append(
+                FieldCheck(
+                    name,
+                    "agree"
+                    if verdict == "match"
+                    else "disagree"
+                    if verdict == "mismatch"
+                    else "ambiguous",
+                    stored,
+                    source_value,
+                )
+            )
         elif same_value(stored, source_value, _kind(prov, source_value)):
             checks.append(FieldCheck(name, "agree", stored, source_value))
         else:
@@ -441,12 +522,16 @@ def default_extractor(provenance: ProvenanceFile) -> LabelExtractor:
 
     specs: dict[str, Any] = {}
     aliases: dict[str, list[str]] = {}
+    formats: dict[str, str] = {}
     for name, prov in provenance.params.items():
         kind = ParamKind.DATE if prov.value_kind == "date" else ParamKind.STRING
         specs[name] = ParamSpec(name=name, type=kind)
         if prov.source.label:
             aliases[name] = [prov.source.label]
-    return LabelExtractor(specs, aliases)
+        if prov.date_order:
+            # The document's own order, never the app's.
+            formats[name] = "MM/DD/YYYY" if prov.date_order == "mdy" else "DD/MM/YYYY"
+    return LabelExtractor(specs, aliases, date_formats=formats)
 
 
 def read_sources(paths: list[Path]) -> dict[str, Any]:

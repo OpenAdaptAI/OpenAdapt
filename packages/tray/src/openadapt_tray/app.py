@@ -505,7 +505,7 @@ class TrayApplication:
     def _stop_local_run(self, run: LocalRun, timeout_s: float | None = None) -> str:
         """Stop a tray-started recording within a deadline.
 
-        Ctrl-C, then SIGTERM, then SIGKILL (see ``LocalRun.stop_within``). If
+        Ctrl-C, then terminate, then kill (see ``LocalRun.stop_within``). If
         the recorder had to be forced, say so: the capture is not trustworthy.
         """
         outcome = run.stop_within(
@@ -518,11 +518,11 @@ class TrayApplication:
                 "The capture may be incomplete."
             ),
             local_record.STOP_KILLED: (
-                "The recorder ignored Ctrl-C and SIGTERM, so the tray killed "
-                "it. The capture is incomplete."
+                "The recorder ignored Ctrl-C and a terminate request, so the "
+                "tray killed it. The capture is incomplete."
             ),
             local_record.STOP_STILL_RUNNING: (
-                "The recorder did not stop, even after SIGKILL. Check for an "
+                "The recorder did not stop, even after it was killed. Check for an "
                 "openadapt-flow record process and end it."
             ),
         }

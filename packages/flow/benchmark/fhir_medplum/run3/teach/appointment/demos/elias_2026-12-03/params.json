@@ -1,0 +1,7 @@
+{
+ "status": "booked",
+ "start": "2026-12-03T15:15:00Z",
+ "end": "2026-12-03T15:45:00Z",
+ "patient": "Patient/d79d9bef-0d31-407e-b384-1c633014e1d1",
+ "practitioner": "Practitioner/f780f370-fe7f-4ef0-a030-92f4b1ef3095"
+}

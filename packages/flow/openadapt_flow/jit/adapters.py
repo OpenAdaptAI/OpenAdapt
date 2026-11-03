@@ -44,7 +44,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from openadapt_flow.benchmark.agent_baseline import SCROLL_PX_PER_UNIT
+from openadapt_flow.anthropic_defaults import SCROLL_PX_PER_UNIT
 
 __all__ = [
     "DIALECTS",

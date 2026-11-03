@@ -1,0 +1,215 @@
+# Test-sign the Windows installers through SignPath's test-signing policy.
+#
+# SignPath orders the production certificate after it reviews a test-signed
+# build. This workflow makes that build. It builds the MSI and NSIS installers
+# with the same local action as desktop-release.yml's build-windows job
+# (.github/actions/build-desktop-windows-installers), submits one signing
+# request with the test-signing policy, checks that every returned file carries
+# an Authenticode signature, and keeps the signed files as a short-lived
+# workflow artifact.
+#
+# It publishes nothing: no release, tag, channel or PyPI upload. A test
+# certificate is not trusted and must never ship; desktop-release.yml refuses
+# any policy but release-signing (scripts/native_signing.py). This workflow
+# runs only on a manual dispatch from main, on a GitHub-hosted runner, in the
+# signpath-test environment, whose SignPath secrets name the test-signing
+# policy; it refuses any other policy. The pipeline policy
+# .signpath/policies/OpenAdapt/test-signing.yml also requires a GitHub-hosted
+# runner and refuses re-runs, so dispatch a new run instead of re-running one.
+#
+# No caches, as in the release workflow: nothing an earlier run wrote can reach
+# the bytes SignPath signs.
+name: SignPath test-sign
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signpath-test-sign
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: packages/desktop
+
+jobs:
+  test-sign-windows:
+    name: Test-sign Windows x86_64
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: windows-2022
+    environment: signpath-test
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Refuse any ref but main
+        working-directory: .
+        shell: pwsh
+        env:
+          REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if ($env:REF -ne "refs/heads/main" -or $env:EVENT -ne "workflow_dispatch") {
+            throw "SignPath test-signing runs only on a dispatch from refs/heads/main (got $env:EVENT on $env:REF)"
+          }
+
+      # Checkout and Python match build-windows in desktop-release.yml; the
+      # build itself is the same local action. tests/test_native_signing.py
+      # keeps them identical.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Require the complete SignPath set with the test-signing policy
+        id: signing
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+        shell: pwsh
+        run: python scripts/native_signing.py test-sign-preflight
+
+      - name: Build MSI and NSIS installers
+        uses: ./.github/actions/build-desktop-windows-installers
+
+      - name: Collect the installers for signing
+        shell: pwsh
+        run: |
+          $Bundle = "src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $Msi = @(Get-ChildItem "$Bundle/msi/*.msi")
+          $Nsis = @(Get-ChildItem "$Bundle/nsis/*-setup.exe")
+          if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
+          New-Item -ItemType Directory -Path signing-input | Out-Null
+          Copy-Item $Msi[0].FullName signing-input/
+          Copy-Item $Nsis[0].FullName signing-input/
+
+      - name: Upload the unsigned installers for SignPath
+        id: unsigned
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-unsigned-installers
+          path: packages/desktop/signing-input/*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Test-sign the installers with SignPath
+        id: sign
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ secrets.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: packages/desktop/signing-output
+
+      - name: Record the signing request
+        if: always() && steps.sign.outcome != 'skipped'
+        shell: pwsh
+        env:
+          REQUEST_ID: ${{ steps.sign.outputs.signing-request-id }}
+          REQUEST_URL: ${{ steps.sign.outputs.signing-request-web-url }}
+          OUTCOME: ${{ steps.sign.outcome }}
+        run: |
+          @(
+            "## SignPath test-signing request",
+            "",
+            "- Policy: ``test-signing`` (test certificate; not trusted, never published)",
+            "- Signing request ID: ``$env:REQUEST_ID``",
+            "- Signing request: $env:REQUEST_URL",
+            "- Outcome: $env:OUTCOME",
+            ""
+          ) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Check every returned file carries an Authenticode signature
+        shell: pwsh
+        run: |
+          # A test certificate chains to an untrusted root, so Status is
+          # NotTrusted or UnknownError rather than Valid. What must hold is that
+          # a signature is present and intact: a signer certificate exists and
+          # the status is not NotSigned, HashMismatch or anything else. Because
+          # UnknownError also covers a revoked or expired signer, every file
+          # must also carry the same signer certificate (one thumbprint).
+          $Accepted = @("Valid", "NotTrusted", "UnknownError")
+          $Rows = [System.Collections.Generic.List[object]]::new()
+          function Test-Signed([string] $Path, [string] $Label) {
+            $Signature = Get-AuthenticodeSignature -LiteralPath $Path
+            $Status = "$($Signature.Status)"
+            $Signer = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Subject } else { "" }
+            $Thumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Thumbprint } else { "" }
+            $Issuer = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Issuer } else { "" }
+            $Rows.Add([pscustomobject]@{
+              File = $Label; Status = $Status; Signer = $Signer; Issuer = $Issuer; Thumbprint = $Thumbprint
+              StatusMessage = $Signature.StatusMessage
+              Sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+            })
+            if (-not $Signature.SignerCertificate) { return "$Label has no Authenticode signature ($Status)" }
+            if ($Accepted -notcontains $Status) { return "$Label has signature status $Status" }
+            return $null
+          }
+
+          $Problems = @()
+          $Submitted = @(Get-ChildItem -File signing-input | Sort-Object Name)
+          $Returned = @(Get-ChildItem -File signing-output | Sort-Object Name)
+          $Expected = ($Submitted.Name) -join ","
+          $Got = ($Returned.Name) -join ","
+          if ($Expected -ne $Got) { throw "SignPath returned [$Got], expected [$Expected]" }
+          foreach ($File in $Returned) {
+            $Unsigned = Join-Path "signing-input" $File.Name
+            if ((Get-FileHash -LiteralPath $Unsigned).Hash -eq (Get-FileHash -LiteralPath $File.FullName).Hash) {
+              $Problems += "$($File.Name) came back unchanged"
+            }
+            $Problems += Test-Signed $File.FullName $File.Name
+          }
+
+          # The artifact configuration deep-signs the MSI: every program file in
+          # it must be signed too. An administrative install extracts them
+          # without installing anything.
+          $Msi = @($Returned | Where-Object Extension -eq ".msi")
+          if ($Msi.Count -ne 1) { throw "Expected one signed MSI" }
+          $Extract = Join-Path $PWD "msi-extract"
+          $Process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
+            "/a", "`"$($Msi[0].FullName)`"", "/qn", "TARGETDIR=`"$Extract`""
+          )
+          if ($Process.ExitCode -ne 0) { throw "msiexec /a exited with $($Process.ExitCode)" }
+          $Inner = @(Get-ChildItem -Recurse -File -Path $Extract -Include *.exe, *.dll)
+          if (-not ($Inner | Where-Object Name -eq "openadapt-desktop.exe")) {
+            throw "The MSI holds no openadapt-desktop.exe"
+          }
+          foreach ($File in $Inner) {
+            $Problems += Test-Signed $File.FullName "$($Msi[0].Name) > $($File.Name)"
+          }
+
+          $Thumbprints = @($Rows | ForEach-Object Thumbprint | Where-Object { $_ } | Sort-Object -Unique)
+          if ($Thumbprints.Count -gt 1) {
+            $Problems += "files carry different signer certificates: $($Thumbprints -join ', ')"
+          }
+
+          $Rows | ConvertTo-Json -Depth 3 | Out-File -FilePath signing-output-report.json -Encoding utf8
+          $Summary = @("## Returned files", "", "| File | Status | Signer | Issuer | Thumbprint | SHA-256 |", "| --- | --- | --- | --- | --- | --- |")
+          foreach ($Row in $Rows) {
+            $Summary += "| $($Row.File) | $($Row.Status) | $($Row.Signer) | $($Row.Issuer) | ``$($Row.Thumbprint)`` | ``$($Row.Sha256)`` |"
+          }
+          $Summary += ""
+          $Summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $Problems = @($Problems | Where-Object { $_ })
+          if ($Problems.Count -gt 0) { throw ($Problems -join "; ") }
+
+      - name: Keep the test-signed installers (workflow artifact only)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-test-signed-installers
+          path: |
+            packages/desktop/signing-output/*
+            packages/desktop/signing-output-report.json
+          if-no-files-found: error
+          retention-days: 7

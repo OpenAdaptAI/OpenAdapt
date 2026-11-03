@@ -151,7 +151,15 @@ def test_the_demo_proof_page_reads_this_pair(break_it_path: TutorialResult) -> N
     assert evidence.clean.plain.key == "done_and_checked"
     assert evidence.broken.plain.key == "check_the_record"
     assert not evidence.broken.plain.nothing_written
-    assert len(evidence.choices) == 3
+    # The save was sent and then refuted, so it may have landed: the engine
+    # offers a check and one approved retry instead of a plain resume.
+    assert [choice.plain for choice in evidence.choices] == [
+        "Check the record in the app and correct it by hand.",
+        "Check in the app whether the save landed. If it did, the run can "
+        "continue without saving again.",
+        "If it didn't land, approve one more try of the save.",
+        "Cancel the run.",
+    ]
     page = demo_proof.render_demo_page(evidence)
     assert "identical, pixel for pixel" in page
     assert "Stopped: the note never reached the record" in page
