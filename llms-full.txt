@@ -524,7 +524,7 @@ Every capability, with its status, its evidence and where it lives.
 
 Status:
 
-- **Released**: in the current PyPI release (openadapt-flow 2.2.0).
+- **Released**: in the current PyPI release (openadapt-flow 2.5.0).
 - **On main**: merged into the monorepo; installable from source.
 
 Evidence:
