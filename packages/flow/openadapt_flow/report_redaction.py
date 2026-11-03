@@ -223,24 +223,28 @@ _CREDENTIAL_PARTS: Final = frozenset(
         "xsrftoken",
         "sessid",
         "sessionid",
-        "authorization",
     }
 )
 _NAME_PARTS: Final = re.compile(r"[a-z0-9]+")
 
 
-def is_credential_name(name: str) -> bool:
-    """Whether a parameter or key name says its value is a credential.
+def is_credential_name(name: str, *, header: bool = False) -> bool:
+    """Whether a parameter, key or header name says its value is a credential.
 
     The name is split into parts on anything but letters and digits; a part
     that is a token, CSRF/XSRF token or session id makes it one
-    (``csrf_token_form``, ``X-Frappe-CSRF-Token``, ``Espo-Authorization``,
-    ``app_sessid``). A parameter or header named so is redacted in every app
-    and cannot be kept.
+    (``csrf_token_form``, ``X-Frappe-CSRF-Token``, ``app_sessid``). For a
+    header (``header=True``) an ``authorization`` part does too
+    (``Espo-Authorization``); elsewhere that word names an approval, not a
+    credential. A parameter or header named so is redacted in every app and
+    cannot be kept.
     """
     parts = _NAME_PARTS.findall(name.lower())
     return any(
-        part in _CREDENTIAL_PARTS or part.startswith(("csrf", "xsrf")) for part in parts
+        part in _CREDENTIAL_PARTS
+        or part.startswith(("csrf", "xsrf"))
+        or (header and part == "authorization")
+        for part in parts
     )
 
 
@@ -401,7 +405,9 @@ def redact_text(
 
     def header(match: re.Match[str]) -> str:
         name = match.group("name")
-        if name.lower() not in policy.headers and not is_credential_name(name):
+        if name.lower() not in policy.headers and not is_credential_name(
+            name, header=True
+        ):
             return match.group(0)
         new = _header_value(name, match.group("value"))
         if new == match.group("value") or new.strip() == match.group("value").strip():
@@ -446,7 +452,10 @@ def _redact_node(
     pair_header = (
         pair_name.lower()
         if isinstance(pair_name, str)
-        and (pair_name.lower() in policy.headers or is_credential_name(pair_name))
+        and (
+            pair_name.lower() in policy.headers
+            or is_credential_name(pair_name, header=True)
+        )
         and isinstance(node.get("value"), str)
         else None
     )

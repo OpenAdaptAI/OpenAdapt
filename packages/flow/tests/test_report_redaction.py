@@ -413,3 +413,11 @@ def test_a_credential_pair_in_a_har_entry_is_redacted():
     redacted, found = redact_report(report)
     assert value not in json.dumps(redacted)
     assert found and found[0].pointer == "/request/headers/0/value"
+
+
+def test_an_approval_named_authorization_is_not_a_credential():
+    """Outside a header, 'authorization' names a governed approval."""
+    report = {"governed_authorization_id": "approval-123"}
+    redacted, found = redact_report(report)
+    assert redacted["governed_authorization_id"] == "approval-123"
+    assert not found
