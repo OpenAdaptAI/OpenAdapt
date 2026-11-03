@@ -12927,15 +12927,24 @@ class Replayer:
         outside it is not. The save step is left out, so the approval
         request (taken before the save resolves) and the recheck after the
         answer ask about the same window; its frame is part of the digest, so
-        a moved or resized window halts the save. None, and the whole screen
-        is read, when the backend cannot say.
+        a moved or resized window halts the save. The earlier steps' points
+        let a resumed run, which verified nothing in this process yet, name
+        the same window. None, and the whole screen is read, when the backend
+        cannot say.
         """
 
         region_of = getattr(self.backend, "approval_form_region", None)
         if not callable(region_of) or frame_png is None:
             return None
+        save_step = self._approval_form_step_id
+        report = self._approval_report
+        points = [
+            (int(prior.resolution.point[0]), int(prior.resolution.point[1]))
+            for prior in (report.results if report is not None else ())
+            if prior.step_id != save_step and prior.resolution is not None
+        ]
         try:
-            region = region_of(self._approval_form_step_id)
+            region = region_of(save_step, points)
         except Exception:  # noqa: BLE001 - no window means the whole screen
             return None
         if region is None:

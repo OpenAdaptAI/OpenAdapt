@@ -101,28 +101,42 @@ def test_a_window_that_reads_nothing_is_unreadable_not_unchanged():
 
 
 def _regions(backend, frame=None, save_step="save"):
-    replayer = SimpleNamespace(backend=backend, _approval_form_step_id=save_step)
+    replayer = SimpleNamespace(
+        backend=backend,
+        _approval_form_step_id=save_step,
+        _approval_report=SimpleNamespace(
+            results=[
+                SimpleNamespace(
+                    step_id="s1", resolution=SimpleNamespace(point=(40, 50))
+                ),
+                SimpleNamespace(step_id="s2", resolution=None),
+                SimpleNamespace(
+                    step_id=save_step, resolution=SimpleNamespace(point=(9, 9))
+                ),
+            ]
+        ),
+    )
     return Replayer._approval_form_regions(replayer, frame or _frame())
 
 
 def test_the_replayer_reads_the_window_the_backend_names_without_the_save_step():
     asked = []
 
-    def region(exclude_step):
-        asked.append(exclude_step)
+    def region(exclude_step, points):
+        asked.append((exclude_step, points))
         return (-8, 0, 2000, 728)
 
     assert _regions(SimpleNamespace(approval_form_region=region)) == [WINDOW]
-    assert asked == ["save"]
+    assert asked == [("save", [(40, 50)])]
 
 
 @pytest.mark.parametrize(
     "backend",
     [
         SimpleNamespace(),
-        SimpleNamespace(approval_form_region=lambda _step: None),
-        SimpleNamespace(approval_form_region=lambda _step: 1 / 0),
-        SimpleNamespace(approval_form_region=lambda _step: (2000, 0, 10, 10)),
+        SimpleNamespace(approval_form_region=lambda _step, _points: None),
+        SimpleNamespace(approval_form_region=lambda _step, _points: 1 / 0),
+        SimpleNamespace(approval_form_region=lambda _step, _points: (2000, 0, 10, 10)),
     ],
     ids=["no-hook", "unknown", "raises", "off-frame"],
 )
@@ -138,6 +152,8 @@ def _windows_backend(captures, conflicted=(), answer=None):
 
     def post(path, payload):
         sent.append((path, payload))
+        if isinstance(answer, dict) and path in answer:
+            return SimpleNamespace(payload=answer[path](payload))
         return SimpleNamespace(payload=answer)
 
     backend._post_typed_read = post
@@ -207,3 +223,32 @@ def test_a_run_forgets_the_windows_an_earlier_run_captured(monkeypatch, tmp_path
     )
     assert backend._verified_windows == {} and backend._conflicted_windows == set()
     assert backend.approval_form_region("save") is None
+
+
+def test_a_resumed_run_names_the_window_under_the_earlier_steps():
+    """With no capture in this process, the window under every earlier
+    step's point must be the same one; it is not kept as a capture."""
+
+    def root_at(payload):
+        hwnd = 7 if payload["x"] < 500 else 8
+        return {"status": "ok", "window": {"hwnd": hwnd, "pid": 10}}
+
+    def bounds(payload):
+        return {"status": "ok", "window": {**payload, "bounds": [0, 0, 800, 600]}}
+
+    answer = {"/window/root-at": root_at, "/window/bounds": bounds}
+    backend, sent = _windows_backend({}, answer=answer)
+    assert backend.approval_form_region("save", [(40, 50), (60, 70)]) == (
+        0,
+        0,
+        800,
+        600,
+    )
+    assert sent[-1] == ("/window/bounds", {"hwnd": 7, "pid": 10})
+    assert backend._verified_windows == {}
+    # Points in two windows, or a point the agent cannot place: no window.
+    assert backend.approval_form_region("save", [(40, 50), (600, 70)]) is None
+    backend, _sent = _windows_backend(
+        {}, answer={"/window/root-at": lambda _p: {"status": "ok", "window": None}}
+    )
+    assert backend.approval_form_region("save", [(40, 50)]) is None
