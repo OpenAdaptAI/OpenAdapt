@@ -12,6 +12,7 @@ import hashlib
 import struct
 import sys
 import threading
+import time
 import types
 from collections.abc import Iterator
 
@@ -969,3 +970,507 @@ def test_element_identity_round_trips_through_the_agent_and_backend(
         assert WindowsBackend(agent.url).element_identity_at(550, 460) is None
     finally:
         agent.close()
+
+
+def _save_button(**kwargs) -> _FakeControl:
+    return _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        runtime_id=(42, 99),
+        bounds=(500, 450, 600, 484),
+        **kwargs,
+    )
+
+
+_SAVE_LOCATOR = {
+    "automation_id": "saveButton",
+    "role": "button",
+    "name": "Save Note",
+    "window_name": "Patient Notes",
+}
+
+
+def _act_click(fingerprint: str) -> dict:
+    return _perform_uia(
+        "act",
+        {
+            "locator": _SAVE_LOCATOR,
+            "operation": "click",
+            "expected_fingerprint": fingerprint,
+        },
+    )
+
+
+def test_native_invoke_on_the_visible_target_is_delivered(monkeypatch) -> None:
+    button = _save_button()
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    found = _perform_uia("find", {"locator": _SAVE_LOCATOR})
+    result = _act_click(found["candidates"][0]["fingerprint"])
+    assert result["receipt"]["operation"] == "uia_invoke"
+    assert button.invocations == 1
+
+
+def test_native_action_on_a_covered_target_is_refused(monkeypatch) -> None:
+    # Real lab finding: UIA still finds a button that another app's window
+    # (Notepad, the Start menu) or a modal dialog covers.
+    button = _save_button()
+    module = _fake_uia_module(button)
+    cover = _FakeControl("EditControl", name="Text editor", runtime_id=(77, 1))
+    module.ControlFromPoint = lambda _x, _y: cover
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+    found = _perform_uia("find", {"locator": _SAVE_LOCATOR})
+    with pytest.raises(AgentRequestError) as caught:
+        _act_click(found["candidates"][0]["fingerprint"])
+    assert caught.value.code == "target_obscured"
+    assert button.invocations == 0
+
+
+def test_a_hit_on_the_targets_own_text_counts_as_the_target(monkeypatch) -> None:
+    button = _save_button()
+    module = _fake_uia_module(button)
+    label = _FakeControl("TextControl", name="Save Note", runtime_id=(42, 100))
+    label.parent = button
+    module.ControlFromPoint = lambda _x, _y: label
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+    found = _perform_uia("find", {"locator": _SAVE_LOCATOR})
+    _act_click(found["candidates"][0]["fingerprint"])
+    assert button.invocations == 1
+
+
+def test_a_target_replaced_before_the_worker_resolves_it_is_refused(
+    monkeypatch,
+) -> None:
+    button = _save_button()
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    fingerprint = _perform_uia("find", {"locator": _SAVE_LOCATOR})["candidates"][0][
+        "fingerprint"
+    ]
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    original = agent_server._find_candidates
+    calls = {"n": 0}
+
+    def find_then_replace(locator, auto):
+        calls["n"] += 1
+        if calls["n"] == 2:  # the worker's own resolution
+            button.runtime_id = (42, 100)
+        return original(locator, auto)
+
+    monkeypatch.setattr(agent_server, "_find_candidates", find_then_replace)
+    with pytest.raises(AgentRequestError) as caught:
+        _act_click(fingerprint)
+    assert caught.value.code == "stale_target"
+    assert button.invocations == 0
+
+
+class _FakeUser32:
+    """The user32 surface the native-action guards read, scripted."""
+
+    def __init__(self, hwnd: int = 0x1234, root: int = 0x1000) -> None:
+        self.hwnd, self.root = hwnd, root
+        self.windows = {hwnd, root}
+        self.enabled = {hwnd: True, root: True}
+        self.visible = {hwnd: True}
+        self.classes = {hwnd: "WindowsForms10.BUTTON.app.0.2bf8098_r6_ad1"}
+        self.under = hwnd
+        self.foreground_window = root
+        self.post_ok = True
+        self.posted: list[tuple[int, int]] = []
+
+    def is_window(self, hwnd):
+        return hwnd in self.windows
+
+    def is_enabled(self, hwnd):
+        return self.enabled.get(hwnd, False)
+
+    def is_visible(self, hwnd):
+        return self.visible.get(hwnd, False)
+
+    def ancestor(self, hwnd, flag):
+        return self.root if hwnd in (self.hwnd, self.root) else hwnd
+
+    def foreground(self):
+        return self.foreground_window
+
+    def window_from_point(self, x, y):
+        return self.under
+
+    def class_name(self, hwnd):
+        return self.classes.get(hwnd, "")
+
+    def post(self, hwnd, message):
+        if self.post_ok:
+            self.posted.append((hwnd, message))
+        return self.post_ok
+
+
+def _on_windows(monkeypatch, user32: _FakeUser32, button: _FakeControl) -> None:
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    button.NativeWindowHandle = user32.hwnd
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    client = types.SimpleNamespace(gen_dir=None)
+    monkeypatch.setitem(sys.modules, "comtypes.client", client)
+    monkeypatch.setitem(sys.modules, "comtypes", types.SimpleNamespace(client=client))
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: user32)
+
+
+def _fingerprint() -> str:
+    return _perform_uia("find", {"locator": _SAVE_LOCATOR})["candidates"][0][
+        "fingerprint"
+    ]
+
+
+def test_a_push_button_is_clicked_by_a_posted_bm_click(monkeypatch) -> None:
+    # Real lab finding: an Invoke that opens a modal dialog stays open inside
+    # the app, which then answers no other UI Automation call.
+    user32, button = _FakeUser32(), _save_button()
+    _on_windows(monkeypatch, user32, button)
+    result = _act_click(_fingerprint())
+    assert result["receipt"]["operation"] == "win32_bm_click"
+    assert user32.posted == [(0x1234, 0x00F5)]
+    assert button.invocations == 0
+
+
+def test_a_window_that_is_not_a_push_button_is_invoked_instead(monkeypatch) -> None:
+    # A WPF or hosted control can report its container's window handle;
+    # BM_CLICK there would be dropped while PostMessage still succeeds.
+    user32, button = _FakeUser32(), _save_button()
+    user32.classes[user32.hwnd] = "HwndWrapper[App;;1234]"
+    _on_windows(monkeypatch, user32, button)
+    result = _act_click(_fingerprint())
+    assert result["receipt"]["operation"] == "uia_invoke"
+    assert user32.posted == []
+    assert button.invocations == 1
+
+
+@pytest.mark.parametrize(
+    ("fault", "code"),
+    [
+        ("root_disabled", "target_blocked"),
+        ("button_disabled", "target_blocked"),
+        ("other_window_under_point", "target_obscured"),
+        ("not_in_front", "target_blocked"),
+        ("window_gone", "stale_target"),
+        ("invisible", "target_obscured"),
+        ("post_fails", "native_action_failed"),
+    ],
+)
+def test_a_posted_click_is_refused_when_the_window_cannot_take_it(
+    monkeypatch, fault, code
+) -> None:
+    user32, button = _FakeUser32(), _save_button()
+    if fault == "root_disabled":
+        user32.enabled[user32.root] = False  # a modal dialog is up
+    elif fault == "button_disabled":
+        user32.enabled[user32.hwnd] = False
+    elif fault == "other_window_under_point":
+        user32.under = 0x9999  # a loading window UIA's hit test sees through
+    elif fault == "not_in_front":
+        user32.foreground_window = 0x7777
+    elif fault == "window_gone":
+        user32.windows.discard(user32.hwnd)
+    elif fault == "invisible":
+        user32.visible[user32.hwnd] = False
+    elif fault == "post_fails":
+        user32.post_ok = False
+    _on_windows(monkeypatch, user32, button)
+    with pytest.raises(AgentRequestError) as caught:
+        _act_click(_fingerprint())
+    assert caught.value.code == code
+    assert user32.posted == []
+    assert button.invocations == 0
+
+
+def test_an_invoke_that_has_not_returned_is_an_uncertain_delivery(monkeypatch) -> None:
+    # A modal loop and a hung app look the same from the agent: neither may
+    # be reported as a delivered click.
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    monkeypatch.setattr(agent_server, "_INVOKE_RETURN_S", 0.2)
+    released = threading.Event()
+
+    class StuckButton(_FakeControl):
+        def Invoke(self):
+            self.invocations += 1
+            released.wait(5)
+
+    button = StuckButton(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        runtime_id=(42, 99),
+        bounds=(500, 450, 600, 484),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    started = time.monotonic()
+    try:
+        with pytest.raises(AgentRequestError) as caught:
+            _act_click(_fingerprint())
+    finally:
+        released.set()
+    assert caught.value.status == 503
+    assert caught.value.code == "delivery_uncertain"
+    assert time.monotonic() - started < 2.0
+
+
+def test_an_invoke_that_raises_is_a_failed_action(monkeypatch) -> None:
+    class FailingButton(_FakeControl):
+        def Invoke(self):
+            raise OSError("provider refused")
+
+    button = FailingButton(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        runtime_id=(42, 99),
+        bounds=(500, 450, 600, 484),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    with pytest.raises(AgentRequestError) as caught:
+        _act_click(_fingerprint())
+    assert caught.value.code == "native_action_failed"
+
+
+class _FakeDesktop:
+    """A z-ordered stack of top-level windows (topmost first) for the
+    owned-window checks: pid, owner, rect, visibility and cloaking."""
+
+    PINNED = 0x100
+
+    def __init__(self) -> None:
+        # hwnd -> (pid, owner, rect, visible, cloaked, title)
+        self.stack: list[int] = [self.PINNED]
+        self.windows = {
+            self.PINNED: (10, 0, (0, 0, 800, 600), True, False, "Patient Notes")
+        }
+        self.dpi_ok = True
+        self.foreground_window = self.PINNED
+        self.roots: dict[int, int] = {}  # child hwnd -> top-level
+
+    def add(
+        self,
+        hwnd,
+        *,
+        pid=10,
+        owner=0,
+        rect=(200, 200, 500, 400),
+        visible=True,
+        cloaked=False,
+        title="Window",
+    ):
+        self.stack.insert(0, hwnd)  # new windows go on top
+        self.windows[hwnd] = (pid, owner, rect, visible, cloaked, title)
+
+    def top_level_windows(self):
+        return list(self.stack)
+
+    def is_window(self, hwnd):
+        return hwnd in self.windows
+
+    def pid_of(self, hwnd):
+        return self.windows[hwnd][0]
+
+    def owner(self, hwnd):
+        return self.windows.get(hwnd, (0, 0))[1]
+
+    def rect(self, hwnd):
+        return self.windows[hwnd][2]
+
+    def is_visible(self, hwnd):
+        return self.windows[hwnd][3]
+
+    def is_cloaked(self, hwnd):
+        return self.windows[hwnd][4]
+
+    def title(self, hwnd):
+        return self.windows[hwnd][5]
+
+    def window_from_point(self, x, y):
+        return self.stack[0]
+
+    def ancestor(self, hwnd, flag):
+        if flag == 2:  # GA_ROOT
+            return self.roots.get(hwnd, hwnd if hwnd in self.windows else 0)
+        root = hwnd  # GA_ROOTOWNER: up the owner chain
+        while self.owner(root):
+            root = self.owner(root)
+        return root
+
+    def foreground(self):
+        return self.foreground_window
+
+    def per_monitor_dpi(self):
+        return self.dpi_ok
+
+
+def _owned_over(monkeypatch, desktop, region=(250, 250, 50, 20), **pinned):
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    payload = {"hwnd": _FakeDesktop.PINNED, "pid": 10, "region": list(region)}
+    payload.update(pinned)
+    return _perform_uia("owned-window-over", payload)["window"]
+
+
+def test_an_owned_dialog_over_the_region_is_reported(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
+    assert _owned_over(monkeypatch, desktop) == {
+        "title": "Session notice",
+        "hwnd": 0x200,
+        "owner_hwnd": _FakeDesktop.PINNED,
+        "pid": 10,
+    }
+
+
+def test_a_topmost_owned_popup_does_not_hide_a_foreign_window_over_the_target(
+    monkeypatch,
+) -> None:
+    # Review blocker: a topmost owned tooltip sorts above every normal window;
+    # Notepad below it still covers the target.
+    desktop = _FakeDesktop()
+    desktop.add(0x900, pid=99, title="Untitled - Notepad")
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(240, 240, 300, 270))
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_an_owned_window_that_only_clips_the_region_is_none(monkeypatch) -> None:
+    # A shadow or glow window of the app's own grazing one corner.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_an_owner_cycle_is_none(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x300, owner=0x200)
+    desktop.windows[0x200] = (10, 0x300, (900, 900, 950, 950), True, False, "x")
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_an_unreadable_cloak_state_on_the_apps_window_is_none(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, cloaked=None)
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_window_operations_need_per_monitor_dpi(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.dpi_ok = False
+    with pytest.raises(AgentRequestError) as caught:
+        _owned_over(monkeypatch, desktop)
+    assert caught.value.status == 503
+
+
+@pytest.mark.parametrize("fault", ["not_foreground", "no_root"])
+def test_window_root_at_refuses_a_doubtful_capture(monkeypatch, fault) -> None:
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    desktop = _FakeDesktop()
+    desktop.add(0x900, pid=99)  # what is now at the point
+    if fault == "not_foreground":
+        desktop.foreground_window = _FakeDesktop.PINNED
+    else:
+        desktop.roots[0x900] = 0  # GetAncestor fails
+        desktop.foreground_window = 0x900
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    assert _perform_uia("window-root-at", {"x": 5, "y": 5})["window"] is None
+
+
+def test_a_dialog_owned_through_a_chain_counts(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(700, 0, 800, 50))
+    desktop.add(0x300, owner=0x200, title="Confirm")
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
+
+
+def test_an_owned_window_over_the_center_wins_over_one_only_clipping(
+    monkeypatch,
+) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
+    desktop.add(0x300, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [
+        "foreign_window_over",
+        "same_process_unowned",
+        "owned_but_not_over_the_region",
+        "foreign_over_an_owned_dialog",
+    ],
+)
+def test_anything_but_an_owned_window_over_the_region_is_none(
+    monkeypatch, layout
+) -> None:
+    desktop = _FakeDesktop()
+    if layout == "foreign_window_over":
+        desktop.add(0x900, pid=99, title="Untitled - Notepad")
+    elif layout == "same_process_unowned":
+        desktop.add(0x200, owner=0, title="Second Patient Notes window")
+    elif layout == "owned_but_not_over_the_region":
+        desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(600, 500, 700, 580))
+    elif layout == "foreign_over_an_owned_dialog":
+        desktop.add(0x200, owner=_FakeDesktop.PINNED)
+        desktop.add(0x900, pid=99, rect=(240, 240, 320, 300))
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_hidden_and_cloaked_windows_do_not_decide(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
+    desktop.add(0x800, pid=99, visible=False)
+    desktop.add(0x801, pid=99, cloaked=True)
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+
+
+@pytest.mark.parametrize("change", ["gone", "pid_changed", "not_listed"])
+def test_a_captured_window_that_changed_is_none(monkeypatch, change) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED)
+    if change == "gone":
+        del desktop.windows[_FakeDesktop.PINNED]
+        desktop.stack.remove(_FakeDesktop.PINNED)
+    elif change == "pid_changed":
+        desktop.windows[_FakeDesktop.PINNED] = (11,) + desktop.windows[
+            _FakeDesktop.PINNED
+        ][1:]
+    else:
+        desktop.stack.remove(_FakeDesktop.PINNED)
+        desktop.windows[0x200] = (10, 0x555) + desktop.windows[0x200][2:]
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"hwnd": True},
+        {"pid": 0},
+        {"region": [1, 2, 3]},
+        {"region": [1, 2, 0, 5]},
+        {"extra": 1},
+    ],
+)
+def test_owned_window_over_refuses_a_malformed_request(monkeypatch, bad) -> None:
+    with pytest.raises(AgentRequestError) as caught:
+        _owned_over(monkeypatch, _FakeDesktop(), **bad)
+    assert caught.value.status == 400
+
+
+def test_window_root_at_names_the_top_level_window(monkeypatch) -> None:
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    desktop = _FakeDesktop()
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    assert _perform_uia("window-root-at", {"x": 5, "y": 5}) == {
+        "status": "ok",
+        "window": {"hwnd": _FakeDesktop.PINNED, "pid": 10},
+    }

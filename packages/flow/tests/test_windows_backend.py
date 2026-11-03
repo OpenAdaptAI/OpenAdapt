@@ -740,3 +740,245 @@ def test_element_identity_at_is_none_outside_the_contract(status, body) -> None:
 def test_element_identity_at_unreachable_agent_is_none() -> None:
     backend = WindowsBackend("http://127.0.0.1:9", timeout_s=0.5)
     assert backend.element_identity_at(1, 1) is None
+
+
+@pytest.mark.parametrize("code", ["target_obscured", "target_blocked"])
+def test_a_covered_or_blocked_target_is_a_refusal_not_an_uncertain_click(code) -> None:
+    # Both are refused by the agent before any input; the runtime must stop
+    # cleanly instead of treating the step as a click that may have landed.
+    from openadapt_flow.backend import StructuralResolutionRefused
+    from openadapt_flow.ir import StructuralHandle, StructuralLocator
+
+    server, seen = _serve_identity_route(
+        409, {"status": "error", "code": code, "error": "not accepting input"}
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        with pytest.raises(StructuralResolutionRefused, match=code):
+            backend.act_structural(
+                StructuralLocator(automation_id="saveButton"),
+                StructuralHandle(
+                    point=(10, 10), confidence=1.0, target_fingerprint="a" * 64
+                ),
+            )
+    finally:
+        server.shutdown()
+    assert seen["path"] == "/uia/act"
+
+
+@pytest.mark.parametrize(
+    ("operation", "accepted"),
+    [("win32_bm_click", True), ("uia_invoke", True), ("physical_click", False)],
+)
+def test_native_action_receipts_the_agent_issues(operation, accepted) -> None:
+    # Real lab finding: the agent's posted BM_CLICK receipt was rejected as a
+    # mismatch after the click had been queued.
+    from openadapt_flow.ir import StructuralHandle, StructuralLocator
+
+    fingerprint = "b" * 64
+    server, _ = _serve_identity_route(
+        200,
+        {
+            "status": "ok",
+            "candidate_count": 1,
+            "receipt": {
+                "receipt_id": "uia-1",
+                "operation": operation,
+                "native": True,
+                "target_fingerprint": fingerprint,
+                "delivered_at": "2026-11-03T00:00:00+00:00",
+                "outcome_verified": False,
+            },
+        },
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        handle = StructuralHandle(
+            point=(10, 10), confidence=1.0, target_fingerprint=fingerprint
+        )
+        locator = StructuralLocator(automation_id="saveButton")
+        if accepted:
+            assert backend.act_structural(locator, handle).operation == operation
+        else:
+            with pytest.raises(RuntimeError, match="mismatched"):
+                backend.act_structural(locator, handle)
+    finally:
+        server.shutdown()
+
+
+def _serve_window_routes(routes: dict):
+    """Answer each POST path with its scripted (status, body); record calls."""
+    calls: list[tuple[str, object]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a: object) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length") or 0)
+            calls.append((self.path, json.loads(self.rfile.read(length))))
+            status, body = routes.get(self.path, (404, {"status": "error"}))
+            raw = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, calls
+
+
+_OWNED = {"title": "Session notice", "hwnd": 0x200, "owner_hwnd": 0x100, "pid": 10}
+
+
+def test_owned_window_over_uses_the_verified_steps_window() -> None:
+    server, calls = _serve_window_routes(
+        {
+            "/window/root-at": (
+                200,
+                {"status": "ok", "window": {"hwnd": 0x100, "pid": 10}},
+            ),
+            "/window/owned-over": (200, {"status": "ok", "window": _OWNED}),
+        }
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.record_verified_window("step_002", 260, 54) is True
+        assert (
+            backend.owned_window_over((250, 250, 50, 20), pinned_step_id="step_002")
+            == _OWNED
+        )
+    finally:
+        server.shutdown()
+    assert calls[1] == (
+        "/window/owned-over",
+        {"hwnd": 0x100, "pid": 10, "region": [250, 250, 50, 20]},
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,  # the agent says no owned window is over the region
+        {**_OWNED, "pid": 11},  # another process
+        {**_OWNED, "hwnd": 0x100},  # the captured window itself
+        {**_OWNED, "extra": 1},
+        {**_OWNED, "hwnd": True},
+    ],
+)
+def test_owned_window_over_is_none_outside_the_contract(answer) -> None:
+    server, _ = _serve_window_routes(
+        {
+            "/window/root-at": (
+                200,
+                {"status": "ok", "window": {"hwnd": 0x100, "pid": 10}},
+            ),
+            "/window/owned-over": (200, {"status": "ok", "window": answer}),
+        }
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        backend.record_verified_window("step_002", 1, 1)
+        assert (
+            backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+        )
+    finally:
+        server.shutdown()
+
+
+def test_owned_window_over_without_a_capture_never_asks_the_agent() -> None:
+    server, calls = _serve_window_routes(
+        {"/window/root-at": (503, {"status": "error"})}
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.record_verified_window("step_002", 1, 1) is False
+        assert (
+            backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+        )
+        assert backend.owned_window_over((0, 0, 5, 5), pinned_step_id="other") is None
+    finally:
+        server.shutdown()
+    assert [path for path, _ in calls] == ["/window/root-at"]
+
+
+def test_owned_window_over_with_a_dead_agent_is_none() -> None:
+    backend = WindowsBackend("http://127.0.0.1:9", timeout_s=0.5)
+    backend._verified_windows["step_002"] = (0x100, 10)
+    assert backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+    assert backend.owned_window_over(("x", 0, 5, 5), pinned_step_id="step_002") is None
+
+
+def test_a_second_capture_of_the_same_window_keeps_it() -> None:
+    server, _ = _serve_window_routes(
+        {
+            "/window/root-at": (
+                200,
+                {"status": "ok", "window": {"hwnd": 0x100, "pid": 10}},
+            ),
+            "/window/owned-over": (200, {"status": "ok", "window": _OWNED}),
+        }
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.record_verified_window("step_002", 1, 1) is True
+        assert backend.record_verified_window("step_002", 1, 1) is True
+        assert backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002")
+    finally:
+        server.shutdown()
+
+
+@pytest.mark.parametrize(
+    "second", [{"hwnd": 0x101, "pid": 10}, {"hwnd": 0x100, "pid": 11}]
+)
+def test_a_second_capture_of_another_window_drops_the_step(second) -> None:
+    # The runtime captures at the identity gate and again just before input;
+    # two different windows for one step mean neither can be trusted.
+    answers = iter(
+        [
+            {"hwnd": 0x100, "pid": 10},
+            second,
+            {"hwnd": 0x100, "pid": 10},  # even a later match does not restore it
+        ]
+    )
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a: object) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length") or 0)
+            self.rfile.read(length)
+            body = (
+                {"status": "ok", "window": next(answers)}
+                if self.path == "/window/root-at"
+                else {"status": "ok", "window": _OWNED}
+            )
+            raw = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.record_verified_window("step_002", 1, 1) is True
+        assert backend.record_verified_window("step_002", 1, 1) is False
+        assert (
+            backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+        )
+        assert backend.record_verified_window("step_002", 1, 1) is False
+        assert (
+            backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+        )
+        backend.clear_verified_windows()
+        assert (
+            backend.record_verified_window("step_002", 1, 1) is False
+        )  # iterator empty
+    finally:
+        server.shutdown()

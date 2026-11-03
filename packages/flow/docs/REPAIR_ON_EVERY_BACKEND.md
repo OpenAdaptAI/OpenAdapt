@@ -140,6 +140,32 @@ rollback plan, undo applies as for any run.
   `record_check`) is written into the evidence and the candidate, so a
   reviewer sees which layer carries the click.
 
+## A dialog over the record's identity band
+
+An app's own dialog (a session notice, an update prompt) can open over the
+next step's identity band. That step's identity check then reads part of the
+record and refuses, which looks like a wrong-record halt, and self-repair
+never takes one of those. #1724 tells the two apart, narrowly. The halt is
+repaired in `after` mode on the previous click (dismiss the dialog) only
+when all of these hold:
+
+- nothing reached the halted step, no save received input, no effect was
+  observed;
+- the backend proves that a window of the app itself, owned by the window
+  the last identity-verified step was in, covers the band
+  (`record_verified_window` at that step, then `owned_window_over`). On
+  macOS that is the window's one proved sheet; on Windows an owned window of
+  the same process, first over the band in the live z-order;
+- the part of the band that was read still matches the recorded record: no
+  contradicted, look-alike, glyph-ambiguous or unexplained name token, and at
+  least half the band matched. Another patient's header behind the dialog
+  fails this and stays an identity halt;
+- the previous step is a click that doesn't save, acted on a trusted rung.
+
+Nothing after that is relaxed: the probe replays the halted step with its own
+identity check in full once the dialog is gone, then the record check and a
+person decide as for any repair.
+
 ## One lifecycle on every backend
 
 Every backend uses the same four stages and the same store
@@ -185,27 +211,33 @@ In this change:
 
 ## Qualified so far
 
-On a native Cocoa app with a SQLite database, through `MacOSBackend`:
+On a native Cocoa test app with a SQLite database, through `MacOSBackend`
+(scripted repair agent and approver; live AX, screen, input and database):
 the run stops at the new notice before any save; the "Later" click's AX
-identity is read (button, inside `AXSheet "Update available"`, in the pinned
-window), found unique and admitted on `element_and_record_check`; the
-patched bundle passes `clinical-write`; with a `demo` profile the same click
-is refused and nobody is asked; with no verifier the run gate refuses.
-Nothing wrong was written in any run.
+identity is read, found unique and admitted on `element_and_record_check`;
+the probe, the replay campaign and the fault campaign (another patient's
+chart) pass; the scripted approver's answer is signed through the
+decision portal's own code; and the
+resumed run is `VERIFIED` against SQLite with exactly one new row. That run
+holds the app's caret steady. With a blinking caret, the clean-tree run
+stopped in the probe at the note field's identity check and wrote nothing; an
+earlier run that got further was refused at the save by the frame lease
+because of the caret
+([#1713](https://github.com/OpenAdaptAI/OpenAdapt/issues/1713)). Under
+`demo`, and with no verifier, the click is refused and nothing is written.
 
-Not yet: the probe, campaigns, approval and resumed run end to end. A durable
-run on `MacOSBackend` refuses its first structural click before any repair is
-involved, and the pixel-only path classes a remote click whose next screen
-differs as "delivery uncertain". The benchmark README lists these findings.
+The pixel-only path doesn't reach repair yet: a remote click whose next
+screen differs counts as an uncertain delivery
+([#1712](https://github.com/OpenAdaptAI/OpenAdapt/issues/1712)).
 
 ## Not built yet
 
 - `WindowsBackend.element_identity_at` and the `win_agent` endpoint behind it.
   The Windows session owns that code.
 - Qualification on Windows UI Automation and over RDP, on the Windows lab.
-- `openadapt-flow run --self-repair` and `--hold-on-halt` for desktop and
-  remote backends. Today the CLI repairs browser runs only; the Python API
-  takes any backend.
-- Input to an app's own dialog windows (macOS sheets, Windows owned windows):
-  today's backends pin one window and refuse input to another.
+- `--hold-on-halt` (teach the fix over MCP) for desktop and remote backends.
+  `run --self-repair` takes them with `repair.session`.
+- Input to a Windows app's owned dialog windows. On macOS, the pinned
+  window's own AppKit sheet is accepted (#1711); any other window is still
+  refused.
 - Linux AT-SPI.

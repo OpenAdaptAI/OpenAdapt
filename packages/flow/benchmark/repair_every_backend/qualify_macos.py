@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -71,12 +72,28 @@ RUN_NOTE = "REPAIRED RUN FOLLOW UP IN THREE WEEKS"
 APPROVER = "qualification:scripted-approver (stands in for a person; approves all)"
 
 
+#: Set by ``--steady-caret``: launch the app with its text caret not blinking
+#: (AppKit user defaults). A blinking caret changes the frame between the
+#: runtime's lease and the save click, and the click is refused; see the README.
+STEADY_CARET: list[str] = []
+#: Set by ``--sheet``: the new version shows its notice as a real AppKit sheet
+#: (an NSAlert attached to the window, its own window), not drawn in the window.
+NOTICE_MODE = ["update_notice"]
+
+
 class App:
     """One launched chart process; killed by exact PID."""
 
     def __init__(self, binary: Path, db: Path, patient: tuple[str, str], mode: str):
+        # The app gets none of the throwaway approver roster's settings.
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(("OPENADAPT_", "OAFLOW_"))
+        }
         self.proc = subprocess.Popen(
-            [str(binary), str(db), TITLE, patient[0], patient[1], mode]
+            [str(binary), str(db), TITLE, patient[0], patient[1], mode, *STEADY_CARET],
+            env=env,
         )
 
     def close(self) -> None:
@@ -290,15 +307,13 @@ def _approver(root: Path, decisions: list[float]) -> Any:
     return sleep
 
 
-def _target(
-    binary: Path, db: Path, kind: str, *, verifier: bool, profile: str
-) -> Any:
+def _target(binary: Path, db: Path, kind: str, *, verifier: bool, profile: str) -> Any:
     from openadapt_flow.repair.self_repair import AppSession, ReplayTarget
     from openadapt_flow.runtime.effects import SqlRecordVerifier
 
     def open_session(fault: Optional[str]) -> Any:
         app = App(
-            binary, db, OTHER if fault == "other_patient" else PATIENT, "update_notice"
+            binary, db, OTHER if fault == "other_patient" else PATIENT, NOTICE_MODE[0]
         )
         try:
             backend = _backend(kind)
@@ -382,7 +397,37 @@ def _repair(
     }
 
 
+def _approver_roster(root: Path) -> None:
+    """A throwaway approver roster in the work folder, for the scripted answer.
+
+    The decision portal signs a person's answer with a key on the signed
+    roster; this provisions one the same way the test fixture does. No real
+    approver key is used or touched.
+    """
+    import secrets
+
+    from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+    from openadapt_flow.approval_mode.human_attestation import PORTAL_KEY_ENV
+    from openadapt_flow.jit.authority import KEY_PASSPHRASE_ENV
+    from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
+
+    sys.path.insert(0, str(FLOW))
+    from tests import _approver_keys
+
+    key_dir = root / "approver-keys"
+    _approver_keys.PASSPHRASE = secrets.token_urlsafe(16)
+    os.environ[KEY_DIR_ENV] = str(key_dir)
+    os.environ[KEY_PASSPHRASE_ENV] = _approver_keys.PASSPHRASE
+    _approver_keys.provision(key_dir)
+    os.environ[ROOT_ENV] = _approver_keys.root_of(key_dir)
+    portal, _signer = _approver_keys.provision(
+        key_dir, "decision-portal", method="portal_key"
+    )
+    os.environ[PORTAL_KEY_ENV] = str(portal)
+
+
 def qualify(kind: str, root: Path) -> dict[str, Any]:
+    _approver_roster(root)
     binary = _build(root)
     demo_db = root / "sor-demo.db"
     bundle, compiled = _record(binary, root / "record", kind, demo_db)
@@ -421,10 +466,24 @@ def qualify(kind: str, root: Path) -> dict[str, Any]:
         if kind == "ax"
         else "RemoteDisplayBackend (pixels only)",
         "app": "tests/native_apps/Chart.swift (native Cocoa, SQLite)",
+        "steady_caret": bool(STEADY_CARET),
+        "notice": NOTICE_MODE[0],
         "at": datetime.now(timezone.utc).isoformat(),
         "git_sha": subprocess.run(
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=FLOW
         ).stdout.strip(),
+        # Uncommitted changes under packages/flow other than the results this
+        # script writes. Evidence counts only from a clean tree.
+        "git_dirty": [
+            line
+            for line in subprocess.run(
+                ["git", "status", "--porcelain", "--", "."],
+                capture_output=True,
+                text=True,
+                cwd=FLOW,
+            ).stdout.splitlines()
+            if "repair_every_backend/results/" not in line
+        ],
         "compiled": compiled,
         "repair_with_record_check": checked,
         "repair_without_verifier": no_verifier,
@@ -438,19 +497,45 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--kind", action="append", choices=("ax", "pixel"))
     parser.add_argument("--keep", action="store_true", help="keep the work folder")
+    parser.add_argument(
+        "--steady-caret",
+        action="store_true",
+        help="launch the app with a caret that doesn't blink",
+    )
+    parser.add_argument(
+        "--sheet",
+        action="store_true",
+        help="show the notice as a real AppKit sheet (its own window)",
+    )
     args = parser.parse_args()
+    if args.sheet:
+        NOTICE_MODE[0] = "update_sheet"
+    if args.steady_caret:
+        STEADY_CARET.extend(
+            [
+                "-NSTextInsertionPointBlinkPeriodOn",
+                "100000000",
+                "-NSTextInsertionPointBlinkPeriodOff",
+                "0",
+            ]
+        )
     RESULTS.mkdir(parents=True, exist_ok=True)
     failed = False
     for kind in args.kind or ["ax", "pixel"]:
         root = Path(tempfile.mkdtemp(prefix=f"oa-repair-{kind}-"))
+        saved_env = dict(os.environ)
         try:
             report = qualify(kind, root)
         finally:
+            os.environ.clear()
+            os.environ.update(saved_env)
             if not args.keep:
                 shutil.rmtree(root, ignore_errors=True)
             else:
                 print(f"work folder: {root}")
-        out = RESULTS / f"macos-{kind}-{datetime.now(timezone.utc):%Y%m%d}.json"
+        mode = kind + ("-sheet" if NOTICE_MODE[0] == "update_sheet" else "")
+        mode += "-steady-caret" if STEADY_CARET else ""
+        out = RESULTS / f"macos-{mode}-{datetime.now(timezone.utc):%Y%m%d}.json"
         out.write_text(json.dumps(report, indent=2) + "\n")
         print(f"{kind}: {'PASSED' if report['passed'] else 'FAILED'} -> {out}")
         for name, ok in report["checks"].items():

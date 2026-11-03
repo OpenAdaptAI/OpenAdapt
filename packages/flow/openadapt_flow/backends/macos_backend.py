@@ -292,6 +292,39 @@ class MacAXClient(Protocol):
     #     offsets in screen points."""
 
 
+#: How long a sheet may take to settle before it is proved attached (#1711).
+_SHEET_SETTLE_POLLS = 15
+_SHEET_SETTLE_STEP_S = 0.1
+
+
+def _ax_window_of(element: Any) -> Any:
+    """The AX window ``element`` is in, a sheet's elements included.
+
+    ``AXTopLevelUIElement`` is the sheet for an element inside a sheet; the
+    sheet's parent is the window it is attached to. None on any failure.
+    """
+    from ApplicationServices import (
+        AXUIElementCopyAttributeValue,
+        kAXParentAttribute,
+        kAXRoleAttribute,
+        kAXTopLevelUIElementAttribute,
+    )
+
+    error, top = AXUIElementCopyAttributeValue(
+        element, kAXTopLevelUIElementAttribute, None
+    )
+    if error != 0 or top is None:
+        return None
+    _e, role = AXUIElementCopyAttributeValue(top, kAXRoleAttribute, None)
+    if str(role or "") == "AXSheet":
+        error, parent = AXUIElementCopyAttributeValue(top, kAXParentAttribute, None)
+        if error != 0 or parent is None:
+            return None
+        _e, parent_role = AXUIElementCopyAttributeValue(parent, kAXRoleAttribute, None)
+        return parent if str(parent_role or "") == "AXWindow" else None
+    return top
+
+
 def _clean_text(value: object) -> Optional[str]:
     """Collapse whitespace to a single-spaced string, or None if empty."""
     text = " ".join(str(value or "").split())
@@ -473,7 +506,6 @@ class QuartzMacAXClient:
                 AXUIElementCopyElementAtPosition,
                 AXUIElementCreateApplication,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
             )
 
             app = AXUIElementCreateApplication(int(pid))
@@ -482,10 +514,8 @@ class QuartzMacAXClient:
             )
             if hit_error != 0 or element is None:
                 return None
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                element, kAXTopLevelUIElementAttribute, None
-            )
-            if top_error != 0 or top_level is None:
+            top_level = _ax_window_of(element)
+            if top_level is None:
                 return None
             title_error, title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
@@ -644,7 +674,6 @@ class QuartzMacAXClient:
                 AXUIElementCopyElementAtPosition,
                 AXUIElementCreateApplication,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
             )
 
             from openadapt_flow.runtime.identity_census import tree_row_census
@@ -655,10 +684,8 @@ class QuartzMacAXClient:
             )
             if hit_error != 0 or element is None:
                 return None
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                element, kAXTopLevelUIElementAttribute, None
-            )
-            if top_error != 0 or top_level is None:
+            top_level = _ax_window_of(element)
+            if top_level is None:
                 return None
             title_error, title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
@@ -823,6 +850,8 @@ class MacOSBackend(RemoteDisplayBackend):
         #: Set by ``act_structural`` for the length of its click: re-proves the
         #: AX element right before every mouse-down edge.
         self._pre_edge_check: Optional[Any] = None
+        #: step id -> (window id, pid) the step's verified identity was in.
+        self._verified_windows: dict[str, tuple[int, int]] = {}
         # Opaque AX object captured with the one-shot actuation frame. It is
         # process-local, never serialized/logged, and prevents an unchanged-
         # pixel focus switch from redirecting consequential TYPE/KEY input.
@@ -861,11 +890,153 @@ class MacOSBackend(RemoteDisplayBackend):
     def _window_focus_matches(self, window: WindowInfo) -> bool:
         """Use authoritative CG+AX focus; NSWorkspace may lag after AXRaise."""
 
+        sheet = self._attached_sheet(window)
         return (
-            self._mac_client.frontmost_window_id() == window.window_id
+            self._mac_client.frontmost_window_id() in self._front_ids(window, sheet)
             and self._mac_client.focused_application_pid() == window.pid
-            and self._mac_client.exact_window_focused_main(window)
+            and self._focused_main(window, sheet)
         )
+
+    # -- the pinned window's own sheet (#1711) ---------------------------------
+    #
+    # An AppKit sheet (an NSAlert attached to the window) is a separate
+    # CoreGraphics window that becomes frontmost and key, and the AX focused
+    # window. It is accepted in place of the pinned window only when the
+    # window's AX element lists exactly that one sheet and exactly one window
+    # of the same process has its bounds inside the window
+    # (``MacWindowClient.attached_sheet``). Any other window stays refused.
+
+    def record_verified_window(self, step_id: str, x: int, y: int) -> bool:
+        """Remember the window a step's verified identity was in (#1724).
+
+        Uses the window the identity check just captured, without another
+        window-server read. It proves the same window, not the same record.
+        """
+        self._verified_windows.pop(str(step_id), None)
+        window = self._captured_window
+        if window is None:
+            return False
+        self._verified_windows[str(step_id)] = (window.window_id, window.pid)
+        return True
+
+    def owned_window_over(
+        self, region: tuple[int, int, int, int], *, pinned_step_id: str
+    ) -> Optional[dict[str, Any]]:
+        """The pinned window's own sheet, when it covers ``region`` (#1724).
+
+        ``pinned_step_id`` names the step whose verified identity recorded the
+        window (:meth:`record_verified_window`). Only that same window's one
+        proved sheet counts. None on anything else: no capture, the window is
+        gone or another one now, no proved sheet, no overlap, any failure.
+        """
+        captured = self._verified_windows.get(str(pinned_step_id))
+        if captured is None:
+            return None
+        try:
+            window = self._resolve_window(refresh=True)
+            if (window.window_id, window.pid) != captured:
+                return None
+            sheet = self._attached_sheet(window, wait=False)
+            if sheet is None:
+                return None
+            self._ensure_captured()
+            rect = self._in_window_pixel_rect(window, sheet[1])
+        except Exception:  # noqa: BLE001 - no proof
+            return None
+        if rect is None:
+            return None
+        sx, sy, sw, sh = rect
+        x, y, w, h = (int(v) for v in region)
+        if sx < x + w and x < sx + sw and sy < y + h and y < sy + sh:
+            return {"kind": "sheet", "window_id": sheet[0], "pid": window.pid}
+        return None
+
+    def _attached_sheet(
+        self, window: WindowInfo, *, wait: bool = True
+    ) -> Optional[tuple[int, tuple[float, float, float, float]]]:
+        """The window's proved sheet, or None.
+
+        ``wait=False`` probes once: for a check whose last read must come right
+        before input (``_assert_click_target``).
+        """
+        probe = getattr(self._mac_client, "attached_sheet", None)
+        if not callable(probe):
+            return None
+        for _ in range(_SHEET_SETTLE_POLLS if wait else 1):
+            try:
+                sheet = probe(window)
+            except Exception:  # noqa: BLE001 - no proof of a sheet means no sheet
+                sheet = None
+            if isinstance(sheet, tuple) and len(sheet) == 2:
+                return sheet
+            # A sheet sliding in is already frontmost while its bounds still
+            # move, so it can't be proved yet. Wait (bounded) only while some
+            # other window of this process is frontmost; anything else is
+            # refused at once.
+            front = self._mac_client.frontmost_window_id()
+            if front in (None, window.window_id) or not self._same_process_window(
+                front, window
+            ):
+                return None
+            time.sleep(_SHEET_SETTLE_STEP_S)
+        return None
+
+    def _same_process_window(self, window_id: int, window: WindowInfo) -> bool:
+        owner = getattr(self._mac_client, "window_owner_pid", None)
+        if not callable(owner):
+            return False
+        try:
+            return owner(window_id) == window.pid
+        except Exception:  # noqa: BLE001
+            return False
+
+    @staticmethod
+    def _front_ids(
+        window: WindowInfo, sheet: Optional[tuple[int, Any]]
+    ) -> frozenset[int]:
+        """The window ids that may be frontmost: the window, or its sheet."""
+
+        return frozenset({window.window_id, sheet[0]} if sheet else {window.window_id})
+
+    def _focused_main(
+        self, window: WindowInfo, sheet: Optional[tuple[int, Any]]
+    ) -> bool:
+        if sheet is None:
+            return bool(self._mac_client.exact_window_focused_main(window))
+        either = getattr(self._mac_client, "exact_window_or_sheet_focused", None)
+        return bool(callable(either) and either(window))
+
+    def _assert_click_target(self, sx: float, sy: float) -> None:
+        """The point hits the leased window, or its attached sheet inside it.
+
+        The sheet is probed once, without waiting, and the hit test is read
+        last: it is the final window check before the base class's mouse-down.
+        """
+        assert self._frame_window is not None
+        window = self._frame_window
+        sheet = self._attached_sheet(window, wait=False)
+        expected = window.window_id
+        if sheet is not None:
+            x, y, w, h = sheet[1]
+            if x <= sx < x + w and y <= sy < y + h:
+                expected = sheet[0]
+        hit = self._client.window_at_point(sx, sy)
+        if hit == expected:
+            return
+        raise MacOSBackendError(
+            f"screen point {(sx, sy)!r} is covered by window {hit!r}, not the "
+            f"leased window {window.window_id} or its attached sheet; refusing a "
+            "click that could hit an occluder"
+        )
+
+    def _capture_window(self, win: WindowInfo) -> tuple[bytes, int, int]:
+        """The window's pixels, with its attached sheet drawn on top."""
+
+        sheet = self._attached_sheet(win)
+        stack = getattr(self._mac_client, "capture_stack", None)
+        if sheet is not None and callable(stack):
+            return stack([sheet[0], win.window_id], win.bounds)
+        return self._mac_client.capture(win.window_id)
 
     @timed_span("screenshot")
     def screenshot(self) -> bytes:
@@ -951,25 +1122,57 @@ class MacOSBackend(RemoteDisplayBackend):
         *,
         point: Optional[tuple[float, float]] = None,
     ) -> None:
-        """Require every global-input proof to still match one bound window."""
+        """Require every global-input proof to still match one bound window.
+
+        While a sheet of the window opens or closes, the window server and AX
+        disagree for a moment (the sheet is frontmost but not yet, or no
+        longer, listed). Only then is the whole check taken again, for at most
+        :data:`_SHEET_SETTLE_POLLS` steps, and it passes only on one snapshot
+        in which every condition holds.
+        """
+        for attempt in range(_SHEET_SETTLE_POLLS):
+            sheet = self._attached_sheet(bound)
+            if self._bound_target_holds(bound, sheet, point):
+                return
+            front = self._mac_client.frontmost_window_id()
+            in_transition = sheet is not None or (
+                front not in (None, bound.window_id)
+                and self._same_process_window(front, bound)
+            )
+            if not in_transition or attempt == _SHEET_SETTLE_POLLS - 1:
+                break
+            time.sleep(_SHEET_SETTLE_STEP_S)
+        raise MacOSBackendError(
+            "native physical-input target changed after foreground proof; "
+            f"bound id={bound.window_id} pid={bound.pid} "
+            f"bounds={bound.bounds!r} title={bound.title!r}. Refusing "
+            "coordinate/global input against a stale window mapping"
+        )
+
+    def _bound_target_holds(
+        self,
+        bound: WindowInfo,
+        sheet: Optional[tuple[int, Any]],
+        point: Optional[tuple[float, float]],
+    ) -> bool:
         current = self._resolve_window(refresh=True)
         point_window_id = (
             self._mac_client.window_id_at_point(*point) if point is not None else None
         )
-        if (
+        expected_at_point = bound.window_id
+        if sheet is not None and point is not None:
+            sx, sy, sw, sh = sheet[1]
+            if sx <= point[0] < sx + sw and sy <= point[1] < sy + sh:
+                expected_at_point = sheet[0]
+        return not (
             current != bound
             or not current.on_screen
             or self._mac_client.focused_application_pid() != bound.pid
-            or self._mac_client.frontmost_window_id() != bound.window_id
-            or not self._mac_client.exact_window_focused_main(bound)
-            or (point is not None and point_window_id != bound.window_id)
-        ):
-            raise MacOSBackendError(
-                "native physical-input target changed after foreground proof; "
-                f"bound id={bound.window_id} pid={bound.pid} "
-                f"bounds={bound.bounds!r} title={bound.title!r}. Refusing "
-                "coordinate/global input against a stale window mapping"
-            )
+            or self._mac_client.frontmost_window_id()
+            not in self._front_ids(bound, sheet)
+            or not self._focused_main(bound, sheet)
+            or (point is not None and point_window_id != expected_at_point)
+        )
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click only through one foregrounded, frame-compatible window binding."""
@@ -1105,11 +1308,18 @@ class MacOSBackend(RemoteDisplayBackend):
             # below before input. A failed AX raise never relaxes the check.
             exact_ax_focus = self._mac_client.raise_window(target)
             target = self._resolve_window(refresh=True)
+            sheet = self._attached_sheet(target)
+            # With a sheet up, AppKit keeps the sheet focused: the window is
+            # raised and main, and its own sheet holds focus.
+            exact_ax_focus = bool(exact_ax_focus) or (
+                sheet is not None and self._focused_main(target, sheet)
+            )
             if (
                 exact_ax_focus
                 and target.on_screen
                 and self._mac_client.focused_application_pid() == target.pid
-                and self._mac_client.frontmost_window_id() == target.window_id
+                and self._mac_client.frontmost_window_id()
+                in self._front_ids(target, sheet)
             ):
                 return
             # Activation is asynchronous on some applications, so retry after
@@ -1199,9 +1409,12 @@ class MacOSBackend(RemoteDisplayBackend):
             self._mac_client.activate(target.pid)
             exact_ax_focus = self._mac_client.raise_window(target)
             target = self._resolve_window(refresh=True)
-            exact_cg_topmost = (
-                target.on_screen
-                and self._mac_client.frontmost_window_id() == target.window_id
+            sheet = self._attached_sheet(target)
+            exact_ax_focus = bool(exact_ax_focus) or (
+                sheet is not None and self._focused_main(target, sheet)
+            )
+            exact_cg_topmost = target.on_screen and (
+                self._mac_client.frontmost_window_id() in self._front_ids(target, sheet)
             )
             if exact_ax_focus and exact_cg_topmost:
                 self._ensure_input_ready()
