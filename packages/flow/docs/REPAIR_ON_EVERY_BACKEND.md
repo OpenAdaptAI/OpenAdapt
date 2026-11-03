@@ -193,8 +193,10 @@ the probe, the replay campaign and the fault campaign (another patient's
 chart) pass; the scripted approver's answer is signed through the
 decision portal's own code; and the
 resumed run is `VERIFIED` against SQLite with exactly one new row. That run
-holds the app's caret steady: with a blinking caret the save click is
-refused and nothing is written
+holds the app's caret steady. With a blinking caret, the clean-tree run
+stopped in the probe at the note field's identity check and wrote nothing; an
+earlier run that got further was refused at the save by the frame lease
+because of the caret
 ([#1713](https://github.com/OpenAdaptAI/OpenAdapt/issues/1713)). Under
 `demo`, and with no verifier, the click is refused and nothing is written.
 

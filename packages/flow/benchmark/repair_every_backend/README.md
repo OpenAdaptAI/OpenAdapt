@@ -19,7 +19,7 @@ python benchmark/repair_every_backend/qualify_macos.py --kind ax --kind pixel
 finding 5). With a blinking caret it stops safely before the save. Pixels
 only doesn't pass yet. No run wrote a wrong row.
 
-| Check | AX (`MacOSBackend`) | Pixels only (`RemoteDisplayBackend`) |
+| Check | AX (`MacOSBackend`), steady caret | Pixels only (`RemoteDisplayBackend`) |
 | --- | --- | --- |
 | Demonstration recorded and compiled, certified `clinical-write` | Yes | Yes |
 | New version stops at the notice before any save | Yes (`HALTED_BEFORE_EFFECT`, `after`) | No: see finding 3 |
@@ -27,7 +27,7 @@ only doesn't pass yet. No run wrote a wrong row.
 | Probe up to the save: nothing written, target found, same record, same fields | Yes | Not reached |
 | Replay campaign and fault campaign (another patient's chart stops before the save) | Yes, 1/1 each | Not reached |
 | One approval, by the scripted approver, signed through the decision portal's own code with a throwaway roster key | Yes | Not reached |
-| Resumed run, checked against SQLite | Steady caret: `VERIFIED`, exactly one new row for the patient. Blinking caret: not reached; see below | Not reached |
+| Resumed run, checked against SQLite | `VERIFIED`, exactly one new row for the patient (blinking caret: not reached; see below) | Not reached |
 | With a `demo` profile the click is refused, nobody is asked, nothing is written | Yes | Not reached |
 | With no verifier the run gate refuses, nothing is written | Yes | Yes |
 
@@ -39,7 +39,7 @@ Evidence, each from a clean tree (the JSON records `git_sha` and
 [`results/macos-ax-20261103.json`](results/macos-ax-20261103.json) (blinking
 caret), [`results/macos-pixel-20261103.json`](results/macos-pixel-20261103.json).
 
-With a blinking caret, both clean-tree runs stopped in the probe at the note
+With a blinking caret, the clean-tree run stopped in the probe at the note
 field's identity check: OCR read only part of the patient banner (coverage
 0.54), so the click was refused and nothing was written. An earlier run from
 an uncommitted tree got past that check and was refused at the save by the
