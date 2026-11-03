@@ -135,6 +135,7 @@ __all__ = [
     "reconcile",
     "verified_write",
     "verify_write",
+    "issue_recheck_receipt",
     "issue_write_receipt",
 ]
 
@@ -1364,6 +1365,31 @@ def issue_write_receipt(
     return dataclasses.replace(
         result, write_receipt="issued", write_receipt_path=str(issued.path)
     )
+
+
+def issue_recheck_receipt(
+    result: WriteResult, late: "RecheckResult", out: Optional[Path] = None
+) -> tuple[str, Optional[str]]:
+    """Sign a recheck's verdict as a write receipt that supersedes the
+    CONFIRMED's (``result.write_receipt_path``). Returns ``("issued",
+    path)`` or ``("not issued: <why>", None)``; never raises."""
+
+    import hashlib
+
+    from openadapt_flow import write_receipt as wr
+
+    first = Path(result.write_receipt_path) if result.write_receipt_path else None
+    if out is None:
+        folder = first.parent if first else Path(result.receipt_path or ".").parent
+        out = folder / f"{result.write_id or 'write'}.recheck.receipt.cbor"
+    try:
+        supersedes = hashlib.sha256(first.read_bytes()).hexdigest() if first else None
+        issued = wr.issue_for_recheck(result, late, out, supersedes=supersedes)
+    except wr.ReceiptError as exc:
+        return f"not issued: {exc}", None
+    except Exception as exc:  # noqa: BLE001 - say why, never change the verdict
+        return f"not issued: {type(exc).__name__}", None
+    return "issued", str(issued.path)
 
 
 def _record(

@@ -47,7 +47,14 @@ said:
 - `verdict` is `CONFIRMED` and the strength is `unchecked`, no store was
   read, a contract store went unread, a `checked` part is `refuted`, or the
   window has no read-back time;
-- `not_checked` is empty or lacks the fixed lines;
+- `verdict` is `CONFIRMED` with no baseline read, or (outside FHIR) without
+  `delta` held;
+- `not_checked` is empty or lacks the fixed lines, or, for `shadow.fhir`,
+  the FHIR read path's gaps;
+- the window runs backwards, starts or ends after the receipt was issued
+  (300 s of clock skew allowed), or the recheck is due before the read-back;
+- the bytes aren't the one canonical CBOR encoding (a re-encoding, a tag or
+  trailing bytes would give the same receipt another digest);
 - `provisional` and `recheck_due_at` disagree;
 - any field is unknown, repeated, or outside its closed set.
 
@@ -85,6 +92,19 @@ then through our own strict checks.
 candidate; its last release was December 2023. The extra is
 `openadapt-flow[receipts]`.
 
+## Rechecks
+
+A provisional `CONFIRMED` is superseded by the recheck's receipt
+(`supersedes` names the first receipt's SHA-256): shadow mode issues it
+after the recheck, and `issue_recheck_receipt(result, late)` does it for a
+verifier `RecheckResult`. A recheck reads fewer stores than the check, so its
+receipt keeps the check's window and adds a `not_covered` line naming what
+was read again and until when. `receipt verify` warns when a provisional
+receipt's recheck is past due: on its own it doesn't show the verdict held.
+
+A receipt is never written over: issuing to an existing path is refused, so
+a receipt already handed out keeps the evidence file that opens it.
+
 ## Keys
 
 - **Issuer key:** the offline Seal key (`OPENADAPT_SEAL_KEY`: `file:`,
@@ -107,8 +127,7 @@ The default log is local: an append-only file of leaf hashes under
 logged in order and not edited since. On its own it is the operator's own
 log, so the operator could rebuild it.
 
-For a party the operator doesn't control, `receipt anchor` (or
-`--anchor rekor`) puts the receipt's digest in Sigstore Rekor through the
+For a party the operator doesn't control, `openadapt-flow receipt anchor FILE` puts the receipt's digest in Sigstore Rekor through the
 same code that anchors Seals (`seal_anchor.anchor_record`). Only a SHA-512
 digest of a domain-separated statement over the receipt's SHA-256 and a
 random nonce leaves the machine, plus the issuer's public key and a

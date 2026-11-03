@@ -22,7 +22,7 @@ import os
 import re
 import secrets
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional
 
@@ -198,6 +198,28 @@ def check_claims(p: ReceiptPayload) -> None:
         raise ReceiptError("overclaim", "not_checked drops a line of scope.not_covered")
     if any(f"store not read: {name}" not in p.not_checked for name in s.unread):
         raise ReceiptError("overclaim", "not_checked doesn't name every unread store")
+    if p.source == "shadow.fhir" and any(
+        line not in p.not_checked for line in FHIR_NOT_COVERED
+    ):
+        raise ReceiptError(
+            "overclaim", "a FHIR receipt lacks the FHIR read path's gaps"
+        )
+    w = s.window
+    issued = _parse(p.issued_at)
+    for name, value in (
+        ("baseline_read_at", w.baseline_read_at),
+        ("read_at", w.read_at),
+    ):
+        if value is not None and _parse(value) > issued + _SKEW:
+            raise ReceiptError("overclaim", f"{name} is after the receipt was issued")
+    if (
+        w.baseline_read_at
+        and w.read_at
+        and _parse(w.read_at) < _parse(w.baseline_read_at)
+    ):
+        raise ReceiptError("overclaim", "read_at is before baseline_read_at")
+    if p.recheck_due_at and w.read_at and _parse(p.recheck_due_at) <= _parse(w.read_at):
+        raise ReceiptError("overclaim", "the recheck is due before the read-back")
     if p.verdict != "CONFIRMED":
         return
     if s.strength == "unchecked":
@@ -208,8 +230,21 @@ def check_claims(p: ReceiptPayload) -> None:
         raise ReceiptError("overclaim", "CONFIRMED with a contract store unread")
     if s.window.read_at is None:
         raise ReceiptError("overclaim", "CONFIRMED with no read-back time")
+    if s.window.baseline_read_at is None:
+        raise ReceiptError("overclaim", "CONFIRMED with no baseline read")
     if "refuted" in p.checked.values():
         raise ReceiptError("overclaim", "CONFIRMED with a refuted part")
+    if p.source != "shadow.fhir" and p.checked.get("delta") != "held":
+        raise ReceiptError("overclaim", "CONFIRMED without the declared write held")
+
+
+#: Clock skew allowed between the store's clock and the issuer's.
+_SKEW = timedelta(seconds=300)
+
+
+def _parse(value: str) -> datetime:
+    when = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return when if when.tzinfo else when.replace(tzinfo=timezone.utc)
 
 
 # --- building a payload ---------------------------------------------------------
@@ -304,15 +339,19 @@ class Issued:
 
 
 def _write_private(path: Path, data: bytes) -> None:
+    """Write ``path`` (mode 0600) whole, and never over an existing file: a
+    receipt already handed out must keep the evidence that opens it."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.unlink(missing_ok=True)
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
     fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(data)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def default_signer(env: Optional[Mapping[str, str]] = None) -> Any:
@@ -340,6 +379,10 @@ def issue(
     except Exception as exc:  # noqa: BLE001 - LocalSealError, KeyUnavailable
         raise ReceiptError("key_unavailable", type(exc).__name__) from exc
     log = log if log is not None else LocalLog()
+    out = Path(out)
+    evidence_path = out.with_name(out.name + ".evidence.json")
+    if out.exists() or evidence_path.exists():
+        raise ReceiptError("exists", f"{out.name} is already issued")
     salt = secrets.token_bytes(32)
     try:
         evidence_json = json.loads(canonical_json(evidence))
@@ -371,8 +414,6 @@ def issue(
         cbor2.CBORTag(18, [prot, {RECEIPTS: [inclusion]}, body, signature]),
         canonical=True,
     )
-    out = Path(out)
-    evidence_path = out.with_name(out.name + ".evidence.json")
     _write_private(
         evidence_path,
         (
@@ -475,11 +516,20 @@ def verify(
         and claims.get(1) == issuer_id
         and claims.get(2) == payload.subject.write_id
         and payload.issuer == issuer_id
-        and set(claims) <= {1, 2, 6}
+        and set(claims) == {1, 2, 6}
+        and claims[6] == int(_parse(payload.issued_at).timestamp())
     ):
         raise ReceiptError("malformed", "CWT claims don't match the payload")
     check_claims(payload)
     out = Verification(payload=payload, sha256=hashlib.sha256(data).hexdigest())
+    if payload.recheck_due_at and _parse(payload.recheck_due_at) < datetime.now(
+        timezone.utc
+    ):
+        out.notes.append(
+            f"provisional, and its recheck was due at {payload.recheck_due_at}: "
+            "ask the issuer for the receipt that supersedes this one; on its own "
+            "this one doesn't show the verdict held"
+        )
     if set(unprot) - {RECEIPTS}:
         raise ReceiptError("malformed", "unexpected unprotected header")
     receipts = unprot.get(RECEIPTS) or []
@@ -580,6 +630,56 @@ def issue_for_result(
         write_id=result.write_id,
         recheck_due_at=result.recheck_due_at,
         contract_sha256=contract_sha,
+        verify_run_receipt_sha256=result.receipt_sha256 or None,
+        supersedes=supersedes,
+        **kwargs,
+    )
+
+
+def recheck_scope(
+    scope: Mapping[str, Any], reread: list[str], read_at: Optional[str]
+) -> dict[str, Any]:
+    """A recheck's scope: the first check's, window unchanged, plus a line
+    naming what the recheck read again and until when. A recheck reads
+    fewer stores than the check, so the window can't move forward for all."""
+
+    line = (
+        f"after read_at only {', '.join(reread) or 'nothing'} was read again, "
+        f"by a recheck until {read_at}; other stores were not"
+        if read_at
+        else "after read_at nothing was read again"
+    )
+    return {**scope, "not_covered": [*scope.get("not_covered", []), line]}
+
+
+def issue_for_recheck(
+    result: Any, late: Any, out: Path, *, supersedes: Optional[str], **kwargs: Any
+) -> Issued:
+    """A receipt for a verifier ``RecheckResult`` that supersedes the earlier
+    CONFIRMED's. Only the frame's database is read again."""
+
+    verdict = str(late.outcome)
+    read_at = str(late.read_at or "") or None
+    if verdict == "CONFIRMED" and not read_at:
+        verdict = "UNCERTAIN"
+    when = iso(_parse(read_at)) if read_at else None
+    return issue(
+        out,
+        evidence={
+            "recheck": {
+                "outcome": late.outcome,
+                "frame": late.frame,
+                "reasons": late.reasons,
+                "read_at": late.read_at,
+                "excused": late.excused,
+                "evidence": late.evidence,
+            }
+        },
+        source="verifier",
+        verdict=verdict,
+        scope=recheck_scope(scope_of_result(result), ["frame.database"], when),
+        checked=result.checked,
+        write_id=result.write_id,
         verify_run_receipt_sha256=result.receipt_sha256 or None,
         supersedes=supersedes,
         **kwargs,

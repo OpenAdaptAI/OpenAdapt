@@ -31,6 +31,7 @@ from openadapt_flow.seal_anchor import root_from_inclusion
 from openadapt_flow.verifier import MemoryLedger, begin_write, verify_write
 from tests import test_shadow as shadow_fx
 from tests import test_verifier_api as api_fx
+from tests.test_shadow_fhir import _allergy, _send, env  # noqa: F401 - fixture
 
 
 @pytest.fixture(autouse=True)
@@ -340,12 +341,12 @@ def test_fhir_scope_never_confirms_an_unreadable_read() -> None:
         )
 
 
-def _cli(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _cli(*args: str, environ: dict[str, str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "openadapt_flow", "receipt", *args],
         capture_output=True,
         text=True,
-        env=env,
+        env=environ,
         timeout=120,
     )
 
@@ -356,9 +357,9 @@ def test_the_cli_verifies_offline_and_prints_what_was_not_checked(
     import os
 
     one = _issue(tmp_path)
-    env = dict(os.environ)
+    environ = dict(os.environ)
     keys = tmp_path / "keys"
-    out = _cli("keys", "export", str(keys), env=env)
+    out = _cli("keys", "export", str(keys), environ=environ)
     assert out.returncode == 0, out.stderr
     assert "PRIVATE" not in out.stdout + (keys / "issuer.pub.pem").read_text()
     ok = _cli(
@@ -370,7 +371,7 @@ def test_the_cli_verifies_offline_and_prints_what_was_not_checked(
         str(keys / "log.pub.pem"),
         "--evidence",
         str(one.evidence_path),
-        env=env,
+        environ=environ,
     )
     assert ok.returncode == 0, ok.stderr
     assert "VALID" in ok.stdout and "NOT checked:" in ok.stdout
@@ -384,11 +385,15 @@ def test_the_cli_verifies_offline_and_prints_what_was_not_checked(
         str(keys / "issuer.pub.pem"),
         "--log-key",
         str(keys / "log.pub.pem"),
-        env=env,
+        environ=environ,
     )
     assert bad.returncode == 1 and "INVALID" in bad.stderr
     no_log = _cli(
-        "verify", str(one.path), "--issuer-key", str(keys / "issuer.pub.pem"), env=env
+        "verify",
+        str(one.path),
+        "--issuer-key",
+        str(keys / "issuer.pub.pem"),
+        environ=environ,
     )
     assert no_log.returncode == 2
 
@@ -407,11 +412,10 @@ def test_anchoring_is_refused_in_no_outbound_mode(
 
 
 # FHIR shadow episodes, with test_shadow_fhir.py's stubbed ensure_record.
-from tests.test_shadow_fhir import _allergy, _send, env  # noqa: E402, F401
 
 
 def test_a_fhir_shadow_confirmation_is_provisional_until_its_recheck(
-    env: dict[str, Any],
+    env: dict[str, Any],  # noqa: F811 - the imported fixture
 ) -> None:
     from datetime import datetime, timezone
 
@@ -430,7 +434,7 @@ def test_a_fhir_shadow_confirmation_is_provisional_until_its_recheck(
 
 
 def test_a_fhir_confirmation_with_no_read_window_gets_no_receipt(
-    env: dict[str, Any],
+    env: dict[str, Any],  # noqa: F811 - the imported fixture
 ) -> None:
     sh = env["sh"]
     sh.receipts = True
@@ -440,3 +444,80 @@ def test_a_fhir_confirmation_with_no_read_window_gets_no_receipt(
     # The verdict stands; the receipt that couldn't state a window isn't made.
     assert ep.verdict == "CONFIRMED" and ep.receipts == []
     assert ep.receipt_note.startswith("not issued: overclaim")
+
+
+@pytest.mark.parametrize(
+    "mangle",
+    [
+        lambda d: d + b"\x00",
+        lambda d: cbor2.dumps(cbor2.CBORTag(55799, cbor2.loads(d))),
+        lambda d: (
+            d[:1]
+            + b"\x84\x5b"
+            + len(cbor2.loads(d).value[0]).to_bytes(8, "big")
+            + d[3:]
+        ),
+    ],
+)
+def test_a_re_encoded_receipt_is_rejected(tmp_path: Path, mangle: Any) -> None:
+    data = _issue(tmp_path).path.read_bytes()
+    with pytest.raises(wr.ReceiptError, match="malformed"):
+        _verify(mangle(data))
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        {"scope": {**SCOPE, "window": {**SCOPE["window"], "baseline_read_at": None}}},
+        {
+            "scope": {
+                **SCOPE,
+                "window": {**SCOPE["window"], "read_at": "2026-11-02T09:00:00Z"},
+            }
+        },
+        {"checked": {}},
+        {"recheck_due_at": "2026-11-02T10:00:01Z"},
+        {"source": "shadow.fhir", "checked": {}},
+        {"issued_at": "2026-11-01T00:00:00Z"},
+    ],
+)
+def test_more_overclaims_are_refused(tmp_path: Path, edit: dict[str, Any]) -> None:
+    with pytest.raises(wr.ReceiptError, match="overclaim"):
+        _issue(tmp_path, **edit)
+
+
+def test_a_receipt_is_never_written_over(tmp_path: Path) -> None:
+    first = _issue(tmp_path)
+    before = first.path.read_bytes(), first.evidence_path.read_bytes()
+    with pytest.raises(wr.ReceiptError, match="exists"):
+        _issue(tmp_path)
+    assert (first.path.read_bytes(), first.evidence_path.read_bytes()) == before
+
+
+def test_a_past_due_provisional_receipt_is_flagged(tmp_path: Path) -> None:
+    one = _issue(tmp_path, recheck_due_at="2026-11-02T10:05:05Z")
+    v = _verify(one.path.read_bytes())
+    assert v.payload.provisional and "supersedes this one" in v.notes[0]
+
+
+def test_a_verifier_recheck_issues_a_superseding_receipt(tmp_path: Path) -> None:
+    from openadapt_flow.verifier import issue_recheck_receipt, recheck
+
+    db = shadow_fx._db(tmp_path)
+    contract = shadow_fx._contract(db)
+    contract.config.frame.database.recheck_after_s = 1
+    params = {"fname": "Ada", "lname": "Quill", "email": "ada@example.test"}
+    pending = begin_write(contract, params, actor=api_fx.BOT, ledger=MemoryLedger())
+    api_fx._write(db, api_fx.SAVE)
+    result = verify_write(pending, write_receipt=True)
+    assert result.provisional and result.write_receipt == "issued"
+    api_fx._write(db, "UPDATE patient SET phone='9' WHERE id=1")
+    late = recheck(contract, result, params=params, actor=api_fx.BOT, wait=True)
+    state, path = issue_recheck_receipt(result, late)
+    assert late.outcome == "REFUTED" and state == "issued", state
+    p = _verify(Path(str(path)).read_bytes()).payload
+    first = Path(str(result.write_receipt_path)).read_bytes()
+    assert p.verdict == "REFUTED" and p.supersedes == hashlib.sha256(first).hexdigest()
+    # The window stays the check's; a line says what was read again.
+    assert p.scope.window.read_at == result.scope.window.read_at
+    assert any("only frame.database was read again" in x for x in p.not_checked)

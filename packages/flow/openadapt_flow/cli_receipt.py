@@ -134,6 +134,13 @@ def cmd_verify(args: argparse.Namespace) -> int:
     except wr.ReceiptError as exc:
         _fail(args, exc.code, str(exc))
         return 1
+    except ImportError as exc:
+        print(
+            f"receipt verify: {exc.name or exc} is missing; "
+            "pip install 'openadapt-flow[receipts]'",
+            file=sys.stderr,
+        )
+        return 2
     except (OSError, ValueError) as exc:
         _fail(args, "unreadable", str(exc))
         return 1

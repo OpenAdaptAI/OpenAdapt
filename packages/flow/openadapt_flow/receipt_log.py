@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
@@ -88,6 +89,11 @@ def decode_sign1(
     import cbor2
 
     msg = cbor2.loads(data)
+    # One byte string per receipt: a re-encoding (longer lengths, a
+    # self-describe tag, trailing bytes) would verify under another digest
+    # and slip past the receipt that supersedes it.
+    if cbor2.dumps(msg, canonical=True) != data:
+        raise ValueError("not canonical CBOR (or bytes after the message)")
     if not (isinstance(msg, cbor2.CBORTag) and msg.tag == 18):
         raise ValueError("not a tagged COSE_Sign1")
     if not (isinstance(msg.value, list) and len(msg.value) == 4):
@@ -173,13 +179,21 @@ class LocalLog:
             serialization.PrivateFormat.PKCS8,
             serialization.NoEncryption(),
         )
-        # O_EXCL: two first appends at once must not each make a key.
+        # Write in full under a private name, then link: the key appears
+        # whole or not at all, and two first appends can't each make one.
+        tmp = self.dir / f".{_KEY}.{secrets.token_hex(8)}"
+        fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
-            return self._private_key()
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(pem)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(pem)
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                os.link(tmp, path)
+            except FileExistsError:
+                return self._private_key()
+        finally:
+            tmp.unlink(missing_ok=True)
         return key
 
     def public_raw(self) -> bytes:

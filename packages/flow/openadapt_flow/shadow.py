@@ -1000,7 +1000,8 @@ class Shadow:
 
         try:
             fields = self._receipt_fields(ep, late)
-            name = f"{ep.id:04d}-{'recheck' if late else 'check'}.receipt.cbor"
+            kind = "recheck" if late else "check"
+            name = f"{self.session}-{ep.id:04d}-{kind}.receipt.cbor"
             issued = wr.issue(
                 self.out / "receipts" / name,
                 evidence={
@@ -1081,14 +1082,19 @@ class Shadow:
             subject = {"contract_sha256": None, "verify_run_receipt_sha256": None}
             checked = {}
             verdict = UNCERTAIN
-        if late and verdict == CONFIRMED:
-            # The recheck read again: the window now closes at its read.
+        if late:
+            # The window stays the check's; a line says what the recheck
+            # read again, and until when.
             read_at = ep.late_read_at
-            if not read_at:
+            if verdict == CONFIRMED and not read_at:
                 verdict = UNCERTAIN
-            else:
-                when = datetime.fromisoformat(read_at.replace("Z", "+00:00"))
-                scope["window"] = {**scope["window"], "read_at": wr.iso(when)}
+            when = (
+                wr.iso(datetime.fromisoformat(read_at.replace("Z", "+00:00")))
+                if read_at
+                else None
+            )
+            reread = ["frame.database"] if ep.kind == "sql" else list(scope["stores"])
+            scope = wr.recheck_scope(scope, reread, when)
         return {
             "source": f"shadow.{self.mode}",
             "verdict": verdict,

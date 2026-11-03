@@ -288,6 +288,7 @@ def test_the_public_api_is_stable() -> None:
         "capture",
         "capture_database",
         "diff_database",
+        "issue_recheck_receipt",
         "issue_write_receipt",
         "recheck",
         "reconcile",
