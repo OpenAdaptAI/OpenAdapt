@@ -12,7 +12,6 @@ import pytest
 
 from openadapt_flow.backend import (
     StructuralElementNotActionable,
-    StructuralElementNotActionableRefused,
 )
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.ir import (
@@ -88,16 +87,14 @@ def test_missing_element_returns_none(page) -> None:
 def test_covered_element_raises_not_actionable_refusal(page) -> None:
     backend = PlaywrightBackend(page)
     loc = StructuralLocator(selector="#btn-covered")
-    with pytest.raises(StructuralElementNotActionableRefused, match="occluded|covered"):
+    with pytest.raises(StructuralElementNotActionable, match="occluded|covered"):
         backend.locate_structural(loc)
 
 
 def test_offscreen_element_raises_not_actionable_refusal(page) -> None:
     backend = PlaywrightBackend(page)
     loc = StructuralLocator(selector="#btn-offscreen")
-    with pytest.raises(
-        StructuralElementNotActionableRefused, match="outside the viewport"
-    ):
+    with pytest.raises(StructuralElementNotActionable, match="outside the viewport"):
         backend.locate_structural(loc)
 
 
@@ -113,7 +110,7 @@ def test_covered_element_never_falls_through_to_template_rung(page) -> None:
     vision.template_results = [
         Match(point=(100, 170), region=(50, 150, 100, 40), confidence=0.99)
     ]
-    with pytest.raises(StructuralElementNotActionableRefused):
+    with pytest.raises(StructuralElementNotActionable):
         resolve(
             anchor,
             make_png(),

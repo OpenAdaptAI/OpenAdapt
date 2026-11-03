@@ -30,17 +30,17 @@ class StructuralResolutionRefused(RuntimeError):
     """
 
 
-class StructuralElementNotActionable(RuntimeError):
-    """A structural backend located exactly one candidate, but it is not actionable.
+class StructuralElementNotActionable(StructuralResolutionRefused):
+    """A structural backend found exactly one candidate it cannot act on.
 
-    The element exists in the live DOM/accessibility tree but cannot be safely acted
-    upon (e.g. covered by an overlay, zero-sized, hidden, or scrolled outside the
-    viewport). Falling through to visual rungs would risk clicking the overlay or
-    wrong pixel coordinates.
+    The element exists in the live DOM, but it is covered, outside the
+    viewport, zero-sized, or outside the recorded frame chain. Falling through
+    to a visual rung could click whatever covers it, so this is never a miss.
+
+    It subclasses :class:`StructuralResolutionRefused`, so any caller that
+    does not handle it on its own halts. Only step resolution and scroll
+    readiness treat it as "not ready yet" and poll until the step times out.
     """
-
-
-StructuralElementNotActionableRefused = StructuralElementNotActionable
 
 
 class ActionDeliveryUncertain(RuntimeError):

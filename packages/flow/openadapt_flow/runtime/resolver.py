@@ -54,10 +54,7 @@ import struct
 import time
 from typing import Any, Optional
 
-from openadapt_flow.backend import (
-    StructuralElementNotActionable,
-    StructuralResolutionRefused,
-)
+from openadapt_flow.backend import StructuralResolutionRefused
 from openadapt_flow.ir import (
     Anchor,
     Landmark,
@@ -927,10 +924,13 @@ def resolve(
         if locate is not None:
             try:
                 handle = locate(anchor.structural)
-            except (StructuralResolutionRefused, StructuralElementNotActionable):
-                # Ambiguity is a safety refusal, not a miss. A candidate that
-                # exists but is not actionable (e.g. covered by an overlay or
-                # off-viewport) must not fall through to pixels.
+            except StructuralResolutionRefused:
+                # Ambiguity is a safety refusal, not a miss. Falling through
+                # to pixels could choose one of the same indistinguishable
+                # candidates and silently defeat the uniqueness contract. A
+                # unique candidate that is covered or off-viewport
+                # (StructuralElementNotActionable, a subclass) must not fall
+                # through either: a pixel click would land on the cover.
                 raise
             except Exception:
                 handle = None

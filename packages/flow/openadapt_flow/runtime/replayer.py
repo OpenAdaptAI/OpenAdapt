@@ -651,6 +651,11 @@ SCROLL_POSITION_SLACK_FRACTION = 0.25
 
 #: Rungs that show the target itself on screen: what closed-loop scroll
 #: readiness accepts, and all a step accepts after its scroll missed it.
+# The error ``_resolve_step`` returns when the structural rung found exactly
+# one candidate but it is covered or off-viewport. The step polls on it like
+# any miss, and halts with ``target_not_actionable`` when it times out.
+_NOT_ACTIONABLE_ERROR = "structural candidate is not actionable"
+
 _DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
 
 #: Steps that own the halt when the closed-loop scroll before them never found
@@ -8246,8 +8251,10 @@ class Replayer:
             if (
                 error is not None
                 and resolution is None
-                and "structural candidate is not actionable" in error
+                and _NOT_ACTIONABLE_ERROR in error
             ):
+                # The one candidate stayed covered or off-viewport for the
+                # whole step timeout. No visual rung ran on it.
                 result.ok = False
                 result.safety_halt = True
                 result.failure_category = "safety_halt"
@@ -9175,7 +9182,11 @@ class Replayer:
             )
             result.safety_refusal_evidence = SafetyRefusalEvidence(
                 stage="target_resolution",
-                code="target_ambiguous",
+                code=(
+                    "target_not_actionable"
+                    if isinstance(exc, StructuralElementNotActionable)
+                    else "target_ambiguous"
+                ),
                 detector_input_sha256=sha256_bytes(last_frame),
             )
         except Exception as exc:  # defensive: report, don't crash the run
@@ -11978,7 +11989,7 @@ class Replayer:
                 None,
                 (
                     f"Could not resolve target for step '{step.id}' "
-                    f"({step.intent}): structural candidate is not actionable ({exc})"
+                    f"({step.intent}): {_NOT_ACTIONABLE_ERROR} ({exc})"
                 ),
             )
         if resolved is None:
@@ -17898,10 +17909,11 @@ class Replayer:
             )
         except (OcrResolutionRefused, StructuralElementNotActionable):
             # Readiness is a bounded, non-actuating probe. An ambiguous OCR
-            # candidate or an occluded/not-ready structural candidate (e.g.
-            # under a sticky header) means that the target is not ready yet, so
-            # the scroll loop must continue. The later target action runs the
-            # full resolver again and still halts on the same ambiguity.
+            # candidate, or a unique structural candidate that is still
+            # covered (a sticky header) or off-viewport, means the target is
+            # not ready yet, so the scroll loop must continue. The later
+            # target action runs the full resolver again and still halts on
+            # the same refusal. Structural ambiguity is not caught here.
             return miss("unresolved")
         if resolved is None:
             return miss("unresolved")

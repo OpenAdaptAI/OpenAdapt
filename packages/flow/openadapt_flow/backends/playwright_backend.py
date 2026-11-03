@@ -31,7 +31,6 @@ if TYPE_CHECKING:  # pragma: no cover
 from openadapt_flow.backend import (
     ActionDeliveryUncertain,
     StructuralElementNotActionable,
-    StructuralElementNotActionableRefused,
     StructuralResolutionRefused,
 )
 from openadapt_flow.ir import (
@@ -3255,12 +3254,12 @@ class PlaywrightBackend:
                 box = loc.bounding_box()
                 if not isinstance(box, dict):
                     self._cleanup_guard(token, scope)
-                    raise StructuralElementNotActionableRefused(
+                    raise StructuralElementNotActionable(
                         "DOM candidate is not rendered or has no bounding box"
                     )
                 if float(box["width"]) <= 0 or float(box["height"]) <= 0:
                     self._cleanup_guard(token, scope)
-                    raise StructuralElementNotActionableRefused(
+                    raise StructuralElementNotActionable(
                         f"DOM candidate has non-positive dimensions: {box['width']}x{box['height']}"
                     )
                 point = (
@@ -3270,14 +3269,14 @@ class PlaywrightBackend:
                 vw, vh = self.viewport
                 if not (0 <= point[0] < vw and 0 <= point[1] < vh):
                     self._cleanup_guard(token, scope)
-                    raise StructuralElementNotActionableRefused(
+                    raise StructuralElementNotActionable(
                         f"DOM candidate center is outside the viewport: point={point}, viewport=({vw}, {vh})"
                     )
                 if not isinstance(observed, dict) or not self._frame_chain_matches(
                     scope, tuple(locator.frame_path or ()), box
                 ):
                     self._cleanup_guard(token, scope)
-                    raise StructuralElementNotActionableRefused(
+                    raise StructuralElementNotActionable(
                         "DOM candidate is occluded or not in hit-tested frame chain"
                     )
                 # The handle's region is the target's VISIBLE box: its
@@ -3294,7 +3293,7 @@ class PlaywrightBackend:
                 x1, y1 = min(vw, bx + bw), min(vh, by + bh)
                 if x1 <= x0 or y1 <= y0:
                     self._cleanup_guard(token, scope)
-                    raise StructuralElementNotActionableRefused(
+                    raise StructuralElementNotActionable(
                         "DOM candidate visible region clipped to viewport is empty"
                     )
                 region = (x0, y0, x1 - x0, y1 - y0)
@@ -3320,7 +3319,7 @@ class PlaywrightBackend:
                 target_fingerprint=fingerprint,
                 supported_operations=["dom_click", "dom_double_click", "dom_drag"],
             )
-        except (StructuralResolutionRefused, StructuralElementNotActionable):
+        except StructuralResolutionRefused:
             raise
         except Exception:
             return None
