@@ -54,7 +54,7 @@ def test_real_recording_search_step_no_longer_asserts_the_selected_row_header():
     pc = _new_text_postcondition(
         _ocr(step["before"]), _ocr(step["after"]), **_compile_args(step)
     )
-    assert pc is None or "Patient:" not in (pc.text or "")
+    assert pc is not None and pc.text == "Sorenson"
 
 
 def test_real_recording_save_step_keeps_its_confirmation():
@@ -114,3 +114,18 @@ def test_a_header_echoing_two_lines_that_are_not_one_row_is_kept() -> None:
     scattered = [_line("Neil", 24, 136, w=60), _line("Sorenson", 215, 260, w=90)]
     after = scattered + [HEADER_AFTER]
     assert not _echoes_screen_rows(HEADER_AFTER, [HEADER_BEFORE], after, (560, 56))
+
+
+def test_a_click_in_a_rows_padding_still_selects_that_row() -> None:
+    # Re-review blocker: grid text is ~18 px tall in a ~44 px row; a click in
+    # the padding must count as a click on the row.
+    rows = [
+        _line("James", 24, 138, w=60),
+        _line("Alvarez", 215, 138, w=90),
+        _line("Neil", 24, 182, w=60),
+        _line("Sorenson", 215, 182, w=90),
+        _line("1984-03-12", 405, 182, w=100),
+    ]
+    after = rows + [HEADER_AFTER]
+    assert not _echoes_screen_rows(HEADER_AFTER, [HEADER_BEFORE], after, (300, 202))
+    assert not _echoes_screen_rows(HEADER_AFTER, [HEADER_BEFORE], after, (300, 170))

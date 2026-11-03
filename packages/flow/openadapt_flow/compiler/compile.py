@@ -890,7 +890,14 @@ def _echoes_screen_rows(
       the same label words (a field whose value changed, not a new banner);
     - two or more of its data words (names, ids, dates) appear in one other
       row of the after frame: two or more separate lines on one row band;
-    - that row is not the row the demonstrator clicked.
+    - the step's click is not on that row (its text, or its padding up to
+      one text height above or below): a step that selects the row keeps a
+      header restating it.
+
+    Known misses, which keep stopping as before (fail closed): a detail pane
+    that was empty before, a header with no label words, a row OCR reads as
+    one line. With openadapt-privacy installed, names in such headers are
+    already dropped as PHI.
     """
     tokens = _value_tokens(line.text)
     if len(tokens) < 2:
@@ -904,18 +911,29 @@ def _echoes_screen_rows(
     ):
         return False
     others = [o for o in after_lines if o is not line and not _overlaps(o, line)]
+    echo_rows: list[list[OcrLine]] = []
     for anchor in others:
         row = [o for o in others if _same_band(anchor, o)]
-        if len(row) < 2:
+        if len(row) < 2 or any(row == r for r in echo_rows):
             continue
-        if click_point is not None and any(
-            o.region[1] <= click_point[1] < o.region[1] + o.region[3] for o in row
-        ):
-            continue  # the clicked row: a header restating it is the person's choice
         cells = [_value_tokens(o.text) & tokens for o in row]
         if sum(1 for c in cells if c) >= 2 and len(set().union(*cells)) >= 2:
-            return True
-    return False
+            echo_rows.append(row)
+    if not echo_rows:
+        return False
+    if click_point is not None:
+        cx, cy = click_point
+        for row in echo_rows:
+            left = min(o.region[0] for o in row)
+            right = max(o.region[0] + o.region[2] for o in row)
+            top = min(o.region[1] for o in row)
+            bottom = max(o.region[1] + o.region[3] for o in row)
+            pad = bottom - top
+            if left <= cx <= right and top - pad <= cy <= bottom + pad:
+                # A click on the restated row, on its text or in its padding:
+                # the step selects that row, and the header is that choice.
+                return False
+    return True
 
 
 def _new_text_postcondition(
