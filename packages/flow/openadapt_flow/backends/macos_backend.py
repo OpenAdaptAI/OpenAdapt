@@ -905,12 +905,17 @@ class MacOSBackend(RemoteDisplayBackend):
     # (``MacWindowClient.attached_sheet``). Any other window stays refused.
 
     def _attached_sheet(
-        self, window: WindowInfo
+        self, window: WindowInfo, *, wait: bool = True
     ) -> Optional[tuple[int, tuple[float, float, float, float]]]:
+        """The window's proved sheet, or None.
+
+        ``wait=False`` probes once: for a check whose last read must come right
+        before input (``_assert_click_target``).
+        """
         probe = getattr(self._mac_client, "attached_sheet", None)
         if not callable(probe):
             return None
-        for _ in range(_SHEET_SETTLE_POLLS):
+        for _ in range(_SHEET_SETTLE_POLLS if wait else 1):
             try:
                 sheet = probe(window)
             except Exception:  # noqa: BLE001 - no proof of a sheet means no sheet
@@ -955,23 +960,22 @@ class MacOSBackend(RemoteDisplayBackend):
         return bool(callable(either) and either(window))
 
     def _assert_click_target(self, sx: float, sy: float) -> None:
-        """The point hits the leased window, or its attached sheet inside it."""
+        """The point hits the leased window, or its attached sheet inside it.
+
+        The sheet is probed once, without waiting, and the hit test is read
+        last: it is the final window check before the base class's mouse-down.
+        """
         assert self._frame_window is not None
         window = self._frame_window
-        hit = self._client.window_at_point(sx, sy)
-        if hit == window.window_id:
-            sheet = self._attached_sheet(window)
-            if sheet is None:
-                return
+        sheet = self._attached_sheet(window, wait=False)
+        expected = window.window_id
+        if sheet is not None:
             x, y, w, h = sheet[1]
-            if not (x <= sx < x + w and y <= sy < y + h):
-                return
-        else:
-            sheet = self._attached_sheet(window)
-            if sheet is not None and hit == sheet[0]:
-                x, y, w, h = sheet[1]
-                if x <= sx < x + w and y <= sy < y + h:
-                    return
+            if x <= sx < x + w and y <= sy < y + h:
+                expected = sheet[0]
+        hit = self._client.window_at_point(sx, sy)
+        if hit == expected:
+            return
         raise MacOSBackendError(
             f"screen point {(sx, sy)!r} is covered by window {hit!r}, not the "
             f"leased window {window.window_id} or its attached sheet; refusing a "

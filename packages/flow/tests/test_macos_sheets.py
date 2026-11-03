@@ -166,3 +166,25 @@ def test_a_client_without_sheet_support_never_accepts_one() -> None:
     client._frontmost_window_id = SHEET_ID
     assert target._attached_sheet(TARGET_WINDOW) is None
     assert not target._window_focus_matches(TARGET_WINDOW)
+
+
+def test_click_target_probes_once_and_reads_the_hit_last() -> None:
+    order: list[str] = []
+
+    class Ordered(SheetClient):
+        def attached_sheet(self, window):
+            order.append("sheet")
+            return None  # a same-app window is frontmost but not a sheet
+
+        def window_at_point(self, x, y):
+            order.append("hit")
+            return TARGET_WINDOW.window_id
+
+    client = Ordered(sheet=False)
+    target = backend(client)
+    target.screenshot()
+    target._frame_window = TARGET_WINDOW
+    client._frontmost_window_id = SHEET_ID  # would make a waiting probe loop
+    order.clear()
+    target._assert_click_target(*OUTSIDE_SHEET)
+    assert order == ["sheet", "hit"]

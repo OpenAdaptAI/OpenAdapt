@@ -751,12 +751,12 @@ class RemoteDisplayBackend:
         assert self._viewport is not None
         return self._viewport
 
-    @timed_span("screenshot")
     def _capture_window(self, win: WindowInfo) -> tuple[bytes, int, int]:
         """The target window's pixels; a subclass may add windows it owns."""
 
         return self._client.capture(win.window_id)
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return the client window's current pixels as PNG bytes.
 
@@ -2545,13 +2545,17 @@ class MacWindowClient:
                 and ax[1] + ax[3] <= wy + wh + 0.5
             ):
                 return None
-            found = []
-            for info in (
+            # The sheet sits directly above its window: only the window
+            # immediately above it in the window server's order may match.
+            above = list(
                 Quartz.CGWindowListCopyWindowInfo(
-                    Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID
+                    Quartz.kCGWindowListOptionOnScreenAboveWindow,
+                    int(window.window_id),
                 )
                 or []
-            ):
+            )
+            found = []
+            for info in above[-1:]:
                 number = int(info.get("kCGWindowNumber", 0) or 0)
                 if (
                     int(info.get("kCGWindowOwnerPID", -1)) != int(window.pid)
@@ -2590,10 +2594,11 @@ class MacWindowClient:
         return None
 
     def exact_window_or_sheet_focused(self, window: WindowInfo) -> bool:
-        """``exact_window_focused_main``, or its attached sheet focused instead.
+        """``exact_window_focused_main``, or its one attached sheet focused instead.
 
-        True when the AX focused window is an ``AXSheet`` whose parent is the
-        one exact AX window, and that window is still main.
+        True when the AX focused window is the one ``AXSheet`` child of the one
+        exact AX window (the sheet ``attached_sheet`` matched), and that window
+        is still main. Every AX read must succeed.
         """
         if self.exact_window_focused_main(window):
             return True
@@ -2601,9 +2606,9 @@ class MacWindowClient:
             from ApplicationServices import (
                 AXUIElementCopyAttributeValue,
                 AXUIElementCreateApplication,
+                kAXChildrenAttribute,
                 kAXFocusedWindowAttribute,
                 kAXMainAttribute,
-                kAXParentAttribute,
                 kAXRoleAttribute,
                 kAXTitleAttribute,
                 kAXWindowsAttribute,
@@ -2611,23 +2616,16 @@ class MacWindowClient:
             from CoreFoundation import CFEqual
 
             app = AXUIElementCreateApplication(int(window.pid))
-            _e, focused = AXUIElementCopyAttributeValue(
+            error, focused = AXUIElementCopyAttributeValue(
                 app, kAXFocusedWindowAttribute, None
             )
-            if (
-                focused is None
-                or str(
-                    AXUIElementCopyAttributeValue(focused, kAXRoleAttribute, None)[1]
-                )
-                != "AXSheet"
-            ):
+            if error != 0 or focused is None:
                 return False
-            _e, parent = AXUIElementCopyAttributeValue(
-                focused, kAXParentAttribute, None
-            )
-            _e, ax_windows = AXUIElementCopyAttributeValue(
+            error, ax_windows = AXUIElementCopyAttributeValue(
                 app, kAXWindowsAttribute, None
             )
+            if error != 0:
+                return False
             targets = [
                 w
                 for w in ax_windows or []
@@ -2635,12 +2633,25 @@ class MacWindowClient:
                     window, AXUIElementCopyAttributeValue(w, kAXTitleAttribute, None)[1]
                 )
             ]
-            if parent is None or len(targets) != 1 or not CFEqual(parent, targets[0]):
+            if len(targets) != 1:
                 return False
-            _e, is_main = AXUIElementCopyAttributeValue(
+            error, children = AXUIElementCopyAttributeValue(
+                targets[0], kAXChildrenAttribute, None
+            )
+            if error != 0:
+                return False
+            sheets = [
+                c
+                for c in children or []
+                if str(AXUIElementCopyAttributeValue(c, kAXRoleAttribute, None)[1])
+                == "AXSheet"
+            ]
+            if len(sheets) != 1 or not CFEqual(sheets[0], focused):
+                return False
+            error, is_main = AXUIElementCopyAttributeValue(
                 targets[0], kAXMainAttribute, None
             )
-            return bool(is_main)
+            return error == 0 and bool(is_main)
         except Exception:  # noqa: BLE001 - missing proof must fail closed
             return False
 
