@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.4.1"
+version = "2.5.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -124,6 +124,9 @@ dev = [
     "jsonschema>=4.21",
     # Countersigned Seals tests (RFC 3161 tokens); see the `countersign` extra.
     "asn1crypto>=1.5",
+    # Write receipt tests (COSE); see the `receipts` extra.
+    "cwt>=3.3,<4",
+    "cbor2>=5.6,<6",
     # Browser tests remain part of the full development matrix even though the
     # published base runtime no longer installs Playwright for non-web users.
     "playwright>=1.44",
@@ -160,6 +163,13 @@ console = [
 # Seal verifier is openadapt_types.seal (openadapt-types, a base dependency).
 countersign = [
     "asn1crypto>=1.5",
+]
+# Signed write receipts (openadapt_flow.write_receipt, `openadapt-flow
+# receipt`): COSE_Sign1 checked through python-cwt (MIT), with cbor2 (MIT);
+# cwt also pulls pyhpke (MIT). See docs/WRITE_RECEIPTS.md.
+receipts = [
+    "cwt>=3.3,<4",
+    "cbor2>=5.6,<6",
 ]
 # Customer-held offline Seal keys (openadapt_flow.seal_keys). `keychain`
 # stores the key in the OS keychain through keyring (MIT): macOS Keychain,

@@ -114,6 +114,7 @@ def statement(seal_sha256: str, nonce: str) -> bytes:
 _RECORD_FIELDS = (
     ("seal_sha256",),
     ("run_authorization_sha256", "signature_sha256"),
+    ("write_receipt_sha256",),
 )
 
 

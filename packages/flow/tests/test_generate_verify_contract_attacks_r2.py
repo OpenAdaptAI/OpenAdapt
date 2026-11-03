@@ -356,7 +356,14 @@ def test_a_mapping_without_accept_takes_no_proposed_column(gv: dict[str, Any]) -
         app = gv["app"]
         iid = _fresh(app, "No accept")
         v = {"project": "Help Desk", "subject": "No accept", "status": "Resolved"}
-        out = _run(gv, "set_status", v, lambda: app.save(iid, {"status": "Resolved"}))
+        try:
+            out = _run(
+                gv, "set_status", v, lambda: app.save(iid, {"status": "Resolved"})
+            )
+        except gen.GenerateError as exc:
+            # No contract (an open column the answer doesn't name): stopped
+            # at begin, which is also not a pass.
+            out = f"NO CONTRACT {exc}"
         assert not out.startswith("CONFIRMED"), out
     finally:
         assert _propose(gv["work"], gv["argv"], gv["answers"]) == 0
