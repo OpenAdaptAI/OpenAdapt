@@ -728,3 +728,20 @@ def test_push_in_strict_mode_seals_the_review_copy_of_a_plain_recording(
         assert b"<PERSON>" in zf.read("events.jsonl")
     (rec / "events.jsonl").unlink()
     _no_plaintext_under(tmp_path)
+
+
+def test_a_plaintext_copy_of_a_sealed_bundle_never_loads_as_encrypted(
+    sealed: Path, tmp_path: Path
+) -> None:
+    """A decrypted copy (an upload, an export) keeps encrypted: true in its
+    JSON, but the flag holds only with an encrypted envelope on disk."""
+    opened = sealed_set.open_set(sealed, KEY)
+    copy = tmp_path / "plain-copy"
+    for rel in opened.files(""):
+        target = copy / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(opened.read_bytes(rel))
+    assert json.loads((copy / "workflow.json").read_text())["encrypted"] is True
+    loaded = Workflow.load(copy)
+    assert loaded.encrypted is False
+    assert loaded.manifest is not None and loaded.manifest.encrypted is False

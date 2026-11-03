@@ -3603,6 +3603,13 @@ class Workflow(BaseModel):
             report = _bv.validate_workflow(wf)
             report.raise_if(categories=("structure",))
 
+        if not bundle_encrypted and wf.encrypted:
+            # The flag is authoritative only with an encrypted envelope on
+            # disk: a plaintext copy (for example a decrypted upload) that
+            # still says encrypted is plaintext, and loads as plaintext.
+            wf.encrypted = False
+            if wf.manifest is not None:
+                wf.manifest = wf.manifest.model_copy(update={"encrypted": False})
         return wf
 
     def stamp_certification(
