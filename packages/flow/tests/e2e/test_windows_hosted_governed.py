@@ -300,6 +300,13 @@ def _config(work: Path, host: _Host, agent_url: str, token: str, pin: str, root:
     return path
 
 
+def _focus_app(backend, points) -> None:
+    """Give the app the foreground, as the person who opened it would."""
+
+    backend.click(*points["searchBox"])
+    time.sleep(0.5)
+
+
 def _report(run_dir: Path):
     from openadapt_flow.ir import RunReport
 
@@ -354,7 +361,10 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     meta["identifier_region"] = [hx - 190, hy - 11, 380, 22]
     meta_path.write_text(json.dumps(meta), encoding="utf-8")
     host.launch_app()
-    _points(backend)
+    _focus_app(backend, _points(backend))
+    evidence["environment_at_qualification"] = list(
+        backend.qualification_environment_identity() or ()
+    )
     bundle = _build_bundle(backend, recording, tmp_path, backend.server_url)
     lint = _flow(
         "certify",
@@ -411,11 +421,17 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
 
     # 1. A person answers while the run waits; the save lands and verifies.
     host.launch_app()
-    _points(backend)
+    _focus_app(backend, _points(backend))
+    evidence["environment_before_run"] = list(
+        backend.qualification_environment_identity() or ()
+    )
     run_dir, argv = run_case("practice-1", 300)
     with _Person(run_dir, env, approver_key) as person:
         done = _flow(*argv, env=env)
     rows = {r["id"]: r for r in host.rows()}
+    evidence["environment_after_run"] = list(
+        backend.qualification_environment_identity() or ()
+    )
     evidence["approved"] = {
         "exit": done.returncode,
         "tail": (done.stdout + done.stderr)[-3000:],
@@ -434,7 +450,7 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     # 2. Nobody answers in time: the run is held before the save and writes
     # nothing. The person approves later and `resume` finishes it.
     host.launch_app()
-    _points(backend)
+    _focus_app(backend, _points(backend))
     run_dir, argv = run_case("practice-2", 5)
     held = _flow(*argv, env=env)
     rows = {r["id"]: r for r in host.rows()}
