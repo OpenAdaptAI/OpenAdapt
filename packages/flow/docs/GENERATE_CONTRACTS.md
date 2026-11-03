@@ -147,7 +147,28 @@ keeps, in this order:
    the table defines first when they hold the same value in every row;
 3. the place another kind's demonstrations used for the same table.
 
-If places are still tied, that is a question. A value that is also in a row
+If places are still tied, that is a question.
+
+Equal ids are not a join. Demonstrations made on a fresh install often give
+a new row the same id as an unrelated row, so:
+
+- A row's own whole single-column key holding a generated number is never
+  a key to another table, and a new row's such key never links it to its
+  record, unless a declared foreign key says so. A member of a composite key
+  (an order line's `order_id` in `(order_id, line_no)`) and a copied token
+  (an extension table keyed by its parent's UUID) still link.
+- A value is never placed in the column a path arrived by (a child row's
+  link column holds the record's key by construction).
+- A list item's link is the column that holds the record's key in every
+  item row of every demonstration. When two always agree and no declared
+  foreign key picks one, the list is refused until a demonstration tells
+  them apart.
+- When the best place goes through a key only equal values support (no
+  declared foreign key, no column named after its table) and a place whose
+  keys are all supported fits every demonstration too, that is a question
+  (`locations.<kind>`), never a silent pick.
+
+A value that is also in a row
 the write added beside the record (a call's lead is its parent and an
 attendee row) is checked in both places.
 
@@ -193,7 +214,16 @@ too. A list parameter gets a contract per length, from 1 to 10 items.
 user, to the value every demonstration held, or to a copy of a column of the
 row a key points to (an invoice line's price from its product). A key, a
 link to a row the write added, the year, month, week or day of a date the
-task gives, and a generated token (a UUID) are recognized as such. Columns
+task gives, and a generated token (a UUID) are recognized as such. A link
+and a column that holds the row's own key need two demonstrations; the own
+key must sit in the same text in every row (`INV-{key}`), never as a mere
+substring. Such a column is listed in the question, never checked or
+left open on its own. A date part must differ between the demonstrations: a constant
+that happens to equal the month of every demonstration's date is a
+constant. A copy is taken only through a declared key or a column named
+after its table, and only when the source differs between demonstrations:
+a column and its source that hold one value in every demonstration fit a
+constant and a copy alike, so the question lists the column. Columns
 that differ between demonstrations, free text every demonstration left
 empty, and the write's time stamps are listed in the bookkeeping question,
 and each is left unchecked only if the answer names it (`unchecked`). Free
@@ -204,6 +234,20 @@ the answer doesn't name gets no contract. The proposed answer names the
 columns that vary or are time stamps, so accepting it is explicit, and
 leaves free text out: a person adds a free-text column to `unchecked` only
 on purpose.
+
+A pin needs two rows that agree. A value seen beside one write only (a field
+set one demonstration alone gives, a row only one demonstration added) is
+pinned only when every row of that table the kind's demonstrations wrote
+holds it. Otherwise the bookkeeping question lists it as one the
+demonstrations can't tell, it is left out of the proposed answer, and the
+kind has no contract until a person names it under `unchecked` or records a
+demonstration where it differs. A field set whose own demonstrations leave
+such a column open, while the kind's full set pins it, gets no contract
+(`rejected` in `report.json`). A column that holds the acting user's id in
+every row is the actor, unless it is also a copy of a column of a row it
+points to, or a link: then the demonstrations can't tell, and the question
+lists it. Pins and widening count demonstrations, not rows. A row the app adds beside an update may hold the target's key: that is a
+link to the record, never a pinned id.
 
 **Rows the app adds on its own.** A row type the app added the same number of
 times in every demonstration (an agenda event, a stream note, a price-history

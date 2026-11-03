@@ -175,6 +175,6 @@ and `--log-url`, the transparency log) are not app URLs.
 | JIT canary on RDP or Citrix needs qualified pixel identity | `jit/` | follow-up ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283) refuses it with the gate's reason) |
 | `route` on a desktop surface: no test | [#1264](https://github.com/OpenAdaptAI/OpenAdapt/pull/1264) | [#1288](https://github.com/OpenAdaptAI/OpenAdapt/pull/1288) |
 | `induce --probe-on` on a desktop test copy: no test | [#1276](https://github.com/OpenAdaptAI/OpenAdapt/pull/1276) | [#1289](https://github.com/OpenAdaptAI/OpenAdapt/pull/1289) |
-| `run --self-repair` refuses non-web: "only browser runs can be repaired for now" | [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) | refused with a reason; desktop support after it merges |
+| `run --self-repair` outside a browser needs `repair.session` (how to start the app for each probe); without it, it refuses with that reason | `cli_self_repair.py` | supported with `repair.session`; `--hold-on-halt` is still browser-only |
 | `compile-agent` takes `--backend`/`--config` but refuses every non-web target (exit 2, before anything runs); its Claude agent reads the DOM listing | [#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277) | refused with a reason; the same pipeline runs on every surface through `serve --teach` (`FirstRunCompiler(surface=...)` with the surface harness) |
 | The GTK3 AT-SPI qualification job is in `packages/flow/.github/`, which GitHub does not run in the monorepo | `.github/workflows/` | follow-up |

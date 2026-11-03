@@ -1068,6 +1068,41 @@ class RollbackSection(BaseModel):
 UNRESOLVED = "UNRESOLVED"
 
 
+class RepairSessionSpec(BaseModel):
+    """How self-repair opens a fresh app session outside a browser.
+
+    A probe, each fault probe and the resumed run each need the app freshly
+    started; the halted session stays as it is. Each command is an argv run
+    on the machine Flow runs on, with no shell. It must keep running while the
+    app is up and own (it, or a process of its group) the one window
+    ``backend:`` binds to; Flow checks that, and ends the group afterwards. A
+    backend whose window is not on this machine (Windows over its agent,
+    FreeRDP) can't show that, so repair there is refused for now.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Starts the app for a probe or the resumed run.
+    command: list[str] = Field(min_length=1)
+    #: Name -> argv that starts the app showing a fault the repaired run must
+    #: stop before the save (another patient's chart, a missing record).
+    fault_commands: dict[str, list[str]] = Field(default_factory=dict)
+    #: Runs after Flow ends the app's process group, to clean up what the app
+    #: left (a lock file, a server-side session). A non-zero exit is refused.
+    close_command: list[str] = Field(default_factory=list)
+    #: Seconds to wait for the window before binding the backend.
+    ready_s: float = Field(default=2.0, ge=0.0, le=120.0)
+
+    @model_validator(mode="after")
+    def _argvs(self) -> "RepairSessionSpec":
+        for name, argv in self.fault_commands.items():
+            if not name or not argv:
+                raise ValueError(
+                    "each repair.session fault command needs a name and an argv"
+                )
+        return self
+
+
 class RepairSection(BaseModel):
     """Automatic repair of stops that wrote nothing (docs/SELF_REPAIR.md).
 
@@ -1100,6 +1135,9 @@ class RepairSection(BaseModel):
     #: bundle accepts it (openadapt_flow/repair/readmission.py).
     requalify: Optional[str] = None
     requalify_trials: int = Field(default=1, ge=1, le=10)
+    #: Outside a browser: how each probe, fault probe and the resumed run open
+    #: a fresh app session. Required to repair a desktop, RDP or Citrix run.
+    session: Optional[RepairSessionSpec] = None
 
 
 class ApproversSection(BaseModel):
