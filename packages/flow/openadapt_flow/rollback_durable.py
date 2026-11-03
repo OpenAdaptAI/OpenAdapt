@@ -3,22 +3,22 @@
 A rollback compares the store with the read taken before the run. In one
 process that read lives in memory. A durable run can pause and be resumed or
 rolled back later, and a crash can stop a rollback half way, so the read must
-outlive the process:
+outlive the process. Under ``<run-dir>/rollback/``:
 
 - ``armed.json.enc``: the read from before the run, the MAC key its row
-  digests use, the audit log as it was before the run, and the run's
-  parameters. Written when the rollback is armed.
+  digests use, the audit log as it was before the run, the run's parameters,
+  and what binds them to this run: an arm id, the run id (once the run has
+  one), the bundle version and the deployment's rollback settings.
 - ``stop.json.enc``: the read the first rollback attempt took after the stop.
   A later attempt judges the run's changes by it, not by a store an earlier
   attempt may have partly undone.
-- ``journal.json``: which compensations an attempt started and finished (step
-  ids only). A later attempt reads the store again before it treats any of
-  them as done.
+- ``journal.json.enc``: which compensations an attempt started and finished,
+  and whether a rollback already ended.
 
-The two reads hold row digests and the values of changed rows, so they are
-only ever written encrypted (AES-256-GCM, ``openadapt_flow.crypto``) with the
-deployment's key; without a key nothing is written and a durable run with
-rollback is refused before it starts.
+Every file is encrypted (AES-256-GCM, ``openadapt_flow.crypto``) with the
+deployment's key and carries the arm id: a file from another run, or one
+missing beside the others, is refused. Without a key nothing is written and a
+durable run with rollback is refused before it starts.
 """
 
 from __future__ import annotations
@@ -26,18 +26,33 @@ from __future__ import annotations
 import base64
 import json
 import os
+import secrets
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from openadapt_flow.runtime.effects.db_snapshot import Snapshot
 
 ROLLBACK_DIRNAME = "rollback"
 ARMED_FILENAME = "armed.json.enc"
 STOP_FILENAME = "stop.json.enc"
-JOURNAL_FILENAME = "journal.json"
-SCHEMA = "openadapt.rollback-armed/v1"
+JOURNAL_FILENAME = "journal.json.enc"
+LOCK_FILENAME = ".lock"
+SCHEMA = "openadapt.rollback-armed/v2"
 #: Domain separation for the sealed rollback files (``crypto.encrypt_bytes``).
 ROLLBACK_AAD = b"openadapt-flow/rollback"
+
+
+def _lock_exclusive(fd: int) -> None:
+    """A non-blocking exclusive lock on ``fd``; OSError when it is held."""
+    try:
+        import fcntl
+    except ImportError:  # Windows
+        import msvcrt
+
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        return
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 class SealedStateError(RuntimeError):
@@ -73,11 +88,18 @@ class SealedRollback:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(staging, path)
+        directory = os.open(self.dir, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
     def _seal(self, name: str, data: dict[str, Any]) -> None:
         from openadapt_flow import crypto
 
-        plain = json.dumps(data, sort_keys=True, default=str).encode("utf-8")
+        plain = json.dumps(
+            {"schema": SCHEMA, **data}, sort_keys=True, default=str
+        ).encode("utf-8")
         self._write(name, crypto.encrypt_bytes(plain, self.key, aad=ROLLBACK_AAD))
 
     def _open(self, name: str) -> Optional[dict[str, Any]]:
@@ -99,6 +121,19 @@ class SealedRollback:
             raise SealedStateError(f"{name} isn't sealed rollback state")
         return data
 
+    def _arm_id(self) -> str:
+        armed = self._open(ARMED_FILENAME)
+        if armed is None or not armed.get("arm_id"):
+            raise SealedStateError("the run's rollback isn't armed")
+        return str(armed["arm_id"])
+
+    def _own(self, name: str) -> Optional[dict[str, Any]]:
+        """``name``, only when it belongs to this arming."""
+        data = self._open(name)
+        if data is not None and data.get("arm_id") != self._arm_id():
+            raise SealedStateError(f"{name} belongs to another run")
+        return data
+
     # -- the read from before the run ---------------------------------------
 
     def save_armed(
@@ -108,21 +143,43 @@ class SealedRollback:
         reader_key: bytes,
         audit_before: Optional[list[dict[str, Any]]],
         params: dict[str, Any],
+        settings: dict[str, Any],
+        bundle_version: Optional[str] = None,
     ) -> None:
+        """Arm afresh: whatever an earlier arming in this directory left goes."""
+        arm_id = secrets.token_hex(16)
+        for name in (STOP_FILENAME, JOURNAL_FILENAME):
+            (self.dir / name).unlink(missing_ok=True)
         self._seal(
             ARMED_FILENAME,
             {
-                "schema": SCHEMA,
+                "arm_id": arm_id,
+                "run_id": None,
+                "bundle_version": bundle_version,
+                "settings": settings,
                 "before": before.to_json(),
                 "reader_key": base64.b64encode(reader_key).decode("ascii"),
                 "audit_before": audit_before,
                 "params": params,
             },
         )
+        self._seal(JOURNAL_FILENAME, {"arm_id": arm_id, "steps": {}, "done": None})
+
+    def bind_run(self, run_id: str) -> None:
+        """Bind the armed state to the run id its durable manifest names."""
+        armed = self._open(ARMED_FILENAME)
+        if armed is None:
+            raise SealedStateError("the run's rollback isn't armed")
+        if armed.get("run_id") not in (None, run_id):
+            raise SealedStateError("the armed state belongs to another run")
+        armed["run_id"] = run_id
+        armed.pop("schema", None)
+        self._seal(ARMED_FILENAME, armed)
 
     def load_armed(self) -> Optional[dict[str, Any]]:
         """The armed state: ``before`` (a Snapshot), ``reader_key`` (bytes),
-        ``audit_before`` and ``params``; None when the run wasn't armed."""
+        ``audit_before``, ``params``, ``run_id``, ``bundle_version`` and
+        ``settings``; None when the run wasn't armed or its rollback ended."""
         data = self._open(ARMED_FILENAME)
         if data is None:
             return None
@@ -132,6 +189,9 @@ class SealedRollback:
                 "reader_key": base64.b64decode(data["reader_key"]),
                 "audit_before": data.get("audit_before"),
                 "params": dict(data.get("params") or {}),
+                "run_id": data.get("run_id"),
+                "bundle_version": data.get("bundle_version"),
+                "settings": data["settings"],
             }
         except (KeyError, TypeError, ValueError) as exc:
             raise SealedStateError("armed.json.enc is incomplete") from exc
@@ -139,13 +199,15 @@ class SealedRollback:
     # -- the stop, as the first attempt read it ------------------------------
 
     def stop_read(self, snapshot: Snapshot) -> None:
-        """Keep the first attempt's read after the stop (never replaced)."""
-        if (self.dir / STOP_FILENAME).exists():
+        """Keep this arming's first read after the stop (never replaced)."""
+        if self._own(STOP_FILENAME) is not None:
             return
-        self._seal(STOP_FILENAME, {"schema": SCHEMA, "after_stop": snapshot.to_json()})
+        self._seal(
+            STOP_FILENAME, {"arm_id": self._arm_id(), "after_stop": snapshot.to_json()}
+        )
 
     def load_stop(self) -> Optional[Snapshot]:
-        data = self._open(STOP_FILENAME)
+        data = self._own(STOP_FILENAME)
         if data is None:
             return None
         try:
@@ -155,41 +217,74 @@ class SealedRollback:
 
     # -- which compensations an attempt started ------------------------------
 
-    def _journal(self) -> dict[str, str]:
-        path = self.dir / JOURNAL_FILENAME
-        if path.is_symlink():
-            raise SealedStateError(f"{path} is a symlink")
-        if not path.is_file():
-            return {}
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except ValueError as exc:
-            raise SealedStateError("journal.json couldn't be read") from exc
-        steps = data.get("steps") if isinstance(data, dict) else None
-        if not isinstance(steps, dict):
-            raise SealedStateError("journal.json isn't a rollback journal")
-        return {str(k): str(v) for k, v in steps.items()}
+    def _journal(self) -> dict[str, Any]:
+        data = self._own(JOURNAL_FILENAME)
+        if data is None:
+            # Written with the armed state: missing means removed.
+            raise SealedStateError("journal.json.enc is missing")
+        if not isinstance(data.get("steps"), dict):
+            raise SealedStateError("journal.json.enc isn't a rollback journal")
+        return data
 
     def step(self, step_id: str, state: str) -> None:
         """Record that a compensation for ``step_id`` ``started`` or was
         ``compensated``; written before the next action, so a crash after it
         leaves the journal saying so."""
-        steps = self._journal()
-        steps[step_id] = state
-        self._write(
-            JOURNAL_FILENAME,
-            json.dumps({"steps": steps}, sort_keys=True).encode("utf-8"),
-        )
+        journal = self._journal()
+        journal["steps"][step_id] = state
+        journal.pop("schema", None)
+        self._seal(JOURNAL_FILENAME, journal)
+
+    def compensated_steps(self) -> frozenset[str]:
+        """Steps whose compensation an earlier attempt finished: never run again."""
+        steps = self._journal()["steps"]
+        return frozenset(k for k, v in steps.items() if v == "compensated")
 
     def started_steps(self) -> frozenset[str]:
-        """Every step an earlier attempt started compensating (finished or
-        not): a later attempt reads the store before it skips or repeats it."""
-        return frozenset(self._journal())
+        """Steps whose compensation an earlier attempt started but didn't
+        finish: done only when a fresh read shows the change gone."""
+        steps = self._journal()["steps"]
+        return frozenset(k for k, v in steps.items() if v != "compensated")
+
+    def finished(self) -> Optional[str]:
+        """The verdict of a rollback that already ended, if any."""
+        path = self.dir / JOURNAL_FILENAME
+        if not path.is_file():
+            return None
+        data = self._open(JOURNAL_FILENAME)
+        return None if data is None else data.get("done")
+
+    def mark_finished(self, status: str) -> None:
+        """The rollback ended: no attempt runs again, and the reads go."""
+        journal = self._journal()
+        journal["done"] = status
+        journal.pop("schema", None)
+        self._seal(JOURNAL_FILENAME, journal)
+        for name in (ARMED_FILENAME, STOP_FILENAME):
+            (self.dir / name).unlink(missing_ok=True)
 
     def clear(self) -> None:
         """A run that finished needs none of it."""
         for name in (ARMED_FILENAME, STOP_FILENAME, JOURNAL_FILENAME):
             (self.dir / name).unlink(missing_ok=True)
+
+    @contextmanager
+    def lock(self) -> Iterator[None]:
+        """One rollback of this run at a time; a second is refused."""
+        from openadapt_flow.rollback import _private_dir
+
+        _private_dir(self.dir)
+        fd = os.open(self.dir / LOCK_FILENAME, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            try:
+                _lock_exclusive(fd)
+            except OSError as exc:
+                raise SealedStateError(
+                    "another rollback of this run is running"
+                ) from exc
+            yield
+        finally:
+            os.close(fd)
 
 
 __all__ = ["SealedRollback", "SealedStateError"]

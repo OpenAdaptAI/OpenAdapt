@@ -154,27 +154,37 @@ Rolled back: the system of record matches the read from before the run.
 A durable run (the Standard and Regulated profiles) can pause and continue
 later, so its rollback state outlives the process. When the rollback is
 armed, Flow seals the read from before the run, the key its row digests use,
-the audit log as it was, and the run's parameters into
-`<run-dir>/rollback/armed.json.enc` (AES-256-GCM with the deployment's key,
-`OPENADAPT_BUNDLE_KEY`; owner-only). A durable run with rollback on needs
-that key.
+the audit log as it was, the run's parameters, the bundle version and the
+deployment's rollback settings into `<run-dir>/rollback/` (AES-256-GCM with
+the deployment's key, `OPENADAPT_BUNDLE_KEY`; owner-only). A durable run with
+rollback on needs that key. Every sealed file carries the arming's id: a file
+from another run, or a journal that went missing, is refused.
 
-- **A pause waits for a person.** The run stays resumable. To undo it
-  instead, run `openadapt-flow resume <run-dir> --roll-back` with the same
-  deployment flags. The rollback runs as after any stop, from the sealed
-  read. Afterwards the run is never resumed.
+- **A pause waits for a person.** The run stays resumable, and its sealed
+  state is bound to the run id. To undo it instead, run
+  `openadapt-flow resume <run-dir> --roll-back` with the same deployment
+  flags. It is refused when the bundle changed since the run, when the
+  deployment's rollback settings (attribution, `exclusive`, `allow_delete`,
+  the read's scope and profile) changed, when the run carries a managed
+  dispatch or a qualification authority, or when another rollback of the run
+  is running. The rollback runs as after any stop, from the sealed read.
+  Afterwards the run is never resumed.
 - **A stop that ends the run** (a person declined the save) rolls back at
-  once, as a run that isn't durable does.
+  once. A resumed run that stops again prints the same `--roll-back`
+  command. A pause whose approval a person rejects later is undone the same
+  way: run `--roll-back`.
 - **A crash during a rollback.** The first attempt seals its read after the
-  stop (`stop.json.enc`) and notes each compensation it starts
-  (`journal.json`, step ids only). The same `resume <run-dir> --roll-back`
-  continues it. The run's changes are judged by the first attempt's read
-  after the stop. If any row changed since then that the run didn't write,
-  or that isn't positively its own, nothing more runs and the run ends
-  `RECONCILIATION_REQUIRED`. Each compensation the first attempt started is
-  treated like an uncertain write: it runs again only when a fresh read shows
-  the run's change still there, and is skipped when the read shows it gone.
-- A run that finishes deletes its sealed state.
+  stop and journals each compensation as it starts and finishes. The same
+  `resume <run-dir> --roll-back` continues it. The run's changes are judged
+  by the first attempt's read after the stop. If any row changed since then
+  that the run didn't write, or that isn't positively its own, nothing more
+  runs and the run ends `RECONCILIATION_REQUIRED`. No compensation runs
+  twice: a finished one is left to the final read; one that started but
+  didn't finish is skipped when a fresh read shows the run's change gone,
+  and otherwise the rollback goes to a person.
+- **Once a rollback ends** (any verdict), its reads are deleted and the
+  journal keeps the verdict; `--roll-back` refuses to run it again. A run
+  that finishes deletes its sealed state.
 
 ## Other users
 

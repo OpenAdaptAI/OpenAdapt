@@ -469,6 +469,7 @@ def roll_back(
     journal: Any = None,
     after_stop: Optional[Snapshot] = None,
     restarted: frozenset[str] = frozenset(),
+    compensated: frozenset[str] = frozenset(),
 ) -> Optional[RollbackRecord]:
     """Undo what a stopped run left, then prove the run's changes are gone.
 
@@ -499,10 +500,12 @@ def roll_back(
     ``journal`` (``rollback_durable.SealedRollback``) keeps the read after
     the stop and which compensations started, so a rollback a crash
     interrupted can run again. That later attempt passes the first attempt's
-    stop read as ``after_stop`` and the steps it started as ``restarted``:
-    the run's changes are judged by that read, the store must since have
-    changed only in the run's own rows, and each restarted step is
-    compensated only when a fresh read shows its effect still there.
+    stop read as ``after_stop``, the steps whose compensation it finished as
+    ``compensated`` and those it only started as ``restarted``. The run's
+    changes are judged by that read, and the store must since have changed
+    only in the run's own rows. No compensation runs twice: a finished one is
+    left to the reads, and a started one is skipped when a fresh read shows
+    the change gone, otherwise the rollback stops.
     """
     if report.success and not assume_stopped:
         return None
@@ -788,11 +791,37 @@ def roll_back(
             stop_reason = f"step {entry.step_id}: {step_record.reason}"
             break
         step_record.undo_id = undo.id
-        if (
-            entry.attempt_state == "delivery_uncertain"
-            or entry.status != "confirmed"
-            or entry.step_id in restarted
-        ):
+        if entry.step_id in compensated:
+            # An earlier attempt finished it: never run twice. The reads judge.
+            step_record.decision = "compensated"
+            step_record.reason = "an earlier attempt compensated it"
+            continue
+        if entry.step_id in restarted:
+            # An earlier attempt started it and may have finished it: run
+            # nothing; only a fresh read showing the change gone settles it.
+            presence, why = fresh_presence(
+                entry,
+                undo,
+                workflow,
+                run_dir=run_dir,
+                params=params,
+                read_records=read_records,
+            )
+            step_record.fresh_read = presence  # type: ignore[assignment]
+            if presence == "absent":
+                step_record.decision = "not_needed"
+                step_record.reason = (
+                    "an earlier attempt started its compensation, and a fresh "
+                    f"read shows nothing left to undo: {why}"
+                )
+                continue
+            step_record.reason = (
+                "an earlier attempt started its compensation and may have "
+                f"finished it ({why}); not run twice"
+            )
+            stop_reason = f"step {entry.step_id}: {step_record.reason}"
+            break
+        if entry.attempt_state == "delivery_uncertain" or entry.status != "confirmed":
             presence, why = fresh_presence(
                 entry,
                 undo,
@@ -1367,7 +1396,30 @@ class RollbackPlan:
         except StateUnreadable:
             return None
 
-    def seal(self, sealed: Any, before: Snapshot, params: dict[str, Any]) -> None:
+    def settings(self) -> dict[str, Any]:
+        """What decides whose rows a rollback may touch: a later process must
+        roll back under the same settings the run was armed with."""
+        return {
+            "exclusive": bool(self.exclusive),
+            "allow_delete": bool(self.allow_delete),
+            "attribution": (
+                self.attribution.model_dump(mode="json")
+                if self.attribution is not None
+                else None
+            ),
+            "scope": getattr(self.reader, "scope", None),
+            "allow_tables": sorted(getattr(self.reader, "allow_tables", ()) or ()),
+            "profile_id": getattr(self.reader, "profile_id", None),
+        }
+
+    def seal(
+        self,
+        sealed: Any,
+        before: Snapshot,
+        params: dict[str, Any],
+        *,
+        bundle_version: Optional[str] = None,
+    ) -> None:
         """Keep the read from before the run, encrypted, for a rollback in a
         later process (``rollback_durable.SealedRollback``)."""
         sealed.save_armed(
@@ -1377,12 +1429,17 @@ class RollbackPlan:
                 self.attributor._before if self.attributor is not None else None
             ),
             params=dict(params),
+            settings=self.settings(),
+            bundle_version=bundle_version,
         )
 
     def restore(self, armed: dict[str, Any]) -> Optional[Snapshot]:
         """The read from before the run, from sealed state (``seal``), with the
         reader's row digests and the audit log as they were then; None when
-        attribution can't be rebuilt from it."""
+        attribution can't be rebuilt from it, or the deployment's rollback
+        settings changed since the run was armed."""
+        if armed.get("settings") != self.settings():
+            return None
         self.reader.key = armed["reader_key"]  # type: ignore[attr-defined]
         if self.attribution is not None:
             self.attributor = Attributor.from_spec(
@@ -1408,6 +1465,7 @@ class RollbackPlan:
         journal: Any = None,
         after_stop: Optional[Snapshot] = None,
         restarted: frozenset[str] = frozenset(),
+        compensated: frozenset[str] = frozenset(),
     ) -> RunReport:
         record = roll_back(
             report,
@@ -1424,7 +1482,13 @@ class RollbackPlan:
             journal=journal,
             after_stop=after_stop,
             restarted=restarted,
+            compensated=compensated,
         )
+        if journal is not None and record is not None:
+            try:
+                journal.mark_finished(record.status)
+            except Exception:  # noqa: BLE001 - the verdict stands; a rerun re-reads
+                pass
         return apply_rollback(report, workflow, record, run_dir)
 
 
