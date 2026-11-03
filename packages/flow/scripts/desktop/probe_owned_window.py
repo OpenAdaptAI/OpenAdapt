@@ -64,8 +64,12 @@ def main() -> int:
     backend.press("Enter")
     time.sleep(3)
     native._save_png(backend, args.out.parent / "owned-dialog.png")
-    # The dialog is centered on the form; ask over the form's center.
-    dialog_region = (search[0] - 60, 260, 300, 120)
+    # The dialog is centered on the maximized form: ask over the screen center
+    # (an earlier region only overlapped it, off its center, and was rightly
+    # answered None).
+    width, height = backend.viewport
+    dialog_region = (width // 2 - 40, height // 2 - 20, 80, 40)
+    result["dialog_region"] = list(dialog_region)
     result["owned_dialog"] = backend.owned_window_over(
         dialog_region, pinned_step_id="step_000"
     )

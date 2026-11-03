@@ -178,6 +178,27 @@ Start-ScheduledTask -TaskName '{task}'
                 time.sleep(1)
         return False
 
+    def attach_console(self) -> None:
+        """Put the lab account's desktop back on the console.
+
+        Closing an RDP connection leaves that account's session disconnected:
+        it is still signed in, but has no display, so screenshots and input
+        fail. ``tscon <id> /dest:console`` reattaches it; it needs SYSTEM, so
+        a one-shot scheduled task runs it.
+        """
+        script = f"""
+$line = (query session {self.user} 2>$null | Select-Object -Skip 1 | Select-Object -First 1)
+if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
+  $id = $Matches[1]
+  $action = New-ScheduledTaskAction -Execute 'tscon.exe' -Argument "$id /dest:console"
+  Register-ScheduledTask -TaskName OAFlowConsole -Action $action -User SYSTEM -RunLevel Highest -Force | Out-Null
+  Start-ScheduledTask -TaskName OAFlowConsole
+  Start-Sleep -Seconds 4
+  Unregister-ScheduledTask -TaskName OAFlowConsole -Confirm:$false
+}}
+"""
+        self.run_ps(script, check=False)
+
     def launch_agent(
         self,
         *,
@@ -205,6 +226,7 @@ Start-ScheduledTask -TaskName '{task}'
             generate_self_signed_cert,
         )
 
+        self.attach_console()
         self.stop_interactive("OAFlowAgent")
         # A previous agent stuck inside a UI Automation call keeps its port.
         self.run_ps(
