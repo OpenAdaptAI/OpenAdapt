@@ -12,13 +12,18 @@
     the openadapt-engine sidecar) and then the MSI itself;
   * the NSIS setup executable is signed. SignPath cannot open an NSIS archive,
     so the program files it installs and its uninstaller stay unsigned.
+
+  Inside the MSI the program files sit under its install directory
+  (PFiles/OpenAdapt Desktop/), not at its root, and a bare "*" does not cross
+  a directory separator, so the includes use "**/". With "*.exe" the set
+  matched nothing and SignPath failed the request.
 -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
   <zip-file>
     <msi-file path="*.msi">
       <pe-file-set>
-        <include path="*.exe" max-matches="unbounded" />
-        <include path="*.dll" min-matches="0" max-matches="unbounded" />
+        <include path="**/*.exe" max-matches="unbounded" />
+        <include path="**/*.dll" min-matches="0" max-matches="unbounded" />
         <for-each>
           <authenticode-sign />
         </for-each>
