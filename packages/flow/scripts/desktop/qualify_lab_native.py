@@ -276,9 +276,18 @@ def run_trial(trial: int, out: Path, row: dict[str, Any]) -> dict[str, Any]:
     _save_png(backend, out / "screens" / "04-foreign-window.png")
     # The search box must no longer be what is under its own point. Notepad's
     # text area has no name or AutomationId, so it has no identity (None).
+    deadline = time.monotonic() + 20
     cover = backend.element_identity_at(*search_point)
+    while (
+        cover is not None
+        and cover.get("automation_id") == "searchBox"
+        and time.monotonic() < deadline
+    ):
+        time.sleep(1)  # Notepad's window lets hits through while it loads
+        cover = backend.element_identity_at(*search_point)
     if cover is not None and cover.get("automation_id") == "searchBox":
         raise AssertionError("foreign-window setup did not cover the app")
+    _save_png(backend, out / "screens" / "04-foreign-window.png")
     steps["foreign_window_cover"] = (cover or {}).get("process")
     report = Replayer(backend, use_structural=True).run(
         Workflow.load(bundle),
