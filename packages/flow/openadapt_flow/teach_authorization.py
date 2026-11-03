@@ -18,24 +18,29 @@ JSON statement that names
 * the **forbidden** actions (a closed list) and controls (by label);
 * what it covers (``teach``, ``repair`` or both) and when it expires.
 
-The person signs the file with the SSH key they publish on GitHub, as for a
-run authorization (:mod:`openadapt_flow.run_authorization`)::
+**Who signs.** A person on the signed approver roster
+(:mod:`openadapt_flow.approval_mode.approver_roster`), with the same
+approver key that answers saves. The signature is a
+:class:`~openadapt_flow.approval_mode.human_attestation.HumanAttestation`
+over :data:`DOMAIN` and the canonical statement, kept beside it in
+``teach-authorization.json.sig``. Verification is the approver verifier's
+own (:func:`~openadapt_flow.approval_mode.human_attestation.refusal`): the
+signer must be on the roster the caller's pinned approver root vouches for,
+and the roster must extend every head recorded earlier. So a key that was
+never added, or was removed since (revoked), refuses, and so does a key
+that holds another role or a principal that names an agent or model.
 
-    ssh-keygen -Y sign -n openadapt-teach-authorization -f ~/.ssh/id_ed25519 \\
-        teach-authorization.json
+Keys: Desktop's approver key (``desktop_key``; on a Mac it sits behind
+Touch ID and signs over ``--approver-signer stdio``) or a person's encrypted
+software key file (``person_key``; ``openadapt-flow jit keygen``, then an
+approver adds it with ``openadapt-flow jit approver add``). The decision
+portal's key (``portal_key``) signs only phone answers, never this.
 
-Every authoring path (JIT capture, ``compile-agent`` and its code-as-action
-author, teach over MCP, the guarded save and the airbag guard, self-repair)
-builds its scope with :func:`bind` from a verified authorization, never from
-the agent's own description. Verification for enforcement
-(:func:`require`) needs the signer's identity checked against allowed
-signers the operator pins (``OPENADAPT_TEACH_AUTHORIZERS`` or a flag) or
-against github.com live; the key snapshot stored beside the statement is
-written by whoever writes the files, so it never counts. A draft records the
-authorization's digest (:func:`record`), and admission re-verifies it
+Every authoring path builds its scope with :func:`bind` from a verified
+authorization, never from the agent's own description. A draft records the
+authorization's digest (:func:`record`) and keeps a copy of the statement;
+admission verifies that copy again against the roster as it is then
 (:func:`check_admission`).
-
-Ed25519 SSH keys only.
 """
 
 from __future__ import annotations
@@ -49,7 +54,7 @@ import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Final, Literal, Mapping, Optional, Sequence
+from typing import Any, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -61,25 +66,25 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow import ssh_sig
-
 SCHEMA: Final = "openadapt.teach-authorization/v1"
-NAMESPACE: Final = "openadapt-teach-authorization"
+#: What an approver key signs for a teach authorization: this domain, then
+#: the canonical statement (the approver verifier's message format).
+DOMAIN: Final = b"openadapt.teach-authorization/v1\x00"
 STATEMENT_FILE: Final = "teach-authorization.json"
 SIGNATURE_FILE: Final = STATEMENT_FILE + ".sig"
-SIGNERS_FILE: Final = "teach-authorization.allowed_signers"
-#: Where an operator pins who may authorize teaching (an allowed-signers file).
-AUTHORIZERS_ENV: Final = "OPENADAPT_TEACH_AUTHORIZERS"
 #: The draft and bundle key that records the authorization.
 RECORD_KEY: Final = "teach_authorization"
+#: Where a draft, a bundle or a taught tool keeps its copy of the statement.
+KEPT_DIR: Final = "teach-authorization"
+#: The approver signing methods a teach authorization accepts.
+SIGNING_METHODS: Final = ("desktop_key", "person_key")
 #: Domain prefix for a value digest.
 _VALUE_DOMAIN: Final = b"openadapt.teach-value/v1\0"
 
 _HEX64 = r"^[a-f0-9]{64}$"
 _NAME = r"^[A-Za-z_][A-Za-z0-9_.-]{0,63}$"
 _TASK_ID = r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
-_FINGERPRINT = r"^SHA256:[A-Za-z0-9+/]{43}$"
-_HANDLE = r"^github:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"
+_PRINCIPAL = r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$"
 _ISO_SECONDS = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
 _ADAPTER = r"^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$"
 
@@ -113,8 +118,8 @@ TeachAuthorizationRefusal = Literal[
     "teach_auth_signer_mismatch",
     "teach_auth_unknown_signer",
     "teach_auth_identity_unverified",
-    "teach_auth_not_on_github",
-    "teach_auth_live_unavailable",
+    "teach_auth_method",
+    "teach_auth_agent_signer",
     "teach_auth_expired",
     "teach_auth_not_yet_valid",
     "teach_auth_purpose",
@@ -233,8 +238,11 @@ class TeachAuthorizationV1(BaseModel):
     constants: list[Bound] = Field(default_factory=list, max_length=64)
     writes: Writes
     forbidden: Forbidden = Field(default_factory=Forbidden)
-    authorizer: StrictStr = Field(pattern=_HANDLE)
-    signer_fingerprint: StrictStr = Field(pattern=_FINGERPRINT)
+    #: The approver who signs: their principal id on the approver roster.
+    authorizer: StrictStr = Field(pattern=_PRINCIPAL)
+    #: Their approver public key (64 hex). The signature must be this key's,
+    #: and the roster must hold this key for ``authorizer`` when it is checked.
+    authorizer_public_key: StrictStr = Field(pattern=_HEX64)
     issued_at: StrictStr = Field(pattern=_ISO_SECONDS)
     expires_at: Optional[StrictStr] = Field(default=None, pattern=_ISO_SECONDS)
     nonce: StrictStr = Field(pattern=_HEX64)
@@ -279,9 +287,6 @@ class TeachAuthorizationV1(BaseModel):
             raise ValueError("a constant is a value or an input, not a digest")
         return self
 
-    def github_user(self) -> str:
-        return self.authorizer.split(":", 1)[1]
-
     def summary_line(self) -> str:
         """What this authorization allows, without values."""
 
@@ -301,19 +306,19 @@ class Verification:
     statement: Optional[TeachAuthorizationV1] = None
     sha256: Optional[str] = None  # of the statement's exact bytes
     signature_sha256: Optional[str] = None
-    signer_fingerprint: Optional[str] = None
-    signers_source: Optional[str] = None
-    #: True only when checked against pinned allowed signers or github.com
-    #: live; never from the snapshot stored beside the statement.
-    identity_verified: bool = False
+    #: The roster principal whose approver key signed, once verified.
+    signer: Optional[str] = None
+    signer_public_key: Optional[str] = None
+    method: Optional[str] = None
+    #: The approver root the roster was checked under.
+    approver_root: Optional[str] = None
     detail: str = field(default="")
 
 
-def _paths(target: Path) -> tuple[Path, Path, Path]:
+def _paths(target: Path) -> tuple[Path, Path]:
     target = Path(target)
-    folder = target if target.is_dir() else target.parent
-    statement = target if not target.is_dir() else folder / STATEMENT_FILE
-    return statement, statement.with_name(statement.name + ".sig"), folder / SIGNERS_FILE
+    statement = target / STATEMENT_FILE if target.is_dir() else target
+    return statement, statement.with_name(statement.name + ".sig")
 
 
 def _utc_seconds(when: Optional[datetime]) -> str:
@@ -321,18 +326,13 @@ def _utc_seconds(when: Optional[datetime]) -> str:
     return when.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def signing_command(statement_path: Path) -> str:
-    """The one command the authorizer runs, with their own GitHub SSH key."""
-
-    return (
-        f"ssh-keygen -Y sign -n {NAMESPACE} -f ~/.ssh/id_ed25519 "
-        f"{Path(statement_path).resolve()}"
-    )
-
-
 def dumps(statement: TeachAuthorizationV1) -> str:
     return (
-        json.dumps(statement.model_dump(by_alias=True, exclude_none=True), indent=2, sort_keys=True)
+        json.dumps(
+            statement.model_dump(by_alias=True, exclude_none=True),
+            indent=2,
+            sort_keys=True,
+        )
         + "\n"
     )
 
@@ -342,215 +342,246 @@ def create(
     spec: Mapping[str, Any],
     *,
     authorizer: str,
-    fetch_keys: Callable[[str], list[str]] = ssh_sig.fetch_github_keys,
-    signer_fingerprint: Optional[str] = None,
+    authorizer_public_key: str,
     now: Optional[datetime] = None,
     expires_at: Optional[datetime] = None,
-    env: Optional[Mapping[str, str]] = None,
 ) -> Path:
-    """Write the unsigned statement and a GitHub key snapshot; return its path.
+    """Write the unsigned statement for ``spec`` in ``out_dir``; return its path.
 
     ``spec`` holds ``task``, ``purposes``, ``origins``, ``inputs``,
-    ``constants``, ``writes`` and ``forbidden`` as in the statement. Reads
-    ``https://github.com/<user>.keys`` once. Refuses in strict no-outbound
-    mode, when GitHub lists no Ed25519 key, and over an existing statement.
+    ``constants``, ``writes`` and ``forbidden`` as in the statement.
+    ``authorizer`` is the approver principal who will sign and
+    ``authorizer_public_key`` their approver key (64 hex). Refuses over an
+    existing statement.
     """
 
-    from openadapt_flow import no_outbound
-
-    if not str(authorizer).startswith("github:"):
-        raise TeachAuthorizationError("teach_auth_malformed", "authorizer is github:<user>")
-    user = str(authorizer).split(":", 1)[1]
-    path, _, signers_path = _paths(Path(out_dir) / STATEMENT_FILE)
-    if path.exists() or signers_path.exists():
+    path = Path(out_dir) / STATEMENT_FILE
+    if path.exists() or path.with_name(SIGNATURE_FILE).exists():
         raise TeachAuthorizationError("teach_auth_exists", f"{path} already exists")
-    if no_outbound.enabled(env):
-        raise TeachAuthorizationError(
-            "held_no_outbound", "reading GitHub's keys needs the network"
-        )
-    keys = ssh_sig.ed25519_keys(fetch_keys(user))
-    if not keys:
-        raise TeachAuthorizationError(
-            "teach_auth_no_ed25519_key",
-            f"{ssh_sig.github_keys_url(user)} lists no ssh-ed25519 key",
-        )
-    prints = [ssh_sig.fingerprint(k) for k in keys]
-    if signer_fingerprint is None:
-        if len(prints) != 1:
-            raise TeachAuthorizationError(
-                "teach_auth_signer_ambiguous",
-                f"GitHub lists {len(prints)} Ed25519 keys; name one "
-                f"({', '.join(prints)})",
-            )
-        signer_fingerprint = prints[0]
-    elif signer_fingerprint not in prints:
-        raise TeachAuthorizationError(
-            "teach_auth_not_on_github",
-            f"{signer_fingerprint} is not among {ssh_sig.github_keys_url(user)}",
-        )
     statement = TeachAuthorizationV1.model_validate(
         {
             **dict(spec),
             "schema": SCHEMA,
             "authorizer": authorizer,
-            "signer_fingerprint": signer_fingerprint,
+            "authorizer_public_key": str(authorizer_public_key).lower(),
             "issued_at": _utc_seconds(now),
             **({"expires_at": _utc_seconds(expires_at)} if expires_at else {}),
             "nonce": secrets.token_hex(32),
         }
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    signers_path.write_text(
-        "\n".join(
-            [
-                f"# {authorizer}: snapshot of {ssh_sig.github_keys_url(user)} at "
-                f"{_utc_seconds(now)}",
-                *(ssh_sig.allowed_signers_line(authorizer, NAMESPACE, k) for k in keys),
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
     path.write_text(dumps(statement), encoding="utf-8")
     return path
+
+
+def _load(statement_path: Path) -> tuple[bytes, dict[str, Any], TeachAuthorizationV1]:
+    from openadapt_flow.offline_seal import loads_strict
+
+    try:
+        raw = Path(statement_path).read_bytes()
+    except FileNotFoundError as exc:
+        raise TeachAuthorizationError(
+            "teach_auth_missing", str(statement_path)
+        ) from exc
+    except OSError as exc:
+        raise TeachAuthorizationError(
+            "teach_auth_malformed", type(exc).__name__
+        ) from exc
+    try:
+        data = loads_strict(raw)
+        statement = TeachAuthorizationV1.model_validate(data)
+    except Exception as exc:  # noqa: BLE001 - any parse error is malformed
+        raise TeachAuthorizationError(
+            "teach_auth_malformed", type(exc).__name__
+        ) from exc
+    if not isinstance(data, dict):
+        raise TeachAuthorizationError("teach_auth_malformed", "not an object")
+    return raw, data, statement
+
+
+def statement_task_id(target: Path) -> str:
+    """The task a statement names, unverified (for naming the task only)."""
+
+    statement_path, _sig = _paths(Path(target))
+    return _load(statement_path)[2].task.task_id
+
+
+def sign(statement_path: Path, signer: Any) -> Path:
+    """Sign the statement with an approver key; return the signature's path.
+
+    ``signer`` is an
+    :class:`~openadapt_flow.approval_mode.human_attestation.ApproverSigner`
+    (``load_signer`` for a key file, ``stdio_signer`` for Desktop's key),
+    which names its principal from the roster. It must be the statement's
+    ``authorizer``, sign with ``authorizer_public_key``, and use a method in
+    :data:`SIGNING_METHODS`. Writes nothing on any mismatch.
+    """
+
+    from openadapt_flow.jit.authority import _verify
+
+    statement_path, sig_path = _paths(Path(statement_path))
+    _raw, data, statement = _load(statement_path)
+    if sig_path.exists():
+        raise TeachAuthorizationError("teach_auth_already_signed", str(sig_path))
+    if signer.method not in SIGNING_METHODS:
+        raise TeachAuthorizationError(
+            "teach_auth_method", f"{signer.method} can't sign a teach authorization"
+        )
+    if signer.principal_id != statement.authorizer:
+        raise TeachAuthorizationError(
+            "teach_auth_signer_mismatch",
+            f"the statement names {statement.authorizer}; this key is "
+            f"{signer.principal_id} on the roster",
+        )
+    attestation = signer.attest(DOMAIN, data)
+    if not _verify(
+        statement.authorizer_public_key, DOMAIN, data, attestation.signature
+    ):
+        raise TeachAuthorizationError(
+            "teach_auth_signer_mismatch",
+            "the signature isn't by the statement's authorizer_public_key",
+        )
+    fd = os.open(sig_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(attestation.model_dump_json() + "\n")
+    return sig_path
+
+
+_ROSTER_REFUSALS = {
+    "human_answer_unsigned": "teach_auth_unsigned",
+    "human_approver_unregistered": "teach_auth_unknown_signer",
+    "human_answer_signature_invalid": "teach_auth_bad_signature",
+    "attestation_method_mismatch": "teach_auth_method",
+}
 
 
 def verify(
     target: Path,
     *,
-    allowed_signers: Optional[Path] = None,
-    live: Optional[Callable[[str], list[str]]] = None,
+    key_dir: Optional[Path],
+    root: Optional[str],
+    at_least: Any = None,
 ) -> Verification:
-    """Verify a teach authorization; say plainly whether the identity was checked."""
+    """Verify a teach authorization against the approver roster.
 
-    from openadapt_flow.offline_seal import loads_strict
+    ``root`` is the caller's pinned approver root and ``key_dir`` the key
+    directory holding the roster; nothing here reads the environment. The
+    signer must be on that roster now (so a removed key refuses), must be
+    the statement's ``authorizer`` with its ``authorizer_public_key``, and
+    must have signed exactly these statement bytes.
+    """
 
-    statement_path, sig_path, _ = _paths(Path(target))
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        HumanAttestation,
+        approvers,
+        refusal,
+    )
+
+    statement_path, sig_path = _paths(Path(target))
     try:
-        raw = statement_path.read_bytes()
-    except FileNotFoundError:
-        return Verification(False, reason="teach_auth_missing")
-    except OSError:
-        return Verification(False, reason="teach_auth_malformed")
-    try:
-        statement = TeachAuthorizationV1.model_validate(loads_strict(raw))
-    except Exception as exc:
-        return Verification(
-            False, reason="teach_auth_malformed", detail=type(exc).__name__
-        )
+        raw, data, statement = _load(statement_path)
+    except TeachAuthorizationError as exc:
+        return Verification(False, reason=exc.code, detail=str(exc))
     base = Verification(
-        False, statement=statement, sha256=hashlib.sha256(raw).hexdigest()
+        False,
+        statement=statement,
+        sha256=hashlib.sha256(raw).hexdigest(),
+        approver_root=root,
     )
     try:
         sig_bytes = sig_path.read_bytes()
-        armored = sig_bytes.decode("ascii")
     except FileNotFoundError:
         return dataclasses.replace(base, reason="teach_auth_unsigned")
-    except (OSError, UnicodeDecodeError):
+    except OSError:
         return dataclasses.replace(base, reason="teach_auth_malformed")
-    base = dataclasses.replace(
-        base, signature_sha256=hashlib.sha256(sig_bytes).hexdigest()
-    )
     try:
-        signer = ssh_sig.verify(raw, armored, NAMESPACE)
-    except ssh_sig.SshSigError as exc:
+        attestation = HumanAttestation.model_validate_json(sig_bytes)
+    except ValueError:
         return dataclasses.replace(
-            base, reason="teach_auth_bad_signature", detail=str(exc)
+            base, reason="teach_auth_malformed", detail="the signature file"
         )
-    fp = ssh_sig.fingerprint(signer)
-    base = dataclasses.replace(base, signer_fingerprint=fp)
-    if fp != statement.signer_fingerprint:
+    base = dataclasses.replace(
+        base,
+        signature_sha256=hashlib.sha256(sig_bytes).hexdigest(),
+        method=attestation.method,
+    )
+    if attestation.method not in SIGNING_METHODS:
+        return dataclasses.replace(
+            base,
+            reason="teach_auth_method",
+            detail=f"{attestation.method} can't sign a teach authorization",
+        )
+    if attestation.signer != statement.authorizer:
         return dataclasses.replace(
             base,
             reason="teach_auth_signer_mismatch",
-            detail=f"signed by {fp}, the statement names {statement.signer_fingerprint}",
+            detail="the signer isn't the statement's authorizer",
         )
-    verified, source = False, f"not verified (self-asserted {statement.authorizer})"
-    if allowed_signers is not None:
-        try:
-            pinned = ssh_sig.parse_allowed_signers(
-                Path(allowed_signers).read_text(encoding="utf-8")
-            )
-        except (OSError, UnicodeDecodeError, ssh_sig.SshSigError) as exc:
-            return dataclasses.replace(
-                base,
-                reason="teach_auth_unknown_signer",
-                detail=f"no usable allowed signers at {allowed_signers}: {exc}",
-            )
-        if not ssh_sig.is_allowed(pinned, statement.authorizer, NAMESPACE, signer):
-            return dataclasses.replace(
-                base,
-                reason="teach_auth_unknown_signer",
-                detail=f"{fp} is not a pinned teach authorizer for {statement.authorizer}",
-            )
-        verified, source = True, f"pinned allowed signers {allowed_signers}"
-    if live is not None:
-        user = statement.github_user()
-        try:
-            listed = ssh_sig.ed25519_keys(live(user))
-        except Exception as exc:  # network, HTTP or decoding errors: closed reason
-            return dataclasses.replace(
-                base, reason="teach_auth_live_unavailable", detail=type(exc).__name__
-            )
-        if signer not in listed:
-            return dataclasses.replace(
-                base,
-                reason="teach_auth_not_on_github",
-                detail=f"{ssh_sig.github_keys_url(user)} does not list {fp}",
-            )
-        live_source = f"{ssh_sig.github_keys_url(user)} now"
-        source = f"{source} and {live_source}" if verified else live_source
-        verified = True
-    return dataclasses.replace(
-        base, ok=True, signers_source=source, identity_verified=verified
+    code = refusal(
+        attestation,
+        domain=DOMAIN,
+        payload=data,
+        key_dir=Path(key_dir) if key_dir is not None else None,
+        root=root,
+        at_least=at_least,
     )
-
-
-def pinned_authorizers(
-    explicit: Optional[Path] = None, env: Optional[Mapping[str, str]] = None
-) -> Optional[Path]:
-    """The operator's pinned allowed-signers file: the flag, else the env var."""
-
-    if explicit is not None:
-        return Path(explicit).expanduser()
-    value = (env if env is not None else os.environ).get(AUTHORIZERS_ENV, "").strip()
-    return Path(value).expanduser() if value else None
+    if code is not None:
+        return dataclasses.replace(
+            base,
+            reason=_ROSTER_REFUSALS.get(code, "teach_auth_identity_unverified"),
+            detail=code,
+        )
+    try:
+        public = approvers(Path(key_dir), root, at_least=at_least).get(  # type: ignore[arg-type]
+            attestation.signer
+        )
+    except AttestationRefused as exc:
+        return dataclasses.replace(
+            base, reason="teach_auth_identity_unverified", detail=exc.code
+        )
+    if public != statement.authorizer_public_key:
+        return dataclasses.replace(
+            base,
+            reason="teach_auth_signer_mismatch",
+            detail="the roster holds another key for the authorizer",
+        )
+    return dataclasses.replace(
+        base, ok=True, signer=attestation.signer, signer_public_key=public
+    )
 
 
 def require(
     target: Path,
     *,
     purpose: Purpose,
-    authorizers: Optional[Path] = None,
-    live: Optional[Callable[[str], list[str]]] = None,
+    key_dir: Optional[Path],
+    root: Optional[str],
     task_id: Optional[str] = None,
     now: Optional[datetime] = None,
-    env: Optional[Mapping[str, str]] = None,
+    at_least: Any = None,
 ) -> Verification:
-    """A verified authorization fit for ``purpose``, or :class:`TeachAuthorizationError`.
+    """A verified authorization fit for ``purpose`` now, or :class:`TeachAuthorizationError`."""
 
-    Unlike :func:`verify`, the signer's identity must be checked: against
-    the operator's pinned authorizers (``authorizers`` or
-    ``OPENADAPT_TEACH_AUTHORIZERS``), or against github.com with ``live``.
-    """
-
-    pinned = pinned_authorizers(authorizers, env)
-    result = verify(target, allowed_signers=pinned, live=live)
+    result = verify(target, key_dir=key_dir, root=root, at_least=at_least)
     if not result.ok or result.statement is None:
         raise TeachAuthorizationError(str(result.reason), result.detail)
-    if not result.identity_verified:
-        raise TeachAuthorizationError(
-            "teach_auth_identity_unverified",
-            f"pin the authorizer's key ({AUTHORIZERS_ENV} or --teach-authorizers) "
-            "or check it against github.com live",
-        )
     st = result.statement
     stamp = _utc_seconds(now)
     if st.issued_at > stamp:
         raise TeachAuthorizationError("teach_auth_not_yet_valid", st.issued_at)
     if st.expires_at is not None and stamp >= st.expires_at:
         raise TeachAuthorizationError("teach_auth_expired", st.expires_at)
-    if purpose not in st.purposes:
+    _fits(result, purpose=purpose, task_id=task_id)
+    return result
+
+
+def _fits(
+    result: Verification, *, purpose: Optional[str], task_id: Optional[str]
+) -> None:
+    st = result.statement
+    assert st is not None
+    if purpose is not None and purpose not in st.purposes:
         raise TeachAuthorizationError(
             "teach_auth_purpose", f"it covers {', '.join(st.purposes)}, not {purpose}"
         )
@@ -559,7 +590,32 @@ def require(
             "teach_auth_task_mismatch",
             f"authorized task {st.task.task_id}, asked for {task_id}",
         )
-    return result
+
+
+def pinned_trust(
+    key_dir: Optional[Path] = None,
+    approver_root: Optional[str] = None,
+    *,
+    env: Optional[Mapping[str, str]] = None,
+) -> tuple[Path, Optional[str]]:
+    """The key directory and approver root a teach path checks against.
+
+    ``key_dir`` defaults to ``$OPENADAPT_JIT_KEY_DIR`` (or
+    ``~/.openadapt/jit``). The root is ``approver_root``, else
+    ``OPENADAPT_APPROVER_ROOT`` (:func:`approver_roster.pinned_root`); two
+    that disagree refuse. ``None`` means unpinned, and verification refuses.
+    """
+
+    from openadapt_flow.approval_mode import approver_roster as roster
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    try:
+        root = roster.pinned_root(approver_root, env=env)
+    except roster.RosterError as exc:
+        raise TeachAuthorizationError(
+            "teach_auth_identity_unverified", exc.code
+        ) from exc
+    return (Path(key_dir) if key_dir is not None else default_key_dir()), root
 
 
 # -- binding to a scope -----------------------------------------------------------
@@ -702,7 +758,7 @@ def record(verification: Verification) -> dict[str, Any]:
     """What a draft, candidate and bundle record about the authorization. No values."""
 
     st = verification.statement
-    if st is None or verification.sha256 is None:
+    if st is None or verification.sha256 is None or not verification.ok:
         raise TeachAuthorizationError("teach_auth_malformed")
     return {
         "schema": SCHEMA,
@@ -710,8 +766,9 @@ def record(verification: Verification) -> dict[str, Any]:
         "signature_sha256": verification.signature_sha256,
         "task_id": st.task.task_id,
         "authorizer": st.authorizer,
-        "signer_fingerprint": verification.signer_fingerprint,
-        "identity": verification.signers_source,
+        "authorizer_public_key": st.authorizer_public_key,
+        "method": verification.method,
+        "approver_root": verification.approver_root,
         "record_kind": st.writes.record_kind,
         "purposes": list(st.purposes),
         "expires_at": st.expires_at,
@@ -722,17 +779,22 @@ def check_admission(
     recorded: Optional[Mapping[str, Any]],
     target: Optional[Path],
     *,
-    authorizers: Optional[Path] = None,
-    live: Optional[Callable[[str], list[str]]] = None,
-    env: Optional[Mapping[str, str]] = None,
+    key_dir: Optional[Path],
+    root: Optional[str],
+    purpose: Optional[Purpose] = None,
+    task_id: Optional[str] = None,
+    not_signed_by: Optional[str] = None,
 ) -> Verification:
-    """Re-verify the authorization a draft names, for admission.
+    """Verify, for admission, the authorization a draft names.
 
     ``recorded`` is the draft's ``teach_authorization`` entry. ``target`` is
-    the statement (the draft keeps a copy; see :func:`copy_into`). The
-    statement's digest must equal the recorded one and its signer's identity
-    must verify against the operator's pinned authorizers or github.com.
-    Expiry is not checked again: it bounds when teaching may happen.
+    the statement the draft kept (:func:`copy_into`). The statement's digest
+    must equal the recorded one, and its signature must verify against the
+    approver roster as it is now: a key removed since teaching refuses.
+    ``purpose`` and ``task_id``, when given, must be covered.
+    ``not_signed_by`` names a principal that may not be the signer (the
+    agent that recorded the draft). Expiry is not checked again: it bounds
+    when teaching may happen.
     """
 
     if not recorded or not isinstance(recorded, Mapping):
@@ -740,34 +802,47 @@ def check_admission(
             "teach_auth_not_recorded",
             "the draft names no teach authorization; an agent-taught draft needs one",
         )
-    if target is None:
-        raise TeachAuthorizationError("teach_auth_missing", "no statement beside the draft")
-    pinned = pinned_authorizers(authorizers, env)
-    result = verify(target, allowed_signers=pinned, live=live)
+    if target is None or not Path(target).is_file():
+        raise TeachAuthorizationError("teach_auth_missing", "no statement kept with it")
+    result = verify(target, key_dir=key_dir, root=root)
     if not result.ok:
         raise TeachAuthorizationError(str(result.reason), result.detail)
-    if not result.identity_verified:
-        raise TeachAuthorizationError(
-            "teach_auth_identity_unverified",
-            f"pin the authorizer's key ({AUTHORIZERS_ENV}) or check it live",
-        )
     if result.sha256 != recorded.get("sha256"):
         raise TeachAuthorizationError(
             "teach_auth_digest_mismatch",
-            "the statement beside the draft is not the one the draft recorded",
+            "the statement kept with it is not the one it recorded",
         )
+    if not_signed_by and result.signer == not_signed_by:
+        raise TeachAuthorizationError(
+            "teach_auth_agent_signer",
+            "the recording agent signed its own authorization",
+        )
+    _fits(result, purpose=purpose, task_id=task_id)
     return result
 
 
 def copy_into(source: Path, folder: Path) -> Path:
-    """Copy the statement and its signature into ``folder``; return the statement path."""
+    """Copy the statement and its signature into ``folder``; return the statement path.
 
-    statement, sig, _ = _paths(Path(source))
+    Refuses to replace a different statement already there.
+    """
+
+    statement, sig = _paths(Path(source))
     folder = Path(folder)
-    folder.mkdir(parents=True, exist_ok=True)
     out = folder / STATEMENT_FILE
-    out.write_bytes(statement.read_bytes())
-    (folder / SIGNATURE_FILE).write_bytes(sig.read_bytes())
+    data, signature = statement.read_bytes(), sig.read_bytes()
+    if out.exists():
+        if (
+            out.read_bytes() != data
+            or (folder / SIGNATURE_FILE).read_bytes() != signature
+        ):
+            raise TeachAuthorizationError(
+                "teach_auth_digest_mismatch", f"{folder} holds another authorization"
+            )
+        return out
+    folder.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(data)
+    (folder / SIGNATURE_FILE).write_bytes(signature)
     return out
 
 
@@ -790,7 +865,7 @@ def render(verification: Verification) -> str:
     w = st.writes
     lines = [
         "You are authorizing an agent to teach (or repair) this task",
-        f"  Authorizer   {st.authorizer} (key {st.signer_fingerprint})",
+        f"  Authorizer   {clean(st.authorizer)} (approver key {st.authorizer_public_key[:16]}…)",
         f"  Task         {clean(st.task.task_id)}: {clean(st.task.summary)}",
         f"  Covers       {', '.join(st.purposes)}",
         f"  Valid        from {st.issued_at}"
@@ -817,107 +892,24 @@ def render(verification: Verification) -> str:
     return "\n".join(lines)
 
 
-def sign(
-    statement_path: Path,
-    key_path: Path,
-    *,
-    dry_run: bool = False,
-    ask: Callable[[str], str] = input,
-    say: Callable[[str], None] = print,
-    run: Optional[Callable[..., Any]] = None,
-) -> int:
-    """Show what the statement allows, ask, then sign with ``ssh-keygen``.
-
-    0 signed (or dry run), 1 not signed.
-    """
-
-    import subprocess
-
-    from openadapt_flow.authorization_summary import key_public_raw
-    from openadapt_flow.offline_seal import loads_strict
-
-    run = run or subprocess.run
-    statement_path, sig_path, signers_path = _paths(Path(statement_path))
-    try:
-        raw = statement_path.read_bytes()
-        statement = TeachAuthorizationV1.model_validate(loads_strict(raw))
-    except Exception:
-        say(f"not signed: teach_auth_malformed: {statement_path}")
-        return 1
-    if sig_path.exists():
-        say(f"not signed: teach_auth_already_signed: {sig_path} exists")
-        return 1
-    try:
-        key_raw = key_public_raw(Path(key_path), run=run)
-    except Exception as exc:
-        say(f"not signed: {exc}")
-        return 1
-    if ssh_sig.fingerprint(key_raw) != statement.signer_fingerprint:
-        say(
-            "not signed: teach_auth_signer_mismatch: the statement names "
-            f"{statement.signer_fingerprint}; {key_path} is {ssh_sig.fingerprint(key_raw)}"
-        )
-        return 1
-    try:
-        snapshot = ssh_sig.parse_allowed_signers(signers_path.read_text("utf-8"))
-    except (OSError, ssh_sig.SshSigError):
-        snapshot = []
-    on_github = ssh_sig.is_allowed(snapshot, statement.authorizer, NAMESPACE, key_raw)
-    say(
-        render(
-            Verification(
-                False, statement=statement, sha256=hashlib.sha256(raw).hexdigest()
-            )
-        )
-    )
-    if dry_run:
-        say("\n(dry run: nothing signed)")
-        return 0
-    if on_github:
-        agreed = ask("\nSign this teach authorization? [y/N] ").strip().lower() in (
-            "y",
-            "yes",
-        )
-    else:
-        say(
-            "\nWARNING: the copy of the GitHub keys next to this statement does not "
-            "list this key for the authorizer."
-        )
-        agreed = ask('Type "yes" to sign anyway: ').strip() == "yes"
-    if not agreed:
-        say("not signed")
-        return 1
-    if statement_path.read_bytes() != raw:
-        say("not signed: the statement changed while it was shown")
-        return 1
-    out = run(
-        ["ssh-keygen", "-Y", "sign", "-n", NAMESPACE, "-f", str(key_path), str(statement_path)]
-    )
-    if getattr(out, "returncode", 1) != 0 or not sig_path.is_file():
-        say("not signed: ssh-keygen failed")
-        return 1
-    say(f"signed: {sig_path}")
-    return 0
-
-
 @dataclass(frozen=True)
 class TeachAuthority:
-    """Where an authoring path gets its scope: a signed statement and who may sign.
+    """Where an authoring path gets its scope: a signed statement and the roster.
 
     Args:
         statement: The ``teach-authorization.json`` (or its folder); its
             ``.sig`` sits beside it.
-        authorizers: The operator's pinned allowed-signers file. Defaults to
-            ``OPENADAPT_TEACH_AUTHORIZERS``.
-        live: Check the signer against github.com now (e.g.
-            ``ssh_sig.fetch_github_keys``) instead of, or as well as, a pin.
+        key_dir: The key directory holding the approver roster. Defaults to
+            ``$OPENADAPT_JIT_KEY_DIR`` (or ``~/.openadapt/jit``).
+        approver_root: The approver root to pin. Defaults to
+            ``OPENADAPT_APPROVER_ROOT``; without one, verification refuses.
         write_adapter: An adapter object to use instead of loading the
             statement's ``write_adapter`` reference.
     """
 
     statement: Path
-    authorizers: Optional[Path] = None
-    live: Optional[Callable[[str], list[str]]] = None
+    key_dir: Optional[Path] = None
+    approver_root: Optional[str] = None
     write_adapter: Any = None
 
     def kept_in(self, folder: Path) -> "TeachAuthority":
@@ -929,13 +921,15 @@ class TeachAuthority:
 
         return dataclasses.replace(self, statement=copy_into(self.statement, folder))
 
-    def verify(self, *, purpose: Purpose, task_id: Optional[str] = None) -> Verification:
+    def trust(self) -> tuple[Path, Optional[str]]:
+        return pinned_trust(self.key_dir, self.approver_root)
+
+    def verify(
+        self, *, purpose: Purpose, task_id: Optional[str] = None
+    ) -> Verification:
+        key_dir, root = self.trust()
         return require(
-            self.statement,
-            purpose=purpose,
-            authorizers=self.authorizers,
-            live=self.live,
-            task_id=task_id,
+            self.statement, purpose=purpose, key_dir=key_dir, root=root, task_id=task_id
         )
 
     def scope(

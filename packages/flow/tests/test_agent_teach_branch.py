@@ -57,8 +57,14 @@ def _examples(tmp_path: Path, titles):
 
 def test_two_demonstrations_become_one_approved_branch(tmp_path):
     bundle, pairs = _examples(tmp_path, TITLES)
+    from tests._teach_authorization_support import repair_authorization
+
+    authorized = repair_authorization(tmp_path / "store", tmp_path / "keys")
     result = teach_branch_from_calling_agent(
-        pairs, tmp_path / "proposed", bundle=bundle, provenance=_provenance()
+        pairs,
+        tmp_path / "proposed",
+        bundle=bundle,
+        provenance=_provenance(teach_authorization=authorized),
     )
     candidate = result.candidate
     assert candidate.state == "candidate"

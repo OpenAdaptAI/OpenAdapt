@@ -273,6 +273,11 @@ class RepairProvenance(BaseModel):
     #: The person who approved sharing for this one repair token
     #: (``ask_each_time`` only).
     screen_share_approved_by: Optional[str] = Field(default=None, max_length=256)
+    #: The person-signed teach authorization (purpose ``repair``) the fix was
+    #: demonstrated under (:func:`openadapt_flow.teach_authorization.record`).
+    #: Its statement is kept in the repair store; approval of a calling
+    #: agent's fix verifies it again and refuses without one.
+    teach_authorization: Optional[dict[str, Any]] = None
 
     @model_validator(mode="after")
     def _consistent(self) -> "RepairProvenance":

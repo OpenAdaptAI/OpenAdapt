@@ -91,6 +91,12 @@ query strings). A clean scoped capture records the same report under
 `teach_scope` in the draft's candidate, so the reviewer sees that nothing was
 blocked and the read-back verified.
 
+A scope written by the agent's harness is only as trustworthy as the
+harness. A teach authorization ([TEACH_AUTHORIZATION.md](TEACH_AUTHORIZATION.md))
+moves the declaration to a person: the scope is bound from a statement they
+sign with their approver key, and admission refuses an agent-taught draft
+without one.
+
 Every teach path passes a scope:
 
 | Path | Where the declaration comes from | What is enforced |

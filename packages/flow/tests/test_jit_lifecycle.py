@@ -40,6 +40,7 @@ from openadapt_flow.runtime.effects.effect import (
     ReadbackSpec,
 )
 from openadapt_flow.verification import VerificationTier
+from tests._teach_authorization_support import draft_fields
 
 TASK = TaskSignature("t.add_note", "Add a note", {})
 REVIEWER = "Dana Reviewer"
@@ -106,6 +107,7 @@ def _jit(
     task: TaskSignature = TASK,
     require_distinct_reviewer_and_admitter: bool = False,
     agent_principal_id: Any = "cua-bot-7",
+    authorized: bool = True,
 ) -> Any:
     jit = compile_agent(
         agent or NeverCalled(),
@@ -145,6 +147,8 @@ def _jit(
             "policy": "clinical-write",
             "mine_effects": True,
             "compiled_recording": str(program / "recording"),
+            # A person signed what the agent could do (admission needs it).
+            **(draft_fields(program, jit.key_dir, task.task_id) if authorized else {}),
         },
         key_dir=jit.key_dir,
     )

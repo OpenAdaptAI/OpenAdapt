@@ -314,6 +314,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="With --teach: the JIT key directory (default $OPENADAPT_JIT_KEY_DIR or ~/.openadapt/jit)",
     )
     p.add_argument(
+        "--teach-authorization",
+        default=None,
+        metavar="STATEMENT",
+        help=(
+            "With --teach or --teach-browser: a person's signed teach "
+            "authorization (openadapt-flow teach-authorization). Run 1 is scoped "
+            "by it. Without one, --teach drafts are refused at admission and "
+            "--teach-browser adds no write tool."
+        ),
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        metavar="HEX",
+        help=(
+            "With --teach-authorization: the approver root its signer is checked "
+            "under (default OPENADAPT_APPROVER_ROOT)"
+        ),
+    )
+    p.add_argument(
         "--teach-hold",
         action="store_true",
         help=(
@@ -1150,6 +1170,29 @@ def _teach_write_adapter(ref: Optional[str]) -> Any:
     return load_write_adapter(ref)
 
 
+def _teach_authority(args: argparse.Namespace, key_dir: Optional[Path]) -> Any:
+    """``--teach-authorization``, checked now so a bad one stops the server."""
+
+    path = getattr(args, "teach_authorization", None)
+    if not path:
+        return None
+    from openadapt_flow.teach_authorization import (
+        TeachAuthority,
+        TeachAuthorizationError,
+    )
+
+    authority = TeachAuthority(
+        Path(path).expanduser().resolve(),
+        key_dir=key_dir,
+        approver_root=getattr(args, "approver_root", None),
+    )
+    try:
+        authority.verify(purpose="teach")
+    except TeachAuthorizationError as exc:
+        raise ValueError(f"--teach-authorization doesn't verify: {exc}") from None
+    return authority
+
+
 def _serve_verify(args: argparse.Namespace, serve) -> int:
     """Serve only the verify tools over local stdio."""
     from openadapt_flow.agent.verify_tools import VerifyBridge
@@ -1229,6 +1272,10 @@ def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
             headless=not args.headed,
             contracts=contracts,
             secrets=sign_in,
+            teach_authorization=_teach_authority(
+                args,
+                Path(args.key_dir).expanduser().resolve() if args.key_dir else None,
+            ),
         )
     except ValueError as exc:
         print(f"serve: {exc}", file=sys.stderr)
@@ -1316,6 +1363,7 @@ def _serve_teach(args: argparse.Namespace, serve) -> int:
             ),
             allow_origins=tuple(args.teach_allow_origin),
             write_adapter=_teach_write_adapter(args.teach_write_adapter),
+            teach_authorization=_teach_authority(args, key_dir),
         )
     except Exception as exc:  # noqa: BLE001 - every setup problem is a refusal
         print(f"serve: {exc}", file=sys.stderr)
@@ -1462,10 +1510,24 @@ def _repair_desk(args: argparse.Namespace, runs_dir: Path):
     else:
         policy = RepairAccessPolicy(args.repair_access)
         demonstrator = LazyBackendDemonstrator(url=args.url, headed=args.headed)
+    authority = None
+    if getattr(args, "teach_authorization", None):
+        from openadapt_flow.teach_authorization import TeachAuthority
+
+        authority = TeachAuthority(
+            Path(args.teach_authorization).expanduser().resolve(),
+            key_dir=(
+                Path(args.key_dir).expanduser().resolve()
+                if getattr(args, "key_dir", None)
+                else None
+            ),
+            approver_root=getattr(args, "approver_root", None),
+        )
     return RepairDesk(
         Path(args.repair_dir) if args.repair_dir else Path(runs_dir) / ".repair",
         policy,
         demonstrator=demonstrator,
+        teach_authorization=authority,
     )
 
 

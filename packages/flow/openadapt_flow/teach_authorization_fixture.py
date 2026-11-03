@@ -1,63 +1,105 @@
-"""A throwaway authorizer for tests, demos and evaluations.
+"""A throwaway approver for tests, demos and evaluations.
 
-A real teach authorization is signed by a person with the SSH key they
-publish on GitHub (:mod:`openadapt_flow.teach_authorization`). Tests, the
-MockMed demos and the injection evaluation need one without a person at the
-keyboard, so :class:`LocalAuthorizer` makes an Ed25519 key in memory, writes
-an allowed-signers file that pins it, and signs statements with it. The
-pinned file is the trust root, exactly as an operator's would be: anything
-signed by this key is trusted only where this file is pinned. Never pin it
-in a deployment.
+A real teach authorization is signed by a person with their approver key
+(:mod:`openadapt_flow.teach_authorization`). Tests, the MockMed demos and the
+injection evaluation need one without a person at the keyboard, so
+:class:`LocalAuthorizer` makes an Ed25519 approver key in memory, starts (or
+joins) a real signed approver roster in a key directory, and signs statements
+with the real approver signer. Its root is what a run pins: anything it signs
+is trusted only where that root is pinned. Never pin it in a deployment.
 """
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from openadapt_flow import ssh_sig
 from openadapt_flow import teach_authorization as ta
 
 __all__ = ["LocalAuthorizer"]
 
 
 class LocalAuthorizer:
-    """An in-memory Ed25519 key standing in for a person's GitHub SSH key."""
+    """An in-memory approver key on a real approver roster in ``key_dir``.
 
-    def __init__(self, handle: str = "github:synthetic-authorizer") -> None:
-        from cryptography.hazmat.primitives import serialization
+    The first one in a key directory starts the roster (it is the root);
+    pass ``added_by`` to add another approver with that one's signature.
+    ``register=False`` makes a key that is on no roster.
+    """
+
+    def __init__(
+        self,
+        key_dir: Path,
+        principal: str = "teach-authorizer",
+        *,
+        added_by: "Optional[LocalAuthorizer]" = None,
+        method: str = "person_key",
+        register: bool = True,
+    ) -> None:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import (
             Ed25519PrivateKey,
         )
 
-        self.handle = handle
+        from openadapt_flow.approval_mode import approver_roster as roster
+        from openadapt_flow.jit.authority import public_hex
+
+        self.key_dir = Path(key_dir)
+        self.principal = principal
+        self.method = method
         self._key = Ed25519PrivateKey.generate()
-        self.raw = self._key.public_key().public_bytes(
-            serialization.Encoding.Raw, serialization.PublicFormat.Raw
-        )
-        self.fingerprint = ssh_sig.fingerprint(self.raw)
+        self.public_key = public_hex(self._key)
+        self.root: str = added_by.root if added_by is not None else self.public_key
+        if not register:
+            return
+        self.key_dir.mkdir(parents=True, exist_ok=True)
+        if added_by is None:
+            roster.init_root(
+                self.key_dir,
+                principal=principal,
+                public_key=self.public_key,
+                sign=roster.file_key_signer(self._key),
+            )
+        else:
+            roster.add_approver(
+                self.key_dir,
+                self.root,
+                principal=principal,
+                public_key=self.public_key,
+                signed_by=added_by.principal,
+                sign=roster.file_key_signer(added_by._key),
+            )
 
-    def pin(self, path: Path) -> Path:
-        """Write the allowed-signers file an operator would pin; return it."""
+    def remove(self, other: "LocalAuthorizer") -> None:
+        """Remove (revoke) ``other`` from the roster with this approver's signature."""
 
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            ssh_sig.allowed_signers_line(self.handle, ta.NAMESPACE, self.raw) + "\n",
-            encoding="utf-8",
-        )
-        return path
+        from openadapt_flow.approval_mode import approver_roster as roster
 
-    def sign_file(self, statement_path: Path) -> Path:
-        blob = ssh_sig.signed_blob(
-            Path(statement_path).read_bytes(), ta.NAMESPACE, "sha512"
+        roster.remove_approver(
+            self.key_dir,
+            self.root,
+            principal=other.principal,
+            public_key=other.public_key,
+            signed_by=self.principal,
+            sign=roster.file_key_signer(self._key),
         )
-        sig = Path(statement_path).with_name(Path(statement_path).name + ".sig")
-        sig.write_text(ssh_sig.armor(self.raw, ta.NAMESPACE, self._key.sign(blob)))
-        return sig
+
+    def signer(self) -> Any:
+        from openadapt_flow.approval_mode.human_attestation import ApproverSigner
+
+        return ApproverSigner(
+            principal_id=self.principal,
+            method=self.method,  # type: ignore[arg-type]
+            signing=self._key,
+        )
+
+    def authority(self, statement: Path, **kw: Any) -> ta.TeachAuthority:
+        """A :class:`TeachAuthority` over ``statement`` that pins this roster."""
+
+        return ta.TeachAuthority(
+            Path(statement), key_dir=self.key_dir, approver_root=self.root, **kw
+        )
 
     def issue(
         self,
@@ -66,16 +108,17 @@ class LocalAuthorizer:
         *,
         now: Optional[datetime] = None,
         valid_for: timedelta = timedelta(days=1),
+        authorizer: Optional[str] = None,
     ) -> Path:
-        """Write and sign a statement for ``spec`` in ``folder``; return the statement path."""
+        """Write and sign a statement for ``spec`` in ``folder``; return its path."""
 
         now = now or datetime.now(timezone.utc)
         statement = ta.TeachAuthorizationV1.model_validate(
             {
                 **dict(spec),
                 "schema": ta.SCHEMA,
-                "authorizer": self.handle,
-                "signer_fingerprint": self.fingerprint,
+                "authorizer": authorizer or self.principal,
+                "authorizer_public_key": self.public_key,
                 "issued_at": ta._utc_seconds(now - timedelta(seconds=5)),
                 "expires_at": ta._utc_seconds(now + valid_for),
                 "nonce": secrets.token_hex(32),
@@ -85,22 +128,36 @@ class LocalAuthorizer:
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / ta.STATEMENT_FILE
         path.write_text(ta.dumps(statement), encoding="utf-8")
-        self.sign_file(path)
+        self.sign_file(path, as_principal=authorizer)
         return path
+
+    def sign_file(
+        self, statement_path: Path, *, as_principal: Optional[str] = None
+    ) -> Path:
+        """Sign with the real approver signer, as ``teach-authorization sign`` does.
+
+        Writes the attestation directly (not through :func:`ta.sign`, which
+        checks the signer first) so a test can sign as a principal the
+        roster doesn't hold for this key.
+        """
+
+        from openadapt_flow.approval_mode.human_attestation import ApproverSigner
+        from openadapt_flow.offline_seal import loads_strict
+
+        data = loads_strict(Path(statement_path).read_bytes())
+        signer = ApproverSigner(
+            principal_id=as_principal or self.principal,
+            method=self.method,  # type: ignore[arg-type]
+            signing=self._key,
+        )
+        attestation = signer.attest(ta.DOMAIN, data)
+        sig = Path(statement_path).with_name(Path(statement_path).name + ".sig")
+        sig.write_text(attestation.model_dump_json() + "\n", encoding="utf-8")
+        return sig
 
     @staticmethod
     def digest(value: str) -> str:
         return ta.value_sha256(value)
 
     def __repr__(self) -> str:  # never show key material
-        return f"LocalAuthorizer({self.handle}, {self.fingerprint})"
-
-
-def spec_digest(spec: Mapping[str, Any]) -> str:
-    """A stable digest of a spec (for logs that must not hold its values)."""
-
-    import json
-
-    return hashlib.sha256(
-        json.dumps(spec, sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()
+        return f"LocalAuthorizer({self.principal}, {self.public_key[:12]})"

@@ -141,6 +141,11 @@ class TeachConfig:
     allow_origins: tuple[str, ...] = ()
     #: The app's write adapter: run 1's writes are read before they are sent.
     write_adapter: Any = None
+    #: A person's signed teach authorization
+    #: (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). Run 1 is
+    #: scoped by it and its task id is the authorized one; without it every
+    #: draft this server teaches is refused at admission.
+    teach_authorization: Any = None
 
     #: One writer at a time on the app: run 1, the canaries and taught runs
     #: would otherwise count each other's records in their checks.
@@ -675,7 +680,8 @@ class TeachBridge:
                 verify=self.config.verify,
                 expect=record,
                 on_screen=list(args["on_screen"]),
-                task_id=f"taught.{name}" if name else None,
+                task_id=self._authorized_task_id()
+                or (f"taught.{name}" if name else None),
                 policy=self.config.policy,
                 cache_dir=self.config.cache_dir,
                 key_dir=self.config.key_dir,
@@ -684,9 +690,29 @@ class TeachBridge:
                 on_warning=lambda text: None,
                 allow_origins=self.config.allow_origins,
                 write_adapter=self.config.write_adapter,
+                teach_authorization=self.config.teach_authorization,
             ), inputs
         except ValueError as exc:
             raise BridgeError(str(exc)) from None
+
+    def _authorized_task_id(self) -> Optional[str]:
+        """The task the operator's teach authorization names, if there is one.
+
+        Read from the statement only to name the task; run 1 verifies the
+        signature before the agent acts, and admission verifies it again.
+        """
+
+        authority = self.config.teach_authorization
+        if authority is None:
+            return None
+        from openadapt_flow import teach_authorization as ta
+
+        try:
+            return ta.statement_task_id(authority.statement)
+        except ta.TeachAuthorizationError as exc:
+            raise BridgeError(
+                f"the teach authorization is unusable ({exc.code})"
+            ) from None
 
     def _start(self, args: Mapping[str, Any]) -> dict[str, Any]:
         from openadapt_flow.compile_agent.driven import DrivenRun

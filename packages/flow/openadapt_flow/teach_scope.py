@@ -655,9 +655,10 @@ class TeachGuard:
             ):
                 at = (op.x, op.y) if op.x is not None and op.y is not None else pointer
                 label = control_label_at(page, at[0], at[1]) if at else None
-                if label is not None and normalize_structured(
-                    label
-                ) in self.scope.forbidden_controls:
+                if (
+                    label is not None
+                    and normalize_structured(label) in self.scope.forbidden_controls
+                ):
                     self._raise(
                         "control_forbidden",
                         "the clicked control is one the authorization forbids",

@@ -352,17 +352,26 @@ class SkillCache:
             "environment": self.environment,
         }
 
-    def _compiler(self, prompt: str, params: Mapping[str, Any]) -> Any:
-        from openadapt_flow.compile_agent import FirstRunCompiler
+    def task_id(self, prompt: str, params: Mapping[str, Any]) -> str:
+        """The task id this prompt compiles under.
+
+        A ``teach_authorization`` (passed through to the compiler) must name
+        exactly this task, or run 1 is refused before the agent acts.
+        """
 
         key = self.key(prompt, params)
         digest = hashlib.sha256(
             json.dumps(key, sort_keys=True).encode("utf-8")
         ).hexdigest()[:16]
-        base = self.common.get("task_id") or "skill"
+        return f"{self.common.get('task_id') or 'skill'}-{digest}"
+
+    def _compiler(self, prompt: str, params: Mapping[str, Any]) -> Any:
+        from openadapt_flow.compile_agent import FirstRunCompiler
+
+        key = self.key(prompt, params)
         common = {k: v for k, v in self.common.items() if k not in ("reset", "task_id")}
         compiler = FirstRunCompiler(
-            prompt, params=list(params), task_id=f"{base}-{digest}", **common
+            prompt, params=list(params), task_id=self.task_id(prompt, params), **common
         )
         return compiler, key
 

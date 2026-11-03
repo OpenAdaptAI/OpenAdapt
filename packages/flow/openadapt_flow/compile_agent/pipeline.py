@@ -364,6 +364,7 @@ class FirstRunCompiler:
         allow_origins: Sequence[str] = (),
         constants: Sequence[str] = (),
         write_adapter: Optional[Any] = None,
+        teach_authorization: Optional[Any] = None,
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
@@ -418,6 +419,11 @@ class FirstRunCompiler:
         self.allow_origins = [str(o) for o in allow_origins]
         self.constants = [str(c) for c in constants if str(c)]
         self.write_adapter = write_adapter
+        #: A person's signed teach authorization
+        #: (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). Run 1
+        #: is scoped by it (the flags may only narrow it); without one the
+        #: draft is refused at admission.
+        self.teach_authorization = teach_authorization
         self._baseline: Optional[list[dict[str, Any]]] = None
         self._pending: Optional[tuple[Any, dict[str, str], Path]] = None
         self._receipt_baseline: Optional[Path] = None
@@ -467,7 +473,12 @@ class FirstRunCompiler:
             model_key=self.model_key,
             key_dir=self.key_dir,
             on_warning=self.on_warning,
-            teach_scope=self.teach_scope,
+            # A signed authorization is the whole scope: the person who
+            # signed it named the origins, record, fields and typeable text.
+            teach_scope=None
+            if self.teach_authorization is not None
+            else self.teach_scope,
+            teach_authorization=self.teach_authorization,
         )
 
     def teach_scope(self, params: Mapping[str, Any]) -> Any:
@@ -1281,6 +1292,7 @@ def compile_first_run(
     allow_origins: Sequence[str] = (),
     constants: Sequence[str] = (),
     write_adapter: Optional[Any] = None,
+    teach_authorization: Optional[Any] = None,
 ) -> CompileResult:
     """Turn an agent's first verified run of ``prompt`` into an admitted program.
 
@@ -1319,6 +1331,9 @@ def compile_first_run(
         write_adapter: The app's
             :class:`~openadapt_flow.teach_scope.WriteAdapter`, so run 1's
             writes are read before they are sent.
+        teach_authorization: A person's signed teach authorization
+            (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). Run
+            1 is scoped by it; without one the draft is refused at admission.
 
     The agent is called once, only when the task has no draft and no
     admitted program.
@@ -1342,6 +1357,7 @@ def compile_first_run(
         allow_origins=allow_origins,
         constants=constants,
         write_adapter=write_adapter,
+        teach_authorization=teach_authorization,
     )
     jit = compiler._jit()
     first: Optional[CompileResult] = None

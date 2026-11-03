@@ -41,6 +41,7 @@ from openadapt_flow.integrations.agents.skills import (  # noqa: E402
 from openadapt_flow.jit.keys import CustomerModelKey  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
 from openadapt_flow.tutorial import _http_json, _records  # noqa: E402
+from tests._teach_authorization_support import mockmed_note
 
 PROMPT = (
     "Open the referral for Jane Sample, start a Triage encounter, and save "
@@ -195,11 +196,30 @@ def _cache(tmp_path: Path, base: str, monkeypatch: pytest.MonkeyPatch, offered: 
     )
 
 
+def _authorize(
+    cache: SkillCache, prompt: str, note: str, patient: str, mrn: str, pid: str
+) -> None:
+    """A person signs what run 1 of this prompt may do (its own task id)."""
+
+    key_dir = Path(cache.common["key_dir"])
+    task_id = cache.task_id(prompt, {"note": note})
+    cache.common["teach_authorization"] = mockmed_note(
+        key_dir,
+        key_dir.parent / f"teach-authorization-{task_id}",
+        task_id,
+        cache.common["url"],
+        note=note,
+        record={"patient_id": pid, "type": "Triage"},
+        constants=[patient, mrn],
+    )
+
+
 def test_run_1_is_compiled_and_run_2_calls_the_skill(
     mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     offered: list = []
     cache = _cache(tmp_path, mockmed, monkeypatch, offered)
+    _authorize(cache, PROMPT, NOTE, "Jane Sample", "MRN P1", "p1")
     chat = ScriptedChat(patient="Jane Sample", note=NOTE)
     first = cache.run(PROMPT, {"note": NOTE}, _agent(chat))
     assert first.path == "agent" and first.status == "admitted", first.detail
@@ -227,6 +247,7 @@ def test_a_wrong_patient_is_refused_and_not_cached(
     _http_json(f"{mockmed}/api/reset", method="POST", body={})
     offered: list = []
     cache = _cache(tmp_path, mockmed, monkeypatch, offered)
+    _authorize(cache, PROMPT, NOTE, "Jane Sample", "MRN P1", "p1")
     chat = ScriptedChat(patient="Alex Testcase", note=NOTE)
     first = cache.run(PROMPT, {"note": NOTE}, _agent(chat))
     assert first.path == "agent" and first.status == "refused_wrong_record"
@@ -245,7 +266,7 @@ def _for_alex(jane: SkillCache) -> SkillCache:
         expect={"patient_id": "p2", "type": "Triage"},
         on_screen=["Alex Testcase", "MRN P2"],
     )
-    return SkillCache(
+    alex = SkillCache(
         **common,
         offer=jane.offer,
         admitter=jane.admitter,
@@ -253,6 +274,8 @@ def _for_alex(jane: SkillCache) -> SkillCache:
         drop_fields=jane.drop_fields,
         model_key=jane.model_key,
     )
+    _authorize(alex, P_ALEX, "Alex note", "Alex Testcase", "MRN P2", "p2")
+    return alex
 
 
 def test_a_skill_never_serves_another_record(
@@ -264,6 +287,7 @@ def test_a_skill_never_serves_another_record(
     reset()
     jane = _cache(tmp_path, mockmed, monkeypatch, [])
     jane.common.pop("task_id")
+    _authorize(jane, P_JANE, "Jane note", "Jane Sample", "MRN P1", "p1")
     first = jane.run(
         P_JANE,
         {"note": "Jane note"},
@@ -338,6 +362,7 @@ def test_another_users_write_elsewhere_does_not_fail_the_skill(
 
     _http_json(f"{mockmed}/api/reset", method="POST", body={})
     cache = _cache(tmp_path, mockmed, monkeypatch, [])
+    _authorize(cache, PROMPT, NOTE, "Jane Sample", "MRN P1", "p1")
     first = cache.run(
         PROMPT, {"note": NOTE}, _agent(ScriptedChat(patient="Jane Sample", note=NOTE))
     )

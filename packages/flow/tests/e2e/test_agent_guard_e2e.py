@@ -12,6 +12,7 @@ Synthetic MockMed in front of the ``effect_e2e`` record store; localhost only.
 
 from __future__ import annotations
 
+import json
 import socket
 from pathlib import Path
 
@@ -97,6 +98,8 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
         assert handoff["inputs"] == ["note"]
         assert handoff["expect"] == {"patient_id": "p1", "type": "Triage"}
 
+        # The airbag handoff can't carry a person's teach authorization yet,
+        # so admission refuses its draft (docs/TEACH_AUTHORIZATION.md).
         second = bench.run2(
             app,
             Path(handoff["task_dir"]),
@@ -104,12 +107,8 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
             teach_dir,
             tmp_path / "taught-runs",
         )
-        assert second["admitted"], second
-        by_name = {r["scenario"]: r for r in second["runs"]}
-        assert by_name["ok"]["outcome"] == "clean"
-        assert by_name["ok"]["model_calls"] == 0
-        for fault in ("no_persist", "partial", "duplicate", "wrong_record", "stale"):
-            assert by_name[fault]["outcome"] == "caught_by_readback", by_name[fault]
+        assert not second["admitted"], second
+        assert "teach_auth_not_recorded" in json.dumps(second["detail"]), second
     finally:
         app.stop()
 

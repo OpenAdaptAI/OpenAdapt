@@ -110,7 +110,13 @@ def encounter_authorization_spec(
             "write_adapter": "openadapt_flow.mockmed.teach_scope:EncounterWrites",
         },
         "forbidden": {
-            "actions": ["drag", "delete_request", "new_window", "download", "file_upload"],
+            "actions": [
+                "drag",
+                "delete_request",
+                "new_window",
+                "download",
+                "file_upload",
+            ],
             "controls": list(forbidden_controls),
         },
     }
