@@ -30,6 +30,19 @@ class StructuralResolutionRefused(RuntimeError):
     """
 
 
+class StructuralElementNotActionable(StructuralResolutionRefused):
+    """A structural backend found exactly one candidate it cannot act on.
+
+    The element exists in the live DOM, but it is covered, outside the
+    viewport, zero-sized, or outside the recorded frame chain. Falling through
+    to a visual rung could click whatever covers it, so this is never a miss.
+
+    It subclasses :class:`StructuralResolutionRefused`, so any caller that
+    does not handle it on its own halts. Only step resolution and scroll
+    readiness treat it as "not ready yet" and poll until the step times out.
+    """
+
+
 class ActionDeliveryUncertain(RuntimeError):
     """An action API failed after delivery may already have begun.
 
@@ -352,8 +365,11 @@ class StructuralActionBackend(Protocol):
       find the element on the LIVE surface and return its center point.
 
     Each returns None when the capability is momentarily unavailable, the
-    element is absent/ambiguous, or the substrate has no structured layer at
-    that point (never raises) -- resolution then uses the visual ladder.
+    element is absent, or the substrate has no structured layer at that
+    point -- resolution then uses the visual ladder. ``locate_structural``
+    may instead raise ``StructuralResolutionRefused`` (ambiguous) or its
+    subclass ``StructuralElementNotActionable`` (one candidate, covered or
+    off-viewport); both stop the step and never fall through to pixels.
     """
 
     def structural_locator_at(self, x: int, y: int) -> Optional["StructuralLocator"]:
