@@ -3,6 +3,7 @@
   "policy": {
     "approved_directories": [
       "benchmark/auto_repair/",
+      "benchmark/fhir_medplum/leaderboard/results/",
       "benchmark/openemr_api_tier/",
       "benchmark/run_player/",
       "benchmark/scoreboard/",
@@ -184,6 +185,7 @@
     "benchmark/fault_model/results.json",
     "benchmark/fhir_medplum/compose.yml",
     "benchmark/fhir_medplum/environment.lock.json",
+    "benchmark/fhir_medplum/leaderboard/practice_cases.yaml",
     "benchmark/fhir_medplum/public/cases.yaml",
     "benchmark/fhir_medplum/public/cases_corrections.yaml",
     "benchmark/fhir_medplum/public/contracts/allergy.yaml",

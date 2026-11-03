@@ -344,6 +344,8 @@ exclude = [
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Leaderboard evidence (screenshots, transcripts) is repository-only.
+    "/benchmark/fhir_medplum/leaderboard/results",
     "/public-demo",
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
@@ -403,6 +405,8 @@ exclude = [
     "/benchmark/**/_bundle",
     "/benchmark/**/_recording",
     "/benchmark/**/_work",
+    # Leaderboard evidence (screenshots, transcripts) is repository-only.
+    "/benchmark/fhir_medplum/leaderboard/results",
     "/public-demo",
     "/THIRD_PARTY_NOTICES.md",
     "/benchmark/openimis_claims",
