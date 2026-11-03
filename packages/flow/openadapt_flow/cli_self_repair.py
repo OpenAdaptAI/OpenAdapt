@@ -389,10 +389,10 @@ class CliTarget:
         if self.web:
             from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
-            backend, close = PlaywrightBackend.launch(
+            page_backend, close_page = PlaywrightBackend.launch(
                 fault or self.url, headless=not self.headed
             )
-            return AppSession(backend=backend, close=close)
+            return AppSession(backend=page_backend, close=close_page)
         from openadapt_flow.backends.factory import build_backend
 
         spec = self.session_spec
