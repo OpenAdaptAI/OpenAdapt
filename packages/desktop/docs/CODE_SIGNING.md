@@ -125,6 +125,16 @@ secrets, or none:
 | `SIGNPATH_PROJECT_SLUG` | `OpenAdapt` | `OpenAdapt` |
 | `SIGNPATH_SIGNING_POLICY_SLUG` | `test-signing` | `release-signing`, once the production certificate is issued |
 
+Keep the two sets apart:
+
+- Both environments must allow deployments from `main` only. That branch
+  policy is the real control: a workflow's own `main` check can be removed by
+  dispatching an edited copy from another branch.
+- Never set a `SIGNPATH_*` secret at repository or organization level, where
+  any branch could read it.
+- Give `signpath-test` its own API token, for a submitter on `test-signing`
+  only, so the test environment cannot submit to `release-signing`.
+
 ### Test-sign a build for SignPath's review
 
 SignPath issues the production certificate after it reviews a test-signed

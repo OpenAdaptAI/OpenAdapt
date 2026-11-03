@@ -136,7 +136,9 @@ jobs:
           # A test certificate chains to an untrusted root, so Status is
           # NotTrusted or UnknownError rather than Valid. What must hold is that
           # a signature is present and intact: a signer certificate exists and
-          # the status is not NotSigned, HashMismatch or anything else.
+          # the status is not NotSigned, HashMismatch or anything else. Because
+          # UnknownError also covers a revoked or expired signer, every file
+          # must also carry the same signer certificate (one thumbprint).
           $Accepted = @("Valid", "NotTrusted", "UnknownError")
           $Rows = [System.Collections.Generic.List[object]]::new()
           function Test-Signed([string] $Path, [string] $Label) {
@@ -144,8 +146,9 @@ jobs:
             $Status = "$($Signature.Status)"
             $Signer = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Subject } else { "" }
             $Thumbprint = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Thumbprint } else { "" }
+            $Issuer = if ($Signature.SignerCertificate) { $Signature.SignerCertificate.Issuer } else { "" }
             $Rows.Add([pscustomobject]@{
-              File = $Label; Status = $Status; Signer = $Signer; Thumbprint = $Thumbprint
+              File = $Label; Status = $Status; Signer = $Signer; Issuer = $Issuer; Thumbprint = $Thumbprint
               StatusMessage = $Signature.StatusMessage
               Sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
             })
@@ -186,10 +189,15 @@ jobs:
             $Problems += Test-Signed $File.FullName "$($Msi[0].Name) > $($File.Name)"
           }
 
+          $Thumbprints = @($Rows | ForEach-Object Thumbprint | Where-Object { $_ } | Sort-Object -Unique)
+          if ($Thumbprints.Count -gt 1) {
+            $Problems += "files carry different signer certificates: $($Thumbprints -join ', ')"
+          }
+
           $Rows | ConvertTo-Json -Depth 3 | Out-File -FilePath signing-output-report.json -Encoding utf8
-          $Summary = @("## Returned files", "", "| File | Status | Signer | SHA-256 |", "| --- | --- | --- | --- |")
+          $Summary = @("## Returned files", "", "| File | Status | Signer | Issuer | Thumbprint | SHA-256 |", "| --- | --- | --- | --- | --- | --- |")
           foreach ($Row in $Rows) {
-            $Summary += "| $($Row.File) | $($Row.Status) | $($Row.Signer) | ``$($Row.Sha256)`` |"
+            $Summary += "| $($Row.File) | $($Row.Status) | $($Row.Signer) | $($Row.Issuer) | ``$($Row.Thumbprint)`` | ``$($Row.Sha256)`` |"
           }
           $Summary += ""
           $Summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
