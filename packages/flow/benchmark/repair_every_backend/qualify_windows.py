@@ -328,8 +328,7 @@ def main() -> int:
             s["stage"] == "campaign" and "fault" in s["detail"] and s["passed"]
             for s in checked["stages"]
         ),
-        "demo_profile_click_not_admitted": "none covers this workflow"
-        in json.dumps(demo),
+        "demo_profile_not_repaired": demo["status"] != "resumed",
         "demo_profile_wrote_nothing": not any(demo["notes"].values()),
     }
     report = {

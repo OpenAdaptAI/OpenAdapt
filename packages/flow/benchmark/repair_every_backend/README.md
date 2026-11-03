@@ -138,6 +138,7 @@ nothing was written.**
 | --- | --- |
 | [before #1724](results/windows-uia-20261103-before-1724.json) | Recorded and certified. The governed run stopped at the note field: identity mismatch, `REJECTED_POLICY`, never repaired ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)) |
 | [after #1724 and #1727](results/windows-uia-20261103-center-rule.json) | The same stop: the read `Patient: Neil Sorenson (1984-` is the recorded band word for word up to the dialog's edge, and the rule accepts it offline. The live `owned_window_over` answered None (finding 9) |
+| [after #1735, #1739 and #1740](results/windows-uia-20261103-no-dialog-box.json) | The stop is reclassified live (`repaired after step_002 (after)`), and the scripted "OK" click passes the dismiss guard (the same window, a session notice). The patch then refuses it: no dialog box was found around the click (finding 10) |
 
 9. **`owned_window_over` on Windows answers only when the owned window covers
    the band's center.** The session notice starts at x 388, and the band runs
@@ -146,3 +147,9 @@ nothing was written.**
    the recorded window and the z-order were right. The macOS hook answers on
    any overlap, and the #1724 rule needs only that: the text left uncovered
    must still be the recorded band, cut only at its end.
+10. **The new dismiss step looked for the dialog by pixels, not by the
+    proved window.** A click admitted on the record check carries the dialog
+    around it as its identity band. That box came from the accessibility
+    ancestry (a `dialog` role) or a drawn box around the click, and neither
+    was found for the Windows message box. A covered-band repair now uses the
+    window `owned_window_over` proved as that box.
