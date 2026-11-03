@@ -112,20 +112,43 @@ def test_mines_record_written_and_field_equals_from_delta():
     assert "note" not in field.match
 
 
-def test_mines_idempotency_key_only_when_observed():
+def test_mines_idempotency_key_only_from_the_named_field_when_observed():
+    # MockMed keeps its at-most-once key in "key".
     with_key = mine_step_effects(
         {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(key="idem-abc")]},
         _key_step(),
         exclude_texts=(NOTE,),
+        idempotency_key_field="key",
     )
     written = next(e for e in with_key.effects if e.kind is EffectKind.RECORD_WRITTEN)
     assert written.idempotency_key == "idem-abc"
     assert written.key_field == "key"
 
+    # Another app names another field (a client request id, say).
+    other = mine_step_effects(
+        {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(client_request_id="req-7")]},
+        _key_step(),
+        exclude_texts=(NOTE,),
+        idempotency_key_field="client_request_id",
+    )
+    written3 = next(e for e in other.effects if e.kind is EffectKind.RECORD_WRITTEN)
+    assert written3.idempotency_key == "req-7"
+    assert written3.key_field == "client_request_id"
+
+    # No field named: no key mined, whatever the record holds.
+    unnamed = mine_step_effects(
+        {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(key="idem-abc")]},
+        _key_step(),
+        exclude_texts=(NOTE,),
+    )
+    written4 = next(e for e in unnamed.effects if e.kind is EffectKind.RECORD_WRITTEN)
+    assert written4.idempotency_key is None
+
     without = mine_step_effects(
         {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record()]},
         _key_step(),
         exclude_texts=(NOTE,),
+        idempotency_key_field="key",
     )
     written2 = next(e for e in without.effects if e.kind is EffectKind.RECORD_WRITTEN)
     # Never invented: §7 names the idempotency key as app-specific.

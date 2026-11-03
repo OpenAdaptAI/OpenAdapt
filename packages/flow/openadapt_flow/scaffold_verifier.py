@@ -196,7 +196,9 @@ def _candidate_from_record(
     )
 
 
-def candidates_from_recording(recording_dir: Path) -> list[WriteCandidate]:
+def candidates_from_recording(
+    recording_dir: Path, *, idempotency_key_field: Optional[str] = None
+) -> list[WriteCandidate]:
     """Write-shaped candidates straight from ``events.jsonl`` evidence."""
     import json
 
@@ -245,6 +247,7 @@ def candidates_from_recording(recording_dir: Path) -> list[WriteCandidate]:
                         label,
                         new_records[0],
                         demonstrated_values=demonstrated_values,
+                        idempotency_key_field=idempotency_key_field,
                     )
                 )
                 continue

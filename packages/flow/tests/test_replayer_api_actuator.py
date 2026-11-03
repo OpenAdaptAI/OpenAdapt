@@ -185,7 +185,7 @@ class _TrackingRestVerifier(RestRecordVerifier):
         fail_verify=False,
         tier_after_verify=None,
     ):
-        super().__init__(url)
+        super().__init__(url, records_path="/api/db", records_key="records")
         self.substrate = substrate
         self.verification_tier = tier
         self.fail_verify = fail_verify
@@ -214,7 +214,7 @@ class _LegacyReachabilityState:
 
 class _LegacyReachabilityVerifier(RestRecordVerifier):
     def __init__(self, url, reachable):
-        super().__init__(url)
+        super().__init__(url, records_path="/api/db", records_key="records")
         self._reachable = reachable
 
     def capture_pre_state(self):
@@ -543,7 +543,9 @@ def test_post_send_protocol_error_with_unavailable_verifier_requires_reconciliat
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=_UnavailableVerifier(url),
+            effect_verifier=_UnavailableVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url, session=session),
             poll_interval_s=0.01,
         ).run(workflow, bundle_dir=bundle, run_dir=run_dir)

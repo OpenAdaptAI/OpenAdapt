@@ -2073,14 +2073,12 @@ def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None
                 dumped.pop(name)
         elif dumped.get(name) is None:
             dumped[name] = legacy
-    if defaults_excluded:
-        # Nested reads (the identity path prunes its own nesting).
-        for item in dumped.get("candidates") or []:
-            if isinstance(item, dict):
-                legacy_hash_dump(item, defaults_excluded=True)
-        for item in (dumped.get("surfaces") or {}).values():
-            if isinstance(item, dict):
-                legacy_hash_dump(item, defaults_excluded=True)
+    for item in dumped.get("candidates") or []:
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
+    for item in (dumped.get("surfaces") or {}).values():
+        if isinstance(item, dict):
+            legacy_hash_dump(item, defaults_excluded=defaults_excluded)
 
 
 def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:

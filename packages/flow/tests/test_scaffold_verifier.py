@@ -175,13 +175,19 @@ class TestScaffoldVerifier:
         self, tmp_path: Path
     ) -> None:
         rec = _recording_dir(tmp_path)
-        candidates = candidates_from_recording(rec)
+        # The demo app keeps its at-most-once key in "key".
+        candidates = candidates_from_recording(rec, idempotency_key_field="key")
         assert [candidate.step_id for candidate in candidates] == ["step_001"]
         candidate = candidates[0]
         assert candidate.observed_delta
         assert candidate.match == {"patient_id": "p2", "type": "Triage"}
         assert candidate.payload == {"note": "Synthetic follow-up in two weeks"}
         assert candidate.idempotency == ("key", "demo-key-1")
+        # Unnamed, no field is guessed to be the key: it stays an identity
+        # field for a person to review.
+        (plain,) = candidates_from_recording(rec)
+        assert plain.idempotency is None
+        assert plain.match["key"] == "demo-key-1"
 
     def test_write_draft_from_recording_is_todo_marked(self, tmp_path: Path) -> None:
         rec = _recording_dir(tmp_path)

@@ -375,7 +375,9 @@ def test_admitted_binding_halts_on_indeterminate_without_gui_retry(tmp_path):
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=_IndeterminateVerifier(url),
+            effect_verifier=_IndeterminateVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url),
             poll_interval_s=0.01,
         ).run(_save_workflow(step), bundle_dir=bundle, run_dir=run_dir)

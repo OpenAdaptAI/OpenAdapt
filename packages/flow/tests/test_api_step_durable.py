@@ -122,7 +122,7 @@ class SecondReadFails(RestRecordVerifier):
     """Reads the record check's pre-state once, then can't reach it."""
 
     def __init__(self, base_url: str) -> None:
-        super().__init__(base_url)
+        super().__init__(base_url, records_path="/api/db", records_key="records")
         self.reads = 0
 
     def capture_pre_state(self, context: Any = None):

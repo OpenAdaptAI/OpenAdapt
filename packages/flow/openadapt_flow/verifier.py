@@ -290,9 +290,11 @@ class Contract:
     def digest(self) -> str:
         """SHA-256 of the contract as parsed: part of a write's identity."""
 
+        config = self.config.model_dump(mode="json")
+        config["verifier"] = self._verifier_dump()
         body = json.dumps(
             {
-                "config": self.config.model_dump(mode="json"),
+                "config": config,
                 "writes": list(self.writes),
             },
             sort_keys=True,
@@ -310,11 +312,19 @@ class Contract:
         return _digest(
             {
                 "environment": self.config.environment_id,
-                "verifier": _strip(
-                    self.config.verifier.model_dump(mode="json"), drop_secrets=True
-                ),
+                "verifier": _strip(self._verifier_dump(), drop_secrets=True),
             }
         )
+
+    def _verifier_dump(self) -> dict[str, Any]:
+        """The verifier as hashed: fields that lost their defaults still hash
+        as their old values, so contracts written before keep their digests."""
+
+        from openadapt_flow.deployment import legacy_hash_dump
+
+        dumped = self.config.verifier.model_dump(mode="json")
+        legacy_hash_dump(dumped, defaults_excluded=False)
+        return dumped
 
     @property
     def shape(self) -> str:

@@ -2081,6 +2081,7 @@ def _compile_recording(
     mine_effects: bool = False,
     admit_api_bindings: bool = False,
     admission_fixture: Optional["AdmissionFixture"] = None,
+    idempotency_key_field: Optional[str] = None,
     skill_library_root: Optional[Path | str] = None,
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
@@ -2182,6 +2183,9 @@ def _compile_recording(
             ``admission_fixture``. A refused proposal leaves
             the step on the GUI ladder. FHIR / MCP / tool bindings are not
             synthesized. Default False keeps the bundle byte-identical.
+        idempotency_key_field: With ``mine_effects``, the record field that
+            carries this app's at-most-once key (from its contract or
+            deployment config). ``None``: no key is mined.
         admission_fixture: The held-out REST fixture
             (:class:`~openadapt_flow.compiler.binding_admission.AdmissionFixture`:
             base URL, and the app's own read and write paths). Required when
@@ -3308,6 +3312,7 @@ def _compile_recording(
                 param_bindings=bindings or None,
                 store_unchanged=unchanged,
                 write_requests=write_requests,
+                idempotency_key_field=idempotency_key_field,
             )
             if mined.effects:
                 step.effects = mined.effects
@@ -3486,6 +3491,9 @@ def _compile_recording(
     if bind_effect_params:
         # Recorded only when set, so every existing compile keeps its digest.
         compiler_config["bind_effect_params"] = True
+    if idempotency_key_field:
+        # Recorded only when set, so every existing compile keeps its digest.
+        compiler_config["idempotency_key_field"] = idempotency_key_field
     if admission_fixture is not None:
         # Added only when set, so a compile without one hashes as before.
         admission: dict[str, Any] = {
