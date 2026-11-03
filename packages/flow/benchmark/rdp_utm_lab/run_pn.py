@@ -79,6 +79,18 @@ def _rdp(desktop: tuple[int, int], bpp: int):
     return backend
 
 
+def _load1() -> float:
+    return os.getloadavg()[0]
+
+
+def _hold_for_load(limit: float) -> float:
+    """Wait until the host's 1-minute load is under ``limit``; return the wait."""
+    started = time.monotonic()
+    while _load1() >= limit:
+        time.sleep(15)
+    return round(time.monotonic() - started, 1)
+
+
 def _seed_drift(lab, drift: str) -> None:
     lab.run_ps(f"& '{native.PY}' '{native.GUEST}\\pn_db.py' seed --drift {drift}")
 
@@ -92,6 +104,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--only", help="comma-separated condition names")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="reuse --out's recording and bundle and skip the runs already in "
+        "trials.json (the workflow under test stays the same)",
+    )
+    parser.add_argument(
+        "--max-load",
+        type=float,
+        default=35.0,
+        help="hold each run until the host's 1-minute load is below this",
+    )
     args = parser.parse_args()
     winrm_lab.load_env_file(Path.home() / "oa/src/OpenAdapt/.env")
     out: Path = args.out
@@ -151,30 +175,44 @@ def main() -> int:
         (out / "points.json").write_text(json.dumps(points))
         native._save_png(rdp, out / "record_start.png")
 
-        rec = Recorder(
-            rdp,
-            out / "recording",
-            settle_interval_s=0.3,
-            settle_stable_frames=2,
-            settle_timeout_s=6.0,
-        )
-        rec.click(*points["searchBox"])
-        rec.type_text("Neil")
-        rec.click(*points["searchButton"])
-        rec.click(*points["firstRow"])
-        rec.click(*points["noteBox"])
-        rec.type_text("recorded demonstration note", param="note")
-        rec.click(*points["saveButton"])
-        rec.finish()
-        workflow = compile_recording(
-            out / "recording", out / "bundle", name="utm-rdp-patient-notes"
-        )
+        if args.resume and (out / "bundle" / "workflow.json").exists():
+            from openadapt_flow.ir import Workflow
 
-        trials: list[dict] = []
+            workflow = Workflow.load(out / "bundle")
+        else:
+            rec = Recorder(
+                rdp,
+                out / "recording",
+                settle_interval_s=0.3,
+                settle_stable_frames=2,
+                settle_timeout_s=6.0,
+            )
+            rec.click(*points["searchBox"])
+            rec.type_text("Neil")
+            rec.click(*points["searchButton"])
+            rec.click(*points["firstRow"])
+            rec.click(*points["noteBox"])
+            rec.type_text("recorded demonstration note", param="note")
+            rec.click(*points["saveButton"])
+            rec.finish()
+            workflow = compile_recording(
+                out / "recording", out / "bundle", name="utm-rdp-patient-notes"
+            )
+
+        trials: list[dict] = (
+            json.loads((out / "trials.json").read_text())
+            if args.resume and (out / "trials.json").exists()
+            else []
+        )
+        done = len(trials)
+        counter = 0
         only = set(args.only.split(",")) if args.only else None
         for cond in CONDITIONS:
             name = cond["name"]
             if only and name not in only:
+                continue
+            if counter + cond["n"] <= done:
+                counter += cond["n"]  # every run of it finished earlier
                 continue
             want = (tuple(cond.get("desktop", RECORD_DESKTOP)), cond.get("bpp", 32))
             if want != session:
@@ -183,8 +221,13 @@ def main() -> int:
                 rdp = _rdp(*want)
                 session = want
             for i in range(cond["n"]):
+                counter += 1
+                if counter <= done:
+                    continue  # finished in an earlier invocation
                 drift = cond.get("drift", "none")
+                held_s = _hold_for_load(args.max_load)
                 fresh(drift)
+                load_start = round(_load1(), 1)
                 token = f"OaUtm{len(trials):03d}{name[:4]}"
                 run_dir = out / f"run_{len(trials):03d}_{name}"
                 first = rdp.screenshot()
@@ -214,6 +257,7 @@ def main() -> int:
                     success, model_calls, stop, rungs = False, 0, None, {}
                     error = repr(exc)[:400]
                 elapsed = time.monotonic() - started
+                load_end = round(_load1(), 1)
                 rows = native._db_rows(lab)
                 holders = [r["id"] for r in rows if r["note"] == token]
                 db_outcome = (
@@ -240,6 +284,9 @@ def main() -> int:
                     "class": classify(db_outcome, success, must_save),
                     "must_save": must_save,
                     "elapsed_s": round(elapsed, 2),
+                    "held_for_load_s": held_s,
+                    "load1_start": load_start,
+                    "load1_end": load_end,
                     "first_frame_sha256": hashlib.sha256(first).hexdigest(),
                 }
                 trials.append(trial)
