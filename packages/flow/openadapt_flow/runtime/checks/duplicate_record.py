@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Protocol
 from urllib.parse import urljoin, urlsplit
@@ -357,6 +357,10 @@ def classify(want: Mapping[str, str], record: PatientRecord) -> Optional[Candida
     street. The record's prior names are tried as well as its current one.
     """
 
+    if record.dob and full_date(record.dob) != record.dob:
+        # Whatever source built it: a date that is no full real date is no
+        # date, so a name match stays close.
+        record = replace(record, dob="")
     mrn = (want.get("mrn") or "").strip()
     if mrn and record.mrn and mrn == record.mrn.strip():
         return Candidate(record, "exact", "same MRN")
