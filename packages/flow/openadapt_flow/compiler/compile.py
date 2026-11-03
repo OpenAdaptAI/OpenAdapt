@@ -35,6 +35,13 @@ import numpy as np
 
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow import volatility
+from openadapt_flow.compiler.empty_result_guard import (
+    MinedGuard,
+    carries_value,
+    has_text_check,
+    is_empty_result_statement,
+    mine_empty_result_guard,
+)
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -1327,7 +1334,14 @@ def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> lis
                         f"{step.id}: focus_on postcondition {focus!r} embeds a "
                         "demo parameter value"
                     )
-            if pc.text and _contains_excluded(pc.text, values):
+            # An empty-result statement is built from a fixed vocabulary, so a
+            # value can only be in it as a whole word; the fuzzy screen would
+            # flag "No matches were found." against a title like "Ms.".
+            if pc.text and (
+                carries_value(pc.text, values)
+                if is_empty_result_statement(pc.text)
+                else _contains_excluded(pc.text, values)
+            ):
                 violations.append(
                     f"{step.id}: {pc.kind.value} postcondition "
                     f"{pc.text!r} embeds a demo parameter value"
@@ -3182,6 +3196,10 @@ def _compile_recording(
     # A click that only opens a confirmation dialog is not the save: the
     # dialog's Confirm click is. Explicit risk_overrides below still win.
     by_step_id = {step.id: step for step in steps}
+    frames_by_step_id = {
+        step.id: (before, after, event) for step, before, after, event in pending
+    }
+    guard_notes: list[dict[str, Any]] = []
     for opener_id, confirm_id in confirmation_opener_step_ids(steps):
         opener = by_step_id[opener_id]
         opener.risk = "reversible"
@@ -3193,6 +3211,51 @@ def _compile_recording(
         confirm.risk_explanation = (
             f"confirms the dialog opened by {opener_id}; this click saves"
         )
+        # The dialog's empty result ("No matches were found.") is what the
+        # person confirmed through: check it after the opener and again right
+        # before the Confirm click. A pair with no such check is noted.
+        opener_before, opener_after, opener_event = frames_by_step_id[opener_id]
+        confirm_before, _, confirm_event = frames_by_step_id[confirm_id]
+        if opener_before is None or opener_after is None or confirm_before is None:
+            dialog_check = MinedGuard(note="the recording lacks the dialog's frames")
+        else:
+            dialog_check = mine_empty_result_guard(
+                cached_lines(int(opener_event["i"]), "before", opener_before),
+                cached_lines(int(opener_event["i"]), "after", opener_after),
+                cached_lines(int(confirm_event["i"]), "before", confirm_before),
+                reject=lambda text: (
+                    carries_value(text, exclude_texts) or _text_carries_phi(text)
+                ),
+            )
+        if dialog_check.postcondition is not None and dialog_check.guard is not None:
+            if not has_text_check(opener.expect, dialog_check.postcondition.text or ""):
+                opener.expect = [*opener.expect, dialog_check.postcondition]
+            if confirm.guard is None:
+                confirm.guard = dialog_check.guard
+            guard_notes.append(
+                {
+                    "change": "empty_result_guard",
+                    "step": opener_id,
+                    "confirm_step": confirm_id,
+                    "evidence": "exact empty search result in the dialog, "
+                    "checked after the opener and before the Confirm click",
+                }
+            )
+        else:
+            logger.warning(
+                "no empty-result check for the dialog %s opens (confirmed by %s): %s",
+                opener_id,
+                confirm_id,
+                dialog_check.note,
+            )
+            guard_notes.append(
+                {
+                    "change": "no_empty_result_guard",
+                    "step": opener_id,
+                    "confirm_step": confirm_id,
+                    "warning": f"no check that the dialog found nothing: {dialog_check.note}",
+                }
+            )
 
     # Local edits the recording proves stayed local (select-all before
     # typing, Enter on a typed dropdown option, an in-form tab): classified
@@ -3413,6 +3476,7 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
+    compile_notes = [*compile_notes, *guard_notes]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 

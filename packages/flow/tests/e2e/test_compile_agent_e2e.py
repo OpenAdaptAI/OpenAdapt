@@ -214,7 +214,7 @@ def test_compile_agent_then_replay_with_no_model_calls(
     fake = FakeClaude("Jane Sample", NOTE)
     # The registered agent drives run 1 and admits it: self-admission, which
     # its signed policy allows.
-    agent = ClaudeAgent(client=fake, principal_id=AGENT_ID)
+    agent = ClaudeAgent(vision="selective", client=fake, principal_id=AGENT_ID)
     result = compile_first_run(
         PROMPT,
         params={"note": NOTE},
@@ -303,7 +303,7 @@ def test_wrong_patient_is_refused_at_the_save(
     result = compile_first_run(
         PROMPT,
         params={"note": NOTE},
-        agent=ClaudeAgent(client=fake),
+        agent=ClaudeAgent(vision="selective", client=fake),
         confirm_checks="dana.reviewer",
         admitter=admitter,
         **_common(tmp_path, mockmed),
