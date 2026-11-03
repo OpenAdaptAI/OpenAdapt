@@ -183,13 +183,15 @@ class Composition(BaseModel):
 
     @classmethod
     def load(cls, parent_dir: Path | str) -> "Composition":
+        from openadapt_flow import artifacts
+
         parent = Path(parent_dir)
         path = parent / COMPOSITION_FILENAME
-        if not path.is_file():
+        if not artifacts.is_file(path):
             raise CompositionError(
                 f"{parent} is not a composition artifact (no {COMPOSITION_FILENAME})"
             )
-        return cls.model_validate_json(path.read_text(encoding="utf-8"))
+        return cls.model_validate_json(artifacts.read_text(path))
 
 
 def is_composition_artifact(path: Path | str) -> bool:
