@@ -5,7 +5,7 @@
 
 ### Features
 
-- encrypt recordings, bundles and checkpoints at rest by default
+- show a notice when Flow logs a recording or run record stored without encryption
 
 
 

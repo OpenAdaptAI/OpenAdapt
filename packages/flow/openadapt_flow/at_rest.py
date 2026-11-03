@@ -1,33 +1,29 @@
-"""Encryption at rest by default: a local key, or a loud, recorded opt-out.
+"""Encryption at rest: the key, the strict mode, and the plaintext ledger.
 
 Recordings, bundles, run directories (screenshots, reports, evidence) and
-durable checkpoints can hold patient data. Flow encrypts them whenever a key
-is configured (:mod:`openadapt_flow.sealed_set`, :mod:`openadapt_flow.crypto`).
-This module decides what happens when none is: Flow does not fall back to
-plaintext.
+durable checkpoints can hold patient data. Flow encrypts them with
+:mod:`openadapt_flow.sealed_set` and :mod:`openadapt_flow.crypto`.
 
-* With ``OPENADAPT_BUNDLE_KEY`` (or ``OPENADAPT_RECORDING_KEY``) set, that key
-  is used, as before.
-* Otherwise Flow uses a key it generated on this machine,
+* The key is ``OPENADAPT_BUNDLE_KEY`` (or ``OPENADAPT_RECORDING_KEY``) when
+  set. Otherwise it is a key Flow generates on this machine,
   ``$OPENADAPT_HOME/keys/at-rest.key`` (default ``~/.openadapt``;
-  ``OPENADAPT_FLOW_AT_REST_HOME`` overrides the directory). It is
-  created on first use with mode 0600 in a 0700 directory, and refused if
-  anyone but the owner can read it. Losing it loses every artifact sealed
-  with it, so back it up like any other secret.
+  ``OPENADAPT_FLOW_AT_REST_HOME`` moves it), created on first use with mode
+  0600 in a 0700 directory and refused if anyone but the owner can read it.
+  Back it up: what it encrypts can't be read without it.
+* Durable checkpoints and attended state are encrypted under that key by
+  default.
+* ``OPENADAPT_FLOW_AT_REST=strict``, the setting for healthcare and regulated
+  deployments, also encrypts every recording, bundle and run directory, and
+  refuses the outputs that aren't encrypted yet (:func:`unsealed_write`).
+* In the default mode, each recording, bundle, run directory or other output
+  written in plaintext goes through :func:`unsealed_write` or :func:`seal_new`:
+  stderr names the path and a ledger line (``plaintext-at-rest.jsonl``)
+  records it, and Desktop shows the ledger as a notice. Once every consumer
+  reads encrypted artifacts (#1751), the default encrypts them too
+  (:data:`DEFAULT_SEALS_ARTIFACTS`).
 * ``OPENADAPT_FLOW_PLAINTEXT_AT_REST='<reason>'`` turns encryption off for
-  development or for data that is already de-identified. Each process that
-  writes plaintext prints a warning to stderr and appends one line to
-  ``$OPENADAPT_HOME/plaintext-at-rest.jsonl`` with the reason.
-
-Some artifacts can't be sealed yet: run directories (the offline Seal, undo
-and other readers don't read sealed runs yet), approval and attended state,
-desktop recordings, and the output of ``visualize``, ``explain``, ``teach``,
-``emit-skill`` and ``push``. By default they are still written in plaintext,
-and each write goes through :func:`unsealed_write`, which names the path on
-stderr and adds a ledger line that Desktop shows as a notice.
-``OPENADAPT_FLOW_AT_REST=strict``, the setting for healthcare and regulated
-deployments, refuses them instead, seals every run directory, and ignores the
-opt-out. ``docs/phi_at_rest.md`` lists them and links the tracking issue.
+  development or de-identified data, with a warning and a ledger line. Strict
+  mode ignores it.
 
 Stdlib only, so :mod:`openadapt_flow.crypto` can import it on every load.
 """
@@ -308,8 +304,9 @@ def _local_key(path: Path) -> str:
 
 
 #: Whether the default mode seals new recordings and bundles. Strict mode
-#: always does. See docs/phi_at_rest.md.
-DEFAULT_SEALS_ARTIFACTS: Final[bool] = True
+#: always does. It turns on once every consumer reads sealed artifacts
+#: (#1751); until then the default names and records each plaintext write.
+DEFAULT_SEALS_ARTIFACTS: Final[bool] = False
 
 
 def seal_new(artifact: str, path: Path | str) -> bool:

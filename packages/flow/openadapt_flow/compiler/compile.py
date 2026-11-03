@@ -2043,10 +2043,10 @@ def compile_recording(
     set, see :mod:`openadapt_flow.sealed_set`) is read in memory and compiles
     into a sealed bundle: every crop, sidecar and ``workflow.json`` is
     encrypted before it reaches the disk, under ``OPENADAPT_BUNDLE_KEY`` or,
-    when that is unset, the recording's own key. A plaintext recording
-    compiles into a sealed bundle too, under the configured or local key
-    (:mod:`openadapt_flow.at_rest`), unless ``OPENADAPT_FLOW_PLAINTEXT_AT_REST``
-    allows plaintext.
+    when that is unset, the recording key. A plaintext recording compiles
+    into a sealed bundle when :func:`openadapt_flow.at_rest.seal_new` says so
+    (``OPENADAPT_FLOW_AT_REST=strict``); otherwise the plaintext bundle is
+    named on stderr and in the ledger.
     """
     recording = Path(recording_dir)
     bundle = Path(out_bundle_dir)

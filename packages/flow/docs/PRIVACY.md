@@ -53,11 +53,10 @@ Paths this rule does not cover yet are listed under
 
 ## Local posture
 
-Scrubbing and encryption are separate controls. Encryption at rest is on by
-default: recordings, compiled bundles and durable checkpoints are encrypted
-under a configured key or a locally generated one, and
-`OPENADAPT_FLOW_AT_REST=strict` refuses every artifact that can't be
-encrypted yet ([phi_at_rest.md](phi_at_rest.md#default-opt-out-and-strict-mode)).
+Scrubbing and encryption are separate controls. Durable checkpoints are
+encrypted by default, under a configured key or a locally generated one, and
+`OPENADAPT_FLOW_AT_REST=strict` encrypts every recording, bundle and run
+directory ([phi_at_rest.md](phi_at_rest.md#default-opt-out-and-strict-mode)).
 
 Two environment variables control scrubbing of what is written locally. The
 default is **predictable, not maximally private**: `auto` writes unscrubbed

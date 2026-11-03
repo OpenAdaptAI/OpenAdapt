@@ -134,17 +134,29 @@ def test_unsealed_write_names_the_path_or_refuses(
     assert len(_ledger(default_mode)) == 1
 
 
-# -- what is sealed by default ---------------------------------------------------
+# -- recordings and bundles -------------------------------------------------------
 
 
-def test_a_plaintext_recording_compiles_to_a_sealed_bundle(
-    default_mode: Path, tmp_path: Path
+def test_a_plaintext_bundle_is_named_by_default(
+    default_mode: Path, tmp_path: Path, capsys
 ) -> None:
-    rec = _recording(tmp_path / "rec", key=None)  # made before the default
+    rec = _recording(tmp_path / "rec", key=None)
+    assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
+    assert (tmp_path / "b" / "workflow.json").is_file()
+    assert str(tmp_path / "b") in capsys.readouterr().err
+    assert _ledger(default_mode)[0]["path"] == str(tmp_path / "b")
+
+
+def test_strict_mode_compiles_a_plaintext_recording_to_a_sealed_bundle(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    rec = _recording(tmp_path / "rec", key=None)  # made before strict mode
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
     _assert_ciphertext_only(tmp_path / "b")
     assert Workflow.load(tmp_path / "b").encrypted
     assert sealed_set.SealedSet.open(tmp_path / "b", crypto.resolve_key(None))
+    assert _ledger(default_mode) == []
 
 
 def test_compile_under_the_opt_out_stays_plaintext(
@@ -154,14 +166,24 @@ def test_compile_under_the_opt_out_stays_plaintext(
     rec = _recording(tmp_path / "rec", key=None)
     assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
     assert (tmp_path / "b" / "workflow.json").is_file()
-    assert _ledger(default_mode)[0]["purpose"] == "a compiled bundle"
+    assert any(e["purpose"] == "a compiled bundle" for e in _ledger(default_mode))
 
 
-def test_induce_seals_by_default_and_refuses_a_plaintext_report(
-    default_mode: Path, tmp_path: Path
+def test_a_recording_only_key_seals_bundles_under_that_key(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv(sealed_set.RECORDING_ENV_KEY, "recording-only-key")
+    rec = _recording(tmp_path / "rec", key="recording-only-key")
+    assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
+    assert sealed_set.SealedSet.open(tmp_path / "b", "recording-only-key")
+
+
+def test_strict_induce_seals_and_refuses_a_plaintext_report(
+    default_mode: Path, tmp_path: Path, monkeypatch
 ) -> None:
     first = _recording(tmp_path / "rec1", key=None)
     second = _recording(tmp_path / "rec2", key=None)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
     report = tmp_path / "induce.json"
     refused = main(
         [
@@ -179,13 +201,31 @@ def test_induce_seals_by_default_and_refuses_a_plaintext_report(
     _assert_ciphertext_only(tmp_path / "i")
 
 
+def test_a_key_from_another_deployment_gets_a_clear_message(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    rec = _recording(tmp_path / "rec", key="deployment-key")
+    with pytest.raises(sealed_set.SealedSetKeyError, match="OPENADAPT_RECORDING_KEY"):
+        sealed_set.open_set(rec)
+
+
 def _record_args(out: Path, *, no_encrypt: bool = False) -> argparse.Namespace:
     return argparse.Namespace(out=str(out), no_encrypt=no_encrypt)
 
 
-def test_web_recordings_get_the_local_key(default_mode: Path, tmp_path: Path) -> None:
-    assert _recording_encryption_key(_record_args(tmp_path / "r"), "web") == (
+def test_web_recordings_are_named_by_default_and_sealed_in_strict_mode(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    assert _recording_encryption_key(_record_args(tmp_path / "r"), "web") is None
+    assert _ledger(default_mode)[0]["path"] == str(tmp_path / "r")
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    assert _recording_encryption_key(_record_args(tmp_path / "r2"), "web") == (
         crypto.resolve_key(None)
+    )
+    monkeypatch.delenv(at_rest.MODE_ENV)
+    monkeypatch.setenv(crypto.ENV_KEY, "deployment-key")
+    assert _recording_encryption_key(_record_args(tmp_path / "r3"), "web") == (
+        "deployment-key"
     )
 
 
