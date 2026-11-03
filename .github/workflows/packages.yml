@@ -642,7 +642,6 @@ jobs:
         # One process: the scenarios share one MockMed server per module.
         env:
           OPENADAPT_GOLDEN_OUT: runs/golden
-          OPENADAPT_GOLDEN_WRITE: "1"  # TEMPORARY: Linux baselines; reverted before review
         run: |
           pytest -vv --durations=20 tests/golden_runs \
             --basetemp=runs/ci-goldens --junitxml=runs/goldens-junit.xml
