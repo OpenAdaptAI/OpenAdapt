@@ -177,9 +177,7 @@ class MacOSInputFocusProbe:
 
             application = ax.AXUIElementCreateApplication(pid)
             if (
-                ax.AXUIElementSetMessagingTimeout(
-                    application, _MACOS_AX_FOCUS_TIMEOUT_SECONDS
-                )
+                ax.AXUIElementSetMessagingTimeout(application, _MACOS_AX_FOCUS_TIMEOUT_SECONDS)
                 != success
             ):
                 return None
@@ -201,6 +199,31 @@ class MacOSInputFocusProbe:
         except Exception:
             return None
 
+    @staticmethod
+    def _ax_focused_application_pid() -> int | None:
+        """Return the pid of the system-wide focused application, or ``None``.
+
+        A non-activating panel (Spotlight, a launcher, a password manager's
+        quick-access panel) takes the keys without becoming the frontmost
+        application, so ``NSWorkspace`` cannot see it; this reading can.
+        ``None`` when Accessibility cannot answer.
+        """
+        try:
+            import ApplicationServices as ax
+
+            success = ax.kAXErrorSuccess
+            system = ax.AXUIElementCreateSystemWide()
+            ax.AXUIElementSetMessagingTimeout(system, _MACOS_AX_FOCUS_TIMEOUT_SECONDS)
+            error, application = ax.AXUIElementCopyAttributeValue(
+                system, "AXFocusedApplication", None
+            )
+            if error != success or application is None:
+                return None
+            error, pid = ax.AXUIElementGetPid(application, None)
+            return int(pid) if error == success and pid else None
+        except Exception:
+            return None
+
     def keyboard_focus(self, *, at_receipt: bool = False) -> FocusOwner | None:
         """Return the focused window and its process.
 
@@ -208,14 +231,24 @@ class MacOSInputFocusProbe:
         answer names the process alone. At delivery the front-most on-screen
         application window must belong to that process. ``NSWorkspace`` is
         updated through the main run loop and can be stale in a process that
-        does not run one, so a disagreement is reported as unknown. That
-        window is the focused window, unless one of the application's raised
-        windows is in front of it (a dialog), or Accessibility names a
-        different focused window (unknown) or a dialog or sheet.
+        does not run one, so a disagreement is reported as unknown. When
+        Accessibility names another focused application (a non-activating
+        panel), the reading is unknown too.
+
+        When Accessibility names the application's focused window, that
+        window is the answer, or a dialog when it is one or focus sits in a
+        sheet. Child windows in front of it (an address bar's suggestion
+        list, a hover card) don't take the keys, so z-order doesn't decide.
+        Without that answer, the front-most layer-0 window is the focused
+        window, unless one of the application's raised windows is in front
+        of it (a dialog).
         """
         pid = self._frontmost_pid()
         if pid is None or at_receipt:
             return None if pid is None else FocusOwner(pid=pid)
+        focused_app = self._ax_focused_application_pid()
+        if focused_app is not None and focused_app != pid:
+            return None
         raised: dict | None = None
         front: dict | None = None
         for info in self._onscreen_app_windows():
@@ -227,18 +260,20 @@ class MacOSInputFocusProbe:
             break
         if front is None or front["pid"] != pid:
             return None
-        if raised is not None:
-            # A modal or floating panel of the app sits over its document
-            # windows. Keys typed while it is up go to the panel.
-            return FocusOwner(window_id=raised["window_id"] or None, pid=pid, dialog=True)
         window_id = front["window_id"] or None
         focused = self._ax_focused_window(pid)
         if focused is not None:
             ax_window_id, dialog = focused
             if dialog:
                 return FocusOwner(window_id=ax_window_id or window_id, pid=pid, dialog=True)
-            if ax_window_id is not None and ax_window_id != window_id:
-                return None
+            if ax_window_id is not None:
+                # The key window: a modal panel that took the keys would be
+                # named here itself, so popups in front of it don't matter.
+                return FocusOwner(window_id=ax_window_id, pid=pid)
+        if raised is not None:
+            # A modal or floating panel of the app sits over its document
+            # windows. Keys typed while it is up go to the panel.
+            return FocusOwner(window_id=raised["window_id"] or None, pid=pid, dialog=True)
         return FocusOwner(window_id=window_id, pid=pid)
 
     def window_at(self, x: float, y: float) -> FocusOwner | None:

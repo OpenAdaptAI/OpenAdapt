@@ -489,9 +489,7 @@ def test_process_only_focus_is_kept_and_marked_as_weaker_evidence(tmp_path, monk
     assert "".join(row["key_char"] for row in keys if row["name"] == "press") == "abcd"
     evidence = [gap for gap in recording.gaps() if gap["event"] == "keyboard_focus_evidence"]
     assert [gap["evidence"] for gap in evidence] == [FOCUS_EVIDENCE_PROCESS, FOCUS_EVIDENCE_WINDOW]
-    assert all(
-        set(gap) == {"schema_version", "event", "evidence", "timestamp"} for gap in evidence
-    )
+    assert all(set(gap) == {"schema_version", "event", "evidence", "timestamp"} for gap in evidence)
     recording.assert_nowhere("bc")
 
 
@@ -548,9 +546,7 @@ def test_keyboard_focus_evidence_names_window_or_process(scope, fake):
     # window evidence (the macOS event tap reads only the process).
     fake.keyboard_owner = TARGET
     assert (
-        scope.assert_input_on_target(
-            window, keyboard_focus_at_receipt=FocusOwner(pid=fake.pid)
-        )
+        scope.assert_input_on_target(window, keyboard_focus_at_receipt=FocusOwner(pid=fake.pid))
         == FOCUS_EVIDENCE_WINDOW
     )
 
@@ -563,9 +559,7 @@ def test_a_named_window_never_falls_back_to_the_process(scope, fake):
     assert excinfo.value.reason == INPUT_KEYBOARD_FOCUS_ELSEWHERE
     fake.keyboard_owner = TARGET
     with pytest.raises(WindowInputNotOnTarget) as excinfo:
-        scope.assert_input_on_target(
-            window, keyboard_focus_at_receipt=SECOND_TARGET_APP_WINDOW
-        )
+        scope.assert_input_on_target(window, keyboard_focus_at_receipt=SECOND_TARGET_APP_WINDOW)
     assert excinfo.value.reason == INPUT_KEYBOARD_FOCUS_ELSEWHERE
 
 
@@ -617,7 +611,7 @@ def _quartz_window(window_id, pid, bounds, *, layer=0, alpha=1.0):
 def fake_macos(monkeypatch):
     import sys
 
-    state = SimpleNamespace(frontmost_pid=1234, windows=[])
+    state = SimpleNamespace(frontmost_pid=1234, windows=[], focused_app_pid=None)
     quartz = SimpleNamespace(
         kCGWindowListOptionOnScreenOnly=1,
         kCGWindowListExcludeDesktopElements=16,
@@ -634,6 +628,10 @@ def fake_macos(monkeypatch):
     success = 0
 
     def copy_attribute(element, name, _out):
+        if element == "system" and name == "AXFocusedApplication":
+            if state.focused_app_pid is None:
+                return (-25211, None)
+            return (success, "focused_app")
         if state.ax_window is None:
             return (-25211, None)  # kAXErrorAPIDisabled
         number, subrole, focused_role = state.ax_window
@@ -651,6 +649,8 @@ def fake_macos(monkeypatch):
     applicationservices = SimpleNamespace(
         kAXErrorSuccess=success,
         AXUIElementCreateApplication=lambda _pid: "app",
+        AXUIElementCreateSystemWide=lambda: "system",
+        AXUIElementGetPid=lambda _element, _out: (success, state.focused_app_pid),
         AXUIElementSetMessagingTimeout=lambda _element, _seconds: success,
         AXUIElementCopyAttributeValue=copy_attribute,
     )
@@ -696,9 +696,18 @@ def test_macos_probe_names_the_front_window_and_checks_accessibility(fake_macos)
     # Accessibility agrees.
     fake_macos.ax_window = (43, "AXStandardWindow", "AXTextField")
     assert probe.keyboard_focus() == FocusOwner(window_id=43, pid=1234)
-    # Accessibility names another window: unknown, so input is refused.
+    # Accessibility names the key window behind a child window in front
+    # (an address bar's suggestion list): the key window has the keys.
     fake_macos.ax_window = (42, "AXStandardWindow", "AXTextField")
+    assert probe.keyboard_focus() == FocusOwner(window_id=42, pid=1234)
+    # So does a raised popup of the app when Accessibility names the target.
+    fake_macos.windows.insert(0, _quartz_window(9, 1234, (300, 180, 400, 300), layer=3))
+    assert probe.keyboard_focus() == FocusOwner(window_id=42, pid=1234)
+    # Another app's non-activating panel (a launcher) has the keys, though
+    # NSWorkspace still names the target's app as frontmost.
+    fake_macos.focused_app_pid = 777
     assert probe.keyboard_focus() is None
+    fake_macos.focused_app_pid = None
     # A dialog window, or a sheet under the focused element, is a dialog.
     fake_macos.ax_window = (43, "AXDialog", "AXSecureTextField")
     assert probe.keyboard_focus() == FocusOwner(window_id=43, pid=1234, dialog=True)
@@ -867,7 +876,9 @@ def test_x11_probe_reports_active_window_and_point_owner():
 # ---------------------------------------------------------------------------
 
 
-_LIVE_MACOS = sys.platform == "darwin" and os.environ.get("OPENADAPT_CAPTURE_MACOS_FOCUS_CHECK") == "1"
+_LIVE_MACOS = (
+    sys.platform == "darwin" and os.environ.get("OPENADAPT_CAPTURE_MACOS_FOCUS_CHECK") == "1"
+)
 
 
 @pytest.mark.slow
