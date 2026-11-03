@@ -1096,6 +1096,7 @@ effects:
   kind: fhir
   base_url: https://fhir.example.org/r4
   resource_type: Observation
+  field_paths: {id: id, patient: subject.reference, note: valueString}
   smart_backend:
     client_id: my-registered-client
     scope: system/Observation.rs

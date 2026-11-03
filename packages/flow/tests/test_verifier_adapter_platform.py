@@ -11,6 +11,8 @@ through both registration paths.
 
 from __future__ import annotations
 
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
 import importlib.metadata
 from datetime import datetime, timedelta, timezone
 
@@ -108,7 +110,11 @@ class TestAdapterInterface:
                 "http://sor", records_path="/api/db", records_key="records"
             ),
             GraphQLRecordVerifier("http://sor/graphql", query="query { r { id } }"),
-            FhirEffectVerifier("http://sor/fhir"),
+            FhirEffectVerifier(
+                "http://sor/fhir",
+                resource_type="Observation",
+                field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            ),
             SqlRecordVerifier(lambda: None, "SELECT id FROM t"),
             FileArrivalVerifier(str(tmp_path)),
             MaildirDeliveryVerifier(str(tmp_path)),

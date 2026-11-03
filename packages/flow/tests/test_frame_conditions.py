@@ -282,6 +282,12 @@ def test_a_bot_log_entry_on_an_undeclared_record_is_collateral() -> None:
         # Both reads read uuid_registry as append-only, and the profile marks
         # it: the bot's insert there, filed under no chart, is bookkeeping.
         (["openemr.uuid_registry"], {}, "held"),
+        # An empty record field names no record in any app.
+        (["openemr.uuid_registry"], {"record": None, "values": ()}, "held"),
+        (["openemr.uuid_registry"], {"record": "", "values": ()}, "held"),
+        # Record 0 names no record only where the app profile says so; in an
+        # app whose profile doesn't, 0 is a record id and the entry counts.
+        (["openemr.uuid_registry"], {"values": ()}, "refuted"),
         # No read of it, or a read of another table: the entry still refutes.
         ([], {}, "refuted"),
         (["openemr.log"], {}, "refuted"),
@@ -294,6 +300,9 @@ def test_a_bot_log_entry_on_an_undeclared_record_is_collateral() -> None:
 def test_a_bot_insert_entry_naming_no_record_needs_that_table_read(
     read: list[str], entry: dict, status: str
 ) -> None:
+    entry = dict(entry)
+    # OpenEMR's profile: an entry filed under patient 0 names no chart.
+    values = entry.pop("values", ("0",))
     spec = _audit_spec()
     assert spec.attribution is not None
     spec.attribution.table_field = "tbl"
@@ -308,6 +317,7 @@ def test_a_bot_insert_entry_naming_no_record_needs_that_table_read(
         audit_before=[],
         audit_after=[logged],
         no_record_inserts=read,
+        no_record_values=values,
     )
     assert verdict.status == status, verdict.reason
 

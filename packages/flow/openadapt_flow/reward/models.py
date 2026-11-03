@@ -230,7 +230,7 @@ class OracleRecipeV1(_Strict):
     query: Optional[StrictStr] = None
     #: ``fhir``: resource type and search parameters; ``token_env`` names the
     #: bearer token variable.
-    resource_type: StrictStr = "Observation"
+    resource_type: Optional[StrictStr] = None
     search_params: dict[StrictStr, StrictStr] = Field(default_factory=dict)
     field_paths: Optional[dict[StrictStr, StrictStr]] = None
     token_env: Optional[StrictStr] = None
@@ -247,6 +247,10 @@ class OracleRecipeV1(_Strict):
             raise ValueError(f"oracle recipe {self.kind} requires base_url")
         if self.kind == "rest" and not self.records_path:
             raise ValueError("oracle recipe rest requires records_path")
+        if self.kind == "fhir" and not (self.resource_type and self.field_paths):
+            raise ValueError(
+                "oracle recipe fhir requires resource_type and field_paths"
+            )
         if self.kind == "sqlite" and not self.query:
             raise ValueError("oracle recipe sqlite requires query")
         return self

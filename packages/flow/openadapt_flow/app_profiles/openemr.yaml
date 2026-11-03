@@ -11,13 +11,15 @@
 # excused.
 schema_version: openadapt.app-profile/v2
 app: openemr
-version: openemr-frame-profile/2026-10-29.5
+version: openemr-frame-profile/2026-11-03.1
 bookkeeping_tables: [log, log_comment_encrypt, api_log, extended_log, audit_master,
   audit_details, clinical_rules_log, uuid_registry, uuid_mapping, contact,
   session_tracker, ip_tracking, background_services, sequences,
   users_secure, user_settings, recent_patients, users]
 system_columns: [uuid]
 users: {table: users, id_column: id, name_column: username}
+# OpenEMR files an entry that names no chart under patient_id 0.
+no_record_values: ["0"]
 rules:
   # Logs and id maps: rows are added, never changed or removed. On the four
   # marked insert_entry_names_no_record, OpenEMR inserts a row with a save or

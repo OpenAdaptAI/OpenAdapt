@@ -1,7 +1,7 @@
 """Generate an ``openadapt.ensure-record/v1`` contract for a FHIR write.
 
 A person used to write about half of a FHIR ensure-record contract by hand
-(``benchmark/fhir_medplum/readpath/MINUTES.md``): the ``telecom[system=...]``
+(for example, for a FHIR server's patient write): the ``telecom[system=...]``
 paths, the comparison kinds, the state map, the identity rules, the search
 parameter per identity value, the closed record and the change feed. This
 module derives each of them from what a teach session already has:
@@ -119,32 +119,16 @@ def _load(path: Path) -> Any:
         raise GenerateError(f"cannot read {path}: {exc}") from exc
 
 
-def facts_from_probe(probe: Mapping[str, Any]) -> dict[str, Any]:
-    """Server facts from ``benchmark/fhir_medplum/readpath/probe.py`` output.
+def server_facts(doc: Mapping[str, Any]) -> dict[str, Any]:
+    """The generic server facts in a teach directory's ``facts.json``.
 
-    A probe that already reports the generic names passes through.
+    Only the names in :data:`FACTS` are read. A probe written for one server
+    translates its own output to these names, beside the probe in the
+    benchmark tree. A fact that is missing is not measured, and the contract
+    it would back is refused.
     """
 
-    if all(k in probe for k in FACTS):
-        return {k: probe[k] for k in FACTS}
-    out: dict[str, Any] = {}
-    logged = probe.get("bundle_and_graphql_writes_logged")
-    if isinstance(logged, list):
-        out["audit_logs_writes"] = len(logged) > 0
-    for name, key in (
-        ("audit_names_actor", "audit_names_the_user_profile"),
-        ("agent_cannot_write_audit", "restricted_bot_audit_read_only"),
-        ("history_lists_versions", "delete_in_history"),
-        ("meta_author_returned", "meta_author_returned"),
-    ):
-        if key in probe:
-            out[name] = probe[key]
-    lags = probe.get("audit_lag_s")
-    if isinstance(lags, Mapping) and lags:
-        out["audit_lag_max_s"] = max(
-            float(v.get("max", 0)) for v in lags.values() if isinstance(v, Mapping)
-        )
-    return out
+    return {k: doc[k] for k in FACTS if k in doc}
 
 
 def load_teach(root: str | Path, confirmed: Sequence[str] = ()) -> Teach:
@@ -152,7 +136,7 @@ def load_teach(root: str | Path, confirmed: Sequence[str] = ()) -> Teach:
 
     ``teach.json`` (resource type and deployment settings),
     ``capability.json``, ``search_parameters.json`` (Bundle), ``facts.json``
-    (generic facts or a probe's output) and ``demos/<name>/{params,before,
+    (the generic facts in :data:`FACTS`) and ``demos/<name>/{params,before,
     after}.json``.
     """
 
@@ -174,7 +158,7 @@ def load_teach(root: str | Path, confirmed: Sequence[str] = ()) -> Teach:
         demos=demos,
         capability=_load(base / "capability.json"),
         search_parameters=_resources(_load(sp_path)) if sp_path.exists() else [],
-        facts=facts_from_probe(_load(base / "facts.json")),
+        facts=server_facts(_load(base / "facts.json")),
         deployment=dict(meta.get("deployment") or {}),
         # A confirmation is a person's, given to the command, never read
         # from the teach data.

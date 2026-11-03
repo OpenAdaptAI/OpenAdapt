@@ -246,9 +246,9 @@ def _adapter_for(recipe: OracleRecipeV1, base_dir: Path) -> OracleAdapter:
         return VerifierOracle(
             FhirEffectVerifier(
                 str(recipe.base_url),
-                resource_type=recipe.resource_type,
+                resource_type=str(recipe.resource_type),
                 search_params=dict(recipe.search_params),
-                field_paths=recipe.field_paths,
+                field_paths=dict(recipe.field_paths or {}),
                 access_token=recipe.token(),
                 timeout_s=recipe.timeout_s,
             ),

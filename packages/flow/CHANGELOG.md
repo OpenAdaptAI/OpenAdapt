@@ -25,6 +25,8 @@
 
 ### Fixes
 
+- A FHIR read names its resource and field map: `effects.kind: fhir`, a reward recipe of kind `fhir` and `FhirEffectVerifier` require `resource_type` and `field_paths` instead of defaulting to one app's note-as-Observation layout (`DEFAULT_OBSERVATION_PATHS` stays importable for callers whose app stores notes that way). An app profile's `no_record_values` lists the record-field values its audit entries use for "no record" (OpenEMR's profile: `"0"`; profile version `openemr-frame-profile/2026-11-03.1`); the frame and rollback no longer treat `0` as "no record" in every app. `generate ensure-contract` reads only the generic server-fact names from `facts.json`; the Medplum probe's translation moved to `benchmark/fhir_medplum/readpath/facts.py`.
+
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
 - Self-repair can take a stop where the app's own dialog covers the next step's identity band: when the backend proves the covering window belongs to the window the last verified step was in, and the part of the band read still matches the record, the dialog is dismissed after the previous click and the step re-checks its identity in full. Another record behind the dialog stays an identity halt. The runtime lets a backend remember a verified record's window (`record_verified_window`); macOS answers `owned_window_over` from the window's proved sheet ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).

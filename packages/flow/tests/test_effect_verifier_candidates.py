@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
 import pytest
 
 from openadapt_flow.deployment import (
@@ -368,17 +370,29 @@ def test_plugin_with_incompatible_verify_signature_fails_at_construction():
 def test_verifier_identity_binds_config_but_not_literal_secret():
     first = build_effect_verifier(
         EffectsConfig(
-            kind="fhir", base_url="https://records.example/a", access_token="one"
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            kind="fhir",
+            base_url="https://records.example/a",
+            access_token="one",
         )
     )
     rotated_secret = build_effect_verifier(
         EffectsConfig(
-            kind="fhir", base_url="https://records.example/a", access_token="two"
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            kind="fhir",
+            base_url="https://records.example/a",
+            access_token="two",
         )
     )
     changed_boundary = build_effect_verifier(
         EffectsConfig(
-            kind="fhir", base_url="https://records.example/b", access_token="two"
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            kind="fhir",
+            base_url="https://records.example/b",
+            access_token="two",
         )
     )
 

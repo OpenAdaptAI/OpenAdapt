@@ -40,6 +40,8 @@ spending money now. See :func:`agent_arm_gate`.
 
 from __future__ import annotations
 
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
 import json
 import os
 import time
@@ -272,7 +274,12 @@ def _live_probe(
     from openadapt_flow.runtime.effects import FhirEffectVerifier
 
     token = os.environ.get("OPENEMR_FHIR_TOKEN")
-    verifier = FhirEffectVerifier(base.rstrip("/"), access_token=token)
+    verifier = FhirEffectVerifier(
+        base.rstrip("/"),
+        resource_type="Observation",
+        field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+        access_token=token,
+    )
     try:
         state = verifier.capture_pre_state()
         reachable = bool(state.reachable)

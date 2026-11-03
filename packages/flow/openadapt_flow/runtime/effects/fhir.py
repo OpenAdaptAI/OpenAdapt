@@ -56,8 +56,9 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.verification import VerificationTier
 
-#: OpenEMR's FHIR field paths for the canonical patient-note-as-Observation
-#: write. Callers override for DocumentReference / Encounter / etc.
+#: A field map for a note kept as a FHIR R4 Observation (the note in
+#: ``valueString``). Not a default: a caller whose app stores its writes this
+#: way passes it as ``field_paths``; any other resource or app names its own.
 DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
     "id": "id",
     "patient": "subject.reference",
@@ -188,18 +189,18 @@ def extract_path(resource: dict[str, Any], dotted: str) -> Any:
 
 
 class FhirEffectVerifier(VerifierAdapterBase):
-    """Verify effects against an OpenEMR FHIR R4 system of record.
+    """Verify effects against a FHIR R4 system of record.
 
     Args:
-        base_url: FHIR base URL (e.g.
-            ``https://demo.openemr.io/apis/default/fhir/R4``).
+        base_url: FHIR base URL (e.g. ``https://fhir.example.org/R4``).
         resource_type: FHIR resource type to search (``Observation``,
-            ``DocumentReference``, ``Encounter``, ...).
+            ``DocumentReference``, ``Encounter``, ...). Required.
         search_params: Query params identifying the candidate resource set
             (e.g. ``{"patient": "9", "category": "social-history"}``); used
             for both the pre-state snapshot and the post-action read.
         field_paths: Flat Effect key -> dotted FHIRPath-lite for flattening a
-            resource into the dict :func:`judge_records` matches on.
+            resource into the dict :func:`judge_records` matches on. Required:
+            where a field lives depends on the app and the resource.
         access_token: OAuth2 bearer token (``Authorization: Bearer ...``).
         token_source: Gets a token per read instead of ``access_token``
             (mutually exclusive with it).
@@ -218,9 +219,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self,
         base_url: str,
         *,
-        resource_type: str = "Observation",
+        resource_type: str,
+        field_paths: dict[str, str],
         search_params: Optional[dict[str, str]] = None,
-        field_paths: Optional[dict[str, str]] = None,
         access_token: Optional[str] = None,
         token_source: Optional[AccessTokenSource] = None,
         session: Any = None,
@@ -233,7 +234,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self.drop_fields = tuple(drop_fields)
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
-        self.field_paths = dict(field_paths or DEFAULT_OBSERVATION_PATHS)
+        if not resource_type or not field_paths:
+            raise ValueError("a FHIR read needs its resource_type and field_paths")
+        self.field_paths = dict(field_paths)
         if access_token and token_source is not None:
             raise ValueError("give access_token or token_source, not both")
         self.access_token = access_token

@@ -65,7 +65,12 @@ def test_all_verifiers_satisfy_protocol(tmp_path):
     assert isinstance(DocumentHashVerifier(tmp_path), EffectVerifier)
     from openadapt_flow.runtime.effects import FhirEffectVerifier
 
-    assert isinstance(FhirEffectVerifier("http://x"), EffectVerifier)
+    assert isinstance(
+        FhirEffectVerifier(
+            "http://x", resource_type="Observation", field_paths={"id": "id"}
+        ),
+        EffectVerifier,
+    )
 
 
 # -- judge_records unit logic (no network) ----------------------------------

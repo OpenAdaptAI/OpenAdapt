@@ -447,8 +447,10 @@ class EffectsConfig(BaseModel):
     #: Allowlist variant: when set, every evidence field NOT named is redacted.
     evidence_keep_fields: Optional[list[str]] = None
 
-    # -- fhir (FHIR R4 search, e.g. OpenEMR) ---------------------------------
-    resource_type: str = "Observation"
+    # -- fhir (FHIR R4 search) -----------------------------------------------
+    #: ``fhir`` only, and required there with ``field_paths``: which resource
+    #: the app keeps the write in, and where each field lives in it.
+    resource_type: Optional[str] = None
     search_params: dict[str, str] = Field(default_factory=dict)
     field_paths: Optional[dict[str, str]] = None
     #: OAuth2 bearer token literal. DEPRECATED for committed configs — prefer
@@ -630,6 +632,7 @@ class EffectsConfig(BaseModel):
             "records_next_path",
             "records_total_path",
             "records_path",
+            "resource_type",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
@@ -2266,6 +2269,12 @@ def _build_effect_verifier_unredacted(
     if kind == "fhir":
         if not cfg.base_url:
             raise ValueError("effects.kind 'fhir' requires effects.base_url")
+        if not cfg.resource_type or not cfg.field_paths:
+            raise ValueError(
+                "effects.kind 'fhir' requires effects.resource_type and "
+                "effects.field_paths (which resource the app keeps the write "
+                "in, and where each field lives in it)"
+            )
         from openadapt_flow.runtime.effects import FhirEffectVerifier
 
         access_token = cfg.access_token

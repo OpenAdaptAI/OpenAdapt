@@ -17,6 +17,8 @@ client is constructed. Pinned below so a future edit cannot reintroduce a
 
 from __future__ import annotations
 
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
 import builtins
 import json
 import threading
@@ -95,12 +97,22 @@ class TestFhirTransport:
 
         _hide(monkeypatch, "requests")
         assert isinstance(
-            FhirEffectVerifier("http://127.0.0.1:1")._get_session(), httpx.Client
+            FhirEffectVerifier(
+                "http://127.0.0.1:1",
+                resource_type="Observation",
+                field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            )._get_session(),
+            httpx.Client,
         )
 
     def test_injected_session_is_always_preferred(self) -> None:
         sentinel = object()
-        verifier = FhirEffectVerifier("http://127.0.0.1:1", session=sentinel)
+        verifier = FhirEffectVerifier(
+            "http://127.0.0.1:1",
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            session=sentinel,
+        )
         assert verifier._get_session() is sentinel
 
     def test_records_are_read_over_the_fallback_transport(
@@ -108,7 +120,11 @@ class TestFhirTransport:
     ) -> None:
         """The fallback is wired end to end, not merely constructible."""
         _hide(monkeypatch, "requests")
-        state = FhirEffectVerifier(sor, resource_type="Observation").capture_pre_state()
+        state = FhirEffectVerifier(
+            sor,
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            resource_type="Observation",
+        ).capture_pre_state()
         assert state.reachable is True
         assert [record["id"] for record in state.records] == ["obs-1"]
 
@@ -121,7 +137,12 @@ class TestFhirTransport:
         the blanket except reads as an unreadable system of record.
         """
         _hide(monkeypatch, "requests")
-        verifier = FhirEffectVerifier(sor, verify_tls=False)
+        verifier = FhirEffectVerifier(
+            sor,
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            verify_tls=False,
+        )
         assert verifier._get_session() is not None
         assert verifier._verify_per_request is False
         assert verifier.capture_pre_state().reachable is True

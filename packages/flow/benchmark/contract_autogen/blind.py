@@ -25,7 +25,6 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import sys
 import time
 from pathlib import Path
@@ -33,6 +32,7 @@ from typing import Any, Optional
 
 from benchmark.fhir_medplum.fixture import FixtureError, MedplumFixture, _http
 from benchmark.fhir_medplum.readpath import suite as runner
+from benchmark.fhir_medplum.readpath.facts import generic_facts
 
 HERE = Path(__file__).resolve().parent
 PROBE = HERE.parent / "fhir_medplum" / "readpath" / "probe.json"
@@ -101,7 +101,7 @@ def cmd_teach(args: argparse.Namespace) -> int:
         out / "search_parameters.json",
         read_all(f"{fx.fhir_url}/SearchParameter?base={rtype}&_count=200", reader),
     )
-    shutil.copyfile(PROBE, out / "facts.json")
+    _dump(out / "facts.json", generic_facts(json.loads(PROBE.read_text())))
     _dump(
         out / "teach.json",
         {

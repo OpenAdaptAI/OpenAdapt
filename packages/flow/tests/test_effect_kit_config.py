@@ -8,6 +8,8 @@ build), and byte-for-byte back-compat for pre-kit configs.
 
 from __future__ import annotations
 
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
 import sqlite3
 from pathlib import Path
 
@@ -181,6 +183,8 @@ class TestFhirKitConfig:
     def test_search_param_exprs_and_token_env(self, monkeypatch):
         monkeypatch.setenv("KIT_FHIR_TOKEN", "oauth-token")
         cfg = EffectsConfig(
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
             kind="fhir",
             base_url="https://emr.local/fhir",
             search_params={"category": "vital-signs"},
@@ -198,6 +202,8 @@ class TestFhirKitConfig:
     def test_token_env_missing_fails_loud(self, monkeypatch):
         monkeypatch.delenv("KIT_FHIR_ABSENT", raising=False)
         cfg = EffectsConfig(
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
             kind="fhir",
             base_url="https://emr.local/fhir",
             access_token_env="KIT_FHIR_ABSENT",
@@ -208,6 +214,8 @@ class TestFhirKitConfig:
     def test_token_env_wins_over_literal(self, monkeypatch):
         monkeypatch.setenv("KIT_FHIR_TOKEN", "from-env")
         cfg = EffectsConfig(
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
             kind="fhir",
             base_url="https://emr.local/fhir",
             access_token="literal-should-lose",
@@ -401,3 +409,28 @@ def test_rest_needs_the_apps_records_path():
         )
         assert isinstance(v, RestRecordVerifier)
         assert (v.records_path, v.records_key) == (path, key)
+
+
+def test_fhir_needs_the_apps_resource_and_field_paths():
+    """No app's FHIR layout is assumed: kind fhir names its resource and paths."""
+    with pytest.raises(ValueError, match="resource_type and"):
+        build_effect_verifier(EffectsConfig(kind="fhir", base_url="https://fhir.local"))
+    assert "resource_type" not in EffectsConfig(kind="none").model_dump()
+    # A note kept as an Observation (OpenEMR) and a Patient (Epic, Medplum)
+    # both work once named.
+    for resource, paths in (
+        ("Observation", dict(DEFAULT_OBSERVATION_PATHS)),
+        ("Patient", {"id": "id", "family": "name.family", "birthDate": "birthDate"}),
+    ):
+        v = build_effect_verifier(
+            EffectsConfig(
+                kind="fhir",
+                base_url="https://fhir.local",
+                resource_type=resource,
+                field_paths=paths,
+            )
+        )
+        assert isinstance(v, FhirEffectVerifier)
+        assert (v.resource_type, v.field_paths) == (resource, paths)
+    with pytest.raises(TypeError):
+        FhirEffectVerifier("https://fhir.local")  # type: ignore[call-arg]

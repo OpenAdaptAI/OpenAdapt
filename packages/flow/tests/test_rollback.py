@@ -1780,8 +1780,9 @@ def test_a_rollback_that_isnt_back_is_always_reconciliation(tmp_path):
 
 
 def test_the_apps_own_logged_bookkeeping_is_accounted_for():
-    # Round 9, as the frame decides: an insert naming no record (none, or
-    # OpenEMR's patient 0) in a bookkeeping table, and the acting user's own
+    # Round 9, as the frame decides: an insert naming no record (none, or a
+    # value the app profile lists, such as OpenEMR's patient 0) in a
+    # bookkeeping table, and the acting user's own
     # per-user rows, are the app's; a write to a disclosure log isn't.
     from openadapt_flow.runtime.effects.frame import FrameAttribution
 
@@ -1810,10 +1811,14 @@ def test_the_apps_own_logged_bookkeeping_is_accounted_for():
     ]
     assert (
         attributor.unaccounted_writes(
-            [], window, {"uuid_registry"}, {"recent_patients"}
+            [], window, {"uuid_registry"}, {"recent_patients"}, {"0"}
         )
         == []
     )
+    # Without that profile value, record 0 is a record like any other.
+    assert attributor.unaccounted_writes(
+        [], window, {"uuid_registry"}, {"recent_patients"}
+    ) == [window[0]]
     hidden = [entry("replace", "extended_log", "4")]
     assert (
         attributor.unaccounted_writes(
