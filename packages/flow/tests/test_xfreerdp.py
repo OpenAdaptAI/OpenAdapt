@@ -62,6 +62,19 @@ def test_avc444_field_keeps_earlier_profile_digests():
     )
 
 
+def test_session_file_writes_avc444_only_when_on(tmp_path):
+    import json
+
+    from openadapt_flow.backends.xfreerdp import load_session, save_session
+
+    plain = save_session(tmp_path / "plain.json", RdpTarget("10.0.0.5"))
+    assert "avc444" not in json.loads(plain.read_text())["profile"]
+    avc = SessionProfile(lossless=False, avc444=True)
+    path = save_session(tmp_path / "avc.json", RdpTarget("10.0.0.5"), avc)
+    assert json.loads(path.read_text())["profile"]["avc444"] is True
+    assert load_session(path)[1] == avc
+
+
 @pytest.mark.parametrize("kw", [{"scale": 125}, {"desktop_scale": 50}, {"width": 10}])
 def test_profile_rejects_bad_values(kw):
     with pytest.raises(ValueError):

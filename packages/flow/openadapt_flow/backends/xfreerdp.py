@@ -151,14 +151,21 @@ class SessionProfile:
         args.append("+clipboard" if self.clipboard else "-clipboard")
         return args
 
+    def to_dict(self) -> dict[str, Any]:
+        """The profile's fields, without ``avc444`` while it is off.
+
+        Profiles saved before the field existed keep their digest, and a
+        session file without AVC444 still loads in releases that predate it.
+        """
+        fields = asdict(self)
+        if not self.avc444:
+            del fields["avc444"]
+        return fields
+
     @property
     def sha256(self) -> str:
         """Digest of the profile, recorded with each run."""
-        fields = asdict(self)
-        if not self.avc444:
-            # Profiles saved before the field existed keep their digest.
-            del fields["avc444"]
-        body = json.dumps(fields, sort_keys=True).encode("utf-8")
+        body = json.dumps(self.to_dict(), sort_keys=True).encode("utf-8")
         return hashlib.sha256(body).hexdigest()
 
 
@@ -200,7 +207,7 @@ def save_session(
     body = {
         "schema": SESSION_SCHEMA,
         "target": asdict(target),
-        "profile": asdict(profile),
+        "profile": profile.to_dict(),
         "profile_sha256": profile.sha256,
         "gateway": asdict(gateway) if gateway is not None else None,
     }

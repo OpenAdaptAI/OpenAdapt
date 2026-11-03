@@ -57,6 +57,21 @@ _PYTHON_DIRS = (
 )
 
 
+# Run over SSH: read the whole script from stdin and run it as one block. Like
+# ``powershell -Command``, exit 1 when the script's last statement failed.
+_SSH_BOOTSTRAP = base64.b64encode(
+    (
+        "$ProgressPreference='SilentlyContinue'; "
+        "[Console]::InputEncoding=[Text.Encoding]::UTF8; "
+        "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
+        "$global:OAFlowLastOk=$true; "
+        '$s=[Console]::In.ReadToEnd() + "`n`$global:OAFlowLastOk=`$?"; '
+        "& ([scriptblock]::Create($s)); "
+        "if (-not $global:OAFlowLastOk) { exit 1 }"
+    ).encode("utf-16-le")
+).decode("ascii")
+
+
 class WinRMLabError(RuntimeError):
     """A lab host command failed; carries the exit status and stderr tail."""
 
@@ -141,9 +156,14 @@ class WinRMLab:
         port: int = 5985,
         profile: Optional[str] = None,
     ) -> None:
-        if host and user and not profile:
-            # Explicit connection facts: the original WinRM-only call.
-            self.profile = HostProfile(name="explicit", host=host, user=user)
+        if (host or user) and not profile:
+            # Explicit connection facts: the original WinRM-only call, which
+            # fills gaps (and the password) from the ``winlab`` variables.
+            host = host or os.environ.get("OAFLOW_WINLAB_HOST")
+            user = user or os.environ.get("OAFLOW_WINLAB_USER")
+            if not (host and user):
+                raise WinRMLabError("WinRMLab needs a host and a user")
+            self.profile = HostProfile(name="winlab", host=host, user=user)
         else:
             base = HostProfile.from_env(profile)
             self.profile = HostProfile(
@@ -184,12 +204,17 @@ class WinRMLab:
             f"{self.user}@{self.host}",
         ]
 
-    def _ssh(self, remote_command: str) -> Result:
-        proc = subprocess.run(
-            self._ssh_base() + [remote_command],
-            capture_output=True,
-            timeout=600,
-        )
+    def _ssh(self, remote_command: str, stdin: bytes = b"") -> Result:
+        try:
+            proc = subprocess.run(
+                self._ssh_base() + [remote_command],
+                input=stdin,
+                capture_output=True,
+                timeout=600,
+            )
+        except subprocess.TimeoutExpired:
+            # The exception's own text repeats the command line.
+            raise WinRMLabError(f"ssh to {self.host} timed out") from None
         return Result(
             proc.returncode,
             proc.stdout.decode("utf-8", "replace"),
@@ -205,11 +230,12 @@ class WinRMLab:
                 raw.std_err.decode("utf-8", "replace"),
             )
         else:
-            # Progress records would arrive as CLIXML on stderr.
-            body = "$ProgressPreference='SilentlyContinue'\n" + script
-            encoded = base64.b64encode(body.encode("utf-16-le")).decode("ascii")
+            # The script goes on stdin, so neither its length nor what it
+            # holds (an agent token) is on a command line. Progress records
+            # would arrive as CLIXML on stderr.
             result = self._ssh(
-                f"powershell -NoProfile -NonInteractive -EncodedCommand {encoded}"
+                f"powershell -NoProfile -NonInteractive -EncodedCommand {_SSH_BOOTSTRAP}",
+                stdin=script.encode("utf-8"),
             )
         if check and result.status != 0:
             raise WinRMLabError(
@@ -226,7 +252,11 @@ class WinRMLab:
                 raw.std_err.decode("utf-8", "replace"),
             )
         else:
-            result = self._ssh(subprocess.list2cmdline([command, *args]))
+            # PowerShell quoting, not cmd.exe's: no metacharacter reaches cmd.
+            quoted = " ".join(
+                "'" + a.replace("'", "''") + "'" for a in (command, *args)
+            )
+            result = self.run_ps(f"& {quoted}; exit $LASTEXITCODE", check=False)
         if check and result.status != 0:
             raise WinRMLabError(
                 f"guest command exited {result.status}: {result.stderr[-600:]}"
@@ -255,9 +285,16 @@ class WinRMLab:
             dest = "/" + remote.replace("\\", "/")
             proc = subprocess.run(
                 [
-                    "scp", "-q", "-i", str(self.profile.ssh_key), "-o", "BatchMode=yes",
-                    str(local), f"{self.user}@{self.host}:{dest}",
+                    "scp",
+                    "-q",
+                    "-i",
+                    str(self.profile.ssh_key),
+                    "-o",
+                    "BatchMode=yes",
+                    str(local),
+                    f"{self.user}@{self.host}:{dest}",
                 ],
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 timeout=600,
             )
@@ -321,9 +358,10 @@ $found
         quoted = arguments.replace("'", "''")
         exe_quoted = exe.replace("'", "''")
         argument = f" -Argument '{quoted}'" if arguments.strip() else ""
+        user = self.user.replace("'", "''")
         script = f"""
 $action = New-ScheduledTaskAction -Execute '{exe_quoted}'{argument}
-$principal = New-ScheduledTaskPrincipal -UserId '{self.user}' -LogonType Interactive -RunLevel Highest
+$principal = New-ScheduledTaskPrincipal -UserId '{user}' -LogonType Interactive -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 12)
 Register-ScheduledTask -TaskName '{task}' -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName '{task}'
@@ -359,8 +397,9 @@ Start-ScheduledTask -TaskName '{task}'
         fail. ``tscon <id> /dest:console`` reattaches it; it needs SYSTEM, so
         a one-shot scheduled task runs it.
         """
+        user = self.user.replace("'", "''")
         script = f"""
-$line = (query session {self.user} 2>$null | Select-Object -Skip 1 | Select-Object -First 1)
+$line = (query session '{user}' 2>$null | Select-Object -Skip 1 | Select-Object -First 1)
 if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
   $id = $Matches[1]
   $action = New-ScheduledTaskAction -Execute 'tscon.exe' -Argument "$id /dest:console"
