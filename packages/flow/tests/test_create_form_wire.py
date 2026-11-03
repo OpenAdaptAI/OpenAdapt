@@ -1126,11 +1126,16 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
         PlaywrightBackend,
         prepare_ws_guard,
     )
+    from openadapt_flow.mockmed.fault_server import serve as fault_serve
     from openadapt_flow.runtime import Replayer
+    from openadapt_flow.runtime.effects import RestRecordVerifier
     from tests.test_api_tier_web_form import _span_workflow
 
     bundle = _bundle(server, "fetch", tmp_path_factory.mktemp("rec"))
     before = len(server.received)
+    # The span's record check reads here, so the API step gets as far as its
+    # send: only the wire-check read stops it.
+    sor_url, _db, stop_sor = fault_serve()
     with sync_api.sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
@@ -1158,7 +1163,12 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
             actuator = _ContextRequestActuator(page, server)
             span_bundle = tmp_path_factory.mktemp("span")
             (span_bundle / "templates").mkdir()
-            report = Replayer(backend, web_form_actuator=actuator).run(
+            report = Replayer(
+                backend,
+                web_form_actuator=actuator,
+                effect_verifier=RestRecordVerifier(sor_url.rstrip("/")),
+                poll_interval_s=0.01,
+            ).run(
                 _span_workflow(),
                 bundle_dir=span_bundle,
                 run_dir=tmp_path_factory.mktemp("run"),
@@ -1166,6 +1176,7 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
             page.wait_for_timeout(300)
         finally:
             browser.close()
+            stop_sor()
     assert saved.success, [(r.step_id, r.error) for r in saved.results]
     received = server.received[before:]
     assert [r["fields"]["field_summary"] for r in received] == [
