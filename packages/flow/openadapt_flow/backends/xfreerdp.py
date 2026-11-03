@@ -102,6 +102,10 @@ class SessionProfile:
         wallpaper, themes: Off removes pixels that vary between sessions.
         clipboard: Redirect the clipboard (needed for copy-based reads).
         keyboard_layout: FreeRDP ``/kbd:layout`` value, for example ``0x409``.
+        avc444: Ask for the H.264/AVC444 graphics pipeline (``/gfx:AVC444``),
+            the encoding production Windows hosts use. Needs ``lossless``
+            off and a FreeRDP built with H.264; the host decides whether
+            it is used (RdpCoreTS event 162).
     """
 
     width: int = 1280
@@ -116,8 +120,11 @@ class SessionProfile:
     themes: bool = False
     clipboard: bool = True
     keyboard_layout: str = "0x409"
+    avc444: bool = False
 
     def __post_init__(self) -> None:
+        if self.avc444 and self.lossless:
+            raise ValueError("avc444 needs lossless=False")
         if self.scale not in _SCALES:
             raise ValueError(f"scale must be one of {_SCALES}")
         if not (100 <= self.desktop_scale <= 500):
@@ -136,6 +143,8 @@ class SessionProfile:
         ]
         if self.lossless:
             args += ["-gfx", "-rfx", "-nsc"]
+        elif self.avc444:
+            args.append("/gfx:AVC444:on")
         args.append("+fonts" if self.font_smoothing else "-fonts")
         args.append("+wallpaper" if self.wallpaper else "-wallpaper")
         args.append("+themes" if self.themes else "-themes")
@@ -145,7 +154,11 @@ class SessionProfile:
     @property
     def sha256(self) -> str:
         """Digest of the profile, recorded with each run."""
-        body = json.dumps(asdict(self), sort_keys=True).encode("utf-8")
+        fields = asdict(self)
+        if not self.avc444:
+            # Profiles saved before the field existed keep their digest.
+            del fields["avc444"]
+        body = json.dumps(fields, sort_keys=True).encode("utf-8")
         return hashlib.sha256(body).hexdigest()
 
 
