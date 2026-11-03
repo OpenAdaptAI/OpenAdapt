@@ -169,10 +169,14 @@ when all of these hold:
 
 The dismiss click is held to that dialog. It must land in the very window
 `owned_window_over` reported (asked again at the click point), and the
-dialog's text must read as a notice only: words such as discard, delete,
-end, overwrite, save, submit or unsaved refuse it, and so does a dialog with
-nothing readable in it. Answering "OK" to "Discard unsaved changes?" would
-lose data.
+dialog's text must read as a notice only. Every word in it must be on a
+short list of notice words (a session that expires, a version that is
+available, "OK"), and it may not ask a question. Anything else refuses,
+including a dialog in another language or with nothing readable in it.
+Answering "OK" to "Discard unsaved changes?" would lose data. The bridge is
+exactly that one click. A covered-band repair gets one attempt: a later
+attempt reopens the app, whose dialog is a new window, so its click is
+refused.
 
 Nothing after that is relaxed: the probe replays the halted step with its own
 identity check in full once the dialog is gone, then the record check and a

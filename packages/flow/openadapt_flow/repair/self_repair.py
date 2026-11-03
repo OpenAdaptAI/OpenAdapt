@@ -2948,39 +2948,51 @@ def _cover_explains_cut(
     return abs((cx - bx) / bw - read / whole) <= _CUT_TOLERANCE
 
 
-#: Words in a dialog's message that make dismissing it more than an
-#: acknowledgement: its buttons may discard, end, overwrite or commit.
-_CONSEQUENTIAL_DIALOG_WORDS = frozenset(
+#: The only words a dismissable covering dialog may show (title, message
+#: and button), casefolded: a notice that something expires, is available or
+#: is informational, answered with "OK". Any other word, a question mark, or
+#: no readable word refuses. An allowlist, so an unlisted "Log out of the
+#: other session?", "Your changes will be deleted" or a dialog in another
+#: language is refused rather than dismissed.
+_NOTICE_DIALOG_WORDS = frozenset(
     {
-        "apply",
-        "approve",
-        "cancel",
-        "clear",
-        "close",
-        "commit",
-        "confirm",
-        "delete",
-        "discard",
-        "end",
-        "erase",
-        "logout",
-        "lose",
-        "lost",
-        "overwrite",
-        "post",
-        "purge",
-        "remove",
-        "replace",
-        "reset",
-        "revert",
-        "save",
-        "send",
-        "sign",
-        "submit",
-        "terminate",
-        "undo",
-        "unsaved",
-        "void",
+        "a",
+        "about",
+        "an",
+        "app",
+        "application",
+        "available",
+        "been",
+        "for",
+        "has",
+        "hour",
+        "hours",
+        "in",
+        "info",
+        "information",
+        "is",
+        "minute",
+        "minutes",
+        "new",
+        "notice",
+        "now",
+        "of",
+        "ok",
+        "reminder",
+        "second",
+        "seconds",
+        "session",
+        "soon",
+        "the",
+        "this",
+        "update",
+        "version",
+        "will",
+        "you",
+        "your",
+        "expire",
+        "expires",
+        "expiring",
     }
 )
 
@@ -2988,24 +3000,31 @@ _CONSEQUENTIAL_DIALOG_WORDS = frozenset(
 def _dialog_message_refusal(text: str) -> Optional[str]:
     """Why a covering dialog's text forbids dismissing it, or None.
 
-    Only a dialog whose words carry no destructive or committing meaning may
-    be dismissed by a bridge: "Discard unsaved changes?" or "End the other
-    session?" answered with "OK" loses data. Unreadable text is a refusal.
+    Only a notice may be dismissed by a bridge: every word must be in
+    ``_NOTICE_DIALOG_WORDS`` (numbers aside) and nothing may ask a question.
+    Answering "OK" to "Discard unsaved changes?" or "Log out of the other
+    session?" loses data, so anything not plainly a notice is refused,
+    including unreadable text.
     """
 
-    from openadapt_flow.risk import is_write_shaped
-
-    words = {
+    words = [
         w for w in "".join(c if c.isalnum() else " " for c in text.casefold()).split()
-    }
+    ]
     if not words:
         return "the covering dialog's message can't be read"
-    hits = sorted(words & _CONSEQUENTIAL_DIALOG_WORDS)
-    if hits or is_write_shaped(text):
+    if "?" in text:
+        return (
+            "the covering dialog asks a question; answering it may discard, end "
+            "or commit something"
+        )
+    other = sorted(
+        {w for w in words if w not in _NOTICE_DIALOG_WORDS and not w.isdecimal()}
+    )
+    if other:
         return (
             "the covering dialog's message reads as more than a notice "
-            f"({', '.join(hits) or 'a save'}); dismissing it may discard, end or "
-            "commit something"
+            f"({', '.join(other[:6])}); dismissing it may discard, end or commit "
+            "something"
         )
     return None
 

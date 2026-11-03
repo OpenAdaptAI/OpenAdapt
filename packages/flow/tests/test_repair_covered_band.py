@@ -473,12 +473,21 @@ def test_a_cover_without_an_id_never_matches_a_click_without_one() -> None:
         "Delete this draft?",
         "Submit the order now?",
         "Your changes will be lost.",
+        # what a list of forbidden words would miss (review of this PR)
+        "Are you sure you want to leave? Yes No",
+        "Log out of the other session? OK",
+        "Your changes will be deleted. OK",
+        "Quit the application",
+        "Stop the running import",
+        "Disconnect other user",
+        "Proceed anyway",
+        "Änderungen verwerfen OK",
     ],
 )
 def test_a_dialog_whose_message_can_lose_or_commit_data_is_refused(message) -> None:
     from openadapt_flow.repair.self_repair import SelfRepairRefused
 
-    with pytest.raises(SelfRepairRefused, match="dialog's message"):
+    with pytest.raises(SelfRepairRefused, match="covering dialog"):
         _guard(at={"hwnd": 7, "pid": 42}, message=message)
 
 
@@ -554,3 +563,58 @@ def test_a_covered_band_bridge_is_exactly_one_click(kinds) -> None:
             [False],
             None,
         )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Session notice Your session expires in 5 minutes. OK",
+        "Information A new version is available. OK",
+    ],
+)
+def test_only_notice_words_pass_the_message_gate(text) -> None:
+    from openadapt_flow.repair.self_repair import _dialog_message_refusal
+
+    assert _dialog_message_refusal(text) is None
+
+
+def test_new_click_runs_the_cover_guard_before_admitting() -> None:
+    from types import SimpleNamespace
+
+    from openadapt_flow.repair.self_repair import (
+        SelfRepair,
+        SelfRepairRefused,
+        _CoveredHalt,
+    )
+
+    calls: list[tuple] = []
+
+    def guard(session, point, screen):
+        calls.append(tuple(point))
+        raise SelfRepairRefused("guarded")
+
+    me = SimpleNamespace(
+        _covered=_CoveredHalt(("s", "after", None), cover={}, pinned="search"),
+        vision=SimpleNamespace(ocr=lambda png: [], wait_settled=lambda b: None),
+        _dismisses_the_cover=guard,
+    )
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (800, 600), "white").save(buf, format="PNG")
+    structural = SimpleNamespace(name="OK")
+    with pytest.raises(SelfRepairRefused, match="guarded"):
+        SelfRepair._new_click(
+            me,
+            _workflow(),
+            "search_bridge_1",
+            SimpleNamespace(kind="click"),
+            (598, 440),
+            structural,
+            buf.getvalue(),
+            (0, 0, 40, 20),
+            SimpleNamespace(backend=object()),
+        )
+    assert calls == [(598, 440)]
