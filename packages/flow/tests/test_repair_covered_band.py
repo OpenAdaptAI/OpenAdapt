@@ -32,6 +32,12 @@ READ_BESIDE_DIALOG = "Patient: Neil Sorenson (1984-"
 TEMPLATE = build_identity_template(RECORDED)
 
 
+def _halt(report, workflow, backend, recorded=RECORDED):
+    return _covered_band_halt(
+        report, workflow, backend, recorded_band=lambda step: recorded
+    )
+
+
 def _anchor(click=(100, 100), band=BAND) -> Anchor:
     return Anchor(
         template="templates/t.png",
@@ -85,10 +91,15 @@ def _report(
     point=(300, 350),
     observed: str = READ_BESIDE_DIALOG,
     search_verified: bool = True,
+    outcome: str = "REJECTED_POLICY",
 ) -> RunReport:
+    from openadapt_flow.ir import HaltObservation
+
     return RunReport(
         workflow_name="notes",
         started_at="2026-11-03T00:00:00Z",
+        halt=HaltObservation(state_id="note", reason="Identity check failed"),
+        transaction_outcome=outcome,
         results=[
             StepResult(
                 step_id="search",
@@ -133,7 +144,7 @@ class Backend:
 
 def test_a_covered_band_is_repaired_after_the_previous_click() -> None:
     backend = Backend()
-    found = _covered_band_halt(_report(), _workflow(), backend)
+    found = _halt(_report(), _workflow(), backend)
     assert found is not None
     step, mode, result = found
     assert (step.id, mode, result.step_id) == ("search", "after", "search")
@@ -143,15 +154,13 @@ def test_a_covered_band_is_repaired_after_the_previous_click() -> None:
 
 def test_no_identity_verified_step_means_no_pinned_window() -> None:
     backend = Backend()
-    assert (
-        _covered_band_halt(_report(search_verified=False), _workflow(), backend) is None
-    )
+    assert _halt(_report(search_verified=False), _workflow(), backend) is None
     assert backend.regions == []
 
 
 def test_the_band_moves_with_the_resolved_point() -> None:
     backend = Backend()
-    _covered_band_halt(_report(point=(310, 345)), _workflow(), backend)
+    _halt(_report(point=(310, 345)), _workflow(), backend)
     assert backend.regions == [(BAND[0] + 10, BAND[1] - 5, BAND[2], BAND[3])]
 
 
@@ -169,7 +178,7 @@ def test_the_band_moves_with_the_resolved_point() -> None:
     ],
 )
 def test_anything_else_keeps_its_usual_routing(backend, report, workflow) -> None:
-    assert _covered_band_halt(report, workflow, backend) is None
+    assert _halt(report, workflow, backend) is None
 
 
 def test_an_observed_effect_is_never_reclassified() -> None:
@@ -179,7 +188,7 @@ def test_an_observed_effect_is_never_reclassified() -> None:
     report.results[0].effect_evidence = [
         EffectVerificationEvidence.model_construct(observed_effect="present")
     ]
-    assert _covered_band_halt(report, _workflow(), Backend()) is None
+    assert _halt(report, _workflow(), Backend()) is None
 
 
 @pytest.mark.parametrize(
@@ -195,10 +204,99 @@ def test_an_observed_effect_is_never_reclassified() -> None:
 )
 def test_another_patient_behind_the_dialog_stays_an_identity_halt(observed) -> None:
     report = _report(observed=observed)
-    assert _covered_band_halt(report, _workflow(), Backend()) is None
+    assert _halt(report, _workflow(), Backend()) is None
 
 
 def test_no_template_is_doubt() -> None:
     workflow = _workflow()
     workflow.steps[1].anchor.identity_template = None
-    assert _covered_band_halt(_report(), workflow, Backend()) is None
+    assert _halt(_report(), workflow, Backend()) is None
+
+
+@pytest.mark.parametrize(
+    "observed",
+    [
+        "Patient: Neil Sorenson (1991-",  # a different birth year shows
+        "Patient: Sorenson",  # the first name is not the record's
+        "Patient: Neil Sorenson (1984-03-13)",  # a full, different date
+        "Neil Sorenson (1984-",  # does not start where the band starts
+    ],
+)
+def test_every_word_read_must_be_the_records(observed) -> None:
+    assert _halt(_report(observed=observed), _workflow(), Backend()) is None
+
+
+def test_a_same_name_patient_with_a_visible_other_dob_is_refused() -> None:
+    from openadapt_flow.repair.self_repair import _uncovered_band_matches
+
+    recorded = "Patient: Christopherson, Maximilian DOB 1/2/80 MRN 4471"
+    step = _workflow().steps[1]
+    step.anchor.identity_template = build_identity_template(recorded)
+    assert not _uncovered_band_matches(
+        step, "Patient: Christopherson, Maximilian DOB 3/9/91", recorded
+    )
+    assert _uncovered_band_matches(
+        step, "Patient: Christopherson, Maximilian DOB 1/2/8", recorded
+    )
+
+
+def test_no_recorded_band_is_doubt() -> None:
+    assert _halt(_report(), _workflow(), Backend(), recorded=None) is None
+
+
+def test_a_parameterised_band_is_never_reclassified() -> None:
+    workflow = _workflow()
+    template = workflow.steps[1].anchor.identity_template
+    workflow.steps[1].anchor.identity_template = template.model_copy(
+        update={"param_token_indices": {"patient": [2]}}
+    )
+    assert _halt(_report(), workflow, Backend()) is None
+
+
+@pytest.mark.parametrize(
+    "outcome", ["CANCELED", "RECONCILIATION_REQUIRED", "FAILED_PLATFORM", "ROLLED_BACK"]
+)
+def test_only_an_identity_refusal_before_effect_qualifies(outcome) -> None:
+    assert _halt(_report(outcome=outcome), _workflow(), Backend()) is None
+
+
+def test_a_structured_identity_mismatch_is_a_real_mismatch() -> None:
+    report = _report()
+    report.results[1].identity = report.results[1].identity.model_copy(
+        update={"mode": "structured"}
+    )
+    assert _halt(report, _workflow(), Backend()) is None
+
+
+def test_uncertain_delivery_is_never_reclassified() -> None:
+    from openadapt_flow.ir import ActionDeliveryUncertainty
+
+    report = _report()
+    report.results[0].delivery_uncertainty = ActionDeliveryUncertainty.model_construct(
+        operation="click"
+    )
+    assert _halt(report, _workflow(), Backend()) is None
+
+
+def test_the_recorded_band_comes_from_the_crop_and_must_meet_the_template(tmp_path):
+    from types import SimpleNamespace
+
+    from openadapt_flow.repair.self_repair import _recorded_band_text
+
+    workflow = _workflow()
+    step = workflow.steps[1]
+    step.anchor.identifier_crop = "templates/identifiers/note.png"
+    crop = tmp_path / step.anchor.identifier_crop
+    crop.parent.mkdir(parents=True)
+    crop.write_bytes(b"png")
+
+    def vision(text):
+        line = SimpleNamespace(text=text, region=(0, 0, 10, 10))
+        return SimpleNamespace(ocr=lambda png: [line])
+
+    assert _recorded_band_text(workflow, tmp_path, step, vision(RECORDED)) == RECORDED
+    assert (
+        _recorded_band_text(workflow, tmp_path, step, vision("Patient: Neil")) is None
+    )
+    other = vision("Patient: Nell Sorensen (1986-07-09)")
+    assert _recorded_band_text(workflow, tmp_path, step, other) is None

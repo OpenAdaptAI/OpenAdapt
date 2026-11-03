@@ -757,7 +757,14 @@ class SelfRepair:
                     run_dir,
                     work,
                 )
-            covered = _covered_band_halt(report, workflow, session.backend)
+            covered = _covered_band_halt(
+                report,
+                workflow,
+                session.backend,
+                recorded_band=lambda step: _recorded_band_text(
+                    workflow, Path(bundle_dir), step, self.vision
+                ),
+            )
             if covered is None and report.transaction_outcome not in (
                 None,
                 "HALTED_BEFORE_EFFECT",
@@ -2652,7 +2659,11 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any]
 
 
 def _covered_band_halt(
-    report: RunReport, workflow: Workflow, backend: Any
+    report: RunReport,
+    workflow: Workflow,
+    backend: Any,
+    *,
+    recorded_band: Callable[[Step], Optional[str]] = lambda step: None,
 ) -> "Optional[tuple[Step, str, Any]]":
     """An identity halt caused by the app's own window over the band (#1724).
 
@@ -2670,11 +2681,15 @@ def _covered_band_halt(
       identity band on the halted screen (``owned_window_over``): a window of
       the same process, owned by the top-level window the backend captured
       when the last identity-verified step passed (``pinned_step_id``);
-    - the part of the band that was read still matches the recorded record:
-      no contradicted, look-alike, glyph-ambiguous or unexplained name token,
-      and at least half the recorded band matched
-      (:func:`_uncovered_band_matches`). Another patient behind the dialog
-      fails this;
+    - the identity was read from the screen (``context``), its band has no
+      run parameter, and the text read is the recorded band word for word up
+      to where the dialog cuts it (only the last word read may be cut short),
+      with at least half the band matched (:func:`_uncovered_band_matches`).
+      Another patient behind the dialog, a different birth date showing, or
+      a missing first name fails this;
+    - the run ended with that identity refusal (``REJECTED_POLICY``) or
+      before any effect, nobody declined it, it has exactly one save, its
+      halt names the step, and no delivery was left uncertain;
     - the previous step is a click that doesn't save, acted on a trusted rung
       and passed, in a linear workflow.
 
@@ -2687,6 +2702,21 @@ def _covered_band_halt(
 
     probe = getattr(backend, "owned_window_over", None)
     if not callable(probe) or workflow.program is not None or workflow.subflows:
+        return None
+    if report.transaction_outcome not in (
+        None,
+        "HALTED_BEFORE_EFFECT",
+        "REJECTED_POLICY",
+    ):
+        return None
+    if (
+        report.approval is not None
+        and report.approval.decision is ItemDecisionKind.DECLINED
+    ):
+        return None
+    if sum(1 for s in workflow.steps if is_consequential(s, workflow)) != 1:
+        return None
+    if any(r.delivery_uncertainty is not None for r in report.results):
         return None
     steps = {step.id: (index, step) for index, step in enumerate(workflow.steps)}
     for result in report.results:
@@ -2710,9 +2740,12 @@ def _covered_band_halt(
         halted.delivery_attempted is not False
         or halted.identity is None
         or halted.identity.status == "verified"
+        or halted.identity.mode != "context"
         or step.anchor is None
         or step.anchor.identifier_region is None
         or index == 0
+        or report.halt is None
+        or report.halt.state_id != step.id
     ):
         return None
     region = tuple(int(v) for v in step.anchor.identifier_region)
@@ -2736,7 +2769,9 @@ def _covered_band_halt(
         cover = probe(region, pinned_step_id=pinned)
     except Exception:  # noqa: BLE001 - no proof means no reclassification
         return None
-    if not cover or not _uncovered_band_matches(step, halted.identity.observed):
+    if not cover or not _uncovered_band_matches(
+        step, halted.identity.observed, recorded_band(step)
+    ):
         return None
     previous = workflow.steps[index - 1]
     acted = next((r for r in report.results if r.step_id == previous.id), None)
@@ -2758,19 +2793,40 @@ def _covered_band_halt(
 _MIN_UNCOVERED_COVERAGE = 0.5
 
 
-def _uncovered_band_matches(step: Step, observed: str) -> bool:
+def _uncovered_band_matches(step: Step, observed: str, recorded: Optional[str]) -> bool:
     """Whether the band text read beside the covering window is the record's.
 
-    Matches it against the step's recorded identity template. Every token read
-    must be explained, nothing may contradict or look like the record without
-    being it, and at least half the recorded band must match. Any doubt (no
-    template, nothing read) is False.
+    ``recorded`` is the step's recorded band, read from its identifier crop
+    (:func:`_recorded_band_text`). The text read must be that band word for
+    word, in order, up to where the dialog cuts it: only its last word may be
+    a shortened form of the recorded word. Every word read must therefore be
+    the record's; a different date or identifier showing, or a missing first
+    name, refuses. The template must also be met by at least half (the read
+    is the record's, not a stray line). Any doubt is False.
     """
 
+    from openadapt_flow.runtime.identity import ocr_canonical, squash
     from openadapt_flow.runtime.identity_template import _band_match_template
 
     template = step.anchor.identity_template if step.anchor is not None else None
-    if template is None or not template.tokens or not (observed or "").strip():
+    if (
+        template is None
+        or not template.tokens
+        or getattr(template, "param_token_indices", None)
+    ):
+        return False
+    if not (observed or "").strip() or not (recorded or "").strip():
+        return False
+
+    def words(text: str) -> list[str]:
+        return [w for w in (ocr_canonical(squash(t)) for t in text.split()) if w]
+
+    read, band = words(observed), words(str(recorded))
+    if not read or len(read) > len(band):
+        return False
+    if read[:-1] != band[: len(read) - 1]:
+        return False
+    if not band[len(read) - 1].startswith(read[-1]):
         return False
     try:
         match = _band_match_template(template, observed)
@@ -2783,6 +2839,41 @@ def _uncovered_band_matches(step: Step, observed: str) -> bool:
         and match.glyph_ambiguous_id_chars == 0
         and match.coverage >= _MIN_UNCOVERED_COVERAGE
     )
+
+
+def _recorded_band_text(
+    workflow: Workflow, bundle_dir: Path, step: Step, vision: Any
+) -> Optional[str]:
+    """The step's recorded identity band as text, from its identifier crop.
+
+    Read with the run's OCR, and accepted only when it meets the step's
+    hashed identity template in full (the crop is the recorded record).
+    None when there is no crop, it can't be read, or it doesn't match.
+    """
+
+    from openadapt_flow.runtime.identity_template import _band_match_template
+
+    anchor = step.anchor
+    if anchor is None or not anchor.identifier_crop or anchor.identity_template is None:
+        return None
+    png = workflow.decrypted_template(anchor.identifier_crop)
+    if png is None:
+        path = bundle_dir / anchor.identifier_crop
+        png = path.read_bytes() if path.is_file() else None
+    if png is None:
+        return None
+    try:
+        lines = sorted(
+            vision.ocr(png),
+            key=lambda ln: (int(ln.region[1]) // 8, int(ln.region[0])),
+        )
+        text = " ".join(str(ln.text) for ln in lines).strip()
+        match = _band_match_template(anchor.identity_template, text)
+    except Exception:  # noqa: BLE001 - unreadable is no recorded band
+        return None
+    if not text or match.contradicted_chars or match.coverage < 0.999:
+        return None
+    return text
 
 
 def _before_frame(run_dir: Path, result: Any) -> Optional[bytes]:

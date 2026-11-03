@@ -907,10 +907,14 @@ class MacOSBackend(RemoteDisplayBackend):
     # (``MacWindowClient.attached_sheet``). Any other window stays refused.
 
     def record_verified_window(self, step_id: str, x: int, y: int) -> bool:
-        """Remember the window a step's verified identity was in (#1724)."""
-        try:
-            window = self._resolve_window(refresh=True)
-        except Exception:  # noqa: BLE001 - no capture
+        """Remember the window a step's verified identity was in (#1724).
+
+        Uses the window the identity check just captured, without another
+        window-server read. It proves the same window, not the same record.
+        """
+        self._verified_windows.pop(str(step_id), None)
+        window = self._captured_window
+        if window is None:
             return False
         self._verified_windows[str(step_id)] = (window.window_id, window.pid)
         return True
