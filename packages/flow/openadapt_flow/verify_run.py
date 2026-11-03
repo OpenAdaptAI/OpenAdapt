@@ -264,7 +264,13 @@ def load_verify_config(path: str | Path) -> VerifyConfig:
 
 #: ``openadapt.verify/v1`` sections only qualify reads (RFC-0002, Qualify-only
 #: sections). verify-run accepts and ignores them, so one file serves both.
-QUALIFY_ONLY_SECTIONS: tuple[str, ...] = ("app", "save_step", "inputs", "campaign")
+QUALIFY_ONLY_SECTIONS: tuple[str, ...] = (
+    "app",
+    "save_step",
+    "inputs",
+    "campaign",
+    "business_rules",
+)
 
 
 def _record_effects(record: Any) -> list[Effect]:

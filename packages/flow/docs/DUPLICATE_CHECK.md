@@ -3,7 +3,10 @@
 Many registration forms run a duplicate search before they save. OpenEMR's New
 Patient form, for example, opens a list of existing charts that might be the
 same person. A recorded program usually expects the empty list ("No matches
-were found."), so any listed chart stops the item before the save.
+were found."), so any listed chart stops the item before the save. The
+compiler mines that check from the recording: the dialog's empty result is an
+exact check on the click that opens the dialog and again before Confirm
+(`compiler/empty_result_guard.py`).
 
 OpenEMR lists a chart that shares only a first name with the new patient. On
 the lifecycle soak's synthetic worklist, most of those stops were false: the

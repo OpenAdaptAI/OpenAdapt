@@ -76,6 +76,39 @@ class ApiProposalError(ValueError):
     """The API step can't be admitted (or the proposal input is malformed)."""
 
 
+def _guard_carried_by_precheck(step: Step, folded: list[Step]) -> bool:
+    """Whether ``step``'s only rule is an exact text guard an earlier step checks.
+
+    The compiler puts a dialog's empty search result ("No matches were found.")
+    on the opener as a postcondition and again as a guard on the Confirm click
+    (``compiler.empty_result_guard``). The opener's check becomes the API
+    step's pre-check read, which runs right before the save, so the guard adds
+    nothing the API step lacks. Any other guard or wait rule still refuses.
+    """
+
+    guard = step.guard
+    if step.wait_until is not None or guard is None or guard.on_unmet != "halt":
+        return False
+    predicate = guard.predicate
+    if (
+        getattr(predicate.kind, "value", predicate.kind) != "text_present"
+        or not predicate.exact
+        or not predicate.text
+    ):
+        return False
+    from openadapt_flow.vision.ocr import text_key
+
+    key = text_key(predicate.text)
+    earlier = folded[: folded.index(step)]
+    return any(
+        getattr(p.kind, "value", p.kind) == "text_present"
+        and p.text
+        and text_key(p.text) == key
+        for s in earlier
+        for p in s.expect
+    )
+
+
 def _event_index(step: Step) -> Optional[int]:
     prefix, _, number = step.id.rpartition("_")
     return int(number) if prefix == "step" and number.isdigit() else None
@@ -489,8 +522,12 @@ def propose_api_step(
             ],
         )
 
+    carried_guards: list[Step] = []
     for step in folded:
-        if step.guard is not None or step.wait_until is not None:
+        if _guard_carried_by_precheck(step, folded):
+            # Confirmed below, once the pre-check reads are known.
+            carried_guards.append(step)
+        elif step.guard is not None or step.wait_until is not None:
             return (
                 workflow,
                 None,
@@ -582,6 +619,18 @@ def propose_api_step(
                 from_step=step.id,
             )
         )
+
+    from openadapt_flow.vision.ocr import text_key
+
+    read_keys = {text_key(t) for check in prechecks for t in check.require_text}
+    for step in carried_guards:
+        assert step.guard is not None
+        if text_key(step.guard.predicate.text or "") not in read_keys:
+            return (
+                workflow,
+                None,
+                [f"{step.id} has a guard or wait rule; the API step can't carry it"],
+            )
 
     others = sorted(
         {

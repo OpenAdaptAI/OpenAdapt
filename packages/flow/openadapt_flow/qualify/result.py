@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any, Literal, Mapping, Optional
 from uuid import NAMESPACE_URL, uuid5
 
+from openadapt_flow.qualify.config import RULE_CASE_PREFIX
 from openadapt_flow.verification import VerificationTier
 
 RESULT_SCHEMA = "openadapt.qualification-result/v1"
@@ -173,9 +174,15 @@ def case_entry(
     report_path: Path,
     verifier_substrate: Optional[str] = None,
 ) -> dict[str, Any]:
-    """One ``cases[]`` entry. The verdict never reads the run report."""
+    """One ``cases[]`` entry. The verdict never reads the run report.
 
-    expected = EXPECTED_VERDICT[case_id]
+    A business-rule case (``rule-<id>``) is judged like a fault (nothing
+    landed, the engine halted) and must also report the transaction outcome
+    ``HALTED_BEFORE_EFFECT``: the run stopped before the save was attempted.
+    """
+
+    rule = case_id.startswith(RULE_CASE_PREFIX)
+    expected = "REFUTED" if rule else EXPECTED_VERDICT[case_id]
     observed = observed_verdict(oracle)
     tier = readback_tier(
         verifier_tier,
@@ -188,7 +195,7 @@ def case_entry(
     entry = {
         "case_id": case_id,
         "trial": trial,
-        "fault_class": FAULT_CLASS[case_id],
+        "fault_class": "business_rule" if rule else FAULT_CLASS[case_id],
         "executor_kind": "flow_replay",
         "expected_verdict": expected,
         "observed_verdict": observed,
@@ -218,6 +225,11 @@ def case_entry(
             and landed == "none"
             and tier == "independent_readback"
             and report.execution_outcome == "HALTED"
+        )
+    if rule:
+        entry["transaction_outcome"] = report.transaction_outcome
+        entry["passed"] = bool(
+            entry["passed"] and report.transaction_outcome == "HALTED_BEFORE_EFFECT"
         )
     # A write landed where nothing should have, or the engine reported a
     # success that the system of record does not confirm.

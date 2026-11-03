@@ -1,9 +1,10 @@
-"""Sign-in, reset and read-back session for the local OpenEMR fixture.
+"""Sign-in, reset, seed and read-back session for the local OpenEMR fixture.
 
-``benchmark/openemr_local/verify.yaml`` names these three functions. They are
+``benchmark/openemr_local/verify.yaml`` names these functions. They are
 environment setup for a made-up-patient test system, not workflow logic:
 OpenEMR's sign-in opens the new-patient form through its tab shell, the
-fixture resets by restoring a database snapshot, and the read-back client
+fixture resets by restoring a database snapshot, the existing-duplicate
+business rule seeds one existing chart over REST, and the read-back client
 uses an OAuth password grant that a static header cannot express.
 
 Environment (all optional):
@@ -106,6 +107,21 @@ def reset() -> None:
     """Restore the verified baseline database."""
 
     fixture().reset()
+
+
+def seed_existing_chart() -> None:
+    """Create the existing chart Rosa Delgado, born 1958-03-27 (made up).
+
+    The seed of the ``existing-duplicate`` business rule in ``verify.yaml``:
+    a chart for the same person as that rule's referral, with a close birth
+    date, so OpenEMR's duplicate check lists it.
+    """
+
+    from benchmark.openemr_local.certified_referrals import _seed_existing_chart
+
+    status = _seed_existing_chart(fixture())
+    if status not in (200, 201):
+        raise RuntimeError(f"seeding the existing chart returned HTTP {status}")
 
 
 def oracle_session(config: Any, attempts: int = 5) -> Any:
