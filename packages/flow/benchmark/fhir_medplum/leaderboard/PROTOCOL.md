@@ -28,11 +28,15 @@ harness, and sells a verifier for agents' writes. To limit bias:
 ## Task set
 
 The 37 cases of `benchmark/fhir_medplum/public/cases.yaml`: 13 patient
-registrations, 12 allergy records and 12 appointment bookings, of which 10
-are clean, 24 put a fault on the write path or a second user's write
-during the run, and 3 more are clean variants without the sentence naming
-the elements to write. Classes and faults are as documented in
-`public/README.md`. Only public cases are used; no private fault set is
+registrations, 12 allergy records and 12 appointment bookings. 11 are
+clean (3 of them, P12, A11 and AP12, without the sentence naming the
+elements to write); 25 put a fault on the write path or another user's
+write into the run (wrong_value 8, collateral 4, duplicate 3, other_user 3,
+lost_response 2, wrong_patient 2, refused_write 1, fake_success 1,
+late_collateral 1); and 1 (P10) can't be finished without a person
+(ambiguous). Classes and faults are as documented in `public/README.md`.
+The faulted cases measure whether an agent notices a write that went wrong
+and says so; the clean cases measure its own mistakes. Both are reported. Only public cases are used; no private fault set is
 touched.
 
 OpenEMR tasks are not in this version. The public OpenEMR material has no

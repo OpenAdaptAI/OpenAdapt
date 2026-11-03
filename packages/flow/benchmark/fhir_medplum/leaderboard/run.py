@@ -58,8 +58,14 @@ AGENTS: dict[str, tuple[str, str]] = {
 def gui_agent(
     name: str, browser: MedplumBrowser, runs_dir: Path, rep: int
 ) -> Callable[[dict[str, Any], str, str], dict[str, Any]]:
-    module, model = AGENTS[name]
-    adapter = importlib.import_module(f"benchmark.fhir_medplum.leaderboard.agents.{module}")
+    if name in AGENTS:
+        adapter = importlib.import_module(
+            f"benchmark.fhir_medplum.leaderboard.agents.{AGENTS[name][0]}"
+        )
+        run_fn = adapter.run
+    else:  # your own agent: py:<module>:<function>
+        _, mod, fn = name.split(":", 2)
+        run_fn = getattr(importlib.import_module(mod), fn)
 
     def agent(task: dict[str, Any], proxy_fhir_url: str, _token: str) -> dict[str, Any]:
         evidence = runs_dir / f"r{rep}-{task['id']}"
@@ -69,7 +75,7 @@ def gui_agent(
         try:
             (evidence / "start.png").write_bytes(screen.screenshot())
             kw = {"app_origin": browser.ui_url} if name in ("gemini", "fara") else {}
-            out = adapter.run(task["instruction"], screen, meter, **kw)
+            out = run_fn(task["instruction"], screen, meter, **kw)
             try:
                 (evidence / "end.png").write_bytes(screen.screenshot())
                 end_url = screen.url()
@@ -101,8 +107,12 @@ def gui_agent(
 
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--agent", required=True, choices=sorted(AGENTS))
-    ap.add_argument("--port", type=int, required=True, help="Medplum server; the app gets port+1")
+    ap.add_argument(
+        "--agent",
+        required=True,
+        help=f"{' | '.join(sorted(AGENTS))} | py:<module>:<function> (see README.md)",
+    )
+    ap.add_argument("--port", type=int, required=True, help="Medplum server; the app gets port+1, the proxy port+2")
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--cases", default=str(CASES), help="the scored set unless you are practising")
     ap.add_argument("--only", action="append")
@@ -113,7 +123,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     suite = yaml.safe_load(Path(args.cases).read_text())
     cases = [c for c in suite["cases"] if not args.only or c["id"] in args.only]
-    out = Path(args.out or HERE / "results" / args.agent)
+    if args.agent not in AGENTS and not args.agent.startswith("py:"):
+        raise SystemExit(f"unknown agent {args.agent!r}")
+    label = args.agent if args.agent in AGENTS else args.agent.split(":")[-1]
+    out = Path(args.out or HERE / "results" / label)
     runs_dir = out / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -131,13 +144,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     browser = MedplumBrowser(fx.ui_url, fx.base_url, headless=not args.headed).start()
     _wait_app(fx.ui_url)
     browser.sign_in(bench.actors.emails["bot"], bench.actors.passwords["bot"])
-    proxy = FaultProxy(fx.fhir_url).start()
+    proxy = FaultProxy(fx.fhir_url, port=args.port + 2).start()  # within the job's port block
     proxy.side_write = bench.side_write
     meta = {
         "schema": "openadapt.write-leaderboard.run/v1",
         "agent": args.agent,
-        "adapter": AGENTS[args.agent][0],
-        "model": AGENTS[args.agent][1],
+        "adapter": AGENTS.get(args.agent, (args.agent, ""))[0],
+        "model": AGENTS.get(args.agent, ("", "yours"))[1],
         "commit": _git_commit(),
         "medplum": fx.lock["services"],
         "host": f"{platform.system()} {platform.machine()}, Python {platform.python_version()}",
