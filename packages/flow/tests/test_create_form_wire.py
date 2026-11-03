@@ -85,6 +85,15 @@ document.getElementById('ticket').addEventListener('submit', () => {
   const ws = new WebSocket('ws://' + location.host + '/ws');
   ws.onopen = () => ws.send('close-account');
 }, true);""" + _SCRIPTS["fetch"]
+# The save goes out with fetch, and the page keeps a way to send the same
+# create again later; the test calls it after the save's run has ended (after
+# the replayer's settle window), so no wall-clock timing decides the order.
+_SCRIPTS["fetchlate"] = """
+document.getElementById('ticket').addEventListener('submit', (e) => {
+  const body = new URLSearchParams(new FormData(e.target, e.submitter)).toString();
+  window.__sendLate = () => fetch('/ticket', {method: 'POST', headers: {
+    'Content-Type': 'application/x-www-form-urlencoded'}, body}).catch(() => 0);
+}, true);""" + _SCRIPTS["fetch"]
 _POPUP = """<!doctype html><title>Popup</title>
 <form method="post" action="/account/close"><input name="confirm" value="yes"></form>
 <script>document.forms[0].submit();</script>"""
@@ -1079,3 +1088,110 @@ def test_a_page_cannot_bind_the_hold_to_its_own_secret(
     # matters is that no save went out while the page held the hold.
     assert opened in ("constructed", "refused")
     assert [r for r in server.received[before:] if r["path"] == "/ticket"] == []
+
+
+class _ContextRequestActuator:
+    """An admitted API step's save, sent the way the real one is: through
+    the page's ``context.request``, which context routes (the wire check)
+    never intercept."""
+
+    def __init__(self, page: Any, server: _Server) -> None:
+        self.page, self.server, self.calls = page, server, 0
+
+    def actuate(self, binding: Any, params: Any) -> Any:
+        from openadapt_flow.runtime.actuators import (
+            ActuationStatus,
+            ApiActuationResult,
+        )
+
+        self.calls += 1
+        origin = self.server.url.rsplit("/", 1)[0]
+        resp = self.page.context.request.post(
+            f"{origin}/ticket", form={"field_summary": "sent by the API step"}
+        )
+        return ApiActuationResult(
+            status=ActuationStatus.ACTUATED, reason=f"POST /ticket -> {resp.status}"
+        )
+
+
+def test_an_api_span_after_a_late_refusal_halts_before_sending(
+    server: _Server, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """A guarded save's page submits again after the settle window; the wire
+    check aborts it. An admitted API span on the same page next must halt at
+    its first step, before its save goes out: its request skips the routes,
+    so only reading the check first can stop it."""
+
+    from openadapt_flow.backends.playwright_backend import (
+        PlaywrightBackend,
+        prepare_ws_guard,
+    )
+    from openadapt_flow.mockmed.fault_server import serve as fault_serve
+    from openadapt_flow.runtime import Replayer
+    from openadapt_flow.runtime.effects import RestRecordVerifier
+    from tests.test_api_tier_web_form import _span_workflow
+
+    bundle = _bundle(server, "fetch", tmp_path_factory.mktemp("rec"))
+    before = len(server.received)
+    # The span's record check reads here, so the API step gets as far as its
+    # send: only the wire-check read stops it.
+    sor_url, _db, stop_sor = fault_serve()
+    with sync_api.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_context(
+                service_workers="block", viewport={"width": 1280, "height": 800}
+            ).new_page()
+            prepare_ws_guard(page.context)
+            page.goto(f"{server.url}?v=fetchlate")
+            page.wait_for_selector("[name=field_summary]", state="visible")
+            backend = PlaywrightBackend(page)
+            saved = Replayer(backend).run(
+                Workflow.load(bundle),
+                params={
+                    "field_summary": "Scanner offline on floor 3",
+                    "field_description": "Since this morning",
+                },
+                bundle_dir=bundle,
+                run_dir=tmp_path_factory.mktemp("run"),
+            )
+            # The page submits again after the save's run has ended; the
+            # wire check, still armed, aborts it.
+            page.evaluate("() => window.__sendLate()")
+            page.wait_for_timeout(500)
+            assert backend.form_submit_guard_armed
+            actuator = _ContextRequestActuator(page, server)
+            span_bundle = tmp_path_factory.mktemp("span")
+            (span_bundle / "templates").mkdir()
+            report = Replayer(
+                backend,
+                web_form_actuator=actuator,
+                effect_verifier=RestRecordVerifier(sor_url.rstrip("/")),
+                poll_interval_s=0.01,
+            ).run(
+                _span_workflow(),
+                bundle_dir=span_bundle,
+                run_dir=tmp_path_factory.mktemp("run"),
+            )
+            page.wait_for_timeout(300)
+        finally:
+            browser.close()
+            stop_sor()
+    assert saved.success, [(r.step_id, r.error) for r in saved.results]
+    received = server.received[before:]
+    assert [r["fields"]["field_summary"] for r in received] == [
+        "Scanner offline on floor 3"
+    ], received
+    assert actuator.calls == 0
+    assert not report.success
+    assert [r.step_id for r in report.results] == ["step_000"]
+    halt = report.results[0]
+    assert halt.actuation == "api" and halt.api_fallback is None
+    assert halt.safety_halt and halt.failure_category == "safety_halt"
+    assert not halt.delivery_attempted
+    # The span's halt names the earlier save's refusal; the check stays armed,
+    # so the end-of-run read words the same refusal "after an earlier save".
+    assert "second submission" in (halt.error or ""), halt.error
+    assert "after the previous save" in (halt.error or "") or (
+        "after an earlier save" in (halt.error or "")
+    ), halt.error
