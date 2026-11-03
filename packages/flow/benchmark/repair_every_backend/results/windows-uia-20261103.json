@@ -1,0 +1,78 @@
+{
+  "schema": "openadapt.repair-every-backend-qualification/v1",
+  "kind": "uia",
+  "backend": "WindowsBackend (UI Automation, win_agent)",
+  "app": "scripts/desktop/patient_notes.ps1 (WinForms, SQLite), Windows 11 VM",
+  "at": "2026-11-03T01:51:55.382283+00:00",
+  "git_sha": "fb7c7d2e22e8bc2450bdffcf81b53af1282cd5d5",
+  "git_dirty": [
+    "?? packages/flow/benchmark/repair_every_backend/qualify_windows.py"
+  ],
+  "compiled": {
+    "steps": [
+      "step_000:click:click recorded visual target",
+      "step_001:type:type 'Neil'",
+      "step_002:click:click 'Search'",
+      "step_003:click:click recorded visual target",
+      "step_004:type:type <note>",
+      "step_005:click:click 'Save Note'"
+    ],
+    "identity_bands": [
+      "Patient",
+      "Patient",
+      "Patient",
+      "Patient"
+    ],
+    "certified_clinical_write": true,
+    "certification": "passed"
+  },
+  "repair_with_record_check": {
+    "status": "not_repairable",
+    "reason": "the run ended REJECTED_POLICY; self-repair handles only a halt before any effect",
+    "person_decisions": 0,
+    "approver": "qualification:scripted-approver (stands in for a person; approves all)",
+    "stages": [],
+    "notes": {
+      "1": "",
+      "2": "",
+      "3": "",
+      "4": "",
+      "5": "",
+      "6": "",
+      "7": "",
+      "8": "",
+      "9": "",
+      "10": ""
+    }
+  },
+  "repair_under_demo_profile": {
+    "status": "not_repairable",
+    "reason": "the run ended REJECTED_POLICY; self-repair handles only a halt before any effect",
+    "person_decisions": 0,
+    "approver": "qualification:scripted-approver (stands in for a person; approves all)",
+    "stages": [],
+    "notes": {
+      "1": "",
+      "2": "",
+      "3": "",
+      "4": "",
+      "5": "",
+      "6": "",
+      "7": "",
+      "8": "",
+      "9": "",
+      "10": ""
+    }
+  },
+  "checks": {
+    "bundle_certified": true,
+    "repair_resumed": false,
+    "resume_verified": false,
+    "only_the_patients_note_changed": false,
+    "click_admitted_on_element_identity": false,
+    "fault_probe_stopped_before_save": false,
+    "demo_profile_click_not_admitted": false,
+    "demo_profile_wrote_nothing": true
+  },
+  "passed": false
+}
