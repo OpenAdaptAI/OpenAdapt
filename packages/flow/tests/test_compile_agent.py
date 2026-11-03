@@ -158,6 +158,26 @@ def test_scrubbing_keeps_the_values_the_operator_named(monkeypatch) -> None:
 # -- the Claude loop -------------------------------------------------------------
 
 
+class _OutboundScrubber(_Scrubber):
+    """Text and image scrubbing for the model-facing screenshots."""
+
+    def __init__(self) -> None:
+        self.images = 0
+
+    def scrub_image(self, image, fill_color=None):
+        self.images += 1
+        return image
+
+
+@pytest.fixture(autouse=True)
+def _outbound_scrubber():
+    """Screenshots sent to the model are redacted first (agents._image)."""
+    scrubber = _OutboundScrubber()
+    privacy.set_text_scrubber(scrubber)
+    yield scrubber
+    privacy.reset_scrubbers()
+
+
 class _Harness:
     """Stands in for the browser harness: a fixed listing and counters."""
 
@@ -216,7 +236,7 @@ class _Client:
 REQUEST = TaskRequest(task_id="t", instruction="Save it", inputs={})
 
 
-def test_claude_loop_counts_tokens_and_the_gate_screenshot() -> None:
+def test_claude_loop_counts_tokens_and_the_gate_screenshot(_outbound_scrubber) -> None:
     client = _Client(
         [
             ("click", {"ref": "e9"}),
@@ -229,6 +249,7 @@ def test_claude_loop_counts_tokens_and_the_gate_screenshot() -> None:
     assert ledger.finished and ledger.summary == "done"
     assert ledger.model_calls == 3 and ledger.tool_errors == 1  # the stale ref
     assert harness.clicks == ["e1"]
+    assert _outbound_scrubber.images >= 1  # redacted before the model saw it
     # The save's result carried a screenshot: the verification gate.
     messages = client.requests[2]["messages"]  # the loop appends to one list
     third = messages[4]["content"][0]["content"]

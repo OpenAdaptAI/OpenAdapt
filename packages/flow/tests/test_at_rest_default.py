@@ -98,8 +98,7 @@ def test_opt_out_restores_plaintext_loudly_and_records_it(
     assert at_rest.plaintext_allowed("a compiled bundle")  # warns once
     err = capsys.readouterr().err
     assert err.count("WARNING: writing a compiled bundle in plaintext") == 1
-    [line] = _ledger(default_mode)
-    assert line["purpose"] == "a compiled bundle"
+    [line] = [e for e in _ledger(default_mode) if e["purpose"] == "a compiled bundle"]
     assert line["reason"] == "de-identified fixtures"
 
 

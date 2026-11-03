@@ -295,7 +295,9 @@ def recording_key(explicit: Optional[str] = None) -> Optional[str]:
 def passphrase_for(kind: str, explicit: Optional[str] = None) -> Optional[str]:
     if kind == "recording":
         return recording_key(explicit)
-    return crypto.resolve_key(explicit)
+    if explicit:
+        return explicit
+    return output_bundle_key()
 
 
 def output_bundle_key() -> Optional[str]:
@@ -919,9 +921,7 @@ def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
 
 
 def _configured(kind: str) -> bool:
-    if os.environ.get(crypto.ENV_KEY):
-        return True
-    return kind == "recording" and bool(os.environ.get(RECORDING_ENV_KEY))
+    return bool(os.environ.get(crypto.ENV_KEY) or os.environ.get(RECORDING_ENV_KEY))
 
 
 def _reader(root: str) -> SealedSet | SealedSetWriter:
