@@ -291,6 +291,32 @@ def _clean_text(value: object) -> Optional[str]:
     return text or None
 
 
+def _hit_is_part_of(hit: MacElement, target: MacElement) -> bool:
+    """Whether the hit-tested element is ``target`` or a part that can't be pressed.
+
+    The same element reads the same role, name, id and bounds. A part is
+    inside the target's bounds and offers no action of its own (a label in a
+    button, a text cell in a row); anything pressable there (a nested button,
+    a link) is a different control.
+    """
+    if (
+        hit.role == target.role
+        and hit.name == target.name
+        and hit.accessible_id == target.accessible_id
+        and hit.bounds == target.bounds
+    ):
+        return True
+    hx, hy, hw, hh = hit.bounds
+    tx, ty, tw, th = target.bounds
+    inside = (
+        hx >= tx
+        and hy >= ty
+        and hx + hw <= tx + tw + 1e-6
+        and hy + hh <= ty + th + 1e-6
+    )
+    return inside and not hit.supported_operations
+
+
 def _fingerprint(element: MacElement) -> str:
     """Bind resolution to the exact live AX node and its geometry."""
     identity = {
@@ -776,6 +802,9 @@ class MacOSBackend(RemoteDisplayBackend):
         self._foreground_retries = max(1, int(foreground_retries))
         self._foreground_settle_s = max(0.0, float(foreground_settle_s))
         self._captured_window: Optional[WindowInfo] = None
+        #: Set by ``act_structural`` for the length of its click: re-proves the
+        #: AX element right before every mouse-down edge.
+        self._pre_edge_check: Optional[Any] = None
         # Opaque AX object captured with the one-shot actuation frame. It is
         # process-local, never serialized/logged, and prevents an unchanged-
         # pixel focus switch from redirecting consequential TYPE/KEY input.
@@ -1012,6 +1041,13 @@ class MacOSBackend(RemoteDisplayBackend):
             counts = 2 if double else 1
             for index in range(counts):
                 self._assert_bound_physical_target(bound, point=point)
+                if self._pre_edge_check is not None:
+                    try:
+                        self._pre_edge_check(bound, sx, sy)
+                    except StructuralResolutionRefused as exc:
+                        if index == 0:
+                            raise  # nothing was pressed yet
+                        raise MacOSBackendError(str(exc)) from exc
                 self._mac_client.mouse(
                     sx,
                     sy,
@@ -1458,36 +1494,54 @@ class MacOSBackend(RemoteDisplayBackend):
         """Click the same unique AX element the resolver found, or refuse.
 
         Re-finds ``locator``'s one element and requires its fingerprint (AX
-        path, role, name, app, window and bounds) to still equal the
+        path, role, name, id, app, window and bounds) to still equal the
         handle's, then delivers the fully gated physical click at its center.
-        The receipt binds that fingerprint. It proves input delivery only;
-        postconditions and system-of-record effects still decide the outcome.
+        Right before every mouse-down edge it proves the element again: still
+        the one match with that fingerprint, and the element the hit-test
+        finds at the point is that element or a part of it that can't be
+        pressed (its label). A nested button or link there is refused.
+
+        The receipt binds that fingerprint. It proves input delivery to that
+        element only: the fingerprint is positional, so a same-looking record
+        in its place is caught by the identity check that ran before, not by
+        this. Postconditions and system-of-record effects decide the outcome.
+        Every refusal before the first mouse-down is a
+        :class:`StructuralResolutionRefused` (no input was sent).
         """
         expected = handle.target_fingerprint
         if not expected:
-            raise MacOSBackendError("AX actuation requires a target fingerprint")
+            raise StructuralResolutionRefused(
+                "AX actuation requires a target fingerprint"
+            )
         with self._input_lock:
             window = self._ensure_captured()
-            candidate = self._unique_candidate(locator)
-            if candidate is None:
-                raise MacOSBackendError(
-                    "AX target disappeared between resolution and actuation"
-                )
-            if not hmac.compare_digest(expected, _fingerprint(candidate)):
-                raise MacOSBackendError(
-                    "AX target changed between resolution and actuation; "
-                    "refusing a stale click"
-                )
+            candidate = self._same_element(locator, expected)
             rect = self._in_window_pixel_rect(window, candidate.bounds)
             if rect is None:
-                raise MacOSBackendError("AX target is no longer inside the window")
+                raise StructuralResolutionRefused(
+                    "AX target is no longer inside the window"
+                )
             x, y, w, h = rect
             point = (x + w // 2, y + h // 2)
             if point != tuple(handle.point):
-                raise MacOSBackendError(
+                raise StructuralResolutionRefused(
                     "AX target moved between resolution and actuation"
                 )
-            self.click(*point, double=double)
+
+            def check(bound: WindowInfo, sx: float, sy: float) -> None:
+                current = self._same_element(locator, expected)
+                hit = self._ax_client.element_at_point(bound.pid, bound.title, sx, sy)
+                if hit is None or not _hit_is_part_of(hit, current):
+                    raise StructuralResolutionRefused(
+                        "the element under the pointer is not the resolved AX "
+                        "target; refusing the click"
+                    )
+
+            self._pre_edge_check = check
+            try:
+                self.click(*point, double=double)
+            finally:
+                self._pre_edge_check = None
         return ActionDeliveryReceipt(
             receipt_id=secrets.token_hex(12),
             operation="physical_double_click" if double else "physical_click",
@@ -1496,6 +1550,20 @@ class MacOSBackend(RemoteDisplayBackend):
             delivered_at=datetime.now(timezone.utc).isoformat(),
             outcome_verified=False,
         )
+
+    def _same_element(self, locator: StructuralLocator, expected: str) -> MacElement:
+        """``locator``'s one element, if its fingerprint is still ``expected``."""
+        candidate = self._unique_candidate(locator)
+        if candidate is None:
+            raise StructuralResolutionRefused(
+                "AX target disappeared between resolution and actuation"
+            )
+        if not hmac.compare_digest(expected, _fingerprint(candidate)):
+            raise StructuralResolutionRefused(
+                "AX target changed between resolution and actuation; refusing a "
+                "stale click"
+            )
+        return candidate
 
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Census of the rows that read the same as the element at (x, y).

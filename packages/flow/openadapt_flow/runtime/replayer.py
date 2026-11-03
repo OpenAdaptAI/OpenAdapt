@@ -13793,7 +13793,14 @@ class Replayer:
                             structural_handle,
                         ),
                     )
-                    result.actuation = "uia"
+                    # A physical click (macOS, a Linux fallback) is not a
+                    # native UIA action; label it as the CLICK branch does.
+                    result.actuation = (
+                        "uia"
+                        if result.delivery_receipt is not None
+                        and result.delivery_receipt.native
+                        else "dom"
+                    )
                 else:
                     if (
                         requires_atomic_identity

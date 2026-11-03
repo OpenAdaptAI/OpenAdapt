@@ -703,6 +703,90 @@ def test_act_structural_refuses_a_stale_or_ambiguous_target(change, error) -> No
         ax.candidates = [SAVE_ELEMENT, replace(SAVE_ELEMENT, ax_path="0/7/2")]
     else:
         handle = handle.model_copy(update={"target_fingerprint": None})
-    with pytest.raises(Exception, match=error):
+    with pytest.raises(StructuralResolutionRefused, match=error):
         target.act_structural(SAVE_LOCATOR, handle)
     assert _clicks(client) == []
+
+
+def test_act_structural_refuses_a_pressable_child_under_the_pointer() -> None:
+    from dataclasses import replace
+
+    from openadapt_flow.backend import StructuralResolutionRefused
+
+    client = FakeMacClient()
+    delete = replace(
+        SAVE_ELEMENT,
+        ax_path="@point",
+        accessible_id="delete",
+        name="Delete",
+        bounds=(220.0, 45.0, 10.0, 10.0),
+        supported_operations=("invoke",),
+    )
+    target = backend(client, FakeMacAXClient(at_point=delete))
+    handle = target.locate_structural(SAVE_LOCATOR)
+    assert handle is not None
+    with pytest.raises(StructuralResolutionRefused, match="not the resolved AX"):
+        target.act_structural(SAVE_LOCATOR, handle)
+    assert _clicks(client) == []
+
+
+def test_act_structural_accepts_the_targets_own_label() -> None:
+    from dataclasses import replace
+
+    client = FakeMacClient()
+    label = replace(
+        SAVE_ELEMENT,
+        ax_path="@point",
+        accessible_id=None,
+        role="text",
+        bounds=(215.0, 42.0, 30.0, 16.0),
+        supported_operations=(),
+    )
+    target = backend(client, FakeMacAXClient(at_point=label))
+    handle = target.locate_structural(SAVE_LOCATOR)
+    assert handle is not None
+    target.act_structural(SAVE_LOCATOR, handle)
+    assert len(_clicks(client)) == 1
+
+
+def test_act_structural_reproves_the_element_after_the_pointer_moves() -> None:
+    from dataclasses import replace
+
+    from openadapt_flow.backend import StructuralResolutionRefused
+
+    ax = FakeMacAXClient()
+
+    class SwappingClient(FakeMacClient):
+        def mouse_move(self, x, y):
+            super().mouse_move(x, y)
+            # A look-alike row takes the target's place, unseen in pixels.
+            ax.candidates = [replace(SAVE_ELEMENT, ax_path="0/9/9")]
+
+    client = SwappingClient()
+    target = backend(client, ax)
+    handle = target.locate_structural(SAVE_LOCATOR)
+    assert handle is not None
+    with pytest.raises(StructuralResolutionRefused, match="changed between"):
+        target.act_structural(SAVE_LOCATOR, handle)
+    assert _clicks(client) == []
+
+
+def test_act_structural_second_edge_of_a_double_click_is_checked_too() -> None:
+
+    from openadapt_flow.backends.macos_backend import MacOSBackendError
+
+    ax = FakeMacAXClient()
+
+    class AfterFirstDown(FakeMacClient):
+        def mouse(self, x, y, *, button, down, click_count):
+            super().mouse(x, y, button=button, down=down, click_count=click_count)
+            if not down and click_count == 1:
+                ax.candidates = []
+
+    client = AfterFirstDown()
+    target = backend(client, ax)
+    handle = target.locate_structural(SAVE_LOCATOR)
+    assert handle is not None
+    with pytest.raises(MacOSBackendError, match="disappeared"):
+        target.act_structural(SAVE_LOCATOR, handle, double=True)
+    assert len(_clicks(client)) == 1  # the second press never happened
