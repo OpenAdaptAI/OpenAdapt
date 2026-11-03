@@ -276,6 +276,13 @@ class MacAXClient(Protocol):
         """Exact AX text of ``element`` (value/title/description), or None."""
         ...
 
+    # Optional (act_structural): a client without it can't prove the element
+    # under the pointer is the target, so every structural click is refused.
+    #
+    # def is_part_of(self, hit: MacElement, target: MacElement) -> bool:
+    #     """Whether the live hit-tested element is the target, or under it in
+    #     the tree with nothing pressable in between."""
+    #
     # Optional (IdentityCandidatesBackend): a client without it cannot count
     # look-alike rows, and the runtime halts a row pick before a write.
     #
@@ -289,32 +296,6 @@ def _clean_text(value: object) -> Optional[str]:
     """Collapse whitespace to a single-spaced string, or None if empty."""
     text = " ".join(str(value or "").split())
     return text or None
-
-
-def _hit_is_part_of(hit: MacElement, target: MacElement) -> bool:
-    """Whether the hit-tested element is ``target`` or a part that can't be pressed.
-
-    The same element reads the same role, name, id and bounds. A part is
-    inside the target's bounds and offers no action of its own (a label in a
-    button, a text cell in a row); anything pressable there (a nested button,
-    a link) is a different control.
-    """
-    if (
-        hit.role == target.role
-        and hit.name == target.name
-        and hit.accessible_id == target.accessible_id
-        and hit.bounds == target.bounds
-    ):
-        return True
-    hx, hy, hw, hh = hit.bounds
-    tx, ty, tw, th = target.bounds
-    inside = (
-        hx >= tx
-        and hy >= ty
-        and hx + hw <= tx + tw + 1e-6
-        and hy + hh <= ty + th + 1e-6
-    )
-    return inside and not hit.supported_operations
 
 
 def _fingerprint(element: MacElement) -> str:
@@ -566,6 +547,43 @@ class QuartzMacAXClient:
             return element.text
         except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
             return None
+
+    #: AX actions that don't change the app: a node offering only these is
+    #: not pressable for ``is_part_of``.
+    _INERT_ACTIONS = frozenset({"AXScrollToVisible", "AXShowMenu"})
+
+    def is_part_of(self, hit: MacElement, target: MacElement) -> bool:
+        """Whether the live ``hit`` is ``target`` or under it with nothing pressable.
+
+        Walks ``AXParent`` from the hit with ``CFEqual`` until it reaches the
+        target, at most 16 steps. Every node on the way, the hit included,
+        must offer no AX action besides scrolling or a context menu. False
+        on any failure.
+        """
+        try:
+            from ApplicationServices import (
+                AXUIElementCopyActionNames,
+                kAXParentAttribute,
+            )
+            from CoreFoundation import CFEqual
+
+            node, goal = hit.native, target.native
+            if node is None or goal is None:
+                return False
+            for _ in range(16):
+                if CFEqual(node, goal):
+                    return True
+                error, actions = AXUIElementCopyActionNames(node, None)
+                if error != 0:
+                    return False
+                if any(str(a) not in self._INERT_ACTIONS for a in actions or ()):
+                    return False
+                node = self._attr(node, kAXParentAttribute)
+                if node is None:
+                    return False
+            return False
+        except Exception:  # noqa: BLE001 - unobservable AX is never a match
+            return False
 
     def ancestry(
         self, element: MacElement
@@ -1497,9 +1515,11 @@ class MacOSBackend(RemoteDisplayBackend):
         path, role, name, id, app, window and bounds) to still equal the
         handle's, then delivers the fully gated physical click at its center.
         Right before every mouse-down edge it proves the element again: still
-        the one match with that fingerprint, and the element the hit-test
-        finds at the point is that element or a part of it that can't be
-        pressed (its label). A nested button or link there is refused.
+        the one match with that fingerprint, and the AX client's
+        ``is_part_of`` says the live element the hit-test finds at the point
+        is that element, or lies under it in the tree with nothing pressable
+        in between (its label). A nested button or link there, an overlay
+        from another subtree, or a client that can't tell is refused.
 
         The receipt binds that fingerprint. It proves input delivery to that
         element only: the fingerprint is positional, so a same-looking record
@@ -1531,7 +1551,12 @@ class MacOSBackend(RemoteDisplayBackend):
             def check(bound: WindowInfo, sx: float, sy: float) -> None:
                 current = self._same_element(locator, expected)
                 hit = self._ax_client.element_at_point(bound.pid, bound.title, sx, sy)
-                if hit is None or not _hit_is_part_of(hit, current):
+                part_of = getattr(self._ax_client, "is_part_of", None)
+                if (
+                    hit is None
+                    or not callable(part_of)
+                    or part_of(hit, current) is not True
+                ):
                     raise StructuralResolutionRefused(
                         "the element under the pointer is not the resolved AX "
                         "target; refusing the click"
