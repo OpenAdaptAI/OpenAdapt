@@ -298,8 +298,6 @@ def build_identity_template(
             for size in (2, 3, 4):
                 if i + size > len(squashed_tokens):
                     break
-                if _id._glues_digits(squashed_tokens[i : i + size]):
-                    continue
                 concat_raw = "".join(squashed_tokens[i : i + size])
                 concat_c = _id.ocr_canonical(concat_raw)
                 if len(concat_c) < _id.MIN_BLOCK:
@@ -454,13 +452,18 @@ def _match_tokens_template(
                 break
 
     # split: consecutive recorded tokens -> one observed token
+    digit_glued: set[int] = set()
     for ct in tmpl.concats:
         if all(matched[ct.i : ct.i + ct.size]):
             continue
+        window = toks[ct.i : ct.i + ct.size]
+        glued = any(a.digit and b.digit for a, b in zip(window, window[1:]))
         for j in range(no):
             if obs_c[j] == ct.c:
                 rawok = ct.r == obs_r[j]
                 for m in range(ct.i, ct.i + ct.size):
+                    if glued:
+                        digit_glued.add(m)
                     matched[m] = True
                     if rawok:
                         raw_matched[m] = True
@@ -477,11 +480,11 @@ def _match_tokens_template(
             for size in (2, 3, 4):
                 if j + size > no:
                     break
-                if _id._glues_digits(obs[j : j + size]):
-                    continue
                 concat_raw = "".join(obs[j : j + size])
                 if canon(concat_raw) == t.c:
                     mark(i, raw(concat_raw), concat_raw)
+                    if _id._glues_digits(obs[j : j + size]):
+                        digit_glued.add(i)
                     for m in range(j, j + size):
                         explained[m] = True
                     done = True
@@ -492,6 +495,8 @@ def _match_tokens_template(
     # Unified glyph-vulnerable-identifier flag (raw match + recorded glyph shape)
     for i, t in enumerate(toks):
         if raw_matched[i] and t.glyph:
+            glyph_ambiguous_id[i] = True
+        if i in digit_glued:
             glyph_ambiguous_id[i] = True
     return matched, explained, raw_matched, suspect_evidence, glyph_ambiguous_id
 

@@ -1096,6 +1096,10 @@ def _match_tokens(
     # second copy of the recorded value elsewhere in the band ("15 patients
     # found") must not stand in for a sibling's differing id.
     digit_used: set[int] = set()
+    # Recorded tokens matched only by gluing two digit-bearing fragments
+    # ("100" "512" vs "100512", or "15" "47" vs "1547"): one id split by OCR
+    # and two values read as one look the same, so the band abstains.
+    digit_glued: set[int] = set()
     for i, ec in enumerate(exp_c):
         digit = _has_digit(exp[i])
         for j, oc in enumerate(obs_c):
@@ -1114,8 +1118,7 @@ def _match_tokens(
                 break
             if all(matched[i : i + size]):
                 continue
-            if _glues_digits(exp[i : i + size]):
-                continue
+            glued = _glues_digits(exp[i : i + size])
             concat_raw = "".join(exp[i : i + size])
             concat_c = ocr_canonical(concat_raw)
             if len(concat_c) < MIN_BLOCK:
@@ -1140,6 +1143,8 @@ def _match_tokens(
                             raw_matched[m] = True
                         elif _suspicious_pair(concat_raw, obs[j]):
                             suspect_evidence[m] = True
+                        if glued:
+                            digit_glued.add(m)
                     explained[j] = True
 
     # join: one recorded token -> consecutive observed tokens
@@ -1150,11 +1155,11 @@ def _match_tokens(
             for size in (2, 3, 4):
                 if j + size > len(obs):
                     break
-                if _glues_digits(obs[j : j + size]):
-                    continue
                 concat_raw = "".join(obs[j : j + size])
                 if ocr_canonical(concat_raw) == exp_c[i]:
                     mark(i, token, concat_raw)
+                    if _glues_digits(obs[j : j + size]):
+                        digit_glued.add(i)
                     for m in range(j, j + size):
                         explained[m] = True
                     break
@@ -1175,6 +1180,8 @@ def _match_tokens(
     # (→ mismatch), not the abstain gate.
     for i in range(len(exp)):
         if raw_matched[i] and _is_glyph_vulnerable_identifier(exp[i]):
+            glyph_ambiguous_id[i] = True
+        if i in digit_glued:
             glyph_ambiguous_id[i] = True
     return (
         matched,
@@ -1284,9 +1291,9 @@ def _contradicted(
 
 
 def _glues_digits(fragments: list[str]) -> bool:
-    """Whether joining ``fragments`` would glue two digit-bearing tokens:
-    "15" + "47" is not OCR's reading of "1547" but two values, and a record
-    whose id is 1547 must not match them (nor the reverse)."""
+    """Whether joining ``fragments`` glues two digit-bearing tokens: OCR's
+    split of one id ("100" "512") and two values ("15" "47" beside a record
+    whose id is 1547) read alike, so such a match can only abstain."""
     return any(
         _has_digit(a) and _has_digit(b) for a, b in zip(fragments, fragments[1:])
     )
