@@ -1512,6 +1512,24 @@ class _User32:
             return None
         return (int(r.left), int(r.top), int(r.right), int(r.bottom))
 
+    def outer_rect(self, hwnd: int) -> Optional[tuple[int, int, int, int]]:
+        """Everything the window may paint: GetWindowRect joined with the
+        visible frame (a self-drawn frame can paint into the border DWM
+        leaves out)."""
+        r = self._wintypes.RECT()
+        frame = self.rect(hwnd)
+        if not self._dll.GetWindowRect(hwnd, self._ctypes.byref(r)):
+            return frame
+        outer = (int(r.left), int(r.top), int(r.right), int(r.bottom))
+        if frame is None:
+            return outer
+        return (
+            min(outer[0], frame[0]),
+            min(outer[1], frame[1]),
+            max(outer[2], frame[2]),
+            max(outer[3], frame[3]),
+        )
+
     def per_monitor_dpi(self) -> bool:
         """Put this thread in per-monitor-v2 DPI awareness, so window rects
         and points are physical pixels like the screenshot's."""
@@ -1771,7 +1789,9 @@ def _window_operation(
             return {"status": "ok", "window": None}  # cannot tell if it shows
         if cloaked:
             continue
-        rect = user32.rect(candidate)
+        # Another process's window is measured by everything it may paint;
+        # the app's own by its visible frame.
+        rect = user32.rect(candidate) if same_process else user32.outer_rect(candidate)
         if rect is None or rect[2] <= rect[0] or rect[3] <= rect[1]:
             continue
         if not _intersects(rect, box):

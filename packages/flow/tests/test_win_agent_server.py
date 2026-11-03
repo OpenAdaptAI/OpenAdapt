@@ -1249,6 +1249,7 @@ class _FakeDesktop:
         self.dpi_ok = True
         self.foreground_window = self.PINNED
         self.roots: dict[int, int] = {}  # child hwnd -> top-level
+        self.paint_border: dict[int, int] = {}  # self-drawn frame, in px
 
     def add(
         self,
@@ -1278,6 +1279,11 @@ class _FakeDesktop:
 
     def rect(self, hwnd):
         return self.windows[hwnd][2]
+
+    def outer_rect(self, hwnd):
+        x0, y0, x1, y1 = self.windows[hwnd][2]
+        grow = self.paint_border.get(hwnd, 0)
+        return (x0 - grow, y0 - grow, x1 + grow, y1 + grow)
 
     def is_visible(self, hwnd):
         return self.windows[hwnd][3]
@@ -1344,6 +1350,16 @@ def test_an_owned_dialog_over_part_of_the_region_is_reported(monkeypatch) -> Non
     desktop = _FakeDesktop()
     desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
     assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+
+
+def test_a_foreign_self_drawn_frame_reaching_the_band_is_none(monkeypatch) -> None:
+    # Review should-fix: an Electron-style window paints into the ~7 px border
+    # DWM leaves out of its visible frame.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
+    desktop.add(0x900, pid=99, rect=(200, 240, 245, 300))  # frame ends 5 px short
+    desktop.paint_border[0x900] = 7
+    assert _owned_over(monkeypatch, desktop) is None
 
 
 def test_a_foreign_window_beside_an_owned_dialog_over_the_band_is_none(
