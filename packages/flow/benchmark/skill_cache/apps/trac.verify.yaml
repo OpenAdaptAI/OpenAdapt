@@ -1,0 +1,9 @@
+# Trac 1.6's own ticket table, read through its SQLite file (a read-only
+# query). Set TRAC_DB to the environment's db/trac.db before a run.
+verifier:
+  kind: sql
+  sqlite_database: ${TRAC_DB}
+  sql_query: >-
+    SELECT id, type, status, summary, description FROM ticket
+  timeout_s: 3.0
+  poll_interval_s: 0.1

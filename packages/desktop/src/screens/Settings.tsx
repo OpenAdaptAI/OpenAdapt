@@ -23,6 +23,7 @@ import {
   Pill,
   SegControl,
 } from "../ui/primitives";
+import { ApproverKeyCard } from "../ui/ApproverKey";
 import { OsWarning } from "../ui/OsWarning";
 import { ShadowModeCard } from "../ui/ShadowMode";
 import {
@@ -249,6 +250,8 @@ export function Settings({
       />
 
       <ShadowModeCard />
+
+      <ApproverKeyCard />
 
       <Card>
         <CardHead

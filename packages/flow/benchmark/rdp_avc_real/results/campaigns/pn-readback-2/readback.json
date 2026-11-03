@@ -1,0 +1,122 @@
+[
+  {
+    "case": 1,
+    "stored": "Rb000note",
+    "expected": "Rb000note",
+    "truth": "confirmed",
+    "verdict": "confirmed",
+    "correct": true,
+    "false_confirm": false,
+    "reason": "field 'note' equals the expected value",
+    "assurance": "screen_readback",
+    "elapsed_s": 53.76
+  },
+  {
+    "case": 2,
+    "stored": "Rb001note",
+    "expected": "Rb001other",
+    "truth": "refuted",
+    "verdict": "indeterminate",
+    "correct": false,
+    "false_confirm": false,
+    "reason": "the record view, read by OCR, does not match the input (note); OCR can misread, so this is not proof the save is wrong. Check the record; HALT",
+    "assurance": "unchecked",
+    "elapsed_s": 43.39
+  },
+  {
+    "case": 3,
+    "stored": "Rb002note",
+    "expected": "Rb002note",
+    "truth": "confirmed",
+    "verdict": "confirmed",
+    "correct": true,
+    "false_confirm": false,
+    "reason": "field 'note' equals the expected value",
+    "assurance": "screen_readback",
+    "elapsed_s": 46.51
+  },
+  {
+    "case": 4,
+    "stored": "Rb003note",
+    "expected": "Rb003other",
+    "truth": "refuted",
+    "verdict": "indeterminate",
+    "correct": false,
+    "false_confirm": false,
+    "reason": "the record view, read by OCR, does not match the input (note); OCR can misread, so this is not proof the save is wrong. Check the record; HALT",
+    "assurance": "unchecked",
+    "elapsed_s": 45.22
+  },
+  {
+    "case": 5,
+    "stored": "Rb004note",
+    "expected": "Rb004note",
+    "truth": "confirmed",
+    "verdict": "confirmed",
+    "correct": true,
+    "false_confirm": false,
+    "reason": "field 'note' equals the expected value",
+    "assurance": "screen_readback",
+    "elapsed_s": 45.17
+  },
+  {
+    "case": 6,
+    "stored": "Rb005note",
+    "expected": "Rb005other",
+    "truth": "refuted",
+    "verdict": "indeterminate",
+    "correct": false,
+    "false_confirm": false,
+    "reason": "the record view, read by OCR, does not match the input (note); OCR can misread, so this is not proof the save is wrong. Check the record; HALT",
+    "assurance": "unchecked",
+    "elapsed_s": 43.58
+  },
+  {
+    "case": 7,
+    "stored": "Rb006note",
+    "expected": "Rb006note",
+    "truth": "confirmed",
+    "verdict": "confirmed",
+    "correct": true,
+    "false_confirm": false,
+    "reason": "field 'note' equals the expected value",
+    "assurance": "screen_readback",
+    "elapsed_s": 45.58
+  },
+  {
+    "case": 8,
+    "stored": "Rb007note",
+    "expected": "Rb007other",
+    "truth": "refuted",
+    "verdict": "indeterminate",
+    "correct": false,
+    "false_confirm": false,
+    "reason": "the record view, read by OCR, does not match the input (note); OCR can misread, so this is not proof the save is wrong. Check the record; HALT",
+    "assurance": "unchecked",
+    "elapsed_s": 45.09
+  },
+  {
+    "case": 9,
+    "stored": "Rb008note",
+    "expected": "Rb008note",
+    "truth": "confirmed",
+    "verdict": "confirmed",
+    "correct": true,
+    "false_confirm": false,
+    "reason": "field 'note' equals the expected value",
+    "assurance": "screen_readback",
+    "elapsed_s": 42.14
+  },
+  {
+    "case": 10,
+    "stored": "Rb009note",
+    "expected": "Rb009other",
+    "truth": "refuted",
+    "verdict": "indeterminate",
+    "correct": false,
+    "false_confirm": false,
+    "reason": "the record view, read by OCR, does not match the input (note); OCR can misread, so this is not proof the save is wrong. Check the record; HALT",
+    "assurance": "unchecked",
+    "elapsed_s": 43.27
+  }
+]

@@ -118,7 +118,16 @@ it("needs the person to look at the record before any choice on a possible save"
   ).toBe(true);
 
   fireEvent.click(screen.getByRole("checkbox", { name: "I looked at the record in the app." }));
-  fireEvent.click(done);
+  // Click only once the button is enabled, queried again after the re-render:
+  // on a loaded CI runner a click on the stale, still-disabled button was lost.
+  const enabled = await waitFor(() => {
+    const button = screen.getByRole("button", {
+      name: /It saved. Mark it done/,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    return button;
+  });
+  fireEvent.click(enabled);
 
   await waitFor(() =>
     expect(engineInvoke).toHaveBeenCalledWith(CMD.RESOLVE_ATTENTION_ITEM, {
@@ -218,11 +227,13 @@ it("keeps Done and checked for a confirmed save that still needs a look, with no
   ).toBeTruthy();
   expect(screen.getByText(/From a list with “Only ask a person about problems” on/)).toBeTruthy();
   expect(screen.queryByRole("button", { name: /Run it again/ })).toBeNull();
-  const close = screen.getByRole("button", { name: /It's right. Close it/ }) as HTMLButtonElement;
-  expect(close.disabled).toBe(true);
+  const closeButton = () =>
+    screen.getByRole("button", { name: /It's right. Close it/ }) as HTMLButtonElement;
+  expect(closeButton().disabled).toBe(true);
   fireEvent.click(screen.getByLabelText("I looked at the record in the app."));
-  expect(close.disabled).toBe(false);
-  fireEvent.click(close);
+  // Re-query: a late re-render can replace the button node.
+  await waitFor(() => expect(closeButton().disabled).toBe(false));
+  fireEvent.click(closeButton());
   await waitFor(() =>
     expect(engineInvoke).toHaveBeenCalledWith(
       CMD.RESOLVE_ATTENTION_ITEM,

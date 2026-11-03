@@ -27,6 +27,7 @@ API_FOLDED_ACTUATION = "api_folded"
 _DELIVERY_OPERATIONS: dict[tuple[str, ActionKind], set[tuple[str, bool]]] = {
     ("uia", ActionKind.CLICK): {
         ("uia_invoke", True),
+        ("win32_bm_click", True),
         ("uia_focus", True),
         ("uia_toggle", True),
         ("uia_select", True),

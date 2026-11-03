@@ -106,3 +106,50 @@ it("says plainly when the engine refused the answer", async () => {
   expect(await screen.findByText(/isn't waiting any more/)).toBeTruthy();
   expect(answered).not.toHaveBeenCalled();
 });
+
+it("offers the one-step approver key setup instead of Approve on a Mac without a key", async () => {
+  const { engineTry } = await import("../lib/engine");
+  vi.mocked(engineTry).mockResolvedValue({ ok: true, supported: true, set_up: false, stored: false });
+  vi.mocked(engineInvoke).mockResolvedValue({ ok: true, supported: true, set_up: true, stored: true });
+  render(<ItemApprovalPanel state={waiting()} onAnswered={() => {}} />);
+
+  const setUp = await screen.findByRole("button", { name: "Set up with Touch ID" });
+  expect(screen.queryByRole("button", { name: "Approve and save" })).toBeNull();
+  expect(screen.getByText(/asks for your Touch ID or login password/)).toBeTruthy();
+
+  vi.mocked(engineTry).mockResolvedValue({ ok: true, supported: true, set_up: true, stored: true });
+  fireEvent.click(setUp);
+
+  await screen.findByRole("button", { name: "Approve and save" });
+  expect(engineInvoke).toHaveBeenCalledWith(CMD.SET_UP_APPROVER_KEY, { replace: false });
+});
+
+it("keeps Approve hidden when setup fails, and says why", async () => {
+  const { engineTry } = await import("../lib/engine");
+  vi.mocked(engineTry).mockResolvedValue({ ok: true, supported: true, set_up: false });
+  vi.mocked(engineInvoke).mockResolvedValue({
+    ok: false,
+    code: "approver_presence_refused",
+    error: "Touch ID or your password wasn't confirmed, so nothing was approved.",
+  });
+  render(<ItemApprovalPanel state={waiting()} onAnswered={() => {}} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Set up with Touch ID" }));
+
+  expect((await screen.findByRole("alert")).textContent).toMatch(/wasn't confirmed/);
+  expect(screen.queryByRole("button", { name: "Approve and save" })).toBeNull();
+});
+
+it("switches to setup when the engine says the key is missing", async () => {
+  vi.mocked(engineInvoke).mockResolvedValue({
+    ok: false,
+    code: "approver_key_missing",
+    setup: "in_app",
+    error: "Set up your approver key to approve saves on this Mac.",
+  });
+  render(<ItemApprovalPanel state={waiting()} onAnswered={() => {}} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Approve and save" }));
+
+  await screen.findByRole("button", { name: "Set up with Touch ID" });
+});

@@ -1,0 +1,64 @@
+{
+ "total_usd": 6.05266,
+ "cap_usd": 30.0,
+ "prices_as_of": "2026-10-20",
+ "note": "Per-label totals. The per-call ledger (1379 calls) is in the release asset evidence-economic-comparison-2026-10-24 of OpenAdaptAI/openadapt-workspace (sha256 906a9daf...). budget.py appends new calls here; the total stays exact.",
+ "entries": [
+  {
+   "label": "agent_tools smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.084352,
+   "calls": 10,
+   "at": 1792520010.822
+  },
+  {
+   "label": "cua_alone smoke-mock-1",
+   "model": "claude-opus-5-5",
+   "usd": 0.113517,
+   "calls": 7,
+   "at": 1792520056.244
+  },
+  {
+   "label": "silent-saves agent-tools",
+   "model": "claude-sonnet-5-5",
+   "usd": 1.713906,
+   "calls": 885,
+   "at": 1792893772.655
+  },
+  {
+   "label": "silent-saves agent-script author",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.082512,
+   "calls": 12,
+   "at": 1792893792.979
+  },
+  {
+   "label": "silent-saves agent-script repair",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.237932,
+   "calls": 32,
+   "at": 1792859250.816
+  },
+  {
+   "label": "agent_tools",
+   "model": "claude-sonnet-5-5",
+   "usd": 2.872425,
+   "calls": 394,
+   "at": 1792885796.091
+  },
+  {
+   "label": "agent_script author",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.236497,
+   "calls": 9,
+   "at": 1792885965.188
+  },
+  {
+   "label": "agent_script fix",
+   "model": "claude-sonnet-5-5",
+   "usd": 0.711519,
+   "calls": 30,
+   "at": 1792886722.077
+  }
+ ]
+}

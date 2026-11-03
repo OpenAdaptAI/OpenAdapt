@@ -1,0 +1,203 @@
+{
+  "schema": "openadapt.stop-queue-klm/v1",
+  "method": "keystroke-level model (Card, Moran, Newell 1983; Kieras 2001)",
+  "assumptions": {
+    "K": 0.28,
+    "P": 1.1,
+    "BB": 0.2,
+    "H": 0.4,
+    "M": 1.2,
+    "app_search_wait_s": 1.5,
+    "touch_id_s": 1.0,
+    "carried_fields": 3
+  },
+  "stops": [
+    {
+      "item_id": "ref-00002",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.9,
+      "after_s": 5.3,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00005",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.7,
+      "after_s": 5.3,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00006",
+      "kind": "confirm_save",
+      "possible_matches": 0,
+      "before_s": 25.3,
+      "after_s": 23.1,
+      "soak_charged_s": 330.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00008",
+      "kind": "halted",
+      "possible_matches": 0,
+      "before_s": 6.2,
+      "after_s": 5.3,
+      "soak_charged_s": 120.0,
+      "soak_action": "skip"
+    },
+    {
+      "item_id": "ref-00012",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 28.2,
+      "after_s": 5.3,
+      "soak_charged_s": 120.0,
+      "soak_action": "skip"
+    },
+    {
+      "item_id": "ref-00019",
+      "kind": "confirm_save",
+      "possible_matches": 0,
+      "before_s": 25.5,
+      "after_s": 23.4,
+      "soak_charged_s": 330.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00021",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.9,
+      "after_s": 5.3,
+      "soak_charged_s": 120.0,
+      "soak_action": "skip"
+    },
+    {
+      "item_id": "ref-00024",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.7,
+      "after_s": 5.3,
+      "soak_charged_s": 120.0,
+      "soak_action": "skip"
+    },
+    {
+      "item_id": "ref-00026",
+      "kind": "confirm_save",
+      "possible_matches": 0,
+      "before_s": 26.1,
+      "after_s": 24.0,
+      "soak_charged_s": 120.0,
+      "soak_action": "confirm_saved"
+    },
+    {
+      "item_id": "ref-00027",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 28.2,
+      "after_s": 5.3,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00029",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.7,
+      "after_s": 5.3,
+      "soak_charged_s": 120.0,
+      "soak_action": "skip"
+    },
+    {
+      "item_id": "ref-00030",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.7,
+      "after_s": 5.3,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00032",
+      "kind": "halted",
+      "possible_matches": 0,
+      "before_s": 6.2,
+      "after_s": 5.3,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00033",
+      "kind": "same_record",
+      "possible_matches": 2,
+      "before_s": 36.7,
+      "after_s": 6.5,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00034",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.7,
+      "after_s": 5.3,
+      "soak_charged_s": 120.0,
+      "soak_action": "skip"
+    },
+    {
+      "item_id": "ref-00038",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 28.5,
+      "after_s": 5.3,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00040",
+      "kind": "same_record",
+      "possible_matches": 2,
+      "before_s": 36.7,
+      "after_s": 6.5,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00041",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.7,
+      "after_s": 5.3,
+      "soak_charged_s": 300.0,
+      "soak_action": "do_by_hand"
+    },
+    {
+      "item_id": "ref-00044",
+      "kind": "same_record",
+      "possible_matches": 1,
+      "before_s": 27.9,
+      "after_s": 5.3,
+      "soak_charged_s": 120.0,
+      "soak_action": "skip"
+    },
+    {
+      "item_id": "ref-00045",
+      "kind": "same_record",
+      "possible_matches": 2,
+      "before_s": 36.5,
+      "after_s": 6.5,
+      "soak_charged_s": 120.0,
+      "soak_action": "skip"
+    }
+  ],
+  "summary": {
+    "stops": 20,
+    "before_mean_s": 26.7,
+    "after_mean_s": 8.2,
+    "before_median_s": 27.7,
+    "after_median_s": 5.3
+  }
+}

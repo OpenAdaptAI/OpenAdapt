@@ -30,8 +30,11 @@ FHIR/REST API, a document store), never the screen.
 ```python
 class EffectVerifier(Protocol):
     substrate: str
+
     def capture_pre_state(self, context) -> EffectState: ...
-    def verify(self, expected: Effect, before: EffectState, context) -> EffectVerdict: ...
+    def verify(
+        self, expected: Effect, before: EffectState, context
+    ) -> EffectVerdict: ...
 ```
 
 - **`Effect`** is the RFC's typed effect. Kinds: `record_written` (a record

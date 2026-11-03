@@ -1,0 +1,39 @@
+[
+ {
+  "resourceType": "AllergyIntolerance",
+  "patient": {
+   "reference": "Patient/b2aa245a-07b6-4710-ace9-f4befc0f84a6"
+  },
+  "code": {
+   "coding": [
+    {
+     "system": "http://snomed.info/sct",
+     "code": "300916003",
+     "display": "Latex allergy"
+    }
+   ]
+  },
+  "criticality": "low",
+  "clinicalStatus": {
+   "coding": [
+    {
+     "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+     "code": "active"
+    }
+   ]
+  },
+  "verificationStatus": {
+   "coding": [
+    {
+     "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+     "code": "confirmed"
+    }
+   ]
+  },
+  "id": "7321eaa4-0649-4bb8-a923-cdabf055cfd1",
+  "meta": {
+   "versionId": "1d34517a-09e6-41be-8c71-a949a0f5c029",
+   "lastUpdated": "2026-10-30T02:11:31.546Z"
+  }
+ }
+]

@@ -1,0 +1,2637 @@
+{
+  "arm": "model",
+  "commit": "104d24df28289961d0ea58f79dd975b539507ab2",
+  "dirty": true,
+  "generated_at": "2026-10-28T23:18:38.300655+00:00",
+  "grounder": {
+    "accept_score": 0.78,
+    "input_side": 112,
+    "license": "Apache-2.0",
+    "lookalike_margin": 0.15,
+    "model": "dinov2-small",
+    "rung": "grounder",
+    "sha256": "dfce54a839b491f395c516350ebb4a78f947e9170a6beac0f2bc5638e0f09d61",
+    "source": "facebook/dinov2-small"
+  },
+  "platform": "Darwin arm64 py3.12.7",
+  "points": [
+    {
+      "campaign": "healthy",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        },
+        {
+          "control": "tb-attach",
+          "row": null
+        },
+        {
+          "control": "save",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 7.31,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 1,
+      "rung_counts": {
+        "template": 5
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 12.8,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 14.9,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 19.4,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 14.6,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 16.6,
+          "rung": "template",
+          "step_id": "step_006"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 3.47,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "template": 3
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 13.7,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 15.3,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 17.8,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 15.8,
+          "rung": "template",
+          "step_id": "step_005"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_005' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Activerecord:GraceHopperMRN48213' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_005"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        },
+        {
+          "control": "tb-attach",
+          "row": null
+        },
+        {
+          "control": "save",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 8.84,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 1,
+      "rung_counts": {
+        "ocr": 1,
+        "template": 4
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 123.4,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 18.0,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 21.0,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 16.6,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 18.2,
+          "rung": "template",
+          "step_id": "step_006"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_125",
+        "scale": 1.25,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 9.4,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 1.62,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "geometry": 2,
+        "template": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 13.6,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 263.2,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 307.2,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "abstain",
+          "ok": false,
+          "resolve_ms": 13.5,
+          "rung": "template",
+          "step_id": "step_005"
+        }
+      ],
+      "stopped_at": {
+        "error": "Step 'step_005' (click recorded visual target) matched the recorded identity, but 2 shown rows carry the same identity and no recorded record id tells them apart (rung 'template') \u2014 acting could open another record; refusing to act",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_005"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_125",
+        "scale": 1.25,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 5.05,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          1600,
+          1000
+        ],
+        "max_residual_px": 1.62,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.25,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "geometry": 2,
+        "template": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 11.4,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 231.0,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 212.9,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 16.9,
+          "rung": "template",
+          "step_id": "step_005"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_005' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Activerecord:GraceHopperMRN48213' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_005"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_125",
+        "scale": 1.25,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.32,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "resolution_changed",
+          "font_size_changed"
+        ],
+        "reason": "11 of 32 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): resolution_changed, font_size_changed: frame is 1600x1000, recorded 1280x800; text is 1.20x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 9.81,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 1.2,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "geometry": 2,
+        "template": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 15.0,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 227.0,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 240.8,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "abstain",
+          "ok": false,
+          "resolve_ms": 14.3,
+          "rung": "template",
+          "step_id": "step_005"
+        }
+      ],
+      "stopped_at": {
+        "error": "Step 'step_005' (click recorded visual target) matched the recorded identity, but 2 shown rows carry the same identity and no recorded record id tells them apart (rung 'template') \u2014 acting could open another record; refusing to act",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_005"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 9.12,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 1.2,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "geometry": 2,
+        "template": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 12.2,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 217.5,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 197.3,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 18.6,
+          "rung": "template",
+          "step_id": "step_005"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_005' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Activerecord:GraceHopperMRN48213' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_005"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 3.81,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "resolution_changed",
+          "font_size_changed"
+        ],
+        "reason": "11 of 32 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): resolution_changed, font_size_changed: frame is 1920x1200, recorded 1280x800; text is 1.35x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_200",
+        "scale": 2.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 11.95,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          2560,
+          1600
+        ],
+        "max_residual_px": 2.12,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 2.0,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "template": 3
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 13.0,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 15.1,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 17.5,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "abstain",
+          "ok": false,
+          "resolve_ms": 16.3,
+          "rung": "template",
+          "step_id": "step_005"
+        }
+      ],
+      "stopped_at": {
+        "error": "Step 'step_005' (click recorded visual target) matched the recorded identity, but 2 shown rows carry the same identity and no recorded record id tells them apart (rung 'template') \u2014 acting could open another record; refusing to act",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_005"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_200",
+        "scale": 2.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 6.11,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          2560,
+          1600
+        ],
+        "max_residual_px": 2.12,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 2.0,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "template": 3
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 11.1,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 13.4,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 13.5,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 14.0,
+          "rung": "template",
+          "step_id": "step_005"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_005' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Activerecord:GraceHopperMRN48213' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_005"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "display_scale",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "scale_200",
+        "scale": 2.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.72,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "resolution_changed",
+          "font_size_changed",
+          "font_changed"
+        ],
+        "reason": "11 of 32 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): resolution_changed, font_size_changed, font_changed: frame is 2560x1600, recorded 1280x800; text is 1.70x the recorded height; character width is 1.14x the recorded proportion \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_110",
+        "scale": 1.0,
+        "zoom": 1.1
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.33,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "the recorded frame does not fit inside the live frame",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed: text is 1.10x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_110",
+        "scale": 1.0,
+        "zoom": 1.1
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 0.23,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "the recorded frame does not fit inside the live frame",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed: text is 1.10x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_110",
+        "scale": 1.0,
+        "zoom": 1.1
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.4,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 111.4,
+          "rung": "ocr",
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_000' (click recorded visual target): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected 'recorded identifier crop', observed 'identifier pixels differ locally (spike 0.073, floor 0.064) \u2014 a different identifier' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "ocr",
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_125",
+        "scale": 1.0,
+        "zoom": 1.25
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 3.54,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "the recorded frame does not fit inside the live frame",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed: text is 1.15x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_125",
+        "scale": 1.0,
+        "zoom": 1.25
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 0.33,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "the recorded frame does not fit inside the live frame",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed: text is 1.15x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_125",
+        "scale": 1.0,
+        "zoom": 1.25
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 2.53,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "10 of 31 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed: text is 1.15x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_150",
+        "scale": 1.0,
+        "zoom": 1.5
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 2.68,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed",
+          "font_changed"
+        ],
+        "reason": "the recorded frame does not fit inside the live frame",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed, font_changed: text is 1.25x the recorded height; character width is 1.17x the recorded proportion \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_150",
+        "scale": 1.0,
+        "zoom": 1.5
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 0.26,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed",
+          "font_changed"
+        ],
+        "reason": "the recorded frame does not fit inside the live frame",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed, font_changed: text is 1.25x the recorded height; character width is 1.17x the recorded proportion \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "zoom",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "zoom_150",
+        "scale": 1.0,
+        "zoom": 1.5
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.22,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed",
+          "font_changed"
+        ],
+        "reason": "9 of 28 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed, font_changed: text is 1.25x the recorded height; character width is 1.16x the recorded proportion \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [],
+      "condition": {
+        "axis": "font_size",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 2,
+        "name": "font_plus2",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.17,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 31,
+        "live_viewport": [
+          1280,
+          800
+        ],
+        "max_residual_px": 9.4,
+        "offset": [
+          9.11,
+          3.75
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.0022,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target) on the display-scaled session: text is 1.13x the recorded width \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [],
+      "condition": {
+        "axis": "font_size",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 2,
+        "name": "font_plus2",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 0.3,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 31,
+        "live_viewport": [
+          1280,
+          800
+        ],
+        "max_residual_px": 9.4,
+        "offset": [
+          9.11,
+          3.75
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.0022,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target) on the display-scaled session: text is 1.13x the recorded width \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "font_size",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 2,
+        "name": "font_plus2",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.53,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed"
+        ],
+        "reason": "8 of 32 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed: text is 1.15x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [],
+      "condition": {
+        "axis": "font_size",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 4,
+        "name": "font_plus4",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.42,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed",
+          "font_changed"
+        ],
+        "reason": "the recorded frame does not fit inside the live frame",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed, font_changed: text is 1.15x the recorded height; character width is 1.11x the recorded proportion \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [],
+      "condition": {
+        "axis": "font_size",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 4,
+        "name": "font_plus4",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 0.25,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed",
+          "font_changed"
+        ],
+        "reason": "the recorded frame does not fit inside the live frame",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed, font_changed: text is 1.15x the recorded height; character width is 1.11x the recorded proportion \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "font_size",
+        "codec_quality": null,
+        "dark": false,
+        "font_delta_px": 4,
+        "name": "font_plus4",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.9,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "font_size_changed",
+          "font_changed"
+        ],
+        "reason": "5 of 32 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): font_size_changed, font_changed: text is 1.15x the recorded height; character width is 1.11x the recorded proportion \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        }
+      ],
+      "condition": {
+        "axis": "theme",
+        "codec_quality": null,
+        "dark": true,
+        "font_delta_px": 0,
+        "name": "dark_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 3.46,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 131.8,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 286.9,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record:Ada Lovelace MRN 36428' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        }
+      ],
+      "condition": {
+        "axis": "theme",
+        "codec_quality": null,
+        "dark": true,
+        "font_delta_px": 0,
+        "name": "dark_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.12,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 121.1,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 254.9,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record:Ada Lovelace MRN 36428' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        }
+      ],
+      "condition": {
+        "axis": "theme",
+        "codec_quality": null,
+        "dark": true,
+        "font_delta_px": 0,
+        "name": "dark_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 3.87,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 115.8,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 358.3,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record:Ada Lovelace MRN 36428' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        }
+      ],
+      "condition": {
+        "axis": "theme",
+        "codec_quality": null,
+        "dark": true,
+        "font_delta_px": 0,
+        "name": "dark_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 5.07,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 1.67,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 110.3,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 276.3,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN 36428' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        }
+      ],
+      "condition": {
+        "axis": "theme",
+        "codec_quality": null,
+        "dark": true,
+        "font_delta_px": 0,
+        "name": "dark_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.54,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 1.67,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "ocr": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 99.4,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 228.1,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record: Ada Lovelace MRN 36428' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "theme",
+        "codec_quality": null,
+        "dark": true,
+        "font_delta_px": 0,
+        "name": "dark_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.45,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "resolution_changed",
+          "font_size_changed",
+          "font_changed"
+        ],
+        "reason": "11 of 32 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): resolution_changed, font_size_changed, font_changed: frame is 1920x1200, recorded 1280x800; text is 1.30x the recorded height; character width is 1.13x the recorded proportion \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        },
+        {
+          "control": "tb-attach",
+          "row": null
+        },
+        {
+          "control": "save",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "codec",
+        "codec_quality": 50,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "codec_q50_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 11.54,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 1,
+      "rung_counts": {
+        "template": 5
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 17.6,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 16.8,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 20.9,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 17.2,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 20.7,
+          "rung": "template",
+          "step_id": "step_006"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "codec",
+        "codec_quality": 50,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "codec_q50_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 3.67,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "template": 3
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 16.1,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 16.0,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 16.5,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 16.0,
+          "rung": "template",
+          "step_id": "step_005"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_005' (click recorded visual target): a target was found positionally (rung 'template', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Activerecord:Grace Hopper MRN48213' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "template",
+        "step_id": "step_005"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        },
+        {
+          "control": "visit",
+          "row": null
+        },
+        {
+          "control": "note",
+          "row": null
+        },
+        {
+          "control": "tb-attach",
+          "row": null
+        },
+        {
+          "control": "save",
+          "row": null
+        }
+      ],
+      "condition": {
+        "axis": "codec",
+        "codec_quality": 50,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "codec_q50_100",
+        "scale": 1.0,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 10.19,
+      "model_calls": 0,
+      "outcome": "pass",
+      "render_scale": {
+        "status": "recorded_geometry"
+      },
+      "rows_saved": 1,
+      "rung_counts": {
+        "ocr": 1,
+        "template": 4
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 105.7,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 18.2,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 18.7,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "identity": null,
+          "ok": true,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 16.2,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 18.2,
+          "rung": "template",
+          "step_id": "step_006"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "campaign": "healthy",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        }
+      ],
+      "condition": {
+        "axis": "codec",
+        "codec_quality": 50,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "codec_q50_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 5.13,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 1.12,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "template": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 16.0,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 268.3,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record:Ada Lovelace MRN 36428' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "wrong_record",
+      "clicked": [
+        {
+          "control": "edit-2",
+          "row": 2
+        }
+      ],
+      "condition": {
+        "axis": "codec",
+        "codec_quality": 50,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "codec_q50_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.69,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "landmarks_located": 32,
+        "landmarks_used": 32,
+        "live_viewport": [
+          1920,
+          1200
+        ],
+        "max_residual_px": 1.12,
+        "offset": [
+          0.0,
+          0.0
+        ],
+        "recorded_viewport": [
+          1280,
+          800
+        ],
+        "scale": 1.5,
+        "status": "normalized"
+      },
+      "rows_saved": 0,
+      "rung_counts": {
+        "template": 1
+      },
+      "steps": [
+        {
+          "identity": "verified",
+          "ok": true,
+          "resolve_ms": 12.4,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "identity": "mismatch",
+          "ok": false,
+          "resolve_ms": 214.1,
+          "rung": "geometry",
+          "step_id": "step_001"
+        }
+      ],
+      "stopped_at": {
+        "error": "Identity check failed for step 'step_001' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.87) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Active record:Ada Lovelace MRN 36428' (coverage 0.00) \u2014 refusing to act; run aborted",
+        "gate": "identity",
+        "intent": "click recorded visual target",
+        "rung": "geometry",
+        "step_id": "step_001"
+      }
+    },
+    {
+      "campaign": "reordered",
+      "clicked": [],
+      "condition": {
+        "axis": "codec",
+        "codec_quality": 50,
+        "dark": false,
+        "font_delta_px": 0,
+        "name": "codec_q50_150",
+        "scale": 1.5,
+        "zoom": null
+      },
+      "crash": null,
+      "dead_clicks": 0,
+      "elapsed_s": 1.55,
+      "model_calls": 0,
+      "outcome": "halted",
+      "render_scale": {
+        "drift": [
+          "resolution_changed",
+          "font_size_changed"
+        ],
+        "reason": "11 of 32 labels agree on one scale",
+        "status": "no_estimate"
+      },
+      "rows_saved": 0,
+      "rung_counts": {},
+      "steps": [
+        {
+          "identity": null,
+          "ok": false,
+          "resolve_ms": null,
+          "rung": null,
+          "step_id": "step_000"
+        }
+      ],
+      "stopped_at": {
+        "error": "Layout drift before step 'step_000' (click recorded visual target): resolution_changed, font_size_changed: frame is 1920x1200, recorded 1280x800; text is 1.32x the recorded height \u2014 the screen no longer matches the recording; refusing to act.",
+        "gate": "layout_drift",
+        "intent": "click recorded visual target",
+        "rung": null,
+        "step_id": "step_000"
+      }
+    }
+  ],
+  "schema": "openadapt.pixel-grounding-sweep.v1",
+  "summary": {
+    "by_condition": {
+      "codec_q50_100": {
+        "healthy": "pass",
+        "reordered": "pass",
+        "wrong_record": "halted"
+      },
+      "codec_q50_150": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "dark_100": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "dark_150": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "font_plus2": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "font_plus4": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "scale_100": {
+        "healthy": "pass",
+        "reordered": "pass",
+        "wrong_record": "halted"
+      },
+      "scale_125": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "scale_150": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "scale_200": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "zoom_110": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "zoom_125": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      },
+      "zoom_150": {
+        "healthy": "halted",
+        "reordered": "halted",
+        "wrong_record": "halted"
+      }
+    },
+    "totals": {
+      "healthy": {
+        "halted": 11,
+        "pass": 2
+      },
+      "reordered": {
+        "halted": 11,
+        "pass": 2
+      },
+      "wrong_record": {
+        "halted": 13
+      }
+    },
+    "unsafe_outcomes": 0
+  }
+}
