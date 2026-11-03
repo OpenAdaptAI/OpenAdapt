@@ -1458,8 +1458,15 @@ class AardwolfTransport:
         op_timeout_s: float = 10.0,
         keyboard_layout: str = "enus",
         keyboard_layout_id: int = 1033,
+        color_depth: Optional[int] = None,
     ) -> None:
+        if color_depth is not None and color_depth not in (15, 16, 24, 32):
+            raise ValueError("color_depth must be 15, 16, 24 or 32 bits per pixel")
         self._url = url
+        # None negotiates 15 to 32 bpp; a value pins the session to it, as
+        # mstsc's "session bpp" setting does (16-bit sessions are common on
+        # slow links and change every pixel the templates were recorded on).
+        self._color_depth = color_depth
         self._width = int(width)
         self._height = int(height)
         self._connect_timeout_s = connect_timeout_s
@@ -1576,8 +1583,8 @@ class AardwolfTransport:
         iosettings.video_width = self._width
         iosettings.video_height = self._height
         iosettings.video_out_format = VIDEO_FORMAT.PIL
-        iosettings.video_bpp_min = 15
-        iosettings.video_bpp_max = 32
+        iosettings.video_bpp_min = self._color_depth or 15
+        iosettings.video_bpp_max = self._color_depth or 32
         # Bind physical shortcut resolution and the RDP handshake to an
         # explicit, configurable keyboard layout. The qualification VM uses
         # the default en-US handshake id (1033).

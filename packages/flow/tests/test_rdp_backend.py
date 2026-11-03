@@ -1892,3 +1892,52 @@ def test_live_smoke_real_rdp_framebuffer() -> None:
         assert colors is None or len(colors) > 1
     finally:
         backend.close()
+
+
+@pytest.mark.parametrize(("depth", "expected"), [(None, (15, 32)), (16, (16, 16))])
+def test_aardwolf_transport_pins_the_session_color_depth(
+    monkeypatch, depth, expected
+) -> None:
+    # The real-RDP benchmark has a 16-bit colour condition; mstsc pins it with
+    # "session bpp", and the pure-Python transport must be able to as well.
+    import sys
+    import types as _types
+
+    from openadapt_flow.backends.rdp_backend import AardwolfTransport
+
+    seen = {}
+
+    class Settings:
+        pass
+
+    class Factory:
+        @staticmethod
+        def from_url(url, iosettings):
+            seen["bpp"] = (iosettings.video_bpp_min, iosettings.video_bpp_max)
+            raise ConnectionRefusedError("stop after the settings are read")
+
+    modules = {
+        "aardwolf": _types.ModuleType("aardwolf"),
+        "aardwolf.commons": _types.ModuleType("aardwolf.commons"),
+        "aardwolf.commons.factory": _types.SimpleNamespace(
+            RDPConnectionFactory=Factory
+        ),
+        "aardwolf.commons.iosettings": _types.SimpleNamespace(RDPIOSettings=Settings),
+        "aardwolf.commons.queuedata": _types.ModuleType("aardwolf.commons.queuedata"),
+        "aardwolf.commons.queuedata.constants": _types.SimpleNamespace(
+            VIDEO_FORMAT=_types.SimpleNamespace(PIL="pil")
+        ),
+    }
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    transport = AardwolfTransport("rdp+ntlm-password://u:p@h:3389", color_depth=depth)
+    with pytest.raises(Exception):
+        transport.connect()
+    assert seen["bpp"] == expected
+
+
+def test_aardwolf_transport_refuses_an_unknown_color_depth() -> None:
+    from openadapt_flow.backends.rdp_backend import AardwolfTransport
+
+    with pytest.raises(ValueError, match="color_depth"):
+        AardwolfTransport("rdp+ntlm-password://u:p@h:3389", color_depth=8)
