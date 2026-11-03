@@ -391,7 +391,7 @@ def _redact_params(text: str, policy: RedactionPolicy, reasons: list[str]) -> st
         name = match.group("name").lower()
         if name not in policy.params_for(
             _host_at(text, match.start())
-        ) and not is_credential_name(name):
+        ) and not is_credential_name(match.group("name")):
             continue
         value = _PARAM_VALUE.match(text, match.end())
         if value is None:
@@ -472,7 +472,7 @@ def _redact_node(
         header_key = lowered if lowered in policy.headers else None
         if key == "value" and pair_header:
             header_key = pair_header
-        secret_key = lowered in _SECRET_KEYS or is_credential_name(lowered)
+        secret_key = lowered in _SECRET_KEYS or is_credential_name(str(key))
         if isinstance(item, str) and (header_key or secret_key):
             new = _header_value(header_key or lowered, item) if item else item
             if item and new != item:
