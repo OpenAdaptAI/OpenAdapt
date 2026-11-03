@@ -241,7 +241,17 @@ refused. A mapping without `accept: true` takes only what it names.
 in any table that the contract doesn't declare stops the write, except rows
 added to a table the person named as a log. The main record's table and the
 tables of rows that hold values are read by the contract's own reads, with
-every column. On PostgreSQL the read account also needs `SELECT` on the
+every row and column. Those tables are compared too
+(`frame.database.judged_by`): the rows the contract's read declares (the
+target, or the rows the write adds) are judged by the table, every column
+exactly, with only their declared fields allowed to change, and any other
+row that moves stops the write. A table's key is read as `id` unless the
+table has its own `id` column that isn't the whole key; then it is read as
+`oa_key` and `id` as it is. A new declared row may set any column of these
+tables (`new_row_fields`), since the contract's read checks each one. An excused column is excused only on the rows the
+write declares, never on a look-alike row of the same table. The recheck
+compares these tables like any other, so a late change to any of their rows
+stops the write. On PostgreSQL the read account also needs `SELECT` on the
 sequences (see [VERIFY_RUN.md](VERIFY_RUN.md)); without it the dry read
 fails and no contract is written.
 
