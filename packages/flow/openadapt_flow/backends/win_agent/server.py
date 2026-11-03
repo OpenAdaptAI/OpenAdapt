@@ -1702,8 +1702,10 @@ def _window_operation(
     to the captured window and answers with a window only when all of this
     holds: no visible window of another process, and none of the captured
     process that its owner chain does not tie to the captured window, meets
-    the region anywhere above the captured window; and an owned window
-    covers the region's center (its visible frame, not the resize border).
+    the region anywhere above the captured window; and an owned window meets
+    the region (its visible frame, not the resize border). The topmost such
+    window is the answer. Whether the covered part hides anything that
+    matters is for the caller, which still sees the uncovered part.
     A captured window that is gone or changed process, a cloak state that
     cannot be read for one of the app's windows, and anything else answer
     ``None``.
@@ -1755,7 +1757,6 @@ def _window_operation(
     if not user32.is_window(hwnd) or user32.pid_of(hwnd) != pid:
         return {"status": "ok", "window": None}
     box = (region[0], region[1], region[2], region[3])
-    center = (region[0] + region[2] // 2, region[1] + region[3] // 2)
     owned: Optional[dict[str, Any]] = None
     reached = False
     for candidate in user32.top_level_windows():
@@ -1785,10 +1786,7 @@ def _window_operation(
             link = user32.owner(link)
         if link != hwnd:
             return {"status": "ok", "window": None}  # not tied to the capture
-        covers_center = (
-            rect[0] <= center[0] < rect[2] and rect[1] <= center[1] < rect[3]
-        )
-        if owned is None and covers_center:
+        if owned is None:
             owned = {
                 "title": user32.title(candidate)[:512] or None,
                 "hwnd": candidate,

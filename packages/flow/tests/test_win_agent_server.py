@@ -1338,10 +1338,27 @@ def test_a_topmost_owned_popup_does_not_hide_a_foreign_window_over_the_target(
     assert _owned_over(monkeypatch, desktop) is None
 
 
-def test_an_owned_window_that_only_clips_the_region_is_none(monkeypatch) -> None:
-    # A shadow or glow window of the app's own grazing one corner.
+def test_an_owned_dialog_over_part_of_the_region_is_reported(monkeypatch) -> None:
+    # Live lab finding: the "Session notice" dialog covers the right part of
+    # the identity band, not its center; the caller still sees the rest.
     desktop = _FakeDesktop()
     desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+
+
+def test_a_foreign_window_beside_an_owned_dialog_over_the_band_is_none(
+    monkeypatch,
+) -> None:
+    # Review attack (a): the app's dialog covers one end of the band and
+    # another process's window the other end.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
+    desktop.add(0x900, pid=99, rect=(200, 240, 262, 300))
+    assert _owned_over(monkeypatch, desktop) is None
+    # Same with the foreign window below the dialog in z-order.
+    desktop = _FakeDesktop()
+    desktop.add(0x900, pid=99, rect=(200, 240, 262, 300))
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
     assert _owned_over(monkeypatch, desktop) is None
 
 
@@ -1389,13 +1406,11 @@ def test_a_dialog_owned_through_a_chain_counts(monkeypatch) -> None:
     assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
 
 
-def test_an_owned_window_over_the_center_wins_over_one_only_clipping(
-    monkeypatch,
-) -> None:
+def test_the_topmost_owned_window_over_the_region_is_reported(monkeypatch) -> None:
     desktop = _FakeDesktop()
     desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
     desktop.add(0x300, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
-    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
 
 
 @pytest.mark.parametrize(
