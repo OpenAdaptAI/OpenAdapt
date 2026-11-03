@@ -1246,7 +1246,7 @@ def _versions_frame(
         return {
             "read": {"kind": "sql", **settings.read, "sql_query": sql},
             "record_field": "id",
-            "target_field": "id",
+            "target_field": _key_alias(b.schema, plan.anchor),
             "target_surface": "record",
             "version_field": "ver",
         }
@@ -1271,7 +1271,7 @@ def _versions_frame(
     return {
         "read": {"kind": "sql", **settings.read, "sql_query": sql},
         "record_field": "id",
-        "target_field": "id",
+        "target_field": _key_alias(b.schema, plan.anchor),
         "target_surface": "record",
         "version_field": "ver",
         "author_field": "author",
@@ -1621,15 +1621,28 @@ class Surface:
         return f"SELECT {cols} FROM {b.qt(self.table)} {self.alias}"
 
 
+def _key_alias(schema: Schema, table: str) -> str:
+    """The name a surface reads the table's key under: ``id``, unless the
+    table has its own ``id`` column that is not the whole primary key (a
+    ``uuid`` key, a key of ``id`` and ``rev``), which must be read as it is."""
+
+    t = schema.tables[table]
+    if t.column("id") is None or t.primary_key == ["id"]:
+        return "id"
+    return "oa_key"
+
+
 def _base_columns(b: SqlBuilder, table: str, alias: str = "t") -> list[tuple[str, str]]:
+    """Every column of ``table`` by its own name, and the key under
+    :func:`_key_alias` when that isn't a column already."""
+
     t = b.schema.tables[table]
     cols: list[tuple[str, str]] = []
     key = b.key(alias, table)
-    if key is not None:
-        cols.append(("id", key))
+    name = _key_alias(b.schema, table)
+    if key is not None and t.column(name) is None:
+        cols.append((name, key))
     for c in t.columns:
-        if c.name == "id" and key is not None:
-            continue
         cols.append((c.name, b.text(alias, table, c.name)))
     return cols
 
@@ -1724,6 +1737,8 @@ def build_contract(
     #: Surface -> the fields its declared rows may change.
     by_surface: dict[str, set[str]] = {}
     named_tables: set[str] = {anchor}
+    #: Table -> the surface that reads it in full (``frame.database.judged_by``).
+    judged: dict[str, str] = {anchor: "record"}
 
     # The main record, with every column and the values its parameters reach.
     main = Surface(
@@ -1849,6 +1864,7 @@ def build_contract(
                 sname, settings.views.get(g.table, g.table), scols
             )
             named_tables.add(g.table)
+            judged.setdefault(g.table, sname)
         surf = surfaces[sname]
         items = range(variant.lists[p]) if g.list_param else [None]
         for i in items:
@@ -2025,29 +2041,24 @@ def build_contract(
         if t in named_tables:
             continue
         allow.append({"table": t})
-    for t in sorted(named_tables):
-        if plan.mode == "create" or flavor == "found":
-            # The contract's own read judges the rows the write adds; the
-            # whole-database frame still sees any existing row change,
-            # now and at the recheck (a late edit to a look-alike).
-            allow.append({"table": t})
-            continue
-        # An update changes a row here, which an append-only table
-        # can't allow: its own read judges this table, and the recheck
-        # (database only) doesn't see it.
-        allow.append(
-            {
-                "table": t,
-                "mode": "skip",
-                "reason": "read in full, every column, by this contract's own surface",
-            }
-        )
-    views = {s.table: s.name for s in surfaces.values() if s.name.startswith("raw_")}
+    # A table the contract's own read covers, every row and column, is
+    # compared like any other: after the save, the rows that read saw move
+    # are left to it (the target, or the rows the write adds, each with only
+    # its declared fields), and every other row of the table must not move.
+    # A recheck reads no surface, so there any change to the table since the
+    # post-save read (a late checkout of a look-alike) stops the write.
+    judged_by = {t: judged[t] for t in sorted(named_tables)}
+    views = {
+        s.table: s.name
+        for s in surfaces.values()
+        if s.name.startswith("raw_") and s.table not in judged_by
+    }
     db: dict[str, Any] = {
         "dialect": schema.dialect,
         "read": dict(settings.read),
         "allow_tables": allow,
         "views": views,
+        "judged_by": judged_by,
         "settle_s": 1,
         "settle_attempts": 5,
     }
@@ -2056,6 +2067,12 @@ def build_contract(
         for s in surfaces.values()
         if s.name.startswith("raw_") and getattr(s, "_new_row_fields", None)
     }
+    for t in judged_by:
+        # A row the contract's own read declares is judged by the table
+        # too, every column exactly. A new one may set any column: the read
+        # checks each (placed, pinned, pinned empty, or named unchecked by
+        # the person).
+        nrf.setdefault(t, sorted(c.name for c in schema.tables[t].columns))
     if nrf:
         db["new_row_fields"] = nrf
     if settings.recheck_after_s:
