@@ -1521,6 +1521,7 @@ class SelfRepair:
         from openadapt_flow.ir import Anchor
         from openadapt_flow.risk import is_meaningful_label, is_write_shaped
         from openadapt_flow.runtime.heal import _crop_png, _reocr_text
+        from openadapt_flow.runtime.identity import squash
 
         region = _centered_region(
             point, (size_like[2], size_like[3]), _png_size(screen)
@@ -1539,6 +1540,11 @@ class SelfRepair:
                 "only lead to the recorded save"
             )
         if self._covered is not None:
+            if squash(label).casefold() != _NOTICE_DISMISS_LABEL:
+                raise SelfRepairRefused(
+                    f"a covered identity band is dismissed only with 'OK'; the "
+                    f"bridge clicks {label!r}"
+                )
             self._dismisses_the_cover(session, point, screen)
         try:
             admission = admit_new_click(
@@ -2949,76 +2955,79 @@ def _cover_explains_cut(
 
 
 #: The only words a dismissable covering dialog may show (title, message
-#: and button), casefolded: a notice that something expires, is available or
-#: is informational, answered with "OK". Any other word, a question mark, or
-#: no readable word refuses. An allowlist, so an unlisted "Log out of the
-#: other session?", "Your changes will be deleted" or a dialog in another
-#: language is refused rather than dismissed.
+#: and button), casefolded after NFKC: a notice that the session expires,
+#: answered with "OK". Any other word, any punctuation outside
+#: ``_NOTICE_DIALOG_MARKS``, or no readable word refuses. An allowlist, so an
+#: unlisted "Log out of the other session?", "Update the application now" or
+#: a dialog in another language is refused rather than dismissed.
 _NOTICE_DIALOG_WORDS = frozenset(
     {
         "a",
-        "about",
-        "an",
-        "app",
-        "application",
-        "available",
-        "been",
-        "for",
-        "has",
+        "expire",
+        "expires",
+        "expiring",
         "hour",
         "hours",
         "in",
-        "info",
         "information",
         "is",
         "minute",
         "minutes",
-        "new",
         "notice",
-        "now",
-        "of",
         "ok",
         "reminder",
         "second",
         "seconds",
         "session",
-        "soon",
         "the",
         "this",
-        "update",
-        "version",
         "will",
-        "you",
+        "x",  # the close glyph, as OCR may read it
         "your",
-        "expire",
-        "expires",
-        "expiring",
     }
 )
+
+#: Marks a notice may carry besides letters and digits: no question mark in
+#: any script, nothing else.
+_NOTICE_DIALOG_MARKS = frozenset(" \t\n.,:!×")
+
+#: The one label the dismiss click may have.
+_NOTICE_DISMISS_LABEL = "ok"
 
 
 def _dialog_message_refusal(text: str) -> Optional[str]:
     """Why a covering dialog's text forbids dismissing it, or None.
 
-    Only a notice may be dismissed by a bridge: every word must be in
-    ``_NOTICE_DIALOG_WORDS`` (numbers aside) and nothing may ask a question.
-    Answering "OK" to "Discard unsaved changes?" or "Log out of the other
-    session?" loses data, so anything not plainly a notice is refused,
-    including unreadable text.
+    Only a session notice may be dismissed by a bridge: after NFKC, every
+    word must be in ``_NOTICE_DIALOG_WORDS`` (numbers aside) and every other
+    character in ``_NOTICE_DIALOG_MARKS``, so nothing asks a question in any
+    script. Answering "OK" to "Discard unsaved changes?" or "Update the
+    application now" loses data, so anything else is refused, including
+    unreadable text.
     """
 
-    words = [
-        w for w in "".join(c if c.isalnum() else " " for c in text.casefold()).split()
-    ]
-    if not words:
-        return "the covering dialog's message can't be read"
-    if "?" in text:
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKC", text).casefold()
+    marks = sorted(
+        {c for c in folded if not c.isalnum() and c not in _NOTICE_DIALOG_MARKS}
+    )
+    if marks:
         return (
-            "the covering dialog asks a question; answering it may discard, end "
-            "or commit something"
+            "the covering dialog shows "
+            f"{' '.join(marks[:6])!r}, which a notice does not; answering it may "
+            "discard, end or commit something"
         )
+    words = folded.replace("×", " ")
+    words_list = [w for w in "".join(c if c.isalnum() else " " for c in words).split()]
+    if not words_list:
+        return "the covering dialog's message can't be read"
     other = sorted(
-        {w for w in words if w not in _NOTICE_DIALOG_WORDS and not w.isdecimal()}
+        {
+            w
+            for w in words_list
+            if w not in _NOTICE_DIALOG_WORDS and not (w.isascii() and w.isdecimal())
+        }
     )
     if other:
         return (

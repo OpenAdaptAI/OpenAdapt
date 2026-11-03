@@ -482,6 +482,14 @@ def test_a_cover_without_an_id_never_matches_a_click_without_one() -> None:
         "Disconnect other user",
         "Proceed anyway",
         "Änderungen verwerfen OK",
+        # notice-like words that still act (re-review of this PR)
+        "Update the application now. OK",
+        "A new version of the application is available. Update now",
+        "This session will expire now. OK",
+        "Your session has expired. OK",
+        "Session notice Your session expires in 5 minutes？ OK",  # fullwidth
+        "¿Session notice OK",
+        "Session notice; OK",
     ],
 )
 def test_a_dialog_whose_message_can_lose_or_commit_data_is_refused(message) -> None:
@@ -569,7 +577,8 @@ def test_a_covered_band_bridge_is_exactly_one_click(kinds) -> None:
     "text",
     [
         "Session notice Your session expires in 5 minutes. OK",
-        "Information A new version is available. OK",
+        "Session notice × Your session expires in 5 minutes. OK",
+        "Session notice x Your session expires in 5 minutes. OK",
     ],
 )
 def test_only_notice_words_pass_the_message_gate(text) -> None:
@@ -618,3 +627,38 @@ def test_new_click_runs_the_cover_guard_before_admitting() -> None:
             SimpleNamespace(backend=object()),
         )
     assert calls == [(598, 440)]
+
+
+@pytest.mark.parametrize("name", ["Yes", "Continue", "Log out", "Close"])
+def test_the_dismiss_click_must_be_ok(name) -> None:
+    from types import SimpleNamespace
+
+    from openadapt_flow.repair.self_repair import (
+        SelfRepair,
+        SelfRepairRefused,
+        _CoveredHalt,
+    )
+
+    me = SimpleNamespace(
+        _covered=_CoveredHalt(("s", "after", None), cover={}, pinned="search"),
+        vision=SimpleNamespace(ocr=lambda png: []),
+        _dismisses_the_cover=lambda *a: None,
+    )
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (800, 600), "white").save(buf, format="PNG")
+    with pytest.raises(SelfRepairRefused, match="only with 'OK'|reads as a save"):
+        SelfRepair._new_click(
+            me,
+            _workflow(),
+            "search_bridge_1",
+            SimpleNamespace(kind="click"),
+            (598, 440),
+            SimpleNamespace(name=name),
+            buf.getvalue(),
+            (0, 0, 40, 20),
+            SimpleNamespace(backend=object()),
+        )

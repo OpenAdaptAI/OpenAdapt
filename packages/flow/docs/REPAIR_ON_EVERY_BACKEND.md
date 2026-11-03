@@ -170,9 +170,11 @@ when all of these hold:
 The dismiss click is held to that dialog. It must land in the very window
 `owned_window_over` reported (asked again at the click point), and the
 dialog's text must read as a notice only. Every word in it must be on a
-short list of notice words (a session that expires, a version that is
-available, "OK"), and it may not ask a question. Anything else refuses,
-including a dialog in another language or with nothing readable in it.
+short list of session-notice words ("Your session expires in 5 minutes",
+"OK"), and it shows no punctuation beyond `. , : !`, so it asks no question
+in any script. The click's label must be "OK". Anything else refuses,
+including an update prompt, a dialog in another language, or one with
+nothing readable in it.
 Answering "OK" to "Discard unsaved changes?" would lose data. The bridge is
 exactly that one click. A covered-band repair gets one attempt: a later
 attempt reopens the app, whose dialog is a new window, so its click is
