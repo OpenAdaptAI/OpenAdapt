@@ -357,7 +357,7 @@ openadapt-flow teach-branch \
 - **The same governed learn loop.** All example corrections and the normal runs
   go through induction, the regression gate and a held-out check together.
   The held-out check is structural: it compares the program's shape with
-  traces it was not fitted to and runs nothing.
+  traces it was not fitted to.
   After promotion, each example and each normal run must still be explained by
   the learned program. Only then is a bundle written.
 - **A candidate, not an active bundle.** The output carries

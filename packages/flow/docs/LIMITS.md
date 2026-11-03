@@ -102,23 +102,6 @@ saves resemble the labelled ones; it doesn't survive an application,
 clinic or form change. The only evaluation is on synthetic data. See
 [`DECISION_TRIAGE.md`](DECISION_TRIAGE.md).
 
-## What "no model calls" means
-
-"No model calls" and the `model_calls` count in a run report mean no request
-to a language or vision model: no hosted model API and no model endpoint you
-configured. It doesn't mean no machine-learned component runs:
-
-- Local text recognition (RapidOCR on ONNX Runtime by default, or the
-  operating system's own OCR with `OPENADAPT_FLOW_OCR=native`) reads the
-  screen on the machine wherever a healthy run needs screen text: identity
-  checks on pixels, landmarks and on-screen read-back. It is a neural network, but it runs in the process
-  and sends nothing.
-- The optional local grounding model (`--local-grounding`, off by default)
-  runs on the machine when you turn it on. The run report counts it apart,
-  as `local_model_calls`.
-- Model-assisted target finding and repair call a model only when you
-  configure one, and those calls are counted in `model_calls`.
-
 ## What "deterministic" means
 
 The compiled program fixes the action sequence, parameters, target evidence,

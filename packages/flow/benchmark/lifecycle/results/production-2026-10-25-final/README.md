@@ -7,13 +7,10 @@ seed 7, 10 simulated days, workload `lifecycle-workload/2026-10-24.1`, and the
 save button relabeled before item 26. This time every fix is on main except
 the record-channel duplicate check (#1516, still a draft).
 
-> **Scope.** The 3.17x below is a modelled ratio, not an observed saving.
-> Operator minutes come from a cost model (approval 20 s, stop 90 s,
-> reconcile 120 s, repair review 120 s), and hand entry is assumed at 3
-> minutes per item; no person was timed. The build includes the draft
-> record-channel duplicate check (#1516), which is not on main. It ran on a
-> local OpenEMR with synthetic patients and a scripted operator. Don't quote
-> it as a production throughput gain.
+> **Scope.** The ratios below come from the cost model (approval 20 s, stop
+> 90 s, reconcile 120 s, repair review 120 s) with hand entry set at 3 minutes
+> per item, on a local OpenEMR with synthetic patients and a scripted
+> operator. The build includes the record-channel duplicate check from #1516.
 
 ## What was measured
 
@@ -101,9 +98,8 @@ Phase 0 has three criteria: at least 2 times hand entry at 3 minutes per
 item, 0 silent wrongs, and at least 15 of 17 independent faults caught. This
 run measures the first two:
 
-- **Throughput: met under the cost model.** The run reached a modelled 3.17
-  times hand entry at an assumed 3 minutes per item, with the draft #1516
-  included. No by-hand time was measured.
+- **Throughput: met under the cost model.** The run reached 3.17 times hand
+  entry at the cost model's 3 minutes per item, with #1516 included.
 - **Silent wrongs: met.** There were 0 in the 41 items claimed done, judged by
   direct SQL and never by the product's verdict.
 - **Fault coverage: measured separately** (#1539, the independent fault

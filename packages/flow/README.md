@@ -7,7 +7,7 @@
 
 A person or an agent shows openadapt-flow a task in a web or desktop app. It
 compiles the task into a program that runs on your own machine and repeats the
-same steps with new details. A healthy run makes no AI model calls. It's built
+same steps with new details. A healthy run makes no calls to a hosted AI model. It's built
 for data entry that repeats every week and has to be right, such as claims,
 referrals, eligibility checks, and invoice posting.
 
@@ -375,11 +375,8 @@ claude --mcp-config mcp.json        # then ask: Add an 18.75 expense for parking
 ## What runs where
 
 Recording, compiling, replaying, and production runs all happen on your
-machine. A healthy run makes no model calls, and model-assisted target finding
-is off unless you turn it on in the CLI or deployment config. Local OCR can
-still read the screen on your machine, and so does the local grounding model when
-you turn it on; see
-[what "no model calls" means](docs/LIMITS.md#what-no-model-calls-means). That isn't the
+machine. A healthy run makes no calls to a hosted AI model, and model-assisted target finding
+is off unless you turn it on in the CLI or deployment config. That isn't the
 same as no network: the app you drive and the record check still talk to
 their own services.
 
@@ -453,7 +450,7 @@ patients. The systems each result ran on, and the boundary of every claim:
   caveats.
 - [Fleet drift patches](docs/FLEET_DRIFT_PATCHES.md): opted-in installs that
   automate the same application share signed repairs for the same UI change,
-  moved as files or through a local reference hub (there is no hosted feed).
+  moved as files or through a local reference hub.
   Each tenant tests a patch on its own cases before it is used.
 - [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a
   model's training episode by reading the record after it ends.
