@@ -259,6 +259,11 @@ class TokenTemplate(BaseModel):
     idsh: bool = False
     glyph: bool = False
     gen: bool = False
+    bearing: Optional[bool] = Field(
+        default=None,
+        description="identity-bearing (identity.identity_bearing); None in "
+        "bundles compiled before the flag, which count every token",
+    )
 
 
 class ConcatTemplate(BaseModel):
