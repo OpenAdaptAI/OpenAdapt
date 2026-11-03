@@ -547,6 +547,29 @@ def _bounds(control: object) -> Optional[list[int]]:
         return None
 
 
+def _uniquely_names(auto: Any, locator: dict[str, Any], control: object) -> bool:
+    """True when ``locator`` matches exactly one element now, and it is ``control``."""
+    found, truncated = _find_candidates(locator, auto)
+    if truncated or len(found) != 1:
+        return False
+    mine = _candidate(control)
+    return mine is not None and hmac.compare_digest(
+        mine["fingerprint"], found[0][1]["fingerprint"]
+    )
+
+
+def _centered_on(control: object, x: int, y: int) -> bool:
+    """True when (x, y) lies in the middle half of the control, on both axes."""
+    bounds = _bounds(control)
+    if bounds is None:
+        return False
+    left, top, right, bottom = bounds
+    return (
+        abs(2 * x - (left + right)) <= (right - left) / 2
+        and abs(2 * y - (top + bottom)) <= (bottom - top) / 2
+    )
+
+
 def _locator_from_control(control: object) -> Optional[dict[str, Any]]:
     automation_id = str(_control_value(control, "AutomationId", "") or "") or None
     name = " ".join(str(_control_value(control, "Name", "") or "").split()) or None
@@ -1216,7 +1239,18 @@ def _perform_uia_initialized(
                 "status": "ok",
                 "identity": _element_identity(actionable or element),
             }
-        return {"status": "ok", "locator": _locator_from_control(actionable or element)}
+        if actionable is None and not _centered_on(element, x, y):
+            # A structural replay acts at the element's centre. A painted
+            # toolbar or grid is one large pane whose centre is some other
+            # button, so it is no locator for this click.
+            return {"status": "ok", "locator": None}
+        target = actionable or element
+        locator = _locator_from_control(target)
+        if locator is not None and not _uniquely_names(auto, locator, target):
+            # WPF gives every text box's inner edit AutomationId "textBox":
+            # a locator that matches others too could only ever be refused.
+            locator = None
+        return {"status": "ok", "locator": locator}
 
     if operation == "read":
         data = _exact_object(
