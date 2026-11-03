@@ -180,12 +180,19 @@ combined), `choose` builds the contracts the way `propose` builds the listed
 ones: from the same demonstrations, answers and schema, checked by the SQL
 guard and a dry read, and written under `field_sets/`. A field the set leaves
 out must stay as it was (an update) or be empty (a create), as in every
-contract. `choose` refuses, and the write stops, when the demonstrations or
-the schema changed since `propose` (`field_sets` in the manifest pins their
-digests), when a question is still open, when the set has a field no
+contract. `field_sets` in the manifest pins, by digest, every byte the
+demonstrations' load read (snapshots outside the folder too, digested in the
+same read), the schema, the generator's own code, and every listed contract
+file as `propose` wrote it. `choose` refuses, and the write stops, when any
+of these changed: so a listed contract a person edited by hand (a tighter
+check) stops every run-time build, since a built contract wouldn't have the
+edit; run `propose` again and reapply the edit to build more sets. It also
+refuses when a question is still open, when the set has a field no
 demonstration placed, or when a column of the new row would be left
 unchecked without the person's answer. A kind whose value names the field to
-change (`field: status`) gets only its listed sets.
+change (`field: status`) gets only its listed sets. Each build writes
+through a temporary file of its own, so threads building one set at once
+don't collide.
 
 `QUESTIONS.md` lists, per kind, the parameters no demonstration gave and no
 column is named like (`not_placed` in `report.json`): record a demonstration

@@ -533,3 +533,110 @@ def test_a_set_outside_the_kinds_fields_has_no_contract(
     v = {"project": "Help Desk", "subject": "x", "status": "New", "priority": "High"}
     with pytest.raises(gen.GenerateError, match="no create_issue contract"):
         gen.choose(manifest, "create_issue", v, extra)
+
+
+# -- review round 1 (#1683) ------------------------------------------------------
+
+UNLISTED = ["project", "status", "subject"]
+UNLISTED_V = {"project": "Help Desk", "subject": "Printer jams", "status": "Resolved"}
+
+
+def _edit_manifest(out: Path, change: Callable[[dict[str, Any]], None]) -> None:
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    change(manifest)
+    (out / "manifest.yaml").write_text(yaml.safe_dump(manifest, allow_unicode=True))
+
+
+def test_a_hand_edited_listed_contract_refuses_run_time_builds(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    """A person tightened a listed contract. A set built at run time would
+    not have the edit, so none is built."""
+
+    out, listed = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    other = (
+        out
+        / sorted(
+            f
+            for f in yaml.safe_load((out / "manifest.yaml").read_text())["field_sets"][
+                "listed_sha256"
+            ]
+        )[0]
+    )
+    other.write_text(other.read_text() + "\n# hand edit\n")
+    with pytest.raises(gen.GenerateError, match="changed since it was proposed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_another_generator_version_refuses_run_time_builds(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    _edit_manifest(
+        out, lambda m: m["field_sets"].update(generator_sha256="sha256:" + "1" * 64)
+    )
+    with pytest.raises(gen.GenerateError, match="generator changed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_a_changed_snapshot_outside_the_folder_refuses(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    """The digest covers every byte the demonstrations' load read, a
+    snapshot named by a path outside the folder too."""
+
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    demos = tmp_path / "demos"
+    shutil.copytree(
+        Path(
+            yaml.safe_load((out / "manifest.yaml").read_text())["field_sets"]["demos"]
+        ),
+        demos,
+    )
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    first = sorted(demos.glob("*.demo.json"))[0]
+    doc = json.loads(first.read_text())
+    snap = demos / doc["after_snapshot"]
+    moved = outside / snap.name
+    shutil.move(str(snap), moved)
+    doc["after_snapshot"] = str(Path("..") / "elsewhere" / snap.name)
+    first.write_text(json.dumps(doc))
+    digest = __import__("hashlib").sha256()
+    gen.load_demos(demos, digest)
+    _edit_manifest(
+        out,
+        lambda m: m["field_sets"].update(
+            demos=str(demos), demos_sha256="sha256:" + digest.hexdigest()
+        ),
+    )
+    gen.choose(
+        out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+    )
+    moved.write_text(moved.read_text().replace('"Printer jams"', '"Printer jamz"'))
+    with pytest.raises(gen.GenerateError, match="demonstrations changed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_two_threads_build_one_set_at_once(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    import concurrent.futures
+
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+
+    def build(_: int) -> Any:
+        return gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(4) as pool:
+        results = list(pool.map(build, range(4)))
+    assert all(r[0] is not None for r in results)
+    assert not list((out / "field_sets").rglob("*.tmp"))
