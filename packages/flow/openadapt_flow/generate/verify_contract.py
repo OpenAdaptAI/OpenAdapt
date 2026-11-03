@@ -156,11 +156,23 @@ def load_kinds(path: Path) -> list[KindSpec]:
     return out
 
 
-def load_demos(demo_dir: Path) -> list[Demo]:
+def load_demos(demo_dir: Path, digest: Any = None) -> list[Demo]:
+    """The demonstrations in ``demo_dir``. ``digest`` (a ``hashlib`` object):
+    fed every byte read, demonstration and snapshot alike (a snapshot path
+    outside the folder too), in one pass, so it covers exactly what was
+    parsed."""
+
     demos = []
     for f in sorted(Path(demo_dir).glob("*.demo.json")):
-        d = json.loads(f.read_text(encoding="utf-8"))
-        after = store.load_snapshot(Path(demo_dir) / d["after_snapshot"])
+        raw = f.read_bytes()
+        d = json.loads(raw.decode("utf-8"))
+        snap = Path(demo_dir) / d["after_snapshot"]
+        snap_raw = snap.read_bytes()
+        if digest is not None:
+            for part in (f.name, raw, str(d["after_snapshot"]), snap_raw):
+                b = part.encode("utf-8") if isinstance(part, str) else part
+                digest.update(len(b).to_bytes(8, "big") + b)
+        after = store.snapshot_from_bytes(snap_raw)
         demos.append(
             Demo(
                 kind=d["kind"],
@@ -2936,12 +2948,27 @@ def propose(
     reader_account: str = "",
     validate: bool = True,
     grant_trigger_flag: bool = False,
+    only: Optional[tuple[str, list[str], dict[str, int]]] = None,
+    schema_sha256: str = "",
+    demos_sha256: str = "",
 ) -> dict[str, Any]:
-    """Analyze, ask, emit and validate. Returns the report (also written)."""
+    """Analyze, ask, emit and validate. Returns the report (also written).
+
+    ``only`` (kind, fields, lists): build the contracts of that one field set
+    and nothing else (``choose`` for a set the manifest doesn't list). The
+    answers must leave no question open and the schema must still have
+    ``schema_sha256``; the manifest, report and questions are not rewritten.
+    Returns ``{"files": {flavor: path}}``."""
 
     connect = store.connector(read)
     dialect = store.dialect_of(read)
     schema = store.read_schema(connect, dialect)
+    schema_digest = _digest(schema.to_json())
+    if only is not None and schema_digest != schema_sha256:
+        raise GenerateError(
+            "the store's schema changed since the contracts were proposed; "
+            "run propose again"
+        )
     problems = check_read_only(connect, dialect)
     if problems:
         raise GenerateError(
@@ -2964,7 +2991,14 @@ def propose(
                 "--grant-trigger --admin-read <admin.yaml> --reader-account <account>, "
                 "or have the DBA run: GRANT TRIGGER ON <database>.* TO <account>"
             )
-    demos = load_demos(demo_dir)
+    read_bytes = hashlib.sha256()
+    demos = load_demos(demo_dir, read_bytes)
+    demos_digest = "sha256:" + read_bytes.hexdigest()
+    if only is not None and demos_digest != demos_sha256:
+        raise GenerateError(
+            "the demonstrations changed since the contracts were proposed; "
+            "run propose again"
+        )
     env = environment_id or f"generated-{schema.database}"
     env = re.sub(r"[^A-Za-z0-9._:-]", "-", env)
     if len(env) < 8:
@@ -3323,6 +3357,10 @@ def propose(
         _children(schema, p, [], only_missing=True)
     questions.extend(location_questions)
     questions_open = [q for q in questions if _answer(answers, q.key) is None]
+    if only is not None and questions_open:
+        raise GenerateError(
+            "open questions: " + ", ".join(q.key for q in questions_open)
+        )
     settings = Settings(
         read,
         dict(actor_params),
@@ -3370,6 +3408,10 @@ def propose(
                         "<account> to read it through a view, or wait for the guard fix"
                     )
 
+    if only is not None:
+        return _emit_one(
+            schema, plans, kinds, only, out, settings, excused, demos, validate
+        )
     out.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {
         "schema_version": MANIFEST_SCHEMA,
@@ -3378,6 +3420,29 @@ def propose(
         "actor_params": sorted(actor_params),
         "questions_open": [q.key for q in questions_open],
         "kinds": {},
+        # What ``choose`` needs to build a field set this manifest doesn't
+        # list, the same way: the same inputs, each pinned by its digest.
+        "field_sets": {
+            "read": dict(read),
+            "kinds": [
+                {
+                    "kind": k.kind,
+                    "parameters": list(k.parameters),
+                    "examples": list(k.examples),
+                }
+                for k in kinds
+            ],
+            "demos": str(Path(demo_dir).resolve()),
+            "demos_sha256": demos_digest,
+            # The code that builds a contract: a run-time build under other
+            # rules than the listed contracts is refused.
+            "generator_sha256": generator_digest(),
+            "answers": json.loads(json.dumps(answers or {}, default=str)),
+            "actor_params": dict(actor_params),
+            "environment_id": environment_id,
+            "schema_sha256": schema_digest,
+            "validate": validate,
+        },
     }
     report: dict[str, Any] = {
         "applied": applied,
@@ -3401,6 +3466,9 @@ def propose(
             "mode": p.mode,
             "main_table": p.anchor,
             "parameters": p.params,
+            # Any set of these (an update's identity always in it) gets a
+            # contract from ``choose``, listed below or not.
+            "fields": _settable(p),
             "identity": sorted(p.identity),
             "lists": sorted(p.lists),
             "dispatch": p.dispatch,
@@ -3431,6 +3499,16 @@ def propose(
             "touched_rows": p.touched,
             "unexcused": {t: sorted(c) for t, c in p.unexcused.items()},
             "refused": list(p.refused),
+            # Parameters no demonstration placed: a task that gives one is
+            # stopped until a demonstration gives it.
+            "not_placed": sorted(
+                set(p.params)
+                - set(p.locations)
+                - {g.param for g in p.children.values()}
+                - set(p.lists)
+                - {p.dispatch or ""}
+                - set(p.unresolved)
+            ),
             "unresolved": {
                 k: [loc.describe(p.anchor) for loc in v]
                 for k, v in sorted(p.unresolved.items())
@@ -3512,6 +3590,16 @@ def propose(
                     (out / f).unlink(missing_ok=True)
         manifest["kinds"][p.kind] = entry
         report["kinds"][p.kind] = rep
+    # Every listed contract as written. A person may edit them (a hand fix);
+    # a run-time build never sees the edit, so any change to a listed file
+    # refuses run-time builds rather than let one be looser.
+    manifest["field_sets"]["listed_sha256"] = {
+        f: _file_digest(out / f)
+        for e in manifest["kinds"].values()
+        for var in e.get("variants") or []
+        for k, f in var.items()
+        if k in ("create", "update", "found") and isinstance(f, str)
+    }
     (out / "manifest.yaml").write_text(
         yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )
@@ -3523,6 +3611,121 @@ def propose(
     )
     report["questions_open"] = [q.key for q in questions_open]
     return report
+
+
+def _digest(data: Any) -> str:
+    text = json.dumps(data, sort_keys=True, default=str)
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def generator_digest() -> str:
+    """A digest of the generator's own code (this package's modules)."""
+
+    h = hashlib.sha256()
+    for f in sorted(Path(__file__).parent.glob("*.py")):
+        raw = f.read_bytes()
+        h.update(f.name.encode() + b"\0" + len(raw).to_bytes(8, "big") + raw)
+    return "sha256:" + h.hexdigest()
+
+
+def _file_digest(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _settable(p: KindPlan) -> dict[str, Any]:
+    """The fields a task of this kind may give, for ``choose``: an update
+    must give its identity and at least one change; a create its required
+    fields, and any optional one. None for a kind with a dispatch field."""
+
+    if p.refused or not p.mode or p.dispatch is not None:
+        return {}
+    if p.mode == "update":
+        return {
+            "identity": sorted(p.identity),
+            "changes": sorted(c for c in p.changes if c in p.locations),
+            "lists": sorted(p.lists),
+        }
+    located = set(p.locations) | {g.param for g in p.children.values()}
+    optional = set(p.optional) & located
+    return {
+        "required": sorted(located - optional),
+        "optional": sorted(optional),
+        "lists": sorted(p.lists),
+    }
+
+
+def _fits(spec: Mapping[str, Any], given: set[str], lists: Mapping[str, int]) -> bool:
+    """Does a task's field set fit a kind's settable fields?"""
+
+    if not spec:
+        return False
+    if set(lists) - set(spec.get("lists") or []) or any(
+        not (1 <= n <= MAX_LIST) for n in lists.values()
+    ):
+        return False
+    if "identity" in spec:
+        ident, changes = set(spec["identity"]), set(spec["changes"])
+        rest = given - ident
+        return ident <= given and bool(rest) and rest <= changes and not lists
+    required, optional = set(spec["required"]), set(spec["optional"])
+    return required <= given and given <= required | optional
+
+
+def _emit_one(
+    schema: Schema,
+    plans: Sequence[KindPlan],
+    kinds: Sequence[KindSpec],
+    only: tuple[str, list[str], dict[str, int]],
+    out: Path,
+    settings: Settings,
+    excused: Mapping[str, set[str]],
+    demos: Sequence[Demo],
+    validate: bool,
+) -> dict[str, Any]:
+    """The contracts of one field set, built as ``propose`` builds the
+    listed ones, checked by the SQL guard and a dry read."""
+
+    kind, fields, lists = only
+    plan = next((p for p in plans if p.kind == kind), None)
+    if plan is None or plan.refused or not plan.mode:
+        raise GenerateError(f"kind {kind!r} has no contracts")
+    if not _fits(_settable(plan), set(fields), lists):
+        raise GenerateError(f"kind {kind!r} has no contract for these fields")
+    v = Variant(kind, sorted(fields), lists=dict(lists))
+    files: dict[str, str] = {}
+    flavors = ["create", "found"] if plan.mode == "create" else ["update", "found"]
+    for flavor in flavors:
+        try:
+            doc = build_contract(
+                schema, plan, v, flavor, settings, excused, set(plan.logs)
+            )
+        except Unpinned as exc:
+            raise GenerateError(f"no contract for these fields: {exc}") from exc
+        why = None
+        for sub in doc["verifier"]["surfaces"].values():
+            why = why or guard_problem(sub["sql_query"])
+        rel = Path("field_sets") / kind / f"{v.slug}.{flavor}.yaml"
+        path = out / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # A name of its own per call (threads share a process id).
+        fd, tmp_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+        )
+        tmp = Path(tmp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(
+                f"# Generated by openadapt_flow.generate.verify_contract on demand: "
+                f"kind {kind}, {flavor}, fields {', '.join(v.fields)}.\n"
+                + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100)
+            )
+        if why is None and validate:
+            why = dry_read(tmp, flatten(sample_values(plan, v, demos)), True)
+        if why is not None:
+            tmp.unlink(missing_ok=True)
+            raise GenerateError(f"the {flavor} contract for these fields fails: {why}")
+        os.replace(tmp, path)
+        files[flavor] = str(rel)
+    return {"files": files}
 
 
 def _questions_md(
@@ -3555,6 +3758,13 @@ def _questions_md(
                 "doesn't give must hold the value it held then. Record a second create "
                 "with other values, so a column computed from the values (a price with "
                 "tax) is told apart from a constant."
+            )
+        if rep.get("not_placed") and rep["mode"]:
+            lines.append(
+                "  - No demonstration gave, and no column is named like: "
+                + ", ".join(f"`{x}`" for x in rep["not_placed"])
+                + ". A task that gives one is stopped: record a demonstration "
+                "that gives it now, before tasks need it."
             )
         for r in rep["refused"]:
             lines.append(f"  - Refused: {r}")
@@ -3612,11 +3822,78 @@ def choose(
         if _exists(found, params):
             return found, params
         return _load_for(base / var[entry["mode"]], params), params
+    files = _field_set(manifest_path, manifest, kind, entry, given, lists)
+    if files is not None:
+        params = {**flatten(values), **dict(extra_params or {})}
+        base = manifest_path.parent
+        found = _load_for(base / files["found"], params)
+        if _exists(found, params):
+            return found, params
+        return _load_for(base / files[entry["mode"]], params), params
     raise GenerateError(
         f"no {kind} contract for the fields {sorted(given)}"
         + (f" and lists {lists}" if lists else "")
         + ": record a demonstration that gives them, or the task is stopped"
     )
+
+
+def _field_set(
+    manifest_path: Path,
+    manifest: Mapping[str, Any],
+    kind: str,
+    entry: Mapping[str, Any],
+    given: set[str],
+    lists: Mapping[str, int],
+) -> Optional[dict[str, str]]:
+    """The contracts of a field set the manifest doesn't list, built from the
+    same inputs as the listed ones (``propose(only=...)``). None when the set
+    doesn't fit the kind's fields; raises when the inputs changed."""
+
+    spec = entry.get("fields") or {}
+    inputs = manifest.get("field_sets")
+    if not inputs or not _fits(spec, given, lists):
+        return None
+    demo_dir = Path(inputs["demos"])
+    if inputs.get("generator_sha256") != generator_digest():
+        raise GenerateError(
+            "the contract generator changed since the contracts were proposed; "
+            "run propose again"
+        )
+    listed = inputs.get("listed_sha256")
+    if not isinstance(listed, dict) or not listed:
+        raise GenerateError("the manifest doesn't pin its listed contracts")
+    base = manifest_path.parent
+    for rel, want in sorted(listed.items()):
+        try:
+            have = _file_digest(base / rel)
+        except OSError:
+            have = ""
+        if have != want:
+            raise GenerateError(
+                f"the listed contract {rel} changed since it was proposed (a hand "
+                "edit?): a contract built at run time wouldn't have the edit, so "
+                "none is built; run propose again"
+            )
+    kinds = [
+        KindSpec(
+            str(k["kind"]), list(k["parameters"]), "", list(k.get("examples") or [])
+        )
+        for k in inputs["kinds"]
+    ]
+    result = propose(
+        read=dict(inputs["read"]),
+        kinds=kinds,
+        demo_dir=demo_dir,
+        out=manifest_path.parent,
+        actor_params=dict(inputs["actor_params"]),
+        answers=dict(inputs["answers"]),
+        environment_id=str(inputs.get("environment_id") or ""),
+        validate=bool(inputs.get("validate", True)),
+        only=(kind, sorted(given), dict(lists)),
+        schema_sha256=str(inputs["schema_sha256"]),
+        demos_sha256=str(inputs["demos_sha256"]),
+    )
+    return dict(result["files"])
 
 
 def _load_for(path: Path, params: Mapping[str, Any]) -> Any:

@@ -76,6 +76,9 @@ APPROVER = "qualification:scripted-approver (stands in for a person; approves al
 #: (AppKit user defaults). A blinking caret changes the frame between the
 #: runtime's lease and the save click, and the click is refused; see the README.
 STEADY_CARET: list[str] = []
+#: Set by ``--sheet``: the new version shows its notice as a real AppKit sheet
+#: (an NSAlert attached to the window, its own window), not drawn in the window.
+NOTICE_MODE = ["update_notice"]
 
 
 class App:
@@ -310,7 +313,7 @@ def _target(binary: Path, db: Path, kind: str, *, verifier: bool, profile: str) 
 
     def open_session(fault: Optional[str]) -> Any:
         app = App(
-            binary, db, OTHER if fault == "other_patient" else PATIENT, "update_notice"
+            binary, db, OTHER if fault == "other_patient" else PATIENT, NOTICE_MODE[0]
         )
         try:
             backend = _backend(kind)
@@ -464,6 +467,7 @@ def qualify(kind: str, root: Path) -> dict[str, Any]:
         else "RemoteDisplayBackend (pixels only)",
         "app": "tests/native_apps/Chart.swift (native Cocoa, SQLite)",
         "steady_caret": bool(STEADY_CARET),
+        "notice": NOTICE_MODE[0],
         "at": datetime.now(timezone.utc).isoformat(),
         "git_sha": subprocess.run(
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=FLOW
@@ -498,7 +502,14 @@ def main() -> int:
         action="store_true",
         help="launch the app with a caret that doesn't blink",
     )
+    parser.add_argument(
+        "--sheet",
+        action="store_true",
+        help="show the notice as a real AppKit sheet (its own window)",
+    )
     args = parser.parse_args()
+    if args.sheet:
+        NOTICE_MODE[0] = "update_sheet"
     if args.steady_caret:
         STEADY_CARET.extend(
             [
@@ -522,7 +533,8 @@ def main() -> int:
                 shutil.rmtree(root, ignore_errors=True)
             else:
                 print(f"work folder: {root}")
-        mode = f"{kind}-steady-caret" if STEADY_CARET else kind
+        mode = kind + ("-sheet" if NOTICE_MODE[0] == "update_sheet" else "")
+        mode += "-steady-caret" if STEADY_CARET else ""
         out = RESULTS / f"macos-{mode}-{datetime.now(timezone.utc):%Y%m%d}.json"
         out.write_text(json.dumps(report, indent=2) + "\n")
         print(f"{kind}: {'PASSED' if report['passed'] else 'FAILED'} -> {out}")
