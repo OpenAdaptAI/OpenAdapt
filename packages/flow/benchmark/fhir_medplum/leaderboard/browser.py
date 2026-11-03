@@ -200,9 +200,19 @@ class MedplumBrowser:
         nxt = page.get_by_role("button", name=re.compile("^(next|continue)$", re.I))
         if nxt.count():
             nxt.first.click()
-        page.get_by_label(re.compile("password", re.I)).fill(password)
+        page.get_by_test_id("auth.password").fill(password)
         page.get_by_role("button", name=re.compile("sign in", re.I)).click()
-        page.wait_for_url(lambda u: "signin" not in u, timeout=30000)
+        for _ in range(3):
+            try:
+                page.wait_for_url(lambda u: "signin" not in u, timeout=30000)
+                break
+            except Exception:  # noqa: BLE001 - a project chooser, or a slow first load
+                choice = page.get_by_text(re.compile("synthetic clinic", re.I))
+                if choice.count():
+                    choice.first.click()
+        else:
+            page.screenshot(path=str(Path.home() / ".openadapt" / "leaderboard" / "signin-failed.png"))
+            raise RuntimeError("the harness couldn't sign in to the Medplum app")
         page.wait_for_load_state("networkidle")
         self.state = ctx.storage_state()
         ctx.close()

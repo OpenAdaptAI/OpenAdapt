@@ -73,12 +73,14 @@ benchmarking or publishing results).
 | gemini | `gemini-3.8-flash` | Gemini API Interactions, `computer_use`, environment `browser` |
 | fara | Microsoft Fara-7B, `mlx-community/Fara-7B-8bit` | Local on Apple silicon (MLX), Fara's own prompt, last 3 screenshots, temperature 0 |
 
-Conditional entrants, run only if the condition holds and reported as "not
-run" with the reason otherwise:
+Not run in this version, with the reason shown on the leaderboard:
 
-- gemini: the Gemini API project has credit.
-- Amazon Nova Act (`nova-act-latest`, AWS IAM, us-east-1): an adapter that
-  drives the same browser and proxy exists before the first scored run.
+- gemini: the adapter is built, but the Gemini API project has no credit
+  (HTTP 402). If credit is added, gemini runs under this same protocol, with
+  the same rules, and its rows are added; nothing else changes.
+- Amazon Nova Act: running it needs AWS spend and, to publish, a
+  disclosure to AWS (AWS Service Terms 1.8). Both are the founder's call,
+  and the founder chose not to run it now.
 
 Every agent gets the same instruction: `common.PREAMBLE` followed by the
 case's own instruction (`public/model.py`, `task_text`). Provider defaults
@@ -94,11 +96,19 @@ refused with an error the agent sees.
 - **Repetitions:** k = 3 runs of every case per agent.
 - **Order:** repetition by repetition (all 37 cases in file order, then
   again), so a run stopped by a budget leaves whole repetitions.
-- **Per-run limits:** 60 model calls, $4.00 of model spend, 1,200 seconds
+  Fara is slow on local hardware, so its cases run in two processes on two
+  Medplum stacks, P01-A06 in one and A07-AP12 in the other, each in this
+  order. Agents finish at different times; the leaderboard is published when
+  claude and openai have finished, and fara's rows are added when its runs
+  end, scored by the same code.
+- **Per-run limits:** 100 model calls, $4.00 of model spend, 2,400 seconds
   (`common.STEP_CAP`, `RUN_USD_CAP`, `WALL_S_CAP`). A run that reaches one
-  ends with no claim.
+  ends with no claim. They were set from the practice runs (the most any
+  practice run took was 76 calls, $1.45 and 644 seconds, all Claude).
 - **Spend:** list prices. Total cap for all agents together: $300
-  (`LEADERBOARD_SPEND_CAP_USD`). Per-agent allocation: BUDGET_TABLE.
+  (`LEADERBOARD_SPEND_CAP_USD`). Per-agent shares (`common.AGENT_CAP_USD`):
+  claude $180, openai $90, the rest held back. Fara runs locally and costs
+  nothing at list price.
   An agent that reaches its allocation stops; its completed repetitions are
   scored and the shortfall is reported.
 - **Seeds:** the case data are deterministic. Sampling uses provider
@@ -162,9 +172,15 @@ flags). It is labelled as OpenAdapt's and is not part of the ranking.
 ## Practice before freezing
 
 The harness was built on a practice HTML page and on the three practice
-cases in `leaderboard/practice_cases.yaml`, whose people, values and times
-appear in no scored case. PRACTICE_RUNS. No scored case was run by any
-model agent before this protocol was frozen.
+cases in `leaderboard/practice_cases.yaml` (X01-X03 clean, X04-X05 with a
+fault), whose people, values and times appear in no scored case. Practice
+runs before freezing: claude X01-X03; openai X01-X05; fara X01 (stopped
+during X02 to freeze; Fara took 19 minutes for X01). They
+showed that a fault reaches a write made in the app (X04, X05), and that
+Medplum's form can save a new record as a create followed by updates
+(claude X01), which the verifier's contract stops; the shadow column counts
+such stops as false flags. Practice spend is in `practice/spend.json`. No
+scored case was run by any model agent before this protocol was frozen.
 
 ## Hashes
 

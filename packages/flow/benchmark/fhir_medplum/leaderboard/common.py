@@ -36,9 +36,9 @@ The task:
 """
 
 #: A run's limits (pre-registered). A run that reaches one ends with no claim.
-STEP_CAP = 60  # model calls per run
-RUN_USD_CAP = 4.00  # model spend per run
-WALL_S_CAP = 1200  # seconds per run
+STEP_CAP = int(os.environ.get("LEADERBOARD_STEP_CAP", 100))  # model calls per run
+RUN_USD_CAP = float(os.environ.get("LEADERBOARD_RUN_USD_CAP", 4.00))  # model spend per run
+WALL_S_CAP = int(os.environ.get("LEADERBOARD_WALL_S_CAP", 2400))  # seconds per run
 
 _RESULT = re.compile(r"^\W*RESULT\W*:?\s*(NOT\s+DONE|DONE)\b\s*(.*)$", re.I)
 _REF = re.compile(
@@ -102,7 +102,7 @@ class Meter:
             raise RunLimit(f"dollar cap: ${self.usd:.2f} of ${RUN_USD_CAP:.2f}")
         if time.monotonic() - self.started > WALL_S_CAP:
             raise RunLimit(f"time cap: {WALL_S_CAP} s")
-        check_total()
+        check_total(agent=self.label.split(" ", 1)[0])
 
     def record(self, usd: float, tokens_in: int, tokens_out: int, **extra: Any) -> None:
         self.calls += 1
@@ -118,6 +118,8 @@ class Meter:
 # -- the total spend ledger (all agents, all runs) ----------------------------------
 
 TOTAL_CAP_USD = float(os.environ.get("LEADERBOARD_SPEND_CAP_USD", "300"))
+#: Each agent's share of the total (pre-registered); the rest is reserve.
+AGENT_CAP_USD = {"claude": 180.0, "openai": 90.0, "gemini": 0.0, "fara": 0.0}
 LEDGER = Path(
     os.environ.get(
         "LEADERBOARD_LEDGER", Path.home() / ".openadapt" / "leaderboard" / "spend.json"
@@ -146,12 +148,22 @@ def spent() -> float:
     return float(json.loads(LEDGER.read_text()).get("total_usd", 0.0))
 
 
-def check_total(margin: float = RUN_USD_CAP / 8) -> None:
+def check_total(margin: float = RUN_USD_CAP / 8, agent: str = "") -> None:
+    if agent in AGENT_CAP_USD and AGENT_CAP_USD[agent] > 0:
+        mine = spent_by(agent)
+        if mine + margin > AGENT_CAP_USD[agent]:
+            raise SpendCap(f"{agent} has spent ${mine:.2f} of its ${AGENT_CAP_USD[agent]:.0f} share")
     if spent() + margin > TOTAL_CAP_USD:
         raise SpendCap(
             f"${spent():.2f} spent of the ${TOTAL_CAP_USD:.0f} cap; "
             "raise LEADERBOARD_SPEND_CAP_USD only with the coordinator's go"
         )
+
+
+def spent_by(agent: str) -> float:
+    if not LEDGER.is_file():
+        return 0.0
+    return float(json.loads(LEDGER.read_text()).get("by_label", {}).get(agent, 0.0))
 
 
 def add_spend(label: str, usd: float) -> None:

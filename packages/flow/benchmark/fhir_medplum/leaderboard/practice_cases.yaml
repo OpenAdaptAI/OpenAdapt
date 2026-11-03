@@ -99,3 +99,39 @@ cases:
     practitioner: dr_lind
     start: '2026-12-03T16:00:00Z'
     end: '2026-12-03T16:20:00Z'
+- id: X04
+  type: patient
+  class: practice
+  note: Practice fault, to check that a fault reaches a write made in the app.
+  expect: create
+  task:
+    given: Ines
+    family: Marlow
+    birthDate: '1995-07-30'
+    gender: female
+    line: 3 Orchard Way
+    city: Northampton
+    state: MA
+    postalCode: '01060'
+    phone: 413-555-0119
+    email: ines.marlow@example.org
+  faults:
+  - set: {birthDate: '1995-07-31'}
+- id: X05
+  type: patient
+  class: practice
+  note: Practice fault, a create sent twice.
+  expect: create
+  task:
+    given: Ines
+    family: Marlow
+    birthDate: '1995-07-30'
+    gender: female
+    line: 3 Orchard Way
+    city: Northampton
+    state: MA
+    postalCode: '01060'
+    phone: 413-555-0119
+    email: ines.marlow@example.org
+  faults:
+  - duplicate: true
