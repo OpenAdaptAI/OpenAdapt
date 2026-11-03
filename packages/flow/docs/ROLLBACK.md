@@ -142,6 +142,33 @@ Rolled back: the system of record matches the read from before the run.
   step `step_010`: compensated with `undo-step_010-network-1` (every undo step ran and an independent read of the system of record confirmed its declared effects)
 ```
 
+### Durable runs, and a rollback a crash interrupted
+
+A durable run (the Standard and Regulated profiles) can pause and continue
+later, so its rollback state outlives the process. When the rollback is
+armed, Flow seals the read from before the run, the key its row digests use,
+the audit log as it was, and the run's parameters into
+`<run-dir>/rollback/armed.json.enc` (AES-256-GCM with the deployment's key,
+`OPENADAPT_BUNDLE_KEY`; owner-only). A durable run with rollback on needs
+that key.
+
+- **A pause waits for a person.** The run stays resumable. To undo it
+  instead, run `openadapt-flow resume <run-dir> --roll-back` with the same
+  deployment flags. The rollback runs as after any stop, from the sealed
+  read. Afterwards the run is never resumed.
+- **A stop that ends the run** (a person declined the save) rolls back at
+  once, as a run that isn't durable does.
+- **A crash during a rollback.** The first attempt seals its read after the
+  stop (`stop.json.enc`) and notes each compensation it starts
+  (`journal.json`, step ids only). The same `resume <run-dir> --roll-back`
+  continues it. The run's changes are judged by the first attempt's read
+  after the stop. If any row changed since then that the run didn't write,
+  or that isn't positively its own, nothing more runs and the run ends
+  `RECONCILIATION_REQUIRED`. Each compensation the first attempt started is
+  treated like an uncertain write: it runs again only when a fresh read shows
+  the run's change still there, and is skipped when the read shows it gone.
+- A run that finishes deletes its sealed state.
+
 ## Other users
 
 A rollback isn't a transaction: a colleague can save something while the run
@@ -337,16 +364,13 @@ profile as `app/version` (`profile_id`).
   table moved, but not which rows.
 - **No rollback in a workflow with a loop,** or when a step ran more than
   once. A compensation runs with the run's base parameters.
-- **Single web runs only, for now.** A desktop, RDP, worklist-pool or
-  durable (pausable) run with rollback on is refused before it starts. The
-  Standard and Regulated execution profiles require durable runs, so
-  rollback doesn't run under them yet.
+- **Single runs.** A worklist-pool run with rollback on is refused before
+  it starts.
 - **Database-numbered ids move on.** A delete compensation can't wind back
   an id counter (MySQL `AUTO_INCREMENT`, SQLite `AUTOINCREMENT`); each read
   accepts a counter that moved, with no row left behind, by no more than the
   rows the run added to that table.
-- **A rolled-back run isn't resumed.** Durable runs are refused with
-  rollback on; and as a second guard, once a compensation has started,
+- **A rolled-back run isn't resumed.** Once a compensation has started,
   `resume`, the attended console and its relay all refuse the run.
 - **Another user's own UI state counts too.** Per-user rows such as
   OpenEMR's recent-patient list or sign-in counters move when a colleague
