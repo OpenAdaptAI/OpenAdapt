@@ -1413,11 +1413,44 @@ class _User32:
                 [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM],
                 wintypes.BOOL,
             ),
+            ("GetWindow", [wintypes.HWND, wintypes.UINT], wintypes.HWND),
+            (
+                "GetWindowThreadProcessId",
+                [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)],
+                wintypes.DWORD,
+            ),
+            (
+                "GetWindowRect",
+                [wintypes.HWND, ctypes.POINTER(wintypes.RECT)],
+                wintypes.BOOL,
+            ),
+            (
+                "GetWindowTextW",
+                [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int],
+                ctypes.c_int,
+            ),
         ):
             fn = getattr(dll, name)
             fn.argtypes = args
             fn.restype = res
         self._dll = dll
+        self._enum_proc = getattr(ctypes, "WINFUNCTYPE")(
+            wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
+        )
+        dll.EnumWindows.argtypes = [self._enum_proc, wintypes.LPARAM]
+        dll.EnumWindows.restype = wintypes.BOOL
+        try:
+            dwm = getattr(ctypes, "WinDLL")("dwmapi")
+            dwm.DwmGetWindowAttribute.argtypes = [
+                wintypes.HWND,
+                wintypes.DWORD,
+                ctypes.c_void_p,
+                wintypes.DWORD,
+            ]
+            dwm.DwmGetWindowAttribute.restype = ctypes.c_long
+            self._dwm = dwm
+        except OSError:
+            self._dwm = None
 
     def is_window(self, hwnd: int) -> bool:
         return bool(self._dll.IsWindow(hwnd))
@@ -1444,6 +1477,63 @@ class _User32:
 
     def post(self, hwnd: int, message: int) -> bool:
         return bool(self._dll.PostMessageW(hwnd, message, 0, 0))
+
+    def top_level_windows(self) -> list[int]:
+        """Every top-level window, topmost first (EnumWindows is z-order)."""
+        found: list[int] = []
+
+        def collect(hwnd, _param):
+            found.append(int(hwnd or 0))
+            return len(found) < 4096
+
+        self._dll.EnumWindows(self._enum_proc(collect), 0)
+        return [hwnd for hwnd in found if hwnd]
+
+    def owner(self, hwnd: int) -> int:
+        return int(self._dll.GetWindow(hwnd, 4) or 0)  # GW_OWNER
+
+    def pid_of(self, hwnd: int) -> int:
+        pid = self._wintypes.DWORD()
+        self._dll.GetWindowThreadProcessId(hwnd, self._ctypes.byref(pid))
+        return int(pid.value)
+
+    def rect(self, hwnd: int) -> Optional[tuple[int, int, int, int]]:
+        """The window's visible frame: DWM's extended frame bounds, which
+        leave out the invisible resize border GetWindowRect includes."""
+        r = self._wintypes.RECT()
+        if self._dwm is not None and (
+            self._dwm.DwmGetWindowAttribute(
+                hwnd, 9, self._ctypes.byref(r), self._ctypes.sizeof(r)
+            )
+            == 0
+        ):
+            return (int(r.left), int(r.top), int(r.right), int(r.bottom))
+        if not self._dll.GetWindowRect(hwnd, self._ctypes.byref(r)):
+            return None
+        return (int(r.left), int(r.top), int(r.right), int(r.bottom))
+
+    def per_monitor_dpi(self) -> bool:
+        """Put this thread in per-monitor-v2 DPI awareness, so window rects
+        and points are physical pixels like the screenshot's."""
+        return bool(self._dll.SetThreadDpiAwarenessContext(self._ctypes.c_void_p(-4)))
+
+    def title(self, hwnd: int) -> str:
+        buffer = self._ctypes.create_unicode_buffer(512)
+        self._dll.GetWindowTextW(hwnd, buffer, 512)
+        return buffer.value
+
+    def is_cloaked(self, hwnd: int) -> Optional[bool]:
+        """A cloaked window (another virtual desktop, a suspended UWP app) is
+        'visible' to IsWindowVisible but not on screen. None: unknown."""
+        if self._dwm is None:
+            return None
+        value = self._ctypes.c_int(0)
+        result = self._dwm.DwmGetWindowAttribute(
+            hwnd, 14, self._ctypes.byref(value), self._ctypes.sizeof(value)
+        )
+        if result != 0:
+            return None
+        return value.value != 0
 
 
 #: Replaced in tests; Windows builds the real binding.
@@ -1590,8 +1680,139 @@ def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
         raise AgentRequestError(409, "native_action_failed", "native UIA action failed")
 
 
+_MAX_OWNER_CHAIN = 32
+_WINDOW_OPERATIONS = frozenset({"window-root-at", "owned-window-over"})
+
+
+def _intersects(
+    rect: tuple[int, int, int, int], region: tuple[int, int, int, int]
+) -> bool:
+    left, top, right, bottom = rect
+    x, y, w, h = region
+    return left < x + w and x < right and top < y + h and y < bottom
+
+
+def _window_operation(
+    operation: str, payload: dict[str, Any], user32: Any
+) -> dict[str, Any]:
+    """Win32 window facts for repair: the top-level window at a point, and
+    whether a window the app itself owns now sits over a region.
+
+    ``owned-window-over`` walks the live top-level windows from the top down
+    to the captured window and answers with a window only when all of this
+    holds: no visible window of another process, and none of the captured
+    process that its owner chain does not tie to the captured window, meets
+    the region anywhere above the captured window; and an owned window
+    covers the region's center (its visible frame, not the resize border).
+    A captured window that is gone or changed process, a cloak state that
+    cannot be read for one of the app's windows, and anything else answer
+    ``None``.
+    """
+    if not user32.per_monitor_dpi():
+        raise AgentRequestError(
+            503, "uia_unavailable", "per-monitor DPI awareness is unavailable"
+        )
+    if operation == "window-root-at":
+        data = _exact_object(payload, required=frozenset({"x", "y"}), label=operation)
+        hit = user32.window_from_point(
+            _bounded_int(data["x"], "x"), _bounded_int(data["y"], "y")
+        )
+        root = user32.ancestor(hit, _GA_ROOT) if hit else 0
+        if not root or not user32.is_window(root):
+            return {"status": "ok", "window": None}
+        # The verified target's window is the foreground app's; anything else
+        # (a topmost window that slid over the point) is not a capture.
+        foreground = user32.foreground()
+        front = (
+            (user32.ancestor(foreground, _GA_ROOTOWNER) or foreground)
+            if foreground
+            else 0
+        )
+        if not front or (user32.ancestor(root, _GA_ROOTOWNER) or root) != front:
+            return {"status": "ok", "window": None}
+        return {
+            "status": "ok",
+            "window": {"hwnd": root, "pid": user32.pid_of(root)},
+        }
+    data = _exact_object(
+        payload, required=frozenset({"hwnd", "pid", "region"}), label=operation
+    )
+    hwnd, pid, region = data["hwnd"], data["pid"], data["region"]
+    if (
+        not isinstance(hwnd, int)
+        or isinstance(hwnd, bool)
+        or hwnd <= 0
+        or not isinstance(pid, int)
+        or isinstance(pid, bool)
+        or pid <= 0
+        or not isinstance(region, list)
+        or len(region) != 4
+        or any(isinstance(v, bool) or not isinstance(v, int) for v in region)
+        or region[2] <= 0
+        or region[3] <= 0
+    ):
+        raise AgentRequestError(400, "invalid_schema", "hwnd, pid and region required")
+    if not user32.is_window(hwnd) or user32.pid_of(hwnd) != pid:
+        return {"status": "ok", "window": None}
+    box = (region[0], region[1], region[2], region[3])
+    center = (region[0] + region[2] // 2, region[1] + region[3] // 2)
+    owned: Optional[dict[str, Any]] = None
+    reached = False
+    for candidate in user32.top_level_windows():
+        if candidate == hwnd:
+            reached = True
+            break
+        if not user32.is_visible(candidate):
+            continue
+        same_process = user32.pid_of(candidate) == pid
+        cloaked = user32.is_cloaked(candidate)
+        if cloaked is None and same_process:
+            return {"status": "ok", "window": None}  # cannot tell if it shows
+        if cloaked:
+            continue
+        rect = user32.rect(candidate)
+        if rect is None or rect[2] <= rect[0] or rect[3] <= rect[1]:
+            continue
+        if not _intersects(rect, box):
+            continue
+        if not same_process:
+            return {"status": "ok", "window": None}  # a foreign occluder
+        owner = user32.owner(candidate)
+        link = owner
+        for _ in range(_MAX_OWNER_CHAIN):
+            if not link or link == hwnd:
+                break
+            link = user32.owner(link)
+        if link != hwnd:
+            return {"status": "ok", "window": None}  # not tied to the capture
+        covers_center = (
+            rect[0] <= center[0] < rect[2] and rect[1] <= center[1] < rect[3]
+        )
+        if owned is None and covers_center:
+            owned = {
+                "title": user32.title(candidate)[:512] or None,
+                "hwnd": candidate,
+                "owner_hwnd": owner,
+                "pid": pid,
+            }
+    if not reached:
+        return {"status": "ok", "window": None}  # nothing proves the order
+    return {"status": "ok", "window": owned}
+
+
 def _perform_uia(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Perform one typed UIA operation on one COM-affine server thread."""
+    if operation in _WINDOW_OPERATIONS:
+        if os.name != "nt":
+            raise AgentRequestError(503, "uia_unavailable", "Win32 is unavailable")
+        try:
+            return _window_operation(operation, payload, _user32_factory())
+        except AgentRequestError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - bounded, never a crash
+            raise AgentRequestError(
+                503, "uia_unavailable", "window state is unavailable"
+            ) from exc
     try:
         import uiautomation as auto  # noqa: PLC0415 - Windows-only, lazy
     except Exception as exc:  # noqa: BLE001
@@ -2016,6 +2237,8 @@ def make_handler_class(
                 "/context/identity": ("context", "identity"),
                 "/uia/locator-at": ("uia", "locator-at"),
                 "/uia/element-identity-at": ("uia", "element-identity-at"),
+                "/window/root-at": ("uia", "window-root-at"),
+                "/window/owned-over": ("uia", "owned-window-over"),
                 "/uia/text-at-point": ("uia", "text-at-point"),
                 "/uia/identity-candidates-at": ("uia", "identity-candidates-at"),
                 "/uia/find": ("uia", "find"),
