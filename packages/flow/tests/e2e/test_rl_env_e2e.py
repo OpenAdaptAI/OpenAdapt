@@ -91,3 +91,27 @@ def test_reset_leaves_no_state_from_the_last_episode(env) -> None:
     rows = httpx.get(env._app_url + "/api/db").json()["records"]
     # Only the concurrent colleague's row this task seeds; nothing carried over.
     assert [r["source"] for r in rows] == ["other"]
+
+
+def test_mcp_tools_and_typed_actions_reach_the_same_reward(env) -> None:
+    from openenv.core.env_server.mcp_types import CallToolAction, ListToolsAction
+
+    assert {t.name for t in env.step(ListToolsAction()).tools} >= {"click", "done"}
+    obs = env.reset(task_id="mockmed-01")
+    node = {n.get("css_selector"): n["node_id"] for n in obs.computer_state["nodes"]}
+    obs = env.step(
+        WebAction(
+            computer_action={"type": "click", "target": {"node_id": node["#signin"]}}
+        )
+    )
+    assert obs.action_result["success"] is True
+    task = env.env.task("mockmed-01")
+    for action in task.solution[3:]:
+        args = {k: v for k, v in action.items() if k != "kind"}
+        result = env.step(CallToolAction(tool_name=action["kind"], arguments=args))
+        assert result.error is None
+    assert (result.done, result.reward, result.result["verdict"]) == (
+        True,
+        1.0,
+        "CONFIRMED",
+    )
