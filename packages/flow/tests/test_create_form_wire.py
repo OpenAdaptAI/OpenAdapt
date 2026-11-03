@@ -1235,6 +1235,7 @@ def test_a_late_refusal_adds_to_an_earlier_halt_instead_of_replacing_it(
         PlaywrightBackend,
         prepare_ws_guard,
     )
+    from openadapt_flow.ir import RunReport, StepResult
     from openadapt_flow.mockmed.fault_server import serve as fault_serve
     from openadapt_flow.runtime import Replayer
     from openadapt_flow.runtime.effects import RestRecordVerifier
@@ -1265,17 +1266,35 @@ def test_a_late_refusal_adds_to_an_earlier_halt_instead_of_replacing_it(
             actuator = _LateSubmitThenRejectedActuator(page)
             span_bundle = tmp_path_factory.mktemp("span")
             (span_bundle / "templates").mkdir()
-            report = Replayer(
+            replayer = Replayer(
                 backend,
                 web_form_actuator=actuator,
                 effect_verifier=RestRecordVerifier(sor_url.rstrip("/")),
                 poll_interval_s=0.01,
-            ).run(
+            )
+            report = replayer.run(
                 _span_workflow(),
                 bundle_dir=span_bundle,
                 run_dir=tmp_path_factory.mktemp("run"),
             )
             late = backend.form_submit_guard_refusal()
+            # The same end-of-run read on a run whose last step halted with
+            # another category: the category is kept.
+            governed = RunReport(
+                workflow_name="span",
+                started_at="t",
+                success=False,
+                results=[
+                    StepResult(
+                        step_id="step_001",
+                        intent="save",
+                        ok=False,
+                        failure_category="governed_refusal",
+                        error="the record check was refuted; reconcile",
+                    )
+                ],
+            )
+            replayer._halt_on_late_form_submit(governed)
         finally:
             browser.close()
             stop_sor()
@@ -1284,9 +1303,14 @@ def test_a_late_refusal_adds_to_an_earlier_halt_instead_of_replacing_it(
     assert not report.success
     halt = report.results[-1]
     assert halt.actuation == "api" and halt.delivery_attempted
-    # The span's own reason and category, then the late refusal.
-    print("CATEGORY", halt.failure_category, "ERROR", halt.error)
-    assert halt.failure_category not in (None, "safety_halt"), halt.failure_category
+    assert halt.safety_halt and halt.failure_category == "safety_halt"
+    # The span's own reason first, then the late refusal.
     own, _, added = (halt.error or "").partition("; also after an earlier save, ")
-    assert "500" in own, halt.error
+    assert "outside the binding's accepted contract" in own, halt.error
     assert added == late, halt.error
+    kept = governed.results[0]
+    assert not governed.success and not kept.ok and kept.safety_halt
+    assert kept.failure_category == "governed_refusal"
+    assert kept.error == (
+        f"the record check was refuted; reconcile; also after an earlier save, {late}"
+    )
