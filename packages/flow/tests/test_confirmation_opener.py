@@ -4,8 +4,22 @@ from __future__ import annotations
 
 import pytest
 
-from openadapt_flow.ir import ActionKind, Anchor, Step, StructuralLocator
-from openadapt_flow.risk import confirmation_opener_step_ids, infer_step_risk
+from openadapt_flow.ir import (
+    ActionKind,
+    Anchor,
+    Postcondition,
+    PostconditionKind,
+    Step,
+    StructuralLocator,
+)
+from openadapt_flow.policy import effective_step_risk
+from openadapt_flow.risk import (
+    CONFIRMATION_OPENER_PREFIX,
+    confirmation_opener_step_ids,
+    infer_step_risk,
+    is_sealed_confirmation_opener,
+)
+from openadapt_flow.runtime.effects import Effect, EffectKind
 
 
 def _click(step_id: str, label: str, selector: str = "button") -> Step:
@@ -71,3 +85,58 @@ def test_an_opener_with_its_own_effect_or_binding_stays_the_save():
 def test_two_confirms_in_a_row_keep_the_first():
     steps = [_click("a", "Confirm"), _click("b", "Confirm")]
     assert confirmation_opener_step_ids(steps) == ()
+
+
+def test_sealed_confirmation_opener_infers_reversible():
+    create = _click("step_010", "Create New Patient", "#create")
+    confirm = _click("step_011", "Confirm", "#confirmCreate")
+    create.risk = "reversible"
+    create.risk_explanation = f"{CONFIRMATION_OPENER_PREFIX} ({confirm.id})"
+    create.expect = [
+        Postcondition(
+            kind=PostconditionKind.TEXT_PRESENT,
+            text="Confirm Create New Patient",
+            timeout_s=10.0,
+        )
+    ]
+    assert is_sealed_confirmation_opener(create) is True
+    inference = infer_step_risk(create)
+    assert inference.risk == "reversible"
+    assert "pattern:confirmation_opener" in inference.evidence
+    assert effective_step_risk(create) == "reversible"
+
+
+def test_unsealed_confirmation_opener_infers_irreversible():
+    create = _click("step_010", "Create New Patient", "#create")
+    create.risk = "reversible"
+    create.risk_explanation = f"{CONFIRMATION_OPENER_PREFIX} (step_011)"
+    create.expect = []
+    assert is_sealed_confirmation_opener(create) is False
+    assert infer_step_risk(create).risk == "irreversible"
+    assert effective_step_risk(create) == "irreversible"
+
+
+def test_confirmation_opener_with_effect_stays_irreversible():
+    create = _click("step_010", "Create New Patient", "#create")
+    create.risk = "reversible"
+    create.risk_explanation = f"{CONFIRMATION_OPENER_PREFIX} (step_011)"
+    create.expect = [
+        Postcondition(
+            kind=PostconditionKind.TEXT_PRESENT,
+            text="Confirm Create New Patient",
+            timeout_s=10.0,
+        )
+    ]
+    create.effects = [
+        Effect(
+            kind=EffectKind.RECORD_WRITTEN,
+            match={"email": "test@example.com"},
+            expected_count=1,
+            forbid_collateral_loss=True,
+            risk="reversible",
+            probe="synthetic test",
+            timeout_s=5.0,
+        )
+    ]
+    assert is_sealed_confirmation_opener(create) is False
+    assert infer_step_risk(create).risk == "irreversible"
