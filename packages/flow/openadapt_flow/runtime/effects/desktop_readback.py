@@ -763,6 +763,22 @@ def _shows_identity(text: str, identity: str) -> bool:
     return False
 
 
+def _row_shows_identity(row: Seen, identity: str) -> bool:
+    """Whether a result row shows ``identity`` on its own: in its text as
+    :func:`_shows_identity` reads it, or as the whole of a run of its cells
+    (``Neil`` | ``Sorenson`` | ``1980-02-11``), never as part of a cell."""
+
+    if _shows_identity(row.text, identity):
+        return True
+    want = _norm(identity)
+    cells = [_norm(text) for text, _ in row.parts]
+    return any(
+        " ".join(cells[start:end]) == want
+        for start in range(len(cells))
+        for end in range(start + 1, len(cells) + 1)
+    )
+
+
 def _identity_piece(row: Seen, identity: str) -> Seen:
     """The row, aimed at the piece that shows the identifier (or a word of
     it), so the click lands on data the look-up checked, not on a button
@@ -944,7 +960,7 @@ def look_up(
             if rows is None:
                 return None
             matching = [
-                r for r in rows if _shows_identity(r.text, target.identity_value)
+                r for r in rows if _row_shows_identity(r, target.identity_value)
             ]
             return matching or None
 
