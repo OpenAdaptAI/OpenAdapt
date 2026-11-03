@@ -118,5 +118,31 @@ In every run the stop came before any save, the sheet's "Later" button was
 read and admitted through AX, and the bridge click on the sheet passed the
 window checks. Finding 8 is what keeps the rest from completing.
 
-Not covered here: Windows UI Automation and RDP to the Windows lab. They wait
-on `WindowsBackend.element_identity_at` and the lab.
+## Windows UI Automation (lab VM)
+
+`qualify_windows.py` runs the same check on the lab's Patient Notes WinForms
+app through `WindowsBackend` and `win_agent`. The record check reads a fresh
+copy of the guest's SQLite file over WinRM. With `interrupt=after_search`,
+the app shows an owned "Session notice" message box after the search. The box
+covers the right part of the patient header, the next step's identity band
+([screenshot](results/windows-uia-20261103-session-notice.png)). Run it with
+`OAFLOW_WINLAB_SCRIPTS` set to a folder holding the lab's `patient_notes.ps1`
+and `pn_db.py` (the copies with the `interrupt` knob), plus the lab helpers
+`qualify_lab_native.py` and `winrm_lab.py` on `PYTHONPATH`. The JSON records
+each app file's SHA-256.
+
+**It doesn't pass yet. In each run, the stop came before any save and
+nothing was written.**
+
+| Run | Result |
+| --- | --- |
+| [before #1724](results/windows-uia-20261103-before-1724.json) | Recorded and certified. The governed run stopped at the note field: identity mismatch, `REJECTED_POLICY`, never repaired ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)) |
+| [after #1724 and #1727](results/windows-uia-20261103-center-rule.json) | The same stop: the read `Patient: Neil Sorenson (1984-` is the recorded band word for word up to the dialog's edge, and the rule accepts it offline. The live `owned_window_over` answered None (finding 9) |
+
+9. **`owned_window_over` on Windows answers only when the owned window covers
+   the band's center.** The session notice starts at x 388, and the band runs
+   from x 227 to x 430, so the dialog meets the band but not its center at
+   x 328. The agent's `/window/owned-over` returned `window: None`, although
+   the recorded window and the z-order were right. The macOS hook answers on
+   any overlap, and the #1724 rule needs only that: the text left uncovered
+   must still be the recorded band, cut only at its end.

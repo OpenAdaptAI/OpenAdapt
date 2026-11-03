@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import sqlite3
@@ -54,6 +55,9 @@ import qualify_macos as mac  # noqa: E402
 import winrm_lab  # noqa: E402
 
 RESULTS = HERE / "results"
+#: Where the app files pushed to the guest come from (the lab's copies, which
+#: carry the ``interrupt`` knob, until they land here).
+LAB_FILES = Path(os.environ.get("OAFLOW_WINLAB_SCRIPTS") or DESKTOP)
 GUEST = lab_native.GUEST
 PY = lab_native.PY
 SEARCH = "Neil"
@@ -293,7 +297,7 @@ def main() -> int:
     endpoint = lab.launch_agent(token=os.environ["OAFLOW_WINLAB_AGENT_TOKEN"])
     backend = endpoint.backend()
     for name in ("pn_db.py", "patient_notes.ps1"):
-        lab.push_file(DESKTOP / name, rf"{GUEST}\{name}")
+        lab.push_file(LAB_FILES / name, rf"{GUEST}\{name}")
     try:
         mac._approver_roster(root)
         bundle, compiled = _record(lab, backend, root)
@@ -308,6 +312,7 @@ def main() -> int:
     stages = json.dumps(checked["stages"])
     target_id = 1
     checks = {
+        "notice_stopped_the_run": checked["status"] != "not_needed",
         "bundle_certified": compiled["certified_clinical_write"],
         "repair_resumed": checked["status"] == "resumed",
         "resume_verified": any(
@@ -346,6 +351,10 @@ def main() -> int:
             ).stdout.splitlines()
             if "repair_every_backend/results/" not in line
         ],
+        "app_files": {
+            name: hashlib.sha256((LAB_FILES / name).read_bytes()).hexdigest()
+            for name in ("pn_db.py", "patient_notes.ps1")
+        },
         "compiled": compiled,
         "repair_with_record_check": checked,
         "repair_under_demo_profile": demo,
