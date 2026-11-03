@@ -780,7 +780,7 @@ jobs:
           set -e
           sudo apt-get install -y \
             at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
-            libcairo2-dev libgirepository-2.0-dev pkg-config xauth xvfb
+            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -797,16 +797,18 @@ jobs:
         timeout-minutes: 10
         run: |
           mkdir -p runs/linux-atspi
-          dbus-run-session -- \
-            xvfb-run -a -s "-screen 0 1280x800x24" \
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
             env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
             python scripts/qualify_linux_atspi.py \
             --output runs/linux-atspi/results.json
       - name: Record, compile, run and repair on a GTK3 app with SQLite
         timeout-minutes: 15
         run: |
-          dbus-run-session -- \
-            xvfb-run -a -s "-screen 0 1280x800x24" \
+          # xvfb-run outside dbus-run-session: the D-Bus-activated AT-SPI
+          # registry needs DISPLAY to synthesize input. openbox makes the
+          # app's window active, which physical input requires.
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
+            bash -c 'openbox >/dev/null 2>&1 & sleep 1; exec "$@"' bash \
             env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
             python benchmark/repair_every_backend/qualify_linux.py \
             --output runs/linux-atspi/record-compile-run.json

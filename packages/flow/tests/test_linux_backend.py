@@ -791,3 +791,113 @@ def test_atspi_client_ancestry_walks_to_the_exact_window() -> None:
 )
 def test_atspi_client_ancestry_fails_closed(element) -> None:
     assert _atspi_client().ancestry(TARGET_WINDOW, element) is None
+
+
+# -- exact read-back of a typed field (text_value_at / focused_text_value) -----
+
+
+class TextClient(FakeLinuxClient):
+    def __init__(self, value="typed", **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.text_at_point = TEXT_ELEMENT
+        self.value = value
+
+    def editable_text(self, element):
+        self.calls.append(("editable-text", element.native_id))
+        return self.value
+
+
+def test_text_value_reads_the_editable_field_under_the_point() -> None:
+    client = TextClient()
+    assert backend(client).text_value_at(100, 100) == "typed"
+    assert ("editable-text", TEXT_ELEMENT.native_id) in client.calls
+
+
+def test_focused_text_value_reads_the_focused_field() -> None:
+    assert backend(TextClient(value="")).focused_text_value() == ""
+
+
+def test_text_value_abstains_outside_scope_or_without_a_reader() -> None:
+    client = TextClient()
+    client.text_at_point = LinuxElement(
+        "0.2:1",
+        "body",
+        "textbox",
+        "Document",
+        "gedit",
+        "other.txt",
+        9001,
+        (120, 260, 580, 380),
+        ("focus",),
+    )
+    assert backend(client).text_value_at(100, 100) is None
+    client.focused = LinuxElement(
+        "0.1:9",
+        "body",
+        "textbox",
+        "Document",
+        "gedit",
+        "oa-trial.txt",
+        4242,
+        (120, 260, 580, 380),
+        ("focus",),
+    )
+    assert backend(client).focused_text_value() is None
+    assert backend().text_value_at(100, 100) is None
+    assert backend().focused_text_value() is None
+
+
+def test_atspi_editable_text_reads_only_editable_text_fields() -> None:
+    from types import SimpleNamespace
+
+    client = _atspi_client()
+    states = {"EDITABLE"}
+    client._state_contains = lambda node, name: name in states  # type: ignore[method-assign]
+    client._atspi.Text = SimpleNamespace(get_text=lambda node, start, end: "abc")
+    field = _Node("text", "Note", (1, 1, 10, 10))
+    element = LinuxElement(
+        "x",
+        None,
+        "textbox",
+        "Note",
+        "gedit",
+        "oa-trial.txt",
+        9001,
+        (1, 1, 10, 10),
+        ("focus",),
+        native=field,
+    )
+    assert client.editable_text(element) == "abc"
+    password = _Node("password text", "PIN", (1, 1, 10, 10))
+    assert (
+        client.editable_text(
+            LinuxElement(
+                "x",
+                None,
+                "textbox",
+                "PIN",
+                "gedit",
+                "oa-trial.txt",
+                9001,
+                (1, 1, 10, 10),
+                (),
+                native=password,
+            )
+        )
+        is None
+    )
+    states.clear()
+    assert client.editable_text(element) is None
+
+
+def test_atspi_focus_window_accepts_an_already_active_window() -> None:
+    client = _atspi_client()
+    active = {"value": True}
+    client.window_is_active = lambda window: active["value"]  # type: ignore[method-assign]
+    assert client.focus_window(TARGET_WINDOW) is True
+    active["value"] = False
+    # Not active, and a frame without a component interface can't be focused.
+    window = LinuxWindow(
+        "0.1", "gedit", "oa-trial.txt", 9001, (0, 0, 1, 1), native=object()
+    )
+    assert client.focus_window(window) is False

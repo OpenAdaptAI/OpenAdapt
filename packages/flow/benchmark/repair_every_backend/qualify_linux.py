@@ -26,11 +26,15 @@ display (Xvfb in CI):
 4. checks the refusals: with no verifier, or under ``demo``, the fix is not
    admitted and nothing is written.
 
-Usage (inside an X11 session with a session D-Bus and the AT-SPI registry)::
+Usage, in the Linux qualification container (Xvfb, openbox, session D-Bus,
+AT-SPI)::
 
-    dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" \\
-        env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \\
+    benchmark/linux_container/run.sh build
+    OA_LINUX_SETUP=1 benchmark/linux_container/run.sh \
         python benchmark/repair_every_backend/qualify_linux.py
+
+or on any X11 session with a window manager, a session D-Bus started after
+``DISPLAY`` is set, and ``GTK_MODULES=atk-bridge`` (the CI job's setup).
 
 Writes ``benchmark/repair_every_backend/results/linux-atspi-<date>.json``
 (or ``--output``).
@@ -96,10 +100,16 @@ class App:
         )
 
     def close(self) -> None:
+        from openadapt_flow.backends.linux_backend import AtspiLinuxClient
+
         self.proc.kill()
         self.proc.wait(timeout=10)
-        # Let the registry drop the old window before the next one appears.
-        time.sleep(1.0)
+        # The registry drops a killed app's window a moment later; the next
+        # run would otherwise see two "Chart" windows and refuse.
+        client = AtspiLinuxClient()
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and client.find_windows(APP, TITLE):
+            time.sleep(0.3)
 
 
 def _backend() -> Any:

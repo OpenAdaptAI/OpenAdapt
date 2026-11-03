@@ -675,6 +675,54 @@ class LinuxBackend:
         except Exception:  # noqa: BLE001 - a momentary AT-SPI failure is a miss
             return None
 
+    def text_value_at(self, x: int, y: int) -> Optional[str]:
+        """The exact text of the editable field under (x, y), from AT-SPI.
+
+        An optional structural observation the runtime uses only to verify
+        that a TYPE step landed (the browser backend's ``text_value_at``).
+        None when the point is not over an editable text field in this exact
+        window, the field is a password field, or the client can't read it,
+        so the runtime falls back to its visual check.
+        """
+        reader = getattr(self._client, "editable_text", None)
+        if not callable(reader):
+            return None
+        try:
+            window, global_x, global_y = self._global_point(
+                int(x), int(y), require_active=False
+            )
+            element = self._client.element_at_point(window, global_x, global_y)
+            if element is None or not self._in_scope(element, window):
+                return None
+            value = reader(element)
+        except Exception:
+            return None
+        return value if isinstance(value, str) else None
+
+    def focused_text_value(self) -> Optional[str]:
+        """The exact text of the one focused editable field in this window."""
+        reader = getattr(self._client, "editable_text", None)
+        if not callable(reader):
+            return None
+        try:
+            window = self._resolve_window()
+            element = self._client.focused_element(window)
+            if element is None or not self._in_scope(element, window):
+                return None
+            value = reader(element)
+        except Exception:
+            return None
+        return value if isinstance(value, str) else None
+
+    def _in_scope(self, element: LinuxElement, window: LinuxWindow) -> bool:
+        """The element belongs to this backend's exact app, window and process."""
+        return (
+            element.app_name.casefold() == self._app.casefold()
+            and element.window_title.casefold() == self._window_title.casefold()
+            and element.window_title.casefold() == window.title.casefold()
+            and element.pid == window.pid
+        )
+
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AT-SPI element under (x, y), for a read-back.
 
@@ -1308,15 +1356,24 @@ class AtspiLinuxClient:
         return self._state_contains(window.native, "ACTIVE")
 
     def focus_window(self, window: LinuxWindow) -> bool:
+        """Whether ``window`` is the active window, asking for focus if not.
+
+        GTK refuses ``grab_focus`` on a top-level frame, so a window that is
+        already active counts as focused; otherwise it must be active after
+        the request.
+        """
+        if self.window_is_active(window):
+            return True
         component = self._call(
             window.native, "get_component_iface", "queryComponent", default=None
         )
         if component is None:
             return False
         try:
-            return bool(component.grab_focus())
+            component.grab_focus()
         except Exception:
             return False
+        return self.window_is_active(window)
 
     def capture_window(self, window: LinuxWindow) -> tuple[bytes, int, int]:
         x, y, width, height = window.bounds
@@ -1631,6 +1688,22 @@ class AtspiLinuxClient:
         if not accepted:
             raise LinuxBackendError("AT-SPI native action was rejected")
         return f"atspi_{operation}"
+
+    #: Raw AT-SPI roles whose text is an editable value (not a password).
+    _EDITABLE_ROLES = frozenset({"text", "entry", "editbar"})
+
+    def editable_text(self, element: LinuxElement) -> Optional[str]:
+        """The full text of an editable text field; None for anything else."""
+        node = element.native
+        if node is None or self._raw_role(node) not in self._EDITABLE_ROLES:
+            return None
+        if not self._state_contains(node, "EDITABLE"):
+            return None
+        try:
+            value = self._atspi.Text.get_text(node, 0, -1)
+        except Exception:
+            return None
+        return value if isinstance(value, str) else None
 
     def replace_text(self, element: LinuxElement, text: str) -> bool:
         editable = self._call(

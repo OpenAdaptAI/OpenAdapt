@@ -121,7 +121,10 @@ class Chart:
             panel.get_style_context().add_class("notice")
             panel.set_size_request(420, 220)
             panel.set_border_width(24)
+            # A notice, announced the way a toolkit's alert is (Chart.swift
+            # gives its panel the AX sheet role).
             panel.get_accessible().set_name("Update available")
+            panel.get_accessible().set_role(Atk.Role.ALERT)
             heading = Gtk.Label(label="Update available", xalign=0)
             heading.get_style_context().add_class("banner")
             body = Gtk.Label(label="Version 2.1 is ready to install.", xalign=0)

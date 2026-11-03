@@ -220,7 +220,9 @@ def test_root_ci_runs_the_linux_atspi_qualification() -> None:
     assert job.index("sudo apt-get update") < job.index(
         "scripts/qualify_linux_atspi.py"
     )
-    assert "dbus-run-session" in job and "xvfb-run" in job
+    assert "xvfb-run -a" in job and "dbus-run-session --" in job
+    assert job.index("xvfb-run -a") < job.index("dbus-run-session --")
+    assert "openbox" in job
     assert "--output runs/linux-atspi/results.json" in job
     assert "benchmark/repair_every_backend/qualify_linux.py" in job
     assert "if-no-files-found: error" in job
