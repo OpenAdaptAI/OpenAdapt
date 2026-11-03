@@ -36,6 +36,7 @@ class Fhir:
         self.status = 201
         self.received: list[tuple[str, str, bytes]] = []
         self.on_write: Any = None
+        self.reply_body: Any = None
         fx = self
 
         class H(BaseHTTPRequestHandler):
@@ -48,8 +49,11 @@ class Fhir:
                 fx.received.append((self.command, self.path, body))
                 if fx.on_write:
                     fx.on_write()
-                rid = f"a{len(fx.received)}"
-                out = json.dumps({"resourceType": "AllergyIntolerance", "id": rid})
+                if fx.reply_body is not None:
+                    out = fx.reply_body
+                else:
+                    rid = f"a{len(fx.received)}"
+                    out = json.dumps({"resourceType": "AllergyIntolerance", "id": rid})
                 self.send_response(fx.status)
                 self.send_header("Content-Type", "application/fhir+json")
                 self.send_header("Content-Length", str(len(out)))
@@ -281,6 +285,22 @@ def test_a_later_write_with_no_known_record_makes_a_late_refutation_uncertain(
     sh = env["sh"]
     _confirmed(env, monkeypatch)
     env["fhir"].status = 504  # a later create whose reply is lost
+    _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p2"))
+    env["calls"]["outcome"] = "needs_review"
+    env["calls"]["ev"] = {"agent_writes": 1}
+    sh.flush()
+    sh.run_rechecks(now=True)
+    assert sh.episodes[0].late_verdict == "UNCERTAIN"
+    assert "can't tell apart" in sh.episodes[0].late_reasons[0]
+
+
+def test_a_later_2xx_write_with_no_known_record_makes_a_late_refutation_uncertain(
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sh = env["sh"]
+    _confirmed(env, monkeypatch)
+    env["fhir"].status = 200
+    env["fhir"].reply_body = "{}"  # a 2xx reply that carries no id or Location
     _send(sh, "POST", "/fhir/R4/AllergyIntolerance", _allergy("Patient/p2"))
     env["calls"]["outcome"] = "needs_review"
     env["calls"]["ev"] = {"agent_writes": 1}
