@@ -1189,7 +1189,7 @@ class ReplayerRunner:
     def __init__(
         self,
         make_replayer: Callable[[], Any],
-        fresh_session: Optional[Callable[[], None]] = None,
+        fresh_session: Optional[Callable[..., None]] = None,
     ) -> None:
         self.make_replayer = make_replayer
         self.fresh_session = fresh_session
