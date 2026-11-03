@@ -300,3 +300,29 @@ def test_the_recorded_band_comes_from_the_crop_and_must_meet_the_template(tmp_pa
     )
     other = vision("Patient: Nell Sorensen (1986-07-09)")
     assert _recorded_band_text(workflow, tmp_path, step, other) is None
+
+
+@pytest.mark.parametrize(
+    "observed",
+    [
+        "Patient: Neil Sorens",  # the dialog hides where Sorenson/Sorensen differ
+        "Patient: Neil Soren",
+        "Patient: Neil So",
+    ],
+)
+def test_a_dialog_hiding_the_difference_below_the_floor_stays_a_halt(
+    observed,
+) -> None:
+    assert _halt(_report(observed=observed), _workflow(), Backend()) is None
+
+
+def test_a_hidden_birth_date_is_reclassified_only_for_the_probe_to_recheck() -> None:
+    # The whole name shows and the dialog hides the birth date, so a
+    # same-name patient could be behind it. Reclassifying only routes the
+    # stop to an ``after`` repair: the probe replays this step with its own
+    # identity check on the uncovered band, which refuses another birth date.
+    found = _halt(
+        _report(observed="Patient: Neil Sorenson (19"), _workflow(), Backend()
+    )
+    assert found is not None and found[1] == "after"
+    assert found[0].id == "search"  # the note step itself is replayed unchanged
