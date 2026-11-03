@@ -1485,21 +1485,6 @@ def judge_frame(
         extra = undeclared_columns(name, after, also)
         if not extra:
             return
-        if name in hashers:
-            hit = covers(
-                learned,
-                table=name,
-                change="added",
-                relation="target",
-                fields=extra,
-                before=None,
-                after=after,
-                hasher=hashers.get(name),
-                actor=actor,
-            )
-            if hit:
-                learned_used.add(hit)
-                return
         ref, _hashed = ref_of(name, key, None, after)
         others = actors(name, ref, None) - self_ids
         change = FrameChange(name, "added", "self", extra, on_target=True, key=key)
@@ -1728,23 +1713,6 @@ def judge_frame(
                         )
                     )
                     continue
-                if stray and name in hashers:
-                    # A move a person approved on the write's own row: only
-                    # these columns, on a row this run declares.
-                    hit = covers(
-                        learned,
-                        table=name,
-                        change="changed",
-                        relation="target",
-                        fields=stray,
-                        before=before,
-                        after=after,
-                        hasher=hasher,
-                        actor=actor,
-                    )
-                    if hit:
-                        learned_used.add(hit)
-                        continue
                 if stray:
                     note(
                         FrameChange(

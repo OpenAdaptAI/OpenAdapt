@@ -259,7 +259,7 @@ allow-listed bookkeeping table explains it.
 
 An app that writes on every request (the acting user's `last_login`, a
 token's `last_seen`) moves rows in every window. `frame.learned` excuses
-exactly those moves, on the write's own rows or the acting user's rows,
+exactly those moves on the acting user's own rows (never the written row),
 once a person approves them: see [LEARNED_EXCUSES.md](LEARNED_EXCUSES.md).
 
 This is the frame of an EspoCRM "create opportunity" contract on MariaDB:

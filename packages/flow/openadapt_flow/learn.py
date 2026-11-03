@@ -18,11 +18,15 @@ Fail closed, at every step:
 - an episode is learned from only when its declared effects held and its
   frame was refuted by database rows alone; every other episode is ignored
   and counted;
-- a moved row is excusable only as the write's own row (``target``) or the
-  acting user's row (``actor_row``: the users table's row keyed by the
-  actor's id, or a row whose user column holds it; the users table and its
-  user columns come from the schema's foreign keys or a person's mapping);
-  any other row stays a stop, however often it moves;
+- a moved row is excusable only as the acting user's row (``actor_row``:
+  the users table's row keyed by the actor's id, or a row whose user
+  columns hold it; the users table and its user columns come from the
+  schema's foreign keys or a person's mapping); any other row stays a stop,
+  however often it moves, the written row's collateral included (a person
+  excuses an app-set column there in the generator's bookkeeping answer);
+- a column the agent's requests sent, a run parameter or the contract
+  names is never learned, and nothing is learned for a kind whose request
+  bodies weren't recorded;
 - an excuse names exact columns, a change (``changed`` or ``added``, never a
   removal) and a relation, and is proposed only when seen in enough of the
   kind's episodes (``K`` of ``N``);
@@ -324,7 +328,12 @@ def relation_of(move: Mapping[str, Any], users: Optional[Users]) -> tuple[str, s
     if not columns or any(not c or c.startswith("(") for c in columns):
         return "", "its moved columns can't be named"
     if move.get("target"):
-        return "target", ""
+        # Never learned: a column the agent's request sets under another
+        # field name looks the same as one the app sets.
+        return "", (
+            "the written row: collateral on it stays a stop (excuse a column the "
+            "app sets there in the contract generator's bookkeeping answer)"
+        )
     if users is None:
         return "", "not the write's own row, and no users table was named"
     candidates = users.actor_columns(str(move.get("table")))
@@ -403,12 +412,12 @@ def propose(
                 relation, extra = relation_of(move, users)
                 table, change = str(move.get("table")), str(move.get("change"))
                 columns = tuple(sorted(str(c) for c in move.get("columns") or []))
-                if relation == "target" and not recorded:
+                if relation and not recorded:
                     relation, extra = (
                         "",
                         (
-                            "the write's own row, but this kind's request bodies "
-                            "weren't recorded, so the agent may have set it"
+                            "this kind's request bodies weren't recorded, so "
+                            "the agent may have set it"
                         ),
                     )
                 if relation:
@@ -533,7 +542,7 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
             "",
         ]
     else:
-        lines += ["No users table named: only the write's own rows can be excused.", ""]
+        lines += ["No users table named: nothing can be excused.", ""]
     for kind, k in proposal["kinds"].items():
         lines += [f"## {kind or '(no kind)'}", ""]
         lines.append(
@@ -551,7 +560,7 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
         if not k.get("request_bodies_recorded", False):
             lines += [
                 "The agent's request bodies weren't recorded for this kind, so no "
-                "excuse on the write's own row is proposed.",
+                "excuse is proposed.",
                 "",
             ]
         if k["excuses"]:
@@ -561,9 +570,7 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
             ]
             for e in k["excuses"]:
                 row = (
-                    "the write's own row"
-                    if e["relation"] == "target"
-                    else "the acting user's row ("
+                    "the acting user's row ("
                     + ", ".join(f"`{c}`" for c in e["actor_columns"])
                     + ")"
                     + (
@@ -592,6 +599,10 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
         if k["below_threshold"] or k["stays_a_stop"]:
             lines.append("")
     lines += [
+        "Collateral on the row a write declares is never learned: it stays a "
+        "stop. A column the app sets there on its own (a modified time, a "
+        "version) is excused in the contract generator's bookkeeping answer.",
+        "",
         "Approve all of it with one command (it records this digest):",
         "",
         "    openadapt-flow learn approve <this proposal.yaml> --by <your name> ...",

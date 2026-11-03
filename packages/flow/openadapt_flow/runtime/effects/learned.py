@@ -9,17 +9,20 @@ them into the contract as ``frame.learned``. This module holds that key and
 the one rule both the learner and the frame use to say how a moved row
 relates to the write.
 
-A row relates to the write in one of two ways, or not at all:
+Only one relation can be excused:
 
-- ``target``: a row the write declares or adds (its effects' records and
-  side records). The frame already knows these rows.
 - ``actor_row``: a row of the acting user. Each of its ``actor_columns``
   holds the actor's id, before and after the write. The users table's own
   row has its key there; a token or user-property row has its user columns
   there. Every user column the row was seen to hold the actor's id in must
   hold it: a token the actor issued for someone else is not the actor's.
 
-Nothing else can be excused, however often it moves. A learned excuse names
+Nothing else can be excused, however often it moves. In particular a
+``target`` excuse (a column of the row the write declares) is refused when
+the contract loads: the learner can't tell a column the app sets on the
+written row from one the agent's own request sets under another field
+name, so collateral on the written row stays a stop. A person excuses such
+a column in the contract generator's bookkeeping answer instead. A learned excuse names
 a table, the exact columns, the change (``changed`` or ``added``, never a
 removal) and the relation. At check time the relation is derived again from
 this run's actor and declared rows, so an excuse never reaches another
@@ -83,6 +86,12 @@ class LearnedExcuse(BaseModel):
 
     @model_validator(mode="after")
     def _shape(self) -> "LearnedExcuse":
+        if self.relation == "target":
+            raise ValueError(
+                "a learned excuse can't cover the written row (relation target): "
+                "collateral on it stays a stop; excuse an app-set column in the "
+                "contract generator's bookkeeping answer instead"
+            )
         if self.relation == "actor_row":
             cols = self.actor_columns or []
             if not cols or any(not c or c.startswith("__") for c in cols):

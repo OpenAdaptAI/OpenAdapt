@@ -345,7 +345,7 @@ TOUCHED = {
     "change": "changed",
     "relation": "target",
 }
-ACTOR_EXCUSES = learned_block(LOGIN, SEEN, FIRST_LOGIN, STAMP)
+ACTOR_EXCUSES = learned_block(LOGIN, SEEN, FIRST_LOGIN)
 
 _n = [0]
 
@@ -365,13 +365,16 @@ def request_bookkeeping(e: Engine, user: str = ACTOR) -> None:
     )
 
 
-def write_note(e: Engine, title: str) -> None:
+def write_note(e: Engine, title: str, stamp: Optional[str] = None) -> None:
+    """The agent's note. ``stamp`` set: a column the write doesn't declare,
+    on the written row."""
+
     request_bookkeeping(e)
     e.run(
         "INSERT INTO note (title, body, stamp) VALUES (%s, %s, %s)",
         title,
         "Body text",
-        "s1",
+        stamp,
     )
 
 
@@ -406,7 +409,7 @@ def test_bookkeeping_refutes_a_correct_write_until_learned(
         engine,
         note_contract(engine),
         {"title": t, "body": "Body text"},
-        lambda: write_note(engine, t),
+        lambda: write_note(engine, t, stamp="s1"),
         tmp_path,
     )
     assert before.outcome.value == "REFUTED"
@@ -429,8 +432,20 @@ def test_bookkeeping_refutes_a_correct_write_until_learned(
     )
     assert after.outcome.value == "CONFIRMED", after.reasons
     used = after.evidence["frame"]["learned"]["used"]
-    assert len(used) == 4
+    assert len(used) == 3
     assert after.evidence["frame"]["learned"]["proposal_sha256"] == DIGEST
+
+    # Collateral on the written row stays a stop, learned excuses or not.
+    t = _title()
+    _refuted(
+        check(
+            engine,
+            note_contract(engine, ACTOR_EXCUSES),
+            {"title": t, "body": "Body text"},
+            lambda: write_note(engine, t, stamp="s2"),
+            tmp_path,
+        )
+    )
 
 
 # -- adversarial: what an actor_row excuse must never cover ------------------------
@@ -629,99 +644,60 @@ def test_actor_row_follows_this_runs_actor(engine: Engine, tmp_path: Path) -> No
     )
 
 
-# -- adversarial: what a target excuse must never cover ------------------------------
+# -- the written row: never excused -------------------------------------------------
 
 
-def test_target_excuse_never_covers_a_look_alike(
+@pytest.mark.parametrize("excuse", [STAMP, TOUCHED], ids=["added", "changed"])
+def test_a_target_excuse_is_refused_at_load(engine: Engine, excuse: dict) -> None:
+    """Collateral on the written row is never learned: a ``frame.learned``
+    entry with ``relation: target`` doesn't load, whatever the engine."""
+
+    with pytest.raises(Exception, match="can't cover the written row"):
+        Contract.from_dict(asset_contract(engine, learned_block(excuse, LOGIN)))
+
+
+def test_collateral_on_the_written_row_stays_a_stop(
     engine: Engine, tmp_path: Path
 ) -> None:
-    contract = asset_contract(engine, learned_block(TOUCHED, LOGIN))
+    """With every actor excuse learned, a correct rename that also moves an
+    undeclared column of the asset is refuted, and so is a look-alike asset
+    moved beside it (the retest's every-row fail-open)."""
+
+    contract = asset_contract(engine, learned_block(LOGIN, SEEN, FIRST_LOGIN))
 
     def correct() -> None:
         request_bookkeeping(engine)
-        engine.run(
-            "UPDATE asset SET name = 'Laptop B', modified_at = 'm1' WHERE tag = 'LT-100'"
-        )
+        engine.run("UPDATE asset SET name = 'Laptop C' WHERE tag = 'LT-100'")
 
     ok = check(
-        engine, contract, {"tag": "LT-100", "name": "Laptop B"}, correct, tmp_path
-    )
-    # user_property and api_token moves aren't excused by this block.
-    assert ok.outcome.value == "REFUTED"
-    tables = {m["table"] for m in ok.evidence["frame"]["moves"]}
-    assert tables == {"api_token", "user_property"}
-
-    contract = asset_contract(engine, learned_block(TOUCHED, LOGIN, SEEN, FIRST_LOGIN))
-
-    def correct2() -> None:
-        request_bookkeeping(engine)
-        engine.run(
-            "UPDATE asset SET name = 'Laptop C', modified_at = 'm2' WHERE tag = 'LT-100'"
-        )
-
-    ok = check(
-        engine, contract, {"tag": "LT-100", "name": "Laptop C"}, correct2, tmp_path
+        engine, contract, {"tag": "LT-100", "name": "Laptop C"}, correct, tmp_path
     )
     assert ok.outcome.value == "CONFIRMED", ok.reasons
 
-    def look_alike() -> None:
-        correct_rename = "UPDATE asset SET name = 'Laptop D' WHERE tag = 'LT-100'"
+    def stray() -> None:
         request_bookkeeping(engine)
-        engine.run(correct_rename)
-        engine.run("UPDATE asset SET modified_at = 'm3' WHERE tag = 'LT-1000'")
+        engine.run(
+            "UPDATE asset SET name = 'Laptop D', modified_at = 'm1' "
+            "WHERE tag = 'LT-100'"
+        )
+
+    _refuted(
+        check(engine, contract, {"tag": "LT-100", "name": "Laptop D"}, stray, tmp_path)
+    )
+
+    def look_alike() -> None:
+        request_bookkeeping(engine)
+        engine.run("UPDATE asset SET name = 'Laptop E' WHERE tag = 'LT-100'")
+        engine.run("UPDATE asset SET assigned_to = 2 WHERE tag = 'LT-1000'")
 
     _refuted(
         check(
             engine,
             contract,
-            {"tag": "LT-100", "name": "Laptop D"},
+            {"tag": "LT-100", "name": "Laptop E"},
             look_alike,
             tmp_path,
         )
-    )
-
-
-def test_excused_column_never_reaches_every_row(engine: Engine, tmp_path: Path) -> None:
-    """The fail-open the first retest found: a column excused for the
-    target was excused on every row of the table. A learned target excuse
-    on ``assigned_to`` covers the target only; a second asset checked out
-    beside it is collateral."""
-
-    checkout = {
-        "table": "asset",
-        "columns": ["assigned_to", "modified_at"],
-        "change": "changed",
-        "relation": "target",
-    }
-    contract = asset_contract(engine, learned_block(checkout, LOGIN, SEEN, FIRST_LOGIN))
-
-    def act() -> None:
-        request_bookkeeping(engine)
-        engine.run(
-            "UPDATE asset SET name = 'Laptop E', assigned_to = 2, modified_at = 'm4' "
-            "WHERE tag = 'LT-100'"
-        )
-        engine.run("UPDATE asset SET assigned_to = 2 WHERE tag = 'LT-1000'")
-
-    _refuted(
-        check(engine, contract, {"tag": "LT-100", "name": "Laptop E"}, act, tmp_path)
-    )
-
-
-def test_target_excuse_never_covers_another_column_of_the_target(
-    engine: Engine, tmp_path: Path
-) -> None:
-    contract = asset_contract(engine, learned_block(TOUCHED, LOGIN, SEEN, FIRST_LOGIN))
-
-    def act() -> None:
-        request_bookkeeping(engine)
-        engine.run(
-            "UPDATE asset SET name = 'Laptop F', assigned_to = 3, modified_at = 'm5' "
-            "WHERE tag = 'LT-100'"
-        )
-
-    _refuted(
-        check(engine, contract, {"tag": "LT-100", "name": "Laptop F"}, act, tmp_path)
     )
 
 
@@ -809,7 +785,6 @@ def test_learn_propose_approve_on_real_writes(engine: Engine, tmp_path: Path) ->
     assert got == {
         ("api_token", "changed", "actor_row", ("issued_by", "user_id")): ["last_seen"],
         ("app_user", "changed", "actor_row", ("id",)): ["last_login"],
-        ("note", "added", "target", ()): ["stamp"],
         ("user_property", "added", "actor_row", ("user_id",)): [
             "property",
             "user_id",
@@ -820,7 +795,7 @@ def test_learn_propose_approve_on_real_writes(engine: Engine, tmp_path: Path) ->
     assert "Proposed excuses" in md.read_text()
     loaded = learn.load_proposal(out)
     done = learn.approve(loaded, by="Test Reviewer", contracts={"create_note": [path]})
-    assert done == [("create_note", path, 4)]
+    assert done == [("create_note", path, 3)]
     approved = yaml.safe_load(path.read_text())
     assert (
         approved["frame"]["learned"]["proposal_sha256"] == proposal["proposal_sha256"]
@@ -876,7 +851,7 @@ def test_actor_row_never_covers_a_row_the_actor_issued_for_another_user(
     (``issued_by`` and ``user_id``) never covers the colleague's."""
 
     seen_both = {**SEEN, "actor_columns": ["issued_by", "user_id"]}
-    block = learned_block(LOGIN, seen_both, FIRST_LOGIN, STAMP)
+    block = learned_block(LOGIN, seen_both, FIRST_LOGIN)
     t = _title()
     ok = check(
         engine,
@@ -979,7 +954,7 @@ def test_the_agents_own_stray_column_is_never_learned(
     assert kind["request_bodies_recorded"] is True
     assert [e for e in kind["excuses"] if e["table"] == "asset"] == []
     stops = [s for s in kind["stays_a_stop"] if s["table"] == "asset"]
-    assert stops and "assigned_to" in stops[0]["why"]
+    assert stops and stops[0]["why"].startswith("the written row")
 
     path = tmp_path / "asset.yaml"
     path.write_text(yaml.safe_dump(asset_contract(engine)))
@@ -998,12 +973,12 @@ def test_the_agents_own_stray_column_is_never_learned(
     )
 
 
-def test_the_apps_own_target_column_is_learned_only_with_bodies(
+def test_the_apps_own_column_on_the_written_row_is_never_learned(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """``modified_at`` the app sets itself: proposed when the request
-    bodies show the agent never sent it, and not when they weren't
-    recorded."""
+    """``modified_at`` the app sets itself, and the agent's bodies never
+    sent: still not learned (a body field of another name could set it).
+    Without recorded bodies, nothing at all is learned."""
 
     def act(i: int) -> None:
         request_bookkeeping(engine)
@@ -1016,16 +991,22 @@ def test_the_apps_own_target_column_is_learned_only_with_bodies(
     with_bodies = _learn_assets(
         engine, tmp_path, act, lambda i: {"name": f"Laptop L{i}"}
     )["kinds"]["rename"]
-    asset = [e for e in with_bodies["excuses"] if e["table"] == "asset"]
-    assert [(e["columns"], e["relation"]) for e in asset] == [
-        (["modified_at"], "target")
-    ]
+    assert [e for e in with_bodies["excuses"] if e["table"] == "asset"] == []
+    assert {e["table"] for e in with_bodies["excuses"]} == {
+        "app_user",
+        "api_token",
+        "user_property",
+    }
+    stops = [s for s in with_bodies["stays_a_stop"] if s["table"] == "asset"]
+    assert "bookkeeping answer" in stops[0]["why"]
     without = _learn_assets(engine, tmp_path, act, lambda i: {}, recorded=False)
     kind = without["kinds"]["rename"]
     assert kind["request_bodies_recorded"] is False
-    assert [e for e in kind["excuses"] if e["table"] == "asset"] == []
+    assert kind["excuses"] == []
     out, md = learn.write_proposal(without, tmp_path / "nobodies.yaml")
-    assert "request bodies weren't recorded" in md.read_text()
+    text = md.read_text()
+    assert "request bodies weren't recorded" in text
+    assert "Collateral on the row a write declares is never learned" in text
 
 
 def test_an_added_actor_row_excuse_never_covers_more_rows_than_learned(
@@ -1081,7 +1062,7 @@ def test_an_excuse_covers_exactly_its_column_set(
     ``last_login`` alone is a set never seen: collateral."""
 
     both = {**LOGIN, "columns": ["email", "last_login"]}
-    block = learned_block(both, SEEN, FIRST_LOGIN, STAMP)
+    block = learned_block(both, SEEN, FIRST_LOGIN)
     t = _title()
     _refuted(
         check(
@@ -1103,7 +1084,7 @@ def test_a_column_the_contract_or_the_agent_names_is_never_learned() -> None:
             _ep(
                 "k",
                 [
-                    _move("note", ["stamp"], target=True, change="added"),
+                    _move("api_token", ["last_seen"], actor_columns=["user_id"]),
                     _move("app_user", ["last_login"], actor_columns=["id"]),
                 ],
                 **kw,
@@ -1111,15 +1092,35 @@ def test_a_column_the_contract_or_the_agent_names_is_never_learned() -> None:
         ] * 5
 
     base = learn.propose(eps(), users=USERS)["kinds"]["k"]["excuses"]
-    assert {e["table"] for e in base} == {"note", "app_user"}
+    assert {e["table"] for e in base} == {"api_token", "app_user"}
     for kw in (
-        {"contract_fields": ["stamp", "last_login"]},
-        {"sent_fields": ["Stamp", "user.last_login"]},
-        {"param_names": ["stamp", "last_login"]},
+        {"contract_fields": ["last_seen", "last_login"]},
+        {"sent_fields": ["Last_Seen", "user.last_login"]},
+        {"param_names": ["last_seen", "last_login"]},
     ):
         k = learn.propose(eps(**kw), users=USERS)["kinds"]["k"]
         assert k["excuses"] == [], kw
         assert len(k["stays_a_stop"]) == 2
+        assert all("agent's own requests" in s["why"] for s in k["stays_a_stop"])
+    # Without recorded bodies, nothing is learned.
+    k = learn.propose(eps(sent_fields=None), users=USERS)["kinds"]["k"]
+    assert k["excuses"] == [] and k["request_bodies_recorded"] is False
+
+
+def test_the_written_row_is_never_proposed() -> None:
+    eps = [
+        _ep(
+            "k",
+            [
+                _move("note", ["stamp"], target=True, change="added"),
+                _move("asset", ["modified_at"], target=True),
+            ],
+        )
+    ] * 6
+    k = learn.propose(eps, users=USERS)["kinds"]["k"]
+    assert k["excuses"] == []
+    assert len(k["stays_a_stop"]) == 2
+    assert all(s["why"].startswith("the written row") for s in k["stays_a_stop"])
 
 
 def test_approve_writes_every_file_or_none(
@@ -1249,7 +1250,7 @@ def test_k_of_n() -> None:
                 "k",
                 [_move("app_user", ["last_login"], actor_columns=["id"])]
                 if i < seen
-                else [_move("note", ["stamp"], target=True)],
+                else [_move("api_token", ["last_seen"], actor_columns=["user_id"])],
             )
             for i in range(total)
         ]
@@ -1260,7 +1261,7 @@ def test_k_of_n() -> None:
         e["table"]
         for e in learn.propose(eps(2, 5), users=USERS)["kinds"]["k"]["excuses"]
     ]
-    assert tables == ["note"]
+    assert tables == ["api_token"]
     # 10 episodes need 6.
     tables = [
         e["table"]
@@ -1307,7 +1308,7 @@ def test_every_other_episode_is_ignored_and_counted() -> None:
     assert len(k["excuses"]) == 1
 
 
-def test_without_users_only_target_rows() -> None:
+def test_without_users_nothing_is_excused() -> None:
     eps = [
         _ep(
             "k",
@@ -1319,7 +1320,7 @@ def test_without_users_only_target_rows() -> None:
         for _ in range(5)
     ]
     k = learn.propose(eps)["kinds"]["k"]
-    assert [e["table"] for e in k["excuses"]] == ["note"]
+    assert k["excuses"] == []
 
 
 def test_an_edited_proposal_is_refused(tmp_path: Path) -> None:
@@ -1346,7 +1347,7 @@ def test_approve_is_all_or_nothing_and_can_reject(tmp_path: Path) -> None:
             "k",
             [
                 _move("app_user", ["last_login"], actor_columns=["id"]),
-                _move("note", ["stamp"], target=True, change="added"),
+                _move("api_token", ["last_seen"], actor_columns=["user_id"]),
             ],
         )
     ] * 5
@@ -1358,7 +1359,7 @@ def test_approve_is_all_or_nothing_and_can_reject(tmp_path: Path) -> None:
     with pytest.raises(learn.LearnError, match="no proposed excuse"):
         learn.approve(p, by="R", contracts={"k": [good]}, reject=["E9"])
     ids = {e["table"]: e["id"] for e in p["kinds"]["k"]["excuses"]}
-    learn.approve(p, by="R", contracts={"k": [good]}, reject=[ids["note"]])
+    learn.approve(p, by="R", contracts={"k": [good]}, reject=[ids["api_token"]])
     block = yaml.safe_load(good.read_text())["frame"]["learned"]
     assert [x["table"] for x in block["excuses"]] == ["app_user"]
 
@@ -1390,7 +1391,8 @@ def test_a_contract_without_learned_keeps_its_digest(tmp_path: Path) -> None:
         ({**LOGIN, "columns": ["id", "last_login"]}, "actor column change"),
         ({**FIRST_LOGIN, "columns": ["property", "value"]}, "sets its actor column"),
         ({**LOGIN, "actor_columns": None}, "names its actor_columns"),
-        ({**STAMP, "actor_columns": ["user_id"]}, "go with relation actor_row"),
+        (STAMP, "can't cover the written row"),
+        (TOUCHED, "can't cover the written row"),
         ({**LOGIN, "relation": "any_row"}, "relation"),
     ],
 )
@@ -1412,7 +1414,6 @@ def test_learned_needs_the_database_frame(tmp_path: Path) -> None:
         "last_login",
         "last_seen",
         "property",
-        "stamp",
         "user_id",
         "value",
     ]
@@ -1573,7 +1574,8 @@ def test_collect_through_the_shadow_hook(tmp_path: Path) -> None:
     got = sorted(
         (x["table"], x["relation"]) for x in p["kinds"]["create_note"]["excuses"]
     )
-    assert got == [("app_user", "actor_row"), ("note", "target")]
+    # The note's stamp, set by the app on the written row, stays a stop.
+    assert got == [("app_user", "actor_row")]
     for ep in eps:
         for m in ep["moves"]:
             assert set(m) <= {
