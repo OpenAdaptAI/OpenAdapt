@@ -185,6 +185,9 @@ def _build_bundle(backend, recording: Path, work: Path, agent_url: str) -> Path:
             },
             field="note",
             value=ValueExpr(param="note"),
+            # Saving the same note again is the same write, not a second one.
+            idempotency_key=ValueExpr(param="note"),
+            key_field="note",
             risk="irreversible",
             probe="read-only patients row lookup",
         )
