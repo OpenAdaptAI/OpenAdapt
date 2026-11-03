@@ -190,7 +190,7 @@ def test_live_round_trip_through_backend():
     data = bench.accounts(bench.SEED)
     jobs = sorted(data)[:3]
     out = bench.run_size(1, jobs, data)
-    assert out["ok"] >= 2
+    assert out["ok"] == len(jobs), out
 
 
 def test_session_file_round_trip(tmp_path):

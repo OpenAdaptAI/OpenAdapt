@@ -12,8 +12,9 @@ Windows host the test runs on, which on CI is a GitHub-hosted
 The demonstration is recorded through the agent, compiled, and replayed from a
 reseeded database. The database, read with ``pn_db.py all`` and never through
 the screen, decides the outcome: the replay must write the note to patient 1
-and change no other row. A second replay against a roster with a near-identical
-sibling above the target must not write to the sibling.
+and change no other row. A second replay, against a roster where the search
+selects a near-identical sibling, must stop at the identity check and write
+nothing.
 
 Opt-in: skipped unless ``OAFLOW_WINDOWS_HOSTED_E2E=1`` on Windows.
 """
@@ -244,24 +245,35 @@ def test_record_compile_replay_through_windows_backend(host, tmp_path) -> None:
             run_dir=tmp_path / f"run-{drift}",
         )
         after = {r["id"]: r for r in host.rows()}
-        changed = sorted(i for i in after if after[i]["note"] != before[i]["note"])
+        changed = sorted(i for i in after if after[i] != before[i])
+        stops = [str(r.error) for r in report.results if r.error]
         outcomes[drift] = {
             "success": report.success,
             "rung_counts": report.rung_counts,
             "model_calls": report.model_calls,
             "changed_ids": changed,
             "target_note": after[TARGET_ID]["note"],
+            "stop": stops[-1] if stops else None,
         }
-        # The record decides. No row other than the target may change.
-        assert changed in ([], [TARGET_ID]), outcomes[drift]
+        # The record decides, and it must agree with the report: a completed
+        # run wrote exactly the demonstrated note to the target and nothing
+        # else; a stopped run wrote nothing at all.
         if report.success:
             assert changed == [TARGET_ID], outcomes[drift]
             assert after[TARGET_ID]["note"] == DEMO_NOTE, outcomes[drift]
+        else:
+            assert changed == [], outcomes[drift]
         assert report.model_calls == 0, outcomes[drift]
     evidence["outcomes"] = outcomes
     # The healthy replay must save; a stop there is a regression.
     assert outcomes["none"]["success"], outcomes["none"]
     assert outcomes["none"]["rung_counts"].get("structural", 0) >= len(CONTROLS)
+    # On the sibling roster the search selects a near-identical patient, so no
+    # recorded click can reach patient 1: the run must stop at the identity
+    # check, not save and not stop for some other reason.
+    siblings = outcomes["siblings"]
+    assert not siblings["success"], siblings
+    assert siblings["stop"] and "Identity check failed" in siblings["stop"], siblings
 
     if os.environ.get(EVIDENCE_ENV):
         Path(os.environ[EVIDENCE_ENV]).write_text(json.dumps(evidence, indent=2))
