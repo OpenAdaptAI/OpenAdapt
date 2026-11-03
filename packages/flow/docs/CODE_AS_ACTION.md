@@ -20,9 +20,11 @@ from openadapt_flow.compile_agent import ClaudeAgent, compile_first_run
 result = compile_first_run(
     "Open the referral for Jane Sample, start a Triage encounter, and save this note: {note}",
     params={"note": "Follow up in two weeks"},
-    agent=ClaudeAgent(),  # vision="code", claude-sonnet-5-5
-    url="http://localhost:8080/#tasks", verify="verify.yaml",
-    expect={"patient_id": "p1"}, on_screen=["Jane Sample", "MRN P1"],
+    agent=ClaudeAgent(),  # vision="code", claude-sonnet-5-5 by default
+    url="http://localhost:8080/#tasks",
+    verify="verify.yaml",
+    expect={"patient_id": "p1"},
+    on_screen=["Jane Sample", "MRN P1"],
 )
 ```
 
@@ -238,8 +240,8 @@ Each one wrongly refused, or failed to gate, a step on OpenEMR:
 ## Measured
 
 **Scoreboard, arm 7** is the quotable source (`benchmark/scoreboard`,
-`python -m scoreboard.build` over committed rows; PROTOCOL.md Amendments 10
-and 11).
+`python -m scoreboard.build` over committed rows; PROTOCOL.md Amendments 11
+and 12).
 
 Agent first runs against the program compiled from one of them, MockMed items
 21 to 40 (20 items; item 30 is a save the server drops while the screen says
@@ -262,7 +264,7 @@ banner. The scoreboard's word rule did not catch that wording, so the row
 keeps the rule's verdict and
 [HAND_REVIEW.md](../benchmark/scoreboard/raw/mockmed/code_agent/2026-10-25-rb/HAND_REVIEW.md)
 records the review.
-From Amendment 11 on, arm 7 reports success only when its last read-back
+From Amendment 12 on, arm 7 reports success only when its last read-back
 shows the save landed. The program for arm 3 was compiled and admitted from
 arm 7's item 21.
 

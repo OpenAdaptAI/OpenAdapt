@@ -45,6 +45,9 @@ def ensure_private_dir(path: Path, *, root: Path | None = None) -> Path:
 
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR_MODE)
+    if path.is_symlink() or not path.is_dir():
+        # A symlink here could send owner-only files somewhere else.
+        raise OSError(f"{path} is not a plain folder; refusing to use it")
     if not _posix():
         return path
     chain = [path]

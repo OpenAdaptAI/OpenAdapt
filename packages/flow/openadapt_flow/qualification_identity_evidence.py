@@ -105,6 +105,20 @@ def _read_pixel_crop(
     return payload
 
 
+def _ladder_part(check: IdentityCheck) -> IdentityCheck:
+    """The check without the candidate census the runtime adds after the ladder.
+
+    The census (runtime.identity_census) reads the whole live screen, which the
+    retained evidence does not hold, so only the ladder verdict is reproduced.
+    A census that changed the verdict (a halt or a mismatch) still fails the
+    status comparison.
+    """
+
+    return check.model_copy(
+        update={"candidate_count": None, "ambiguity_halt": None, "census_status": None}
+    )
+
+
 def _canonical_ladder_error(
     check: IdentityCheck,
     *,
@@ -166,7 +180,9 @@ def _canonical_ladder_error(
         if pixel_result is None:
             return "pixel identity crop evidence does not reproduce a verdict"
         pixel_result.pixel_evidence = evidence
-        if pixel_result.status != expected_status or pixel_result != check:
+        if pixel_result.status != expected_status or pixel_result != _ladder_part(
+            check
+        ):
             return "pixel identity crop evidence does not reproduce the runtime verdict"
         return None
 
@@ -224,7 +240,11 @@ def _canonical_ladder_error(
     except (TypeError, ValueError):
         return "canonical ladder evidence could not be reproduced"
 
-    if expected is None or expected.status != expected_status or expected != check:
+    if (
+        expected is None
+        or expected.status != expected_status
+        or expected != _ladder_part(check)
+    ):
         return "canonical ladder evidence does not reproduce the runtime verdict"
     return None
 

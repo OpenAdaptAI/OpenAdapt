@@ -1,0 +1,125 @@
+{
+  "tier": "3",
+  "cases": [
+    {
+      "case": 1,
+      "stored": "Rb000note",
+      "expected": "Rb000note",
+      "truth": "confirmed",
+      "verdict": "confirmed",
+      "correct": true,
+      "false_confirm": false,
+      "reason": "field 'note' equals the expected value",
+      "assurance": "screen_readback",
+      "elapsed_s": 35.66
+    },
+    {
+      "case": 2,
+      "stored": "Rb001note",
+      "expected": "Rb001other",
+      "truth": "refuted",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 40.44
+    },
+    {
+      "case": 3,
+      "stored": "Rb002note",
+      "expected": "Rb002note",
+      "truth": "confirmed",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 39.34
+    },
+    {
+      "case": 4,
+      "stored": "Rb003note",
+      "expected": "Rb003other",
+      "truth": "refuted",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 38.84
+    },
+    {
+      "case": 5,
+      "stored": "Rb004note",
+      "expected": "Rb004note",
+      "truth": "confirmed",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 40.8
+    },
+    {
+      "case": 6,
+      "stored": "Rb005note",
+      "expected": "Rb005other",
+      "truth": "refuted",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 39.09
+    },
+    {
+      "case": 7,
+      "stored": "Rb006note",
+      "expected": "Rb006note",
+      "truth": "confirmed",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 39.0
+    },
+    {
+      "case": 8,
+      "stored": "Rb007note",
+      "expected": "Rb007other",
+      "truth": "refuted",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 39.03
+    },
+    {
+      "case": 9,
+      "stored": "Rb008note",
+      "expected": "Rb008note",
+      "truth": "confirmed",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 39.05
+    },
+    {
+      "case": 10,
+      "stored": "Rb009note",
+      "expected": "Rb009other",
+      "truth": "refuted",
+      "verdict": "indeterminate",
+      "correct": false,
+      "false_confirm": false,
+      "reason": "the record view still shows what it showed before the search; it may not have refreshed, so it can't be read as this save; cannot certify the save; HALT",
+      "assurance": "unchecked",
+      "elapsed_s": 38.91
+    }
+  ]
+}

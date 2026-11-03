@@ -818,19 +818,20 @@ def test_a_stop_before_saving_is_finished_as_a_counted_problem(tmp_path):
     evidence = h.gate.finish_item(_halted_report("HALTED_BEFORE_EFFECT"))
     assert evidence.decision is ItemDecisionKind.STOP_BEFORE_SAVING
     assert evidence.counts_toward_problems
-    assert evidence.switch_off_reason is None
+    # The wrong user signed in: an environment problem, so the switch turns
+    # off at once (not after three in a row).
+    assert evidence.switch_off_reason is OffReason.ENVIRONMENT_CHANGED
     assert evidence.gated_step_id == "save"
 
 
-def test_three_counted_problems_in_a_row_switch_the_mode_off(tmp_path):
+def test_a_program_problem_switches_the_mode_off_at_once(tmp_path):
     h = Harness(tmp_path)
     h.user.verdict = "mismatch"
-    for index in range(3):
-        h.begin(run_id=f"run-{index}")
-        assert not h.before_save().proceed
-        evidence = h.gate.finish_item(_halted_report("HALTED_BEFORE_EFFECT"))
-    assert evidence.switch_off_reason is OffReason.TOO_MANY_PROBLEMS
-    assert h.log.state().off_reason is OffReason.TOO_MANY_PROBLEMS
+    h.begin(run_id="run-0")
+    assert not h.before_save().proceed
+    evidence = h.gate.finish_item(_halted_report("HALTED_BEFORE_EFFECT"))
+    assert evidence.switch_off_reason is OffReason.ENVIRONMENT_CHANGED
+    assert h.log.state().off_reason is OffReason.ENVIRONMENT_CHANGED
 
 
 def test_items_sent_to_approval_by_a_stale_status_never_switch_off(tmp_path):
@@ -869,8 +870,9 @@ def test_each_item_finish_always_needs_a_person(tmp_path):
 def test_a_reused_gate_never_carries_one_items_context_to_the_next(tmp_path):
     h = Harness(tmp_path)
     h.begin(run_id="run-a")
-    assert h.before_save().proceed
-    h.gate.finish_item(_verified_report())
+    saved = _gated_save()
+    assert h.before_save(current=saved).proceed
+    h.gate.finish_item(_verified_report(saved))
     # The next item without a fresh context gets the fail-safe default.
     h.begin(run_id="run-b", fresh_item=False)
     verdict = h.before_save()

@@ -60,7 +60,7 @@ flowchart LR
 | What your product does with each outcome | One result per request, and no second entry when your agent repeats a `request_id` |
 | Your tests against the four outcomes | A sandbox that returns each outcome on demand |
 
-Your customer provides the computer and a person for runs that stop. A person or an agent shows the task, in web apps, native Windows apps, and over Citrix or remote desktop. A person accepts the result before it runs. See [Record a first workflow](#record-a-first-workflow), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
+Your customer provides the computer and a person for runs that stop. A person or an agent shows the task, in web apps, native Windows apps, and remote-desktop sessions. A person accepts the result before it runs. See [Record a first workflow](#record-a-first-workflow), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
 
 ## Try it in three steps
 
@@ -424,7 +424,7 @@ openadapt-flow compile-agent admit <task dir> --admit-as "<your name>" --canary-
 
 Once the program is admitted, it is in `list_workflows` and `run_workflow` at once and has its own `taught_<name>` tool, and the server sends `notifications/tools/list_changed` to clients that support it. A server started later lists every program taught in its `--teach-dir`.
 
-It works on a web app (`--url`) and on the app a deployment file's `backend:` section names (`--config deploy.yaml`): a native Windows, macOS or Linux window, or a local RDP or Citrix client window. Off the web, OpenAdapt can't read which record a form shows, so a person approves, in your client's form, every action that might save: any click except on a text field, a check box, a tab or a control that plainly navigates (Open, New, Cancel), any click at x,y, Enter, typing outside a text field, and shortcuts. Each answer covers that one action on the screen as it was; if anything changes first, the action isn't done. A client without forms can't save. RDP and Citrix have no control tree, and the Windows, macOS and Linux backends don't list controls yet, so off the web your agent needs `--teach-screens scrubbed` to see the screen, and clicks x,y pixels. Admission there fails closed for now: a pixel-only click carries no checked record identity, so the canary is refused and says why. Network RDP (`rdp_host`) is refused.
+It works on a web app (`--url`) and on the app a deployment file's `backend:` section names (`--config deploy.yaml`): a native Windows, macOS or Linux window, or a local RDP or Citrix client window. Off the web, OpenAdapt can't read which record a form shows, so a person approves, in your client's form, every action that might save: any click except on a text field, a check box, a tab or a control that plainly navigates (Open, New, Cancel), any click at x,y, Enter, typing outside a text field, and shortcuts. Each answer covers that one action on the screen as it was; if anything changes first, the action isn't done. A client without forms can't save. RDP and Citrix have no control tree, and the Windows, macOS and Linux teach backends work from the screen, so off the web your agent needs `--teach-screens scrubbed` to see the screen, and clicks x,y pixels. Admission there fails closed: a pixel-only click carries no checked record identity, so the canary is refused and says why. Network RDP (`rdp_host`) is refused.
 
 | Flag | What it does |
 | --- | --- |
@@ -538,17 +538,17 @@ openadapt-agent seal verify runs/<run_id>/report.json
 openadapt-agent seal verify https://example.com/receipt.json --json
 ```
 
-## Limits
+## How runs work
 
-- Your agent, or a program acting for it, has to run on your customer's computer.
-- Nobody is notified when a run outside a [task-ledger job](#track-a-long-job) stops. Someone has to check `list_needs_attention` or Flow's console.
-- A job belongs to one server process. Two servers that share a runs folder shouldn't work on the same job.
-- Ledger questions are yes or no. The phone still titles them "Approve a save" and labels the answers Save and Don't save; the card shows the question and says the answer saves nothing in any app.
+- Your agent, or a program acting for it, runs on your customer's computer.
+- Runs that stop show up in `list_needs_attention` and Flow's console; inside a [task-ledger job](#track-a-long-job), a person gets the question on the phone or in Desktop.
+- A job belongs to one server process. Give each server its own runs folder for a job.
+- Ledger questions are yes or no. The phone card shows the question and says the answer saves nothing in any app.
 - The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
 - If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
-- This server issues no signed receipts itself. `proof` is `sealed` only when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).
+- `proof` is `sealed` when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).
 - With openadapt-flow 2, each save waits for approval unless the operator names another mode (`serve --approval-mode problems_only` or `not_gated`). Your agent gets `needs_review` with the reason `waiting_for_approval`. A person answers on the computer that runs OpenAdapt, or your agent does when the server runs with `--delegate-approvals` and the run's approver policy allows an agent for that step. Nothing is saved without that answer. `get_approval_mode` tells your agent which mode applies; no tool changes it.
-- Each call carries one request. There's no batch call.
+- Each call carries one request.
 - Accounts, separation between customers, fleet policy, and hosted runs belong to OpenAdapt Cloud.
 
 ## Release status

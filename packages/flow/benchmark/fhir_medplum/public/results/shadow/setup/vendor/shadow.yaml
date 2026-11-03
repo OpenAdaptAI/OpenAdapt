@@ -1,0 +1,5 @@
+schema_version: openadapt.shadow/v1
+mode: fhir
+upstream: http://127.0.0.1:9740
+listen: 9744
+contracts: [contracts/patient.yaml, contracts/allergy.yaml, contracts/appointment.yaml]

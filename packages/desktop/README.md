@@ -194,7 +194,7 @@ release, never another `openadapt-flow` it finds on your `PATH`, and `doctor`
 says which one it found:
 
 ```bash
-pip install openadapt-desktop "openadapt-flow[browser,console]==2.1.0"
+pip install openadapt-desktop "openadapt-flow[browser,console]==2.4.1"
 openadapt-desktop doctor
 ```
 
@@ -209,6 +209,7 @@ setting.
 | `record`, `list`, `info` | Record a task and inspect recordings |
 | `compile`, `qualify`, `replay`, `run` | Compile a recording, fill in its checks from the recording, replay it, or run it with a deployment settings file |
 | `scrub`, `review`, `approve`, `dismiss` | Remove personal data from a recording and review it before anything leaves the computer |
+| `approver-key setup` | Create the keys that sign your answers to saves in Run it and on the paired phone, and print the command a person runs once to register each one |
 | `login`, `credential`, `rotate`, `push`, `report-break` | Sign in to OpenAdapt Cloud, manage the stored sign-in, send a recording or task, or report a stopped run |
 | `storage`, `health`, `cleanup`, `config` | Inspect and maintain local storage and settings |
 | `upload`, `backends` | Older upload commands. `upload --backend hosted_ingest` runs `push`; upload to your own S3 storage is turned off in this release. |

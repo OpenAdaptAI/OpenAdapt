@@ -239,6 +239,10 @@ def effect_parameter_roles(effect: Effect) -> list[tuple[str, str]]:
     name = _expr_param(effect.idempotency_key)
     if name:
         found.append((name, f"idempotency_key.{effect.key_field}"))
+    for key, expr in effect.composite_key.items():
+        name = _expr_param(expr)
+        if name:
+            found.append((name, f"composite_key.{key}"))
     for position, selector in enumerate(effect.new_records):
         for key, expr in selector.items():
             name = _expr_param(expr)

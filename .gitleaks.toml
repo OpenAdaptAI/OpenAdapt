@@ -23,3 +23,14 @@ regexTarget = "secret"
 regexes = [
   '''^397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5$''',
 ]
+
+# benchmark/rdp_avc_real records each trial's made-up note value (job id,
+# trial number, condition) under a "token" key. These seven trip the generic
+# entropy rule; they are lab labels typed into a test app, not credentials.
+[[allowlists]]
+description = "Made-up per-trial note values in benchmark/rdp_avc_real results"
+regexTarget = "secret"
+regexes = [
+  '''^Oaun30(1[5-9])deco$''',
+  '''^Oaun30(21|24)sibl$''',
+]

@@ -1,0 +1,46 @@
+{
+ "seed": 7,
+ "items": 55,
+ "days": 10,
+ "existing": 12,
+ "app": "openemr",
+ "drift": [
+  "relabel_save@26"
+ ],
+ "arms": [
+  [
+   "agent_tools",
+   "lifecycle.arms.agent_tools:factory",
+   {
+    "model": "claude-sonnet-5-5",
+    "effort": "medium",
+    "item_budget_usd": 0.5
+   }
+  ],
+  [
+   "agent_script",
+   "lifecycle.arms.agent_script:factory",
+   {
+    "model": "claude-sonnet-5-5",
+    "effort": "high",
+    "author_budget_usd": 3.0,
+    "fix_budget_usd": 1.5
+   }
+  ],
+  [
+   "human_script",
+   "lifecycle.arms.human_script:factory",
+   {}
+  ],
+  [
+   "cua_alone",
+   "lifecycle.arms.cua:factory",
+   {
+    "model": "claude-sonnet-5-5",
+    "effort": "medium",
+    "item_budget_usd": 0.8,
+    "stop_after": 12
+   }
+  ]
+ ]
+}

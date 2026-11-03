@@ -250,7 +250,11 @@ def test_emit_skill_no_params(tmp_path: Path) -> None:
 # -- emit_mcp_server ----------------------------------------------------------
 
 
-def test_emit_mcp_server(tmp_path: Path) -> None:
+def test_emit_mcp_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Another test in the same process may have imported mcp; start without it
+    # so the check below sees only what emission imports.
+    for name in [m for m in sys.modules if m == "mcp" or m.startswith("mcp.")]:
+        monkeypatch.delitem(sys.modules, name)
     bundle = _make_bundle(tmp_path)
     out = emit_mcp_server(bundle, tmp_path / "mcp" / "server.py")
 

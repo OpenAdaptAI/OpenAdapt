@@ -61,7 +61,10 @@ from openadapt_flow.reward.oracles import (
     effect_state_of,
     records_of,
 )
-from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects._common import (
+    carries_composite_key,
+    judge_records,
+)
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
@@ -69,6 +72,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
     Verdict,
     record_matches,
+    selector_value,
 )
 
 
@@ -232,11 +236,15 @@ def _in_scope(record: dict[str, Any], effect: Effect) -> bool:
     """Whether the judge looks at ``record`` when it judges ``effect``.
 
     Mirrors the selection in ``judge_records``: the effect's ``match``
-    selector, then its idempotency key when it declares one.
+    selector, then its idempotency key when it declares one. With a
+    composite key the judge also reads every record that carries the key,
+    whether or not it matches the selector, so those are in scope too.
     """
 
-    selector = {key: str(want) for key, want in effect.match.items()}
-    if not record_matches(record, selector):
+    if carries_composite_key(record, effect):
+        return True
+    selector = {key: selector_value(want) for key, want in effect.match.items()}
+    if not record_matches(record, selector) or effect.composite_key:
         return False
     if effect.idempotency_key is None:
         return True

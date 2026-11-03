@@ -36,12 +36,14 @@ from openadapt_flow.approval_mode.approver import (
 from openadapt_flow.approval_mode.item_approval import (
     ItemApprovalRefused,
     ItemApprovalStore,
+    answer_refusal,
     make_answer,
     request_facts,
     wait_for_answer,
 )
 from openadapt_flow.approval_mode.model import ApprovalMode, ItemApprovalRef
 from tests._approver_grant_support import grant_store, signed_grant
+from tests._approver_keys import answer_as_person
 
 FRAME = b"\x89PNG\r\n\x1a\nmade-up filled form"
 FORM = ("dom", "sha256:" + "1" * 64)
@@ -187,23 +189,57 @@ def test_step_class_comes_from_the_run_policy():
     assert step_class_for(save, policy_name="regulated") is StepClass.CLINICAL_WRITE
 
 
-def test_a_person_answer_keeps_its_old_bytes(tmp_path):
-    """No approver and the default step class: nothing new is serialized."""
+def test_a_person_answer_keeps_its_old_bytes(tmp_path, approver):
+    """No approver and the default step class: no delegate field is serialized.
+
+    A person's answer now also needs its approver key's signature. The
+    signature is added as one ``attestation`` field over the answer's earlier
+    bytes, which are otherwise unchanged; without it the answer is refused.
+    """
 
     store = ItemApprovalStore(tmp_path / "run")
     request = _open(store)
-    answer = make_answer(
+    answer = answer_as_person(
+        store,
         request,
         decision="approve",
         decided_by="human",
         route="desktop_run_it",
-        approver_id="cloud-user-0001",
-        auth_method="cloud_aal2",
+        approver_id=None,
+        auth_method="none",
     )
-    assert "approver" not in answer.model_dump(mode="json")
+    dumped = answer.model_dump(mode="json")
+    assert "approver" not in dumped
     assert "step_class" not in request.model_dump(mode="json")
     ref = answer.reference(request).model_dump(mode="json")
     assert "approver" not in ref
+    # The signature covers exactly the earlier bytes and adds only itself.
+    assert set(dumped) - set(answer.signed_payload()) == {"attestation"}
+    unsigned = answer.model_copy(update={"attestation": None})
+    assert unsigned.model_dump(mode="json") == answer.signed_payload()
+    assert answer_refusal(request, answer, policy=store.context()) is None
+    assert answer_refusal(request, unsigned, policy=store.context()) == (
+        "human_answer_unsigned"
+    )
+
+
+def test_a_claimed_cloud_sign_in_no_longer_makes_a_person_answer(tmp_path, approver):
+    """Nothing here can verify a Cloud sign-in, so claiming one is refused."""
+
+    store = ItemApprovalStore(tmp_path / "run")
+    request = _open(store)
+    with pytest.raises(ItemApprovalRefused) as err:
+        answer_as_person(
+            store,
+            request,
+            decision="approve",
+            decided_by="human",
+            route="desktop_run_it",
+            approver_id="cloud-user-0001",
+            auth_method="cloud_aal2",
+        )
+    assert err.value.code == "auth_method_unverified"
+    assert store.read_answer(request.request_id) is None
 
 
 # -- delegated waiting ------------------------------------------------------------

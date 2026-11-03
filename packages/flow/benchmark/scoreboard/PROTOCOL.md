@@ -351,7 +351,40 @@ fresh directory per item and reads a receipt only after verify-run exits 0
 or 1. Every row of the earlier claims runs has exit 0 or 1 and a fresh
 directory, so those runs were not affected.
 
-## Amendment 10 (2026-10-25): arm 7 with a read-back on every save, and the program it compiles
+## Amendment 10 (2026-10-20, before any figure was quoted): lifecycle economics
+
+A separate table, not an arm: total lifecycle cost per 1,000 verified items
+on OpenEMR, from the lifecycle harness (`benchmark/lifecycle`, the soak's
+workload, oracle, scripted operator and cost model) and the competing arms in
+`benchmark/lifecycle/arms`:
+- `openadapt`: the certified referral program under the production
+  configuration the soak uses. Its API tier is not a separate arm: on main
+  9e4801b7f the compiler refuses the referral's API step
+  (`lifecycle/results/api_tier/`), so a gated run uses the GUI path.
+- `cua_alone`: computer use alone, screenshots only, fixed per-item budget.
+- `agent_tools`: the same model with the DOM/accessibility view, ref-based
+  actions and a read-only REST search, the read-back OpenAdapt uses.
+- `agent_script`: an agent writes a Playwright + REST script with a read-back
+  from the same demonstration, dry-runs it with the save request blocked, and
+  fixes it when it breaks; a person reviews the script once and each fix.
+- `human_script`: a hand-written script, authoring time logged, not
+  maintained during the run.
+
+Every arm runs the same seeded stream (seed 7, 40 items, 10 days, UI changes
+at items 9, 17, 25 and 33). Model spend is capped at $30 across all arms in
+`lifecycle/results/spend.json`, separate from `raw/spend.json`. Prices come
+from `lifecycle/arms/prices.json` (dated). People's time is priced at an
+assumed hourly rate, with bands at half and double. Each silent wrong is
+charged a lower-bound cleanup (one reconcile and one manual entry); its other
+harm is not priced. `build.py` lists every run under `lifecycle/results/`
+that has a REPORT.md.
+
+## Amendment 11 (2026-10-25): arm 7 with a read-back on every save, and the program it compiles
+
+Amendments 11 to 14 were written as Amendments 10 to 13 on their branch and
+renumbered when the branch merged after Amendment 10 (lifecycle economics).
+Run notes committed under `raw/` before the merge use the old numbers: their
+"Amendment 11" is Amendment 12 here.
 
 Written while arm 7 was on item 25, before any result was summed. Code as
 action became the default first-run agent,
@@ -376,15 +409,15 @@ program compiled from it:
   (faults on by default). Its earlier runs were items 1 to 5, before any
   fault item, so they are unaffected.
 
-## Amendment 11 (2026-10-25, after Amendment 10's run): arm 7 reports what its read-back saw
+## Amendment 12 (2026-10-25, after Amendment 11's run): arm 7 reports what its read-back saw
 
-In Amendment 10's run, item 30 (the save the server drops while the screen
+In Amendment 11's run, item 30 (the save the server drops while the screen
 says "saved") came out `silent_wrong` by the word rule. The agent did not
 claim the save: its final message says the save "did not take effect" and
 that the read-back showed nothing was saved (`raw/mockmed/code_agent/
 2026-10-25-rb/ledgers/item-030.json`), but none of `FAILURE_WORDS` is in it.
 By hand review the item is a safe stop (`HAND_REVIEW.md` next to the run).
-Amendment 10's rows keep the word rule's verdict.
+Amendment 11's rows keep the word rule's verdict.
 
 From this amendment on, arm 7 reports success only when the word rule passes
 and its own read-back after the last save shows the save landed. The read-back
@@ -392,12 +425,12 @@ is part of the arm (OpenAdapt reads every save back during run 1), so this is
 what the arm reports, not the scoreboard's judgement: the scoreboard still
 reads the store on its own after each item.
 
-## Amendment 12 (2026-10-25, written after the runs it describes): arm 7 on the OpenEMR referral with read-back
+## Amendment 13 (2026-10-25, written after the runs it describes): arm 7 on the OpenEMR referral with read-back
 
 A real-app check of the read-back, not a scored batch. Arm 7 on the
 `realrun` OpenEMR fixture (pinned image, ports 9301/9300), items 1 to 5
 (`2026-10-25-rb`), then item 6 (`2026-10-25-rb-admit`) after a recorder fix.
-Amendment 11's success rule applies.
+Amendment 12's success rule applies.
 
 - Items 1 to 6: `correct`; each save's read-back showed the named chart
   (matched by email and last name) landed.
@@ -412,7 +445,7 @@ Amendment 11's success rule applies.
   fixed here: binding a "nothing was written here" read-back to such a step
   changes what admission accepts.
 
-## Amendment 13 (2026-10-25, after review): the read-back's rules changed after Amendments 10 to 12's runs
+## Amendment 14 (2026-10-25, after review): the read-back's rules changed after Amendments 11 to 13's runs
 
 After review, run 1's read-back counts only a record created during run 1 as
 the named one (any change to or removal of a starting record stops the run),
@@ -420,7 +453,7 @@ stops on a second named record (a duplicate, counted even without record
 ids), treats a save with no new record as unconfirmed and stops the next save
 if it lands late, stops when a read fails, and calls a save `landed` only
 when the new record holds every input value (`compile_agent.harness.
-RecordReadBack`). Amendments 10 to 12's runs used the earlier rules. Not
+RecordReadBack`). Amendments 11 to 13's runs used the earlier rules. Not
 re-run; by the rules, their verdicts are the same: every item made one save,
 on MockMed's empty store or next to OpenEMR records it left untouched; item
 40's save created a record on another patient (wrong record either way) and

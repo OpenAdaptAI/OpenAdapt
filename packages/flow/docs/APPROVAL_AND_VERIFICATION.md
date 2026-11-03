@@ -125,8 +125,9 @@ A delegated approver answers by one of three routes:
 The run re-checks every answer: the grant must verify, name the delegate
 and cover the workflow, its policy must allow the approver's kind for the
 step class, the delegate can't have started the run, a person answers only
-from Desktop or the decision portal on their phone (below), and a delegate
-never fills in the person fields. The report's `ItemApprovalRef` records `decided_by:
+from Desktop or the decision portal on their phone (below), with an answer a
+registered approver key signed, and a delegate never fills in the person
+fields. The report's `ItemApprovalRef` records `decided_by:
 automation`, the route and the approver, whose `policy_ref` is the grant's
 digest. `item-approval show` prints each request's `decided_by`: a person
 (Cloud user id, or none, and route) or the delegate's id and the grant
@@ -170,9 +171,12 @@ the task's digest and signature. Only the attended console the portal relays
 to takes an answer. A task that changed, or belongs to another save, is
 refused. The answer is written once, as a person on the `decision_portal`
 route, so a second tap or a replay has nothing to answer, and a Desktop
-answer that lands first wins. A paired phone proves a device, not who held
-it, so the answer records an unauthenticated person, like a signed-out
-Desktop answer. The receipt says `accepted_pending_runner`: then the run
+answer that lands first wins. The portal signs the answer with its approver
+key (`OPENADAPT_PORTAL_APPROVER_KEY`, registered with `jit register --role
+approver`; see [`APPROVAL_MODES.md`](APPROVAL_MODES.md)), and a portal
+without that key records no answer. A paired phone proves a device, not who
+held it, so the answer names no Cloud user, like a signed-out Desktop
+answer. The receipt says `accepted_pending_runner`: then the run
 re-checks the form before the save, as for a Desktop approval, and stops if
 anything changed while it waited.
 
