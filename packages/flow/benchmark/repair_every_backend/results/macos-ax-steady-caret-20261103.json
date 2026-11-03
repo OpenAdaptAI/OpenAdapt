@@ -4,8 +4,9 @@
   "backend": "MacOSBackend (AX)",
   "app": "tests/native_apps/Chart.swift (native Cocoa, SQLite)",
   "steady_caret": true,
-  "at": "2026-11-03T00:26:37.774834+00:00",
-  "git_sha": "c6c07d587d95b1561bbab627d9932b5979955fa9",
+  "notice": "update_notice",
+  "at": "2026-11-03T01:17:47.851050+00:00",
+  "git_sha": "3e44044d5e6c1e67edfac8668e0df0323607d498",
   "git_dirty": [],
   "compiled": {
     "steps": [
@@ -22,7 +23,7 @@
   "repair_with_record_check": {
     "status": "resumed",
     "reason": "",
-    "duration_s": 68.9,
+    "duration_s": 70.9,
     "person_decisions": 1,
     "approver": "qualification:scripted-approver (stands in for a person; approves all)",
     "stages": [
@@ -39,7 +40,7 @@
       {
         "stage": "patch",
         "passed": true,
-        "detail": "after step_000: clicks 'Later' (checked by the record check); bundle d0a773bf8787af58; step_000_bridge_1 admitted by element_and_record_check (button 'Later')"
+        "detail": "after step_000: clicks 'Later' (checked by the record check); bundle c1024babc1dc29b3; step_000_bridge_1 admitted by element_and_record_check (button 'Later')"
       },
       {
         "stage": "probe",
@@ -76,7 +77,7 @@
   },
   "repair_without_verifier": {
     "status": "refused",
-    "reason": "the run gate refused the bundle; nothing was executed:\nREFUSE: workflow 'chart-note-ax' under 'standard' profile vs policy 'clinical-write'\n  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled\n  [PASS] Certification: certified under 'clinical-write' (4 steps, 0 violations)\n  [PASS] Identity coverage: 3/3 entity-sensitive/consequential action(s) identity-armed\n  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts\n  [REFUSE] Approval fallback: 1 consequential write(s) lack a verifier at the evidence tier required by this execution profile; an approval cannot convert unverified completion into VERIFIED\n         steps: step_003\n  [PASS] Interstitial admission: no automatic interstitial actions declared\n  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 10 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse\n         steps: templates/identifiers/step_000.png, templates/identifiers/step_001.png, templates/identifiers/step_003.png, templates/layout_fingerprint.json, templates/step_000.png, templates/step_000_expect.png, templates/step_001.png, templates/step_001_expect.png, ... (+2 more)\n  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest d42f3432bc8e098b..., compiler 2.5.0)\n  -> RUN REFUSED (fail-closed): Approval fallback. Nothing was executed.",
+    "reason": "the run gate refused the bundle; nothing was executed:\nREFUSE: workflow 'chart-note-ax' under 'standard' profile vs policy 'clinical-write'\n  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled\n  [PASS] Certification: certified under 'clinical-write' (4 steps, 0 violations)\n  [PASS] Identity coverage: 3/3 entity-sensitive/consequential action(s) identity-armed\n  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts\n  [REFUSE] Approval fallback: 1 consequential write(s) lack a verifier at the evidence tier required by this execution profile; an approval cannot convert unverified completion into VERIFIED\n         steps: step_003\n  [PASS] Interstitial admission: no automatic interstitial actions declared\n  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 10 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse\n         steps: templates/identifiers/step_000.png, templates/identifiers/step_001.png, templates/identifiers/step_003.png, templates/layout_fingerprint.json, templates/step_000.png, templates/step_000_expect.png, templates/step_001.png, templates/step_001_expect.png, ... (+2 more)\n  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest 0d9bfad0863163b7..., compiler 2.5.0)\n  -> RUN REFUSED (fail-closed): Approval fallback. Nothing was executed.",
     "person_decisions": 0,
     "stages": [],
     "rows": []
@@ -84,7 +85,7 @@
   "repair_under_demo_profile": {
     "status": "no_fix",
     "reason": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on an accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated",
-    "duration_s": 10.2,
+    "duration_s": 11.3,
     "person_decisions": 0,
     "approver": "qualification:scripted-approver (stands in for a person; approves all)",
     "stages": [

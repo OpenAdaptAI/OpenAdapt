@@ -59,13 +59,13 @@ Each is a fail-closed refusal, not a wrong action.
    bundle on the old app version fails the same way, so no production-profile
    run on native macOS completes today. Code: `openadapt_flow/action_evidence.py`
    (`_delivery_receipt_error`) and the replayer's `remote_guarded` branch.
-2. **macOS sheets and separate dialog windows can't take input.** A real
-   `NSAlert` sheet is its own CoreGraphics window, so `MacOSBackend`'s window
-   binding refuses input to it, and raises after the click that opened it.
-   The test app therefore draws its notice inside the window, as many desktop
-   apps do. Windows update prompts are often separate top-level windows too;
-   a backend that pins one window needs a rule for the app's own owned
-   dialogs before repair can reach them.
+2. **Fixed for macOS sheets
+   ([#1711](https://github.com/OpenAdaptAI/OpenAdapt/issues/1711)): a real
+   `NSAlert` sheet couldn't take input.** A sheet is its own CoreGraphics
+   window, so `MacOSBackend`'s window binding refused input to it. It now
+   accepts the pinned window's one attached sheet, proved by AX and the
+   window server, and nothing else (see "A real sheet" below). Windows owned
+   dialogs are the Windows session's half of #1711.
 3. **On pixels only, a click whose next screen differs is "delivery
    uncertain".** Under `demo` the run ends `RECONCILIATION_REQUIRED`
    (`effect not settled at step_000`), so the stop is not repairable, by
@@ -90,6 +90,33 @@ Each is a fail-closed refusal, not a wrong action.
    accepts a value of two or more words that equals a run of whole OCR words
    on one line, glued or not. It never matches part of a word (`5 mg` is
    not in `25mg`). The check is word presence on screen, not per field.
+
+7. **The identity band moves with a wide control's structural offset**
+   ([#1720](https://github.com/OpenAdaptAI/OpenAdapt/issues/1720)). A click
+   recorded on a text field's left-aligned placeholder resolves at replay to
+   the field's center, and the band is translated by that gap, so it reads
+   only part of the patient banner and the click is refused. The test app
+   centres its field's placeholder so the two coincide.
+8. **Right after a sheet closes, OCR sometimes reads the banner's `O` as
+   `0`** (`0kafor`), and the identity check refuses the next click. Two of the
+   three clean sheet runs stopped this way, before the save, with nothing
+   written.
+
+## A real sheet
+
+`--sheet` shows the notice as an `NSAlert` sheet: its own window, attached to
+the chart window. With #1711's backend change, on the clean tree (`git_sha`
+`3e44044d5`), steady caret, three runs:
+
+| Run | Result |
+| --- | --- |
+| [run 1](results/macos-ax-sheet-steady-caret-20261103-run1.json) | Stopped in the probe at the note field's identity check (finding 8); nothing written |
+| [run 2](results/macos-ax-sheet-steady-caret-20261103-run2.json) | The same |
+| [run 3](results/macos-ax-sheet-steady-caret-20261103-run3.json) | `VERIFIED`: halt, "Later" in the sheet admitted on `element_and_record_check`, probe, replay and fault campaigns, the scripted approval, and exactly one new row |
+
+In every run the stop came before any save, the sheet's "Later" button was
+read and admitted through AX, and the bridge click on the sheet went through
+the window checks.
 
 Not covered here: Windows UI Automation and RDP to the Windows lab. They wait
 on `WindowsBackend.element_identity_at` and the lab.

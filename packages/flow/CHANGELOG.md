@@ -19,6 +19,8 @@
 
 ### Fixes
 
+- macOS: a run can now act in the pinned window's own AppKit sheet (an `NSAlert` attached to it), which is a separate window. `MacOSBackend` accepts it only when AX lists exactly one `AXSheet` on the window and exactly one window of the same process has its bounds inside it; the capture composites exactly that sheet over the window, and focus, pointer and click-target checks accept it only inside its bounds. Any other window is still refused ([#1711](https://github.com/OpenAdaptAI/OpenAdapt/issues/1711)).
+
 - A durable run (`standard` or `regulated`) on macOS no longer refuses every click the AX tree resolves (`remote delivery receipt does not bind the resolved target`). `MacOSBackend.act_structural` re-finds the locator's one element, refuses unless its fingerprint (AX path, role, name, app, window, bounds) still equals the resolved handle's, and delivers the gated physical click at its center; the receipt binds that fingerprint. The receipt check is unchanged ([#1710](https://github.com/OpenAdaptAI/OpenAdapt/issues/1710)).
 
 - Self-repair's probe on a backend with no form to read (native or pixel-only) no longer refuses a typed value because OCR glued its words together: a value of two or more words and at least six letters also counts when it shows on one line with its words joined. Single words keep the word rule.

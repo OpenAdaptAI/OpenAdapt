@@ -212,6 +212,7 @@ screen differs counts as an uncertain delivery
 - `openadapt-flow run --self-repair` and `--hold-on-halt` for desktop and
   remote backends. Today the CLI repairs browser runs only; the Python API
   takes any backend.
-- Input to an app's own dialog windows (macOS sheets, Windows owned windows):
-  today's backends pin one window and refuse input to another.
+- Input to a Windows app's owned dialog windows. On macOS, the pinned
+  window's own AppKit sheet is accepted (#1711); any other window is still
+  refused.
 - Linux AT-SPI.
