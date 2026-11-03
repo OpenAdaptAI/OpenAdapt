@@ -135,6 +135,7 @@ __all__ = [
     "reconcile",
     "verified_write",
     "verify_write",
+    "issue_write_receipt",
 ]
 
 DEFAULT_WORKDIR = "~/.openadapt/verify"
@@ -606,6 +607,10 @@ class WriteResult:
     #: receipt's ``recheck_due_at`` says; None when no recheck is due. Until
     #: the recheck runs, the result is provisional.
     recheck_due_at: Optional[str] = None
+    #: ``off``, ``issued`` or ``not issued: <why>``: the signed write receipt
+    #: (``docs/WRITE_RECEIPTS.md``). Issuing never changes the outcome.
+    write_receipt: str = "off"
+    write_receipt_path: Optional[str] = None
 
     @property
     def verified(self) -> bool:
@@ -664,6 +669,8 @@ class WriteResult:
             "review": self.review,
             "recheck_due_at": self.recheck_due_at,
             "provisional": self.provisional,
+            "write_receipt": self.write_receipt,
+            "write_receipt_path": self.write_receipt_path,
         }
 
 
@@ -1239,6 +1246,7 @@ def verify_write(
     params: Optional[Mapping[str, object]] = None,
     actor: Optional[Actor] = None,
     authorization_ref: str = "verify_write",
+    write_receipt: bool = False,
 ) -> WriteResult:
     """Read the system of record now and judge the write against the
     baseline :func:`begin_write` took. Never resends the write.
@@ -1257,6 +1265,8 @@ def verify_write(
             cancelled tool call, a timeout); the next identical call then
             raises :class:`AlreadyWritten` with this result instead of a
             resend. The caller decides this, not the verifier.
+        write_receipt: Sign the result, with its scope, as a portable write
+            receipt (any outcome; see :func:`issue_write_receipt`).
 
     Deprecated form (#1588): ``verify_write(contract, before, params=...,
     actor=...)`` with a :func:`capture` snapshot judges the write the same
@@ -1318,7 +1328,42 @@ def verify_write(
         import dataclasses
 
         result = dataclasses.replace(result, ledger=pending.ledger)
+    if write_receipt:
+        result = issue_write_receipt(result)
     return result
+
+
+def issue_write_receipt(
+    result: WriteResult, out: Optional[Path] = None, **kwargs: Any
+) -> WriteResult:
+    """Sign ``result`` as a write receipt (``docs/WRITE_RECEIPTS.md``) next
+    to its verify-run receipt, or under ``OPENADAPT_RECEIPT_HOME``. Returns
+    the result with ``write_receipt`` set; the outcome never changes, and a
+    receipt that would claim more than the scope is not issued."""
+
+    import dataclasses
+
+    from openadapt_flow import write_receipt as wr
+    from openadapt_flow.receipt_log import receipt_home
+
+    if out is None:
+        folder = (
+            Path(result.receipt_path).parent
+            if result.receipt_path
+            else receipt_home() / "issued"
+        )
+        out = folder / f"{result.write_id or 'write'}.receipt.cbor"
+    try:
+        issued = wr.issue_for_result(result, out, **kwargs)
+    except wr.ReceiptError as exc:
+        return dataclasses.replace(result, write_receipt=f"not issued: {exc}")
+    except Exception as exc:  # noqa: BLE001 - say why, never fail the write
+        return dataclasses.replace(
+            result, write_receipt=f"not issued: {type(exc).__name__}"
+        )
+    return dataclasses.replace(
+        result, write_receipt="issued", write_receipt_path=str(issued.path)
+    )
 
 
 def _record(

@@ -288,6 +288,7 @@ def test_the_public_api_is_stable() -> None:
         "capture",
         "capture_database",
         "diff_database",
+        "issue_write_receipt",
         "recheck",
         "reconcile",
         "verified_write",
@@ -322,6 +323,7 @@ def test_the_public_api_is_stable() -> None:
         ("params", "KEYWORD_ONLY"),
         ("actor", "KEYWORD_ONLY"),
         ("authorization_ref", "KEYWORD_ONLY"),
+        ("write_receipt", "KEYWORD_ONLY"),
     ]
     assert [n for n in inspect.signature(capture_database).parameters] == [
         "read",
@@ -340,9 +342,11 @@ def test_the_public_api_is_stable() -> None:
         "reasons",
         "retry_safe",
     ]
-    assert list(WriteResult.__dataclass_fields__)[-2:] == [
+    assert list(WriteResult.__dataclass_fields__)[-4:] == [
         "recheck",
         "recheck_due_at",
+        "write_receipt",
+        "write_receipt_path",
     ]
     assert params(recheck) == [
         ("contract", "POSITIONAL_OR_KEYWORD"),
