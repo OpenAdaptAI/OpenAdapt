@@ -679,10 +679,12 @@ def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optiona
             return None
     except at_rest.AtRestRefused as exc:
         raise SystemExit(f"record: {exc}") from exc
-    key = explicit or crypto.resolve_key(None)
-    if key is None:
-        at_rest.plaintext_allowed("a recording")
-    return key
+    if explicit or os.environ.get(crypto.ENV_KEY):
+        return explicit or crypto.resolve_key(None)
+    try:
+        return crypto.resolve_key(None) if at_rest.seal_new("a recording", out) else None
+    except at_rest.AtRestRefused as exc:
+        raise SystemExit(f"record: {exc}") from exc
 
 
 def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
@@ -2181,7 +2183,7 @@ def _cmd_induce(args: argparse.Namespace) -> int:
 
     # Encrypted demonstrations induce an encrypted program, and so do
     # plaintext ones unless plaintext at rest is explicitly allowed.
-    seal_output = sealed_inputs or not at_rest.plaintext_allowed("an induced program")
+    seal_output = sealed_inputs or at_rest.seal_new("an induced program", args.out)
     if seal_output and (args.report or args.probe_on):
         # Both write the induced program (or probe bundles) outside any
         # sealed set; refuse rather than write plaintext.
@@ -2227,7 +2229,7 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         workflow = workflow.model_copy(update={"name": args.name})
     out = Path(args.out)
     if seal_output:
-        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
+        passphrase = sealed_set.output_bundle_key()
         assert passphrase is not None  # resolves to the local key by default
         with sealed_set.writing(out, "bundle", passphrase):
             workflow.save(out)
@@ -12606,6 +12608,7 @@ _UNSEALED_OUTPUT_COMMANDS: dict[str, str] = {
     "openadapt_flow.__main__:_cmd_process": "the process report",
     "openadapt_flow.__main__:_cmd_variants": "the variant report",
     "openadapt_flow.__main__:_cmd_route": "the variant report",
+    "openadapt_flow.__main__:_cmd_for_each": "the looped bundle",
 }
 
 
@@ -12615,9 +12618,14 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
     from openadapt_flow import at_rest
 
     at_rest.strict()  # raises on an unknown mode before anything runs
-    healed = getattr(args, "save_healed_to", None)
-    if healed and at_rest.strict():
-        at_rest.unsealed_write("a healed bundle (--save-healed-to)", healed)
+    if at_rest.strict():
+        # Written after records change, so refused before the run starts.
+        healed = getattr(args, "save_healed_to", None)
+        if healed:
+            at_rest.unsealed_write("a healed bundle (--save-healed-to)", healed)
+        workers = getattr(args, "workers", None)
+        if isinstance(workers, int) and workers > 0:
+            at_rest.unsealed_write("the worker pool report (--workers)", "the run directory")
     func = getattr(args, "func", None)
     command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
     artifact = _UNSEALED_OUTPUT_COMMANDS.get(command)

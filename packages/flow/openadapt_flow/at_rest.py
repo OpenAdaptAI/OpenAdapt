@@ -154,7 +154,7 @@ def opt_out_reason() -> Optional[str]:
     None in strict mode, which ignores the opt-out.
     """
     reason = (os.environ.get(OPT_OUT_ENV) or "").strip()
-    if reason and strict():
+    if strict() and reason:
         with _lock:
             first = "strict-ignores-opt-out" not in _warned
             _warned.add("strict-ignores-opt-out")
@@ -199,6 +199,7 @@ def record_plaintext(purpose: str, reason: str) -> None:
 def _record(
     purpose: str, reason: str, *, warning: str, path: Optional[str] = None
 ) -> None:
+    strict()  # an unknown mode stops here too, not only at the CLI
     with _lock:
         if purpose in _warned:
             return
@@ -264,6 +265,17 @@ def _read(path: Path) -> str:
 def local_key() -> str:
     """Return this machine's at-rest key, creating it on first use."""
     path = local_key_path()
+    try:
+        return _local_key(path)
+    except OSError as exc:
+        raise LocalKeyError(
+            f"Flow could not create or read its local encryption key at {path} "
+            f"({exc}). Set OPENADAPT_BUNDLE_KEY, or {HOME_ENV} to a writable "
+            "private directory. Nothing was written."
+        ) from exc
+
+
+def _local_key(path: Path) -> str:
     with _lock:
         if path.exists():
             return _read(path)
@@ -295,12 +307,36 @@ def local_key() -> str:
         return text
 
 
+#: Whether the default mode seals new recordings and bundles. Strict mode
+#: always does. See docs/phi_at_rest.md.
+DEFAULT_SEALS_ARTIFACTS: Final[bool] = True
+
+
+def seal_new(artifact: str, path: Path | str) -> bool:
+    """Whether a new bundle or recording at ``path`` is written sealed.
+
+    True in strict mode, and by default. Otherwise (the opt-out, or a default
+    mode that doesn't seal it) the plaintext write is named and recorded.
+    """
+    if strict():
+        return True
+    if opt_out_reason() is not None:
+        plaintext_allowed(artifact)
+        return False
+    if DEFAULT_SEALS_ARTIFACTS:
+        return True
+    unsealed_write(artifact, path)
+    return False
+
+
 def default_key() -> Optional[str]:
     """The key to use when none is configured: the local key, or None under
     the opt-out (plaintext, the behaviour before encryption was the default).
     Strict mode ignores the opt-out.
     """
-    if opt_out_reason() is not None:
+    reason = opt_out_reason()
+    if reason is not None:
+        record_plaintext("files Flow encrypts when a key is set", reason)
         return None
     return local_key()
 

@@ -2060,12 +2060,12 @@ def compile_recording(
         # A plaintext recording (one made before encryption was the default,
         # or under the opt-out) still compiles to a sealed bundle unless
         # plaintext is explicitly allowed.
-        if at_rest.plaintext_allowed("a compiled bundle"):
+        if not at_rest.seal_new("a compiled bundle", bundle):
             return _compile_recording(recording, bundle, name=name, **kwargs)
     if sealed_input:
         # Opening the recording verifies its whole file set before compiling.
         _sealed.open_set(recording)
-    passphrase = _sealed.passphrase_for("bundle") or _sealed.recording_key()
+    passphrase = _sealed.output_bundle_key()
     if not passphrase:
         raise _sealed.SealedSetKeyError(_sealed.missing_key_message(bundle, "bundle"))
     if not sealed_output and bundle.exists() and any(bundle.iterdir()):

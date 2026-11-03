@@ -285,7 +285,8 @@ def classify(kind: Kind, rel: str) -> Optional[FileKind]:
 
 def recording_key(explicit: Optional[str] = None) -> Optional[str]:
     """The passphrase for recordings: explicit, then the recording variable,
-    then the bundle variable. ``None`` means no key is configured."""
+    then the bundle variable, then the local key. ``None`` only under the
+    plaintext opt-out."""
     if explicit:
         return explicit
     return os.environ.get(RECORDING_ENV_KEY) or crypto.resolve_key(None)
@@ -295,6 +296,17 @@ def passphrase_for(kind: str, explicit: Optional[str] = None) -> Optional[str]:
     if kind == "recording":
         return recording_key(explicit)
     return crypto.resolve_key(explicit)
+
+
+def output_bundle_key() -> Optional[str]:
+    """The key for a bundle Flow writes: ``OPENADAPT_BUNDLE_KEY``, else
+    ``OPENADAPT_RECORDING_KEY`` (a deployment that sets only the recording
+    key keeps its bundles under it), else the local key."""
+    return (
+        os.environ.get(crypto.ENV_KEY)
+        or os.environ.get(RECORDING_ENV_KEY)
+        or crypto.resolve_key(None)
+    )
 
 
 def missing_key_message(root: Path | str, kind: str) -> str:
@@ -890,10 +902,26 @@ def open_set(root: Path | str, key: Optional[str] = None) -> SealedSet:
         cached[0].encode("utf-8"), passphrase.encode("utf-8")
     ):
         return cached[1]
-    opened = SealedSet.open(base, passphrase)
+    try:
+        opened = SealedSet.open(base, passphrase)
+    except crypto.CryptoError as exc:
+        if key is None and not _configured(str(header["kind"])):
+            # Opened with the local key because nothing was configured: the
+            # set was most likely sealed with a deployment key that isn't set.
+            raise SealedSetKeyError(
+                missing_key_message(Path(base), str(header["kind"]))
+                + " (The local key did not open it.)"
+            ) from exc
+        raise
     with _STATE_LOCK:
         _OPENED[cache_key] = (passphrase, opened)
     return opened
+
+
+def _configured(kind: str) -> bool:
+    if os.environ.get(crypto.ENV_KEY):
+        return True
+    return kind == "recording" and bool(os.environ.get(RECORDING_ENV_KEY))
 
 
 def _reader(root: str) -> SealedSet | SealedSetWriter:
