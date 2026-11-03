@@ -1631,6 +1631,13 @@ class SelfRepair:
                 "band; only that dialog may be dismissed"
             )
         rect = _cover_region(covered.cover)
+        if "region" in here and _cover_region(here) != rect:
+            # The dismiss step's dialog box is the proved region; a dialog
+            # that moved since the halt would leave it stale.
+            raise SelfRepairRefused(
+                "the covering dialog moved since the halt; its box can't be "
+                "used as the new step's identity"
+            )
         text = ""
         if rect is not None:
             x, y, w, h = rect

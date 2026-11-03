@@ -391,7 +391,7 @@ def test_a_recorded_band_that_raises_is_doubt() -> None:
 
 class _Line:
     def __init__(self, text: str, region: tuple[int, int, int, int]) -> None:
-        self.text, self.region = text, region
+        self.text, self.region, self.confidence = text, region, 1.0
 
 
 def _guard(
@@ -800,3 +800,20 @@ def test_the_dialog_band_uses_the_proved_window_before_a_pixel_search() -> None:
             vision,
             proved_region=(380, 300, 270, 160),
         )
+
+
+def test_a_dialog_that_moved_since_the_halt_is_refused() -> None:
+    from openadapt_flow.repair.self_repair import SelfRepairRefused
+
+    cover = {"hwnd": 7, "pid": 42, "region": [380, 300, 270, 160]}
+    with pytest.raises(SelfRepairRefused, match="moved"):
+        _guard(
+            at={"hwnd": 7, "pid": 42, "region": [300, 300, 270, 160]},
+            message="Your session expires in 5 minutes.",
+            cover=cover,
+        )
+    assert _guard(
+        at={"hwnd": 7, "pid": 42, "region": [380, 300, 270, 160]},
+        message="Your session expires in 5 minutes.",
+        cover=cover,
+    )
