@@ -14,7 +14,10 @@ The per-item rows of the run below are private, in openadapt-corpus
 (`reliability_recipes/verification_coverage/dup_check_offline-2026-10-24/`);
 this README keeps the aggregate tables. No app, no model calls. `measure.py` says exactly what each check sees. The
 record check reads an in-memory table with FHIR search semantics
-(`TableSource`): a case-insensitive name prefix and an exact birth date.
+(`TableSource`): a case-insensitive prefix of the stored name text, as a
+server compares it, and an exact birth date. (Re-measured on 2026-11-03 after
+the search began sending names as typed as well as normalized; the numbers
+below did not change.)
 
 ## The exact numbers
 
