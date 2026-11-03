@@ -158,8 +158,6 @@ def _open_patient(rec, points) -> None:
     rec.press("End")
     rec.hotkey(["shift"], "Home")
     rec.type_text(SEARCH)
-    rec.press("Enter")
-    time.sleep(0.8)
     rec.click(*points["searchButton"])
     time.sleep(0.8)
     rec.click(*points["noteBox"])
@@ -206,6 +204,11 @@ def build_bundle(run_rec: Path, undo_rec: Path, bundle: Path):
 
     task = compile_recording(run_rec, bundle / "task", name="patient-notes-rollback")
     undo = compile_recording(undo_rec, bundle / "undo", name="patient-notes-undo")
+    # The note a patient holds before a run differs per case (empty in one):
+    # a screen check quoting it would stop that case before its save. The
+    # database checks below judge every write.
+    for step in [*task.steps, *undo.steps]:
+        step.expect = [p for p in step.expect if (p.text or "") not in (ORIGINAL, NOTE)]
     save = task.steps[-1]
     save.risk = "irreversible"
     save.effects = [_note_is(NOTE)]
