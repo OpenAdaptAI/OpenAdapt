@@ -18,8 +18,8 @@ through a channel the agent's browser cannot reach.
 
 | Directory | App | App licence | How the app ships | Tasks | Status |
 |---|---|---|---|---:|---|
-| `mockmed` | MockMed encounter charting with a fault server | MIT (OpenAdapt fixture) | bundled, runs in the container | 14 | validated |
-| `mockloan` | MockLoan disbursements with a fault server | MIT (OpenAdapt fixture) | bundled, runs in the container | 12 | validated |
+| `mockmed` | MockMed encounter charting with a fault server | MIT (OpenAdapt fixture) | bundled, runs in the container | 11 public | validated |
+| `mockloan` | MockLoan disbursements with a fault server | MIT (OpenAdapt fixture) | bundled, runs in the container | 0 public (all held out) | validated on the held-out pack |
 | `openemr` | OpenEMR 8.0.0.3 patient registration | GPL-3.0 | upstream images by digest; operator starts them | 3 | awaiting a live run |
 | `frappe_lending` | Frappe/ERPNext + Lending loan application | GPL-3.0 (ERPNext, Lending), MIT (Frappe) | image built locally from pinned upstreams | none yet | manifest and oracle only |
 | `openimis_claims` | openIMIS 25.10 claim intake | AGPL-3.0-only | upstream images by digest; repository-only | none yet | blocked: the fixture has no per-episode reset |

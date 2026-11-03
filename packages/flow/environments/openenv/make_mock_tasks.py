@@ -40,6 +40,9 @@ FAULTS: dict[str, tuple[bool, str]] = {
     "collateral": (False, "lands once plus a stray fee on the same loan"),
 }
 
+#: The patient MockMed's wrong_record fault always writes to.
+WRONG_RECORD_TARGET = "p2"
+
 MOCKMED_PATIENTS = {
     "p1": "Jane Sample",
     "p2": "Alex Testcase",
@@ -129,6 +132,11 @@ def mockmed_tasks(
 ) -> list[dict[str, Any]]:
     tasks = []
     for n, (fault, pid, enc_type, note, seed) in enumerate(cases, 1):
+        if fault == "wrong_record" and pid == WRONG_RECORD_TARGET:
+            raise ValueError(
+                f"case {n}: wrong_record writes to {WRONG_RECORD_TARGET}, so a task "
+                f"on {WRONG_RECORD_TARGET} would succeed; use another patient"
+            )
         feasible, why = FAULTS[fault]
         name = MOCKMED_PATIENTS[pid]
         tasks.append(
