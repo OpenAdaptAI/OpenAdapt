@@ -1201,10 +1201,15 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - name: Install the launcher
-        run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          cache-suffix: seal-view
+      - name: Install the launcher from its lock
+        run: >-
+          python scripts/ci/locked_install.py
+          --lock '.[dev]' --editable .
       - name: Resolve Playwright version
         id: pw
         run: |
