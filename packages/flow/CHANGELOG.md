@@ -17,9 +17,17 @@
 
 ## Unreleased
 
+### Features
+
+- Signed write receipts. A verifier verdict, with its scope (stores read, time window, strength) and a plain list of what it did not check, is signed as a COSE_Sign1 in the IETF SCITT shape and appended to a local transparency log. `openadapt-flow receipt verify FILE --issuer-key --log-key` checks one offline and prints the not-checked list every time; a receipt that claims more than its scope is neither issued nor accepted. `verify_write(..., write_receipt=True)`, `issue_write_receipt(result)` and `openadapt-flow shadow --receipts` issue them; `receipt anchor` puts the digest in Rekor. Extra: `openadapt-flow[receipts]`. Design: `docs/WRITE_RECEIPTS.md`.
+
 ### Fixes
 
+- On a macOS host, a pixel-only run (`RemoteDisplayBackend`: Parallels, RDP and Citrix clients) no longer reads a stale frontmost app. `MacWindowClient` applies NSWorkspace's pending updates before each read, so a freshly started app's window passes the focus check instead of failing it as if an app that already exited were still frontmost ([#1712](https://github.com/OpenAdaptAI/OpenAdapt/issues/1712)).
+
 - A durable run (`standard` or `regulated`) on macOS no longer refuses every click the AX tree resolves (`remote delivery receipt does not bind the resolved target`). `MacOSBackend.act_structural` re-finds the locator's one element, refuses unless its fingerprint (AX path, role, name, app, window, bounds) still equals the resolved handle's, and delivers the gated physical click at its center; the receipt binds that fingerprint. The receipt check is unchanged ([#1710](https://github.com/OpenAdaptAI/OpenAdapt/issues/1710)).
+
+- Self-repair's probe on a backend with no form to read (native or pixel-only) no longer refuses a typed value because OCR glued its words together: a value of two or more words and at least six letters also counts when it shows on one line with its words joined. Single words keep the word rule.
 
 ## v2.5.0 (2026-11-02)
 

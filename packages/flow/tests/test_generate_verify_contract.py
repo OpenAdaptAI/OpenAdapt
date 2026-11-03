@@ -138,7 +138,7 @@ class App:
         )
         if v.get("customer_ref") is not None:
             self.q("INSERT INTO custom_values (customized_type, customized_id, custom_field_id, value) "
-                   "VALUES ('Issue', %s, 1, %s)", (iid, v["customer_ref"]))  # fmt: skip
+                   "VALUES ('Issue', %s, 4, %s)", (iid, v["customer_ref"]))  # fmt: skip
         return iid
 
     def find(self, project: str, subject: str) -> int:
@@ -210,6 +210,18 @@ KINDS = {
                         "customer_ref": "007341",
                     }
                 },
+                # A second write with a custom field: one row can't tell a
+                # pinned value from what one write happened to store.
+                {
+                    "values": {
+                        "project": "Billing Portal Legacy",
+                        "subject": "Ledger export",
+                        "status": "In Progress",
+                        "assignee": "Jon Park",
+                        "due_date": None,
+                        "customer_ref": "008812",
+                    }
+                },
             ],
         },
         {
@@ -264,6 +276,18 @@ def generated(pg: Any) -> dict[str, Any]:
     app = App(port, "tracker")
     with app.con() as c, c.cursor() as cur:
         cur.execute(SCHEMA)
+        # Saved before: a version of 1 after a save would equal the bot's
+        # id, and the generator asks when a column is both the acting
+        # user's id and a copy of another row's column.
+        cur.execute("UPDATE issues SET lock_version = 4")
+        # Likewise new journal rows numbered from 1 would equal the bot's id
+        # (a link to a row the write added, or the acting user?).
+        for seq in (
+            "journals_id_seq",
+            "journal_details_id_seq",
+            "custom_values_id_seq",
+        ):
+            cur.execute(f"SELECT setval('{seq}', 100)")
     os.environ["OA_GEN_TEST_PW"] = "reader-pw"
     work = root / "work"
     work.mkdir()
