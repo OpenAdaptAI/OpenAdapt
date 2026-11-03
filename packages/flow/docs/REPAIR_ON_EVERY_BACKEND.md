@@ -211,6 +211,7 @@ screen differs counts as an uncertain delivery
 - Qualification on Windows UI Automation and over RDP, on the Windows lab.
 - `--hold-on-halt` (teach the fix over MCP) for desktop and remote backends.
   `run --self-repair` takes them with `repair.session`.
-- Input to an app's own dialog windows (macOS sheets, Windows owned windows):
-  today's backends pin one window and refuse input to another.
+- Input to a Windows app's owned dialog windows. On macOS, the pinned
+  window's own AppKit sheet is accepted (#1711); any other window is still
+  refused.
 - Linux AT-SPI.

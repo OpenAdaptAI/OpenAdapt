@@ -621,3 +621,186 @@ def test_a_correct_write_with_nothing_late_is_confirmed_at_the_recheck(
     )
     assert first == "CONFIRMED", first
     assert late.startswith("CONFIRMED"), late
+
+
+# -- field sets the manifest doesn't list ----------------------------------------
+
+
+def _unlisted(
+    generated: dict[str, Any], tmp_path: Path, kind: str, fields: list[str]
+) -> tuple[Path, dict[str, Any]]:
+    """A copy of the output whose manifest drops one field set, as the cap
+    of 64 drops sets of a kind with many fields."""
+
+    out = tmp_path / "out"
+    shutil.copytree(generated["out"], out)
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    entry = manifest["kinds"][kind]
+    dropped = [v for v in entry["variants"] if sorted(v["fields"]) == sorted(fields)]
+    assert len(dropped) == 1, [v["fields"] for v in entry["variants"]]
+    entry["variants"] = [v for v in entry["variants"] if v not in dropped]
+    (out / "manifest.yaml").write_text(yaml.safe_dump(manifest, allow_unicode=True))
+    return out, dropped[0]
+
+
+def _body(path: Path) -> Any:
+    return yaml.safe_load(path.read_text())  # the document, past the header
+
+
+def test_an_unlisted_update_set_is_built_like_a_listed_one(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    """``choose`` builds a field set the manifest doesn't list from the same
+    inputs: the same contract the listed one was, judging the same way."""
+
+    app = generated["app"]
+    fields = ["done_ratio", "project", "status", "subject"]
+    out, listed = _unlisted(generated, tmp_path, "update_issue", fields)
+    v = {"project": "Help Desk", "subject": "Printer jams", "status": "Resolved",
+         "assignee": None, "due_date": None, "done_ratio": 60, "notes": None}  # fmt: skip
+    gen.choose(out / "manifest.yaml", "update_issue", v, {"bot_user_id": str(BOT)})
+    built = sorted((out / "field_sets" / "update_issue").glob("*.update.yaml"))
+    assert len(built) == 1
+    assert _body(built[0]) == _body(out / listed["update"])
+    iid = app.find("Help Desk", "Printer jams")
+    here = {**generated, "out": out}
+    ok = _run(here, "update_issue", v, lambda: app.update_issue(iid, v))
+    assert ok.startswith("CONFIRMED"), ok
+    wrong = {**v, "done_ratio": 70}
+    bad = _run(here, "update_issue", v, lambda: app.update_issue(iid, wrong))
+    assert not bad.startswith("CONFIRMED"), bad
+
+
+def test_an_unlisted_set_is_refused_when_its_inputs_changed(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    out, _ = _unlisted(
+        generated, tmp_path, "update_issue", ["project", "status", "subject"]
+    )
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    manifest["field_sets"]["demos_sha256"] = "sha256:" + "0" * 64
+    (out / "manifest.yaml").write_text(yaml.safe_dump(manifest, allow_unicode=True))
+    v = {"project": "Help Desk", "subject": "Printer jams", "status": "Resolved"}
+    with pytest.raises(gen.GenerateError, match="demonstrations changed"):
+        gen.choose(out / "manifest.yaml", "update_issue", v, {"bot_user_id": str(BOT)})
+
+
+def test_a_set_outside_the_kinds_fields_has_no_contract(
+    generated: dict[str, Any],
+) -> None:
+    manifest = generated["out"] / "manifest.yaml"
+    extra = {"bot_user_id": str(BOT)}
+    # No identity: the update's target can't be told apart.
+    with pytest.raises(gen.GenerateError, match="no update_issue contract"):
+        gen.choose(manifest, "update_issue", {"status": "Resolved"}, extra)
+    # A field no demonstration placed.
+    v = {"project": "Help Desk", "subject": "x", "status": "New", "priority": "High"}
+    with pytest.raises(gen.GenerateError, match="no create_issue contract"):
+        gen.choose(manifest, "create_issue", v, extra)
+
+
+# -- review round 1 (#1683) ------------------------------------------------------
+
+UNLISTED = ["project", "status", "subject"]
+UNLISTED_V = {"project": "Help Desk", "subject": "Printer jams", "status": "Resolved"}
+
+
+def _edit_manifest(out: Path, change: Callable[[dict[str, Any]], None]) -> None:
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    change(manifest)
+    (out / "manifest.yaml").write_text(yaml.safe_dump(manifest, allow_unicode=True))
+
+
+def test_a_hand_edited_listed_contract_refuses_run_time_builds(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    """A person tightened a listed contract. A set built at run time would
+    not have the edit, so none is built."""
+
+    out, listed = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    other = (
+        out
+        / sorted(
+            f
+            for f in yaml.safe_load((out / "manifest.yaml").read_text())["field_sets"][
+                "listed_sha256"
+            ]
+        )[0]
+    )
+    other.write_text(other.read_text() + "\n# hand edit\n")
+    with pytest.raises(gen.GenerateError, match="changed since it was proposed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_another_generator_version_refuses_run_time_builds(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    _edit_manifest(
+        out, lambda m: m["field_sets"].update(generator_sha256="sha256:" + "1" * 64)
+    )
+    with pytest.raises(gen.GenerateError, match="generator changed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_a_changed_snapshot_outside_the_folder_refuses(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    """The digest covers every byte the demonstrations' load read, a
+    snapshot named by a path outside the folder too."""
+
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    demos = tmp_path / "demos"
+    shutil.copytree(
+        Path(
+            yaml.safe_load((out / "manifest.yaml").read_text())["field_sets"]["demos"]
+        ),
+        demos,
+    )
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    first = sorted(demos.glob("*.demo.json"))[0]
+    doc = json.loads(first.read_text())
+    snap = demos / doc["after_snapshot"]
+    moved = outside / snap.name
+    shutil.move(str(snap), moved)
+    doc["after_snapshot"] = str(Path("..") / "elsewhere" / snap.name)
+    first.write_text(json.dumps(doc))
+    digest = __import__("hashlib").sha256()
+    gen.load_demos(demos, digest)
+    _edit_manifest(
+        out,
+        lambda m: m["field_sets"].update(
+            demos=str(demos), demos_sha256="sha256:" + digest.hexdigest()
+        ),
+    )
+    gen.choose(
+        out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+    )
+    moved.write_text(moved.read_text().replace('"Printer jams"', '"Printer jamz"'))
+    with pytest.raises(gen.GenerateError, match="demonstrations changed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_two_threads_build_one_set_at_once(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    import concurrent.futures
+
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+
+    def build(_: int) -> Any:
+        return gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(4) as pool:
+        results = list(pool.map(build, range(4)))
+    assert all(r[0] is not None for r in results)
+    assert not list((out / "field_sets").rglob("*.tmp"))

@@ -7,7 +7,9 @@
 // SQLite table notes(patient_id, note). With mode "update_notice", the first
 // "New note" shows an in-window "Update available" notice instead (an overlay
 // that covers the window, as many desktop apps draw their notices); "Later"
-// dismisses it and opens the note form. Nothing else writes to the database.
+// dismisses it and opens the note form. Mode "update_sheet" shows the same
+// notice as a real AppKit sheet (NSAlert), its own window attached to the
+// chart window. Nothing else writes to the database.
 import AppKit
 import Foundation
 import SQLite3
@@ -15,6 +17,7 @@ import SQLite3
 let args = CommandLine.arguments
 let dbPath = args[1], title = args[2], patientId = args[3], banner = args[4]
 let updateNotice = args.count > 5 && args[5] == "update_notice"
+let updateSheet = args.count > 5 && args[5] == "update_sheet"
 
 func insertNote(_ note: String) -> Bool {
     var db: OpaquePointer?
@@ -49,6 +52,9 @@ final class Controller: NSObject {
         open.frame = NSRect(x: 24, y: 240, width: 140, height: 32)
         content.addSubview(open)
         field.placeholderString = "Note"
+        // Centred, so the label a person clicks is the field's structural
+        // center too (see benchmark/repair_every_backend, finding 7).
+        field.alignment = .center
         field.isHidden = true
         field.setAccessibilityIdentifier("note-field")
         content.addSubview(field)
@@ -70,6 +76,18 @@ final class Controller: NSObject {
     var notice: NSView?
 
     @objc func newNote() {
+        if updateSheet && !noticeShown {
+            noticeShown = true
+            let alert = NSAlert()
+            alert.messageText = "Update available"
+            alert.informativeText = "Version 2.1 is ready to install."
+            alert.addButton(withTitle: "Later")
+            alert.addButton(withTitle: "Install now")
+            alert.beginSheetModal(for: window) { response in
+                if response == .alertFirstButtonReturn { self.showForm() }
+            }
+            return
+        }
         if updateNotice && !noticeShown {
             noticeShown = true
             let content = window.contentView!
