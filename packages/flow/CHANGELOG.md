@@ -15,6 +15,12 @@
 
 <!-- version list -->
 
+## Unreleased
+
+### Fixes
+
+- On a macOS host, a pixel-only run (`RemoteDisplayBackend`: Parallels, RDP and Citrix clients) no longer reads a stale frontmost app. `MacWindowClient` applies NSWorkspace's pending updates before each read, so a freshly started app's window passes the focus check instead of failing it as if an app that already exited were still frontmost ([#1712](https://github.com/OpenAdaptAI/OpenAdapt/issues/1712)).
+
 ## v2.5.0 (2026-11-02)
 
 Shadow mode checks the writes of an agent you already run against the system of record without blocking any of them, the whole-database frame works on PostgreSQL, a write that lands after the verdict can be caught by a recheck, and several verifier checks that could be unreadable or pass on the wrong value now read and compare exactly.
