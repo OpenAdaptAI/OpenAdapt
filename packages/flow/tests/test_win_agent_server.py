@@ -12,6 +12,7 @@ import hashlib
 import struct
 import sys
 import threading
+import time
 import types
 from collections.abc import Iterator
 
@@ -969,3 +970,154 @@ def test_element_identity_round_trips_through_the_agent_and_backend(
         assert WindowsBackend(agent.url).element_identity_at(550, 460) is None
     finally:
         agent.close()
+
+
+def _save_button(**kwargs) -> _FakeControl:
+    return _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        runtime_id=(42, 99),
+        bounds=(500, 450, 600, 484),
+        **kwargs,
+    )
+
+
+_SAVE_LOCATOR = {
+    "automation_id": "saveButton",
+    "role": "button",
+    "name": "Save Note",
+    "window_name": "Patient Notes",
+}
+
+
+def _act_click(fingerprint: str) -> dict:
+    return _perform_uia(
+        "act",
+        {
+            "locator": _SAVE_LOCATOR,
+            "operation": "click",
+            "expected_fingerprint": fingerprint,
+        },
+    )
+
+
+def test_native_invoke_on_the_visible_target_is_delivered(monkeypatch) -> None:
+    button = _save_button()
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    found = _perform_uia("find", {"locator": _SAVE_LOCATOR})
+    result = _act_click(found["candidates"][0]["fingerprint"])
+    assert result["receipt"]["operation"] == "uia_invoke"
+    assert button.invocations == 1
+
+
+def test_native_action_on_a_covered_target_is_refused(monkeypatch) -> None:
+    # Real lab finding: UIA still finds a button that another app's window
+    # (Notepad, the Start menu) or a modal dialog covers.
+    button = _save_button()
+    module = _fake_uia_module(button)
+    cover = _FakeControl("EditControl", name="Text editor", runtime_id=(77, 1))
+    module.ControlFromPoint = lambda _x, _y: cover
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+    found = _perform_uia("find", {"locator": _SAVE_LOCATOR})
+    with pytest.raises(AgentRequestError) as caught:
+        _act_click(found["candidates"][0]["fingerprint"])
+    assert caught.value.code == "target_obscured"
+    assert button.invocations == 0
+
+
+def test_a_hit_on_the_targets_own_text_counts_as_the_target(monkeypatch) -> None:
+    button = _save_button()
+    module = _fake_uia_module(button)
+    label = _FakeControl("TextControl", name="Save Note", runtime_id=(42, 100))
+    label.parent = button
+    module.ControlFromPoint = lambda _x, _y: label
+    monkeypatch.setitem(sys.modules, "uiautomation", module)
+    found = _perform_uia("find", {"locator": _SAVE_LOCATOR})
+    _act_click(found["candidates"][0]["fingerprint"])
+    assert button.invocations == 1
+
+
+def test_an_invoke_that_opens_a_modal_dialog_does_not_hang(monkeypatch) -> None:
+    # Real lab finding: a WinForms button whose handler shows a modal dialog
+    # does not return from Invoke until the dialog closes.
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    monkeypatch.setattr(agent_server, "_INVOKE_RETURN_S", 0.2)
+    dialog_closed = threading.Event()
+
+    class ModalButton(_FakeControl):
+        def Invoke(self):
+            self.invocations += 1
+            dialog_closed.wait(5)
+
+    button = ModalButton(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        runtime_id=(42, 99),
+        bounds=(500, 450, 600, 484),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    found = _perform_uia("find", {"locator": _SAVE_LOCATOR})
+    started = time.monotonic()
+    result = _act_click(found["candidates"][0]["fingerprint"])
+    elapsed = time.monotonic() - started
+    dialog_closed.set()
+    assert result["receipt"]["operation"] == "uia_invoke"
+    assert button.invocations == 1
+    assert elapsed < 2.0
+
+
+def test_a_target_replaced_before_the_worker_resolves_it_is_refused(
+    monkeypatch,
+) -> None:
+    button = _save_button()
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    fingerprint = _perform_uia("find", {"locator": _SAVE_LOCATOR})["candidates"][0][
+        "fingerprint"
+    ]
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    original = agent_server._find_candidates
+    calls = {"n": 0}
+
+    def find_then_replace(locator, auto):
+        calls["n"] += 1
+        if calls["n"] == 2:  # the worker's own resolution
+            button.runtime_id = (42, 100)
+        return original(locator, auto)
+
+    monkeypatch.setattr(agent_server, "_find_candidates", find_then_replace)
+    with pytest.raises(AgentRequestError) as caught:
+        _act_click(fingerprint)
+    assert caught.value.code == "stale_target"
+    assert button.invocations == 0
+
+
+def test_a_window_backed_button_is_clicked_by_posted_message(monkeypatch) -> None:
+    # Real lab finding: an Invoke that opens a modal dialog stays open inside
+    # the app, and the app answers no other UI Automation call until it ends.
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    button = _save_button()
+    button.NativeWindowHandle = 0x1234
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    posted: list[int] = []
+    monkeypatch.setitem(
+        sys.modules, "comtypes.client", types.SimpleNamespace(gen_dir=None)
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "comtypes",
+        types.SimpleNamespace(client=sys.modules["comtypes.client"]),
+    )
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_post_button_click", posted.append)
+    fingerprint = _perform_uia("find", {"locator": _SAVE_LOCATOR})["candidates"][0][
+        "fingerprint"
+    ]
+    result = _act_click(fingerprint)
+    assert result["receipt"]["operation"] == "uia_invoke"
+    assert posted == [0x1234]
+    assert button.invocations == 0

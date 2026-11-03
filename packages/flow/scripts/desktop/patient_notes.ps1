@@ -28,15 +28,19 @@ Add-Type -AssemblyName System.Drawing
 #   moved targets -- that defeats pixel-template matching, the effect under test.
 # theme      : "dark" flips to a dark colour scheme.
 # window     : "maximized" (default) or "windowed"; size "WxH" forces windowed.
+# confirm_save : true shows an owned "Confirm save" Yes/No dialog on Save; the
+#   note is written only on Yes (input to a dialog owned by the app's window).
+# interrupt  : "after_search" shows an owned "Session notice" dialog the first
+#   time Search runs (an unexpected window the recording never saw).
 # A JSON config file is used instead of env vars because the harness launches
 # the app in session 1 via CreateProcessAsUser, which does not inherit the
 # caller's environment.
-$cfg = @{ font_scale = 1.0; theme = ""; window = "maximized"; size = "" }
+$cfg = @{ font_scale = 1.0; theme = ""; window = "maximized"; size = ""; confirm_save = $false; interrupt = "" }
 $cfgPath = "C:\oa\pn_env.json"
 if (Test-Path $cfgPath) {
     try {
         $j = Get-Content $cfgPath -Raw | ConvertFrom-Json
-        foreach ($k in @("font_scale", "theme", "window", "size")) {
+        foreach ($k in @("font_scale", "theme", "window", "size", "confirm_save", "interrupt")) {
             if ($null -ne $j.$k) { $cfg[$k] = $j.$k }
         }
     } catch {}
@@ -184,9 +188,16 @@ function Load-Patients {
     $status.Text = "Loaded " + $rows.Count + " patients"
 }
 
-$searchButton.Add_Click({ Load-Patients -Filter $searchBox.Text })
+$script:interruptShown = $false
+function Show-Interrupt {
+    if ([string]$cfg["interrupt"] -eq "after_search" -and -not $script:interruptShown) {
+        $script:interruptShown = $true
+        [void][System.Windows.Forms.MessageBox]::Show($form, "Your session expires in 5 minutes.", "Session notice", "OK", "Information")
+    }
+}
+$searchButton.Add_Click({ Load-Patients -Filter $searchBox.Text; Show-Interrupt })
 $searchBox.Add_KeyDown({
-    if ($_.KeyCode -eq "Enter") { Load-Patients -Filter $searchBox.Text; $_.SuppressKeyPress = $true }
+    if ($_.KeyCode -eq "Enter") { Load-Patients -Filter $searchBox.Text; $_.SuppressKeyPress = $true; Show-Interrupt }
 })
 
 $grid.Add_SelectionChanged({
@@ -207,6 +218,10 @@ $grid.Add_SelectionChanged({
 $saveButton.Add_Click({
     if ($grid.SelectedRows.Count -lt 1) { $status.Text = "No patient selected"; return }
     $id = $grid.SelectedRows[0].Cells["id"].Value
+    if ([bool]$cfg["confirm_save"]) {
+        $answer = [System.Windows.Forms.MessageBox]::Show($form, "Save this note?", "Confirm save", "YesNo", "Question")
+        if ($answer -ne "Yes") { $status.Text = "Save cancelled"; return }
+    }
     $bytes = [Text.Encoding]::UTF8.GetBytes($noteBox.Text)
     $b64 = [Convert]::ToBase64String($bytes)
     $res = Invoke-Db -DbArgs @("save", "$id", "$b64")

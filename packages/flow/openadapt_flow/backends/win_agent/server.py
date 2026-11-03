@@ -89,6 +89,7 @@ import re
 import secrets
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import unicodedata
@@ -118,6 +119,11 @@ _MAX_TEXT_CHARS = 65_536
 _MAX_UIA_NODES = 5_000
 _MAX_UIA_CANDIDATES = 16
 _MAX_UIA_DEPTH = 24
+# A WinForms button whose click opens a modal dialog does not return from
+# Invoke until the dialog closes. Past this wait with the call accepted, the
+# invoke is running and counts as delivered.
+_INVOKE_RETURN_S = 2.0
+_INVOKE_START_S = 15.0
 
 _ROLE_TO_CONTROL = {
     "button": "ButtonControl",
@@ -1291,10 +1297,20 @@ def _perform_uia_initialized(
         raise AgentRequestError(
             409, "native_action_unavailable", "native double-click is unavailable"
         )
+    if not _hits_target(auto, control, candidate):
+        raise AgentRequestError(
+            409,
+            "target_obscured",
+            "another window or dialog is over the UIA target",
+        )
     role = candidate.get("role")
     try:
         if role in {"button", "link", "menuitem"}:
-            control.GetInvokePattern().Invoke()
+            hwnd = _control_value(control, "NativeWindowHandle", 0)
+            if role == "button" and isinstance(hwnd, int) and hwnd and os.name == "nt":
+                _post_button_click(hwnd)
+            else:
+                _invoke_off_thread(locator, candidate["fingerprint"])
             delivered = "uia_invoke"
         elif role == "textbox":
             if control.SetFocus() is False:
@@ -1327,6 +1343,128 @@ def _perform_uia_initialized(
             target_fingerprint=candidate["fingerprint"],
         ),
     }
+
+
+def _hits_target(auto: Any, control: object, candidate: dict[str, Any]) -> bool:
+    """Whether the element at the target's own point is the target.
+
+    UI Automation reaches controls that another window covers, or that a
+    modal dialog blocks. A native action must only go to a control a person
+    could click there, so the element under its point (or one of that
+    element's ancestors) must be the target itself. Without a runtime id the
+    two cannot be compared and the answer is no.
+    """
+    target_id = _runtime_id(control)
+    if not target_id:
+        return False
+    x, y = candidate["point"]
+    try:
+        node: Optional[object] = auto.ControlFromPoint(int(x), int(y))
+    except Exception:  # noqa: BLE001 - no hit test, no action
+        return False
+    for _ in range(_MAX_UIA_DEPTH):
+        if node is None:
+            return False
+        if _runtime_id(node) == target_id:
+            return True
+        node = _parent(node)
+    return False
+
+
+_BM_CLICK = 0x00F5
+_GA_ROOT = 2
+
+
+def _post_button_click(hwnd: int) -> None:
+    """Click a window-backed button by posting it ``BM_CLICK``.
+
+    This is the message UI Automation's own Win32 button provider sends for
+    Invoke, but posted: the click runs in the app's message loop and this
+    returns at once, so a click handler that opens a modal dialog cannot
+    hold the agent (or the app's UI Automation provider) inside a call. The
+    button and its top-level window must be enabled; a window disabled by a
+    modal dialog would drop the click without a word.
+    """
+    import ctypes  # noqa: PLC0415
+    from ctypes import wintypes  # noqa: PLC0415
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.IsWindow.restype = wintypes.BOOL
+    user32.IsWindowEnabled.argtypes = [wintypes.HWND]
+    user32.IsWindowEnabled.restype = wintypes.BOOL
+    user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+    user32.GetAncestor.restype = wintypes.HWND
+    user32.PostMessageW.argtypes = [
+        wintypes.HWND,
+        wintypes.UINT,
+        wintypes.WPARAM,
+        wintypes.LPARAM,
+    ]
+    user32.PostMessageW.restype = wintypes.BOOL
+    handle = wintypes.HWND(hwnd)
+    if not user32.IsWindow(handle):
+        raise AgentRequestError(
+            409, "stale_target", "UIA target changed after resolution"
+        )
+    root = user32.GetAncestor(handle, _GA_ROOT) or handle
+    if not user32.IsWindowEnabled(handle) or not user32.IsWindowEnabled(root):
+        raise AgentRequestError(
+            409, "target_blocked", "the UIA target's window is not accepting input"
+        )
+    if not user32.PostMessageW(handle, _BM_CLICK, 0, 0):
+        raise AgentRequestError(409, "native_action_failed", "native UIA action failed")
+
+
+def _invoke_off_thread(locator: dict[str, Any], fingerprint: str) -> None:
+    """Invoke the exact resolved control without waiting on a modal loop.
+
+    UIA elements belong to the thread that found them, so a worker thread
+    resolves the locator again and invokes only the control with the same
+    fingerprint. When the provider has accepted the call but not returned
+    within ``_INVOKE_RETURN_S`` (a click handler showing a modal dialog), the
+    invoke is running and this returns; the worker ends when the dialog
+    closes. A failed or mismatched resolution raises before any input.
+    """
+    state: dict[str, Any] = {}
+    started = threading.Event()
+    finished = threading.Event()
+
+    def work() -> None:
+        try:
+            import uiautomation as auto  # noqa: PLC0415 - Windows-only, lazy
+
+            with auto.UIAutomationInitializerInThread():
+                found, truncated = _find_candidates(locator, auto)
+                if (
+                    len(found) != 1
+                    or truncated
+                    or not hmac.compare_digest(fingerprint, found[0][1]["fingerprint"])
+                ):
+                    state["error"] = "stale_target"
+                    return
+                pattern = found[0][0].GetInvokePattern()
+                started.set()
+                pattern.Invoke()
+        except Exception as exc:  # noqa: BLE001 - reported below
+            state["error"] = type(exc).__name__
+        finally:
+            started.set()
+            finished.set()
+
+    threading.Thread(target=work, name="uia-invoke", daemon=True).start()
+    if not started.wait(_INVOKE_START_S):
+        raise AgentRequestError(
+            503, "uia_unavailable", "UI Automation did not resolve the target"
+        )
+    finished.wait(_INVOKE_RETURN_S)
+    error = state.get("error")
+    if error == "stale_target":
+        raise AgentRequestError(
+            409, "stale_target", "UIA target changed after resolution"
+        )
+    if error is not None:
+        raise AgentRequestError(409, "native_action_failed", "native UIA action failed")
 
 
 def _perform_uia(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
