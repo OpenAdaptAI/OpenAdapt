@@ -1630,6 +1630,11 @@ class Replayer:
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
+        # Windows captured by an earlier run on this backend name no step of
+        # this one (step ids repeat across workflows).
+        forget = getattr(self.backend, "clear_verified_windows", None)
+        if callable(forget):
+            forget()
         bundle_path = Path(bundle_dir)
         if (
             not (

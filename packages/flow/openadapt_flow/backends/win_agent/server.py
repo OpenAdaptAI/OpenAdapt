@@ -1807,6 +1807,32 @@ def _window_operation(
         rect = user32.rect(hwnd)
         if rect is None or rect[2] <= rect[0] or rect[3] <= rect[1]:
             return {"status": "ok", "window": None}
+        # The frame bounds the whole form only if every window the app shows
+        # sits inside it: a dialog or second window of the app that reaches
+        # outside the frame (or is on another monitor) answers None, and the
+        # caller reads the whole screen.
+        for candidate in user32.top_level_windows():
+            if candidate == hwnd or user32.pid_of(candidate) != pid:
+                continue
+            if not user32.is_visible(candidate):
+                continue
+            cloaked = user32.is_cloaked(candidate)
+            if cloaked is None:
+                return {"status": "ok", "window": None}
+            if cloaked:
+                continue
+            other = user32.rect(candidate)  # its visible frame, as for hwnd
+            if other is None:
+                return {"status": "ok", "window": None}
+            if other[2] <= other[0] or other[3] <= other[1]:
+                continue
+            if (
+                other[0] < rect[0]
+                or other[1] < rect[1]
+                or other[2] > rect[2]
+                or other[3] > rect[3]
+            ):
+                return {"status": "ok", "window": None}
         return {
             "status": "ok",
             "window": {

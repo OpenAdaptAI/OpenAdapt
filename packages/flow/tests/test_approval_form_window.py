@@ -195,3 +195,15 @@ def test_the_windows_backend_names_the_one_window_its_steps_were_in():
 def test_the_windows_backend_refuses_a_doubtful_window(captures, conflicted, answer):
     backend, _sent = _windows_backend(captures, conflicted, answer)
     assert backend.approval_form_region("save") is None
+
+
+def test_a_run_forgets_the_windows_an_earlier_run_captured(monkeypatch, tmp_path):
+    backend, _sent = _windows_backend({"s1": (7, 10)}, ("s2",))
+    replayer = object.__new__(Replayer)
+    replayer.backend = backend
+    monkeypatch.setattr(Replayer, "_run_unsealed", lambda self, *a, **k: "ran")
+    assert (
+        replayer.run(None, bundle_dir=tmp_path / "b", run_dir=tmp_path / "r") == "ran"
+    )
+    assert backend._verified_windows == {} and backend._conflicted_windows == set()
+    assert backend.approval_form_region("save") is None
