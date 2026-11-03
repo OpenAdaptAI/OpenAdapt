@@ -129,7 +129,9 @@ def test_a_dropped_save_is_reported_as_not_saved(mockmed: str, tmp_path: Path) -
 # -- the MCP teach path ----------------------------------------------------------
 
 
-def _teach(tmp_path: Path, base: str, *, hold: bool) -> object:
+def _teach(
+    tmp_path: Path, base: str, *, hold: bool, teach_authorization: object = None
+) -> object:
     from openadapt_flow.agent.teach import TeachBridge, TeachConfig
 
     return TeachBridge(
@@ -140,6 +142,7 @@ def _teach(tmp_path: Path, base: str, *, hold: bool) -> object:
             key_dir=tmp_path / "keys",
             hold=hold,
             reset=_reset(base),
+            teach_authorization=teach_authorization,
         )
     )
 
@@ -212,5 +215,93 @@ def test_teach_run_stops_before_a_save_a_person_must_approve(
         ]
         report = teach.dispatch("teach_finish", {})  # type: ignore[attr-defined]
         assert report["status"] == "draft", report
+    finally:
+        teach.close()  # type: ignore[attr-defined]
+
+
+# -- teach_run under a person's signed teach authorization -----------------------
+# Real pieces: a real approver roster and signature, the real teach scope on
+# run 1 and the real admission gate (docs/TEACH_AUTHORIZATION.md).
+
+
+def _gate(teach: object, trust: object = None) -> dict:
+    from openadapt_flow.jit import lifecycle
+
+    jit = teach._compiler._jit()  # type: ignore[attr-defined]
+    return lifecycle.teach_authorization_gate(
+        jit.program_dir, jit.candidate(), key_dir=jit.key_dir, trust=trust
+    )
+
+
+def _authority(tmp_path: Path, base: str) -> object:
+    from tests._teach_authorization_support import mockmed_note
+
+    return mockmed_note(
+        tmp_path / "keys",
+        tmp_path / "teach-authorization",
+        "taught.add_note",
+        base,
+        note=NOTE,
+        record={"patient_id": "p1", "type": "Triage"},
+        constants=["Jane Sample", "MRN P1"],
+    )
+
+
+def test_a_teach_run_draft_without_a_statement_is_refused_at_admission(
+    mockmed: str, tmp_path: Path
+) -> None:
+    from openadapt_flow.jit import AdmissionError
+
+    teach = _teach(tmp_path, mockmed, hold=False)
+    try:
+        _start(teach)
+        for script in SCRIPTS[:2]:
+            out = teach.dispatch(  # type: ignore[attr-defined]
+                "teach_run", {"script": script.replace("{note}", NOTE)}
+            )
+            assert out["status"] == "ok", out
+        assert teach.dispatch("teach_finish", {})["status"] == "draft"  # type: ignore[attr-defined]
+        with pytest.raises(AdmissionError, match="teach_auth_not_recorded"):
+            _gate(teach)
+    finally:
+        teach.close()  # type: ignore[attr-defined]
+
+
+def test_a_teach_run_draft_under_a_statement_is_bound_and_admissible(
+    mockmed: str, tmp_path: Path
+) -> None:
+    authority = _authority(tmp_path, mockmed)
+    teach = _teach(tmp_path, mockmed, hold=False, teach_authorization=authority)
+    try:
+        started = _start(teach)
+        assert started["started"], started
+        for script in SCRIPTS[:2]:
+            out = teach.dispatch(  # type: ignore[attr-defined]
+                "teach_run", {"script": script.replace("{note}", NOTE)}
+            )
+            assert out["status"] == "ok", out
+        report = teach.dispatch("teach_finish", {})  # type: ignore[attr-defined]
+        assert report["status"] == "draft", report
+        recorded = _gate(teach, trust=authority)
+        assert recorded["task_id"] == "taught.add_note"
+        assert recorded["authorizer"] == "teach-lead"
+    finally:
+        teach.close()  # type: ignore[attr-defined]
+
+
+def test_teach_run_cannot_type_what_the_statement_does_not_allow(
+    mockmed: str, tmp_path: Path
+) -> None:
+    teach = _teach(
+        tmp_path, mockmed, hold=False, teach_authorization=_authority(tmp_path, mockmed)
+    )
+    try:
+        _start(teach)
+        out = teach.dispatch("teach_run", {"script": SCRIPTS[0]})  # type: ignore[attr-defined]
+        assert out["status"] == "ok", out
+        injected = SCRIPTS[1].replace("{note}", "Cleared for discharge")
+        out = teach.dispatch("teach_run", {"script": injected})  # type: ignore[attr-defined]
+        assert out["status"] in ("refused", "error"), out
+        assert _records(mockmed) == []  # nothing outside the statement was saved
     finally:
         teach.close()  # type: ignore[attr-defined]
