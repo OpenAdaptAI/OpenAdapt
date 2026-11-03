@@ -97,17 +97,19 @@ bundled.
 
 In SignPath:
 
-1. Create the project `openadapt-desktop` and link the predefined GitHub.com
-   trusted build system to it. Install the SignPath GitHub App on
+1. SignPath creates the project `OpenAdapt` (slug `OpenAdapt`) with the
+   predefined GitHub.com trusted build system linked. Install the SignPath GitHub App on
    OpenAdaptAI/OpenAdapt so SignPath can read the build's audit data.
 2. Add the artifact configuration in
    `.signpath/artifact-configurations/openadapt-desktop-installers.xml` (at the
    monorepo root) and make it the project's default. GitHub uploads the
    installers as one ZIP, so one request signs a release: it deep-signs the MSI
    (every PE file inside it, then the MSI) and signs the NSIS `*-setup.exe`.
-3. Create the signing policy `release-signing`. Its pipeline policy is
-   `.signpath/policies/openadapt-desktop/release-signing.yml` at the monorepo
-   root: GitHub-hosted runners only, no re-runs. The workflow itself runs only
+3. SignPath creates the signing policies `test-signing` (test certificate) and
+   `release-signing` (production certificate, issued after SignPath reviews a
+   test-signed build). Their pipeline policies are
+   `.signpath/policies/OpenAdapt/test-signing.yml` and `release-signing.yml` at
+   the monorepo root: GitHub-hosted runners only, no re-runs. The workflow itself runs only
    from `main`, and the `native-release` environment deploys only from `main`.
 4. Create an API token for a user with submitter rights on that policy.
 
@@ -118,8 +120,8 @@ OpenAdaptAI/OpenAdapt (all four, or none):
 | --- | --- |
 | `SIGNPATH_API_TOKEN` | the submitter's API token |
 | `SIGNPATH_ORGANIZATION_ID` | the SignPath organization ID |
-| `SIGNPATH_PROJECT_SLUG` | `openadapt-desktop` |
-| `SIGNPATH_SIGNING_POLICY_SLUG` | `release-signing` |
+| `SIGNPATH_PROJECT_SLUG` | `OpenAdapt` |
+| `SIGNPATH_SIGNING_POLICY_SLUG` | `test-signing` first; `release-signing` once the production certificate is issued |
 
 The Windows job then builds the installers, uploads them, submits one signing
 request with `signpath/github-action-submit-signing-request` (pinned by commit),

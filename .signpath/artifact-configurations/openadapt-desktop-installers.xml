@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  SignPath artifact configuration for the openadapt-desktop project. Paste it
-  into SignPath (project openadapt-desktop > Artifact configurations) and make
+  SignPath artifact configuration for the OpenAdapt project. Paste it
+  into SignPath (project OpenAdapt > Artifact configurations) and make
   it the default; the workflow does not pass artifact-configuration-slug.
 
   desktop-release.yml uploads one GitHub artifact (a ZIP) holding the

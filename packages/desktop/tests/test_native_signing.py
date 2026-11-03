@@ -114,7 +114,10 @@ def test_one_signpath_request_deep_signs_the_msi_and_signs_the_nsis_setup() -> N
     import xml.etree.ElementTree as ElementTree
 
     config = SIGNPATH_DIR / "artifact-configurations" / "openadapt-desktop-installers.xml"
-    policy = SIGNPATH_DIR / "policies" / "openadapt-desktop" / "release-signing.yml"
+    policies = [
+        SIGNPATH_DIR / "policies" / "OpenAdapt" / f"{slug}.yml"
+        for slug in ("test-signing", "release-signing")
+    ]
     if not NATIVE_WORKFLOW.is_file():
         pytest.skip("not running from the OpenAdapt monorepo checkout")
     namespace = {"sp": "http://signpath.io/artifact-configuration/v1"}
@@ -128,9 +131,10 @@ def test_one_signpath_request_deep_signs_the_msi_and_signs_the_nsis_setup() -> N
     assert nsis is not None and nsis.get("path") == "*-setup.exe"
     assert nsis.find("sp:authenticode-sign", namespace) is not None
 
-    policy_text = policy.read_text(encoding="utf-8")
-    assert "require_github_hosted: true" in policy_text
-    assert "disallow_reruns: true" in policy_text
+    for policy in policies:
+        policy_text = policy.read_text(encoding="utf-8")
+        assert "require_github_hosted: true" in policy_text
+        assert "disallow_reruns: true" in policy_text
 
     workflow = NATIVE_WORKFLOW.read_text(encoding="utf-8")
     smoke = workflow.split("Smoke-test MSI and NSIS install", 1)[1].split("- name:", 1)[0]
