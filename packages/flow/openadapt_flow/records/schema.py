@@ -352,6 +352,21 @@ class ChannelRead(BaseModel):
         default=None,
         description="Required for an export read; must be unset otherwise.",
     )
+    record_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "The record this read came from (its id in the source). Reads "
+            "of one field that name different records disagree."
+        ),
+    )
+    record_count: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description=(
+            "How many records the read matched. Anything but 1 is not a read "
+            "of one record; a database or API read must state it."
+        ),
+    )
 
     @model_validator(mode="after")
     def _session_matches_channel(self) -> "ChannelRead":
