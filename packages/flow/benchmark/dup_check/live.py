@@ -33,9 +33,9 @@ sys.path.insert(0, str(HERE.parent))
 
 from openadapt_flow.runtime.checks.duplicate_record import (  # noqa: E402
     FhirPatientSource,
-    RestPatientSource,
     check_duplicate,
 )
+from openadapt_flow.runtime.checks.openemr_patient import RestPatientSource  # noqa: E402
 
 DOB = "1977-05-14"
 SCOPE = "openid api:oemr api:fhir user/patient.crus user/Patient.read user/Patient.rs"

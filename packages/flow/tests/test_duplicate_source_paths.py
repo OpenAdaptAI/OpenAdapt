@@ -27,10 +27,10 @@ from openadapt_flow.ir import Postcondition, PostconditionKind
 from openadapt_flow.runtime.checks.duplicate_record import (
     FhirPatientSource,
     PatientRecord,
-    RestPatientSource,
     TableSource,
     resolve_duplicate_source,
 )
+from openadapt_flow.runtime.checks.openemr_patient import RestPatientSource
 from openadapt_flow.runtime.effects import FhirEffectVerifier
 from openadapt_flow.runtime.effects.rest import RestRecordVerifier
 

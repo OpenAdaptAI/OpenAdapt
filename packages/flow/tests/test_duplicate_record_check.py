@@ -22,11 +22,13 @@ import pytest
 from openadapt_flow.runtime.checks.duplicate_record import (
     FhirPatientSource,
     PatientRecord,
-    RestPatientSource,
-    SqlPatientSource,
     TableSource,
     check_duplicate,
     classify,
+)
+from openadapt_flow.runtime.checks.openemr_patient import (
+    RestPatientSource,
+    SqlPatientSource,
 )
 
 WANT = {"fname": "Rosalind", "lname": "Jesswood", "DOB": "1990-04-09"}
@@ -50,6 +52,9 @@ def rec(
         (rec("Rosalind", "Jesswood", "1990-04-10"), "close"),  # a typo in the day
         (rec("Rosalnid", "Jesswood", "1990-04-09"), "close"),  # a typo in the name
         (rec("Rosalind", "Jesswood", ""), "close"),  # the record has no birth date
+        (rec("Rosalind", "Jesswood", "0000-00-00"), "close"),  # MySQL zero date
+        (rec("Rosalind", "Jesswood", "1990-00-00"), "close"),  # year only
+        (rec("Rosalind", "Jesswood", "1990-02-30"), "close"),  # no such date
         (rec("Ana", "Jesswood", "1961-01-01"), None),  # a namesake
         (rec("Ana", "Oakwood", "1990-04-09"), None),  # a shared birth date
         (rec("Rosalind", "Jesswood", "1971-11-23"), None),  # same name, another person
@@ -77,6 +82,17 @@ def test_decisions_and_fail_closed_inputs() -> None:
         check_duplicate(table, {**WANT, "DOB": "04/09/1990"}).decision == "unreadable"
     )
     assert check_duplicate(table, {**WANT, "lname": " "}).decision == "unreadable"
+
+
+def test_a_stored_name_with_punctuation_is_still_searched() -> None:
+    # The channel compares the stored text by prefix, as a server does, so the
+    # search must also send the name as typed: "obrien" never finds "O'Brien".
+    # The date differs by a day, so only the name searches can find the chart.
+    table = TableSource([rec("Margaret", "O'Brien", "1950-03-04", "8")])
+    want = {"fname": "Peggy", "lname": "O'Brien", "DOB": "1950-03-05"}
+    result = check_duplicate(table, want)
+    assert result.decision == "close"
+    assert [c.record.record_id for c in result.candidates] == ["8"]
 
 
 # -- FHIR over HTTP ---------------------------------------------------------------
@@ -510,3 +526,24 @@ def test_a_program_maps_its_own_parameter_names() -> None:
     )
     assert replayer._postcondition_passes(pc, b"", None, {}) is False
     assert replayer._last_duplicate_check.decision == "exact"
+
+
+def test_fhir_full_page_with_no_next_link_is_unreadable(serve, monkeypatch) -> None:
+    # OpenEMR's FHIR honors _count but gives no next link and a total equal to
+    # the rows returned, so a cut-short answer looks complete.
+    from openadapt_flow.runtime.checks import duplicate_record
+
+    monkeypatch.setattr(duplicate_record, "FHIR_PAGE_SIZE", 3)
+
+    def capped(path: str, query: dict[str, list[str]]) -> tuple[int, Any]:
+        count = int(query["_count"][0])
+        rows = PEOPLE[:count]
+        return 200, {
+            "resourceType": "Bundle",
+            "type": "searchset",
+            "total": len(rows),
+            "entry": [{"resource": r} for r in rows],
+        }
+
+    server = serve(capped)
+    assert check_duplicate(FhirPatientSource(server.url), WANT).decision == "unreadable"

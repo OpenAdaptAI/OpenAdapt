@@ -33,6 +33,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Protocol
 from urllib.parse import urljoin, urlsplit
 
@@ -41,8 +42,9 @@ from openadapt_flow.runtime.checks import CheckSource
 Decision = Literal["none", "exact", "close", "unreadable"]
 
 #: The fields the check reads, and the run parameter that fills each one by
-#: default (OpenEMR's referral parameter names). A program for another app
-#: maps its own names with ``candidate_record_fields``.
+#: default: a parameter of the same name. A program maps its own names with
+#: ``candidate_record_fields``; with no mapping, a missing first name, last
+#: name or date of birth makes the check unreadable.
 RECORD_FIELDS: dict[str, str] = {
     "fname": "fname",
     "lname": "lname",
@@ -55,6 +57,8 @@ RECORD_FIELDS: dict[str, str] = {
 
 #: A paging chain longer than this is read as unreadable, not truncated.
 MAX_PAGES = 50
+# Rows asked for per FHIR page (``_count``).
+FHIR_PAGE_SIZE = 200
 
 
 @dataclass(frozen=True)
@@ -132,6 +136,19 @@ def norm_name(value: str) -> str:
 
 def name_parts(value: str) -> set[str]:
     return {p for p in re.split(r"[\s\-]+", norm_name(value)) if p}
+
+
+def raw_name_terms(*names: str) -> set[str]:
+    """Each name whole and each of its parts, as typed (apostrophes, accents
+    and case kept), for channels that search the stored text literally."""
+
+    terms: set[str] = set()
+    for name in names:
+        name = re.sub(r"\s+", " ", name or "").strip()
+        if name:
+            terms.add(name)
+            terms |= {p for p in re.split(r"[\s\-]+", name) if p}
+    return terms
 
 
 def edit_distance(a: str, b: str) -> int:
@@ -424,12 +441,19 @@ ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def full_date(value: Any) -> str:
-    """A record's date of birth as full ISO, or "" when it has none or only a
-    year or a year and month. A partial date is never a non-match: the
-    record is judged as one with no date of birth, so a name match is close."""
+    """A record's date of birth as full ISO, or "" when it has none, only a
+    year or a year and month, or no real date (MySQL's ``0000-00-00``,
+    ``1980-02-30``). Such a record is judged as one with no date of birth,
+    so a name match is close, never a non-match."""
 
     text = str(value or "").strip()[:10]
-    return text if ISO_DATE.fullmatch(text) else ""
+    if not ISO_DATE.fullmatch(text):
+        return ""
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return ""
+    return text
 
 
 def check_duplicate(
@@ -450,12 +474,18 @@ def check_duplicate(
     ]
     if swapped(dob):
         queries.append((source.by_birthdate, swapped(dob)))  # type: ignore[arg-type]
-    # Each part of the last name, and of the first name (a swapped name).
+    # Each part of the last name, and of the first name (a swapped name),
+    # both as typed and normalized: a channel compares the stored text, so
+    # "obrien" alone never finds "O'Brien", nor "jose" "José".
     queries += [
         (source.by_family, part)
-        for part in sorted(name_parts(lname) | name_parts(fname))
+        for part in sorted(
+            name_parts(lname) | name_parts(fname) | raw_name_terms(lname, fname)
+        )
     ]
-    queries.append((source.by_given, fname))
+    queries += [
+        (source.by_given, given) for given in sorted({fname, norm_name(fname)} - {""})
+    ]
     if (want.get("mrn") or "").strip():
         queries.append((source.by_identifier, want["mrn"].strip()))
     if len(_digits(want.get("phone_home") or "")) >= 7:
@@ -572,7 +602,10 @@ class FhirPatientSource:
 
     def search(self, params: dict[str, str]) -> list[PatientRecord]:
         url: Optional[str] = f"{self.base_url}/Patient"
-        query: Optional[dict[str, str]] = params
+        # An explicit page size, so a full page with no next link shows the
+        # server cut the answer short (OpenEMR's FHIR gives no next link,
+        # and a Bundle.total equal to the rows it returned).
+        query: Optional[dict[str, str]] = {**params, "_count": str(FHIR_PAGE_SIZE)}
         total: Optional[int] = None
         out: list[PatientRecord] = []
         pages = 0
@@ -601,6 +634,7 @@ class FhirPatientSource:
                 ):
                     raise Unreadable("a Bundle entry is not a Patient")
                 out.append(self._record(resource))
+            full_page = len(entries) >= FHIR_PAGE_SIZE
             url, query = None, None
             for link in body.get("link", []) or []:
                 if isinstance(link, dict) and link.get("relation") == "next":
@@ -608,6 +642,11 @@ class FhirPatientSource:
                     if not isinstance(raw, str) or not raw.strip():
                         raise Unreadable("a next-page link has no URL")
                     url = _same_origin(self.base_url, urljoin(at, raw.strip()))
+            if url is None and full_page:
+                raise Unreadable(
+                    "a full page came back with no next link; the server may "
+                    "have cut the answer short"
+                )
         if total is not None and total != len(out):
             raise Unreadable(
                 f"the search reported {total} record(s) and {len(out)} were read"
@@ -690,100 +729,6 @@ class FhirPatientSource:
         return self.search({"email": email})
 
 
-class SqlPatientSource:
-    """OpenEMR adapter, fallback: a read-only query on ``patient_data``.
-
-    The columns (``pid``, ``pubpid``, ``DOB``, ``birth_lname``, ...) are
-    OpenEMR's.
-
-    For a deployment with no FHIR or REST read. ``connect`` returns a DB-API
-    connection with a SELECT-only account. OpenEMR runs on MySQL or MariaDB,
-    so parameters default to ``%s`` (``paramstyle="format"``); pass
-    ``paramstyle="qmark"`` for SQLite. The SQL itself is portable (the
-    wildcard is bound, not concatenated).
-    """
-
-    channel = "sql"
-
-    def __init__(
-        self,
-        connect: Callable[[], Any],
-        *,
-        table: str = "patient_data",
-        paramstyle: Literal["format", "qmark"] = "format",
-    ) -> None:
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]{0,63}", table):
-            raise ValueError("table must be a plain identifier")
-        self._connect = connect
-        self.table = table
-        self.mark = "%s" if paramstyle == "format" else "?"
-        self.pages_read = 0
-
-    def _query(self, where: str, *values: str) -> list[PatientRecord]:
-        try:
-            conn = self._connect()
-        except Exception as exc:  # noqa: BLE001
-            raise Unreadable(f"the database is unreachable ({type(exc).__name__})")
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT pid, fname, lname, DOB, pubpid, phone_home, street, email, "
-                f"birth_fname, birth_lname FROM {self.table} "
-                f"WHERE {where.replace('?', self.mark)}",
-                values,
-            )
-            rows = cur.fetchall()
-        except Exception as exc:  # noqa: BLE001
-            raise Unreadable(f"the database query failed ({type(exc).__name__})")
-        finally:
-            try:
-                conn.close()
-            except Exception:  # noqa: BLE001
-                pass
-        self.pages_read += 1
-        out = []
-        for pid, f, ln, d, mrn, phone, street, email, bf, bl in rows:
-            prior = ((str(bf or f or ""), str(bl)),) if bl else ()
-            out.append(
-                PatientRecord(
-                    str(pid),
-                    str(f or ""),
-                    str(ln or ""),
-                    full_date(d),
-                    str(mrn or ""),
-                    str(phone or ""),
-                    str(street or ""),
-                    str(email or ""),
-                    prior,
-                )
-            )
-        return out
-
-    def by_birthdate(self, dob: str) -> list[PatientRecord]:
-        return self._query("DOB = ?", dob)
-
-    def by_family(self, family: str) -> list[PatientRecord]:
-        # FHIR's string search is a case-insensitive prefix; match it.
-        prefix = family.replace("%", "").replace("_", "") + "%"
-        return self._query(
-            "LOWER(lname) LIKE LOWER(?) OR LOWER(birth_lname) LIKE LOWER(?)",
-            prefix,
-            prefix,
-        )
-
-    def by_identifier(self, mrn: str) -> list[PatientRecord]:
-        return self._query("pubpid = ?", mrn)
-
-    def by_given(self, given: str) -> list[PatientRecord]:
-        return self._query("LOWER(fname) = LOWER(?)", given)
-
-    def by_phone(self, phone: str) -> list[PatientRecord]:
-        return self._query("phone_home = ?", phone)
-
-    def by_email(self, email: str) -> list[PatientRecord]:
-        return self._query("LOWER(email) = LOWER(?)", email)
-
-
 class TableSource:
     """An in-memory patient table with FHIR search semantics (offline use)."""
 
@@ -799,12 +744,13 @@ class TableSource:
 
     def by_family(self, family: str) -> list[PatientRecord]:
         self.pages_read += 1
-        prefix = norm_name(family)
+        # As a server compares: the stored text, case aside, by prefix.
+        prefix = family.casefold()
         return [
             r
             for r in self.records
             if any(
-                norm_name(last).startswith(prefix)
+                last.casefold().startswith(prefix)
                 for last in (r.lname, *(n[1] for n in r.prior_names))
             )
         ]
@@ -815,8 +761,8 @@ class TableSource:
 
     def by_given(self, given: str) -> list[PatientRecord]:
         self.pages_read += 1
-        prefix = norm_name(given)
-        return [r for r in self.records if norm_name(r.fname).startswith(prefix)]
+        prefix = given.casefold()
+        return [r for r in self.records if r.fname.casefold().startswith(prefix)]
 
     def by_phone(self, phone: str) -> list[PatientRecord]:
         self.pages_read += 1
@@ -827,135 +773,6 @@ class TableSource:
     def by_email(self, email: str) -> list[PatientRecord]:
         self.pages_read += 1
         return [r for r in self.records if r.email.casefold() == email.casefold()]
-
-
-class RestPatientSource:
-    """OpenEMR adapter: its standard REST API, ``GET .../api/patient?DOB=...``.
-
-    The query parameters and fields (``fname``, ``lname``, ``DOB``,
-    ``pubpid``, ``phone_home``) are OpenEMR's.
-
-    OpenEMR answers with ``{"data": [...]}``. A next-page link
-    (``links.next``) is followed. A full page with no next link may be
-    truncated, so it makes the answer unreadable rather than incomplete.
-    """
-
-    channel = "rest"
-
-    def __init__(
-        self,
-        base_url: str,
-        *,
-        path: str = "/apis/default/api/patient",
-        headers: Optional[dict[str, str]] = None,
-        session: Any = None,
-        timeout_s: float = 10.0,
-        page_size: int = 500,
-    ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.path = path.split("?", 1)[0]
-        self.headers = dict(headers or {})
-        self._session = session
-        self.timeout_s = timeout_s
-        self.page_size = page_size
-        self.pages_read = 0
-
-    def _client(self) -> Any:
-        if self._session is None:
-            import httpx
-
-            self._session = httpx.Client()
-        return self._session
-
-    def search(self, params: dict[str, str]) -> list[PatientRecord]:
-        url: Optional[str] = f"{self.base_url}{self.path}"
-        query: Optional[dict[str, Any]] = {**params, "_limit": self.page_size}
-        out: list[PatientRecord] = []
-        pages = 0
-        while url is not None:
-            if pages >= MAX_PAGES:
-                raise Unreadable(
-                    f"more than {MAX_PAGES} pages; the search was not read to the end"
-                )
-            body, at = _get_json(
-                self._client(), url, query, self.headers, self.timeout_s
-            )
-            pages += 1
-            self.pages_read += 1
-            if not isinstance(body, dict):
-                raise Unreadable("the patient search did not return an object")
-            errors = [
-                k
-                for k in ("validationErrors", "internalErrors", "errors", "error")
-                if body.get(k)
-            ]
-            if errors:
-                raise Unreadable("the patient search reported " + ", ".join(errors))
-            rows = body.get("data")
-            if not isinstance(rows, list):
-                raise Unreadable("the patient search did not return a data list")
-            for row in rows:
-                if not isinstance(row, dict):
-                    raise Unreadable("a patient row is not an object")
-                out.append(
-                    PatientRecord(
-                        record_id=str(
-                            row.get("uuid") or row.get("pid") or row.get("id") or ""
-                        ),
-                        fname=str(row.get("fname") or ""),
-                        lname=str(row.get("lname") or ""),
-                        dob=full_date(row.get("DOB")),
-                        mrn=str(row.get("pubpid") or ""),
-                        phone=str(row.get("phone_home") or ""),
-                        street=str(row.get("street") or ""),
-                        email=str(row.get("email") or ""),
-                        prior_names=(
-                            (
-                                (
-                                    str(
-                                        row.get("birth_fname") or row.get("fname") or ""
-                                    ),
-                                    str(row["birth_lname"]),
-                                ),
-                            )
-                            if row.get("birth_lname")
-                            else ()
-                        ),
-                    )
-                )
-            links = body.get("links") if isinstance(body, dict) else None
-            nxt = links.get("next") if isinstance(links, dict) else None
-            if isinstance(nxt, str) and nxt.strip():
-                url = _same_origin(self.base_url, urljoin(at, nxt.strip()))
-                query = None
-            elif len(rows) >= self.page_size:
-                raise Unreadable(
-                    "a full page with no next link; the search may be truncated"
-                )
-            else:
-                url = None
-        return out
-
-    def by_birthdate(self, dob: str) -> list[PatientRecord]:
-        return self.search({"DOB": dob})
-
-    def by_family(self, family: str) -> list[PatientRecord]:
-        # OpenEMR matches lname exactly here, so compare prefixes locally
-        # against an exact read: a hyphenated or married name is still found
-        # through the date of birth.
-        return self.search({"lname": family})
-
-    def by_identifier(self, mrn: str) -> list[PatientRecord]:
-        return self.search({"pubpid": mrn})
-
-    def by_given(self, given: str) -> list[PatientRecord]:
-        return self.search({"fname": given})
-
-    def by_phone(self, phone: str) -> list[PatientRecord]:
-        return self.search({"phone_home": phone})
-
-    def by_email(self, email: str) -> list[PatientRecord]:
-        return self.search({"email": email})
 
 
 def _unwrap(verifier: Any) -> Any:
@@ -984,16 +801,12 @@ def source_for_verifier(
     """The patient search on the same channel as a run's record check.
 
     A FHIR verifier gives a generic FHIR R4 ``Patient`` search at its base URL
-    with its credentials. An OpenEMR REST verifier on ``.../api/patient``
-    gives the OpenEMR REST adapter, but only with ``allow_rest`` (a program
-    pinned to the record check). Anything else, or a verifier missing the
-    attributes these need, gives None.
-
-    ``channel`` (the program's ``candidate_channel``) chooses: ``fhir`` with
-    an OpenEMR REST verifier searches OpenEMR's FHIR API on the same server
-    (``.../apis/<site>/fhir``) with the verifier's bearer token, which then
-    needs the FHIR read scope (``api:fhir user/Patient.read``); ``rest``
-    uses only the REST adapter.
+    with its credentials. A REST record verifier goes to the app's adapter
+    (:mod:`openadapt_flow.runtime.checks.openemr_patient` is the only one),
+    which uses its REST channel only with ``allow_rest`` (a program pinned to
+    the record check). Anything else, or a verifier missing the attributes
+    these need, gives None. ``channel`` (the program's ``candidate_channel``)
+    chooses ``fhir`` or ``rest``.
     """
 
     from openadapt_flow.runtime.effects import FhirEffectVerifier
@@ -1018,37 +831,14 @@ def source_for_verifier(
                 verify_tls=getattr(verifier, "verify_tls", True),
                 timeout_s=max(float(getattr(verifier, "timeout_s", 10.0)), 10.0),
             )
-        records_path = str(getattr(verifier, "records_path", "") or "")
-        if (
-            channel == "fhir"
-            and isinstance(verifier, RestRecordVerifier)
-            and "/api/patient" in records_path
-        ):
-            # OpenEMR serves FHIR beside its REST API: .../apis/default/fhir.
-            site = records_path.split("?", 1)[0].split("/api/patient", 1)[0]
-            bearer = str(
-                (getattr(verifier, "headers", None) or {}).get("Authorization", "")
+        if isinstance(verifier, RestRecordVerifier):
+            # An app's REST record check: its adapter decides, if it has one.
+            from openadapt_flow.runtime.checks.openemr_patient import (
+                source_for_rest_verifier,
             )
-            token = bearer.removeprefix("Bearer ").strip()
-            return FhirPatientSource(
-                f"{verifier.base_url}{site}/fhir",
-                token=(lambda: token) if token else None,
-                session=verifier._get_session(),
-                timeout_s=max(float(getattr(verifier, "timeout_s", 10.0)), 10.0),
-            )
-        if channel == "fhir":
-            return None
-        if (
-            allow_rest
-            and isinstance(verifier, RestRecordVerifier)
-            and "/api/patient" in records_path
-        ):
-            return RestPatientSource(
-                verifier.base_url,
-                path=records_path,
-                headers=getattr(verifier, "headers", None),
-                session=verifier._get_session(),
-                timeout_s=max(float(getattr(verifier, "timeout_s", 10.0)), 10.0),
+
+            return source_for_rest_verifier(
+                verifier, allow_rest=allow_rest, channel=channel
             )
     except Exception:  # noqa: BLE001 - an unusable verifier gives no source
         return None
