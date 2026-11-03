@@ -186,6 +186,7 @@ Start-ScheduledTask -TaskName '{task}'
         guest_dir: str = r"C:\oa",
         port: int = 5000,
         wait_s: float = 40.0,
+        server_path: Optional[Path] = None,
     ):
         """Deploy and start ``win_agent`` on the desktop with a pinned TLS cert.
 
@@ -212,7 +213,10 @@ Start-ScheduledTask -TaskName '{task}'
             "$_.ProcessId -Force }",
             check=False,
         )
-        self.push_file(Path(agent_server.__file__), rf"{guest_dir}\win_agent_server.py")
+        self.push_file(
+            Path(server_path or agent_server.__file__),
+            rf"{guest_dir}\win_agent_server.py",
+        )
         bundle = generate_self_signed_cert([self.host])
         try:
             self.push_file(Path(bundle.certfile), rf"{guest_dir}\agent-cert.pem")
