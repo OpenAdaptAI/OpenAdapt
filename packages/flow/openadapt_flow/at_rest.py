@@ -10,7 +10,7 @@ durable checkpoints can hold patient data. Flow encrypts them with
   ``OPENADAPT_FLOW_AT_REST_HOME`` moves it), created on first use with mode
   0600 in a 0700 directory and refused if anyone but the owner can read it.
   Back it up: what it encrypts can't be read without it.
-* Durable checkpoints and attended state are encrypted under that key by
+* Durable checkpoints are encrypted under that key by
   default.
 * ``OPENADAPT_FLOW_AT_REST=strict``, the setting for healthcare and regulated
   deployments, also encrypts every recording, bundle and run directory, and
@@ -76,6 +76,16 @@ def explicit_key() -> bool:
         os.environ.get("OPENADAPT_BUNDLE_KEY")
         or os.environ.get("OPENADAPT_RECORDING_KEY")
     )
+
+
+def hold_back_in_strict(artifact: str) -> None:
+    """Refuse, before any record changes, a library entry point whose output
+    can't be encrypted yet, when strict mode is on."""
+    if strict():
+        raise AtRestRefused(
+            f"Not starting: {artifact} is written in plaintext, and "
+            f"{MODE_ENV}=strict holds it back. Nothing was executed."
+        )
 
 
 def unsealed_write(artifact: str, path: Path | str, *, refuse: bool = True) -> None:
@@ -221,9 +231,15 @@ def _record(
         finally:
             os.close(fd)
     except OSError as exc:
-        print(
-            f"WARNING: could not record the plaintext opt-out: {exc}", file=sys.stderr
-        )
+        # An unrecorded plaintext write is the silent case this ledger exists
+        # to prevent, so the write stops here.
+        with _lock:
+            _warned.discard(purpose)
+        raise AtRestRefused(
+            f"Not writing {purpose}: the plaintext ledger at {ledger_path()} "
+            f"can't be written ({exc}). Set {HOME_ENV} to a writable private "
+            "directory. Nothing was written."
+        ) from exc
 
 
 def refusal(purpose: str, why: str) -> str:
@@ -238,12 +254,23 @@ def refusal(purpose: str, why: str) -> str:
 def _check_mode(path: Path) -> None:
     if os.name != "posix":
         return
-    mode = path.stat().st_mode
-    if mode & (stat.S_IRWXG | stat.S_IRWXO):
-        raise LocalKeyError(
-            f"{path} is readable by group or others (mode {oct(mode & 0o777)}); "
-            f"run chmod 600 {path}. Nothing was read or written."
-        )
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode):
+        raise LocalKeyError(f"{path} is not a regular file. Nothing was read.")
+    for item, label, fix in (
+        (info, str(path), f"chmod 600 {path}"),
+        (path.parent.stat(), str(path.parent), f"chmod 700 {path.parent}"),
+    ):
+        if item.st_uid != os.getuid():
+            raise LocalKeyError(
+                f"{label} belongs to another user. Nothing was read or written."
+            )
+        if item.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+            raise LocalKeyError(
+                f"{label} is open to group or others (mode "
+                f"{oct(item.st_mode & 0o777)}); run {fix}. Nothing was read or "
+                "written."
+            )
 
 
 def _read(path: Path) -> str:

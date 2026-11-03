@@ -130,6 +130,22 @@ def require_key(key: Optional[str]) -> str:
     return resolved
 
 
+def require_configured_key(key: Optional[str] = None) -> str:
+    """The explicit ``key`` or ``OPENADAPT_BUNDLE_KEY``, never the local key.
+
+    For commands whose contract is the deployment key (``seal``, a record
+    check bound to an encrypted bundle): a missing key raises
+    :class:`MissingKeyError` instead of silently using this machine's key.
+    """
+    resolved = key or os.environ.get(ENV_KEY)
+    if not resolved:
+        raise MissingKeyError(
+            f"no encryption key configured: set the {ENV_KEY} environment "
+            "variable to the deployment key."
+        )
+    return resolved
+
+
 def is_encrypted(data: bytes) -> bool:
     """Whether ``data`` is one of this module's encrypted containers.
 

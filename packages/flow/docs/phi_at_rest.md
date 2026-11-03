@@ -22,22 +22,30 @@ with your other secrets.
 
 | | Default | `OPENADAPT_FLOW_AT_REST=strict` |
 | --- | --- | --- |
-| Durable checkpoints and attended state | Encrypted | Encrypted |
+| Durable checkpoints | Encrypted | Encrypted |
 | Web recordings | Encrypted with a configured key; otherwise logged | Encrypted |
 | Bundles from `compile`, `induce`, `admit` | Encrypted from encrypted input; otherwise logged | Encrypted |
-| Run directories | Encrypted for a sealed bundle with a configured key; otherwise logged | Encrypted |
-| Desktop recordings, approval requests, and the output of `visualize`, `explain`, `teach`, `emit-skill`, `push`, `compose`, `process`, `variants`, `route`, `for-each`, `--save-healed-to`, `--workers` and `induce --report` | Logged | Held back before the command runs |
+| Run directories | Encrypted for a sealed bundle; otherwise logged | Encrypted |
+| Desktop recordings, approval requests, `--record-video`, and the output of `visualize`, `explain`, `teach`, `emit-skill`, `push`, `compose`, `process`, `variants`, `route`, `for-each`, `shadow`, `compile-agent`, `guard`, `bench`, `sanitize`, `redact-report`, `jit`, `--save-healed-to`, `--workers` and `induce --report` | Logged | Held back before the command runs |
 
 **Logged** means stderr names the path and one line goes to
-`~/.openadapt/plaintext-at-rest.jsonl`. OpenAdapt Desktop shows a notice in
+`~/.openadapt/plaintext-at-rest.jsonl`; when that line can't be written, the
+write stops. OpenAdapt Desktop shows a notice in
 its window from the same ledger. Issue
 [#1751](https://github.com/OpenAdaptAI/OpenAdapt/issues/1751) tracks moving
 each logged artifact to encrypted by default.
 
+A sealed bundle always runs into a sealed run directory, in every mode.
+
 **Healthcare and other regulated deployments:** set
 `OPENADAPT_FLOW_AT_REST=strict` and a key from your secret manager. Strict
-mode encrypts every recording, bundle and run directory, and an unknown value
-of `OPENADAPT_FLOW_AT_REST` stops the command.
+mode runs the commands that keep their files encrypted (the ones listed under
+[Commands on sealed input](#commands-on-sealed-input)) and the ones that
+write no recorded data (service health and control, the no-outbound allow
+list, key and Seal verification), and holds back every other command before
+it starts. It encrypts every recording, bundle and run directory, and an
+unknown value of `OPENADAPT_FLOW_AT_REST` stops the command. `seal` and
+record checks on encrypted bundles use `OPENADAPT_BUNDLE_KEY` only.
 
 `OPENADAPT_FLOW_PLAINTEXT_AT_REST='<reason>'` is for development and
 already de-identified data: it turns encryption off, and each process that

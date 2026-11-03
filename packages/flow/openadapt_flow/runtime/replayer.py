@@ -1624,12 +1624,19 @@ class Replayer:
             _sealed.is_sealed(bundle_path)
             or _sealed.active_writer(bundle_path) is not None
         )
-        # A run directory is sealed under strict mode, or when the deployment
-        # configured a key and the bundle is sealed. Otherwise it is one of the
-        # artifacts that can't be sealed yet by default (the offline Seal and
-        # other readers don't read sealed runs): it is written in plaintext,
-        # named on stderr and in the ledger (docs/phi_at_rest.md).
-        seal_run = at_rest.strict() or (bundle_sealed and at_rest.explicit_key())
+        # A sealed bundle always runs into a sealed run directory, whatever
+        # the mode or opt-out: encrypted input never yields plaintext output.
+        # Strict mode seals the run of a plaintext bundle too. Otherwise the
+        # plaintext run directory is named on stderr and in the ledger
+        # (docs/phi_at_rest.md).
+        seal_run = at_rest.strict() or bundle_sealed
+        if save_healed_to is not None and seal_run:
+            # The healed copy is written as a plaintext bundle: hold it back
+            # before anything runs rather than decrypt a sealed bundle to disk.
+            raise at_rest.AtRestRefused(
+                f"Not writing a healed bundle at {save_healed_to}: it would be a "
+                "plaintext copy of an encrypted run. Nothing was executed."
+            )
         if not seal_run or _sealed.active_writer(Path(run_dir)) is not None:
             if _sealed.active_writer(Path(run_dir)) is None:
                 if not at_rest.plaintext_allowed("a run directory"):
@@ -1669,11 +1676,9 @@ class Replayer:
             # Refuse before anything is actuated or written: these stores
             # keep their own plaintext state files in the run directory.
             raise _sealed.SealedSetError(
-                f"a sealed run cannot use {unsupported} yet, because that "
-                "state is written to the run directory in plaintext. Nothing "
-                "was executed. Outside OPENADAPT_FLOW_AT_REST=strict, and "
-                "without a configured key, the run directory is written in "
-                "plaintext (recorded) and this works."
+                f"a sealed run keeps {unsupported} outside the sealed set, so "
+                "it is held back. Nothing was executed. Run a plaintext bundle "
+                "outside OPENADAPT_FLOW_AT_REST=strict to use it (recorded)."
             )
         if self.checkpoint_key is None:
             # A sealed bundle's run keeps its durable state under the same key.

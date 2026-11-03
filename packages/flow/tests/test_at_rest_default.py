@@ -264,7 +264,7 @@ def test_commands_that_cannot_seal_their_output_refuse_in_strict_mode(
 # -- run directories -----------------------------------------------------------
 
 
-def _mockmed_run(tmp_path: Path, bundle: Path, run_dir: Path):
+def _mockmed_run(tmp_path: Path, bundle: Path, run_dir: Path, **kw):
     from openadapt_flow.mockmed.fault_server import serve
     from openadapt_flow.runtime.effects import RestRecordVerifier
     from openadapt_flow.runtime.replayer import Replayer
@@ -278,7 +278,7 @@ def _mockmed_run(tmp_path: Path, bundle: Path, run_dir: Path):
             vision=_vision(),
             effect_verifier=RestRecordVerifier(url),
             poll_interval_s=0.01,
-        ).run(Workflow.load(bundle), bundle_dir=bundle, run_dir=run_dir)
+        ).run(Workflow.load(bundle), bundle_dir=bundle, run_dir=run_dir, **kw)
     finally:
         stop()
 
@@ -314,3 +314,149 @@ def test_strict_mode_seals_the_run_directory_of_a_plaintext_bundle(
     _assert_ciphertext_only(run_dir)
     assert watch.leaks([b'"execution_outcome"', PNG_SIGNATURE]) == []
     assert _ledger(default_mode) == []
+
+
+# -- review fixes (#1755) --------------------------------------------------------
+
+
+def test_a_sealed_bundle_runs_sealed_in_every_mode(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """Encrypted input never yields a plaintext run directory, even under the
+    opt-out Desktop uses."""
+    from tests.test_after_stop_mockmed import _workflow
+
+    bundle = tmp_path / "bundle"
+    with sealed_set.writing(bundle, "bundle", crypto.resolve_key(None)):
+        _workflow().save(bundle)
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "desktop")
+    monkeypatch.setenv(at_rest.HOME_ENV, str(default_mode))
+    # The bundle opens with the local key, which the opt-out leaves unread.
+    monkeypatch.setenv(crypto.ENV_KEY, at_rest.local_key())
+    run_dir = tmp_path / "run"
+    with watching_disk() as watch:
+        _mockmed_run(tmp_path, bundle, run_dir)
+    assert sealed_set.is_sealed(run_dir)
+    _assert_ciphertext_only(run_dir)
+    assert watch.leaks([b'"execution_outcome"', PNG_SIGNATURE]) == []
+
+
+def test_a_healed_copy_of_a_sealed_run_is_held_back(
+    default_mode: Path, tmp_path: Path
+) -> None:
+    from tests.test_after_stop_mockmed import _workflow
+
+    bundle = tmp_path / "bundle"
+    with sealed_set.writing(bundle, "bundle", crypto.resolve_key(None)):
+        _workflow().save(bundle)
+    with pytest.raises(at_rest.AtRestRefused, match="healed bundle"):
+        _mockmed_run(
+            tmp_path, bundle, tmp_path / "run", save_healed_to=tmp_path / "healed"
+        )
+    assert not (tmp_path / "healed").exists()
+    assert not (tmp_path / "run").exists()
+
+
+def test_default_mode_checkpoints_are_encrypted_on_disk(
+    default_mode: Path, tmp_path: Path
+) -> None:
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_after_stop_mockmed import MockMedBackend, _vision, _workflow
+
+    bundle = tmp_path / "bundle"
+    _workflow().save(bundle)
+    run_dir = tmp_path / "run"
+    replayer = Replayer(MockMedBackend("http://127.0.0.1:9"), vision=_vision())
+    assert replayer.checkpoint_key is None
+    try:
+        replayer.run(Workflow.load(bundle), bundle_dir=bundle, run_dir=run_dir)
+    except Exception:  # noqa: BLE001 - no app is listening; the key is what counts
+        pass
+    assert replayer.checkpoint_key == at_rest.local_key()
+    store = CheckpointStore(run_dir, key=replayer.checkpoint_key)
+    store._write_model(run_dir / "checkpoints" / "probe.json", Workflow(name="x"))
+    on_disk = sorted(p.name for p in (run_dir / "checkpoints").iterdir())
+    assert on_disk == ["probe.json.enc"]
+    assert b"probe" not in (run_dir / "checkpoints" / "probe.json.enc").read_bytes()
+
+
+def test_a_recording_only_key_reads_back_from_the_environment(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv(sealed_set.RECORDING_ENV_KEY, "recording-only-key")
+    rec = _recording(tmp_path / "rec", key="recording-only-key")
+    assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
+    assert Workflow.load(tmp_path / "b").name == "x"
+
+
+def test_strict_mode_runs_only_listed_commands(default_mode: Path, monkeypatch) -> None:
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.cli_service import _cmd_health
+    from openadapt_flow.cli_shadow import cmd_shadow
+
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    with pytest.raises(at_rest.AtRestRefused, match="strict"):
+        cli._unsealed_output_check(argparse.Namespace(func=cmd_shadow, out="o"))
+    cli._unsealed_output_check(argparse.Namespace(func=_cmd_health))
+    with pytest.raises(at_rest.AtRestRefused, match="record-video"):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_replay, record_video="video")
+        )
+
+
+def test_default_mode_logs_the_newly_listed_writers(default_mode: Path, capsys) -> None:
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.cli_shadow import cmd_shadow
+
+    cli._unsealed_output_check(argparse.Namespace(func=cmd_shadow, out="shadow-out"))
+    cli._unsealed_output_check(
+        argparse.Namespace(func=cli._cmd_replay, record_video="video-out")
+    )
+    paths = {e["path"] for e in _ledger(default_mode)}
+    assert {"shadow-out", "video-out"} <= paths
+
+
+def test_strict_holds_back_library_reports_before_they_start(
+    default_mode: Path, monkeypatch
+) -> None:
+    from openadapt_flow.runtime.composition import execute_composition
+
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    with pytest.raises(at_rest.AtRestRefused, match="Nothing was executed"):
+        execute_composition(
+            None,  # type: ignore[arg-type]
+            parent_dir="p",
+            run_dir="r",
+            child_run=None,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX perms")
+def test_an_unwritable_ledger_stops_the_write(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / at_rest.LEDGER_NAME).mkdir()  # a directory where the file goes
+    monkeypatch.setenv(at_rest.HOME_ENV, str(locked))
+    with pytest.raises(at_rest.AtRestRefused, match="ledger"):
+        at_rest.unsealed_write("a run directory", "/data/run-9")
+
+
+def test_seal_requires_the_deployment_key(default_mode: Path, tmp_path: Path) -> None:
+    from tests.test_sealed_at_rest import _plain_bundle
+
+    code = main(["seal", str(_plain_bundle(tmp_path)), "--out", str(tmp_path / "s")])
+    assert code != 0 and not (tmp_path / "s").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions")
+def test_an_open_keys_directory_is_refused(default_mode: Path) -> None:
+    crypto.resolve_key(None)
+    (default_mode / "keys").chmod(0o777)
+    try:
+        with pytest.raises(at_rest.LocalKeyError, match="chmod 700"):
+            crypto.resolve_key(None)
+    finally:
+        (default_mode / "keys").chmod(0o700)

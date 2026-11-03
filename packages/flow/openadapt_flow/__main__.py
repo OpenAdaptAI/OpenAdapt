@@ -645,8 +645,9 @@ def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optiona
     """The passphrase that encrypts this recording, or ``None`` for plaintext.
 
     The web recorder encrypts every file from the first frame under
-    ``OPENADAPT_RECORDING_KEY``, else ``OPENADAPT_BUNDLE_KEY``, else the local
-    key (:mod:`openadapt_flow.at_rest`). ``--no-encrypt`` and
+    ``OPENADAPT_RECORDING_KEY`` or ``OPENADAPT_BUNDLE_KEY``, and under the
+    local key in strict mode (:mod:`openadapt_flow.at_rest`); otherwise the
+    plaintext recording is logged. ``--no-encrypt`` and
     ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` opt out, with a warning and a ledger
     line. The desktop recorders write a raw capture session through
     openadapt-capture that Flow cannot encrypt yet: by default they record in
@@ -12611,16 +12612,62 @@ _UNSEALED_OUTPUT_COMMANDS: dict[str, str] = {
     "openadapt_flow.__main__:_cmd_variants": "the variant report",
     "openadapt_flow.__main__:_cmd_route": "the variant report",
     "openadapt_flow.__main__:_cmd_for_each": "the looped bundle",
+    "openadapt_flow.__main__:_cmd_bench": "the bench report",
+    "openadapt_flow.__main__:_cmd_sanitize": "the sanitized copy",
+    "openadapt_flow.cli_redact_report:_cmd_redact_report": "the redacted report",
+    "openadapt_flow.cli_shadow:cmd_shadow": "the shadow snapshots and report",
+    "openadapt_flow.compile_agent.cli:cmd_compile_agent": (
+        "the compile-agent screenshots and traces"
+    ),
+    "openadapt_flow.agent_guard.cli:cmd_guard": "the guard's run record",
+    "openadapt_flow.jit.cli:cmd_jit": "the compiled agent run",
 }
+
+#: Commands that write no recorded screen, record or report data (service
+#: health and control, the no-outbound allow list, key and Seal verification).
+#: Under OPENADAPT_FLOW_AT_REST=strict only these and the sealed-ready commands
+#: run; every other command is held back before it starts.
+_STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.cli_service:_cmd_boot_check",
+        "openadapt_flow.cli_service:_cmd_egress_audit",
+        "openadapt_flow.cli_service:_cmd_health",
+        "openadapt_flow.cli_service:_cmd_notices",
+        "openadapt_flow.cli_service:_cmd_pf_check",
+        "openadapt_flow.cli_service:_cmd_pf_render",
+        "openadapt_flow.cli_service:_cmd_restart",
+        "openadapt_flow.cli_service:_cmd_run",
+        "openadapt_flow.cli_no_outbound:_cmd_add",
+        "openadapt_flow.cli_no_outbound:_cmd_derive",
+        "openadapt_flow.cli_no_outbound:_cmd_list",
+        "openadapt_flow.cli_no_outbound:_cmd_remove",
+        "openadapt_flow.cli_local_seal:_guarded",
+        "openadapt_flow.cli_receipt:cmd_anchor",
+        "openadapt_flow.cli_receipt:cmd_keys_export",
+        "openadapt_flow.cli_receipt:cmd_verify",
+        "openadapt_flow.agent.seal_cli:cmd_keys_pin",
+        "openadapt_flow.agent.seal_cli:cmd_keys_show",
+        "openadapt_flow.agent.seal_cli:cmd_verify",
+    }
+)
 
 
 def _unsealed_output_check(args: argparse.Namespace) -> None:
     """Warn and record, or refuse in strict mode, a command whose output
-    can't be encrypted yet. Also rejects a mistyped OPENADAPT_FLOW_AT_REST."""
+    can't be encrypted yet. Strict mode runs only the sealed-ready and
+    strict-safe commands. Also rejects a mistyped OPENADAPT_FLOW_AT_REST."""
     from openadapt_flow import at_rest
 
-    at_rest.strict()  # raises on an unknown mode before anything runs
-    if at_rest.strict():
+    func = getattr(args, "func", None)
+    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    video = getattr(args, "record_video", None)
+    if at_rest.strict():  # raises on an unknown mode before anything runs
+        if command not in _SEALED_READY_COMMANDS | _STRICT_SAFE_COMMANDS:
+            raise at_rest.AtRestRefused(
+                f"{at_rest.MODE_ENV}=strict runs only the commands that keep "
+                "patient data encrypted, and this one writes files outside an "
+                "encrypted set. Nothing was run."
+            )
         # Written after records change, so refused before the run starts.
         healed = getattr(args, "save_healed_to", None)
         if healed:
@@ -12630,8 +12677,8 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
             at_rest.unsealed_write(
                 "the worker pool report (--workers)", "the run directory"
             )
-    func = getattr(args, "func", None)
-    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    if video:
+        at_rest.unsealed_write("a screen video (--record-video)", video)
     artifact = _UNSEALED_OUTPUT_COMMANDS.get(command)
     if artifact is None:
         return
