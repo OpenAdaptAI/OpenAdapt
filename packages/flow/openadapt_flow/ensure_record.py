@@ -245,7 +245,9 @@ def normalize(value: Any, rule: FieldRule, *, task: bool = False) -> Optional[st
         try:
             if len(text) == 10:
                 return date.fromisoformat(text).isoformat()
-            return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+            return (
+                datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+            )
         except ValueError:
             return None
     if rule.compare == "instant":

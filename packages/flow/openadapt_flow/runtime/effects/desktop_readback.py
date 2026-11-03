@@ -1257,9 +1257,7 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
             record[spec.identity.field] = self._target.identity_value
             spaced[spec.identity.field] = self._target.identity_value
         ocr_fields = {name for name, seen in raw.values.items() if seen.ocr}
-        return _ReadRecord(
-            True, "", [record], uncertain, False, ocr_fields, [spaced]
-        )
+        return _ReadRecord(True, "", [record], uncertain, False, ocr_fields, [spaced])
 
     def _effect_problem(self, effect: Effect) -> Optional[EffectVerdict]:
         """An effect this look-up can't judge, found before any session opens."""
