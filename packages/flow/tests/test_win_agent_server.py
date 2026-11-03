@@ -195,7 +195,9 @@ def test_typed_input_and_uia_receipts_never_claim_outcome(
     assert set(context.json()) == {
         "status",
         "application",
+        "application_version",
         "session",
+        "environment",
         "workflow_state",
     }
     assert "title" not in context.text.casefold()
