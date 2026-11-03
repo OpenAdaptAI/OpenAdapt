@@ -12603,6 +12603,11 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_process",
         "openadapt_flow.__main__:_cmd_variants",
         "openadapt_flow.__main__:_cmd_route",
+        "openadapt_flow.__main__:_cmd_teach",
+        "openadapt_flow.__main__:_cmd_push",
+        "openadapt_flow.__main__:_cmd_sanitize",
+        "openadapt_flow.__main__:_cmd_review_sanitized",
+        "openadapt_flow.__main__:_cmd_approve_sanitized",
         "openadapt_flow.cli_sections:cmd_sections",
         "openadapt_flow.cli_check:cmd_check_mark",
         "openadapt_flow.cli_admit:cmd_admit_run",
@@ -12636,9 +12641,17 @@ _UNSEALED_OUTPUT_COMMANDS: dict[str, str] = {
 }
 
 
-#: Commands that write a new bundle sealed when their input bundle is sealed.
-_SEALED_OUTPUT_FROM_SEALED_INPUT: frozenset[str] = frozenset(
-    {"openadapt_flow.__main__:_cmd_for_each"}
+#: Commands that write their output sealed when an input is sealed, by the
+#: arguments that name those inputs.
+_SEALED_OUTPUT_FROM_SEALED_INPUT: dict[str, tuple[str, ...]] = {
+    "openadapt_flow.__main__:_cmd_for_each": ("bundle",),
+    "openadapt_flow.__main__:_cmd_teach": ("run_dir", "fix", "bundle"),
+    "openadapt_flow.__main__:_cmd_push": ("path",),
+}
+
+#: Commands that write their output sealed in strict mode.
+_SEALED_OUTPUT_IN_STRICT: frozenset[str] = frozenset(
+    {"openadapt_flow.__main__:_cmd_teach", "openadapt_flow.__main__:_cmd_push"}
 )
 
 
@@ -12663,12 +12676,15 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
     artifact = _UNSEALED_OUTPUT_COMMANDS.get(command)
     if artifact is None:
         return
+    if command in _SEALED_OUTPUT_IN_STRICT and at_rest.strict():
+        return  # strict mode makes a sealed output
     if command in _SEALED_OUTPUT_FROM_SEALED_INPUT:
         from openadapt_flow import sealed_set
 
-        source = getattr(args, "bundle", None)
-        if source and sealed_set.is_sealed_path(source):
-            return  # a sealed input makes a sealed output
+        for name in _SEALED_OUTPUT_FROM_SEALED_INPUT[command]:
+            source = getattr(args, name, None)
+            if source and sealed_set.is_sealed_path(source):
+                return  # a sealed input makes a sealed output
     target = next(
         (
             getattr(args, name)
@@ -12730,8 +12746,9 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
             "command. Commands that read sealed input: record, compile, "
             "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
             "replay, approve, resume, undo, visualize, explain, emit-skill, "
-            "for-each, sections, check mark, compose, process, variants and "
-            "route."
+            "for-each, sections, check mark, compose, process, variants, "
+            "route, teach, push, sanitize, review-sanitized and "
+            "approve-sanitized."
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)

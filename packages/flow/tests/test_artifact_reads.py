@@ -79,6 +79,43 @@ CONVERTED["__main__.py"] += (
     "_cmd_route",
 )
 CONVERTED["composition.py"] += ("load",)
+# teach: the halted run, the fix recording, the base bundle, the library.
+CONVERTED["__main__.py"] += ("_cmd_teach",)
+CONVERTED["learning/teach.py"] = (
+    "load_halt_report",
+    "load_base_program",
+    "_texts_seen_before_halt",
+    "_spec_from_recording",
+    "_real_target_canary",
+    "_copy_templates",
+    "_copy_carried",
+    "teach",
+)
+CONVERTED["learning/library.py"] = ("_load",)
+# push, and the review and approval of its sanitized copy.
+CONVERTED["hosted.py"] = ("push", "_is_bundle_dir")
+CONVERTED["sanitized_artifact.py"] = (
+    "_source_files",
+    "_scrub_text_file",
+    "_scrub_image_file",
+    "_tree_rows",
+    "_reseal_sanitized_bundle",
+    "sanitize_artifact",
+    "load_and_verify_derivative",
+    "_rescan_derivative",
+    "_write_deterministic_archive",
+    "approve_derivative",
+    "load_valid_approval",
+    "_update_entry",
+    "_authorized_review_path",
+    "add_manual_text_redaction",
+    "add_manual_image_redaction",
+    "render_review_html",
+)
+CONVERTED["repair/registration.py"] = (
+    "_evidence_from_run_dir",
+    "load_detached_candidate",
+)
 CONVERTED["admitted_composition.py"] += (
     "load",
     "load_child_envelope",
@@ -128,6 +165,22 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "first_screen_probe",
         "Path(explicit).read_bytes()",
     ): "the --first-screen PNG a person passes in",
+    ("hosted.py", "push", "derivative.exists()"): "the review copy's directory",
+    (
+        "sanitized_artifact.py",
+        "_source_files",
+        "path.is_file()",
+    ): "walks a plain source; a sealed one is listed from its index above",
+    (
+        "sanitized_artifact.py",
+        "sanitize_artifact",
+        "destination.exists()",
+    ): "the new derivative directory, not an artifact",
+    (
+        "sanitized_artifact.py",
+        "load_valid_approval",
+        "archive.is_file()",
+    ): "the archive file beside the derivative, read by read_approved_archive",
 }
 
 
@@ -445,3 +498,233 @@ def test_name_path_arguments_go_through_the_missing_key_check(
     err = capsys.readouterr().err
     assert "OPENADAPT_BUNDLE_KEY" in err and "Nothing was read" in err
     assert not (tmp_path / "composed").exists()
+
+
+# -- teach on sealed input ----------------------------------------------------
+
+
+def _seal_dir(plain: Path, root: Path, kind: str) -> Path:
+    """Copy a plaintext recording or run directory into a sealed set."""
+    with sealed_set.writing(root, kind, KEY):  # type: ignore[arg-type]
+        for path in sorted(plain.rglob("*")):
+            if path.is_file():
+                rel = path.relative_to(plain).as_posix()
+                sealed_set.write_bytes(root / rel, path.read_bytes())
+    return root
+
+
+def _teach_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A halted run, a fix recording and the bundle that halted, all sealed."""
+    from tests.test_teach_cli import _base_bundle, _dismiss_recording, _halt_run
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    base = _base_bundle(plain)
+    _halt_run(base, plain / "run")
+    _dismiss_recording(plain / "fix")
+    bundle = tmp_path / "bundle"
+    assert main(["seal", str(base), "--out", str(bundle)]) == 0
+    run = _seal_dir(plain / "run", tmp_path / "run", "run")
+    fix = _seal_dir(plain / "fix", tmp_path / "fix", "recording")
+    return run, fix, bundle
+
+
+def _assert_taught_sealed(out: Path, fix: Path) -> None:
+    for root in (out, out.parent / f"{out.name}.skills", fix / "_teach_compiled"):
+        assert sealed_set.is_sealed(root), root
+        _assert_ciphertext_only(root)
+    assert sealed_set.header_kind(out.parent / f"{out.name}.skills") == "library"
+    if sealed_set.is_sealed(fix):
+        # The fix recording still opens: its compiled copy is a separate set.
+        sealed_set.SealedSet.open(fix, KEY).verify_all()
+    assert sealed_set.is_file(out / "repair" / "candidate.json")
+    learned = Workflow.load(out, key=KEY)
+    clicks = [
+        state.step.anchor.click_point
+        for state in learned.program.states.values()  # type: ignore[union-attr]
+        if state.step is not None and state.step.anchor is not None
+    ]
+    assert (140, 108) in clicks  # the recorded dismiss click was spliced in
+
+
+def test_teach_reads_sealed_inputs_and_writes_sealed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    from openadapt_flow.learning.library import SkillLibrary
+
+    _ready("openadapt_flow.__main__:_cmd_teach")
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, bundle = _teach_inputs(tmp_path)
+    before = {p: _files(p) for p in (run, bundle)}
+    out = tmp_path / "taught"
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(bundle)]
+    assert main([*args, "--out", str(out)]) == 0
+    _assert_taught_sealed(out, fix)
+    assert {p: _files(p) for p in (run, bundle)} == before
+    library = SkillLibrary(tmp_path / "taught.skills")
+    assert library.sealed and library.skill_ids()
+    # A second teach reads the sealed library back: the fix is learned already.
+    capsys.readouterr()
+    assert main([*args, "--out", str(out)]) == 1
+    assert "no_change" in capsys.readouterr().out
+    _assert_taught_sealed(out, fix)
+
+
+def test_teach_in_strict_mode_seals_plain_inputs_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.test_teach_cli import _base_bundle, _dismiss_recording, _halt_run
+
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    base = _base_bundle(tmp_path)
+    _halt_run(base, tmp_path / "run")
+    fix = _dismiss_recording(tmp_path / "fix")
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    out = tmp_path / "taught"
+    args = ["teach", str(tmp_path / "run"), "--fix", str(fix)]
+    assert main([*args, "--bundle", str(base), "--out", str(out)]) == 0
+    _assert_taught_sealed(out, fix)
+
+
+def test_teach_refuses_a_plaintext_library_for_sealed_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, bundle = _teach_inputs(tmp_path)
+    library = tmp_path / "plain-library"
+    library.mkdir()
+    (library / "skills.json").write_text('{"skills": {}}')
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(bundle)]
+    out = tmp_path / "taught"
+    assert main([*args, "--out", str(out), "--library", str(library)]) == 2
+    assert "unencrypted skill library" in capsys.readouterr().out
+    assert not out.exists()
+
+
+# -- push of a sealed source --------------------------------------------------
+
+
+@pytest.fixture
+def push_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import base64
+
+    from openadapt_flow import hosted, privacy
+    from tests.test_hosted import _FakeScrubber
+
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv(hosted.TOKEN_ENV, raising=False)
+    monkeypatch.setenv(hosted.DESTINATION_KIND_ENV, "customer-managed")
+    monkeypatch.setenv(hosted.TRUSTED_HOSTS_ENV, "https://h.test")
+    monkeypatch.setenv("OPENADAPT_SANITIZATION_POLICY_KEY_ID", "test-policy-key")
+    monkeypatch.setenv(
+        "OPENADAPT_SANITIZATION_POLICY_KEY",
+        base64.b64encode(b"test-policy-secret-material-32-bytes!!").decode(),
+    )
+    monkeypatch.setattr(hosted, "_keyring_token", lambda host: None)
+    privacy.set_text_scrubber(_FakeScrubber())
+    yield
+    privacy.reset_scrubbers()
+
+
+def _sealed_phi_recording(root: Path) -> Path:
+    with sealed_set.writing(root, "recording", KEY):
+        sealed_set.write_text(
+            root / "events.jsonl",
+            json.dumps({"kind": "type", "text": "Jane Doe 12345"}) + "\n",
+        )
+        sealed_set.write_text(root / "meta.json", json.dumps({"task": "Jane Doe"}))
+    return root
+
+
+def _uploaded(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
+    import httpx
+
+    from tests.test_hosted import _accepted_recording_post
+
+    sent: dict[str, bytes] = {}
+    accept = _accepted_recording_post()
+
+    def post(url, **kw):
+        sent["body"] = kw["files"]["file"][1].read()
+        return accept(url, **kw)
+
+    monkeypatch.setattr(httpx, "post", post)
+    return sent
+
+
+def _no_plaintext_under(root: Path) -> None:
+    for path in root.rglob("*"):
+        if path.is_file():
+            data = path.read_bytes()
+            assert b"Jane Doe" not in data and b"<PERSON>" not in data, path
+
+
+def test_push_of_a_sealed_recording_keeps_the_review_copy_sealed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, push_env, capsys
+) -> None:
+    import io
+    import zipfile
+
+    from openadapt_flow import hosted
+    from openadapt_flow.sanitized_artifact import (
+        add_manual_text_redaction,
+        approved_archive_path,
+        render_review_html,
+    )
+
+    for name in ("push", "review_sanitized", "approve_sanitized"):
+        _ready(f"openadapt_flow.__main__:_cmd_{name}")
+    monkeypatch.setenv(hosted.AUTO_APPROVE_ENV, "false")
+    rec = _sealed_phi_recording(tmp_path / "rec")
+    before = _files(rec)
+    push = ["push", str(rec), "--host", "https://h.test", "--token", "tok"]
+    assert main(push) == 0
+    out = capsys.readouterr().out
+    derivative = Path(out.split("Sanitized derivative: ")[1].splitlines()[0])
+    assert sealed_set.header_kind(derivative) == "sanitized"
+    _assert_ciphertext_only(derivative)
+    # Review decrypts in memory; a reviewer's redaction stays encrypted.
+    page = render_review_html(rec, derivative, "csrf")
+    assert "Jane Doe" in page and "&lt;PERSON&gt;" in page
+    add_manual_text_redaction(derivative, "meta.json", "task", "field")
+    _assert_ciphertext_only(derivative)
+    approve = ["approve-sanitized", str(derivative), "--original", str(rec)]
+    assert main([*approve, "--reviewer", "reviewer@example.test"]) == 0
+    assert crypto.is_encrypted(approved_archive_path(derivative).read_bytes())
+    sent = _uploaded(monkeypatch)
+    upload = ["push", str(derivative), "--host", "https://h.test", "--token", "tok"]
+    assert main(upload) == 0
+    with zipfile.ZipFile(io.BytesIO(sent["body"])) as zf:
+        uploaded = {name: zf.read(name) for name in zf.namelist()}
+    assert b"<PERSON>" in uploaded["events.jsonl"]
+    assert all(b"Jane Doe" not in data for data in uploaded.values())
+    assert b"field" in uploaded["meta.json"]
+    assert _files(rec) == before
+    _no_plaintext_under(tmp_path)
+
+
+def test_push_in_strict_mode_seals_the_review_copy_of_a_plain_recording(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, push_env
+) -> None:
+    from openadapt_flow import hosted
+
+    monkeypatch.setenv(hosted.AUTO_APPROVE_ENV, "true")
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    (rec / "events.jsonl").write_text(json.dumps({"text": "Jane Doe"}) + "\n")
+    (rec / "meta.json").write_text("{}")
+    sent = _uploaded(monkeypatch)
+    out = tmp_path / "derivative"
+    push = ["push", str(rec), "--host", "https://h.test", "--token", "tok"]
+    assert main([*push, "--sanitized-out", str(out)]) == 0
+    assert sealed_set.header_kind(out) == "sanitized"
+    _assert_ciphertext_only(out)
+    import io
+    import zipfile
+
+    with zipfile.ZipFile(io.BytesIO(sent["body"])) as zf:
+        assert b"<PERSON>" in zf.read("events.jsonl")
+    (rec / "events.jsonl").unlink()
+    _no_plaintext_under(tmp_path)

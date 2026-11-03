@@ -61,13 +61,14 @@ A model-backed inducer wires in behind the same
 from __future__ import annotations
 
 import difflib
+import os
 import re
-import shutil
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow import artifacts, sealed_set
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -146,12 +147,12 @@ def load_halt_report(run_dir: Path | str) -> RunReport:
     """
     run = Path(run_dir)
     report_path = run / "report.json"
-    if not report_path.is_file():
+    if not artifacts.is_file(report_path):
         raise TeachError(
             f"no run report at {report_path} -- teach needs the directory of a "
             "run that HALTED (holding report.json)"
         )
-    report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+    report = RunReport.model_validate_json(artifacts.read_text(report_path))
     if report.halt is None:
         raise TeachError(
             f"the run at {run} did not halt (report.json has no halt observation) "
@@ -168,7 +169,9 @@ def load_base_program(bundle_dir: Path | str) -> tuple[Workflow, ProgramGraph]:
     same governed learn path applies to both.
     """
     bundle = Path(bundle_dir)
-    if not (bundle / "workflow.json").is_file():
+    if not artifacts.is_file(bundle / "workflow.json") and not artifacts.is_file(
+        bundle / "workflow.json.enc"
+    ):
         raise TeachError(
             f"no bundle at {bundle} -- teach needs the base bundle that halted "
             "(the one whose replay produced the run report), via --bundle"
@@ -413,7 +416,7 @@ def _texts_seen_before_halt(
         completed = result.ok and not result.skipped
         if completed or (delivered and result is halted):
             frames.append(run_dir / result.before_png)
-    readable = [frame for frame in frames if frame.is_file()]
+    readable = [frame for frame in frames if artifacts.is_file(frame)]
     if not readable:
         return None
     try:
@@ -422,7 +425,7 @@ def _texts_seen_before_halt(
 
         seen: list[str] = []
         for frame in readable:
-            for line in ocr(frame.read_bytes()):
+            for line in ocr(artifacts.open_read(frame)):
                 text = (scrub_text(line.text) or "").strip()
                 if text:
                     seen.append(text)
@@ -680,12 +683,14 @@ def _spec_from_recording(
     from openadapt_flow.compiler.compile import compile_recording
 
     recording = Path(recording_dir)
-    if not (recording / "events.jsonl").is_file():
+    if not artifacts.is_file(recording / "events.jsonl"):
         raise TeachError(
             f"{recording} is not a recording directory (no events.jsonl). Pass a "
             "recording produced by `openadapt-flow record`, or a .json "
             "correction spec."
         )
+    # Inside an encrypted recording this is a sealed bundle of its own, which
+    # the recording's set skips (compile_recording seals it).
     compiled_dir = recording / "_teach_compiled"
     compiled = compile_recording(
         recording, compiled_dir, name=f"{report.workflow_name}-fix"
@@ -838,7 +843,7 @@ def _real_target_canary(bundle_dir: Path, carried: dict[str, Path]) -> ProgramCa
                         continue
                     if anchor is not None and (
                         anchor.template in carried
-                        or (bundle_dir / anchor.template).is_file()
+                        or artifacts.is_file(bundle_dir / anchor.template)
                     ):
                         continue
                     return False, (
@@ -852,24 +857,84 @@ def _real_target_canary(bundle_dir: Path, carried: dict[str, Path]) -> ProgramCa
     return canary
 
 
+def _write_crop(destination: Path, data: bytes) -> None:
+    """Write a crop into the taught bundle: encrypted when it is being sealed."""
+    if not sealed_set.is_sealed_path(destination):
+        destination.parent.mkdir(parents=True, exist_ok=True)
+    sealed_set.write_bytes(destination, data)
+
+
 def _copy_templates(src_bundle: Path, out_bundle: Path) -> None:
     """Carry the base bundle's template crops (subfolders included, such as
     identifier crops) into the updated bundle so the promoted program can
-    resolve its anchors on re-run."""
-    src_templates = src_bundle / "templates"
-    if not src_templates.is_dir():
-        return
-    shutil.copytree(src_templates, out_bundle / "templates", dirs_exist_ok=True)
+    resolve its anchors on re-run. Sealed crops are decrypted in memory."""
+    src_templates = Path(os.path.abspath(src_bundle / "templates"))
+    for template in artifacts.list_files(src_templates):
+        _write_crop(
+            out_bundle / "templates" / template.relative_to(src_templates),
+            artifacts.open_read(template),
+        )
 
 
 def _copy_carried(carried: dict[str, Path], out_bundle: Path) -> None:
     """Copy the fix recording's crops to the paths the spliced step uses."""
     for rel, source in carried.items():
-        if not source.is_file():
+        if not artifacts.is_file(source):
             raise TeachError(f"the fix recording's crop {source} is missing")
-        destination = out_bundle / rel
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
+        _write_crop(out_bundle / rel, artifacts.open_read(source))
+
+
+def _seal_outputs(*inputs: Path | str) -> bool:
+    """Whether teach writes its library and bundle sealed: any input is sealed,
+    or strict mode (docs/phi_at_rest.md)."""
+    from openadapt_flow import at_rest
+
+    return at_rest.strict() or any(artifacts.is_sealed(p) for p in inputs)
+
+
+def _check_sealed_out(out_bundle: Path) -> None:
+    """A sealed taught bundle goes into a new or sealed directory, never over
+    a plaintext one."""
+    if sealed_set.is_sealed(out_bundle):
+        return
+    if out_bundle.is_dir() and any(out_bundle.iterdir()):
+        raise TeachError(
+            f"--out {out_bundle} already holds an unencrypted bundle; pass a new "
+            "directory so the taught bundle stays encrypted"
+        )
+
+
+def _write_taught_bundle(
+    updated: Workflow,
+    bundle: Path,
+    out_bundle: Path,
+    carried: dict[str, Path],
+    run_dir: Path | str,
+) -> None:
+    # Crops go in first: saving seals a manifest over the files present.
+    _copy_templates(bundle, out_bundle)
+    _copy_carried(carried, out_bundle)
+    updated.save(out_bundle)
+    # Governed repair promotion (Section 9): the taught bundle is a lifecycle
+    # CANDIDATE, never an implicitly active bundle. A detached
+    # repair/candidate.json is written into it; promotion to active requires
+    # the explicit lifecycle (campaigns, human approval, staged canary) via
+    # `openadapt-flow repair`. Registration failure fails CLOSED by absence:
+    # without the record the taught bundle cannot enter the lifecycle at all.
+    from openadapt_flow.repair.registration import register_bundle_candidate
+
+    try:
+        register_bundle_candidate(
+            bundle,
+            out_bundle,
+            source="teach",
+            evidence_run_dir=Path(run_dir),
+        )
+    except Exception as exc:
+        print(
+            "repair candidate registration failed (the taught bundle stays "
+            f"ungoverned and non-promotable): {exc}"
+        )
 
 
 def teach(
@@ -908,6 +973,9 @@ def teach(
             fix, a run that did not come from ``bundle``, or a library at
             ``library_dir`` seeded from a different bundle).
     """
+    seal = _seal_outputs(run_dir, fix, bundle)
+    if seal:
+        _check_sealed_out(Path(out))
     report = load_halt_report(run_dir)
     base_workflow, program = load_base_program(bundle)
     check_provenance(report, base_workflow, program, run_dir=run_dir, bundle_dir=bundle)
@@ -931,7 +999,10 @@ def teach(
         if library_dir is not None
         else Path(out).parent / f"{Path(out).name}.skills"
     )
-    library = SkillLibrary(lib_root)
+    try:
+        library = SkillLibrary(lib_root, seal=seal)
+    except sealed_set.SealedSetError as exc:
+        raise TeachError(str(exc)) from exc
     _seed_or_check_library(
         library, sid, program, dict(base_workflow.subflows), bundle_dir=bundle
     )
@@ -964,30 +1035,21 @@ def teach(
         }
     )
     out_bundle = Path(out)
-    # Crops go in first: saving seals a manifest over the files present.
-    _copy_templates(Path(bundle), out_bundle)
-    _copy_carried(carried, out_bundle)
-    updated.save(out_bundle)
-    # Governed repair promotion (Section 9): the taught bundle is a lifecycle
-    # CANDIDATE, never an implicitly active bundle. A detached
-    # repair/candidate.json is written into it; promotion to active requires
-    # the explicit lifecycle (campaigns, human approval, staged canary) via
-    # `openadapt-flow repair`. Registration failure fails CLOSED by absence:
-    # without the record the taught bundle cannot enter the lifecycle at all.
-    from openadapt_flow.repair.registration import register_bundle_candidate
-
-    try:
-        register_bundle_candidate(
-            Path(bundle),
+    if seal:
+        # Every crop, the program and the candidate record are encrypted
+        # before they reach the disk (the same key rules as compile).
+        passphrase = sealed_set.output_bundle_key()
+        if not passphrase:
+            raise TeachError(sealed_set.missing_key_message(out_bundle, "bundle"))
+        with sealed_set.writing(
             out_bundle,
-            source="teach",
-            evidence_run_dir=Path(run_dir),
-        )
-    except Exception as exc:
-        print(
-            "repair candidate registration failed (the taught bundle stays "
-            f"ungoverned and non-promotable): {exc}"
-        )
+            "bundle",
+            passphrase,
+            resume=sealed_set.is_sealed(out_bundle),
+        ):
+            _write_taught_bundle(updated, Path(bundle), out_bundle, carried, run_dir)
+    else:
+        _write_taught_bundle(updated, Path(bundle), out_bundle, carried, run_dir)
     return TeachResult(
         skill_id=sid, promoted=True, outcome=outcome, out_bundle=out_bundle
     )

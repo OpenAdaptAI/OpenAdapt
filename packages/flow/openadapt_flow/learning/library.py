@@ -13,6 +13,11 @@ a whole program revision).
 Persistence is a single JSON file per library root (``skills.json``): the schema
 is Pydantic, so a version round-trips a real ``ProgramGraph`` verbatim. No model
 calls, no I/O beyond the JSON file.
+
+A learned program can carry patient data, so a library can also be a sealed set
+of kind ``library`` (:mod:`openadapt_flow.sealed_set`): ``seal=True`` creates
+one, and a root that is already sealed stays sealed. ``skills.json`` is then
+encrypted on disk and read back in memory.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow import artifacts, sealed_set
 from openadapt_flow.ir import ProgramGraph
 from openadapt_flow.learning.trace import ExecutionTrace
 
@@ -101,11 +107,36 @@ class SkillLibrary:
     the next).
     """
 
-    def __init__(self, root: Path | str) -> None:
+    def __init__(
+        self, root: Path | str, *, seal: bool = False, key: Optional[str] = None
+    ) -> None:
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
         self._skills: dict[str, Skill] = {}
+        self._writer: Optional[sealed_set.SealedSetWriter] = None
+        existing = sealed_set.is_sealed(self.root)
+        if seal or existing:
+            if not existing and self.root.is_dir() and any(self.root.iterdir()):
+                raise sealed_set.SealedSetError(
+                    f"{self.root} holds an unencrypted skill library; pass a new "
+                    "library directory so learned programs stay encrypted"
+                )
+            passphrase = sealed_set.passphrase_for("library", key)
+            if not passphrase:
+                raise sealed_set.SealedSetKeyError(
+                    sealed_set.missing_key_message(self.root, "library")
+                )
+            self._writer = sealed_set.SealedSetWriter(
+                self.root, "library", passphrase, resume=True
+            )
+            if not existing:
+                self._writer.finalize()  # an empty library is a complete set
+        else:
+            self.root.mkdir(parents=True, exist_ok=True)
         self._load()
+
+    @property
+    def sealed(self) -> bool:
+        return self._writer is not None
 
     # -- persistence --------------------------------------------------------
 
@@ -114,15 +145,20 @@ class SkillLibrary:
         return self.root / _LIBRARY_FILE
 
     def _load(self) -> None:
-        if not self.path.is_file():
+        if not artifacts.is_file(self.path):
             return
-        raw = json.loads(self.path.read_text())
+        raw = json.loads(artifacts.read_text(self.path))
         for sid, data in raw.get("skills", {}).items():
             self._skills[sid] = Skill.model_validate(data)
 
     def save(self) -> Path:
         payload = {"skills": {sid: s.model_dump() for sid, s in self._skills.items()}}
-        self.path.write_text(json.dumps(payload, indent=2, default=str))
+        text = json.dumps(payload, indent=2, default=str)
+        if self._writer is not None:
+            self._writer.write(_LIBRARY_FILE, text.encode("utf-8"))
+            self._writer.finalize()
+        else:
+            self.path.write_text(text)
         return self.path
 
     # -- read ---------------------------------------------------------------
