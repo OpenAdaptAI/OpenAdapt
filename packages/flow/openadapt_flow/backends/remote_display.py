@@ -127,6 +127,117 @@ class WindowInfo:
     on_screen: bool = True
 
 
+def _ax_top_level(element: Any) -> Any:
+    """The window or sheet an AX element is in, or None.
+
+    ``AXTopLevelUIElement`` when the element reports it. Some toolkits (Qt's
+    item views and their inline editors) report none; the answer is then the
+    nearest ``AXWindow`` or ``AXSheet`` up the ``AXParent`` chain, within 32
+    levels. None on any read failure or when the chain reaches the
+    application first, so callers keep failing closed.
+    """
+    from ApplicationServices import (
+        AXUIElementCopyAttributeValue,
+        kAXTopLevelUIElementAttribute,
+    )
+
+    error, top = AXUIElementCopyAttributeValue(
+        element, kAXTopLevelUIElementAttribute, None
+    )
+    if error == 0 and top is not None:
+        return top
+    from ApplicationServices import kAXParentAttribute, kAXRoleAttribute
+
+    node = element
+    for _ in range(32):
+        error, node = AXUIElementCopyAttributeValue(node, kAXParentAttribute, None)
+        if error != 0 or node is None:
+            return None
+        _error, role = AXUIElementCopyAttributeValue(node, kAXRoleAttribute, None)
+        if str(role or "") in ("AXWindow", "AXSheet"):
+            return node
+        if str(role or "") == "AXApplication":
+            return None
+    return None
+
+
+def _ax_write_selected_text(element: Any, text: str) -> bool:
+    """Replace the selection in one AX text element; True only when delivered.
+
+    The selection is replaced through ``AXSelectedText`` when the element
+    allows it. Some toolkits (Qt's line edits) allow only ``AXValue``: the new
+    value is then the current value with ``text`` spliced over the selected
+    range (``AXSelectedTextRange``; an empty field needs none), and it counts
+    as delivered only when ``AXValue`` reads back exactly that. Anything else,
+    including a range that can't be read on a non-empty field, is False.
+    """
+    from ApplicationServices import (
+        AXUIElementIsAttributeSettable,
+        AXUIElementSetAttributeValue,
+        kAXSelectedTextAttribute,
+    )
+
+    settable_error, settable = AXUIElementIsAttributeSettable(
+        element, kAXSelectedTextAttribute, None
+    )
+    if settable_error == 0 and settable:
+        return (
+            AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute, text) == 0
+        )
+    from ApplicationServices import (
+        AXUIElementCopyAttributeValue,
+        AXValueCreate,
+        AXValueGetValue,
+        kAXSelectedTextRangeAttribute,
+        kAXValueAttribute,
+        kAXValueCFRangeType,
+    )
+
+    value_error, value_settable = AXUIElementIsAttributeSettable(
+        element, kAXValueAttribute, None
+    )
+    if value_error != 0 or not value_settable:
+        return False
+    current_error, current = AXUIElementCopyAttributeValue(
+        element, kAXValueAttribute, None
+    )
+    if current_error != 0 or not isinstance(current, str):
+        return False
+    range_error, raw_range = AXUIElementCopyAttributeValue(
+        element, kAXSelectedTextRangeAttribute, None
+    )
+    if range_error == 0 and raw_range is not None:
+        ok, selected = AXValueGetValue(raw_range, kAXValueCFRangeType, None)
+        if not ok:
+            return False
+        try:
+            start, length = (int(part) for part in selected)
+        except TypeError:
+            start, length = int(selected.location), int(selected.length)
+        if start < 0 or length < 0 or start + length > len(current):
+            return False
+    elif current == "":
+        start, length = 0, 0
+    else:
+        return False
+    expected = current[:start] + text + current[start + length :]
+    if AXUIElementSetAttributeValue(element, kAXValueAttribute, expected) != 0:
+        return False
+    read_error, delivered = AXUIElementCopyAttributeValue(
+        element, kAXValueAttribute, None
+    )
+    if read_error != 0 or delivered != expected:
+        return False
+    # Typing leaves the caret after the inserted text; so does this. The
+    # delivery is already proved, so a field that ignores the caret is fine.
+    try:
+        caret = AXValueCreate(kAXValueCFRangeType, (start + len(text), 0))
+        AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute, caret)
+    except Exception:  # noqa: BLE001 - the caret is cosmetic once delivered
+        pass
+    return True
+
+
 def _macos_ax_title_matches(window: WindowInfo, ax_title: object) -> bool:
     """Match one CG title to AX without widening beyond known Chrome suffixes."""
 
@@ -242,6 +353,20 @@ _MAC_KEYCODES = {
     "down": 0x7D,
     "left": 0x7B,
     "right": 0x7C,
+    # function keys (macOS virtual key codes; F2 edits the current cell in
+    # many item views)
+    "f1": 0x7A,
+    "f2": 0x78,
+    "f3": 0x63,
+    "f4": 0x76,
+    "f5": 0x60,
+    "f6": 0x61,
+    "f7": 0x62,
+    "f8": 0x64,
+    "f9": 0x65,
+    "f10": 0x6D,
+    "f11": 0x67,
+    "f12": 0x6F,
     # single letters used inside chords (e.g. Ctrl+A select-all)
     "a": 0x00,
     "c": 0x08,
@@ -2122,7 +2247,6 @@ class MacWindowClient:
                 kAXFocusedWindowAttribute,
                 kAXMainAttribute,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
                 kAXWindowsAttribute,
             )
 
@@ -2162,10 +2286,8 @@ class MacWindowClient:
             )
             if focused_error != 0 or focused is None:
                 return None
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                focused, kAXTopLevelUIElementAttribute, None
-            )
-            if top_error != 0 or top_level is None or top_level != target:
+            top_level = _ax_top_level(focused)
+            if top_level is None or top_level != target:
                 return None
             top_title_error, top_title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
@@ -2197,7 +2319,6 @@ class MacWindowClient:
                 AXUIElementCreateApplication,
                 kAXParentAttribute,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
             )
 
             app = AXUIElementCreateApplication(int(window.pid))
@@ -2209,12 +2330,8 @@ class MacWindowClient:
             )
             if hit_error != 0 or hit is None:
                 return None
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                hit,
-                kAXTopLevelUIElementAttribute,
-                None,
-            )
-            if top_error != 0 or top_level is None:
+            top_level = _ax_top_level(hit)
+            if top_level is None:
                 return None
             title_error, title = AXUIElementCopyAttributeValue(
                 top_level,
@@ -2276,12 +2393,6 @@ class MacWindowClient:
         switch cannot redirect the write to a different control.
         """
         try:
-            from ApplicationServices import (
-                AXUIElementIsAttributeSettable,
-                AXUIElementSetAttributeValue,
-                kAXSelectedTextAttribute,
-            )
-
             focused = self._focused_element_for_window(window)
             if (
                 focused is None
@@ -2289,15 +2400,7 @@ class MacWindowClient:
                 or focused != expected_focused_element
             ):
                 return False
-            settable_error, settable = AXUIElementIsAttributeSettable(
-                focused, kAXSelectedTextAttribute, None
-            )
-            if settable_error != 0 or not settable:
-                return False
-            return (
-                AXUIElementSetAttributeValue(focused, kAXSelectedTextAttribute, text)
-                == 0
-            )
+            return _ax_write_selected_text(focused, text)
         except Exception:  # noqa: BLE001 - unsupported AX is a safe refusal
             return False
 
@@ -2318,14 +2421,10 @@ class MacWindowClient:
             from ApplicationServices import (
                 AXUIElementCopyAttributeValue,
                 AXUIElementCreateApplication,
-                AXUIElementIsAttributeSettable,
-                AXUIElementSetAttributeValue,
                 kAXFocusedUIElementAttribute,
                 kAXFocusedWindowAttribute,
                 kAXMainAttribute,
-                kAXSelectedTextAttribute,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
                 kAXWindowsAttribute,
             )
 
@@ -2365,10 +2464,8 @@ class MacWindowClient:
             )
             if focused_error != 0 or focused is None:
                 return False
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                focused, kAXTopLevelUIElementAttribute, None
-            )
-            if top_error != 0 or top_level is None:
+            top_level = _ax_top_level(focused)
+            if top_level is None:
                 return False
             top_title_error, top_title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
@@ -2378,15 +2475,7 @@ class MacWindowClient:
             if top_level != target:
                 return False
 
-            settable_error, settable = AXUIElementIsAttributeSettable(
-                focused, kAXSelectedTextAttribute, None
-            )
-            if settable_error != 0 or not settable:
-                return False
-            return (
-                AXUIElementSetAttributeValue(focused, kAXSelectedTextAttribute, text)
-                == 0
-            )
+            return _ax_write_selected_text(focused, text)
         except Exception:  # noqa: BLE001 - unsupported AX is a safe refusal
             return False
 

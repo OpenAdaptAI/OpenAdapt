@@ -61,6 +61,8 @@ DIALOG_ROLES = frozenset(
     {
         "dialog",
         "alertdialog",
+        # AT-SPI's raw role for a message dialog (GtkMessageDialog).
+        "alert",
         "AXSheet",
         "AXDialog",
         "AXSystemDialog",

@@ -604,6 +604,77 @@ class LinuxBackend:
             return None
         return census if isinstance(census, dict) else None
 
+    def element_identity_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The AT-SPI element identity under pixel (x, y), for a repair's new click.
+
+        Shape: :class:`openadapt_flow.repair.element_identity.ElementIdentity`.
+        ``role`` is the mapped role :meth:`structural_locator_at` stores, so the
+        two name the same element. ``ancestry`` is the raw AT-SPI role and name
+        of each ancestor, parent first, ending at this backend's exact window.
+        The client's ``ancestry`` must reach that window by its exact title and
+        bounds. ``process`` is the AT-SPI application name. Scoped to the
+        pinned window; None on any miss (never raises).
+        """
+        read = getattr(self._client, "ancestry", None)
+        if not callable(read):
+            return None
+        try:
+            window, global_x, global_y = self._global_point(
+                int(x), int(y), require_active=False
+            )
+            element = self._client.element_at_point(window, global_x, global_y)
+            if element is None or not self._candidate_matches(
+                element,
+                StructuralLocator(
+                    automation_id=element.accessible_id,
+                    role=element.role,
+                    name=element.name,
+                ),
+                window,
+            ):
+                return None
+            if (
+                element.app_name.casefold() != self._app.casefold()
+                or element.window_title.casefold() != self._window_title.casefold()
+            ):
+                return None
+            left, top, width, height = element.bounds
+            if not (left <= global_x < left + width and top <= global_y < top + height):
+                return None
+            trail = read(window, element)
+            if not trail:
+                return None
+            last_role, last_name, last_bounds = trail[-1]
+            if last_name != window.title or last_bounds != window.bounds:
+                return None
+            from openadapt_flow.repair.element_identity import DIALOG_ROLES
+
+            dialog_region = None
+            wx, wy, ww, wh = window.bounds
+            for role, _name, bounds in trail:
+                if role in DIALOG_ROLES and bounds is not None:
+                    bx, by, bw, bh = bounds
+                    if (
+                        bx >= wx
+                        and by >= wy
+                        and bx + bw <= wx + ww
+                        and by + bh <= wy + wh
+                    ):
+                        dialog_region = [bx - wx, by - wy, bw, bh]
+                    break
+            return {
+                "source": "atspi",
+                "role": element.role,
+                "name": element.name,
+                "automation_id": element.accessible_id,
+                "ancestry": [[role, name] for role, name, _bounds in trail],
+                "window": window.title,
+                "process": window.app_name,
+                "dialog_region": dialog_region,
+            }
+        except Exception:  # noqa: BLE001 - a momentary AT-SPI failure is a miss
+            return None
+
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AT-SPI element under (x, y), for a read-back.
 
@@ -1330,6 +1401,43 @@ class AtspiLinuxClient:
             matches[0][1],
         )
         return actionable
+
+    def ancestry(
+        self, window: LinuxWindow, element: LinuxElement
+    ) -> Optional[list[tuple[str, Optional[str], Optional[tuple[int, int, int, int]]]]]:
+        """(raw AT-SPI role, name, screen bounds) of each ancestor, parent first.
+
+        Ends at the top-level node whose parent is the application, which must
+        carry ``window``'s exact title and bounds. None when the walk fails,
+        runs past 32 levels, or never reaches that window.
+        """
+        try:
+            node = element.native
+            if node is None:
+                return None
+            trail: list[
+                tuple[str, Optional[str], Optional[tuple[int, int, int, int]]]
+            ] = []
+            for _ in range(32):
+                node = self._call(node, "get_parent", default=None)
+                if node is None:
+                    return None
+                role = self._raw_role(node)
+                if not role or role in {"application", "desktop frame"}:
+                    return None
+                name = _clean_text(self._call(node, "get_name", default=None))
+                bounds = self._bounds(node)
+                trail.append((role, name, bounds))
+                parent = self._call(node, "get_parent", default=None)
+                if parent is not None and self._raw_role(parent) == "application":
+                    if name != window.title or bounds != window.bounds:
+                        return None
+                    if self._pid(node) != window.pid:
+                        return None
+                    return trail
+            return None
+        except Exception:  # noqa: BLE001 - unobservable AT-SPI is an ordinary miss
+            return None
 
     def focused_element(self, window: LinuxWindow) -> Optional[LinuxElement]:
         nodes, truncated = self._walk(window)

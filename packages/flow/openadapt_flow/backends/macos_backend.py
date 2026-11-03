@@ -61,6 +61,7 @@ from openadapt_flow.backends.remote_display import (
     RemoteDisplayError,
     WindowClient,
     WindowInfo,
+    _ax_top_level,
     require_pyobjc,
 )
 from openadapt_flow.ir import (
@@ -300,20 +301,18 @@ _SHEET_SETTLE_STEP_S = 0.1
 def _ax_window_of(element: Any) -> Any:
     """The AX window ``element`` is in, a sheet's elements included.
 
-    ``AXTopLevelUIElement`` is the sheet for an element inside a sheet; the
-    sheet's parent is the window it is attached to. None on any failure.
+    The element's top level (:func:`_ax_top_level`) is the sheet for an
+    element inside a sheet; the sheet's parent is the window it is attached
+    to. None on any failure.
     """
     from ApplicationServices import (
         AXUIElementCopyAttributeValue,
         kAXParentAttribute,
         kAXRoleAttribute,
-        kAXTopLevelUIElementAttribute,
     )
 
-    error, top = AXUIElementCopyAttributeValue(
-        element, kAXTopLevelUIElementAttribute, None
-    )
-    if error != 0 or top is None:
+    top = _ax_top_level(element)
+    if top is None:
         return None
     _e, role = AXUIElementCopyAttributeValue(top, kAXRoleAttribute, None)
     if str(role or "") == "AXSheet":
@@ -570,13 +569,53 @@ class QuartzMacAXClient:
             and element.name == locator.name
         )
 
+    #: Containers whose direct children are rows or cells.
+    _TABLE_ROLES = frozenset({"AXTable", "AXOutline", "AXGrid"})
+    #: Bound on the nodes read for one row's text.
+    _ROW_TEXT_NODES = 256
+
     def structured_text(self, element: MacElement) -> Optional[str]:
+        """The element's record text: its row's text inside a table.
+
+        A cell's own text names one field, not the record, so a cell inside
+        an ``AXRow`` reads as the text of every element in that row, in tree
+        order. A cell directly under a table with no ``AXRow`` (Qt's item
+        views) abstains (None): its row can't be read, and identity falls back
+        to the recorded band. Any other element reads as its own AX text.
+        """
         try:
-            if element.native is not None:
-                return _clean_text(self._text(element.native))
-            return element.text
+            native = element.native
+            if native is None:
+                return element.text
+            node = native
+            for _ in range(4):
+                node = self._attr(node, "AXParent")
+                if node is None:
+                    break
+                role = str(self._attr(node, "AXRole") or "")
+                if role == "AXRow":
+                    return self._row_text(node)
+                if role in self._TABLE_ROLES:
+                    return None
+            return _clean_text(self._text(native))
         except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
             return None
+
+    def _row_text(self, row: Any) -> Optional[str]:
+        """Every element's own text in ``row``, in tree order; None if too big."""
+        parts: list[str] = []
+        stack = list(reversed(list(self._attr(row, "AXChildren") or [])))
+        seen = 0
+        while stack:
+            node = stack.pop()
+            seen += 1
+            if seen > self._ROW_TEXT_NODES:
+                return None
+            text = self._text(node)
+            if text:
+                parts.append(text)
+            stack.extend(reversed(list(self._attr(node, "AXChildren") or [])))
+        return _clean_text(" ".join(parts))
 
     #: AX actions that don't change the app: a node offering only these is
     #: not pressable for ``is_part_of``.
@@ -830,6 +869,7 @@ class MacOSBackend(RemoteDisplayBackend):
         foreground_retries: int = 10,
         foreground_settle_s: float = 0.1,
         ax_client: Optional[MacAXClient] = None,
+        pointer_settle_timeout_s: float = 2.0,
     ) -> None:
         if not app.strip():
             raise ValueError("native macOS backend requires a non-empty app name")
@@ -863,6 +903,7 @@ class MacOSBackend(RemoteDisplayBackend):
             require_input_trust=require_input_trust,
             activate_before_input=False,
             settle_s=settle_s,
+            pointer_settle_timeout_s=pointer_settle_timeout_s,
         )
 
     def _resolve_window(self, *, refresh: bool = False) -> WindowInfo:

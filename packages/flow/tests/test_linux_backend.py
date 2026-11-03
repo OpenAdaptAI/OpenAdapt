@@ -544,3 +544,250 @@ def test_factory_requires_exact_target_and_threads_physical_opt_in() -> None:
     )
     assert isinstance(target, LinuxBackend)
     assert target._allow_physical_input is True
+
+
+# -- AT-SPI element identity (a repair's new click) ---------------------------
+
+LATER_ELEMENT = LinuxElement(
+    "0.1:3.1",
+    None,
+    "button",
+    "Later",
+    "gedit",
+    "oa-trial.txt",
+    9001,
+    (400, 230, 80, 30),
+    ("invoke",),
+)
+LATER_TRAIL = [
+    ("dialog", "Update available", (300, 210, 300, 120)),
+    ("filler", None, (100, 200, 640, 480)),
+    ("frame", "oa-trial.txt", (100, 200, 640, 480)),
+]
+
+
+class IdentityClient(FakeLinuxClient):
+    def __init__(self, trail=LATER_TRAIL, **kwargs) -> None:
+        super().__init__(candidates=[LATER_ELEMENT], **kwargs)
+        self.text_at_point = LATER_ELEMENT
+        self.trail = trail
+
+    def ancestry(self, window, element):
+        self.calls.append(("ancestry", window.native_id, element.native_id))
+        if isinstance(self.trail, Exception):
+            raise self.trail
+        return self.trail
+
+
+def test_element_identity_has_the_shared_shape_and_admits() -> None:
+    from openadapt_flow.repair.element_identity import (
+        BASIS_ELEMENT_AND_RECORD_CHECK,
+        ElementIdentity,
+        admit_new_click,
+        backend_kind,
+    )
+
+    target = backend(IdentityClient())
+    raw = target.element_identity_at(340, 40)
+    assert raw == {
+        "source": "atspi",
+        "role": "button",
+        "name": "Later",
+        "automation_id": None,
+        "ancestry": [
+            ["dialog", "Update available"],
+            ["filler", None],
+            ["frame", "oa-trial.txt"],
+        ],
+        "window": "oa-trial.txt",
+        "process": "gedit",
+        "dialog_region": [200, 10, 300, 120],
+    }
+    identity = ElementIdentity.from_mapping(raw)
+    assert identity is not None and identity.ends_at_window()
+    assert identity.dialog() == ("dialog", "Update available")
+    assert backend_kind(target) == "accessibility"
+
+    def unverified():
+        raise RuntimeError("no record identity")
+
+    admission = admit_new_click(
+        target, (340, 40), record_identity=unverified, cover=lambda: None
+    )
+    assert admission.basis == BASIS_ELEMENT_AND_RECORD_CHECK
+    assert admission.locator.name == "Later"
+    assert admission.locator.window_name == "oa-trial.txt"
+
+
+@pytest.mark.parametrize(
+    "trail",
+    [
+        None,
+        [],
+        RuntimeError("AT-SPI died"),
+        # The top of the trail must be the pinned window, by title and bounds.
+        [("frame", "Other window", (100, 200, 640, 480))],
+        [("frame", "oa-trial.txt", (100, 200, 640, 481))],
+    ],
+)
+def test_element_identity_fails_closed_on_a_bad_ancestry(trail) -> None:
+    assert backend(IdentityClient(trail)).element_identity_at(340, 40) is None
+
+
+def test_element_identity_refuses_an_element_outside_the_window_or_point() -> None:
+    client = IdentityClient()
+    client.text_at_point = LinuxElement(
+        "0.2:1",
+        None,
+        "button",
+        "Later",
+        "gedit",
+        "other.txt",
+        9001,
+        (400, 230, 80, 30),
+        ("invoke",),
+    )
+    assert backend(client).element_identity_at(340, 40) is None
+    client.text_at_point = LinuxElement(
+        "0.1:1",
+        None,
+        "button",
+        "Later",
+        "gedit",
+        "oa-trial.txt",
+        9002,
+        (400, 230, 80, 30),
+        ("invoke",),
+    )
+    assert backend(client).element_identity_at(340, 40) is None
+    client.text_at_point = LATER_ELEMENT
+    # (10, 10) is inside the window but not inside the element.
+    assert backend(client).element_identity_at(10, 10) is None
+    # Neither a name nor an id: nothing replay could find again.
+    client.text_at_point = LinuxElement(
+        "0.1:1",
+        None,
+        None,
+        None,
+        "gedit",
+        "oa-trial.txt",
+        9001,
+        (400, 230, 80, 30),
+        (),
+    )
+    assert backend(client).element_identity_at(340, 40) is None
+
+
+def test_element_identity_needs_a_client_that_reads_ancestry() -> None:
+    from openadapt_flow.repair.element_identity import (
+        ClickRefused,
+        read_element_identity,
+    )
+
+    with pytest.raises(ClickRefused, match="no element identity"):
+        read_element_identity(backend(), (340, 40))
+
+
+class _Node:
+    def __init__(self, role, name, bounds, parent=None, pid=9001):
+        self.role, self.name, self.bounds, self.parent, self.pid = (
+            role,
+            name,
+            bounds,
+            parent,
+            pid,
+        )
+
+    def get_role_name(self):
+        return self.role
+
+    def get_name(self):
+        return self.name
+
+    def get_parent(self):
+        return self.parent
+
+    def get_process_id(self):
+        return self.pid
+
+    def get_component_iface(self):
+        node = self
+
+        class _Component:
+            def get_extents(self, coord):
+                x, y, w, h = node.bounds
+                return type("R", (), {"x": x, "y": y, "width": w, "height": h})()
+
+        return _Component()
+
+
+def _atspi_client():
+    from types import SimpleNamespace
+
+    client = object.__new__(linux_backend_module.AtspiLinuxClient)
+    client._atspi = SimpleNamespace(
+        CoordType=SimpleNamespace(SCREEN=0, WINDOW=1), StateType=SimpleNamespace()
+    )
+    return client
+
+
+def _tree(window_name="oa-trial.txt", window_pid=9001):
+    app = _Node("application", "gedit", (0, 0, 1, 1))
+    frame = _Node("frame", window_name, (100, 200, 640, 480), app, window_pid)
+    bar = _Node("info bar", None, (100, 200, 640, 40), frame)
+    button = _Node("push button", "Later", (400, 210, 80, 30), bar)
+    return LinuxElement(
+        "0.1:0.0",
+        None,
+        "button",
+        "Later",
+        "gedit",
+        "oa-trial.txt",
+        9001,
+        (400, 210, 80, 30),
+        ("invoke",),
+        native=button,
+    )
+
+
+def test_atspi_client_ancestry_walks_to_the_exact_window() -> None:
+    client = _atspi_client()
+    assert client.ancestry(TARGET_WINDOW, _tree()) == [
+        ("info bar", None, (100, 200, 640, 40)),
+        ("frame", "oa-trial.txt", (100, 200, 640, 480)),
+    ]
+
+
+@pytest.mark.parametrize(
+    "element",
+    [
+        _tree(window_name="Other"),
+        _tree(window_pid=4242),
+        LinuxElement(
+            "x",
+            None,
+            "button",
+            "Later",
+            "gedit",
+            "oa-trial.txt",
+            9001,
+            (1, 1, 1, 1),
+            (),
+            native=None,
+        ),
+        LinuxElement(
+            "x",
+            None,
+            "button",
+            "Later",
+            "gedit",
+            "oa-trial.txt",
+            9001,
+            (1, 1, 1, 1),
+            (),
+            native=_Node("push button", "Later", (1, 1, 1, 1)),
+        ),
+    ],
+)
+def test_atspi_client_ancestry_fails_closed(element) -> None:
+    assert _atspi_client().ancestry(TARGET_WINDOW, element) is None
