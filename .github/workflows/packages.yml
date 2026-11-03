@@ -1178,7 +1178,9 @@ jobs:
     name: seal-view (test, viewer build, browser)
     needs: scope
     if: needs.scope.outputs.seal_view == 'true'
-    runs-on: ubuntu-latest
+    # The launcher's lock pins Playwright 1.58, which has no Chromium build for
+    # ubuntu-latest (26.04); Flow's jobs use Flow's lock (1.61).
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
