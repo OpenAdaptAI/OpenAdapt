@@ -3045,11 +3045,41 @@ class Replayer:
         stopped after sending. Returns None when the save was not sent, with
         the reason in ``self._web_form_fallback_reason``; the caller then runs
         the GUI steps.
+
+        An earlier save's wire check that refused a request halts the run at
+        the span's first step, before anything is sent. A check without a
+        refusal stays armed through the span: the span's requests go through
+        the context's APIRequestContext (``context.request``), which context
+        routes never intercept, so the check can't block them and still
+        aborts a stray submit from the live page. Don't route them.
         """
 
         save = workflow.steps[end_index]
         router = getattr(self, "_surface_router", None)
         surface = router.active_id if router is not None else None
+        backend = self.backend
+        if getattr(backend, "form_submit_guard_armed", False):
+            # Read, never disarm: see the docstring.
+            late = backend.form_submit_guard_refusal()  # type: ignore[attr-defined]
+            if late is not None:
+                first = workflow.steps[start_index]
+                # Never None here: None runs the GUI steps instead.
+                return [
+                    StepResult(
+                        step_id=first.id,
+                        intent=first.intent,
+                        ok=False,
+                        safety_halt=True,
+                        failure_category="safety_halt",
+                        actuation="api",
+                        delivery_attempted=False,
+                        surface=surface,
+                        error=(
+                            f"Step '{first.id}' ({first.intent}): after the "
+                            f"previous save, {late} — run aborted"
+                        ),
+                    )
+                ]
         folded = [
             StepResult(
                 step_id=s.id,
@@ -13284,7 +13314,7 @@ class Replayer:
         last.ok = False
         last.safety_halt = True
         last.failure_category = "safety_halt"
-        last.error = f"after the save, {late} — run aborted"
+        last.error = f"after an earlier save, {late} — run aborted"
         report.success = False
 
     def _act_closing_surface(
