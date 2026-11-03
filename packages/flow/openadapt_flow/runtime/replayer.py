@@ -15160,7 +15160,7 @@ class Replayer:
         """
         kind = pred.kind.value if hasattr(pred.kind, "value") else pred.kind
         if kind == "text_present" and pred.exact:
-            return bool(pred.text) and self._exact_text_holds(pred.text, frame_png)
+            return bool(pred.text and self._exact_text_holds(pred.text, frame_png))
         return evaluate_program_predicate(
             pred,
             frame_png,
