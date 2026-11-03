@@ -203,6 +203,15 @@ reward = [
 # 3.12+) is not on PyPI, and a published wheel cannot name a git URL, so it is
 # installed beside this extra; docs/HARNESS2.md gives the pinned command.
 harness2 = ["playwright>=1.44"]
+# Standard RL environments (openadapt_flow.rl_env): the record-checked apps
+# served over the OpenEnv protocol (BSD-3-Clause) and rewarded by verify-run.
+# See environments/openenv/README.md.
+openenv = [
+    "openenv>=0.11,<0.12",
+    "playwright>=1.44",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
 # Native macOS window capture/input. Imported lazily; other platforms never
 # install or import these framework bindings.
 macos = [
@@ -420,6 +429,7 @@ exclude = [
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",
     "/openadapt_flow/validation/identity_roc.py",
+    "/environments/openenv/openimis_claims",
     "/scripts/openimis_claims_demo.py",
     "/scripts/openimis_eligibility_demo.py",
     "/scripts/openimis_submit_binding_probe.py",
