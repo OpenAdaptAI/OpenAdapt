@@ -808,7 +808,9 @@ class WindowsBackend:
         """Remember the top-level window under (x, y) for ``step_id``.
 
         Call it when that step's identity check verifies, at the verified
-        target's point, before anything else can open: later,
+        target's point, before anything else can open. The agent refuses a
+        window that is not the foreground app's (a topmost window that slid
+        over the point in between): later,
         :meth:`owned_window_over` compares live window state against this
         capture instead of hit-testing at a halted step, where a dialog would
         answer for itself. Returns False (and records nothing) when the agent
@@ -831,6 +833,10 @@ class WindowsBackend:
         self._verified_windows[step_id] = (window["hwnd"], window["pid"])
         return True
 
+    def clear_verified_windows(self) -> None:
+        """Forget every capture (call between runs: step ids repeat)."""
+        self._verified_windows.clear()
+
     def owned_window_over(
         self, region: tuple[int, int, int, int], *, pinned_step_id: str
     ) -> Optional[dict]:
@@ -840,9 +846,9 @@ class WindowsBackend:
         the last step whose identity check verified (its window recorded by
         :meth:`record_verified_window`). Returns ``{"title", "hwnd",
         "owner_hwnd", "pid"}`` only when the first visible window above the
-        recorded one that meets the region belongs to the same process and
-        its owner chain reaches the recorded window (an owned dialog, a
-        message box). Returns None with no record for that step, when the
+        recorded one, of the same process and with an owner chain reaching it
+        (an owned dialog, a message box), covers the region's center, and no
+        window of another process, or unowned, meets the region above it. Returns None with no record for that step, when the
         recorded window is gone or now another process's, for any other
         process's window or an unowned one, and on any failure. Never raises.
         """

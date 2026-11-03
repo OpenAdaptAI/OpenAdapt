@@ -1246,6 +1246,9 @@ class _FakeDesktop:
         self.windows = {
             self.PINNED: (10, 0, (0, 0, 800, 600), True, False, "Patient Notes")
         }
+        self.dpi_ok = True
+        self.foreground_window = self.PINNED
+        self.roots: dict[int, int] = {}  # child hwnd -> top-level
 
     def add(
         self,
@@ -1289,7 +1292,18 @@ class _FakeDesktop:
         return self.stack[0]
 
     def ancestor(self, hwnd, flag):
-        return hwnd
+        if flag == 2:  # GA_ROOT
+            return self.roots.get(hwnd, hwnd if hwnd in self.windows else 0)
+        root = hwnd  # GA_ROOTOWNER: up the owner chain
+        while self.owner(root):
+            root = self.owner(root)
+        return root
+
+    def foreground(self):
+        return self.foreground_window
+
+    def per_monitor_dpi(self):
+        return self.dpi_ok
 
 
 def _owned_over(monkeypatch, desktop, region=(250, 250, 50, 20), **pinned):
@@ -1313,11 +1327,75 @@ def test_an_owned_dialog_over_the_region_is_reported(monkeypatch) -> None:
     }
 
 
+def test_a_topmost_owned_popup_does_not_hide_a_foreign_window_over_the_target(
+    monkeypatch,
+) -> None:
+    # Review blocker: a topmost owned tooltip sorts above every normal window;
+    # Notepad below it still covers the target.
+    desktop = _FakeDesktop()
+    desktop.add(0x900, pid=99, title="Untitled - Notepad")
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(240, 240, 300, 270))
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_an_owned_window_that_only_clips_the_region_is_none(monkeypatch) -> None:
+    # A shadow or glow window of the app's own grazing one corner.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_an_owner_cycle_is_none(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x300, owner=0x200)
+    desktop.windows[0x200] = (10, 0x300, (900, 900, 950, 950), True, False, "x")
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_an_unreadable_cloak_state_on_the_apps_window_is_none(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, cloaked=None)
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_window_operations_need_per_monitor_dpi(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.dpi_ok = False
+    with pytest.raises(AgentRequestError) as caught:
+        _owned_over(monkeypatch, desktop)
+    assert caught.value.status == 503
+
+
+@pytest.mark.parametrize("fault", ["not_foreground", "no_root"])
+def test_window_root_at_refuses_a_doubtful_capture(monkeypatch, fault) -> None:
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    desktop = _FakeDesktop()
+    desktop.add(0x900, pid=99)  # what is now at the point
+    if fault == "not_foreground":
+        desktop.foreground_window = _FakeDesktop.PINNED
+    else:
+        desktop.roots[0x900] = 0  # GetAncestor fails
+        desktop.foreground_window = 0x900
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    assert _perform_uia("window-root-at", {"x": 5, "y": 5})["window"] is None
+
+
 def test_a_dialog_owned_through_a_chain_counts(monkeypatch) -> None:
     desktop = _FakeDesktop()
     desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(700, 0, 800, 50))
     desktop.add(0x300, owner=0x200, title="Confirm")
     assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
+
+
+def test_an_owned_window_over_the_center_wins_over_one_only_clipping(
+    monkeypatch,
+) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
+    desktop.add(0x300, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
 
 
 @pytest.mark.parametrize(
