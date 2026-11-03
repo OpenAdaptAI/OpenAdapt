@@ -1192,9 +1192,12 @@ def verify_ensure(
         late = _agents_part(changes_since(None), selfs)
         if late != _agents_part(changes, selfs):
             raise Unreadable("the agent wrote after the window closed")
-        return judge(
+        result = judge(
             contract, params, baseline, changes, after_matches, created, existing_now
         )
+        # Where the read window closed, for a write receipt's scope.
+        result.evidence["window_until"] = until.isoformat()
+        return result
     except Unreadable as exc:
         return _review([f"unreadable: {exc}"], {"unreadable": True})
 

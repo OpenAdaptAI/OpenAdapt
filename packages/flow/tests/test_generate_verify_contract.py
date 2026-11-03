@@ -138,7 +138,7 @@ class App:
         )
         if v.get("customer_ref") is not None:
             self.q("INSERT INTO custom_values (customized_type, customized_id, custom_field_id, value) "
-                   "VALUES ('Issue', %s, 1, %s)", (iid, v["customer_ref"]))  # fmt: skip
+                   "VALUES ('Issue', %s, 4, %s)", (iid, v["customer_ref"]))  # fmt: skip
         return iid
 
     def find(self, project: str, subject: str) -> int:
@@ -210,6 +210,18 @@ KINDS = {
                         "customer_ref": "007341",
                     }
                 },
+                # A second write with a custom field: one row can't tell a
+                # pinned value from what one write happened to store.
+                {
+                    "values": {
+                        "project": "Billing Portal Legacy",
+                        "subject": "Ledger export",
+                        "status": "In Progress",
+                        "assignee": "Jon Park",
+                        "due_date": None,
+                        "customer_ref": "008812",
+                    }
+                },
             ],
         },
         {
@@ -264,6 +276,18 @@ def generated(pg: Any) -> dict[str, Any]:
     app = App(port, "tracker")
     with app.con() as c, c.cursor() as cur:
         cur.execute(SCHEMA)
+        # Saved before: a version of 1 after a save would equal the bot's
+        # id, and the generator asks when a column is both the acting
+        # user's id and a copy of another row's column.
+        cur.execute("UPDATE issues SET lock_version = 4")
+        # Likewise new journal rows numbered from 1 would equal the bot's id
+        # (a link to a row the write added, or the acting user?).
+        for seq in (
+            "journals_id_seq",
+            "journal_details_id_seq",
+            "custom_values_id_seq",
+        ):
+            cur.execute(f"SELECT setval('{seq}', 100)")
     os.environ["OA_GEN_TEST_PW"] = "reader-pw"
     work = root / "work"
     work.mkdir()
@@ -457,3 +481,326 @@ def test_each_fault_is_stopped(generated: dict[str, Any], name: str) -> None:
                     cur.execute(
                         f"INSERT INTO {t} VALUES ({', '.join(['%s'] * len(r))})", r
                     )
+
+
+# -- the recheck sees the contract's own tables --------------------------------
+
+TABLES = ("issues", "journals", "journal_details", "custom_values", "settings")
+
+
+def _snapshot(app: App) -> dict[str, list[tuple]]:
+    out = {}
+    with app.con() as c, c.cursor() as cur:
+        for t in TABLES:
+            cur.execute(f"SELECT * FROM {t}")
+            out[t] = cur.fetchall()
+    return out
+
+
+def _restore(app: App, snapshot: dict[str, list[tuple]]) -> None:
+    with app.con() as c, c.cursor() as cur:
+        for t, rows in snapshot.items():
+            cur.execute(f"DELETE FROM {t}")
+            for r in rows:
+                cur.execute(f"INSERT INTO {t} VALUES ({', '.join(['%s'] * len(r))})", r)
+
+
+def _write_then_recheck(
+    generated: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    values: dict[str, Any],
+    write: Callable[[], Any],
+    late: Callable[[], Any],
+) -> tuple[str, str]:
+    """A write, its verdict, a late write after the verdict, and the
+    recheck's verdict."""
+
+    from openadapt_flow import verifier
+    from openadapt_flow.verifier import Actor, begin_write, recheck, verify_write
+
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    actor = Actor("agent", "ops-bot")
+    contract, params = gen.choose(
+        generated["out"] / "manifest.yaml", kind, values, {"bot_user_id": str(BOT)}
+    )
+    app = generated["app"]
+    saved = _snapshot(app)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            pending = begin_write(contract, params, actor=actor, ledger=None,
+                                  write_key=f"t-{time.time_ns()}", workdir=tmp)  # fmt: skip
+            write()
+            result = verify_write(pending)
+            first = str(getattr(result.outcome, "value", result.outcome))
+            if not result.verified:
+                return first + " " + "; ".join(result.reasons)[:400], ""
+            late()
+            again = recheck(contract, result, params=params, actor=actor, ledger=None)
+            outcome = str(getattr(again.outcome, "value", again.outcome))
+            return first, outcome + " " + "; ".join(again.reasons)[:400]
+    finally:
+        _restore(app, saved)
+
+
+def test_the_generated_frame_compares_its_own_tables(generated: dict[str, Any]) -> None:
+    """The main record's table and the tables of rows that hold values are
+    compared, and left to the contract's own read only for the rows that
+    read saw move (``judged_by``): never skipped, never append-only."""
+
+    out = generated["out"]
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    for kind in ("create_issue", "update_issue"):
+        for v in manifest["kinds"][kind]["variants"]:
+            for flavor in ("create", "update", "found"):
+                if flavor not in v:
+                    continue
+                db = yaml.safe_load((out / v[flavor]).read_text())["frame"]["database"]
+                allowed = {t["table"] for t in db["allow_tables"]}
+                assert db["judged_by"]["issues"] == "record"
+                assert not set(db["judged_by"]) & allowed, (kind, flavor)
+                assert not set(db["judged_by"]) & set(db.get("views", {}))
+
+
+def test_a_late_update_of_a_look_alike_is_refuted_at_the_recheck(
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A correct update, then a change to the look-alike issue in the other
+    project after the verdict: the recheck stops it. The columns the update
+    may change are excused on the target only."""
+
+    app = generated["app"]
+
+    def target() -> int:
+        return app.find("Billing Portal", "Refund button missing")
+
+    def legacy() -> int:
+        return app.find("Billing Portal Legacy", "Refund button missing")
+
+    lates = {
+        "the same update on the look-alike": lambda: app.update_issue(legacy(), UPDATE),
+        "only the look-alike's status": lambda: app.q(
+            "UPDATE issues SET status_id=3, updated_on=now() WHERE id=%s", (legacy(),)),
+        "a second change to the target": lambda: app.q(
+            "UPDATE issues SET done_ratio=90 WHERE id=%s", (target(),)),
+    }  # fmt: skip
+    for name, late_write in lates.items():
+        first, late = _write_then_recheck(
+            generated, monkeypatch, "update_issue", UPDATE,
+            lambda: app.update_issue(target(), UPDATE), late_write,
+        )  # fmt: skip
+        assert first == "CONFIRMED", (name, first)
+        assert late.startswith("REFUTED"), (name, late)
+
+
+def test_a_late_duplicate_create_is_refuted_at_the_recheck(
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = generated["app"]
+    first, late = _write_then_recheck(
+        generated, monkeypatch, "create_issue", CREATE,
+        lambda: app.create_issue(CREATE),
+        lambda: app.create_issue(CREATE, project_id=2),
+    )  # fmt: skip
+    assert first == "CONFIRMED", first
+    assert late.startswith("REFUTED"), late
+
+
+@pytest.mark.parametrize("kind", ["create_issue", "update_issue"])
+def test_a_correct_write_with_nothing_late_is_confirmed_at_the_recheck(
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    app = generated["app"]
+    if kind == "create_issue":
+        values, write = CREATE, lambda: app.create_issue(CREATE)
+    else:
+        iid = app.find("Billing Portal", "Refund button missing")
+        values, write = UPDATE, lambda: app.update_issue(iid, UPDATE)
+    first, late = _write_then_recheck(
+        generated, monkeypatch, kind, values, write, lambda: None
+    )
+    assert first == "CONFIRMED", first
+    assert late.startswith("CONFIRMED"), late
+
+
+# -- field sets the manifest doesn't list ----------------------------------------
+
+
+def _unlisted(
+    generated: dict[str, Any], tmp_path: Path, kind: str, fields: list[str]
+) -> tuple[Path, dict[str, Any]]:
+    """A copy of the output whose manifest drops one field set, as the cap
+    of 64 drops sets of a kind with many fields."""
+
+    out = tmp_path / "out"
+    shutil.copytree(generated["out"], out)
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    entry = manifest["kinds"][kind]
+    dropped = [v for v in entry["variants"] if sorted(v["fields"]) == sorted(fields)]
+    assert len(dropped) == 1, [v["fields"] for v in entry["variants"]]
+    entry["variants"] = [v for v in entry["variants"] if v not in dropped]
+    (out / "manifest.yaml").write_text(yaml.safe_dump(manifest, allow_unicode=True))
+    return out, dropped[0]
+
+
+def _body(path: Path) -> Any:
+    return yaml.safe_load(path.read_text())  # the document, past the header
+
+
+def test_an_unlisted_update_set_is_built_like_a_listed_one(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    """``choose`` builds a field set the manifest doesn't list from the same
+    inputs: the same contract the listed one was, judging the same way."""
+
+    app = generated["app"]
+    fields = ["done_ratio", "project", "status", "subject"]
+    out, listed = _unlisted(generated, tmp_path, "update_issue", fields)
+    v = {"project": "Help Desk", "subject": "Printer jams", "status": "Resolved",
+         "assignee": None, "due_date": None, "done_ratio": 60, "notes": None}  # fmt: skip
+    gen.choose(out / "manifest.yaml", "update_issue", v, {"bot_user_id": str(BOT)})
+    built = sorted((out / "field_sets" / "update_issue").glob("*.update.yaml"))
+    assert len(built) == 1
+    assert _body(built[0]) == _body(out / listed["update"])
+    iid = app.find("Help Desk", "Printer jams")
+    here = {**generated, "out": out}
+    ok = _run(here, "update_issue", v, lambda: app.update_issue(iid, v))
+    assert ok.startswith("CONFIRMED"), ok
+    wrong = {**v, "done_ratio": 70}
+    bad = _run(here, "update_issue", v, lambda: app.update_issue(iid, wrong))
+    assert not bad.startswith("CONFIRMED"), bad
+
+
+def test_an_unlisted_set_is_refused_when_its_inputs_changed(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    out, _ = _unlisted(
+        generated, tmp_path, "update_issue", ["project", "status", "subject"]
+    )
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    manifest["field_sets"]["demos_sha256"] = "sha256:" + "0" * 64
+    (out / "manifest.yaml").write_text(yaml.safe_dump(manifest, allow_unicode=True))
+    v = {"project": "Help Desk", "subject": "Printer jams", "status": "Resolved"}
+    with pytest.raises(gen.GenerateError, match="demonstrations changed"):
+        gen.choose(out / "manifest.yaml", "update_issue", v, {"bot_user_id": str(BOT)})
+
+
+def test_a_set_outside_the_kinds_fields_has_no_contract(
+    generated: dict[str, Any],
+) -> None:
+    manifest = generated["out"] / "manifest.yaml"
+    extra = {"bot_user_id": str(BOT)}
+    # No identity: the update's target can't be told apart.
+    with pytest.raises(gen.GenerateError, match="no update_issue contract"):
+        gen.choose(manifest, "update_issue", {"status": "Resolved"}, extra)
+    # A field no demonstration placed.
+    v = {"project": "Help Desk", "subject": "x", "status": "New", "priority": "High"}
+    with pytest.raises(gen.GenerateError, match="no create_issue contract"):
+        gen.choose(manifest, "create_issue", v, extra)
+
+
+# -- review round 1 (#1683) ------------------------------------------------------
+
+UNLISTED = ["project", "status", "subject"]
+UNLISTED_V = {"project": "Help Desk", "subject": "Printer jams", "status": "Resolved"}
+
+
+def _edit_manifest(out: Path, change: Callable[[dict[str, Any]], None]) -> None:
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    change(manifest)
+    (out / "manifest.yaml").write_text(yaml.safe_dump(manifest, allow_unicode=True))
+
+
+def test_a_hand_edited_listed_contract_refuses_run_time_builds(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    """A person tightened a listed contract. A set built at run time would
+    not have the edit, so none is built."""
+
+    out, listed = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    other = (
+        out
+        / sorted(
+            f
+            for f in yaml.safe_load((out / "manifest.yaml").read_text())["field_sets"][
+                "listed_sha256"
+            ]
+        )[0]
+    )
+    other.write_text(other.read_text() + "\n# hand edit\n")
+    with pytest.raises(gen.GenerateError, match="changed since it was proposed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_another_generator_version_refuses_run_time_builds(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    _edit_manifest(
+        out, lambda m: m["field_sets"].update(generator_sha256="sha256:" + "1" * 64)
+    )
+    with pytest.raises(gen.GenerateError, match="generator changed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_a_changed_snapshot_outside_the_folder_refuses(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    """The digest covers every byte the demonstrations' load read, a
+    snapshot named by a path outside the folder too."""
+
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+    demos = tmp_path / "demos"
+    shutil.copytree(
+        Path(
+            yaml.safe_load((out / "manifest.yaml").read_text())["field_sets"]["demos"]
+        ),
+        demos,
+    )
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    first = sorted(demos.glob("*.demo.json"))[0]
+    doc = json.loads(first.read_text())
+    snap = demos / doc["after_snapshot"]
+    moved = outside / snap.name
+    shutil.move(str(snap), moved)
+    doc["after_snapshot"] = str(Path("..") / "elsewhere" / snap.name)
+    first.write_text(json.dumps(doc))
+    digest = __import__("hashlib").sha256()
+    gen.load_demos(demos, digest)
+    _edit_manifest(
+        out,
+        lambda m: m["field_sets"].update(
+            demos=str(demos), demos_sha256="sha256:" + digest.hexdigest()
+        ),
+    )
+    gen.choose(
+        out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+    )
+    moved.write_text(moved.read_text().replace('"Printer jams"', '"Printer jamz"'))
+    with pytest.raises(gen.GenerateError, match="demonstrations changed"):
+        gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+
+def test_two_threads_build_one_set_at_once(
+    generated: dict[str, Any], tmp_path: Path
+) -> None:
+    import concurrent.futures
+
+    out, _ = _unlisted(generated, tmp_path, "update_issue", UNLISTED)
+
+    def build(_: int) -> Any:
+        return gen.choose(
+            out / "manifest.yaml", "update_issue", UNLISTED_V, {"bot_user_id": str(BOT)}
+        )
+
+    with concurrent.futures.ThreadPoolExecutor(4) as pool:
+        results = list(pool.map(build, range(4)))
+    assert all(r[0] is not None for r in results)
+    assert not list((out / "field_sets").rglob("*.tmp"))

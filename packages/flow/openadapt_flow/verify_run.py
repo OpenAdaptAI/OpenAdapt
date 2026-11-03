@@ -371,6 +371,38 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
             raise VerifyRunError(
                 "frame.database.views names no such surface: " + ", ".join(unknown)
             )
+        unknown = sorted(set(database.judged_by.values()) - surfaces)
+        if unknown:
+            raise VerifyRunError(
+                "frame.database.judged_by names no such surface: " + ", ".join(unknown)
+            )
+        named = list(database.judged_by.values())
+        twice = sorted({s for s in named if named.count(s) > 1})
+        if twice:
+            raise VerifyRunError(
+                "frame.database.judged_by names one surface for two tables: "
+                + ", ".join(twice)
+            )
+        attribution_spec = cfg.frame.attribution if cfg.frame is not None else None
+        surface_ignore = set(cfg.frame.ignore_fields if cfg.frame is not None else [])
+        if attribution_spec is not None and attribution_spec.kind == "record_field":
+            surface_ignore |= set(attribution_spec.server_set)
+        for table in sorted(database.judged_by):
+            loose = sorted(surface_ignore - set(database.ignore_columns_for(table)))
+            if loose:
+                raise VerifyRunError(
+                    f"frame.database.judged_by: the surface for {table} ignores "
+                    f"{', '.join(loose)}, which the table doesn't ignore "
+                    "(frame.database.ignore_columns)"
+                )
+        both = sorted(
+            set(database.judged_by) & (set(database.views) | set(database.modes()))
+        )
+        if both:
+            raise VerifyRunError(
+                "frame.database.judged_by names a table that views or "
+                "allow_tables also names: " + ", ".join(both)
+            )
     for effect in cfg.effects:
         if effect.needs_operator_confirmation:
             raise VerifyRunError(
@@ -653,6 +685,9 @@ def _ref_columns(cfg: VerifyConfig) -> list[str]:
         cols |= {o.column for o in a.owners.values()}
     for side in frame.side_records:
         cols |= {side.link_field, side.of_field}
+    if frame.learned is not None:
+        # A learned excuse is checked by its actor column and moved columns.
+        cols |= set(frame.learned.columns_to_keep())
     profile = frame.database.loaded_profile() if frame.database else None
     if profile is not None:
         cols |= set(profile.ref_columns())
@@ -753,6 +788,9 @@ class _DatabaseFrame:
     post_read_at: str = ""
     #: The snapshot the rows are judged against.
     old: Any = None
+    #: (table, record) -> the row key MAC of the table's row with that
+    #: record's primary key values, or None when they can't be read from it.
+    row_key: Any = None
 
 
 def _rules_used(profile: Any, old: Any, new: Any) -> list[str]:
@@ -810,7 +848,9 @@ def _database_frame(
         Snapshot,
         SnapshotError,
         cell_hash,
+        key_text,
         mac_key,
+        row_key_hash,
         settled_state,
         unpack,
         unread_reasons,
@@ -873,6 +913,15 @@ def _database_frame(
     key = mac_key(salt)
     out = _DatabaseFrame({}, {}, [], {}, (old.clock, new.clock), {}, None)
     out.post, out.post_read_at, out.old = new, new_at, old
+
+    def row_key(table: str, record: Mapping[str, Any]) -> Optional[str]:
+        t = old.tables.get(table)
+        pk = list(t.primary_key) if t is not None else []
+        if not pk or any(record.get(c) is None for c in pk):
+            return None
+        return row_key_hash(key, key_text(pk, record), table)
+
+    out.row_key = row_key
     if "audit" in new.extra:
         out.audit_after = list(new.extra["audit"])
     if old.objects != new.objects:
@@ -1001,6 +1050,48 @@ def _read_audit(verifier: Any) -> Optional[list[dict[str, Any]]]:
         return None
 
 
+def _declared_by_surface(
+    table: str,
+    surface: str,
+    state: tuple[EffectState, Optional[list[dict[str, Any]]]],
+    effects: Sequence[Effect],
+    routes: Mapping[str, Sequence[str]],
+    db: _DatabaseFrame,
+) -> set[str]:
+    """Row key MACs of ``table``'s rows that ``surface`` declares
+    (``frame.database.judged_by``): its records, before or after the save,
+    that an effect routed to it selects, matched to the table by primary
+    key. The table judges those rows itself, every column exactly, with the
+    surface's fields as the ones a declared row may change. Empty when a
+    declared record's key can't be read, so nothing is declared there and a
+    declared change stops the write."""
+
+    from openadapt_flow.runtime.effects.effect import record_matches
+    from openadapt_flow.runtime.effects.frame import declared_selectors
+
+    before_state, after_records = state
+    if after_records is None or not before_state.reachable:
+        return set()
+    selectors = [
+        s
+        for i, effect in enumerate(effects)
+        if surface in routes.get(str(i), ())
+        for s in declared_selectors(effect)
+    ]
+    typed = before_state.substrate == "sql"
+    keys: set[str] = set()
+    for record in [*before_state.records, *after_records]:
+        if not any(
+            record_matches(dict(record), s, text_numbers=typed) for s in selectors
+        ):
+            continue
+        k = db.row_key(table, record)
+        if k is None:
+            return set()
+        keys.add(k)
+    return keys
+
+
 def judge_run_frame(
     cfg: VerifyConfig,
     verifier: Any,
@@ -1026,6 +1117,10 @@ def judge_run_frame(
     from openadapt_flow.runtime.effects.surfaces import surface_of
 
     spec = cfg.frame or FrameSpec()
+    # The database first, then the surfaces: a row a surface judges
+    # (``database.judged_by``) is read by it no earlier than the settled
+    # read a recheck compares with, so no change falls between the two.
+    db = _database_frame(cfg, before, salt)
     after: Any = None
     if not database_only:
         try:
@@ -1074,7 +1169,8 @@ def judge_run_frame(
     elif not database_only:
         slices[""] = (before, _post_records(after))
     identities: Optional[dict[str, str]] = None
-    db = _database_frame(cfg, before, salt)
+    #: Table -> row key MACs its ``judged_by`` surface declares.
+    declared_rows: dict[str, set[str]] = {}
     if db is not None and db.still_moving:
         tries = db.evidence.get("settle_attempts", 1)
         return FrameVerdict(
@@ -1112,6 +1208,12 @@ def judge_run_frame(
         for route in routes.values():
             route.extend(t for t, surface in db_views.items() if surface in route)
         slices.update(db.slices)
+        if spec.database is not None and db.row_key is not None:
+            for table, surface in spec.database.judged_by.items():
+                if table in db.slices and surface in slices:
+                    declared_rows[table] = _declared_by_surface(
+                        table, surface, slices[surface], bound_effects, routes, db
+                    )
         identities = {name: KEY for name in db.slices}
     audit_before: Optional[list[dict[str, Any]]] = None
     audit_after: Optional[list[dict[str, Any]]] = None
@@ -1189,6 +1291,7 @@ def judge_run_frame(
         database_evidence=None if db is None else db.evidence,
         excuse=excuse,
         user_ids=None if db is None else db.users_map,
+        declared_rows=declared_rows,
     )
     profile = db.evidence.get("profile") if db is not None else None
     if profile is not None:
