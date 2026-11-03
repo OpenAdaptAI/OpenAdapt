@@ -764,3 +764,43 @@ def test_a_covered_or_blocked_target_is_a_refusal_not_an_uncertain_click(code) -
     finally:
         server.shutdown()
     assert seen["path"] == "/uia/act"
+
+
+@pytest.mark.parametrize(
+    ("operation", "accepted"),
+    [("win32_bm_click", True), ("uia_invoke", True), ("physical_click", False)],
+)
+def test_native_action_receipts_the_agent_issues(operation, accepted) -> None:
+    # Real lab finding: the agent's posted BM_CLICK receipt was rejected as a
+    # mismatch after the click had been queued.
+    from openadapt_flow.ir import StructuralHandle, StructuralLocator
+
+    fingerprint = "b" * 64
+    server, _ = _serve_identity_route(
+        200,
+        {
+            "status": "ok",
+            "candidate_count": 1,
+            "receipt": {
+                "receipt_id": "uia-1",
+                "operation": operation,
+                "native": True,
+                "target_fingerprint": fingerprint,
+                "delivered_at": "2026-11-03T00:00:00+00:00",
+                "outcome_verified": False,
+            },
+        },
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        handle = StructuralHandle(
+            point=(10, 10), confidence=1.0, target_fingerprint=fingerprint
+        )
+        locator = StructuralLocator(automation_id="saveButton")
+        if accepted:
+            assert backend.act_structural(locator, handle).operation == operation
+        else:
+            with pytest.raises(RuntimeError, match="mismatched"):
+                backend.act_structural(locator, handle)
+    finally:
+        server.shutdown()
