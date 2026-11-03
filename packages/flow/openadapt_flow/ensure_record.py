@@ -42,7 +42,7 @@ import time
 from collections import Counter
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -239,7 +239,20 @@ def normalize(value: Any, rule: FieldRule, *, task: bool = False) -> Optional[st
     if rule.compare == "digits":
         return re.sub(r"\D", "", text)
     if rule.compare == "date":
-        return text[:10]
+        # A calendar date, a partial date as written, or the date a date-time
+        # was written on (in its own offset, as a person entered it). Anything
+        # else, such as
+        # "1984-03-07xyz", is not a date and never matches.
+        if re.fullmatch(r"\d{4}(-\d{2})?", text, re.ASCII):
+            return text  # a FHIR partial date (1984, 1984-03), as written
+        try:
+            if len(text) == 10:
+                return date.fromisoformat(text).isoformat()
+            return (
+                datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+            )
+        except ValueError:
+            return None
     if rule.compare == "instant":
         # One moment however it is written (an offset, Z, milliseconds), to
         # the second. A time with no zone names no moment, so never matches.
