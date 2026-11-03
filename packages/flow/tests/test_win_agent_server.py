@@ -650,6 +650,58 @@ def test_guarded_input_binds_the_executable_digest_and_environment() -> None:
         agent.close()
 
 
+def test_guarded_input_refuses_when_the_executable_digest_changes() -> None:
+    """A guarded POST carries the digest; a different executable is refused."""
+
+    from openadapt_flow.backends import WindowsBackend
+
+    frame = _fake_png()
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    delivered = []
+
+    def input_fn(payload):
+        delivered.append(payload)
+        return {
+            "status": "delivered",
+            "receipt_id": "guarded-env",
+            "operation": "physical_click",
+            "native": False,
+            "target_fingerprint": None,
+            "delivered_at": "2026-11-03T00:00:00+00:00",
+            "outcome_verified": False,
+        }
+
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0),
+        grab_fn=lambda: frame,
+        input_fn=input_fn,
+        context_fn=lambda: {"status": "ok", **state, "workflow_state": None},
+    )
+    try:
+        backend = WindowsBackend(agent.url)
+        expected = backend._guard_context()
+        body = {
+            "expected_frame_sha256": hashlib.sha256(frame).hexdigest(),
+            "expected_context": expected,
+            "input": {"action": "click", "x": 1, "y": 1},
+        }
+        ok = requests.post(f"{agent.url}/input/guarded", json=body, timeout=5)
+        assert ok.status_code == 200, ok.text
+        assert len(delivered) == 1
+        state["application_version"] = "sha256:" + "d" * 64
+        moved = requests.post(f"{agent.url}/input/guarded", json=body, timeout=5)
+        assert moved.status_code == 409
+        assert moved.json()["code"] == "stale_context"
+        assert len(delivered) == 1
+    finally:
+        agent.close()
+
+
 def test_agent_advertises_the_environment_context() -> None:
     agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0))
     try:

@@ -2620,6 +2620,9 @@ def make_handler_class(
                             required=frozenset(
                                 {"application", "session", "workflow_state"}
                             ),
+                            # context_environment_v1: the executable's digest
+                            # and the environment, compared like the others.
+                            optional=frozenset({"application_version", "environment"}),
                             label="expected_context",
                         )
                         for key, value in expected_context.items():
