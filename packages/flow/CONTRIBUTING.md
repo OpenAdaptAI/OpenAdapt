@@ -177,15 +177,13 @@ notice alone is not sufficient.
 
 ## App knowledge lives in data
 
-The engine (`openadapt_flow/`) works the same way for every application. Never
-write code, a default, a constant or a heuristic for one application. What one
-application needs goes in data:
+The engine (`openadapt_flow/`) works the same way for every application. App
+knowledge lives in data:
 
 - its bookkeeping writes: an app profile in `openadapt_flow/app_profiles/`,
   loaded by name;
 - its endpoints, tables, keys and field paths: the generated contract or the
-  deployment config (`deploy.yaml`), which the engine requires rather than
-  defaulting;
+  deployment config (`deploy.yaml`);
 - tests and benchmarks for it: fixtures under `tests/` and harnesses under
   `benchmark/`, outside the shipped package.
 
