@@ -412,3 +412,83 @@ def test_strict_pins_checks_both_readings_and_is_off_by_default() -> None:
     assert "'EUR'" in exprs["pin__cur"] and "`product`" in exprs["copy__cur"]
     with pytest.raises(gen.Unpinned):
         gen._pin(b, gen.Surface("record", "item", []), "item", "cur", role, {}, {})
+
+
+# -- a duplicate the store's own unique index refuses (review round 2) -------
+
+
+class _UniqueSandbox(_FakeSandbox):
+    def unique_indexes(self, table: str) -> dict[str, list[str]]:
+        return {"uk_res": ["fk_event", "kind", "fk_element"]}
+
+
+def _dup_case(copy_changes: dict[str, Any]) -> Any:
+    row = {"id": "5", "fk_event": "46", "kind": "user", "fk_element": "2", "note": "a"}
+    copy = {**row, "id": "1005", **copy_changes}
+    return zt.Case("duplicate:res", "duplicate", [], copy_of=("res", row, copy))
+
+
+class _Mysql1062(Exception):
+    pass
+
+
+def test_a_duplicate_refused_by_a_declared_unique_index_is_not_applicable() -> None:
+    exc = _Mysql1062(1062, "Duplicate entry '46-user-2' for key 'uk_res'")
+    got = zt.blocked_by_constraint(_UniqueSandbox({}), _dup_case({}), exc)
+    assert got and "uk_res" in got
+
+
+def test_any_other_refusal_of_a_duplicate_is_still_a_failure() -> None:
+    sb = _UniqueSandbox({})
+    unique = _Mysql1062(1062, "Duplicate entry '46-user-2' for key 'uk_res'")
+    # The copy changed a column of the index: the index doesn't prove it.
+    assert zt.blocked_by_constraint(sb, _dup_case({"fk_element": "3"}), unique) is None
+    # An index the schema doesn't declare.
+    other = _Mysql1062(1062, "Duplicate entry 'x' for key 'uk_other'")
+    assert zt.blocked_by_constraint(sb, _dup_case({}), other) is None
+    # Not a unique violation (a NOT NULL refusal).
+    assert (
+        zt.blocked_by_constraint(sb, _dup_case({}), _Mysql1062(1048, "cannot be null"))
+        is None
+    )
+    # Not a duplicate fault.
+    case = _dup_case({})
+    case.cls = "bookkeeping"
+    assert zt.blocked_by_constraint(sb, case, unique) is None
+
+
+def test_duplicates_impossible_by_constraint_are_recorded_not_required() -> None:
+    correct = zt.Outcome("correct", "correct", True, "CONFIRMED", True)
+    rest = [zt.Outcome(c, c, False, "REFUTED", False)
+            for c in (*zt.REQUIRED_CLASSES, "look_alike")]  # fmt: skip
+    na = zt.Outcome("duplicate:res", "duplicate", False, "NOT_APPLICABLE", False,
+                    ["impossible by constraint res.uk_res (fk_event, kind, fk_element)"])  # fmt: skip
+    s = zt.summarize({"k": [correct, *rest, na]}, ["k"], {"k": {"create"}})["k"]
+    assert s["admitted"] and s["duplicates_impossible_by_constraint"]
+    # One blocked, one that errored: not admitted.
+    err = zt.Outcome("duplicate:main", "duplicate", False, "ERROR", False)
+    s = zt.summarize({"k": [correct, *rest, na, err]}, ["k"], {"k": {"create"}})["k"]
+    assert not s["admitted"]
+
+
+def test_unique_indexes_reads_the_catalog_on_postgresql(pg: Any) -> None:  # noqa: F811
+    admin = psycopg2.connect(
+        host="127.0.0.1", port=pg["port"], user="admin", dbname="postgres"
+    )
+    admin.autocommit = True
+    admin.cursor().execute("CREATE DATABASE uq_probe")
+    admin.close()
+    c = psycopg2.connect(
+        host="127.0.0.1", port=pg["port"], user="admin", dbname="uq_probe"
+    )
+    c.autocommit = True
+    c.cursor().execute(
+        "CREATE SCHEMA oa_sandbox; CREATE TABLE oa_sandbox.res (id int PRIMARY KEY, "
+        "a int, b text, c int); CREATE UNIQUE INDEX uk_res ON oa_sandbox.res (b, a); "
+        "CREATE INDEX plain ON oa_sandbox.res (c)"
+    )
+    c.close()
+    read = {"sql_driver": "psycopg2", "sql_connect_args": {"host": "127.0.0.1", "port": pg["port"],
+            "user": "admin", "dbname": "uq_probe"}}  # fmt: skip
+    sb = zt.Sandbox(read, read)
+    assert sb.unique_indexes("res") == {"uk_res": ["b", "a"]}

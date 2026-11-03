@@ -302,6 +302,34 @@ class Sandbox:
         )
         return [{c: store.cell_text(v) for c, v in zip(cols, r)} for r in got]
 
+    def unique_indexes(self, table: str) -> dict[str, list[str]]:
+        """Unique indexes of a sandbox table other than its primary key:
+        name -> columns in index order, from the catalog."""
+
+        if self.dialect == "mysql":
+            got = self._exec(
+                "SELECT INDEX_NAME, COLUMN_NAME FROM information_schema.STATISTICS "
+                "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND NON_UNIQUE = 0 "
+                "AND INDEX_NAME <> 'PRIMARY' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
+                (self.name, table),
+            )
+        else:
+            got = self._exec(
+                "SELECT i.relname, a.attname FROM pg_index x "
+                "JOIN pg_class c ON c.oid = x.indrelid "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "JOIN pg_class i ON i.oid = x.indexrelid "
+                "JOIN LATERAL unnest(x.indkey) WITH ORDINALITY k(attnum, ord) ON true "
+                "JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum "
+                "WHERE n.nspname = %s AND c.relname = %s AND x.indisunique "
+                "AND NOT x.indisprimary ORDER BY i.relname, k.ord",
+                (self.name, table),
+            )
+        out: dict[str, list[str]] = {}
+        for name, col in got:
+            out.setdefault(str(name), []).append(str(col))
+        return out
+
     def distinct(self, table: str, column: str, limit: int = 5) -> list[str]:
         """Up to ``limit`` values the column holds, as text."""
 
@@ -477,6 +505,11 @@ class Case:
     late: list[Op] = field(default_factory=list)
     correct: bool = False
     unplantable: str = ""
+    #: For a ``duplicate``: the table, and the row copied with the copy, so a
+    #: refusal by a unique key can be checked against the schema.
+    copy_of: Optional[
+        tuple[str, dict[str, Optional[str]], dict[str, Optional[str]]]
+    ] = None
 
 
 #: Fault classes every kind's held-out writes must have produced before the
@@ -718,7 +751,8 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
             else:
                 dup = _copy_row(t, op.row, key)
                 out.append(Case(f"duplicate:{op.table}", "duplicate",
-                                write + [Op(op.table, key, dup)]))  # fmt: skip
+                                write + [Op(op.table, key, dup)],
+                                copy_of=(op.table, dict(op.row), dup)))  # fmt: skip
             # The values land on an existing look-alike instead.
             for other in sb.rows(op.table, 20):
                 look = dict(op.row)
@@ -795,15 +829,47 @@ def _put_all(sb: Sandbox, ops: Sequence[Op]) -> None:
     sb.put_many(ops)
 
 
-def _unique_violation(exc: BaseException) -> bool:
-    """The store refused a row for a duplicate unique key (MySQL 1062,
-    PostgreSQL 23505)."""
+def _unique_violation(exc: BaseException) -> Optional[str]:
+    """The constraint name when the store refused a row for a duplicate
+    unique key (MySQL 1062, PostgreSQL 23505, SQLite UNIQUE), else None.
+    An empty string: a unique violation whose constraint isn't named."""
 
-    code = getattr(exc, "pgcode", None)
-    if code == "23505":
-        return True
+    if getattr(exc, "pgcode", None) == "23505":
+        diag = getattr(exc, "diag", None)
+        return str(getattr(diag, "constraint_name", "") or "")
     args = getattr(exc, "args", ())
-    return bool(args) and args[0] == 1062
+    if args and args[0] == 1062:
+        m = re.search(r"for key '([^']+)'", str(args[-1]))
+        return m.group(1).split(".")[-1] if m else ""
+    text = str(exc)
+    if text.startswith("UNIQUE constraint failed"):
+        return ""
+    return None
+
+
+def blocked_by_constraint(
+    sb: "Sandbox", case: "Case", exc: BaseException
+) -> Optional[str]:
+    """The unique index that makes ``case``'s duplicate impossible, or None.
+
+    Only when the store refused the copy for a unique violation, the
+    violated index is one the schema declares unique on that table (not the
+    primary key), and every column of that index holds the same value in the
+    copy as in the row it copies: then no duplicate of that row can be
+    stored at all."""
+
+    if case.cls != "duplicate" or case.copy_of is None:
+        return None
+    name = _unique_violation(exc)
+    if not name:
+        return None
+    table, row, copy = case.copy_of
+    cols = sb.unique_indexes(table).get(name)
+    if not cols:
+        return None
+    if all(row.get(c) == copy.get(c) for c in cols):
+        return f"{table}.{name} ({', '.join(cols)})"
+    return None
 
 
 def run_case(
@@ -869,11 +935,12 @@ def run_case(
             )
         return Outcome(case.name, case.cls, case.correct, outcome, passed, reasons[:6])
     except Exception as exc:  # noqa: BLE001 - a case that can't run admits nothing
-        if case.cls == "duplicate" and _unique_violation(exc):
-            # The store's own unique key refuses this copy: such a duplicate
-            # can't exist, so it is neither stopped nor passed.
+        blocked = blocked_by_constraint(sb, case, exc)
+        if blocked:
+            # The store's own unique index refuses this copy: such a
+            # duplicate can't exist, so it is neither stopped nor passed.
             return Outcome(case.name, case.cls, case.correct, "NOT_APPLICABLE",
-                           False, [f"{type(exc).__name__}: {exc}"])  # fmt: skip
+                           False, [f"impossible by constraint {blocked}"])  # fmt: skip
         return Outcome(
             case.name,
             case.cls,
@@ -1045,9 +1112,22 @@ def summarize(
         if "update" in modes.get(k, set()):
             need += UPDATE_CLASSES
         planted = {r.cls for r in fl if r.outcome != "NOT_PLANTED"}
+        blocked = [r for r in rs if r.outcome == "NOT_APPLICABLE"]
+        impossible = sorted({r.reasons[0] for r in blocked if r.reasons})
+        if (
+            "duplicate" in need
+            and "duplicate" not in planted
+            and blocked
+            and all(r.cls == "duplicate" for r in blocked)
+        ):
+            # Every duplicate the kind's writes could make is refused by a
+            # unique index the schema declares: recorded, not required.
+            need.remove("duplicate")
         missing = [c for c in need if c not in planted]
         out[k] = {
-            "admitted": bool(correct) and all(r.ok for r in rs) and not missing,
+            "admitted": bool(correct)
+            and all(r.ok for r in rs if r.outcome != "NOT_APPLICABLE")
+            and not missing,
             "correct_writes": len(correct),
             "false_stops": [
                 f"{r.outcome}: {'; '.join(r.reasons[:2])}" for r in correct if not r.ok
@@ -1056,6 +1136,7 @@ def summarize(
             "faults_stopped": sum(1 for r in fl if r.ok),
             "faults_passed": [f"{r.case} ({r.outcome})" for r in fl if not r.ok],
             "classes_not_planted": missing,
+            "duplicates_impossible_by_constraint": impossible,
             "by_class": {
                 c: f"{sum(1 for r in fl if r.cls == c and r.ok)}/{sum(1 for r in fl if r.cls == c)}"
                 for c in sorted({r.cls for r in fl})
