@@ -319,6 +319,7 @@ def test_standard_run_with_approval_hold_and_resume(host, tmp_path) -> None:
 def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     from openadapt_flow.adapters.desktop_recorder import record_desktop_demo
     from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
+    from openadapt_flow.ir import StructuralLocator
     from openadapt_flow.jit.authority import KEY_PASSPHRASE_ENV
     from openadapt_flow.jit.lifecycle import KEY_DIR_ENV
     from tests import _approver_keys as approver_keys
@@ -340,9 +341,26 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         time.sleep(0.4)
 
     recording = record_desktop_demo(backend, tmp_path / "recording", driver)
+    # The operator marks the record-identifying region once, as
+    # `record --identifier X,Y,W,H` does: the patient header above the note.
+    header = backend.locate_structural(StructuralLocator(automation_id="patientHeader"))
+    assert header is not None, "UIA never found the patient header"
+    hx, hy = int(header.point[0]), int(header.point[1])
+    meta_path = recording / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["identifier_region"] = [hx - 190, hy - 11, 380, 22]
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
     host.launch_app()
     _points(backend)
     bundle = _build_bundle(backend, recording, tmp_path, backend.server_url)
+    lint = _flow(
+        "certify",
+        str(bundle),
+        "--policy",
+        "clinical-write",
+        env={**host.env, "OPENADAPT_BUNDLE_KEY": BUNDLE_KEY},
+    )
+    evidence["certify"] = (lint.stdout + lint.stderr)[-6000:]
 
     key_dir = tmp_path / "approver-keys"
     env = {
