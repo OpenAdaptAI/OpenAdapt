@@ -1073,10 +1073,11 @@ class RepairSessionSpec(BaseModel):
 
     A probe, each fault probe and the resumed run each need the app freshly
     started; the halted session stays as it is. Each command is an argv run
-    on the machine Flow runs on, with no shell, and must leave exactly one
-    window of the app that ``backend:`` binds to. For RDP or Citrix, the
-    command restarts the app in the remote session (for example over the
-    host's remote-management channel).
+    on the machine Flow runs on, with no shell. It must keep running while the
+    app is up and own (it, or a process of its group) the one window
+    ``backend:`` binds to; Flow checks that, and ends the group afterwards. A
+    backend whose window is not on this machine (Windows over its agent,
+    FreeRDP) can't show that, so repair there is refused for now.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -1086,12 +1087,9 @@ class RepairSessionSpec(BaseModel):
     #: Name -> argv that starts the app showing a fault the repaired run must
     #: stop before the save (another patient's chart, a missing record).
     fault_commands: dict[str, list[str]] = Field(default_factory=dict)
-    #: Stops the app after the session. Without it, Flow ends the process it
-    #: started; a launcher that exits at once then needs one.
+    #: Runs after Flow ends the app's process group, to clean up what the app
+    #: left (a lock file, a server-side session). A non-zero exit is refused.
     close_command: list[str] = Field(default_factory=list)
-    #: Whether ``command`` exits once the app is up (``open -n``, a launcher
-    #: script). False: it must still be running after ``ready_s``.
-    launcher_exits: bool = False
     #: Seconds to wait for the window before binding the backend.
     ready_s: float = Field(default=2.0, ge=0.0, le=120.0)
 
@@ -1102,10 +1100,6 @@ class RepairSessionSpec(BaseModel):
                 raise ValueError(
                     "each repair.session fault command needs a name and an argv"
                 )
-        if self.launcher_exits and not self.close_command:
-            raise ValueError(
-                "repair.session.launcher_exits needs a close_command to stop the app"
-            )
         return self
 
 

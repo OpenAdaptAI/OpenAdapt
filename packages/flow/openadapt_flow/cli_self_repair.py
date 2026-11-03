@@ -261,7 +261,12 @@ def pinned_lineage(args: argparse.Namespace, cfg: Any) -> Any:
 
 
 class _AppProcess:
-    """One app session started by ``repair.session``; stopped on close."""
+    """One app session started by ``repair.session``; stopped on close.
+
+    The app runs in a process group of its own, so closing ends a wrapper
+    script's app too, and the bound window can be proved to belong to it
+    (:meth:`owns`).
+    """
 
     def __init__(self, spec: Any, argv: list[str]) -> None:
         import subprocess
@@ -270,42 +275,68 @@ class _AppProcess:
         from openadapt_flow.repair.self_repair import SelfRepairRefused
 
         self.spec = spec
+        self.closed = False
         try:
             self.proc = subprocess.Popen(
                 list(argv),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
         except OSError as exc:
             raise SelfRepairRefused(
                 f"repair.session could not start the app ({type(exc).__name__})"
             ) from exc
-        time.sleep(spec.ready_s)
-        code = self.proc.poll()
-        if spec.launcher_exits:
-            if code is None:
-                self.proc.wait(timeout=60)
-                code = self.proc.returncode
-            if code != 0:
-                self.close()
+        try:
+            time.sleep(spec.ready_s)
+            if self.proc.poll() is not None:
                 raise SelfRepairRefused(
-                    f"repair.session's launcher exited with status {code}"
+                    "repair.session's app exited at once; a single-instance app "
+                    "hands the launch to the running window, which is not a "
+                    "fresh session"
                 )
-        elif code is not None:
+        except BaseException:
             self.close()
-            raise SelfRepairRefused(
-                "repair.session's app exited at once; a single-instance app hands "
-                "the launch to the running window, which is not a fresh session "
-                "(set launcher_exits and a close_command for a launcher)"
-            )
+            raise
+
+    def owns(self, pid: Optional[int]) -> bool:
+        """Whether ``pid`` is this app or a process of its group."""
+
+        import os
+
+        if pid is None or self.proc.poll() is not None:
+            return False
+        try:
+            return int(pid) == self.proc.pid or os.getpgid(int(pid)) == self.proc.pid
+        except (OSError, ValueError):
+            return False
 
     def close(self) -> None:
+        """End the app's whole process group, then run ``close_command``."""
+
+        import os
+        import signal
         import subprocess
 
+        from openadapt_flow.repair.self_repair import SelfRepairRefused
+
+        if self.closed:
+            return
+        self.closed = True
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(self.proc.pid, sig)
+            except (ProcessLookupError, PermissionError):
+                break
+            try:
+                self.proc.wait(timeout=10)
+                break
+            except subprocess.TimeoutExpired:
+                continue
         if self.spec.close_command:
             try:
-                subprocess.run(
+                done = subprocess.run(
                     list(self.spec.close_command),
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
@@ -313,14 +344,32 @@ class _AppProcess:
                     timeout=60,
                     check=False,
                 )
-            except (OSError, subprocess.TimeoutExpired):
-                pass
-        if self.proc.poll() is None:
-            self.proc.terminate()
-            try:
-                self.proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise SelfRepairRefused(
+                    f"repair.session's close_command failed ({type(exc).__name__})"
+                ) from exc
+            if done.returncode != 0:
+                raise SelfRepairRefused(
+                    f"repair.session's close_command exited {done.returncode}"
+                )
+
+
+def _bound_window_pid(backend: Any) -> Optional[int]:
+    """The local pid owning the window ``backend`` is bound to, or None.
+
+    Backends that drive a window on this machine (macOS, the remote-display
+    client window of RDP or Citrix) say which; a backend that drives a guest
+    over an agent can't, and a session there can't be proved fresh.
+    """
+
+    resolve = getattr(backend, "_resolve_window", None)
+    if not callable(resolve):
+        return None
+    try:
+        pid = resolve(refresh=True).pid
+    except Exception:  # noqa: BLE001 - an unbound window proves nothing
+        return None
+    return int(pid) if isinstance(pid, int) else None
 
 
 class CliTarget:
@@ -375,6 +424,10 @@ class CliTarget:
         #: The run's profile name, for the record-check cover a repair needs
         #: outside a browser (repair.element_identity.record_check_cover).
         self.profile = getattr(profile, "value", profile)
+        #: Outside a browser two sessions of the app can't run side by side
+        #: (both windows would match the backend), so self-repair closes the
+        #: halted session before each probe.
+        self.one_session_at_a_time = not self.web
 
     def fault_probes(self) -> tuple[str, ...]:
         """The fault names a desktop run's repair probes (its fault commands)."""
@@ -403,11 +456,28 @@ class CliTarget:
         app = _AppProcess(spec, spec.fault_commands[fault] if fault else spec.command)
         try:
             backend = build_backend(self.backend_cfg)
-        except Exception as exc:
+        except BaseException as exc:
             app.close()
-            raise SelfRepairRefused(
-                f"the backend could not bind the started app: {exc}"
-            ) from exc
+            if isinstance(exc, Exception):
+                raise SelfRepairRefused(
+                    f"the backend could not bind the started app: {exc}"
+                ) from exc
+            raise
+        try:
+            # The session must be the app just started: not the halted
+            # session, not a copy the operator already had open.
+            if not app.owns(_bound_window_pid(backend)):
+                raise SelfRepairRefused(
+                    "the backend's window does not belong to the app repair.session "
+                    "started (another window of the app is open, or this backend "
+                    "can't show which process owns its window)"
+                )
+        except BaseException:
+            closer = getattr(backend, "close", None)
+            if callable(closer):
+                closer()
+            app.close()
+            raise
 
         def close() -> None:
             closer = getattr(backend, "close", None)
@@ -500,6 +570,7 @@ class CliTarget:
             governed_authorization=authorization,
             runtime_config=self.cfg.runtime,
             approval_gate=gate,
+            surface_override=bool(getattr(self.args, "_surface_override", False)),
             **target,
             deployment_surface=self.backend_cfg.deployment_surface,
             # A probe or the resumed run of a repaired bundle runs the GUI
@@ -538,6 +609,7 @@ def cmd_run_self_repair(
     ran, and the caller runs it plainly.
     """
 
+    from openadapt_flow.backends.factory import _normalize_kind
     from openadapt_flow.cli_hints import command
     from openadapt_flow.repair.auto_repair import AutoRepair
     from openadapt_flow.repair.self_repair import (
@@ -548,6 +620,14 @@ def cmd_run_self_repair(
 
     url = args.url or cfg.backend.url
     refusal = _refusal(args, backend_cfg, url, getattr(cfg, "repair", None))
+    if (
+        refusal is None
+        and _normalize_kind(backend_cfg.kind) != "web"
+        and getattr(workflow, "surfaces", None)
+    ):
+        refusal = (
+            "a bundle with several surfaces can't be repaired outside a browser yet"
+        )
     if refusal is None and (
         worklists
         or getattr(args, "workers", None)
@@ -671,4 +751,11 @@ def cmd_run_self_repair(
         )
     if evidence.status != "not_needed":
         print(f"  stop logged in {auto.ledger.path}")
-    return finish(result.run_dir, result.report, args, backend_kind="web")
+    from openadapt_flow.__main__ import _report_backend_kind
+
+    return finish(
+        result.run_dir,
+        result.report,
+        args,
+        backend_kind=_report_backend_kind(backend_cfg.kind),
+    )

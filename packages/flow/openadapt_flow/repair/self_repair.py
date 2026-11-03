@@ -1012,7 +1012,11 @@ class SelfRepair:
                         _close(current)
                         current = None
                     continue
-                if touched[0]:
+                if touched[0] or getattr(self.target, "one_session_at_a_time", False):
+                    # A target that can't run two sessions of the app side by
+                    # side (a desktop app) closes the halted one before the
+                    # probe opens its own; the next attempt reaches the halt
+                    # again.
                     _close(current)
                     current = None
                 evidence.steps.append(

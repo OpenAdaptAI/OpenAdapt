@@ -85,11 +85,43 @@ def _target(spec: RepairSessionSpec | None, *, kind: str = "macos", calls=None):
 
 
 class StubBackend:
-    def __init__(self) -> None:
+    """Binds to the newest window: the started app's, unless ``pid`` is set."""
+
+    started: list[int] = []
+
+    def __init__(self, pid: int | None = None) -> None:
         self.closed = False
+        self.pid = pid
+
+    def _resolve_window(self, refresh: bool = False) -> Any:
+        return SimpleNamespace(pid=self.pid or _newest_child())
 
     def close(self) -> None:
         self.closed = True
+
+
+def _newest_child() -> int:
+    import subprocess
+
+    out = subprocess.run(
+        ["pgrep", "-n", "-P", str(__import__("os").getpid())],
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    return int(out[0]) if out else -1
+
+
+def _alive(pid: int) -> bool:
+    import os
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:  # a zombie child still answers kill(0); reap it first
+        return os.waitpid(pid, os.WNOHANG) == (0, 0)
+    except ChildProcessError:
+        return True
 
 
 @pytest.fixture
@@ -131,21 +163,84 @@ def test_session_spec_validates() -> None:
         RepairSessionSpec(command=[])
     with pytest.raises(ValidationError):
         RepairSessionSpec(command=SLEEP, fault_commands={"x": []})
-    with pytest.raises(ValidationError, match="close_command"):
-        RepairSessionSpec(command=EXITS, launcher_exits=True)
 
 
 # -- sessions -----------------------------------------------------------------
 
 
 def test_each_session_starts_the_app_and_stops_it(factory) -> None:
-    target = _target(RepairSessionSpec(command=SLEEP, ready_s=0.2))
+    target = _target(RepairSessionSpec(command=SLEEP, ready_s=0.3))
     session = target.open(None)
     assert len(factory) == 1
-    app_procs = [p for p in _children()]
+    pid = factory[0]._resolve_window().pid
+    assert _alive(pid)
     session.close()
+    session.close()  # idempotent: self-repair may close a session twice
     assert factory[0].closed
-    assert all(p.poll() is not None for p in app_procs)
+    assert not _alive(pid)
+
+
+def test_a_window_the_app_did_not_open_is_refused(monkeypatch, tmp_path) -> None:
+    import subprocess
+
+    # The operator's (or the halted session's) copy is already running; the
+    # backend binds to it instead of the started app.
+    other = subprocess.Popen(SLEEP)
+    try:
+        monkeypatch.setattr(
+            "openadapt_flow.backends.factory.build_backend",
+            lambda cfg, **kw: StubBackend(pid=other.pid),
+        )
+        target = _target(RepairSessionSpec(command=SLEEP, ready_s=0.3))
+        with pytest.raises(SelfRepairRefused, match="does not belong"):
+            target.open(None)
+        assert _alive(other.pid)  # never ours to stop
+    finally:
+        other.kill()
+        other.wait()
+
+
+def test_a_backend_that_cannot_name_its_window_owner_is_refused(monkeypatch) -> None:
+    class Agent:
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "openadapt_flow.backends.factory.build_backend", lambda cfg, **kw: Agent()
+    )
+    target = _target(RepairSessionSpec(command=SLEEP, ready_s=0.2), kind="windows")
+    with pytest.raises(SelfRepairRefused, match="does not belong"):
+        target.open(None)
+
+
+def test_close_ends_a_wrapper_scripts_app(factory, tmp_path) -> None:
+    pidfile = tmp_path / "app.pid"
+    wrapper = [
+        "/bin/sh",
+        "-c",
+        f"{sys.executable} -c 'import time; time.sleep(60)' & echo $! > {pidfile}; wait",
+    ]
+    target = _target(RepairSessionSpec(command=wrapper, ready_s=0.5))
+    session = target.open(None)
+    app_pid = int(pidfile.read_text())
+    assert _alive(app_pid)
+    session.close()
+    import time
+
+    time.sleep(0.3)
+    assert not _alive(app_pid)
+
+
+def test_a_failing_close_command_is_refused(factory) -> None:
+    target = _target(RepairSessionSpec(command=SLEEP, close_command=FAILS, ready_s=0.2))
+    session = target.open(None)
+    with pytest.raises(SelfRepairRefused, match="close_command exited 3"):
+        session.close()
+
+
+def test_desktop_target_runs_one_session_at_a_time() -> None:
+    assert _target(RepairSessionSpec(command=SLEEP)).one_session_at_a_time
+    assert not _target(None, kind="web").one_session_at_a_time
 
 
 def test_fault_probe_uses_its_fault_command(factory, tmp_path) -> None:
@@ -173,35 +268,18 @@ def test_an_app_that_exits_at_once_is_not_a_fresh_session(factory) -> None:
     assert factory == []
 
 
-def test_a_launcher_must_exit_cleanly(factory, tmp_path) -> None:
-    closed = tmp_path / "closed"
-    close = [sys.executable, "-c", f"open({str(closed)!r}, 'w')"]
-    ok = _target(
-        RepairSessionSpec(
-            command=EXITS, launcher_exits=True, close_command=close, ready_s=0.1
-        )
-    )
-    session = ok.open(None)
-    session.close()
-    assert closed.exists()
-    bad = _target(
-        RepairSessionSpec(
-            command=FAILS, launcher_exits=True, close_command=close, ready_s=0.1
-        )
-    )
-    with pytest.raises(SelfRepairRefused, match="status 3"):
-        bad.open(None)
+def test_a_backend_that_cannot_bind_stops_the_app(monkeypatch) -> None:
+    started: list[int] = []
 
-
-def test_a_backend_that_cannot_bind_stops_the_app(monkeypatch, tmp_path) -> None:
     def build(cfg, **kwargs):
+        started.append(_newest_child())
         raise ValueError("no unique window")
 
     monkeypatch.setattr("openadapt_flow.backends.factory.build_backend", build)
-    target = _target(RepairSessionSpec(command=SLEEP, ready_s=0.2))
+    target = _target(RepairSessionSpec(command=SLEEP, ready_s=0.3))
     with pytest.raises(SelfRepairRefused, match="could not bind"):
         target.open(None)
-    assert all(p.poll() is not None for p in _children())
+    assert started and not _alive(started[0])
 
 
 # -- the run ------------------------------------------------------------------
@@ -232,14 +310,3 @@ def test_desktop_execute_names_the_desktop_target(monkeypatch) -> None:
     assert kwargs["execution_target_origin"] == "macos://Chart"
     assert "execution_entry_url" not in kwargs
     assert kwargs["approval_gate"] == "g"
-
-
-def _children():
-    """Child processes this test started (best effort, for the stop checks)."""
-    import subprocess
-
-    return [
-        p
-        for p in getattr(subprocess, "_active", None) or []
-        if isinstance(p, subprocess.Popen)
-    ]

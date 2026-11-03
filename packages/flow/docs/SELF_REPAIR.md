@@ -197,20 +197,26 @@ repair:
   agent: mypkg.agents:make_agent
   screen_access_by: ops-lead
   session:
-    command: ["/opt/chart/bin/chart", "--profile", "test"]
+    command: ["/Applications/Chart.app/Contents/MacOS/Chart", "--profile", "test"]
     fault_commands:
-      other_patient: ["/opt/chart/bin/chart", "--profile", "test", "--patient", "5512"]
+      other_patient: ["/Applications/Chart.app/Contents/MacOS/Chart", "--patient", "5512"]
     ready_s: 2
 ```
 
 Each command is an argv, run with no shell on the machine Flow runs on. It
-must leave exactly one window that `backend:` binds to. Flow stops the
-process when the session ends, or runs `close_command`. A launcher that exits
-once the app is up (`open -n`) sets `launcher_exits: true` and needs a
-`close_command`. An app that exits at once handed the launch to a running
-window and is refused, since that isn't a fresh session. Fault commands are
-the fault probes, as `fault_urls` are in a browser. For RDP or Citrix the
-command restarts the app in the remote session.
+must keep running while the app is up, and the one window `backend:` binds
+to must belong to it or to a process of its group: Flow checks that, so a
+session never binds to the halted session or a copy that was already open.
+When the session ends, Flow ends the command's whole process group, then runs
+`close_command` if there is one; a non-zero exit is refused. An app that
+exits at once handed the launch to a running window and is refused. Fault
+commands are the fault probes, as `fault_urls` are in a browser. Two
+sessions can't run side by side, so self-repair closes the halted session
+before each probe.
+
+Flow has to see which process owns the bound window, so this works where the
+window is on the machine Flow runs on: macOS, and the local client window of
+RDP or Citrix. Windows over its agent, and FreeRDP, are refused for now.
 
 Without `repair.session`, repair is off for a desktop run: the stop waits
 for a person, and `--self-repair` is refused. When it is set, Flow starts the
