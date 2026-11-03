@@ -21,6 +21,12 @@
 
 - `run --self-repair` (and repair by default) now works outside a browser. `repair.session` in `deploy.yaml` says how to start the app for each probe, fault probe and resumed run (an argv, no shell, kept running while the app is up; `fault_commands`, `close_command`, `ready_s`). The run's configured backend must bind to a window owned by that command's process group, so a session never binds to the halted session or a copy already open; Flow ends the group afterwards, and closes the halted session before each probe. This works where the bound window is on Flow's machine (macOS, and the local RDP or Citrix client window); Windows over its agent and FreeRDP are refused for now. Without `repair.session`, a desktop run refuses repair with that reason, as before.
 
+### Fixes
+
+- A durable run (`standard` or `regulated`) on macOS no longer refuses every click the AX tree resolves (`remote delivery receipt does not bind the resolved target`). `MacOSBackend.act_structural` re-finds the locator's one element, refuses unless its fingerprint (AX path, role, name, app, window, bounds) still equals the resolved handle's, and delivers the gated physical click at its center; the receipt binds that fingerprint. The receipt check is unchanged ([#1710](https://github.com/OpenAdaptAI/OpenAdapt/issues/1710)).
+
+- Self-repair's probe on a backend with no form to read (native or pixel-only) no longer refuses a typed value because OCR glued its words together: a value of two or more words and at least six letters also counts when it shows on one line with its words joined. Single words keep the word rule.
+
 ## v2.5.0 (2026-11-02)
 
 Shadow mode checks the writes of an agent you already run against the system of record without blocking any of them, the whole-database frame works on PostgreSQL, a write that lands after the verdict can be caught by a recheck, and several verifier checks that could be unreadable or pass on the wrong value now read and compare exactly.
