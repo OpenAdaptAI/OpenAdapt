@@ -71,9 +71,12 @@ def gui_agent(
         evidence = runs_dir / f"r{rep}-{task['id']}"
         evidence.mkdir(parents=True, exist_ok=True)
         meter = Meter(f"{name} r{rep} {task['id']}")
+        browser.fresh()
         ctx, screen = browser.open(proxy_fhir_url)
         try:
             (evidence / "start.png").write_bytes(screen.screenshot())
+            if "/signin" in screen.url():
+                raise RuntimeError("harness: the app was signed out at the start")
             kw = {"app_origin": browser.ui_url} if name in ("gemini", "fara") else {}
             out = run_fn(task["instruction"], screen, meter, **kw)
             try:
@@ -83,6 +86,9 @@ def gui_agent(
                 end_url = ""
         finally:
             ctx.close()
+        if "/signin" in end_url:
+            # The session ended under the agent: the harness's failure.
+            raise RuntimeError("harness: the app was signed out during the run")
         claim = parse_claim(out.final_text)
         if out.stopped:
             claim["stopped"] = out.stopped

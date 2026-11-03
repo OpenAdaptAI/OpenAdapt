@@ -176,6 +176,8 @@ class MedplumBrowser:
         self._pw: Any = None
         self._browser: Any = None
         self.state: Optional[dict[str, Any]] = None
+        self._creds: Optional[tuple[str, str]] = None
+        self.signed_in_at = 0.0
 
     def start(self) -> "MedplumBrowser":
         from playwright.sync_api import sync_playwright
@@ -216,6 +218,18 @@ class MedplumBrowser:
         page.wait_for_load_state("networkidle")
         self.state = ctx.storage_state()
         ctx.close()
+        self._creds = (email, password)
+        self.signed_in_at = time.monotonic()
+
+    def fresh(self, max_age_s: float = 900) -> None:
+        """Sign in again if the session is older than ``max_age_s``.
+
+        Medplum's session lasts an hour; a run may take 40 minutes, so every
+        run starts on a session at most 15 minutes old.
+        """
+
+        if self._creds and time.monotonic() - self.signed_in_at > max_age_s:
+            self.sign_in(*self._creds)
 
     def open(self, proxy_fhir_url: str, evidence: Optional[Path] = None) -> tuple[Any, Screen]:
         """A fresh context on the home page, its FHIR traffic sent through the proxy."""

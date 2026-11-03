@@ -34,3 +34,29 @@ they now run one after the other: P01-A06 first, then A07-AP12, each in
 the protocol's order.
 
 **Effect on scoring:** none. Only the wall-clock time changes.
+
+## 3. Signed-out runs rerun; the session is renewed (2026-11-03, about 00:15 EST)
+
+**What happened:** the harness signed the agent's user in once per process.
+Medplum's session lasts an hour, and nothing renewed it, so every run that
+finished more than an hour after its process signed in had been signed out:
+the app showed its sign-in page and the agent, correctly, said NOT DONE.
+That is the harness's failure, not the agent's.
+
+**What changed:** before each run the harness signs in again if its
+session is more than 15 minutes old, so a run (at most 40 minutes) always
+ends inside the session. A run that starts or ends on the sign-in page now
+raises a harness error, which the pre-registered rule retries up to twice.
+`score.py` now also leaves out a run the harness failed three times
+(`infra_note`), as PROTOCOL.md already said; before, it scored such a run
+as no claim. No run had one.
+
+**Runs affected:** every row written more than 3,600 seconds after its
+process's last sign-in (the time in its `meta-*.json`) is excluded and run
+again: claude 96 rows (r1 A03 onwards, all of r2 and r3), openai 84 (r1
+AP03 onwards, all of r2 and r3), fara 8 (r1 P04 onwards). This rule picks
+exactly the rows whose end page was the sign-in page, plus fara r1 P04,
+which ran across the expiry. The excluded rows and their evidence are kept
+in `results/<agent>/excluded-signed-out/` and listed in
+`results/excluded-signed-out.json`; none is scored. Their spend stays in
+the spend ledger and counts against each agent's share.

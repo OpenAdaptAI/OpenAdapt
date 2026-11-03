@@ -51,7 +51,8 @@ def load(agent_dir: Path) -> list[dict[str, Any]]:
 
 
 def scored(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [r for r in rows if r.get("oracle") and not r.get("infra_error")]
+    # A run the harness failed three times is excluded (pre-registered).
+    return [r for r in rows if r.get("oracle") and not r.get("infra_error") and not r.get("infra_note")]
 
 
 def claimed(r: dict[str, Any]) -> bool:
@@ -169,7 +170,7 @@ def board(root: Path, k: int = 3) -> dict[str, Any]:
         }
         m["clean_cases"] = metrics([r for r in rows if clean(r)], k)
         m["faulted_cases"] = metrics([r for r in rows if not clean(r)], k)
-        m["infra_errors"] = sum(1 for r in load(d) if r.get("infra_error"))
+        m["infra_errors"] = sum(1 for r in load(d) if r.get("infra_error") or r.get("infra_note"))
         m["by_class"] = {
             c: {
                 "runs": len(g),
