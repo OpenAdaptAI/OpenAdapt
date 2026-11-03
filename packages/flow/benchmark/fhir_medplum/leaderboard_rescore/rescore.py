@@ -134,7 +134,11 @@ def rebuild(
     start, check = _utc(times["start.png"]), _utc(times["transcript.json"])
     keys = [k for _, _, k in stack.timeline]
     i = keys.index(key)
-    prev_end = _utc(stack.timeline[i - 1][1]) if i else datetime.min.replace(tzinfo=timezone.utc)
+    prev_end = (
+        _utc(stack.timeline[i - 1][1])
+        if i
+        else datetime.min.replace(tzinfo=timezone.utc)
+    )
     setup = [w for w in stack.setup_writes if prev_end < w[0] < start]
     last_setup = max([w[0] for w in setup], default=prev_end)
     baseline_at = max(last_setup, prev_end) + timedelta(seconds=BASELINE_AFTER_SEED_S)
@@ -157,8 +161,12 @@ def contract_path(kind: str, which: str) -> Path:
 
 
 def judge_row(
-    stack: Stack, row: dict[str, Any], times: dict[str, float], case: dict[str, Any],
-    suite: dict[str, Any], which: str,
+    stack: Stack,
+    row: dict[str, Any],
+    times: dict[str, float],
+    case: dict[str, Any],
+    suite: dict[str, Any],
+    which: str,
 ) -> dict[str, Any]:
     try:
         baseline_at, check_at, refs = rebuild(stack, row["_key"], times, case)
@@ -174,9 +182,15 @@ def judge_row(
     try:
         baseline = capture_baseline(contract, params, reader)
     except Unreadable as exc:
-        return {"outcome": "needs_review", "reasons": [f"unreadable: {exc}"], "unreadable": True}
+        return {
+            "outcome": "needs_review",
+            "reasons": [f"unreadable: {exc}"],
+            "unreadable": True,
+        }
     stack.server.now = check_at
-    result = verify_ensure(contract, params, baseline, reader=reader, sleep=stack.server.sleep)
+    result = verify_ensure(
+        contract, params, baseline, reader=reader, sleep=stack.server.sleep
+    )
     return {
         "outcome": result.outcome,
         "id": result.record_id,
@@ -192,8 +206,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--contracts", choices=("main", "operations"), required=True)
     ap.add_argument("--agent", action="append", choices=sorted(STACKS))
-    ap.add_argument("--only-live", action="store_true",
-                    help="only rows the live verifier judged (the fidelity check)")
+    ap.add_argument(
+        "--only-live",
+        action="store_true",
+        help="only rows the live verifier judged (the fidelity check)",
+    )
     ap.add_argument("--out", type=Path)
     args = ap.parse_args(argv)
     suite = yaml.safe_load(CASES.read_text())
@@ -217,10 +234,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                 continue
             key = f"{agent}/runs/{row['_name']}"
             row["_key"] = key
-            res = judge_row(stack, row, times[key], cases[row["id"]], suite, args.contracts)
+            res = judge_row(
+                stack, row, times[key], cases[row["id"]], suite, args.contracts
+            )
             out["rows"][key] = res
-            print(f"{key:28} live {live.get('outcome', '-'):16} now {res['outcome']:16} "
-                  f"{'; '.join(res['reasons'])[:110]}", flush=True)
+            print(
+                f"{key:28} live {live.get('outcome', '-'):16} now {res['outcome']:16} "
+                f"{'; '.join(res['reasons'])[:110]}",
+                flush=True,
+            )
     text = json.dumps(out, indent=1, sort_keys=True, default=str)
     if args.out:
         args.out.write_text(text + "\n")

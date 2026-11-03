@@ -95,7 +95,9 @@ class FrozenMedplum:
         self.reader_ref = reader_ref
         self.now = datetime.min.replace(tzinfo=timezone.utc)
         #: "Type/id" -> versions oldest first, as (lastUpdated, content).
-        self.versions: dict[str, list[tuple[datetime, dict[str, Any]]]] = defaultdict(list)
+        self.versions: dict[str, list[tuple[datetime, dict[str, Any]]]] = defaultdict(
+            list
+        )
         self.events: list[tuple[datetime, dict[str, Any]]] = []
         opener = gzip.open if dump.suffix == ".gz" else open
         with opener(dump, "rt") as fh:
@@ -178,7 +180,9 @@ class FrozenMedplum:
         path = urlsplit(url).path[len(urlsplit(self.base_url).path) :].strip("/")
         parts = path.split("/")
         params = dict(params or {})
-        headers = {"Date": format_datetime(self.now.replace(microsecond=0), usegmt=True)}
+        headers = {
+            "Date": format_datetime(self.now.replace(microsecond=0), usegmt=True)
+        }
         if parts == ["metadata"]:
             return 200, headers, {"resourceType": "CapabilityStatement"}
         if len(parts) == 3 and parts[2] == "_history":
@@ -193,7 +197,11 @@ class FrozenMedplum:
                     entries.append({"request": {"method": "DELETE", "url": ref}})
                 else:
                     entries.append({"request": {"method": "GET"}, "resource": res})
-            return 200, headers, {"resourceType": "Bundle", "type": "history", "entry": entries}
+            return (
+                200,
+                headers,
+                {"resourceType": "Bundle", "type": "history", "entry": entries},
+            )
         if len(parts) == 2:
             ref = f"{parts[0]}/{parts[1]}"
             hist = self._history(ref)
@@ -205,11 +213,15 @@ class FrozenMedplum:
             return 200, headers, hist[-1][1]
         if len(parts) == 1:
             found = self.search(parts[0], params)
-            return 200, headers, {
-                "resourceType": "Bundle",
-                "type": "searchset",
-                "entry": [{"resource": r} for r in found],
-            }
+            return (
+                200,
+                headers,
+                {
+                    "resourceType": "Bundle",
+                    "type": "searchset",
+                    "entry": [{"resource": r} for r in found],
+                },
+            )
         raise ValueError(f"unsupported read: {url}")
 
     def search(self, rtype: str, params: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -270,7 +282,8 @@ class FrozenMedplum:
             return got in (want, f"Patient/{want}")
         if name == "patient" and rtype == "Appointment":
             return any(
-                str((p.get("actor") or {}).get("reference") or "") in (want, f"Patient/{want}")
+                str((p.get("actor") or {}).get("reference") or "")
+                in (want, f"Patient/{want}")
                 for p in res.get("participant") or []
             )
         raise ValueError(f"unsupported search parameter {rtype}?{name}")

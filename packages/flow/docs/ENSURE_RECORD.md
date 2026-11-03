@@ -41,7 +41,9 @@ It counts only when all of these hold; anything else is `needs_review`:
   hidden among them;
 - every one of those versions is the person (by the contract's identity
   rules): a correction may fix a value, never who the record is, since a
-  search no audit event names may have found an earlier version;
+  search no audit event names may have found an earlier version. With
+  `operations.correction.between: consistent`, every version must instead
+  hold only the task's values (see "Operation semantics" below);
 - no other actor read the record by id from the create to the window's
   close, and the trail is logging reads by id at all (the verifier's own
   read of the record must show up, as for `found_existing`);
@@ -65,6 +67,100 @@ What this can't see:
 `accept_corrections:
 false` in the contract sends every change after the create to review.
 
+### Operation semantics
+
+What one write may also do is contract data, in an `operations:` section.
+Every default keeps the rules above, so a contract without the section
+judges as before. One principle runs through it: **every version that was
+ever live may assert only true facts, and no one but the agent may have
+touched it by id.** A search the audit trail doesn't log can have shown any
+version, so a version that held a wrong value is never excused, however
+briefly it stood.
+
+```yaml
+operations:
+  correction:
+    accept: true            # with accept_corrections; both must be true
+    between: consistent     # or person (the default)
+  cardinality:
+    own_transient: true     # default false
+  bookkeeping:              # default none
+    - resource_type: Practitioner
+      paths: [meta, extension]
+```
+
+The rules belong to the application, not to one task, so they can live in
+a versioned spec, `openadapt.app-semantics/v1`, that every contract on the
+app pins (example: `benchmark/fhir_medplum/app_semantics/medplum.yaml`):
+
+```yaml
+# the contract
+semantics: {path: ../app_semantics/medplum.yaml, app: medplum, version: 1}
+
+# the spec
+schema_version: openadapt.app-semantics/v1
+app: medplum
+version: 1
+resources:                 # resource type -> correction and cardinality
+  Patient: {correction: {between: consistent}, cardinality: {own_transient: true}}
+bookkeeping: []            # rules as below, for every task on the app
+```
+
+A pin that doesn't match the file's `app` and `version`, a missing file, or
+a contract with both `semantics` and `operations` doesn't load. The format
+is public; a spec for a customer's system is private, like its other
+per-system recipes (`source-policy.yaml`).
+
+- **`correction.between`.** `person` (the default) is the rule above: each
+  version in the window is the person. `consistent`: each version holds
+  only the task's values, any of them possibly still missing, and nothing
+  else (on a `closed` contract, no element the task didn't give either). A
+  web form that saves a new record as a create and then updates (Medplum's
+  app does: the first version can be `{}`) is one write. A version that held
+  another birth date, another patient or a wrong phone number refuses.
+  `consistent` is stricter than `person` on values (a corrected phone
+  number refuses) and looser on missing ones.
+- **`cardinality.own_transient`.** A second record of the contract's type
+  that the agent created and deleted again in the window (a double submit,
+  or a save resubmitted after a lost response, then cleaned up) counts as
+  not created, when: its every write is the agent's, logged and timed, the
+  create first and the delete last; `_history` shows as many versions as the
+  trail shows creates and updates; every version holds only the task's
+  values; no other actor read it by id; and the trail logs reads at all
+  (the verifier's heartbeat on the record that stays). The result says how
+  many such records it deleted (`transient_records`).
+- **`bookkeeping`.** An update by the agent's actor to *another* record that
+  changed only the named elements of its type (a version counter, a
+  timestamp, an app's own extension) is the save's bookkeeping, not a write
+  (`bookkeeping_writes`). Each rule names one resource type and exact element
+  paths, with no filters or wildcards; `meta.security`, `meta.tag`, `id` and
+  `resourceType` can't be named, and `meta.security` and `meta.tag` stay
+  compared even under `meta`. It never applies to the record the task
+  writes, to any record that is the person before or after, to a create or
+  a delete, or to a change the trail didn't log or attribute. `_history`
+  must give the version before the window, and each version must differ
+  from the one before only in the named elements. With `now_checks: true`
+  (the temporal rule of the whole-database generator's bookkeeping answer),
+  every time stamp the named elements change to must lie within
+  `now_within_s` (default 60) of the version's own server-set
+  `meta.lastUpdated`; a planted or replayed time refuses.
+- **Attribution** stays as `self`, `change_feed.audit` and
+  `history_author` say: a change no source attributes is the agent's, and
+  another actor's change to the created record refuses.
+- **Time** stays as `settle_s`, `stable_reads` and the late-write read say:
+  the window closes at a server instant, and a write of the agent's that
+  lands after it sends the run to review.
+
+The same kinds of incidental change in the whole-database verifier
+(`verify.yaml`, [`VERIFY_RUN.md`](VERIFY_RUN.md)): corrections are one
+write there by construction (the frame compares the end state with the
+baseline); timestamps and version counters are `frame.ignore_fields` and the
+profile's column rules; audit rows and per-user rows are the profile's
+reviewed bookkeeping tables and `own_rows`, each an exact table, owner and
+row relation; attribution is `frame.attribution`; late writes are
+`recheck_after_s`. Learned excuses there stay limited to exact table,
+column and row relations, and nothing on the written row is excused.
+
 ## The contract
 
 `openadapt.ensure-record/v1` (example:
@@ -80,6 +176,7 @@ false` in the contract sends every change after the create to review.
 | `void` | values that make a record assert nothing (`status="entered-in-error"` on an Immunization). A record holding one is never the person: it is not found, it is not a duplicate, and a created record holding one needs review. It names values to leave out, never values to keep, so a status it misses still matches and stops for review. Each entry is an element path (filters allowed, as in `fields`) and one JSON scalar, compared as JSON (`1` is not `true`). It can't name an identity field. A record that was the person and turns void during the run is not found. A created record the agent corrects must be the person in every version, so a version holding a void value is refused; a status the list doesn't name may still be corrected away | a person, from the resource's FHIR definition |
 | `change_feed` | the audit read, `_history`, whether the server returns `meta.author`, sweep types | a person, once per server |
 | `accept_corrections` | whether the agent's own updates after its create can count (default true; see above) | a person |
+| `operations` | what one write may also do: corrections between `person` and `consistent`, the agent's own transient duplicates, bookkeeping elements of other records (see "Operation semantics"); defaults keep the rules above | a person, from how the app saves |
 
 ## What this read path sees, and what it doesn't
 
