@@ -2,7 +2,7 @@
 
 OpenAdapt turns work that people or computer-use agents do in applications
 with no usable API (EMRs, payer portals, desktop and remote-desktop apps) into
-programs that make the same entry every time with no model calls, check that
+programs that make the same entry every time with no calls to a hosted AI model, check that
 the entry landed in the right record, and stop instead of guessing.
 
 This page indexes what OpenAdapt implements, with the status, the evidence and
@@ -69,7 +69,8 @@ monorepo and installable from source.
    Person-signed grants let named agents answer. Released.
 8. **Repairs itself, with a person approving.** Governed repair (propose,
    review, campaign, canary, rollback), agent-demonstrated fixes for a halted
-   run, and fleet drift patches shared with no patient data are released.
+   run, and fleet drift patches shared with no patient data (moved as files
+   or through a local reference hub) are released.
    Self-repair, where an agent proposes a fix and Flow probes it up to the save
    without saving, is on main, and so are fixes of up to three new steps.
 9. **Is a safety layer underneath any agent.** An agent's MCP calls, a task
@@ -80,8 +81,8 @@ monorepo and installable from source.
    the agent ([#1357](https://github.com/OpenAdaptAI/OpenAdapt/pull/1357)), `verify-run`
    to judge any executor's write from the system of record, and Agent Skills and
    a CLI for coding agents. Released except where a PR is named.
-10. **Runs locally and keeps data private.** Healthy runs make no model calls
-    and send nothing out. Personal and health data are redacted from text,
+10. **Runs locally and keeps data private.** Healthy runs make no calls to a
+    hosted AI model and send nothing out. Personal and health data are redacted from text,
     screenshots and structure (scrub-by-default for anything that leaves the
     machine is on main); a strict no-outbound mode, an unattended on-prem
     service, and signed, timestamped receipts are released.
@@ -106,7 +107,7 @@ monorepo and installable from source.
 | Has a written threat model for prompt injection against the agent that teaches or repairs a program, with tests. | [THREAT_MODEL.md](packages/flow/docs/THREAT_MODEL.md) |
 | Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
 | Ships as one monorepo with separately installable packages (flow, agent, types, capture, privacy, desktop and tray), each released from the monorepo. | [README](README.md) |
-| Makes no model calls on healthy runs. Model training (openadapt-ml) is separate research. | [README](README.md) |
+| Makes no calls to a hosted AI model on healthy runs. Model training (openadapt-ml) is separate research. | [README](README.md) |
 
 ## The full map
 
@@ -265,7 +266,7 @@ improvising or retrying when something is off.
 | Repair a relabeled save button: prove from the recorded identity hash that only the label changed (same control id, kind and form), re-qualify the fix on the new release, and have a person admit the certified copy afresh, since a save button's identity is part of the record check | On main | Real app (local OpenEMR, synthetic data): after the save button was relabeled, the stopped item re-ran and saved once after 8.3 operator minutes and 763 s of re-qualification; 896 s from stop to done ([#1513](https://github.com/OpenAdaptAI/OpenAdapt/pull/1513)) | `openadapt_flow/repair/relabel.py`, [SELF_REPAIR.md](packages/flow/docs/SELF_REPAIR.md#a-relabeled-control-proof-that-only-the-label-changed) |
 | A duplicate check that reads the app's match list (`no_duplicate_candidate`): stop only on a listed record with the item's last name or date of birth, fail closed on an unreadable or unloaded list | On main | Real app (local OpenEMR, synthetic data): false stops per 100 items 70.4 before, 16.4 after; 0 silent wrongs in 30 saves ([#1513](https://github.com/OpenAdaptAI/OpenAdapt/pull/1513)) | [DUPLICATE_CHECK.md](packages/flow/docs/DUPLICATE_CHECK.md) |
 | A switched-off `problems_only` gate asks a person before the save instead of stopping the item | On main | Synthetic; real app in [#1513](https://github.com/OpenAdaptAI/OpenAdapt/pull/1513) | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md#when-the-mode-turns-itself-off) |
-| Fleet drift patches: a verified fix with no patient data, shared across sites under policy | Released, local reference hub | Simulator | `openadapt-flow fleet`, [FLEET_DRIFT_PATCHES.md](packages/flow/docs/FLEET_DRIFT_PATCHES.md) |
+| Fleet drift patches: a verified fix with no patient data, shared across sites under policy, moved as files or through a local reference hub | Released, local reference hub | Simulator | `openadapt-flow fleet`, [FLEET_DRIFT_PATCHES.md](packages/flow/docs/FLEET_DRIFT_PATCHES.md) |
 
 ## Computer-use agents
 
