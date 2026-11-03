@@ -20,12 +20,14 @@ Values are compared after normalizing by kind:
 - ``date``: both sides are parsed to a calendar date. ``03/04/2026`` is
   ambiguous unless the field declares the order (``date_order``);
 - ``currency``: both sides are parsed to a decimal amount, ignoring the
-  currency symbol, valid thousands separators and a trailing ``.00``;
-- ``number``: both sides are parsed to a decimal number. An expected value
-  that is a plain number (``250``, ``1,250.00``) is compared as a number even
-  when the field is declared ``text``; the read must then be a plain number
-  too (``MRN 12345`` is not ``12345``). A value with a leading zero (``007``)
-  is an identifier and stays text.
+  currency symbol, valid thousands separators and a trailing ``.00``. Two
+  amounts that name different currencies (``€250``, ``$250``) differ; ``$``
+  is ``USD``;
+- ``number`` (declared only, never guessed): both sides must be plain
+  numbers, compared by value (``1,250.00`` is ``1250``). A value with a
+  leading zero (``007``) is an identifier, compared as written. A ``text``
+  field is compared as text even when it holds digits: ``250.0`` is not
+  ``250.00`` (two different codes).
 
 The comparison is of the whole field, never by substring, prefix or
 similarity: ``Ann Smithers`` is not ``Ann Smith`` and ``$1,250.00`` is not
@@ -82,10 +84,11 @@ _STRICT_AMOUNT = re.compile(
     r"^(?P<pre>[$€£¥]|USD|CAD|EUR|GBP)?\s?(?P<open>\()?(?P<sign>[+-])?\s?"
     r"(?P<num>\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\d+,\d{2})"
     r"(?P<close>\))?\s?(?P<post>USD|CAD|EUR|GBP)?$",
-    re.IGNORECASE,
+    re.IGNORECASE | re.ASCII,
 )
 #: A plain number: digits, optional thousands commas, optional decimals.
-_PLAIN_NUMBER = re.compile(r"^[+-]?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$")
+_PLAIN_NUMBER = re.compile(r"^[+-]?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$", re.ASCII)
+_CURRENCY_NAMES = {"$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY"}
 _CODE_PARTS = re.compile(r"[^\s\-./]+")
 _TOKEN_EDGES = ".,:;!?()[]{}\"'"
 
@@ -199,17 +202,20 @@ def _amount(value: str) -> Optional[Decimal]:
     return -amount if negative else amount
 
 
+def _currency(value: str) -> Optional[str]:
+    """The currency an amount names (``$`` is ``USD``), or None."""
+
+    match = _STRICT_AMOUNT.match(value.strip())
+    if match is None:
+        return None
+    name = (match["pre"] or match["post"] or "").upper()
+    return _CURRENCY_NAMES.get(name, name) or None
+
+
 def _leading_zero(value: str) -> bool:
     """``007``, ``0012345``: an identifier, not a number."""
 
     return re.match(r"^[+-]?0\d", value.strip()) is not None
-
-
-def _plain_number(value: str) -> bool:
-    """A value that is only a number (and no identifier with a leading zero)."""
-
-    text = value.strip()
-    return bool(_PLAIN_NUMBER.match(text)) and not _leading_zero(text)
 
 
 def _code_edges(value: str) -> tuple[str, str]:
@@ -289,6 +295,10 @@ def normalize_value(
     return _text(value) or None
 
 
+def _squash(value: str) -> str:
+    return "".join(value.split())
+
+
 def _folded_equal(observed: str, expected: str) -> bool:
     return observed.translate(OCR_CONFUSABLE) == expected.translate(OCR_CONFUSABLE)
 
@@ -311,8 +321,6 @@ def compare_value(
     """
 
     ocr = source == "ocr"
-    if kind == "text" and _plain_number(expected):
-        kind = "number"  # 250 is compared as a number, never as text
     whole = _compare_whole(observed, expected, kind, ocr, date_order)
     if whole != "mismatch" or exact:
         return whole
@@ -363,7 +371,10 @@ def _compare_whole(
         seen_amount = normalize_value(observed, kind)
         if seen_amount is not None:
             want_form = format(want_amount.normalize(), "f")
-            return "match" if seen_amount == want_form else "mismatch"
+            names = {_currency(observed), _currency(expected)} - {None}
+            if seen_amount != want_form or len(names) > 1:
+                return "mismatch"  # another amount, or another currency
+            return "match"
         if ocr:
             folded = observed.lower().translate(OCR_CONFUSABLE)
             if normalize_value(folded, kind) == format(want_amount.normalize(), "f"):
@@ -374,7 +385,15 @@ def _compare_whole(
         if not want_code:
             return "mismatch"
         if seen_code == want_code:
-            return "match" if _same_code_layout(observed, expected) else "mismatch"
+            if _same_code_layout(observed, expected):
+                return "match"
+            # OCR adds and drops spaces, so a layout that differs only in
+            # spaces may be a misread; a structure read has the real text.
+            return (
+                "ambiguous"
+                if ocr and _same_code_layout(_squash(observed), _squash(expected))
+                else "mismatch"
+            )
         if ocr and _folded_equal(seen_code, want_code):
             return "ambiguous"
         return "mismatch"
@@ -383,7 +402,9 @@ def _compare_whole(
         return "mismatch"
     if seen_text == want_text:
         return "match"
-    if ocr and _folded_equal(seen_text, want_text):
+    if ocr and _folded_equal(_squash(seen_text), _squash(want_text)):
+        # Equal once OCR's added or dropped spaces (or look-alike glyphs)
+        # are set aside: a possible misread, never proof either way.
         return "ambiguous"
     return "mismatch"
 

@@ -115,7 +115,6 @@ def test_a_value_inside_a_longer_read_is_ambiguous_never_a_match(
 @pytest.mark.parametrize(
     ("observed", "expected", "kind"),
     [
-        ("1,250.00", "1250", "text"),  # a plain number compares by value
         ("1250", "1,250.00", "number"),
         ("$1,250.00", "1250", "currency"),
         ("USD 1,250.00", "$1,250", "currency"),
@@ -148,11 +147,67 @@ def test_malformed_numbers_do_not_parse(malformed: str) -> None:
 
 
 def test_a_currency_symbol_is_not_a_plain_number() -> None:
-    # A field compared as a number (``250`` in a text field) must read as a
-    # plain number; a declared currency field takes the symbol.
-    assert compare_value("$250.00", "250", source="structure") == "mismatch"
+    # A declared number must read as a plain number; a currency field takes
+    # the symbol.
+    assert compare_value("$250.00", "250", kind="number", source="structure") == (
+        "mismatch"
+    )
     assert compare_value("$250.00", "250", kind="currency", source="structure") == (
         "match"
+    )
+
+
+@pytest.mark.parametrize(
+    ("observed", "expected"),
+    [
+        ("250.0", "250.00"),  # two ICD-9 codes, not one number
+        ("250", "250.00"),
+        ("1.1", "1.10"),
+        ("12,345", "12345"),
+        ("+250", "250"),
+        ("1,250.00", "1250"),
+    ],
+)
+def test_a_text_field_holding_digits_is_compared_as_text(
+    observed: str, expected: str
+) -> None:
+    for source in ("ocr", "structure"):
+        assert compare_value(observed, expected, source=source) != "match"
+    assert value_matches(observed, expected) is False
+    # Declared a number, the same values compare by value.
+    assert compare_value(observed, expected, kind="number", source="structure") == (
+        "match"
+    )
+
+
+@pytest.mark.parametrize(
+    ("observed", "expected"),
+    [("€250", "$250"), ("250 EUR", "250 USD"), ("£250", "USD 250"), ("¥250", "$250")],
+)
+def test_amounts_in_different_currencies_differ(observed: str, expected: str) -> None:
+    assert compare_value(observed, expected, kind="currency") == "mismatch"
+    assert compare_value("USD 250", "$250.00", kind="currency") == "match"
+
+
+def test_non_ascii_digits_are_not_numbers() -> None:
+    assert compare_value("２５０", "250", kind="number", source="structure") != "match"
+    assert compare_value("١٢", "12", kind="currency", source="structure") != "match"
+
+
+@pytest.mark.parametrize(
+    ("observed", "expected", "kind"),
+    [
+        ("AnnSmith", "Ann Smith", "text"),
+        ("2026-11-0209:30", "2026-11-02 09:30", "text"),
+        ("1 2-345", "12-345", "code"),
+    ],
+)
+def test_an_ocr_read_that_only_gained_or_lost_spaces_is_ambiguous(
+    observed: str, expected: str, kind: str
+) -> None:
+    assert compare_value(observed, expected, kind=kind, source="ocr") == "ambiguous"  # type: ignore[arg-type]
+    assert (
+        compare_value(observed, expected, kind=kind, source="structure") == "mismatch"  # type: ignore[arg-type]
     )
 
 
@@ -170,7 +225,7 @@ def test_token_occurrences_takes_whole_tokens() -> None:
     assert token_occurrences("Ada Quill Ada Quill", "Ada Quill") == 2
 
 
-def test_plain_numbers_are_inferred_conservatively() -> None:
+def test_kinds_are_inferred_conservatively() -> None:
     assert compare_value("250", "250") == "match"
     assert infer_value_kind("$1,250.00") == "currency"
     assert infer_value_kind("Ann Smith") == "text"
@@ -212,6 +267,7 @@ def _read_back(text: str, expected: str, kind: str = "text") -> Verdict:
         ("Ann Smithers", "Ann Smith", "text", Verdict.REFUTED),
         ("Patient: Ann Smithers", "Ann Smith", "text", Verdict.REFUTED),
         ("$1,250.00", "250", "text", Verdict.REFUTED),
+        ("AnnSmith", "Ann Smith", "text", Verdict.INDETERMINATE),
         ("$1,250.00", "250", "currency", Verdict.REFUTED),
         ("Balance $1,250.00", "250", "currency", Verdict.REFUTED),
         ("Ann Smith Jr", "Ann Smith", "text", Verdict.INDETERMINATE),

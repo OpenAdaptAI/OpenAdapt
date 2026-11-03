@@ -689,7 +689,9 @@ def test_date_compare_parses_the_date_never_a_prefix():
     assert normalize("1984-03-07", rule) == "1984-03-07"
     # A date-time: the date it was written on, in its own offset.
     assert normalize("2025-10-01T09:30:00-04:00", rule) == "2025-10-01"
-    for junk in ("1984-03-07xyz", "1984-03-07 and more", "1984-13-07", "1984"):
+    # A FHIR partial date compares as written.
+    assert normalize("1984", rule) == "1984" and normalize("1984-03", rule) == "1984-03"
+    for junk in ("1984-03-07xyz", "1984-03-07 and more", "1984-13-07", "84"):
         assert normalize(junk, rule) is None, junk
 
 

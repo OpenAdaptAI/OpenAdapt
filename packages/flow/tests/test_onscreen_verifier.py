@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-
 from openadapt_flow.runtime.effects import EffectVerifier
 from openadapt_flow.runtime.effects.effect import (
     Effect,

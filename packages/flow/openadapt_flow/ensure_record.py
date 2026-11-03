@@ -239,9 +239,12 @@ def normalize(value: Any, rule: FieldRule, *, task: bool = False) -> Optional[st
     if rule.compare == "digits":
         return re.sub(r"\D", "", text)
     if rule.compare == "date":
-        # A calendar date, or the date a date-time was written on (in its own
-        # offset, as a person entered it). Anything else, such as
+        # A calendar date, a partial date as written, or the date a date-time
+        # was written on (in its own offset, as a person entered it). Anything
+        # else, such as
         # "1984-03-07xyz", is not a date and never matches.
+        if re.fullmatch(r"\d{4}(-\d{2})?", text, re.ASCII):
+            return text  # a FHIR partial date (1984, 1984-03), as written
         try:
             if len(text) == 10:
                 return date.fromisoformat(text).isoformat()
