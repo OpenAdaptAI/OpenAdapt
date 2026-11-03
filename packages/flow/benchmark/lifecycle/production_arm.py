@@ -863,6 +863,17 @@ def with_duplicate_list_check(source: Path, out: Path) -> Path:
     if expect == list(step.expect):
         raise RuntimeError(f"{DUPLICATE_STEP} has no '{NO_MATCHES}' check to replace")
     steps[index] = step.model_copy(update={"expect": expect})
+    # The compiler also re-checks the same text right before the Confirm click
+    # (a guard on the next step); the list check replaces that one too.
+    confirm = steps[index + 1] if index + 1 < len(steps) else None
+    guard = confirm.guard if confirm is not None else None
+    if (
+        confirm is not None
+        and guard is not None
+        and guard.predicate.exact
+        and guard.predicate.text == NO_MATCHES
+    ):
+        steps[index + 1] = confirm.model_copy(update={"guard": None})
     workflow.steps = steps
     _uncertify_patch(workflow)
     if out.exists():

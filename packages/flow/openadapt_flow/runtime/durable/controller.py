@@ -434,6 +434,14 @@ def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[s
             abort,
         ]
 
+    if "is not actionable" in lower:
+        return "resolution", [
+            "The target is on the page but covered or off screen; close what "
+            "covers it (a dialog, banner or toast), then resume",
+            resume,
+            abort,
+        ]
+
     if "could not resolve" in lower or "all resolution rungs failed" in lower:
         return "resolution", [
             "The target could not be located on screen; confirm the app view "
