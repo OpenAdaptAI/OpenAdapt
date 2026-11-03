@@ -186,6 +186,34 @@ def test_short_values_and_bare_numerics_not_bound_by_value_alone():
     }
 
 
+def test_a_value_two_fields_hold_binds_only_by_name():
+    diff = diff_snapshots(
+        [],
+        [{"id": 9, "start": "2026-01-05", "end": "2026-01-05", "note": "Ann Lee"}],
+    )
+    proposal = propose_effects(diff, {"visit_date": "2026-01-05", "who": "Ann Lee"})
+    [effect] = proposal.effects
+    assert effect.match == {
+        "start": ValueExpr(literal="2026-01-05"),
+        "end": ValueExpr(literal="2026-01-05"),
+        "note": ValueExpr(param="who"),
+    }
+    notes = " ".join(proposal.not_proposed)
+    assert "field 'start' equals parameter 'visit_date'" in notes
+    assert "held by more than one field" in notes
+
+
+def test_a_numeric_identity_never_binds_to_an_unrelated_parameter():
+    before = [{"id": 7, "status": "open"}]
+    after = [{"id": 7, "status": "closed"}]
+    diff = diff_snapshots(before, after)
+    proposal = propose_effects(diff, {"quantity": "7", "state": "closed"})
+    [effect] = proposal.effects
+    assert effect.match == {"id": ValueExpr(literal="7")}
+    assert effect.value == ValueExpr(param="state")
+    assert "it is short or a bare number" in " ".join(proposal.not_proposed)
+
+
 # -- observer ------------------------------------------------------------------
 
 

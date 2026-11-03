@@ -511,6 +511,23 @@ def test_lift_applies_record_field_check_to_single_matches(tmp_path: Path) -> No
     }
 
 
+def test_lift_needs_a_named_field_for_a_short_value_two_fields_hold(
+    tmp_path: Path,
+) -> None:
+    record = {"fname": "Testa", "quantity": "1", "refills": "1"}
+    named = _detour_bundle(tmp_path / "named", ["quantity"], record, text="1")
+    report = lift_params(named, {"quantity": "1"})
+    assert [item.step_id for item in report.lifted] == ["step_000"]
+
+    other = _detour_bundle(tmp_path / "other", ["refills"], record, text="1")
+    report = lift_params(other, {"qty": "1"})
+    assert report.lifted == []
+    assert report.unlifted["qty"] == (
+        "typed in step_000; a short value that record fields quantity, refills "
+        "all hold, and no typed field is named 'qty'"
+    )
+
+
 # -- the gates (no browser) --------------------------------------------------
 
 

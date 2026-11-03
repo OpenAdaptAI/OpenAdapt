@@ -8,13 +8,14 @@ becomes a parameter only through the existing confirm pass
 (:mod:`openadapt_flow.compiler.param_confirm`), which a person runs when they
 admit the candidate.
 
-A value typed whole in more than one step (an agent typed it into the wrong
-field, then the right one) is lifted at the step whose field the saved record
-holds it in, as the mined record check shows. The other steps are listed in
-``also_typed_in``: they still type the demonstrated text. When there is no
-record check, the record holds the value in no typed field, or more than one
-of the steps writes such a field, nothing is lifted and the reason names the
-steps.
+When a mined record check exists, a value is lifted only at a step whose
+field the saved record holds it in, whether it was typed once or more (an
+agent typed it into the wrong field, then the right one). The other steps are
+listed in ``also_typed_in``: they still type the demonstrated text. A short
+value or a bare number ("1") needs more: one record field holds it, or the
+step's field is named like the input. When the record holds the value in no
+typed field, more than one of the steps writes such a field, or a repeated
+value has no record check, nothing is lifted and the reason names the steps.
 
 A value is not lifted when it was typed inside longer text or never typed
 whole. Those inputs are reported so the reviewer sees them; the program would
@@ -35,6 +36,7 @@ from openadapt_flow.compiler.annotate import mask_value
 from openadapt_flow.compiler.distill import field_key
 from openadapt_flow.compiler.param_confirm import PROPOSALS_FILENAME
 from openadapt_flow.ir import ActionKind, Step, Workflow
+from openadapt_flow.record_sor import distinctive_value as _distinctive
 
 __all__ = ["LiftReport", "LiftedParam", "lift_params"]
 
@@ -106,63 +108,61 @@ def _field_names(step: Step) -> set[str]:
 
 
 def _pick_match(
-    workflow: Workflow, step_ids: list[str], value: str
+    workflow: Workflow, name: str, step_ids: list[str], value: str
 ) -> tuple[Optional[str], str]:
-    """The one step whose field the saved record holds ``value`` in, or why not."""
+    """The one step whose field the saved record holds ``value`` in, or why not.
 
+    With no mined record check, a value typed in one step is lifted there.
+    Otherwise the record must confirm the step: its field holds the value.
+    A short value or a bare number ("1") also sits in fields it was never
+    typed into (quantity and refills), so it needs one holder, or the step's
+    field named like the input. A step with no field name is lifted only for
+    a distinctive value that one record field holds.
+    """
+
+    listed = ", ".join(step_ids)
+    where = (
+        f"typed in {listed}"
+        if len(step_ids) == 1
+        else f"typed in {len(step_ids)} steps ({listed})"
+    )
     held = _saved_fields(workflow)
     if not held:
         if len(step_ids) == 1:
             return step_ids[0], ""
-        listed = ", ".join(step_ids)
-        return None, (
-            f"typed in {len(step_ids)} steps ({listed}); no mined record check "
-            "shows which field kept it"
-        )
-    holders = {field_key(name) for name, values in held.items() if value in values}
+        return None, f"{where}; no mined record check shows which field kept it"
+    holders = {field_key(field) for field, values in held.items() if value in values}
     if not holders:
-        if len(step_ids) == 1:
-            return (
-                None,
-                f"typed in {step_ids[0]}; the saved record holds it in no field",
-            )
-        listed = ", ".join(step_ids)
-        return None, (
-            f"typed in {len(step_ids)} steps ({listed}); the saved record holds "
-            "it in no field"
-        )
+        return None, f"{where}; the saved record holds it in no field"
+    distinctive = _distinctive(value)
     steps = {step.id: step for step in workflow.steps}
-    hits = [
-        sid
-        for sid in step_ids
-        if _field_names(steps[sid]) & holders
-        or (len(step_ids) == 1 and not _field_names(steps[sid]))
-    ]
+
+    def confirmed(step_id: str) -> bool:
+        names = _field_names(steps[step_id])
+        if not names:
+            return len(step_ids) == 1 and distinctive and len(holders) == 1
+        if not names & holders:
+            return False
+        return distinctive or len(holders) == 1 or field_key(name) in names
+
+    hits = [sid for sid in step_ids if confirmed(sid)]
     if len(hits) == 1:
         return hits[0], ""
-
-    if not hits:
-        if len(step_ids) == 1:
-            return None, (
-                f"typed in {step_ids[0]}; its field is not a record field that holds it "
-                f"({', '.join(sorted(holders))})"
-            )
-        listed = ", ".join(step_ids)
+    if not hits and not distinctive and len(holders) > 1:
         return None, (
-            f"typed in {len(step_ids)} steps ({listed}); none of their fields is "
-            f"a record field that holds it ({', '.join(sorted(holders))})"
+            f"{where}; a short value that record fields "
+            f"{', '.join(sorted(holders))} all hold, and no typed field is "
+            f"named {name!r}"
         )
-    listed = ", ".join(step_ids)
+    if not hits:
+        fields = "its field is not" if len(step_ids) == 1 else "none of their fields is"
+        return None, (
+            f"{where}; {fields} a record field that holds it "
+            f"({', '.join(sorted(holders))})"
+        )
     return None, (
-        f"typed in {len(step_ids)} steps ({listed}); steps {', '.join(hits)} all "
-        "write a record field that holds it"
+        f"{where}; steps {', '.join(hits)} all write a record field that holds it"
     )
-
-
-def _pick_repeated(
-    workflow: Workflow, step_ids: list[str], value: str
-) -> tuple[Optional[str], str]:
-    return _pick_match(workflow, step_ids, value)
 
 
 def lift_params(bundle_dir: Path | str, inputs: Mapping[str, str]) -> LiftReport:
@@ -203,7 +203,7 @@ def lift_params(bundle_dir: Path | str, inputs: Mapping[str, str]) -> LiftReport
                 "demonstrated value"
             )
             continue
-        step_id, why = _pick_match(workflow, whole, value)
+        step_id, why = _pick_match(workflow, name, whole, value)
         if step_id is None:
             report.unlifted[name] = why
             continue
