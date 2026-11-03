@@ -23,6 +23,7 @@ Python 3.10–3.12 are supported and exercised in CI.
 ruff check openadapt_flow          # lint
 ruff format --check openadapt_flow # format (drop --check to auto-apply)
 mypy                               # type-check (config in pyproject.toml)
+python scripts/check_engine_generality.py  # no app names in the engine
 pytest -q                          # tests
 ```
 
@@ -173,6 +174,30 @@ surface from permissively licensed package artifacts.
 
 The release-consistency gate inspects the actual wheel and sdist. A source-tree
 notice alone is not sufficient.
+
+## App knowledge lives in data
+
+The engine (`openadapt_flow/`) works the same way for every application. Never
+write code, a default, a constant or a heuristic for one application. What one
+application needs goes in data:
+
+- its bookkeeping writes: an app profile in `openadapt_flow/app_profiles/`,
+  loaded by name;
+- its endpoints, tables, keys and field paths: the generated contract or the
+  deployment config (`deploy.yaml`), which the engine requires rather than
+  defaulting;
+- tests and benchmarks for it: fixtures under `tests/` and harnesses under
+  `benchmark/`, outside the shipped package.
+
+`scripts/check_engine_generality.py` runs in CI and fails when engine source
+names an application or one of its identifiers from the denylist in
+`scripts/generality.toml`. Add new applications and identifiers to that list
+when you meet them. A comment that only gives an example may name an
+application on a line marked `# example:`. Hits that predate the check are
+counted in `scripts/generality_baseline.json`, which only shrinks: when you
+remove one, lower it with `--update-baseline`. OpenAdapt's own demo apps
+(MockMed) may be named only in the demo modules listed in the denylist. The
+audit behind the rule is `docs/GENERALITY_AUDIT.md`.
 
 ## Safety-sensitive areas
 
