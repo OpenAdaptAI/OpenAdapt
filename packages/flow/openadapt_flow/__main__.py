@@ -5895,10 +5895,12 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
     held_directories: list = []
     try:
         try:
-            ledger_dir = private_directory(
-                private_directory(state_root, migrate_owned_root=True)
-                / "qualification-attempts"
-            )
+            root = private_directory(state_root, migrate_owned_root=True)
+            if held_directories:
+                # Open the ledger under the held root's resolved path, so a
+                # junction above the root swapped now cannot move it.
+                root = Path(held_directories[-1].final_path)
+            ledger_dir = private_directory(root / "qualification-attempts")
         except ValueError:
             print(
                 "run REFUSED: qualification attempt ledger is not available safely. "
