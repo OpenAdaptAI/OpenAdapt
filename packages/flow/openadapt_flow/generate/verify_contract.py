@@ -1723,6 +1723,29 @@ class SqlBuilder:
             return f"CASE WHEN {ref} = CAST({self.literal(value)} AS DATE) THEN '1' ELSE '0' END"
         return f"CASE WHEN {self.text(alias, table, column)} = {self.literal(value)} THEN '1' ELSE '0' END"
 
+    def now(self, alias: str, column: str, window_s: int) -> str:
+        """A flag: this date-time column holds a time within ``window_s``
+        seconds before the read (or 5 minutes after it, for clock skew), by
+        the database's local clock or by UTC (an app may store either).
+        NULL is not a time, so it fails."""
+
+        ref = f"{alias}.{self.q(column)}"
+        w, ahead = int(window_s), 300
+        if self.d == "mysql":
+            clocks = ("NOW()", "UTC_TIMESTAMP()")
+            spans = [
+                f"{ref} BETWEEN {c} - INTERVAL {w} SECOND AND {c} + INTERVAL {ahead} SECOND"
+                for c in clocks
+            ]
+        else:
+            clocks = ("LOCALTIMESTAMP", "(NOW() AT TIME ZONE 'UTC')")
+            spans = [
+                f"CAST({ref} AS timestamp) BETWEEN {c} - INTERVAL '{w} seconds' "
+                f"AND {c} + INTERVAL '{ahead} seconds'"
+                for c in clocks
+            ]
+        return f"CASE WHEN {' OR '.join(spans)} THEN '1' ELSE '0' END"
+
     def empty(self, alias: str, table: str, column: str) -> str:
         col = self.schema.tables[table].column(column)
         ref = f"{alias}.{self.q(column)}"
@@ -1835,6 +1858,18 @@ class Settings:
     #: Table -> columns of a new row the person named as not checked (they
     #: vary, are free text left empty, or are the write's time stamp).
     unchecked: dict[str, set[str]] = field(default_factory=dict)
+    #: ``now_checks`` answered true: a date-time column of the main record
+    #: that is the write's time stamp (named unchecked on a create, or the
+    #: target's excused bookkeeping on an update) must hold a time near the
+    #: read, instead of any value.
+    now_checks: bool = False
+
+    @property
+    def now_window_s(self) -> int:
+        """How old the write's time stamp may be when it is read: the
+        execution window plus the recheck, plus a minute."""
+
+        return int(self.max_window_s + (self.recheck_after_s or 0) + 60)
 
 
 #: Roles of a new row's column that no rule checks: named by the person
@@ -1915,6 +1950,18 @@ def build_contract(
         target_fields.update(
             c for c in plan.anchor_extra if c in excused.get(anchor, set())
         )
+        if settings.now_checks:
+            for c in sorted(plan.anchor_extra):
+                column = schema.tables[anchor].column(c)
+                if (
+                    c in excused.get(anchor, set())
+                    and column is not None
+                    and column.kind == "datetime"
+                ):
+                    alias = _add_column(
+                        main, f"now__{_alias(c)}", b.now("t", c, settings.now_window_s)
+                    )
+                    match[alias] = {"literal": "1"}
     if plan.mode == "create":
         # ``found`` pins the same constants as ``create`` (a soft-delete
         # flag, a status, a type): a trashed record with the task's values
@@ -1933,6 +1980,19 @@ def build_contract(
                 settings.actor_params,
                 settings.unchecked,
             )
+            column = schema.tables[anchor].column(col)
+            if (
+                settings.now_checks
+                and flavor == "create"
+                and role.role == "timestamp"
+                and col in settings.unchecked.get(anchor, set())
+                and column is not None
+                and column.kind == "datetime"
+            ):
+                alias = _add_column(
+                    main, f"now__{_alias(col)}", b.now("t", col, settings.now_window_s)
+                )
+                match[alias] = {"literal": "1"}
     if plan.mode == "create" and flavor == "create":
         support = _support(plan, variant)
         for p in plan.optional:
@@ -3367,6 +3427,7 @@ def propose(
         recheck or DEFAULT_RECHECK_S,
         env,
         unchecked=unchecked_named,
+        now_checks=_answer(answers, "now_checks") is True,
     )
 
     # Tables whose name the SQL guard refuses: a view, or a refusal.
