@@ -177,7 +177,7 @@ def world(tmp_path: Path):
                         "group_by": ["trace", "purpose"],
                         "latest_by": "sent_at",
                         "distinct_by": ["auth_number"],
-                        "duplicate_key": same,
+                        "duplicate_key": {**same, "purpose": "11"},
                         "due": {"after": anchor["param"], "within_s": 3600},
                     },
                     "writeback": {

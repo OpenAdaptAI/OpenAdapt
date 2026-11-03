@@ -118,6 +118,7 @@ legs:
       member_id: {param: ehr.member_id}
       service_code: {param: ehr.service_code}
       service_date: {param: ehr.service_date}
+      purpose: "11"
     # A pended review and its final review share a trace: judge the latest.
     group_by: [trace, purpose]
     latest_by: sent_at
