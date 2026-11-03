@@ -757,7 +757,11 @@ class SelfRepair:
                     run_dir,
                     work,
                 )
-            if report.transaction_outcome not in (None, "HALTED_BEFORE_EFFECT"):
+            covered = _covered_band_halt(report, workflow, session.backend)
+            if covered is None and report.transaction_outcome not in (
+                None,
+                "HALTED_BEFORE_EFFECT",
+            ):
                 return self._finish(
                     "not_repairable",
                     _not_before_effect(report),
@@ -767,7 +771,7 @@ class SelfRepair:
                     work,
                 )
             evidence.halted_run_dir = str(run_dir)
-            found = _repairable(report, workflow)
+            found = covered if covered is not None else _repairable(report, workflow)
             if isinstance(found, str):
                 evidence.steps.append(
                     SelfRepairStepRecord(stage="halt", passed=False, detail=found)
@@ -781,8 +785,13 @@ class SelfRepair:
                 SelfRepairStepRecord(
                     stage="halt",
                     passed=True,
-                    detail=f"{step.id} halted before any effect ({mode}): "
-                    f"{(halted.error or '')[:300]}",
+                    detail=(
+                        f"the next step's identity band is covered by the app's own "
+                        f"window; repaired after {step.id} ({mode})"
+                        if covered is not None
+                        else f"{step.id} halted before any effect ({mode}): "
+                        f"{(halted.error or '')[:300]}"
+                    ),
                 )
             )
             live_png = session.backend.screenshot()
@@ -2636,6 +2645,126 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any]
     if not report.halt or report.halt.state_id != step.id:
         return "the report's halt does not name the failed step"
     return step, mode, halted
+
+
+def _covered_band_halt(
+    report: RunReport, workflow: Workflow, backend: Any
+) -> "Optional[tuple[Step, str, Any]]":
+    """An identity halt caused by the app's own window over the band (#1724).
+
+    A dialog the app opens after a step (a session notice, an update prompt)
+    can cover the next step's identity band, so that step's identity check
+    reads part of the record and refuses. That is not a wrong record, and the
+    fix is the one ``after`` mode handles: dismiss the dialog after the
+    previous step. Returns ``(previous step, "after", its result)`` only when
+    every condition holds, else None (the halt keeps its usual routing):
+
+    - the run halted at a pointer step whose identity check did not verify,
+      and no input reached it;
+    - no step that saves received input and no effect was observed;
+    - the backend proves that a window of the app itself covers the step's
+      identity band on the halted screen (``owned_window_over``);
+    - the part of the band that was read still matches the recorded record:
+      no contradicted, look-alike, glyph-ambiguous or unexplained name token,
+      and at least half the recorded band matched
+      (:func:`_uncovered_band_matches`). Another patient behind the dialog
+      fails this;
+    - the previous step is a click that doesn't save, acted on a trusted rung
+      and passed, in a linear workflow.
+
+    Nothing is relaxed after this: the probe replays the halted step with its
+    own identity check, which must verify on the uncovered band, then the
+    record check and a person decide as for any repair.
+    """
+
+    from openadapt_flow.run_gate import is_consequential
+
+    probe = getattr(backend, "owned_window_over", None)
+    if not callable(probe) or workflow.program is not None or workflow.subflows:
+        return None
+    steps = {step.id: (index, step) for index, step in enumerate(workflow.steps)}
+    for result in report.results:
+        found = steps.get(result.step_id)
+        if found is None:
+            return None
+        if result.delivery_attempted and is_consequential(found[1], workflow):
+            return None
+        if any(
+            item.observed_effect not in (None, "absent")
+            for item in result.effect_evidence
+        ):
+            return None
+    halted = next(
+        (r for r in reversed(report.results) if not r.ok and not r.skipped), None
+    )
+    if halted is None or halted.step_id not in steps:
+        return None
+    index, step = steps[halted.step_id]
+    if (
+        halted.delivery_attempted is not False
+        or halted.identity is None
+        or halted.identity.status == "verified"
+        or step.anchor is None
+        or step.anchor.identifier_region is None
+        or index == 0
+    ):
+        return None
+    region = tuple(int(v) for v in step.anchor.identifier_region)
+    if halted.resolution is not None:
+        dx = int(halted.resolution.point[0]) - int(step.anchor.click_point[0])
+        dy = int(halted.resolution.point[1]) - int(step.anchor.click_point[1])
+        region = (region[0] + dx, region[1] + dy, region[2], region[3])
+    try:
+        cover = probe(region)
+    except Exception:  # noqa: BLE001 - no proof means no reclassification
+        return None
+    if not cover or not _uncovered_band_matches(step, halted.identity.observed):
+        return None
+    previous = workflow.steps[index - 1]
+    result = next((r for r in report.results if r.step_id == previous.id), None)
+    rung = result.resolution.rung if result and result.resolution else None
+    if (
+        result is None
+        or not result.ok
+        or result.delivery_attempted is not True
+        or previous.action not in _POINTER_KINDS
+        or previous.anchor is None
+        or rung not in TRUSTED_RUNGS
+        or is_consequential(previous, workflow)
+    ):
+        return None
+    return previous, "after", result
+
+
+#: The least share of the recorded band the uncovered part must match.
+_MIN_UNCOVERED_COVERAGE = 0.5
+
+
+def _uncovered_band_matches(step: Step, observed: str) -> bool:
+    """Whether the band text read beside the covering window is the record's.
+
+    Matches it against the step's recorded identity template. Every token read
+    must be explained, nothing may contradict or look like the record without
+    being it, and at least half the recorded band must match. Any doubt (no
+    template, nothing read) is False.
+    """
+
+    from openadapt_flow.runtime.identity_template import _band_match_template
+
+    template = step.anchor.identity_template if step.anchor is not None else None
+    if template is None or not template.tokens or not (observed or "").strip():
+        return False
+    try:
+        match = _band_match_template(template, observed)
+    except Exception:  # noqa: BLE001 - an unreadable match is doubt
+        return False
+    return (
+        match.contradicted_chars == 0
+        and match.suspect_chars == 0
+        and match.unexplained_name_tokens == 0
+        and match.glyph_ambiguous_id_chars == 0
+        and match.coverage >= _MIN_UNCOVERED_COVERAGE
+    )
 
 
 def _before_frame(run_dir: Path, result: Any) -> Optional[bytes]:
