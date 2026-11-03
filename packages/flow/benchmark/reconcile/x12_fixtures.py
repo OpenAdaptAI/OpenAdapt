@@ -133,6 +133,8 @@ class ClaimStatus:
     status: str = "20"
     payer_claim_number: Optional[str] = None
     billed: str = "125.00"
+    family: str = "SYNTH"
+    birth_date: Optional[str] = None  # ISO; written as a DMG when given
     payer_id: str = "SYNPAYER01"
     provider_npi: str = "1999999984"
 
@@ -165,7 +167,8 @@ def status_set(claims: list[ClaimStatus]) -> list[str]:
         hl += 1
         body += [
             seg("HL", str(hl), "3", "22", "0"),
-            seg("NM1", "IL", "1", "SYNTH", "MEMBER", "", "", "", "MI", c.member_id),
+            seg("NM1", "IL", "1", c.family, "MEMBER", "", "", "", "MI", c.member_id),
+            *([seg("DMG", "D8", _d8(c.birth_date))] if c.birth_date else []),
             seg("TRN", "2", c.trace),
             seg("STC", f"{c.category}{COMPONENT}{c.status}", "20261102", "", c.billed),
         ]

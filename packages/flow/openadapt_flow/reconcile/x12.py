@@ -167,6 +167,7 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
     current: Optional[dict[str, Any]] = None
     hl = ""
     owner = ""  # the HL that opened ``current``
+    person = ""  # the HL of the last subscriber or patient named
 
     def ancestors(node: str) -> list[str]:
         chain = []
@@ -193,6 +194,10 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
             "patient_id": inherited("patient_id"),
             "payer_id": inherited("payer_id"),
             "provider_id": inherited("provider_id"),
+            # The patient's (a dependent's, else the subscriber's) last name
+            # and birth date.
+            "family": inherited("family"),
+            "birth_date": inherited("birth_date"),
             "service_code": None,
             "service_date": None,
             "service_date_end": None,
@@ -232,10 +237,21 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
                 "FA": "provider_id",
                 "85": "provider_id",
             }.get(entity)
-            if slot and number:
-                names.setdefault(hl, {})[slot] = number
-                if current is not None and current.get(slot) is None:
-                    current[slot] = number
+            found = {slot: number} if slot and number else {}
+            if entity in ("IL", "QC"):
+                person = hl
+                if el[3]:
+                    found["family"] = el[3]
+            for key, value in found.items():
+                names.setdefault(hl, {})[key] = value
+                if current is not None and current.get(key) is None:
+                    current[key] = value
+            continue
+        if tag == "DMG" and el[1] == "D8" and person:
+            born = _date("D8", el[2])[0]
+            names.setdefault(person, {})["birth_date"] = born
+            if current is not None and current.get("birth_date") is None:
+                current["birth_date"] = born
             continue
         if tag == "TRN":
             if kind == "277":

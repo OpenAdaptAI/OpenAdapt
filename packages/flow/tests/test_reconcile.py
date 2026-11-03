@@ -363,3 +363,11 @@ def test_x12_envelope_checks() -> None:
     ):
         with pytest.raises(x12.X12Error):
             x12.parse(broken)
+
+
+def test_x12_reads_the_patient_name_and_birth_date() -> None:
+    status = fx.ClaimStatus(
+        "C1", "M1", "99213", "2026-10-01", family="LOPEZ", birth_date="1987-09-12"
+    )
+    (record,) = x12.parse(fx.interchange("277", [fx.status_set([status])], control="9"))
+    assert record["family"] == "LOPEZ" and record["birth_date"] == "1987-09-12"
