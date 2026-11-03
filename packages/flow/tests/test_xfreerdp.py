@@ -40,6 +40,23 @@ def test_profile_digest_changes_with_any_setting():
     assert base.sha256 != SessionProfile(width=1920, height=1080).sha256
 
 
+def test_profile_asks_for_avc444_only_when_lossy():
+    args = SessionProfile(lossless=False, gfx="avc444").client_args()
+    assert "/gfx:AVC444" in args and "-gfx" not in args
+    assert "/gfx:AVC444" not in SessionProfile(lossless=False).client_args()
+    with pytest.raises(ValueError, match="lossy"):
+        SessionProfile(gfx="avc444")
+    # A profile without the field keeps the digest it had before the field.
+    assert (
+        SessionProfile().sha256
+        == "aa9e114039316fbf97090145552bbeef82e78e784a146768ec2126f6c6728b58"
+    )
+    assert (
+        SessionProfile(lossless=False, gfx="avc444").sha256
+        != SessionProfile(lossless=False).sha256
+    )
+
+
 @pytest.mark.parametrize("kw", [{"scale": 125}, {"desktop_scale": 50}, {"width": 10}])
 def test_profile_rejects_bad_values(kw):
     with pytest.raises(ValueError):
