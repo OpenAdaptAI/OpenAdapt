@@ -377,11 +377,19 @@ def test_dropdown_typed_input_verified_from_dom() -> None:
     assert landed and changed and ocr_calls == 0
 
 
-@pytest.mark.parametrize("label", [None, "Maine", "Massachusetts (MA)"])
-def test_dropdown_dom_miss_falls_back_and_never_passes(label) -> None:
-    (landed, _changed), ocr_calls = _typed(label)
-    assert landed is False  # OCR (empty here) decides; DOM miss never passes
+def test_dropdown_dom_miss_falls_back_and_never_passes() -> None:
+    (landed, _changed), ocr_calls = _typed(None)
+    assert landed is False  # no focused select: OCR (empty here) decides
     assert ocr_calls >= 1
+
+
+@pytest.mark.parametrize("label", ["Maine", "Massachusetts (MA)"])
+def test_dropdown_showing_another_option_fails_without_ocr(label) -> None:
+    # The focused select shows another option (type-ahead stopped elsewhere):
+    # the read-back decides, and OCR can't turn it into a pass.
+    (landed, changed), ocr_calls = _typed(label)
+    assert landed is False and changed is True
+    assert ocr_calls == 0
 
 
 def _seed_from(result):

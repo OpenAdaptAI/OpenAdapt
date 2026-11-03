@@ -199,8 +199,10 @@ def _record_native_select(
         page.locator("#sel").click()
         _settle(pump)
         # Real key events, so the browser's own change event is trusted, as
-        # a person's selection is.
-        page.keyboard.type("Label Beta")
+        # a person's selection is, at a person's pace: a change that arrives
+        # before the click's frame is kept is refused, by design.
+        page.wait_for_timeout(300)
+        page.keyboard.type("Label Beta", delay=120)
         _settle(pump)
         page.locator("#single").click()
         _settle(pump)
