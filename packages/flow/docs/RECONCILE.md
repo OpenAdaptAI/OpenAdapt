@@ -90,9 +90,11 @@ legs:
     verifier: {kind: x12, options: {root: ..., transaction: "278"}}
     identity: {trace: {param: submission_id}}
     compare: {member_id: ..., service_code: ..., service_date: ...,
-              auth_number: {param: payer_decision.auth_number}}
-    group_by: trace          # a pended review, then the final one
+              auth_number: {param: payer_decision.auth_number},
+              decision: {param: payer_decision.review_action}}
+    group_by: [trace, purpose]   # a pended review, then the final one
     latest_by: sent_at
+    distinct_by: [auth_number]   # two auth numbers are two decisions
   writeback:                 # the clinic's copy of the decision
     role: writeback
     compare: {outcome: {param: payer_decision.outcome}, auth_number: ...}
@@ -129,7 +131,15 @@ copy in the EHR while the payer pends is a `not_written_back` break.
 `group_by` and `latest_by` read a store that keeps every status of a unit (a
 277 acknowledgement, then the 277 that it was paid) as one unit's history:
 only the records with the latest `latest_by` in each group are judged. A
-redelivered file ties at the latest and still counts twice.
+redelivered file ties at the latest and still counts twice. A group whose
+records carry two different values of a `distinct_by` field (two payer
+claim numbers under one trace) is two submissions and is kept whole, so a
+resubmission is still a `duplicate`.
+
+The decision is compared as a code, not inferred from an auth number: the
+payer's review action (X12 HCR01: A1 certified, A3 not certified, A4
+pended) must equal the 278's and the EHR copy's, so a denial and a pend
+without auth numbers aren't taken for agreement.
 
 ## Verdicts and time
 
@@ -158,7 +168,7 @@ leg in `scope.unread`.
 
 The JSON result holds closed fields only, as `WriteResult.to_dict()` does:
 leg names, break kinds, field names, record references (`Claim/123`, or an
-X12 unit's control numbers `x12:ISA13.GS06.ST02.n`), counts, read times and
+X12 unit's place `x12:f<file index>:ISA13.GS06.ST02.n`), counts, read times and
 reasons. It holds no member ids, names, codes or dates, and no file names.
 Reasons that come from a store have quoted values and URL queries replaced
 with `…`. A person follows the record references
