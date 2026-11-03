@@ -9,6 +9,7 @@ import stat
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -37,7 +38,7 @@ from openadapt_flow.benchmark.openemr_local import (
     patient_records_sha256,
     publication_gate,
 )
-from openadapt_flow.ir import StructuralLocator
+from openadapt_flow.ir import Postcondition, PostconditionKind, StructuralLocator
 from openadapt_flow.runtime.effects import EffectKind
 from scripts.openemr_local_demo import (
     AGENT_STANDARD_INPUT_LIMIT,
@@ -683,29 +684,79 @@ def test_iframe_confirm_locator_and_explicit_save_event_marker(tmp_path: Path) -
     assert no_match.text == "No matches were found."
 
 
-def test_referral_rules_guard_duplicates_and_drop_the_mined_tab_strip() -> None:
-    """The duplicate rule is on #create, and the save step checks the chart
-    heading instead of the tab strip the recorder mined (the strip changes
-    when OpenEMR opens the new patient's tab)."""
+def _mined_confirm_guard(exact: bool = True) -> Any:
+    from openadapt_flow.ir import Guard, Predicate, PredicateKind
+
+    return Guard(
+        predicate=Predicate(
+            kind=PredicateKind.TEXT_PRESENT,
+            text="No matches were found.",
+            exact=exact,
+        )
+    )
+
+
+def test_referral_rules_keep_the_mined_duplicate_guard_and_drop_the_tab_strip() -> None:
+    """The duplicate rule on #create is the compiler's mined check, and the save
+    step checks the chart heading instead of the tab strip the recorder mined
+    (the strip changes when OpenEMR opens the new patient's tab)."""
 
     from types import SimpleNamespace
-
-    from openadapt_flow.ir import Postcondition, PostconditionKind
 
     region = Postcondition(
         kind=PostconditionKind.REGION_STABLE, region=(0, 255, 1280, 545)
     )
+    stray = Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Additional Add")
+    mined = Postcondition(
+        kind=PostconditionKind.TEXT_PRESENT,
+        text="No matches were found.",
+        timeout_s=10.0,
+        exact=True,
+    )
     tabs = Postcondition(
         kind=PostconditionKind.TEXT_PRESENT, text="CalendarxMessageCenterx"
     )
-    open_step = SimpleNamespace(expect=[region])
-    save_step = SimpleNamespace(expect=[region, tabs])
+    open_step = SimpleNamespace(expect=[region, stray, mined])
+    save_step = SimpleNamespace(expect=[region, tabs], guard=_mined_confirm_guard())
 
     apply_referral_rules(open_step, save_step)
 
     assert open_step.expect == _duplicate_dialog_postconditions()
+    assert open_step.expect[1] is mined
     assert save_step.expect == [region, _saved_chart_postcondition()]
     assert _saved_chart_postcondition().text == "Medical Record Dashboard"
+
+
+def test_referral_rules_refuse_a_compile_without_the_mined_guard() -> None:
+    """The guard is not added by hand: a bundle whose compile did not mine it
+    is refused."""
+
+    from types import SimpleNamespace
+
+    region = Postcondition(
+        kind=PostconditionKind.REGION_STABLE, region=(0, 255, 1280, 545)
+    )
+    open_step = SimpleNamespace(expect=[region])
+    save_step = SimpleNamespace(expect=[region], guard=_mined_confirm_guard())
+    with pytest.raises(FixtureError, match="did not mine"):
+        apply_referral_rules(open_step, save_step)
+    assert open_step.expect == [region]
+    # A fuzzy (not exact) check is not the mined one either.
+    fuzzy = Postcondition(
+        kind=PostconditionKind.TEXT_PRESENT,
+        text="No matches were found.",
+        timeout_s=10.0,
+    )
+    with pytest.raises(FixtureError, match="did not mine"):
+        apply_referral_rules(SimpleNamespace(expect=[fuzzy]), save_step)
+    # The re-check before #confirmCreate is required too.
+    mined = fuzzy.model_copy(update={"exact": True})
+    for guard in (None, _mined_confirm_guard(exact=False)):
+        with pytest.raises(FixtureError, match="re-check"):
+            apply_referral_rules(
+                SimpleNamespace(expect=[mined]),
+                SimpleNamespace(expect=[], guard=guard),
+            )
 
 
 def test_recording_opens_real_contact_accordion_before_address_fields() -> None:
@@ -1400,7 +1451,15 @@ def test_compiled_confirm_create_is_the_declared_consequential_write(
     while #create, which only opens the duplicate check, stayed irreversible.
     """
 
-    from openadapt_flow.ir import ActionKind, Anchor, ParamKind, ParamSpec, Step
+    from openadapt_flow.ir import (
+        ActionKind,
+        Anchor,
+        ParamKind,
+        ParamSpec,
+        Postcondition,
+        PostconditionKind,
+        Step,
+    )
     from openadapt_flow.ir import Workflow as FlowWorkflow
     from scripts.openemr_local_demo import compile_recording as compile_openemr
 
@@ -1449,23 +1508,33 @@ def test_compiled_confirm_create_is_the_declared_consequential_write(
             )
             for index, param in enumerate(params)
         ]
-        steps.append(
-            click(
-                f"step_{len(params):03d}",
-                "#create",
-                "Create New Patient",
-                "irreversible",
-            )
+        opener = click(
+            f"step_{len(params):03d}",
+            "#create",
+            "Create New Patient",
+            "irreversible",
         )
-        # What the compiler infers for the confirm click on its own.
-        steps.append(
-            click(
-                f"step_{save_index:03d}",
-                "#confirmCreate",
-                "Confirm Create New Patient",
-                "irreversible",
+        # What the compiler mines from the duplicate dialog
+        # (compiler.empty_result_guard; tests/test_empty_result_guard.py).
+        opener.expect = [
+            Postcondition(
+                kind=PostconditionKind.TEXT_PRESENT,
+                text="No matches were found.",
+                timeout_s=10.0,
+                exact=True,
             )
+        ]
+        steps.append(opener)
+        # What the compiler infers for the confirm click on its own, with
+        # the dialog's no-match check repeated before it.
+        confirm = click(
+            f"step_{save_index:03d}",
+            "#confirmCreate",
+            "Confirm Create New Patient",
+            "irreversible",
         )
+        confirm.guard = _mined_confirm_guard()
+        steps.append(confirm)
         workflow = FlowWorkflow(
             name=name,
             params=dict(params),

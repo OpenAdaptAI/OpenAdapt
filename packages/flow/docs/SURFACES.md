@@ -68,13 +68,14 @@ Per-substrate engineering evidence is reported per the
 
 | Substrate | Selector | Evidence basis | Evidence |
 |---|---|---|---|
-| Web / browser | `--backend web` | Required CI and bounded field evidence | Full lifecycle on every CI build, plus third-party OpenEMR evidence |
-| Native macOS (AX) | `--backend macos` | Counted task acceptance and a third-party app | 3/3 fixed TextEdit trials with exact file-byte effects; refused a two-window ambiguity without changing either file. On calibre (Qt, SQLite): record, compile and a governed run `VERIFIED` against its database; a same-title book by another author and two identical books stopped with nothing written |
-| Native Windows (UIA) | `--backend windows` | Counted task acceptance | 3/3 fixed WinForms trials with independently confirmed SQLite effects; 3/3 refusal for both stale and ambiguous targets |
+| Web / browser | `--backend web` | Required CI and third-party apps | The lifecycle on in-tree apps on every CI build; local runs on OpenEMR, Odoo, Frappe Lending and openIMIS test copies |
+| Native macOS (AX) | `--backend macos` | Counted effects and a third-party app | 3/3 fixed TextEdit trials with exact file-byte effects, driving the backend directly; refused a two-window ambiguity without changing either file. On calibre (Qt, SQLite): record, compile and a governed run `VERIFIED` against its database; a same-title book by another author and two identical books stopped with nothing written |
+| Native Windows (UIA) | `--backend windows` | Counted task acceptance | 3/3 fixed trials of an in-tree WinForms app in a Windows 11 VM, with independently confirmed SQLite effects; 3/3 refusal for both stale and ambiguous targets |
 | Native Linux (AT-SPI) | `--backend linux` | CI on real AT-SPI and counted task acceptance | The `flow-linux-atspi` job drives a real GTK3 workflow through an isolated X11 / session-D-Bus environment (three verified effects, three ambiguous-target and three stale-target refusals), and records, compiles, runs governed and repairs a write workflow on a GTK3 app with SQLite |
-| RDP (remote display) | `--backend rdp` | Counted task acceptance | Real-network Aardwolf RDP into Windows 11 passed 3/3 fixed remote-input trials with independent guest-tools file verification; a separate real-FreeRDP batch covers record → compile → governed replay and refusal |
+| RDP (remote display) | `--backend rdp` | Counted task acceptance | Aardwolf RDP into a Windows 11 VM passed 3/3 fixed remote-input trials with independent guest-tools file verification; a separate real-FreeRDP batch covers record → compile → governed replay and refusal; through the stock Remote Desktop client on a real AVC444 session, 105 scripted runs saved 55 records confirmed in the database, with 0 wrong-record saves and 40 false stops |
 | Citrix / VDI (pixel ladder) | `--backend citrix` | Required CI and counted no-DOM stand-in | Dedicated exact-Workspace-window driver, readiness gate, durable resume, and 3 healthy + 3 drift-halt no-DOM trials; the retained artifact records `ica_hdx_accepted=false` until a counted ICA/HDX run is attached |
 
+[BACKEND_PARITY.md](BACKEND_PARITY.md) breaks this down by capability.
 Every row is bounded to its stated evidence. Accepted application workflows are
 qualified against their own controls, session/display policy, identity evidence,
 and effect oracle; code-qualified Citrix deployments additionally attach the

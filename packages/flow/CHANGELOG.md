@@ -33,6 +33,8 @@
 
 ### Fixes
 
+- A covered-band dismiss step takes its dialog box from the window the backend proved covers the band, before any pixel search, so a native message box that the accessibility tree doesn't label as a dialog can be dismissed. Without a proved window the step is refused as before.
+
 - macOS: Qt apps' table cells and inline editors report no `AXTopLevelUIElement`, so `MacOSBackend` couldn't scope them to the window and refused them. Their window is now the nearest `AXWindow` or `AXSheet` up the `AXParent` chain (within 32 levels; reaching the application refuses).
 
 - macOS: a text field that accepts only `AXValue` (Qt's line edits) now takes typed text: the text is spliced over the selection and counts as delivered only when the field reads back exactly that value. It refuses when the field changes between the read and the write, and when the field holds characters outside the Basic Multilingual Plane (AX ranges count UTF-16 units). Before, every such field refused AX text delivery.
@@ -133,7 +135,7 @@ A person's approval counts only when a registered approver key signed it, and th
 - Under `problems_only`, problems with an item's own input leave the switch on and send that item to a person; program and environment problems turn it off, and a person re-arms it with one signed tap ([#1517](https://github.com/OpenAdaptAI/OpenAdapt/pull/1517)).
 - Look-alike rows are counted on Windows, macOS, Linux and pixel-only surfaces, so a step that picks a row halts when it cannot tell the target from its twin ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504), [#1518](https://github.com/OpenAdaptAI/OpenAdapt/pull/1518), [#1557](https://github.com/OpenAdaptAI/OpenAdapt/pull/1557)).
 - `openadapt-agent serve --teach-browser` lets a coding agent turn a read-only browser task into a named tool it calls again with new values; `openadapt setup` registers it with Claude Code, Cursor, Codex and Gemini CLI ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)).
-- `induce --held-out` scores each held-out item by running it and checking the record independently ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
+- `openadapt_flow.validation.behavioral_generalization` scores each held-out item by running it and checking the record independently. `induce --held-out` prints structural trace coverage ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
 
 ### Fixes
 
