@@ -97,26 +97,26 @@ Each is a fail-closed refusal, not a wrong action.
    the field's center, and the band is translated by that gap, so it reads
    only part of the patient banner and the click is refused. The test app
    centres its field's placeholder so the two coincide.
-8. **Right after a sheet closes, OCR sometimes reads the banner's `O` as
-   `0`** (`0kafor`), and the identity check refuses the next click. Two of the
-   three clean sheet runs stopped this way, before the save, with nothing
-   written.
+8. **Right after a sheet closes, OCR often reads the banner's `O` as `0`**
+   (`0kafor`), and the identity check refuses the next click. Four of the five
+   clean sheet runs stopped this way, before the save, with nothing written.
 
 ## A real sheet
 
 `--sheet` shows the notice as an `NSAlert` sheet: its own window, attached to
-the chart window. With #1711's backend change, on the clean tree (`git_sha`
-`3e44044d5`), steady caret, three runs:
+the chart window. All runs are from a clean tree with a steady caret:
 
-| Run | Result |
-| --- | --- |
-| [run 1](results/macos-ax-sheet-steady-caret-20261103-run1.json) | Stopped in the probe at the note field's identity check (finding 8); nothing written |
-| [run 2](results/macos-ax-sheet-steady-caret-20261103-run2.json) | The same |
-| [run 3](results/macos-ax-sheet-steady-caret-20261103-run3.json) | `VERIFIED`: halt, "Later" in the sheet admitted on `element_and_record_check`, probe, replay and fault campaigns, the scripted approval, and exactly one new row |
+| Run | Code | Result |
+| --- | --- | --- |
+| [run 1](results/macos-ax-sheet-steady-caret-20261103-run1.json) | `3e44044d5` | Stopped in the probe at the note field's identity check (finding 8); nothing written |
+| [run 2](results/macos-ax-sheet-steady-caret-20261103-run2.json) | `3e44044d5` | The same |
+| [run 3](results/macos-ax-sheet-steady-caret-20261103-run3.json) | `3e44044d5` | `VERIFIED`: halt, "Later" in the sheet admitted on `element_and_record_check`, probe, replay and fault campaigns, the scripted approval, and exactly one new row |
+| [run 4](results/macos-ax-sheet-steady-caret-20261103-run4.json) | `3f50a7065` (review fixes) | Stopped in the probe at the note field's identity check (finding 8); nothing written |
+| [run 5](results/macos-ax-sheet-steady-caret-20261103-run5.json) | `3f50a7065` | The same |
 
 In every run the stop came before any save, the sheet's "Later" button was
-read and admitted through AX, and the bridge click on the sheet went through
-the window checks.
+read and admitted through AX, and the bridge click on the sheet passed the
+window checks. Finding 8 is what keeps the rest from completing.
 
 Not covered here: Windows UI Automation and RDP to the Windows lab. They wait
 on `WindowsBackend.element_identity_at` and the lab.

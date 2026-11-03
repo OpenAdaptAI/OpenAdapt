@@ -456,6 +456,8 @@
     "benchmark/repair_every_backend/results/macos-ax-sheet-steady-caret-20261103-run1.json",
     "benchmark/repair_every_backend/results/macos-ax-sheet-steady-caret-20261103-run2.json",
     "benchmark/repair_every_backend/results/macos-ax-sheet-steady-caret-20261103-run3.json",
+    "benchmark/repair_every_backend/results/macos-ax-sheet-steady-caret-20261103-run4.json",
+    "benchmark/repair_every_backend/results/macos-ax-sheet-steady-caret-20261103-run5.json",
     "benchmark/repair_every_backend/results/macos-ax-steady-caret-20261103.json",
     "benchmark/repair_every_backend/results/macos-pixel-20261103.json",
     "benchmark/results.json",
