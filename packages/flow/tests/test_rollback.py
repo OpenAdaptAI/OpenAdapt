@@ -2032,10 +2032,80 @@ def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
     )
     assert reset is not None
     reset()  # back at the start screen
-    with pytest.raises(CompensationRefused, match="start screen"):
+    with pytest.raises(CompensationRefused, match="run's start screen"):
         reset()
-    assert [p.name for p in seen] == ["fresh-session-1", "fresh-session-2"]
+    # Undo ids can't start with a dot: no collision with a compensation's dir.
+    assert [p.name for p in seen] == [".fresh-session-1", ".fresh-session-2"]
     assert all(p.parent == tmp_path / "rollback" for p in seen)
+
+
+def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch):
+    # The run's start screen can show (a menu bar every screen has) while the
+    # compensation's own first screen doesn't: nothing runs.
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
+    from openadapt_flow.rollback import screen_fresh_session
+
+    start = HaltCleanup(
+        steps=[],
+        start_state=Predicate(kind=PredicateKind.TEXT_PRESENT, text="Home"),
+        source="declared",
+    )
+    monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: start)
+    monkeypatch.setattr(halt_cleanup, "run_cleanup", lambda *a, **k: _cleanup_result())
+    compensation_start = Predicate(kind=PredicateKind.TEXT_PRESENT, text="Patient")
+    monkeypatch.setattr(halt_cleanup, "start_state_of", lambda wf: compensation_start)
+    checked: list[Any] = []
+
+    def check_start(factory, wf, cleanup, *, bundle_dir, run_dir):
+        checked.append(cleanup.start_state)
+        return "the start screen isn't showing"
+
+    monkeypatch.setattr(halt_cleanup, "check_start", check_start)
+    reset = screen_fresh_session(
+        FakeBackend(), _clinic_workflow(), bundle_dir=tmp_path, run_dir=tmp_path
+    )
+    undo = Workflow(name="undo", steps=[_key_step("d", "delete", "Delete")])
+    runner = ReplayerRunner(lambda: pytest.fail("nothing may run"), reset)
+    with pytest.raises(CompensationRefused, match="compensation's start screen"):
+        runner.run(undo, bundle_dir=tmp_path, run_dir=tmp_path, params={})
+    assert checked == [compensation_start]
+    # A compensation with no anchored step can't be checked: refused too.
+    monkeypatch.setattr(halt_cleanup, "start_state_of", lambda wf: None)
+    with pytest.raises(CompensationRefused, match="no anchored step"):
+        runner.run(undo, bundle_dir=tmp_path, run_dir=tmp_path, params={})
+
+
+def test_a_desktop_gui_undo_counts_only_with_a_qualified_cleanup(monkeypatch):
+    # Without cleanup steps a person qualified, nothing returns a desktop
+    # screen to a start: each save goes to a person before it runs.
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow.__main__ import _require_undo_or_person
+    from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
+    from openadapt_flow.rollback import screen_undo_counts
+
+    workflow = _clinic_workflow()
+    assert not screen_undo_counts(workflow)
+    plan = RollbackPlan(ListReader([]), allow_delete=True)
+    with pytest.raises(SystemExit, match="create_patient"):
+        _require_undo_or_person(
+            workflow, plan, None, api_only=not screen_undo_counts(workflow)
+        )
+    cleanup = HaltCleanup(
+        steps=[_key_step("esc", "close the dialog", "Escape")],
+        start_state=Predicate(kind=PredicateKind.TEXT_PRESENT, text="Home"),
+        source="declared",
+    )
+    qualified = workflow.model_copy(update={"halt_cleanup": cleanup})
+    monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: wf.halt_cleanup)
+    assert screen_undo_counts(qualified)
+    # Unqualified (runnable_cleanup falls back to the check alone): no.
+    monkeypatch.setattr(
+        halt_cleanup,
+        "runnable_cleanup",
+        lambda wf: cleanup.model_copy(update={"steps": []}),
+    )
+    assert not screen_undo_counts(qualified)
 
 
 def test_a_screen_that_doesnt_come_back_compensates_nothing(tmp_path):
@@ -2078,6 +2148,7 @@ def test_a_desktop_run_is_armed_with_the_screen_fresh_session(tmp_path, monkeypa
         "screen_fresh_session",
         lambda b, wf, *, bundle_dir, run_dir: reset if b is backend else None,
     )
+    monkeypatch.setattr(rollback_module, "screen_undo_counts", lambda wf: False)
     plan = object()
     args = SimpleNamespace(drift=False, save_healed_to=None)
     backend_cfg = SimpleNamespace(kind="windows", deployment_surface=None)
@@ -2096,6 +2167,8 @@ def test_a_desktop_run_is_armed_with_the_screen_fresh_session(tmp_path, monkeypa
     assert seen["rollback_plan"] is plan
     assert seen["backend"] is backend
     assert seen["fresh_session"] is reset
+    # No qualified cleanup: a GUI undo doesn't stand in for a person.
+    assert seen["gui_undo_counts"] is False
     seen.clear()
     cli._replay_desktop(args, backend_cfg, **common)
     assert seen["rollback_plan"] is None and seen["fresh_session"] is None
