@@ -641,7 +641,8 @@ def column_roles(
         # One row can't tell a pinned value from what that one write
         # happened to store (a reference number, a currency, an id equal to
         # the bot's): never pinned from one row.
-        one = len(rows) < 2
+        # Two rows one demonstration added (two lines) are one example.
+        one = len({id(d) for d, _ in rows}) < 2
         actor = [
             p
             for p, av in actor_values.items()
@@ -698,6 +699,17 @@ def column_roles(
             )
             continue
         copied = _copied(schema, t, name, rows)
+        if copied is not None and len({v for v in values}) == 1:
+            # The same value in every row, and so in its source: a constant
+            # and a copy both fit, and the demonstrations can't tell.
+            out[name] = ColumnRole(
+                "varies",
+                detail={
+                    "why": f"a constant or a copy of {copied['table']}."
+                    f"{copied['column']}: the demonstrations can't tell"
+                },
+            )
+            continue
         if copied is not None:
             out[name] = ColumnRole("copied", detail=copied)
             continue

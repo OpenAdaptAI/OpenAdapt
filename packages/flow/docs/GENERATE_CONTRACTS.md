@@ -217,10 +217,12 @@ link to a row the write added, the year, month, week or day of a date the
 task gives, and a generated token (a UUID) are recognized as such. A link
 and a column that holds the row's own key need two demonstrations; the own
 key must sit in the same text in every row (`INV-{key}`), never as a mere
-substring. A date part must differ between the demonstrations: a constant
+substring, and the contract checks that text exactly. A date part must differ between the demonstrations: a constant
 that happens to equal the month of every demonstration's date is a
 constant. A copy is taken only through a declared key or a column named
-after its table. Columns
+after its table, and only when the source differs between demonstrations:
+a column and its source that hold one value in every demonstration fit a
+constant and a copy alike, so the question lists the column. Columns
 that differ between demonstrations, free text every demonstration left
 empty, and the write's time stamps are listed in the bookkeeping question,
 and each is left unchecked only if the answer names it (`unchecked`). Free

@@ -48,12 +48,31 @@ INSERT INTO users (login) VALUES ('bot'), ('ana'), ('raj');
 INSERT INTO projects (name, manager_id) VALUES ('Apollo', 1), ('Gemini', 1), ('Mercury', 3);
 SELECT setval('invoices_id_seq', 2);
 SELECT setval('po_id_seq', 5);
+CREATE TABLE customers (id serial PRIMARY KEY, name text NOT NULL, status integer);
+CREATE TABLE bills (id serial PRIMARY KEY, customer_id integer NOT NULL,
+  ref text NOT NULL, status integer NOT NULL);
+INSERT INTO customers (name, status) VALUES ('Acme', 5), ('Globex', 5),
+  ('Initech', 6), ('Umbrella', 6);
+CREATE TABLE notes (id serial PRIMARY KEY, title text NOT NULL, code text NOT NULL);
+SELECT setval('notes_id_seq', 30);
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO oa_reader;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO oa_reader;
 """
 
 
 class Shop(App):
+    def bill(self, v: dict[str, Any], status: int = 5) -> None:
+        cid = self.one("SELECT id FROM customers WHERE name=%s", (v["customer"],))
+        self.q("INSERT INTO bills (customer_id, ref, status) VALUES (%s,%s,%s)",
+               (cid, v["ref"], status))  # fmt: skip
+
+    def note(self, v: dict[str, Any], code: Any = None) -> None:
+        nid = self.one(
+            "INSERT INTO notes (title, code) VALUES (%s, '') RETURNING id",
+            (v["title"],),
+        )
+        self.q("UPDATE notes SET code=%s WHERE id=%s", (code or f"NT-{nid}", nid))
+
     def po(self, v: dict[str, Any]) -> None:
         oid = self.one(
             "INSERT INTO po (supplier) VALUES (%s) RETURNING id", (v["supplier"],)
@@ -99,6 +118,8 @@ INVOICE = [
     {"customer": "Acme", "note": "Net 30", "tag": None, "due": "2026-11-05"},  # id 3
     {"customer": "Globex", "note": None, "tag": "q4", "due": "2026-11-20"},  # id 4
 ]
+BILL = [{"customer": "Acme", "ref": "B-1"}, {"customer": "Globex", "ref": "B-2"}]
+NOTE = [{"title": "Kickoff"}, {"title": "Review"}]
 TASK = [
     {"project": "Apollo", "title": "Kickoff"},
     {"project": "Gemini", "title": "Review"},
@@ -111,6 +132,10 @@ KINDS = {
          "examples": [{"values": v} for v in ACCOUNT]},
         {"kind": "create_invoice", "parameters": ["customer", "note", "tag", "due"],
          "examples": [{"values": v} for v in INVOICE]},
+        {"kind": "create_bill", "parameters": ["customer", "ref"],
+         "examples": [{"values": v} for v in BILL]},
+        {"kind": "create_note", "parameters": ["title"],
+         "examples": [{"values": v} for v in NOTE]},
         {"kind": "create_task", "parameters": ["project", "title"],
          "examples": [{"values": v} for v in TASK]},
     ]
@@ -155,6 +180,10 @@ def shop(pg: Any) -> dict[str, Any]:
         demo("create_account", v, lambda v=v: app.account(v))
     for v in INVOICE:
         demo("create_invoice", v, lambda v=v: app.invoice(v))
+    for v in BILL:
+        demo("create_bill", v, lambda v=v: app.bill(v))
+    for v in NOTE:
+        demo("create_note", v, lambda v=v: app.note(v))
     for v in TASK:
         demo("create_task", v, lambda v=v: app.task(v))
     argv = ["propose", *common, "--kinds", str(work / "kinds.yaml"), "--demos", str(work / "demos"),
@@ -238,3 +267,37 @@ def test_an_actor_id_that_is_also_a_copy_is_asked(shop: dict[str, Any]) -> None:
     assert "tasks.assignee_id (the acting user's id or a copy of" in shop["questions"]
     refused = shop["report"]["kinds"]["create_task"]["refused"]
     assert any("tasks.assignee_id" in r for r in refused), refused
+
+
+# -- review round 2 ------------------------------------------------------------
+
+
+def test_a_constant_equal_to_its_source_in_every_demo_is_asked(
+    shop: dict[str, Any],
+) -> None:
+    """The app stores status 5 on every bill; both demonstrated customers
+    happen to have status 5. A constant and a copy both fit: a question,
+    and no contract until the person answers (never a silent copy)."""
+
+    assert "bills.status (a constant or a copy of customers.status" in shop["questions"]
+    refused = shop["report"]["kinds"]["create_bill"]["refused"]
+    assert any("bills.status" in r for r in refused), refused
+    # Customer 4's status is 6: under a copy, a wrong 6 would have passed.
+    v = {"customer": "Umbrella", "ref": "B-9"}
+    out = _run(shop, "create_bill", v, lambda: shop["app"].bill(v, status=6))
+    assert not out.startswith("CONFIRMED"), out
+
+
+def test_the_own_key_template_is_checked(shop: dict[str, Any]) -> None:
+    """``code`` holds the row's own key as ``NT-{key}`` in both
+    demonstrations: the contract checks that text exactly."""
+
+    v = {"title": "Retro"}
+    out = _run(shop, "create_note", v, lambda: shop["app"].note(v))
+    assert out.startswith("CONFIRMED"), out
+    v = {"title": "Plan"}
+    wrong = _run(shop, "create_note", v, lambda: shop["app"].note(v, code="NT-999"))
+    assert not wrong.startswith("CONFIRMED"), wrong
+    v = {"title": "Plan B"}
+    case = _run(shop, "create_note", v, lambda: shop["app"].note(v, code="nt-0"))
+    assert not case.startswith("CONFIRMED"), case

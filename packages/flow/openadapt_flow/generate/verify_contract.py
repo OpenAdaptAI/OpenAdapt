@@ -85,9 +85,7 @@ def _computed(role: ColumnRole) -> bool:
     not asked about."""
 
     why = str(role.detail.get("why") or "")
-    return why == "holds the row's own key" or (
-        why.startswith("the ") and "of a date the task gives" in why
-    )
+    return why.startswith("the ") and "of a date the task gives" in why
 
 
 class GenerateError(RuntimeError):
@@ -2243,6 +2241,22 @@ def _pin(
     actor_params: Mapping[str, str],
     unchecked: Mapping[str, set[str]] = {},
 ) -> None:
+    template = role.detail.get("template") if role.role == "varies" else None
+    if template and col not in unchecked.get(table, set()):
+        # The row's own key in its exact text (``INV-{key}``): checked.
+        prefix, suffix = str(template).split("{key}", 1)
+        key = b.text("t", table, b.schema.tables[table].primary_key[0])
+        parts = [b.literal(prefix), key, b.literal(suffix)]
+        whole = (
+            "CONCAT(" + ", ".join(parts) + ")" if b.d == "mysql" else " || ".join(parts)
+        )
+        stored = b.text("t", table, col)
+        if b.d == "mysql":  # compare bytes: the collation may fold case
+            stored, whole = f"CAST({stored} AS BINARY)", f"CAST({whole} AS BINARY)"
+        expr = f"CASE WHEN {stored} = {whole} THEN '1' ELSE '0' END"
+        alias = _add_column(surf, f"pin__{_alias(col)}", expr)
+        match[alias] = {"literal": "1"}
+        return
     if (
         role.role == "varies"
         and col not in unchecked.get(table, set())
@@ -3145,7 +3159,7 @@ def propose(
         groups += [(sd.table, sd.roles) for sd in p.sides]
         for table, group_roles in groups:
             for col, role in group_roles.items():
-                if role.role in OPEN_ROLES:
+                if role.role in OPEN_ROLES and not role.detail.get("template"):
                     own.setdefault(table, {})[col] = role.role
                     reason = str(role.detail.get("why") or "")
                     if "one demonstration" in reason or "can't tell" in reason:
