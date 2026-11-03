@@ -1395,7 +1395,7 @@ class _User32:
 
         self._ctypes = ctypes
         self._wintypes = wintypes
-        dll = ctypes.WinDLL("user32", use_last_error=True)
+        dll = getattr(ctypes, "WinDLL")("user32", use_last_error=True)
         for name, args, res in (
             ("IsWindow", [wintypes.HWND], wintypes.BOOL),
             ("IsWindowEnabled", [wintypes.HWND], wintypes.BOOL),
