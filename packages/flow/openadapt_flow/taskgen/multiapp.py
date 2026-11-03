@@ -50,6 +50,11 @@ def build_flow(flow: dict[str, Any], seed: int) -> dict[str, Any]:
     person_a = wa.get(pa.person, pid_a)
     Ca = pa.entity(pa.child)
     new_a = {f.name: s.value(Ca, f.name) for f in Ca.editable}
+    have = {
+        r[Ca.identify_by] for _, r in wa.find(pa.child, **{Ca.parent[1]: f"$p{pid_a}"})
+    }
+    while new_a[Ca.identify_by] in have:  # a new record, never a "found" one
+        new_a[Ca.identify_by] = s.value(Ca, Ca.identify_by)
     new_a.update(a_spec.get("set", {}))
     write_a = K.make_write(pa, a_spec["kind"], wa, pid_a, new=new_a)
     # Step two: the same person in the second app, under its own key, next

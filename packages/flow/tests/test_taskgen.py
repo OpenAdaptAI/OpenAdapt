@@ -11,6 +11,7 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -195,3 +196,69 @@ def test_taskgen_e2e(tmp_path: Path) -> None:
     )
     summary = validate(pack, PROFILES[0], pg)
     assert summary["overall"]["rate"] == 1.0, json.dumps(summary["rejected"], indent=1)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("TASKGEN_PG"),
+    reason="needs TASKGEN_PG (a PostgreSQL admin conninfo)",
+)
+def test_workbench_guards_and_stale_form() -> None:
+    """The reset and state routes need the admin token, sign-in never
+    redirects into them, and a concurrent edit makes the agent's form stale."""
+
+    import http.cookiejar
+    import urllib.error
+    import urllib.request
+
+    import psycopg2
+
+    from openadapt_flow.taskgen.workbench import serve
+
+    pg = os.environ["TASKGEN_PG"]
+    db = "wb_taskgen_guards"
+    conn = psycopg2.connect(pg + " dbname=postgres")
+    conn.autocommit = True
+    conn.cursor().execute(f"DROP DATABASE IF EXISTS {db} WITH (FORCE)")
+    conn.cursor().execute(f"CREATE DATABASE {db}")
+    conn.close()
+    prof = load_profile(PROFILES[0])
+    d = F.build(prof, "update", "concurrent_edit", False, 7)
+    url, wb, stop = serve(prof, f"{pg} dbname={db}")
+    try:
+        wb.reset({"rows": d.world.setup_rows(), **d.setup})
+        for method, path in (("GET", "/__state"), ("POST", "/__reset")):
+            req = urllib.request.Request(
+                url + path, data=b"{}" if method == "POST" else None, method=method
+            )
+            with pytest.raises(urllib.error.HTTPError) as err:
+                urllib.request.urlopen(req)
+            assert err.value.code == 404
+        jar = http.cookiejar.CookieJar()
+        op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        a = prof.agent
+        resp = op.open(
+            url + "/login?next=/__state",
+            data=f"username={a['user']}&password={a['password']}".encode(),
+        )
+        assert urlparse(resp.geturl()).path == "/"
+        # Open the edit form: the second user saves right after, so this
+        # form's version is stale and the save is refused.
+        target = d.setup["concurrent"]
+        pid = next(
+            i
+            for i, r in d.world.find(prof.person)
+            if r.get("_as") == target["record"][1:]
+        )
+        page = op.open(f"{url}/e/{prof.person}/{pid}/edit").read().decode()
+        version = re.search(r'name="__version" value="(\d+)"', page).group(1)
+        P = prof.entity(prof.person)
+        row = d.world.get(prof.person, pid)
+        body = (
+            "&".join(f"{f.name}={row.get(f.name) or ''}" for f in P.editable)
+            + f"&__version={version}"
+        )
+        with pytest.raises(urllib.error.HTTPError) as err:
+            op.open(f"{url}/e/{prof.person}/{pid}/edit", data=body.encode())
+        assert err.value.code == 409
+    finally:
+        stop()

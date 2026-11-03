@@ -73,7 +73,14 @@ def judge_episode(
     from openadapt_flow.verify_run import capture_baseline, verify_run
 
     started = time.monotonic()
-    wb.reset(setup)
+    try:
+        wb.reset(setup)
+    except Exception as exc:  # noqa: BLE001 - fails closed, reported
+        return {
+            "verdict": "INDETERMINATE",
+            "error": f"reset: {type(exc).__name__}: {exc}",
+            "seconds": 0.0,
+        }
     out: dict[str, Any] = {}
     with tempfile.TemporaryDirectory(prefix="taskgen-") as tmp:
         base = Path(tmp) / "baseline.json"
@@ -148,27 +155,26 @@ def _worker(args: tuple[int, str, str, str, list[str], str]) -> list[dict[str, A
         for tid in ids:
             task = tasks[tid]
             plan = json.loads((pack_dir / "validation" / f"{tid}.json").read_text())
-            try:
-                cfg = load_contract(pack_dir / task["verify"], db).config
-                params = dict(task["params"])
-                r = judge_episode(
-                    wb, browser, url, cfg, params, task["setup"], task["solution"]
+            episodes = [("positive", task["setup"], task["solution"])] + [
+                (
+                    p["name"],
+                    {**task["setup"], **p["setup"]},
+                    p["solution"] or task["solution"],
                 )
-                rows.append({"task_id": tid, "episode": "positive", **r})
-                for p in plan["planted"]:
-                    setup = {**task["setup"], **p["setup"]}
-                    sol = p["solution"] or task["solution"]
-                    r = judge_episode(wb, browser, url, cfg, params, setup, sol)
-                    rows.append({"task_id": tid, "episode": p["name"], **r})
-            except Exception as exc:  # noqa: BLE001 - the task is rejected, the run goes on
-                rows.append(
-                    {
-                        "task_id": tid,
-                        "episode": "positive",
+                for p in plan["planted"]
+            ]
+            for name, setup, sol in episodes:
+                try:
+                    cfg = load_contract(pack_dir / task["verify"], db).config
+                    r = judge_episode(
+                        wb, browser, url, cfg, dict(task["params"]), setup, sol
+                    )
+                except Exception as exc:  # noqa: BLE001 - the task is rejected, the run goes on
+                    r = {
                         "verdict": "INDETERMINATE",
                         "error": f"{type(exc).__name__}: {exc}"[:300],
                     }
-                )
+                rows.append({"task_id": tid, "episode": name, **r})
             print(
                 f"[{index}] {tid}: "
                 + " ".join(
@@ -239,9 +245,9 @@ def _flow_worker(args: tuple[int, str, str, list[str], str]) -> list[dict[str, A
             first = next(iter(task["apps"]))
             browser.open(servers[first][0] + "/login")
             claim = None
-            ui = "reached_done"
             try:
                 claim = browser.run(solution)
+                ui = "reached_done" if claim else "no_done"
             except Exception as exc:  # noqa: BLE001
                 ui = f"action_failed: {str(exc)[:200]}"
             verdicts = {}
@@ -273,36 +279,24 @@ def _flow_worker(args: tuple[int, str, str, list[str], str]) -> list[dict[str, A
         for tid in ids:
             task = tasks[tid]
             plan = json.loads((pack_dir / "validation" / f"{tid}.json").read_text())
-            try:
-                rows.append(
-                    {
-                        "task_id": tid,
-                        "episode": "positive",
-                        **episode(task, task["solution"], None, {}),
-                    }
+            episodes = [("positive", task["solution"], None, {})] + [
+                (
+                    p["name"],
+                    p.get("solution") or task["solution"],
+                    p.get("app"),
+                    p.get("setup") or {},
                 )
-                for p in plan["planted"]:
-                    rows.append(
-                        {
-                            "task_id": tid,
-                            "episode": p["name"],
-                            **episode(
-                                task,
-                                p.get("solution") or task["solution"],
-                                p.get("app"),
-                                p.get("setup") or {},
-                            ),
-                        }
-                    )
-            except Exception as exc:  # noqa: BLE001 - the task is rejected
-                rows.append(
-                    {
-                        "task_id": tid,
-                        "episode": "positive",
+                for p in plan["planted"]
+            ]
+            for name, sol, app, setup in episodes:
+                try:
+                    r = episode(task, sol, app, setup)
+                except Exception as exc:  # noqa: BLE001 - the task is rejected
+                    r = {
                         "verdict": "INDETERMINATE",
                         "error": f"{type(exc).__name__}: {exc}"[:300],
                     }
-                )
+                rows.append({"task_id": tid, "episode": name, **r})
             print(
                 f"[{index}] {tid}: "
                 + " ".join(
@@ -339,9 +333,19 @@ def summarize(pack: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
         eps = by_task.get(t["id"], [])
         pos = [e for e in eps if e["episode"] == "positive"]
         planted = [e for e in eps if e["episode"] != "positive"]
+        planned = json.loads((pack / "validation" / f"{t['id']}.json").read_text())[
+            "planted"
+        ]
         why = []
+        if len(pos) != 1:
+            why.append(f"{len(pos)} positive episodes, expected 1")
+        if sorted(e["episode"] for e in planted) != sorted(p["name"] for p in planned):
+            why.append("planted episodes judged do not match the plan")
+        for e in eps:
+            if e.get("error"):
+                why.append(f"{e['episode']} errored: {e['error']}")
         if not pos:
-            why.append("not run")
+            pass
         elif pos[0]["verdict"] != CONFIRMED:
             why.append(
                 f"positive {pos[0]['verdict']}: {(pos[0].get('reasons') or [pos[0].get('error', '')])[0]}"
@@ -355,6 +359,11 @@ def summarize(pack: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
         for e in planted:
             if e["verdict"] == CONFIRMED:
                 why.append(f"planted {e['episode']} was CONFIRMED")
+            elif e.get("ui") != "reached_done":
+                # A trap that never ran proves nothing about the oracle.
+                why.append(
+                    f"planted {e['episode']} did not reach done: {e.get('ui_error', e.get('ui'))}"
+                )
         verdicts[t["id"]] = {"valid": not why, "why": why}
 
     def rate(keys: list[str]) -> dict[str, Any]:

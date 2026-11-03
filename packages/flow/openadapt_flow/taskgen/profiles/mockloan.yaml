@@ -80,7 +80,6 @@ answers:
 # The app's audit log: who wrote which row. Used to attribute another
 # user's concurrent write to them.
 audit:
-  table: audit_log
   record_key: id
   query: SELECT id, actor, table_name, record_id, event FROM audit_log
   actor: actor

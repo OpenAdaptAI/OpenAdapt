@@ -57,7 +57,8 @@ FAULTS = (
     "lost_update",
     "late_write_lost",
 )
-#: Paths a browser agent must never reach (the reset hook).
+#: Paths a browser agent must never reach: every ``/__`` route needs the
+#: admin token, and sign-in never redirects into one.
 BLOCKED_PATHS = ("/__reset", "/__state")
 
 
@@ -252,6 +253,8 @@ class Workbench:
         self.mech = Mechanisms()
         self.flash: dict[str, str] = {}
         self.timers: list[threading.Timer] = []
+        #: Required on ``/__reset`` and ``/__state`` (see ``Handler._admin``).
+        self.admin_token: Optional[str] = secrets.token_hex(16)
 
     # -- reset --------------------------------------------------------------
 
@@ -441,6 +444,17 @@ class Handler(BaseHTTPRequestHandler):
             return json.loads(raw or "{}")
         return {k: v[0] for k, v in parse_qs(raw, keep_blank_values=True).items()}
 
+    def _admin(self) -> bool:
+        """The reset and state routes need the workbench's admin token
+        (``X-Workbench-Token``), which no browser session holds. A
+        workbench served with ``admin_token=None`` leaves them to the
+        environment's own path blocking."""
+        token = self.wb.admin_token
+        if token is None:
+            return True
+        given = self.headers.get("X-Workbench-Token") or ""
+        return secrets.compare_digest(given, token)
+
     def _sid(self) -> Optional[str]:
         c = SimpleCookie(self.headers.get("Cookie") or "")
         return c["wbsid"].value if "wbsid" in c else None
@@ -511,7 +525,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         url = urlparse(self.path)
         path, query = url.path, {k: v[0] for k, v in parse_qs(url.query).items()}
-        if path == "/__state":
+        if path.startswith("/__"):
+            if path != "/__state" or not self._admin():
+                return self._send(404, "not found", "text/plain")
             return self._send(200, json.dumps(self.wb.store.dump()), "application/json")
         if path == "/health":
             return self._send(200, "ok", "text/plain")
@@ -546,7 +562,9 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         path = url.path
         form = self._form()
-        if path == "/__reset":
+        if path.startswith("/__"):
+            if path != "/__reset" or not self._admin():
+                return self._send(404, "not found", "text/plain")
             return self._send(200, json.dumps(self.wb.reset(form)), "application/json")
         if path == "/login":
             return self._login(form, {k: v[0] for k, v in parse_qs(url.query).items()})
@@ -600,7 +618,7 @@ class Handler(BaseHTTPRequestHandler):
         sid = secrets.token_hex(16)
         self.wb.sessions[sid] = {"user": agent["user"], "requests": 0}
         nxt = query.get("next") or "/"
-        if not nxt.startswith("/") or nxt.startswith("//"):
+        if not nxt.startswith("/") or nxt.startswith("//") or nxt.startswith("/__"):
             nxt = "/"
         self._redirect(nxt, {"Set-Cookie": f"wbsid={sid}; Path=/; HttpOnly"})
 
@@ -744,10 +762,12 @@ class Handler(BaseHTTPRequestHandler):
     def _op_form(self, s: Mapping[str, Any], name: str, rid: int, op: str) -> None:
         wb = self.wb
         e = wb.profile.entity(name)
-        wb.on_edit_form(name, rid)
         row = wb.store.get(name, rid)
         if row is None:
             raise KeyError(f"no {name} {rid}")
+        # The form shows the record as it is now; the second user saves right
+        # after, so the form the agent fills is stale.
+        wb.on_edit_form(name, rid)
         ver = f'<input type="hidden" name="__version" value="{row["version"]}">'
         if op == "edit" and "update" in e.ops:
             fields = "".join(self._input(f, row[f.name]) for f in e.editable)
@@ -911,13 +931,20 @@ def serve(
     port: int = 0,
     reader: Optional[str] = None,
     create: bool = True,
+    admin_token: Optional[str] = "random",
 ) -> tuple[str, Workbench, Callable[[], None]]:
-    """Start the workbench; returns (url, workbench, stop)."""
+    """Start the workbench; returns (url, workbench, stop).
+
+    ``admin_token`` guards the reset and state routes: ``"random"`` (the
+    default) makes one, held in ``workbench.admin_token``; None leaves the
+    routes to the caller's path blocking."""
 
     store = Store(profile, dsn)
     if create:
         store.create_schema(reader)
     wb = Workbench(profile, store)
+    if admin_token != "random":
+        wb.admin_token = admin_token
     handler = type("BoundHandler", (Handler,), {"wb": wb})
     httpd = ThreadingHTTPServer((host, port), handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -941,6 +968,9 @@ def serve_env() -> tuple[str, Workbench, Callable[[], None]]:
         load_profile(os.environ["WB_PROFILE"]),
         os.environ["WB_DSN"],
         reader=os.environ.get("WB_READER", "wb_reader"),
+        # The environment blocks /__ paths in the agent's browser
+        # (agent.blocked_paths) and posts its resets with WB_ADMIN_TOKEN.
+        admin_token=os.environ.get("WB_ADMIN_TOKEN"),
     )
 
 

@@ -95,24 +95,34 @@ record, a partial save, or no save at all. Every task is feasible. The
 positive forms keep the cue but need the ordinary write, so the reward
 never pays for refusing.
 
+Only `instruction` is meant for the agent. `params`, `setup`, `solution`
+and `verify` stay with the environment (OpenEnv's `Task.public_view`
+returns the instruction alone): for `hidden_state` and `interruption`
+tasks, `params` holds the value the agent has to find.
+
 ## What validation checks
 
 For each task, on a fresh copy of the app:
 
 - the scripted solution reaches `done` through the screens alone, and the
   task's contract scores it `CONFIRMED`;
-- every planted variant scores `REFUTED` or `INDETERMINATE`.
+- every planted variant reaches `done` and scores `REFUTED` or
+  `INDETERMINATE`;
+- no episode errored, and exactly the planned episodes were judged.
 
 Tasks that fail either check are rejected. `validity.json` reports the
 validity rate by app, kind and family, and the reason for each rejection.
 
 ## Known limits
 
-- `concurrent_edit` tasks are rejected. The generated contracts read the
-  second user's write as collateral: attribution through the audit log
-  explains the changed database row, but not the same change seen through
-  the contract's own surface reads. These tasks stay out of packs until the
-  contract generator can attribute a surface read.
+- `concurrent_edit` tasks are rejected, by design of the verifier. When a
+  second user saves the same record while the agent edits it, the verifier
+  refutes the agent's save even after a correct reload and redo: the frame
+  counts another user's write to the target (`target_changed_by_other`)
+  and a version that moved two steps. That is fail-closed behavior, so the
+  family stays out of packs. Tasks where the second user edits a different
+  record also fail today: the audit log explains the changed row, but not
+  the second user's own audit row.
 - An update never changes the field that names the record (an encounter's
   note): the contract would look for the old value.
 - The contract generator refuses the person kinds on the `mockmed-v2`

@@ -285,7 +285,12 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
     value_from: Optional[str] = None
     new: dict[str, Any] = {}
     if kind == "create":
+        # New values: a record the person already has would make this a
+        # "found" task (nothing to write), judged by another contract.
+        have = {w.get(prof.child, k)[C.identify_by] for k in kids}
         new = {f.name: s.value(C, f.name) for f in C.editable}
+        while new[C.identify_by] in have:
+            new[C.identify_by] = s.value(C, C.identify_by)
     elif kind == "update":
         changes = list(P.changes) if s.r.random() < 0.3 else [s.r.choice(P.changes)]
         if family == "hidden_state":

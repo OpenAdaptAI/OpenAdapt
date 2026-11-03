@@ -12,10 +12,7 @@ generator only adds checks to it (never removes one):
 - ``concurrent_edit``: the second user's change must still be there after
   the save (a lost update reads as unchanged against the baseline, so the
   frame alone can't see it), and the app's audit log attributes that user's
-  write to them. This is the one place a contract is relaxed: the audit log
-  itself becomes append-only, because the second user's audit row names no
-  record an entry could attribute; the agent's own audit row stays a
-  declared effect.
+  write to them.
 
 Output, in ``--out``:
 
@@ -44,16 +41,29 @@ TASK_SCHEMA = "openadapt.taskgen-task/v1"
 
 
 def contract_file(manifest_path: Path, kind: str, values: dict[str, Any]) -> Path:
-    """The generated (non-``found``) contract for a task's field set, as
-    :func:`~openadapt_flow.generate.verify_contract.choose` picks it."""
+    """The generated ``create`` or ``update`` contract for a task's field set.
+
+    This is the file :func:`~openadapt_flow.generate.verify_contract.choose`
+    picks for these values when the store doesn't already hold them (else
+    it picks ``found``). The generator never writes a task whose record is
+    already there (``families`` makes every create's values new), and it
+    refuses kinds whose manifest dispatches on a value or holds lists,
+    which ``choose`` would resolve differently.
+    """
 
     manifest = vc.load_yaml(manifest_path) or {}
+    if manifest.get("schema_version") != vc.MANIFEST_SCHEMA:
+        raise vc.GenerateError(f"{manifest_path} is not a contract manifest")
+    if manifest.get("questions_open"):
+        raise vc.GenerateError(f"{manifest_path} still has open questions")
     entry = (manifest.get("kinds") or {}).get(kind)
     if not entry:
         raise vc.GenerateError(f"no contract for kind {kind!r}")
+    if entry.get("dispatch") or any(v.get("lists") for v in entry["variants"]):
+        raise vc.GenerateError(f"{kind}: dispatch and list kinds are not supported")
     given = {k for k, v in values.items() if v is not None and not isinstance(v, list)}
     for var in entry["variants"]:
-        if set(var["fields"]) == given and not var.get("lists"):
+        if set(var["fields"]) == given:
             return manifest_path.parent / var[entry["mode"]]
     files = vc._field_set(manifest_path, manifest, kind, entry, given, {})
     if files is None:
@@ -94,14 +104,8 @@ def finish_contract(
         main["match"][draft.pins["field"]] = {"literal": str(draft.pins["value"])}
     if draft.attribution:
         read = dict(doc["frame"]["database"]["read"])
-        doc["frame"]["identity_field"] = "id"
+        doc["frame"].setdefault("identity_field", "id")
         doc["frame"]["attribution"] = attribution(prof, read)
-        # The second user's own audit row names no record, so no entry can
-        # attribute it: the log is append-only here (existing rows must not
-        # change). The agent's one audit row is still its own effect.
-        allow = doc["frame"]["database"].setdefault("allow_tables", [])
-        if prof.audit["table"] not in allow:
-            allow.append(prof.audit["table"])
     return doc
 
 
