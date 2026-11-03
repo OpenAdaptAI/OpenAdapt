@@ -1537,3 +1537,83 @@ def test_window_root_at_names_the_top_level_window(monkeypatch) -> None:
         "status": "ok",
         "window": {"hwnd": _FakeDesktop.PINNED, "pid": 10},
     }
+
+
+def test_locator_at_refuses_a_painted_toolbar_pane(monkeypatch) -> None:
+    # Open Dental paints its toolbar buttons: the only UIA element under
+    # "Select Patient" is the whole toolbar, whose centre is another button.
+    toolbar = _FakeControl(
+        "PaneControl", automation_id="ToolBarMain", bounds=(51, 50, 1024, 75)
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(toolbar))
+
+    assert _perform_uia("locator-at", {"x": 110, "y": 61}) == {
+        "status": "ok",
+        "locator": None,
+    }
+
+
+def test_locator_at_keeps_a_custom_control_clicked_at_its_centre(monkeypatch) -> None:
+    # A WPF button can surface as a CustomControl with an AutomationId.
+    ok = _FakeControl(
+        "CustomControl", automation_id="butOK", bounds=(899, 688, 975, 714)
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(ok))
+
+    locator = _perform_uia("locator-at", {"x": 937, "y": 701})["locator"]
+
+    assert locator["automation_id"] == "butOK"
+
+
+def test_locator_at_keeps_an_actionable_control_clicked_off_centre(monkeypatch) -> None:
+    button = _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save",
+        bounds=(500, 450, 600, 484),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+
+    locator = _perform_uia("locator-at", {"x": 503, "y": 452})["locator"]
+
+    assert locator["automation_id"] == "saveButton"
+
+
+def test_locator_at_refuses_an_automation_id_others_share(monkeypatch) -> None:
+    # WPF names the inner edit of every text box "textBox".
+    last = _FakeControl(
+        "EditControl",
+        automation_id="textBox",
+        runtime_id=(42, 7),
+        bounds=(879, 81, 969, 101),
+    )
+    first = _FakeControl(
+        "EditControl",
+        automation_id="textBox",
+        runtime_id=(42, 8),
+        bounds=(879, 101, 969, 121),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(last, first))
+
+    assert _perform_uia("locator-at", {"x": 920, "y": 91})["locator"] is None
+
+
+def test_locator_at_keeps_a_unique_automation_id(monkeypatch) -> None:
+    note = _FakeControl(
+        "EditControl",
+        automation_id="noteBox",
+        runtime_id=(42, 7),
+        bounds=(254, 304, 879, 514),
+    )
+    other = _FakeControl(
+        "EditControl",
+        automation_id="searchBox",
+        runtime_id=(42, 8),
+        bounds=(10, 10, 200, 30),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(note, other))
+
+    assert (
+        _perform_uia("locator-at", {"x": 560, "y": 400})["locator"]["automation_id"]
+        == "noteBox"
+    )

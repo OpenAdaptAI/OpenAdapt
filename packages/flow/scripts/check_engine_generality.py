@@ -40,7 +40,7 @@ BASELINE = HERE / "generality_baseline.json"
 #: Engine files that hold text: code and the data shipped with it.
 SUFFIXES = {".py", ".js", ".html", ".css", ".json", ".yaml", ".yml", ".toml", ".txt"}
 
-EXAMPLE_MARKER = re.compile(r"#\s*example:", re.IGNORECASE)
+EXAMPLE_MARKER = re.compile(r"#:?\s*example:", re.IGNORECASE)
 
 
 def load_config(path: Path = CONFIG) -> dict:

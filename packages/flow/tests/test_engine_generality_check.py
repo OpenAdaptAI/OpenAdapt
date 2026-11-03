@@ -43,6 +43,7 @@ def test_a_marked_example_comment_passes(check, tmp_path: Path) -> None:
         tmp_path,
         {
             "a.py": "# example: OpenEMR keys rows by uuid\nx = 1\n",
+            "d.py": "#: example: OpenEMR keys rows by uuid\nx = 1\n",
             # Without the marker the same comment is a hit.
             "b.py": "# OpenEMR keys rows by uuid\nx = 1\n",
             # The marker only counts on a comment line, not after code.
