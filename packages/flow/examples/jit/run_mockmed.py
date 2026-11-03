@@ -97,7 +97,21 @@ def main() -> int:
                 policy="clinical-write",
                 cache_dir=cache,
                 key_dir=cache / "admission-keys",
+                # A throwaway approver stands in for the person who signs
+                # what the agent may do (docs/TEACH_AUTHORIZATION.md).
+                teach_authorization=authority,
             )
+
+        from openadapt_flow.teach_authorization_fixture import demo_authority
+
+        authority = demo_authority(
+            cache,
+            task_id=TASK.task_id,
+            url=base,
+            record={"note": agent.inputs["note"]},
+            inputs={"note": agent.inputs["note"]},
+            record_kind="encounter",
+        )
 
         jit = wrapped()
         print("Run 1: the agent does the task while Flow records it")

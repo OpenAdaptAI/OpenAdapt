@@ -38,6 +38,7 @@ from typing import Any, Optional
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
+from openadapt_flow.teach_authorization_fixture import demo_authority  # noqa: E402
 from scoreboard import schema  # noqa: E402
 from scoreboard.agent import (  # noqa: E402
     SYSTEM_TEMPLATE,
@@ -405,6 +406,16 @@ def _mockmed_jit(
         key_dir=cache / "admission-keys",
         model_key=model_key() if agent is not None else None,
         dialect=dialect,
+        # A throwaway approver stands in for the person who signs what run 1
+        # may do; admission needs it.
+        teach_authorization=demo_authority(
+            cache,
+            task_id=mockmed.TASK_ID,
+            url=server.url(it),
+            record={"note": it.values["note"]},
+            inputs=it.values,
+            record_kind="encounter",
+        ),
     )
 
 
@@ -446,6 +457,14 @@ def _openemr_jit(
         key_dir=cache / "admission-keys",
         model_key=model_key() if agent is not None else None,
         dialect=dialect,
+        teach_authorization=demo_authority(
+            cache,
+            task_id=T.TASK_ID,
+            url=T.entry_url(),
+            record={"fname": values["fname"], "lname": values["lname"]},
+            inputs=values,
+            record_kind="patient",
+        ),
     )
 
 

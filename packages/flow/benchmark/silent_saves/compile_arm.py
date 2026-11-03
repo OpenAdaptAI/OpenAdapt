@@ -25,6 +25,8 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow.teach_authorization_fixture import demo_authority
+
 from . import spend
 from .executors import BENCHMARK_DIR, Report, Task
 
@@ -99,6 +101,16 @@ class CompileAgent:
             key_dir=self.cache / "admission-keys",
             model_key=self._sb.model_key() if agent is not None else None,
             dialect="anthropic",
+            # A throwaway approver stands in for the person who signs what
+            # run 1 may do; admission needs it.
+            teach_authorization=demo_authority(
+                self.cache,
+                task_id=TASK_ID,
+                url=task.url,
+                record={"note": task.params["note"]},
+                inputs=task.params,
+                record_kind="encounter",
+            ),
         )
 
     # -- admission, scripted --------------------------------------------------

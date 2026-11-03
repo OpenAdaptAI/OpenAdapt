@@ -772,10 +772,15 @@ def state_of(
 
 
 def _teach_authorization_status(
-    program: Path, candidate: Mapping[str, Any], key_dir: Optional[Path]
+    program: Path,
+    candidate: Mapping[str, Any],
+    key_dir: Optional[Path],
+    trust: Any = None,
 ) -> dict[str, Any]:
     try:
-        recorded = teach_authorization_gate(program, candidate, key_dir=key_dir)
+        recorded = teach_authorization_gate(
+            program, candidate, key_dir=key_dir, trust=trust
+        )
     except AdmissionError as exc:
         return {"met": False, "required": True, "problem": str(exc)}
     return {
@@ -794,7 +799,7 @@ def _evidence_at(path: Path, digest: str) -> Optional[dict[str, Any]]:
 
 
 def admission_status(
-    program_dir: Path | str, *, key_dir: Optional[Path] = None
+    program_dir: Path | str, *, key_dir: Optional[Path] = None, trust: Any = None
 ) -> dict[str, Any]:
     """What the draft has and what it still needs, pinned to its digest."""
 
@@ -843,7 +848,7 @@ def admission_status(
                 "outcome": (canary or {}).get("outcome"),
             },
             "teach_authorization": _teach_authorization_status(
-                program, candidate, key_dir
+                program, candidate, key_dir, trust
             ),
         },
         "needs_person": _evidence_at(program / NEEDS_PERSON_FILE, digest),

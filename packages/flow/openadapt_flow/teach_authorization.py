@@ -354,12 +354,21 @@ def create(
     ``constants``, ``writes`` and ``forbidden`` as in the statement.
     ``authorizer`` is the approver principal who will sign and
     ``authorizer_public_key`` their approver key (64 hex). Refuses over an
-    existing statement.
+    existing statement. ``expires_at`` defaults to 24 hours from now and is
+    at most 90 days on.
     """
 
     path = Path(out_dir) / STATEMENT_FILE
     if path.exists() or path.with_name(SIGNATURE_FILE).exists():
         raise TeachAuthorizationError("teach_auth_exists", f"{path} already exists")
+    from datetime import timedelta
+
+    issued = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    expires_at = expires_at or issued + timedelta(hours=24)
+    if not issued < expires_at <= issued + timedelta(days=90):
+        raise TeachAuthorizationError(
+            "teach_auth_malformed", "expires_at is after now and at most 90 days on"
+        )
     statement = TeachAuthorizationV1.model_validate(
         {
             **dict(spec),
@@ -367,7 +376,7 @@ def create(
             "authorizer": authorizer,
             "authorizer_public_key": str(authorizer_public_key).lower(),
             "issued_at": _utc_seconds(now),
-            **({"expires_at": _utc_seconds(expires_at)} if expires_at else {}),
+            "expires_at": _utc_seconds(expires_at),
             "nonce": secrets.token_hex(32),
         }
     )

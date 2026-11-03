@@ -762,7 +762,9 @@ class CompiledAgent:
     def status(self) -> dict[str, Any]:
         """The draft's steps and which admission requirements it meets."""
 
-        return lifecycle.admission_status(self.program_dir, key_dir=self.key_dir)
+        return lifecycle.admission_status(
+            self.program_dir, key_dir=self.key_dir, trust=self.teach_authorization
+        )
 
     # -- run -----------------------------------------------------------------
 

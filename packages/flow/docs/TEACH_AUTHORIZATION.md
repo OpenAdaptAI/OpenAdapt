@@ -78,7 +78,7 @@ openadapt-flow teach-authorization verify auth/ --approver-root ROOT_HEX
 ```
 
 A statement expires 24 hours after `create` unless `--expires-in-hours`
-says otherwise (at most 90 days). `sign` shows what the statement allows and
+(or `expires_at` in the Python API) says otherwise, at most 90 days on. `sign` shows what the statement allows and
 needs a person at an interactive terminal who types `yes`.
 
 ## Where it is required
@@ -111,9 +111,9 @@ Programs and tools made before teach authorizations carry none, so:
   until a person teaches it again with an authorization that covers
   `repair` and admits it.
 - a write tool taught in browser teach doesn't run.
-- harnesses that teach without one (the benchmarks under
-  `packages/flow/benchmark` that compile an agent's run, and
-  `examples/jit/run_mockmed.py`) end with a draft that admission refuses.
+- the benchmarks that compile an agent's run and `examples/jit/run_mockmed.py`
+  now sign a throwaway authorization for each run
+  (`teach_authorization_fixture.demo_authority`), standing in for the person.
 
 ## Limits
 
@@ -121,6 +121,13 @@ Programs and tools made before teach authorizations carry none, so:
   deployment config. A process that controls both the environment and the
   key directory can pin its own roster. Keep the key directory and the
   approver keys away from the agents they govern, as for approvals.
+- Self-repair's carried admission (`run --self-repair`) and repair approval
+  take the root from `OPENADAPT_APPROVER_ROOT` and the roster from
+  `OPENADAPT_JIT_KEY_DIR`, not from a governed run's deployment config.
+  Without them they refuse.
+- `serve --teach` reads the roster from the config's `approvers.key_dir`
+  when it names one, else from `OPENADAPT_JIT_KEY_DIR`. Pin `approvers.head`
+  in the config too, or a copied older roster in that folder isn't caught.
 - Self-repair of a program a person demonstrated (not a JIT draft) is a
   repair a person reviews; it carries no teach authorization.
 - A statement may be used for any number of teach runs of its task until it

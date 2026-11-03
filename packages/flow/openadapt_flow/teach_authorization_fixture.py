@@ -18,7 +18,7 @@ from typing import Any, Mapping, Optional
 
 from openadapt_flow import teach_authorization as ta
 
-__all__ = ["LocalAuthorizer"]
+__all__ = ["LocalAuthorizer", "demo_authority"]
 
 
 class LocalAuthorizer:
@@ -161,3 +161,42 @@ class LocalAuthorizer:
 
     def __repr__(self) -> str:  # never show key material
         return f"LocalAuthorizer({self.principal}, {self.public_key[:12]})"
+
+
+def demo_authority(
+    work_dir: Path,
+    *,
+    task_id: str,
+    url: str,
+    record: Mapping[str, Any],
+    inputs: Mapping[str, Any],
+    fields: Optional[Mapping[str, Any]] = None,
+    constants: Any = (),
+    record_kind: str = "record",
+) -> ta.TeachAuthority:
+    """A teach authorization a throwaway approver signs, for demos and benchmarks.
+
+    Starts a new approver roster in a fresh folder under ``work_dir``, signs
+    a statement for exactly this run (the task, the app's origin, the record,
+    the inputs' values and any other typeable text), and returns a
+    :class:`TeachAuthority` that pins that roster. Admission checks it like
+    any other. Never use it where a person must authorize the teaching.
+    """
+
+    from openadapt_flow.teach_scope import origin_of
+
+    folder = Path(work_dir) / f"demo-teach-authorization-{secrets.token_hex(6)}"
+    person = LocalAuthorizer(folder / "approvers", "demo-authorizer")
+    spec = {
+        "task": {"task_id": task_id, "summary": f"Demo run of {task_id}"},
+        "purposes": ["teach", "repair"],
+        "origins": [str(origin_of(url))],
+        "inputs": {str(k): {"value": str(v)} for k, v in inputs.items()},
+        "constants": [{"value": str(c)} for c in dict.fromkeys(map(str, constants))],
+        "writes": {
+            "record_kind": record_kind,
+            "identity": {str(k): {"value": str(v)} for k, v in record.items()},
+            "fields": {str(k): {"value": str(v)} for k, v in (fields or {}).items()},
+        },
+    }
+    return person.authority(person.issue(folder, spec))
