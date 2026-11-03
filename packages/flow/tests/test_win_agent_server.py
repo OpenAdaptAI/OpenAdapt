@@ -1617,3 +1617,37 @@ def test_locator_at_keeps_a_unique_automation_id(monkeypatch) -> None:
         _perform_uia("locator-at", {"x": 560, "y": 400})["locator"]["automation_id"]
         == "noteBox"
     )
+
+
+def test_uia_tree_lists_one_windows_elements_without_values(monkeypatch) -> None:
+    box = _FakeControl(
+        "EditControl",
+        automation_id="noteBox",
+        name="Chart note",
+        bounds=(20, 350, 740, 460),
+    )
+    box.Value = "a typed note the tree must not carry"
+    button = _FakeControl(
+        "ButtonControl",
+        automation_id="saveButton",
+        name="Save Note",
+        bounds=(630, 494, 740, 528),
+    )
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(box, button))
+    tree = _perform_uia("tree", {"window_name": "Patient Notes"})
+    ids = [n["automation_id"] for n in tree["nodes"]]
+    assert ids[1:] == ["noteBox", "saveButton"]
+    assert tree["nodes"][2]["bounds"] == [630, 494, 740, 528]
+    assert tree["truncated"] is False
+    assert "typed note" not in str(tree)
+    assert _perform_uia("tree", {"window_name": "Another app"})["nodes"] == []
+    cut = _perform_uia("tree", {"window_name": "Patient Notes", "max_nodes": 1})
+    assert len(cut["nodes"]) == 1 and cut["truncated"] is True
+    for bad in (
+        {},
+        {"window_name": ""},
+        {"window_name": "x", "max_nodes": 0},
+        {"window_name": "x", "max_nodes": True},
+    ):
+        with pytest.raises(AgentRequestError):
+            _perform_uia("tree", bad)

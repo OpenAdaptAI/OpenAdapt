@@ -1,0 +1,19 @@
+{
+  "app": "claims_desk",
+  "generator": "environments/openenv/_windows/make_tasks.py",
+  "heldout": {
+    "feasible": 12,
+    "file": "claims_desk.heldout.jsonl",
+    "location": "private (OpenAdaptAI/openadapt-corpus)",
+    "sha256": "74733fed72e18fbb738fbb6665234f0a9a65b4967937181f0c7b6531780d97a2",
+    "tasks": 24
+  },
+  "public": {
+    "feasible": 12,
+    "file": "public.jsonl",
+    "sha256": "cd7bc9cb3dc93dc0ce1a95446c43ea3388b4a174413fbd78e83811c11f19f08d",
+    "tasks": 24
+  },
+  "schema": "openadapt.rl-env-task-manifest/v1",
+  "seed": 20261103
+}

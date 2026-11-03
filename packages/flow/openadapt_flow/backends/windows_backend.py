@@ -1261,6 +1261,38 @@ class WindowsBackend:
                 return None
         return payload
 
+    def window_tree(
+        self, window_name: str, *, max_nodes: int = 400
+    ) -> Optional[tuple[list[dict], bool]]:
+        """The UIA elements of the top-level windows named ``window_name``.
+
+        Read-only, for an observation (an RL environment's UIA surface): each
+        element's role, name, automation id, bounds and depth, and whether the
+        list was cut at ``max_nodes``. Returns None when the read is
+        unavailable or the answer is malformed; it never acts.
+        """
+        typed = self._post_typed_read(
+            "/uia/tree", {"window_name": window_name, "max_nodes": max_nodes}
+        )
+        payload = typed.payload
+        if not typed.available or payload is None:
+            return None
+        nodes = payload.get("nodes")
+        if not isinstance(nodes, list) or not isinstance(
+            payload.get("truncated"), bool
+        ):
+            return None
+        for node in nodes:
+            bounds = node.get("bounds") if isinstance(node, dict) else None
+            if not (
+                isinstance(bounds, list)
+                and len(bounds) == 4
+                and all(isinstance(v, int) and not isinstance(v, bool) for v in bounds)
+                and isinstance(node.get("depth"), int)
+            ):
+                return None
+        return nodes, payload["truncated"]
+
     def arm_guarded_coordinate(self, x: int, y: int) -> None:
         """Bind a coordinate and live execution context before identity readback."""
 

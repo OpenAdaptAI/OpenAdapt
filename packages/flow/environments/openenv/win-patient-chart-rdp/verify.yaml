@@ -1,0 +1,17 @@
+# Read the chart notes through the guest's database (pack_db.py dump over
+# WinRM, served on the environment server's loopback). The agent's session
+# never reaches it. One new note on the task's patient with the task's text,
+# exactly once.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: rest
+  base_url: ${APP_URL}
+  records_path: /api/db
+effects:
+  - kind: record_written
+    match:
+      mrn: {param: mrn}
+      note: {param: note}
+    expected_count: 1
+    count_new_only: true

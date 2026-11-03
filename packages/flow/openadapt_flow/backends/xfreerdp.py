@@ -102,6 +102,10 @@ class SessionProfile:
         wallpaper, themes: Off removes pixels that vary between sessions.
         clipboard: Redirect the clipboard (needed for copy-based reads).
         keyboard_layout: FreeRDP ``/kbd:layout`` value, for example ``0x409``.
+        gfx: Ask for an H.264 graphics pipeline mode (``"avc444"`` or
+            ``"avc420"``). Needs ``lossless=False``; the server must allow it
+            (on Windows, the AVC444 group policy). None leaves the client's
+            default negotiation.
     """
 
     width: int = 1280
@@ -116,8 +120,11 @@ class SessionProfile:
     themes: bool = False
     clipboard: bool = True
     keyboard_layout: str = "0x409"
+    gfx: Optional[Literal["avc444", "avc420"]] = None
 
     def __post_init__(self) -> None:
+        if self.gfx is not None and self.lossless:
+            raise ValueError("an H.264 gfx mode is lossy; set lossless=False")
         if self.scale not in _SCALES:
             raise ValueError(f"scale must be one of {_SCALES}")
         if not (100 <= self.desktop_scale <= 500):
@@ -136,6 +143,8 @@ class SessionProfile:
         ]
         if self.lossless:
             args += ["-gfx", "-rfx", "-nsc"]
+        elif self.gfx is not None:
+            args.append(f"/gfx:{self.gfx.upper()}")
         args.append("+fonts" if self.font_smoothing else "-fonts")
         args.append("+wallpaper" if self.wallpaper else "-wallpaper")
         args.append("+themes" if self.themes else "-themes")
@@ -145,7 +154,11 @@ class SessionProfile:
     @property
     def sha256(self) -> str:
         """Digest of the profile, recorded with each run."""
-        body = json.dumps(asdict(self), sort_keys=True).encode("utf-8")
+        fields = asdict(self)
+        if fields["gfx"] is None:
+            # Profiles from before the field keep their digest.
+            del fields["gfx"]
+        body = json.dumps(fields, sort_keys=True).encode("utf-8")
         return hashlib.sha256(body).hexdigest()
 
 
