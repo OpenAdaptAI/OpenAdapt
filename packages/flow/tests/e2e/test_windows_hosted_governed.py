@@ -444,6 +444,9 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     evidence["approved"] = {
         "exit": done.returncode,
         "tail": (done.stdout + done.stderr)[-3000:],
+        "probe": [
+            line for line in (done.stdout + done.stderr).splitlines() if "PROBE" in line
+        ][:40],
         "answers": person.answers,
         "errors": person.errors,
     }
@@ -466,6 +469,9 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     evidence["held"] = {
         "exit": held.returncode,
         "tail": (held.stdout + held.stderr)[-3000:],
+        "probe": [
+            line for line in (held.stdout + held.stderr).splitlines() if "PROBE" in line
+        ][:40],
     }
     assert held.returncode != 0, evidence["held"]
     assert all(r["note"] == "" for r in rows.values()), "a held run wrote"
@@ -479,6 +485,9 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     evidence["resumed"] = {
         "exit": resumed.returncode,
         "tail": (resumed.stdout + resumed.stderr)[-3000:],
+        "probe": [
+            line for line in (resumed.stdout + resumed.stderr).splitlines() if "PROBE" in line
+        ][:40],
     }
     assert resumed.returncode == 0, evidence["resumed"]
     assert rows[TARGET_ID]["note"] == DEMO_NOTE

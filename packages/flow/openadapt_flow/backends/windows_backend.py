@@ -926,13 +926,24 @@ class WindowsBackend:
             captures = {self._root_window_at(x, y) for x, y in points}
             if None in captures:
                 return None
+        import sys as _dbg_sys
+
+        print(
+            f"PROBE approval_form_region exclude={exclude_step} "
+            f"captures={sorted(map(str, captures))} "
+            f"verified={sorted((k, v) for k, v in self._verified_windows.items())} "
+            f"conflicted={sorted(self._conflicted_windows)} points={list(points)}",
+            file=_dbg_sys.stderr,
+        )
         if len(captures) != 1:
             return None
         hwnd, pid = next(iter(captures))
         typed = self._post_typed_read("/window/bounds", {"hwnd": hwnd, "pid": pid})
         window = typed.payload.get("window") if typed.payload is not None else None
         if not isinstance(window, dict) or set(window) != {"hwnd", "pid", "bounds"}:
+            print(f"PROBE bounds refused={typed.payload}", file=_dbg_sys.stderr)
             return None
+        print(f"PROBE bounds answer={window}", file=_dbg_sys.stderr)
         bounds = window["bounds"]
         if (
             window["hwnd"] != hwnd
