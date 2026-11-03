@@ -1,0 +1,137 @@
+# One prior authorization across the EHR (Medplum, FHIR R4), the
+# clearinghouse (X12 278 responses in a folder) and the payer (the HL7 Da Vinci
+# PAS reference implementation). The caller names the unit by its
+# submission id; every other expected value comes from the EHR's request.
+#
+# ${RECON_*} values come from run.py's environment. Credentials are named by
+# environment variable, never written here.
+schema_version: openadapt.reconcile/v1
+unit: prior_authorization
+anchor: ehr
+legs:
+  ehr:
+    role: ehr
+    environment_id: medplum-ehr-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_EHR_FHIR}
+      access_token_env: RECON_EHR_TOKEN
+      resource_type: Claim
+      search_param_exprs:
+        identifier: {param: submission_ref}
+        _include: {literal: "Claim:patient"}
+      field_paths:
+        resourceType: resourceType
+        id: id
+        submission_id: identifier[system=urn:openadapt:synthetic:submission].value
+        use: use
+        status: status
+        patient_ref: patient.reference
+        member_id: identifier[type.coding.code=MB].value
+        service_code: item.productOrService.coding.code
+        service_date: item.servicedDate
+        submitted_at: created
+    join:
+      member_id: {via: patient_ref, field: member_id}
+    identity:
+      submission_id: {param: submission_id}
+      use: preauthorization
+    provides:
+      member_id: member_id
+      service_code: service_code
+      service_date: service_date
+      submitted_at: submitted_at
+
+  clearinghouse:
+    role: clearinghouse
+    environment_id: x12-inbox-reconcile
+    verifier:
+      kind: x12
+      options: {root: "${RECON_X12_INBOX}", glob: "*.x12", transaction: "278"}
+    identity:
+      trace: {param: submission_id}
+      purpose: "11"
+    compare: &same
+      member_id: {param: ehr.member_id}
+      service_code: {param: ehr.service_code}
+      service_date: {param: ehr.service_date}
+    duplicate_key: *same
+    due: {after: ehr.submitted_at, within_s: 259200}
+
+  payer:
+    role: payer
+    environment_id: davinci-pas-ri-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_PAYER_FHIR}
+      resource_type: Claim
+      # The PAS reference implementation searches a member's claims only.
+      search_param_exprs:
+        patient.identifier: {param: ehr.member_id}
+      field_paths:
+        id: id
+        submission_id: identifier.value
+        use: use
+        status: status
+        service_code: item.productOrService.coding.code
+        service_date: item.servicedDate
+    identity:
+      submission_id: {param: submission_id}
+    compare:
+      service_code: {param: ehr.service_code}
+      service_date: {param: ehr.service_date}
+    duplicate_key:
+      service_code: {param: ehr.service_code}
+      service_date: {param: ehr.service_date}
+      status: active
+    provides:
+      claim_id: id
+    # CMS-0057-F: 7 calendar days for a standard request.
+    due: {after: ehr.submitted_at, within_s: 604800}
+
+  payer_decision:
+    role: payer
+    environment_id: davinci-pas-ri-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_PAYER_FHIR}
+      resource_type: ClaimResponse
+      search_param_exprs:
+        patient.identifier: {param: ehr.member_id}
+      field_paths:
+        id: id
+        request: request.reference
+        outcome: outcome
+        auth_number: preAuthRef
+        decided_at: created
+    # The reference implementation gives a request's Claim and its
+    # ClaimResponse the same id.
+    identity:
+      id: {param: payer.claim_id}
+    provides:
+      outcome: outcome
+      auth_number: auth_number
+      decided_at: decided_at
+
+  writeback:
+    role: writeback
+    environment_id: medplum-ehr-reconcile
+    verifier:
+      kind: fhir
+      base_url: ${RECON_EHR_FHIR}
+      access_token_env: RECON_EHR_TOKEN
+      resource_type: ClaimResponse
+      search_param_exprs:
+        identifier: {param: submission_ref}
+      field_paths:
+        id: id
+        submission_id: identifier[system=urn:openadapt:synthetic:submission].value
+        outcome: outcome
+        auth_number: preAuthRef
+    identity:
+      submission_id: {param: submission_id}
+    compare:
+      outcome: {param: payer_decision.outcome}
+      auth_number: {param: payer_decision.auth_number}
+    when: {param: payer_decision.outcome, values: [complete, partial]}
+    due: {after: payer_decision.decided_at, within_s: 86400}

@@ -391,6 +391,7 @@ A test fails when a command has no file or this list is out of date.
 
 **Judge any executor's write:**
 
+- `reconcile`: Check that the EHR, clearinghouse and payer agree on one prior authorization or claim, and report each break.
 - `serve-reward`: Scores agent training episodes by reading the system of record.
 - `verify-run`
 
