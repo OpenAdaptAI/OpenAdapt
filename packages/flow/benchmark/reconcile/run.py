@@ -414,12 +414,16 @@ def score(u: dict, result: dict) -> dict:
     caught = expected & got
     refuted_expected = {b for b in expected if b[2] == "REFUTED"}
     false = {b for b in got - expected if b[2] == "REFUTED"}
+    # Reported, not scored: an UNCERTAIN break nobody planted (a leg that
+    # depends on a dropped record, for example).
+    extra_uncertain = {b for b in got - expected if b[2] == "UNCERTAIN"}
     return {
         "expected": sorted(expected),
         "got": sorted(got),
         "caught": sorted(caught),
         "missed": sorted(expected - got),
         "false_breaks": sorted(false),
+        "extra_uncertain_breaks": sorted(extra_uncertain),
         "planted_refuted": len(refuted_expected),
         "planted_refuted_caught": len(refuted_expected & got),
     }
@@ -499,6 +503,17 @@ def run(out: Path) -> None:
         "expected_breaks_caught": sum(len(r["caught"]) for r in rows),
         "false_breaks": sum(len(r["false_breaks"]) for r in rows),
         "units_with_false_breaks": [r["n"] for r in rows if r["false_breaks"]],
+        "faulty_units": sum(r["category"] == "fault" for r in rows),
+        # The headline miss: a unit with a planted fault reported as agreeing.
+        "faulty_units_confirmed": [
+            r["n"]
+            for r in rows
+            if r["category"] == "fault" and r["outcome"] == "CONFIRMED"
+        ],
+        "faulty_units_refuted": sum(
+            r["category"] == "fault" and r["outcome"] == "REFUTED" for r in rows
+        ),
+        "extra_uncertain_breaks": sum(len(r["extra_uncertain_breaks"]) for r in rows),
         "clean_units": sum(r["category"] in ("clean", "lookalike") for r in rows),
         "clean_units_confirmed": sum(
             r["category"] in ("clean", "lookalike") and r["outcome"] == "CONFIRMED"

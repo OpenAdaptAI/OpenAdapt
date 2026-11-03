@@ -28,7 +28,9 @@ partial set. Nothing here writes or calls the network.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -56,9 +58,12 @@ def _date(qualifier: str, value: str) -> tuple[Optional[str], Optional[str]]:
     """A ``DTP`` date as ISO ``YYYY-MM-DD`` (start, end)."""
 
     def iso(text: str) -> str:
-        if len(text) != 8 or not text.isdigit():
-            raise X12Error(f"date {text!r} is not CCYYMMDD")
-        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+        try:
+            if len(text) != 8 or not text.isdigit():
+                raise ValueError
+            return datetime.strptime(text, "%Y%m%d").date().isoformat()
+        except ValueError:
+            raise X12Error("a date is not a valid CCYYMMDD") from None
 
     if qualifier == "D8":
         day = iso(value)
@@ -66,9 +71,9 @@ def _date(qualifier: str, value: str) -> tuple[Optional[str], Optional[str]]:
     if qualifier == "RD8":
         start, sep, end = value.partition("-")
         if not sep:
-            raise X12Error(f"date range {value!r} has no '-'")
+            raise X12Error("a date range has no '-'")
         return iso(start), iso(end)
-    raise X12Error(f"date format {qualifier!r} is not D8 or RD8")
+    raise X12Error("a date format is not D8 or RD8")
 
 
 def segments(text: str) -> list[list[str]]:
@@ -83,6 +88,8 @@ def segments(text: str) -> list[list[str]]:
     if not text.startswith("ISA") or len(text) < 106:
         raise X12Error("the file does not start with a 106-character ISA")
     element, terminator = text[3], text[105]
+    if text.find(terminator) != 105:
+        raise X12Error("the ISA is not exactly 106 characters")
     if element.isalnum() or terminator.isalnum() or element == terminator:
         raise X12Error("the ISA delimiters are not usable")
     out: list[list[str]] = []
@@ -96,7 +103,9 @@ def segments(text: str) -> list[list[str]]:
     return out
 
 
-def _check_envelopes(segs: list[list[str]]) -> list[tuple[str, str, list[list[str]]]]:
+def _check_envelopes(
+    segs: list[list[str]],
+) -> list[tuple[str, str, str, list[list[str]]]]:
     """Each transaction set as (group control, ST control, its segments).
 
     Every trailer must count and name what it closes: ``SE01`` the
@@ -107,13 +116,13 @@ def _check_envelopes(segs: list[list[str]]) -> list[tuple[str, str, list[list[st
     isa = segs[0]
     if segs[-1][0] != "IEA":
         raise X12Error("the interchange has no IEA trailer")
-    out: list[tuple[str, str, list[list[str]]]] = []
+    out: list[tuple[str, str, str, list[list[str]]]] = []
     groups = 0
     i = 1
     while i < len(segs) - 1:
         gs = segs[i]
         if gs[0] != "GS" or len(gs) < 7:
-            raise X12Error(f"expected GS, found {gs[0]!r}")
+            raise X12Error("a functional group does not start with GS")
         groups += 1
         sets = 0
         i += 1
@@ -131,15 +140,15 @@ def _check_envelopes(segs: list[list[str]]) -> list[tuple[str, str, list[list[st
             if len(st) < 3 or len(se) < 3:
                 raise X12Error("an ST or SE is short")
             if se[1] != str(len(body)) or se[2] != st[2]:
-                raise X12Error(f"SE of transaction {st[2]!r} does not count or name it")
-            out.append((gs[6], st[2], body))
+                raise X12Error("an SE does not count or name its transaction set")
+            out.append((gs[6], st[2], f"{gs[4]}{gs[5][:4]}", body))
             sets += 1
             i += 1
         if i >= len(segs) or segs[i][0] != "GE":
             raise X12Error("a functional group has no GE trailer")
         ge = segs[i]
         if len(ge) < 3 or ge[1] != str(sets) or ge[2] != gs[6]:
-            raise X12Error(f"GE of group {gs[6]!r} does not count or name it")
+            raise X12Error("a GE does not count or name its group")
         i += 1
     iea = segs[-1]
     if len(iea) < 3 or iea[1] != str(groups) or iea[2] != isa[13]:
@@ -220,7 +229,11 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
             if not hl or hl in tree:
                 raise X12Error("an HL id is missing or repeated")
             tree[hl] = (parent, level)
-            if current is not None and owner not in ancestors(hl):
+            # A unit's own segments: a 277 claim's end at the next HL; a 278
+            # event keeps its service levels (SS) and nothing else.
+            if current is not None and not (
+                kind == "278" and level == "SS" and owner in ancestors(hl)
+            ):
                 current = None
             if kind == "278" and level == "EV":
                 current, owner = open_record(), hl
@@ -255,9 +268,11 @@ def _records(body: list[list[str]], component: str, ref: str) -> list[dict[str, 
             continue
         if tag == "TRN":
             if kind == "277":
-                if el[1] != "2":
+                if el[1] != "2" or tree.get(hl, ("", ""))[1] not in ("22", "23"):
                     continue
                 current, owner = open_record(), hl
+            elif hl != owner:
+                continue  # a 278 service level's own trace is not the event's
             # The referenced trace (TRN01 2) is the submitter's; it wins over
             # the payer's own (TRN01 1).
             if current is not None and (current["trace"] is None or el[1] == "2"):
@@ -301,11 +316,15 @@ def parse(text: str, name: str = "file") -> list[dict[str, Any]]:
     component = segs[0][16][:1]
     control = segs[0][13]
     out: list[dict[str, Any]] = []
-    for group, st, body in _check_envelopes(segs):
+    for group, st, sent, body in _check_envelopes(segs):
         if body[0][1] not in TRANSACTIONS:
             continue
-        ref = f"{name}#{control}.{group}.{st}"
-        out.extend(_records(body, component, ref))
+        # A person finds the file by its control numbers; file names can
+        # carry member ids, so they stay out of the reference.
+        ref = f"x12:{control}.{group}.{st}"
+        for record in _records(body, component, ref):
+            record["sent_at"] = sent
+            out.append(record)
     return out
 
 
@@ -344,7 +363,9 @@ class X12Verifier(VerifierAdapterBase):
                 text = path.read_bytes().decode("utf-8")
                 records = parse(text, path.name)
             except (OSError, UnicodeDecodeError, X12Error) as exc:
-                self.read_problem = f"{path.name}: {exc}"
+                digest = hashlib.sha256(str(path.name).encode()).hexdigest()[:12]
+                detail = exc if isinstance(exc, X12Error) else type(exc).__name__
+                self.read_problem = f"X12 file name-sha256 {digest}: {detail}"
                 return None
             out.extend(
                 r

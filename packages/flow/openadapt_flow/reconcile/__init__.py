@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -108,8 +109,11 @@ class Due(BaseModel):
     within_s: int = Field(ge=0)
 
 
-class When(BaseModel):
-    """Check the leg only when parameter ``param`` is one of ``values``."""
+class RequiredWhen(BaseModel):
+    """The leg's record must exist only when parameter ``param`` is one of
+    ``values`` (a write-back is due only once the payer has decided).
+    Otherwise its absence is no break; a record that is there is still
+    compared, so a stale copy is caught either way."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -135,7 +139,20 @@ class Leg(BaseModel):
     provides: dict[str, str] = Field(default_factory=dict)
     join: dict[str, Join] = Field(default_factory=dict)
     due: Optional[Due] = None
-    when: Optional[When] = None
+    required_when: Optional[RequiredWhen] = None
+    #: A store that keeps every status of a unit (a 277 acknowledgement,
+    #: then the 277 that it was paid): records that share ``group_by`` are
+    #: one unit's history, and only those with the greatest ``latest_by``
+    #: are judged. Records tied at the latest stay, so a redelivery still
+    #: counts twice.
+    group_by: Optional[str] = None
+    latest_by: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _history(self) -> "Leg":
+        if (self.group_by is None) != (self.latest_by is None):
+            raise ValueError("group_by and latest_by go together")
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -223,8 +240,10 @@ class ReconcileSpec(BaseModel):
         for name, leg in self.legs.items():
             if "." in name:
                 raise ValueError(f"leg name {name!r} may not contain '.'")
-            if leg.due is not None and name == self.anchor:
-                raise ValueError("the anchor has no due time")
+            if name == self.anchor and (
+                leg.due is not None or leg.required_when is not None
+            ):
+                raise ValueError("the anchor has no due time and is always required")
             for later in names[names.index(name) :]:
                 for dep in _deps(self.legs[later]):
                     if dep.split(".", 1)[0] == later:
@@ -267,7 +286,7 @@ def _deps(leg: Leg) -> set[str]:
     walk(leg.model_dump(mode="json"))
     for name in (
         leg.due.after if leg.due else None,
-        leg.when.param if leg.when else None,
+        leg.required_when.param if leg.required_when else None,
     ):
         if name and "." in name:
             out.add(name)
@@ -314,7 +333,6 @@ class LegResult:
     checked: dict[str, str] = field(default_factory=dict)
     records: tuple[str, ...] = ()
     reasons: list[str] = field(default_factory=list)
-    skipped: bool = False
     scope: Optional[Scope] = None
     contract_digest: str = ""
 
@@ -326,7 +344,6 @@ class LegResult:
             "checked": dict(self.checked),
             "records": list(self.records),
             "reasons": list(self.reasons),
-            "skipped": self.skipped,
             "scope": self.scope.to_dict() if self.scope else None,
             "contract_digest": self.contract_digest,
         }
@@ -434,6 +451,59 @@ def _scope_of(
     )
 
 
+#: A URL's query (it can carry a member id) and a quoted value, in a reason.
+_QUERY = re.compile(r"\?[^\s)]*")
+_QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
+
+
+def _clean(reason: str) -> str:
+    """A store's reason without the values it may quote: closed text only."""
+
+    return _QUOTED.sub("'…'", _QUERY.sub("?…", reason))
+
+
+def _effect_params(effect: Any) -> set[str]:
+    out: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, Mapping):
+            name = value.get("param")
+            if isinstance(name, str) and name:
+                out.add(name)
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                walk(item)
+
+    walk(effect.model_dump(mode="json"))
+    return out
+
+
+def _latest(records: list[dict[str, Any]], leg: Leg) -> list[dict[str, Any]]:
+    """Each ``group_by`` group's records at its greatest ``latest_by``. A
+    group whose ``latest_by`` is missing on any record is kept whole."""
+
+    if leg.group_by is None or leg.latest_by is None:
+        return records
+    groups: dict[Any, list[dict[str, Any]]] = {}
+    out: list[dict[str, Any]] = []
+    for r in records:
+        key = r.get(leg.group_by)
+        if key is None:
+            out.append(r)
+        else:
+            groups.setdefault(str(key), []).append(r)
+    for members in groups.values():
+        marks = [m.get(leg.latest_by) for m in members]
+        if any(m is None for m in marks):
+            out.extend(members)
+            continue
+        top = max(str(m) for m in marks)
+        out.extend(m for m, mark in zip(members, marks) if str(mark) == top)
+    return out
+
+
 def _check_leg(
     name: str,
     leg: Leg,
@@ -448,33 +518,43 @@ def _check_leg(
     except VerifierError as exc:
         raise VerifierError(f"leg {name}: {exc}") from exc
     result.contract_digest = contract.digest
+    effects = list(contract.config.effects)
+    probes = [e.probe or "" for e in effects]
 
-    if leg.when is not None:
-        value = params.get(leg.when.param)
-        if value is None:
-            result.reasons.append(
-                f"checking it depends on {leg.when.param}, which no earlier leg gave"
-            )
-            return result
-        if str(value) not in leg.when.values:
-            result.outcome = Outcome.CONFIRMED
-            result.skipped = True
-            result.reasons.append(f"not due: {leg.when.param} is not one of the values")
-            return result
-
-    missing = [p for p in contract.params if params.get(p) is None]
-    from_legs = [p for p in missing if "." in p]
-    from_caller = [p for p in missing if "." not in p]
+    from_caller = sorted(p for p in contract.params if "." not in p and p not in params)
     if from_caller:
         raise VerifierError(
             f"leg {name} needs parameter(s) the caller didn't give: "
             + ", ".join(from_caller)
         )
-    if from_legs:
+    # A value a compare reads may be null (a denial has no auth number): it
+    # binds to null and must equal a stored null. Anything that selects or
+    # reads records may not be null or unknown.
+    compared = set().union(
+        *(_effect_params(e) for e, p in zip(effects, probes) if p.startswith("field:"))
+    )
+    selecting = (set(contract.params) - compared) | {
+        p
+        for e, pr in zip(effects, probes)
+        if not pr.startswith("field:")
+        for p in _effect_params(e)
+    }
+    blocked = sorted(p for p in selecting if params.get(p) is None)
+    if blocked:
         result.reasons.append(
-            "depends on values no earlier leg gave: " + ", ".join(sorted(from_legs))
+            "depends on values no earlier leg gave: " + ", ".join(blocked)
         )
         return result
+
+    required = True
+    if leg.required_when is not None:
+        value = params.get(leg.required_when.param)
+        required = value is None or str(value) in leg.required_when.values
+        if value is None:
+            result.reasons.append(
+                f"whether a record is due depends on {leg.required_when.param}, "
+                "which no earlier leg gave"
+            )
 
     substrate = contract.config.verifier.kind
     try:
@@ -492,17 +572,21 @@ def _check_leg(
         problem = state.detail.get("read_problem") or (
             "a joined record is not in the read" if state.reachable else "unreadable"
         )
-        result.reasons.append(f"the store could not be read: {problem}")
+        result.reasons.append(_clean(f"the store could not be read: {problem}"))
         result.scope = _scope_of(leg, substrate, tier, read_at, unread=True)
         return result
+    records = _latest(records, leg)
     result.scope = _scope_of(leg, substrate, tier, read_at, unread=False)
 
     empty = EffectState(substrate=substrate, reachable=True, records=[])
-    verdicts: list[tuple[str, EffectVerdict]] = []
-    for effect in contract.config.effects:
+    verdicts: list[tuple[str, Optional[EffectVerdict]]] = []
+    for effect, probe in zip(effects, probes):
+        if any(p not in params for p in _effect_params(effect)):
+            verdicts.append((probe, None))  # a compare whose value is unknown
+            continue
         verdicts.append(
             (
-                effect.probe or "",
+                probe,
                 judge_records(
                     effect.resolve(params), empty, records, substrate=substrate
                 ),
@@ -516,6 +600,10 @@ def _check_leg(
         if start is not None:
             due_at = start + timedelta(seconds=leg.due.within_s)
             overdue = now >= due_at
+        else:
+            result.reasons.append(
+                f"no due time: {leg.due.after} is missing or has no time zone"
+            )
     due_text = _now_iso(due_at) if due_at else None
     lag_kind: BreakKind = (
         "not_written_back" if leg.role == "writeback" else "not_received"
@@ -523,18 +611,22 @@ def _check_leg(
     outcomes: list[Outcome] = []
 
     presence = verdicts[0][1]
+    assert presence is not None  # identity params are selecting, so bound
     matched = presence.matched_records
     result.records = _refs(verifier, matched)
     count = presence.observed_count
     if presence.verdict is Verdict.INDETERMINATE:
         result.checked["presence"] = "not_checked"
-        result.reasons.append(presence.reason)
+        result.reasons.append(_clean(presence.reason))
         outcomes.append(Outcome.UNCERTAIN)
     elif count == 0:
         result.checked["presence"] = "refuted"
         if anchor:
             result.reasons.append("the EHR has no record of this unit of work")
             outcomes.append(Outcome.UNCERTAIN)
+        elif not required:
+            result.checked["presence"] = "held"
+            result.reasons.append("no record, and none is due yet")
         else:
             outcome = Outcome.REFUTED if overdue else Outcome.UNCERTAIN
             why = (
@@ -579,10 +671,11 @@ def _check_leg(
         for key, source in leg.provides.items():
             params[f"{name}.{key}"] = record.get(source)
 
-    one = result.checked.get("presence") == "held"
+    one = result.checked.get("presence") == "held" and count == 1
     differing: list[str] = []
     for probe, verdict in verdicts[1:]:
         if probe == "duplicates":
+            assert verdict is not None
             if verdict.verdict is Verdict.INDETERMINATE:
                 result.checked["duplicates"] = "not_checked"
                 outcomes.append(Outcome.UNCERTAIN)
@@ -590,8 +683,8 @@ def _check_leg(
                 result.checked["duplicates"] = "refuted"
                 if not any(b.kind == "duplicate" and b.leg == name for b in breaks):
                     why = (
-                        f"{verdict.observed_count} submissions share this unit's "
-                        "member, service and date"
+                        f"{verdict.observed_count} submissions share this "
+                        "unit's member, service and date"
                     )
                     breaks.append(
                         Break(
@@ -612,19 +705,25 @@ def _check_leg(
         if not one:
             result.checked[probe] = "not_checked"
             continue
-        if verdict.verdict is Verdict.CONFIRMED:
+        if verdict is None:
+            result.checked[probe] = "not_checked"
+            result.reasons.append(
+                f"{probe.split(':', 1)[1]} wasn't compared: an earlier leg gave no value"
+            )
+            outcomes.append(Outcome.UNCERTAIN)
+        elif verdict.verdict is Verdict.CONFIRMED:
             result.checked[probe] = "held"
         elif verdict.verdict is Verdict.REFUTED:
             result.checked[probe] = "refuted"
             differing.append(probe.split(":", 1)[1])
         else:
             result.checked[probe] = "not_checked"
-            result.reasons.append(verdict.reason)
+            result.reasons.append(_clean(verdict.reason))
             outcomes.append(Outcome.UNCERTAIN)
     if differing:
         kind: BreakKind = "not_written_back" if leg.role == "writeback" else "mismatch"
         # A write-back can lag the decision: inside its due time a stale copy
-        # may still be updated.
+        # may still be updated. Without a due time it can't be told.
         outcome = (
             Outcome.UNCERTAIN
             if leg.role == "writeback" and not overdue
@@ -679,16 +778,9 @@ def reconcile(
             _check_leg(name, leg, bound, now, breaks, anchor=name == spec.anchor)
         )
 
-    checked = [leg for leg in legs if not leg.skipped]
-    outcome = max((leg.outcome for leg in checked), key=_RANK.__getitem__)
-    reasons: list[str] = []
-    if legs[0].outcome is not Outcome.CONFIRMED and outcome is Outcome.CONFIRMED:
-        outcome = Outcome.UNCERTAIN  # never agree without the anchor
-    if len(checked) < 2 and outcome is Outcome.CONFIRMED:
-        outcome = Outcome.UNCERTAIN
-        reasons.append("only one leg was checked: nothing to reconcile against")
-    for leg in legs:
-        reasons.extend(f"{leg.name}: {r}" for r in leg.reasons)
+    # Every leg counts: CONFIRMED only when every check on every leg held.
+    outcome = max((leg.outcome for leg in legs), key=_RANK.__getitem__)
+    reasons = [f"{leg.name}: {r}" for leg in legs for r in leg.reasons]
 
     scopes = [leg.scope for leg in legs if leg.scope is not None]
     paths: list[str] = []
@@ -696,8 +788,7 @@ def reconcile(
     unread: list[str] = []
     for leg in legs:
         if leg.scope is None:
-            if not leg.skipped:
-                unread.append(leg.name)
+            unread.append(leg.name)
             continue
         for p in leg.scope.read_paths:
             if p not in paths:

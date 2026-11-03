@@ -6,7 +6,8 @@ agree on one prior authorization or claim? See ``docs/RECONCILE.md``.
 ``--worklist units.jsonl`` reconciles one unit per line (each line a JSON
 object of parameters). The JSON reply holds closed fields only. Exit 0 when
 every unit agrees, 1 when any shows a REFUTED break, 2 when none does but
-any is UNCERTAIN.
+any is UNCERTAIN, and 3 when the spec, a parameter or a worklist line is
+invalid (nothing is reconciled then).
 """
 
 from __future__ import annotations
@@ -44,12 +45,19 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
 
     try:
         spec = ReconcileSpec.load(args.spec)
+        if args.worklist and args.param:
+            raise VerifierError("give --param or --worklist, not both")
         units: list[dict[str, object]] = []
         if args.worklist:
-            for line in Path(args.worklist).read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    units.append(json.loads(line))
-        if args.param or not units:
+            lines = Path(args.worklist).read_text(encoding="utf-8").splitlines()
+            for number, line in enumerate(lines, start=1):
+                if not line.strip():
+                    continue
+                unit = json.loads(line)
+                if not isinstance(unit, dict):
+                    raise VerifierError(f"worklist line {number} is not a JSON object")
+                units.append(unit)
+        else:
             one: dict[str, object] = {}
             for item in args.param:
                 name, eq, value = item.partition("=")
@@ -63,9 +71,9 @@ def cmd_reconcile(args: argparse.Namespace) -> int:
             else None
         )
         results = [reconcile(spec, unit, now=now) for unit in units]
-    except (VerifierError, ValueError, OSError) as exc:
-        print(f"reconcile: {exc}", file=sys.stderr)
-        return 2
+    except Exception as exc:  # noqa: BLE001 - a misuse is never an outcome
+        print(f"reconcile: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 3
     body = [r.to_dict() for r in results]
     text = json.dumps(body[0] if len(body) == 1 else body, indent=2)
     if args.out:

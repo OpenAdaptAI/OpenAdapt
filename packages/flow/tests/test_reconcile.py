@@ -4,6 +4,7 @@ payer, X12 278 files for the clearinghouse."""
 from __future__ import annotations
 
 import importlib.util
+import json
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -133,21 +134,6 @@ def world(tmp_path: Path):
                             )
                         },
                     },
-                    "clearinghouse": {
-                        "role": "clearinghouse",
-                        "verifier": {
-                            "kind": "x12",
-                            "options": {
-                                "root": str(inbox),
-                                "glob": "*.x12",
-                                "transaction": "278",
-                            },
-                        },
-                        "identity": {"trace": {"param": "submission_id"}},
-                        "compare": same,
-                        "duplicate_key": same,
-                        "due": {"after": anchor["param"], "within_s": 3600},
-                    },
                     "payer": {
                         "role": "payer",
                         "verifier": _sql(p, "SELECT * FROM t"),
@@ -161,6 +147,24 @@ def world(tmp_path: Path):
                         },
                         "due": {"after": anchor["param"], "within_s": 259200},
                     },
+                    "clearinghouse": {
+                        "role": "clearinghouse",
+                        "verifier": {
+                            "kind": "x12",
+                            "options": {
+                                "root": str(inbox),
+                                "glob": "*.x12",
+                                "transaction": "278",
+                            },
+                        },
+                        "identity": {"trace": {"param": "submission_id"}},
+                        "compare": {
+                            **same,
+                            "auth_number": {"param": "payer.auth_number"},
+                        },
+                        "duplicate_key": same,
+                        "due": {"after": anchor["param"], "within_s": 3600},
+                    },
                     "writeback": {
                         "role": "writeback",
                         "verifier": _sql(w, "SELECT * FROM t"),
@@ -169,7 +173,7 @@ def world(tmp_path: Path):
                             "auth_number": {"param": "payer.auth_number"},
                             "outcome": {"param": "payer.outcome"},
                         },
-                        "when": {
+                        "required_when": {
                             "param": "payer.outcome",
                             "values": ["complete", "partial"],
                         },
@@ -258,11 +262,53 @@ def test_missed_write_back(world) -> None:
 def test_pended_decision_needs_no_write_back(world) -> None:
     spec = world(
         payer=[("PA-1", "M1", "97110", "2026-11-20", "queued", None, None)],
+        reviews=[fx.Review("PA-1", "M1", "97110", "2026-11-20", decision="A4")],
         writeback=[],
     )
     result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
     assert result.outcome is Outcome.CONFIRMED, result.reasons
-    assert next(leg for leg in result.legs if leg.name == "writeback").skipped
+
+
+def test_stale_approval_in_the_ehr_while_payer_pends(world) -> None:
+    # Review finding 1: a write-back that isn't due is still compared.
+    spec = world(
+        payer=[("PA-1", "M1", "97110", "2026-11-20", "queued", None, None)],
+        reviews=[fx.Review("PA-1", "M1", "97110", "2026-11-20", decision="A4")],
+        writeback=[("PA-1", "AUTH9", "complete")],
+    )
+    result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
+    assert result.outcome is not Outcome.CONFIRMED
+    assert any(b.kind == "not_written_back" for b in result.breaks)
+
+
+def test_clearinghouse_decision_must_match_the_payer(world) -> None:
+    # Review finding 2: a 278 that says "not certified" while the payer
+    # approved with an auth number.
+    spec = world(
+        reviews=[fx.Review("PA-1", "M1", "97110", "2026-11-20", decision="A3")]
+    )
+    result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
+    b = next(b for b in result.breaks if b.leg == "clearinghouse")
+    assert (b.kind, b.fields, b.outcome) == (
+        "mismatch",
+        ("auth_number",),
+        Outcome.REFUTED,
+    )
+
+
+def test_denial_without_auth_number_reconciles(world) -> None:
+    # Review finding 9: a denial has no auth number; null must equal null.
+    payer = [
+        ("PA-1", "M1", "97110", "2026-11-20", "complete", None, "2026-11-01T10:00:00Z")
+    ]
+    reviews = [fx.Review("PA-1", "M1", "97110", "2026-11-20", decision="A3")]
+    ok = world(payer=payer, reviews=reviews, writeback=[("PA-1", None, "complete")])
+    assert (
+        reconcile(ok, {"submission_id": "PA-1"}, now=NOW).outcome is Outcome.CONFIRMED
+    )
+    bad = world(payer=payer, reviews=reviews, writeback=[("PA-1", "AUTH9", "complete")])
+    result = reconcile(bad, {"submission_id": "PA-1"}, now=NOW)
+    assert ("not_written_back", "writeback", "REFUTED") in _kinds(result)
 
 
 def test_duplicate_under_another_identity(world) -> None:
@@ -371,3 +417,113 @@ def test_x12_reads_the_patient_name_and_birth_date() -> None:
     )
     (record,) = x12.parse(fx.interchange("277", [fx.status_set([status])], control="9"))
     assert record["family"] == "LOPEZ" and record["birth_date"] == "1987-09-12"
+
+
+def _claim_spec(inbox: Path, ehr_db: str) -> ReconcileSpec:
+    same = {k: {"param": f"ehr.{k}"} for k in ("member_id", "service_code")}
+    return ReconcileSpec.model_validate(
+        {
+            "unit": "claim",
+            "anchor": "ehr",
+            "legs": {
+                "ehr": {
+                    "role": "ehr",
+                    "verifier": _sql(ehr_db, "SELECT * FROM t"),
+                    "identity": {"submission_id": {"param": "submission_id"}},
+                    "provides": {
+                        "member_id": "member_id",
+                        "service_code": "service_code",
+                    },
+                },
+                "clearinghouse": {
+                    "role": "clearinghouse",
+                    "verifier": {
+                        "kind": "x12",
+                        "options": {"root": str(inbox), "transaction": "277"},
+                    },
+                    "identity": {"trace": {"param": "submission_id"}},
+                    "compare": same,
+                    "duplicate_key": same,
+                    "group_by": "trace",
+                    "latest_by": "sent_at",
+                },
+            },
+        }
+    )
+
+
+def test_a_claims_status_history_is_not_a_duplicate(tmp_path: Path) -> None:
+    # Review finding 3: an acknowledgement, then a paid status, for one claim.
+    db = _db(
+        tmp_path / "e.db",
+        "CREATE TABLE t (submission_id, member_id, service_code)",
+        [("C1", "M1", "99213")],
+    )
+    inbox = tmp_path / "in"
+    inbox.mkdir()
+    for i, (cat, day) in enumerate((("A1", "20261101"), ("F1", "20261102")), start=1):
+        status = fx.ClaimStatus("C1", "M1", "99213", "2026-10-01", category=cat)
+        (inbox / f"{i}.x12").write_text(
+            fx.interchange("277", [fx.status_set([status])], control=str(i), date=day)
+        )
+    result = reconcile(_claim_spec(inbox, db), {"submission_id": "C1"}, now=NOW)
+    assert result.outcome is Outcome.CONFIRMED, result.reasons
+    # The same status delivered twice still counts twice.
+    (inbox / "3.x12").write_bytes((inbox / "2.x12").read_bytes())
+    result = reconcile(_claim_spec(inbox, db), {"submission_id": "C1"}, now=NOW)
+    assert ("duplicate", "clearinghouse", "REFUTED") in _kinds(result)
+
+
+def test_278_service_trace_does_not_replace_the_event_trace() -> None:
+    # Review finding 4.
+    body = fx.review_set(fx.Review("PA-1", "M1", "97110", "2026-11-20"))
+    at = body.index("SV1*HC:97110**UN*1")
+    body.insert(at, "TRN*2*SVCTRACE77*9SYNTHCLIN")
+    (record,) = x12.parse(fx.interchange("278", [body], control="3"))
+    assert record["trace"] == "PA-1"
+
+
+def test_277_batch_trace_and_dependent_stay_out_of_a_claim() -> None:
+    # Review finding 5: a TRN at the receiver level opens no unit, and a
+    # dependent HL after a subscriber's claim doesn't change it.
+    body = fx.status_set([fx.ClaimStatus("C1", "M1", "99213", "2026-10-01")])
+    at = body.index("HL*3*2*19*1")
+    body.insert(at, "TRN*2*BATCH1")
+    body += ["HL*5*4*23*0", "NM1*QC*1*DEPENDENT*CHILD****MI*DEP99"]
+    records = x12.parse(fx.interchange("277", [body], control="4"))
+    assert [r["trace"] for r in records] == ["C1"]
+    assert records[0]["patient_id"] is None
+
+
+def test_x12_errors_carry_no_values(world) -> None:
+    # Review finding 6: a bad date in a file named after a member.
+    bad = fx.interchange(
+        "277",
+        [
+            fx.status_set(
+                [
+                    fx.ClaimStatus(
+                        "C9", "M9", "99213", "2026-10-01", birth_date="1980-02-03"
+                    )
+                ]
+            )
+        ],
+        control="8",
+    )
+    spec = world(x12_text=bad.replace("19800203", "19801302"))
+    (Path(spec.legs["clearinghouse"].verifier.options["root"]) / "extra.x12").rename(
+        Path(spec.legs["clearinghouse"].verifier.options["root"]) / "MBR-M9-SMITH.x12"
+    )
+    text = json.dumps(reconcile(spec, {"submission_id": "PA-1"}, now=NOW).to_dict())
+    for value in ("M9", "SMITH", "1980", "19801302"):
+        assert value not in text
+
+
+def test_isa_must_be_exactly_106_characters() -> None:
+    text = fx.interchange(
+        "278",
+        [fx.review_set(fx.Review("PA-1", "M1", "97110", "2026-11-20"))],
+        control="5",
+    )
+    with pytest.raises(x12.X12Error):
+        x12.parse(text.replace("*:~GS", "*::~GS", 1))

@@ -50,4 +50,7 @@ legs:
       service_code: {param: ehr.service_code}
       service_date: {param: ehr.service_date}
     duplicate_key: *same
+    # An acknowledgement and a later status share a trace: judge the latest.
+    group_by: trace
+    latest_by: sent_at
     due: {after: ehr.submitted_at, within_s: 259200}
