@@ -794,8 +794,11 @@ def verify_template_identity(
         run_value_tokens: list[TokenTemplate] = []
         for name in in_band:
             value = params.get(name, param_examples.get(name, ""))
-            for tok in _id.tokenize(value):
-                run_value_tokens.append(_token_template(salt, tok))
+            raw_tokens = [tok for tok in value.split() if _id.squash(tok)]
+            for raw_tok, tok in zip(raw_tokens, _id.tokenize(value)):
+                run_value_tokens.append(
+                    _token_template(salt, tok, _id.identity_bearing(raw_tok, tok))
+                )
         sub_tmpl = IdentityTemplate(
             salt=tmpl.salt,
             band_len=tmpl.band_len,

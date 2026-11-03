@@ -999,21 +999,22 @@ def identity_bearing(raw_token: str, squashed_token: str) -> bool:
 def identity_coverage(
     lengths: list[int], matched: list[bool], bearing: list[bool]
 ) -> tuple[float, bool]:
-    """Coverage over identity-bearing tokens, and whether evidence is short.
+    """Coverage the band must meet, and whether identity evidence is short.
 
+    The lower of whole-band coverage and coverage over identity-bearing
+    tokens. Label text then cannot pad coverage (the bearing share must pass
+    on its own), and leaving a token out of the bearing share can never let
+    a band pass that whole-band coverage fails: a real name that reads like
+    a UI word ("Ali" / "all") or is entered lowercase still counts there.
     Short when no recorded token is identity-bearing: nothing identifies
-    the record, so the OCR tier abstains. Coverage then falls back to every
-    token, so an affirmative mismatch still reads as one.
+    the record, so the OCR tier abstains.
     """
+    whole = sum(n for n, m in zip(lengths, matched) if m) / max(sum(lengths), 1)
     total = sum(n for n, b in zip(lengths, bearing) if b)
     if not total:
-        return (
-            sum(n for n, m in zip(lengths, matched) if m) / max(sum(lengths), 1),
-            True,
-        )
-    return sum(
-        n for n, m, b in zip(lengths, matched, bearing) if m and b
-    ) / total, False
+        return whole, True
+    share = sum(n for n, m, b in zip(lengths, matched, bearing) if m and b) / total
+    return min(whole, share), False
 
 
 def _is_generational_suffix(token: str) -> bool:

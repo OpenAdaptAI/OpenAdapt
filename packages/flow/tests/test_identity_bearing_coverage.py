@@ -121,3 +121,38 @@ def test_old_templates_without_the_flag_count_every_token() -> None:
         legacy, f"Smith John 15 47 {LABEL}", params={}, param_examples={}
     )
     assert check.status == "verified"
+
+
+@pytest.mark.parametrize(
+    "recorded,observed",
+    [
+        # Review blocker 1: a real name that reads like a UI word ("Ali" folds
+        # to "all") must keep counting.
+        ("Ali Price Age 47", "Al Price Age 47"),
+        ("Ali Price Age: 47", "Bo Price Age: 47"),
+        ("Price, Ali Close", "Price, Al Close"),
+        ("Ali Price Age 47", "Price Age 47"),
+        # Review blocker 2: lowercase-entered names must keep counting.
+        ("Smith, lee Age 47", "Smith, jo Age 47"),
+        ("smith ann Age 47", "smith al Age 47"),
+        ("Smith ann Age 47", "Smith al Age 47"),
+    ],
+)
+def test_leaving_a_token_out_of_the_bearing_share_never_lets_a_band_pass(
+    recorded, observed
+) -> None:
+    plain, hashed = _statuses(recorded, observed)
+    assert plain != "verified"
+    assert hashed != "verified"
+
+
+def test_param_values_are_weighed_with_the_same_bearing_rule() -> None:
+    # Review should-fix: the run's value tokens must not count as bearing on
+    # the template path when the plaintext path does not count them.
+    recorded = "Last: smith First: john"
+    kwargs = {"params": {"last": "jones"}, "param_examples": {"last": "smith"}}
+    plain = I.verify_target_identity(recorded, "Last: jones First: john", **kwargs)
+    tmpl = build_identity_template(recorded, param_examples=kwargs["param_examples"])
+    assert tmpl is not None
+    hashed = verify_template_identity(tmpl, "Last: jones First: john", **kwargs)
+    assert plain.status == hashed.status
