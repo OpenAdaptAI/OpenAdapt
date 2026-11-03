@@ -1722,7 +1722,8 @@ def _window_operation(
     process that its owner chain does not tie to the captured window, meets
     the region anywhere above the captured window; and an owned window meets
     the region (its visible frame, not the resize border). The topmost such
-    window is the answer. Whether the covered part hides anything that
+    window is the answer, with its visible frame as ``region``
+    ``[x, y, w, h]``. A 1x1 region asks about one point. Whether the covered part hides anything that
     matters is for the caller, which still sees the uncovered part.
     A captured window that is gone or changed process, a cloak state that
     cannot be read for one of the app's windows, and anything else answer
@@ -1812,6 +1813,9 @@ def _window_operation(
                 "hwnd": candidate,
                 "owner_hwnd": owner,
                 "pid": pid,
+                # Its visible frame (DWM bounds, no shadow), in the region's
+                # pixels, so the caller can check what it covers.
+                "region": [rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]],
             }
     if not reached:
         return {"status": "ok", "window": None}  # nothing proves the order

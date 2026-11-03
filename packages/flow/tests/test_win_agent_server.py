@@ -1330,7 +1330,39 @@ def test_an_owned_dialog_over_the_region_is_reported(monkeypatch) -> None:
         "hwnd": 0x200,
         "owner_hwnd": _FakeDesktop.PINNED,
         "pid": 10,
+        "region": [200, 200, 300, 200],
     }
+
+
+def test_the_reported_region_is_the_owned_windows_visible_frame(monkeypatch) -> None:
+    # The whole frame, not its overlap with the query, so the caller can
+    # check that it spans the band from the cut point to the right edge.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop)["region"] == [295, 265, 105, 35]
+
+
+def test_a_one_pixel_region_reports_the_topmost_owned_window_there(
+    monkeypatch,
+) -> None:
+    # agnostic-repair asks at the dismiss-click point and requires the same
+    # hwnd as the cover.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(200, 200, 500, 400))
+    desktop.add(0x300, owner=_FakeDesktop.PINNED, rect=(450, 350, 600, 450))
+    assert _owned_over(monkeypatch, desktop, region=(300, 300, 1, 1))["hwnd"] == 0x200
+    assert _owned_over(monkeypatch, desktop, region=(460, 360, 1, 1))["hwnd"] == 0x300
+    # Its right and bottom edges are exclusive: (500, 300) is off 0x200.
+    assert _owned_over(monkeypatch, desktop, region=(500, 300, 1, 1)) is None
+
+
+def test_a_one_pixel_region_under_a_foreign_window_is_none(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(200, 200, 500, 400))
+    desktop.add(0x900, pid=99, rect=(280, 280, 320, 320))
+    assert _owned_over(monkeypatch, desktop, region=(300, 300, 1, 1)) is None
+    # A foreign window elsewhere does not decide a point it does not reach.
+    assert _owned_over(monkeypatch, desktop, region=(400, 350, 1, 1))["hwnd"] == 0x200
 
 
 def test_a_topmost_owned_popup_does_not_hide_a_foreign_window_over_the_target(
