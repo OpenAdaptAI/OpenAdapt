@@ -1,11 +1,16 @@
-name: Windows replay
+name: Desktop replay
 
-# Records, compiles and replays the in-tree WinForms Patient Notes app through
-# WindowsBackend and the real win_agent on a GitHub-hosted Windows runner, and
-# judges every replay from the app's SQLite record
-# (packages/flow/tests/e2e/test_windows_hosted_replay.py). It runs on pull
-# requests that touch the Windows path and on the nightly run. It is not a
-# required check.
+# Two live desktop replays on GitHub-hosted runners, on pull requests that
+# touch the desktop path and on the nightly run. Neither is a required check.
+#
+# - replay: records, compiles and replays the in-tree WinForms Patient Notes
+#   app through WindowsBackend and the real win_agent on Windows, and judges
+#   every replay from the app's SQLite record
+#   (packages/flow/tests/e2e/test_windows_hosted_replay.py).
+# - freerdp: drives a real RDP session end to end on Linux. xfreerdp3 connects
+#   over loopback to freerdp-shadow-cli3 serving an Xvfb display, and
+#   FreeRDPBackend looks up accounts in a synthetic ledger app through it
+#   (the live test in packages/flow/tests/test_xfreerdp.py).
 
 on:
   pull_request:
@@ -18,7 +23,9 @@ on:
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
-      - .github/workflows/windows-replay.yml
+      - packages/flow/tests/test_xfreerdp.py
+      - packages/flow/benchmark/rdp_pool/**
+      - .github/workflows/desktop-replay.yml
   workflow_call:
   workflow_dispatch:
 
@@ -26,7 +33,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-replay-${{ github.event.pull_request.number || github.run_id }}
+  group: desktop-replay-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -89,3 +96,50 @@ jobs:
             ${{ runner.temp }}/wr/**/report.json
           if-no-files-found: ignore
           retention-days: 14
+
+  freerdp:
+    name: freerdp replay (real RDP session over loopback)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+          cache-suffix: freerdp-replay
+      - name: Install the RDP client, shadow server and virtual display
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            xvfb freerdp3-x11 freerdp3-shadow-x11 xdotool imagemagick python3-tk
+          for t in Xvfb xfreerdp3 freerdp-shadow-cli3 xdotool; do command -v "$t"; done
+      - name: Install from the lock
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev]'
+          --editable packages/types --editable packages/flow
+      - name: Live round trip through FreeRDPBackend
+        env:
+          OAFLOW_XFREERDP_E2E: "1"
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider tests/test_xfreerdp.py \
+            -k test_live_round_trip_through_backend --junitxml=runs/freerdp-junit.xml
+      - name: The round trip ran (no skips)
+        run: |
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          cases = list(ET.parse("runs/freerdp-junit.xml").getroot().iter("testcase"))
+          skipped = [c for c in cases if c.find("skipped") is not None]
+          if len(cases) != 1 or skipped:
+              sys.exit(f"freerdp round trip did not run: {len(cases)} cases, {len(skipped)} skipped")
+          PY
