@@ -1249,6 +1249,7 @@ class _FakeDesktop:
         self.dpi_ok = True
         self.foreground_window = self.PINNED
         self.roots: dict[int, int] = {}  # child hwnd -> top-level
+        self.paint_border: dict[int, int] = {}  # self-drawn frame, in px
 
     def add(
         self,
@@ -1278,6 +1279,11 @@ class _FakeDesktop:
 
     def rect(self, hwnd):
         return self.windows[hwnd][2]
+
+    def outer_rect(self, hwnd):
+        x0, y0, x1, y1 = self.windows[hwnd][2]
+        grow = self.paint_border.get(hwnd, 0)
+        return (x0 - grow, y0 - grow, x1 + grow, y1 + grow)
 
     def is_visible(self, hwnd):
         return self.windows[hwnd][3]
@@ -1338,10 +1344,37 @@ def test_a_topmost_owned_popup_does_not_hide_a_foreign_window_over_the_target(
     assert _owned_over(monkeypatch, desktop) is None
 
 
-def test_an_owned_window_that_only_clips_the_region_is_none(monkeypatch) -> None:
-    # A shadow or glow window of the app's own grazing one corner.
+def test_an_owned_dialog_over_part_of_the_region_is_reported(monkeypatch) -> None:
+    # Live lab finding: the "Session notice" dialog covers the right part of
+    # the identity band, not its center; the caller still sees the rest.
     desktop = _FakeDesktop()
     desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+
+
+def test_a_foreign_self_drawn_frame_reaching_the_band_is_none(monkeypatch) -> None:
+    # Review should-fix: an Electron-style window paints into the ~7 px border
+    # DWM leaves out of its visible frame.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
+    desktop.add(0x900, pid=99, rect=(200, 240, 245, 300))  # frame ends 5 px short
+    desktop.paint_border[0x900] = 7
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_a_foreign_window_beside_an_owned_dialog_over_the_band_is_none(
+    monkeypatch,
+) -> None:
+    # Review attack (a): the app's dialog covers one end of the band and
+    # another process's window the other end.
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
+    desktop.add(0x900, pid=99, rect=(200, 240, 262, 300))
+    assert _owned_over(monkeypatch, desktop) is None
+    # Same with the foreign window below the dialog in z-order.
+    desktop = _FakeDesktop()
+    desktop.add(0x900, pid=99, rect=(200, 240, 262, 300))
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(280, 240, 400, 300))
     assert _owned_over(monkeypatch, desktop) is None
 
 
@@ -1389,13 +1422,11 @@ def test_a_dialog_owned_through_a_chain_counts(monkeypatch) -> None:
     assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
 
 
-def test_an_owned_window_over_the_center_wins_over_one_only_clipping(
-    monkeypatch,
-) -> None:
+def test_the_topmost_owned_window_over_the_region_is_reported(monkeypatch) -> None:
     desktop = _FakeDesktop()
     desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
     desktop.add(0x300, owner=_FakeDesktop.PINNED, rect=(295, 265, 400, 300))
-    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
 
 
 @pytest.mark.parametrize(

@@ -861,8 +861,9 @@ class WindowsBackend:
         :meth:`record_verified_window`). Returns ``{"title", "hwnd",
         "owner_hwnd", "pid"}`` only when the first visible window above the
         recorded one, of the same process and with an owner chain reaching it
-        (an owned dialog, a message box), covers the region's center, and no
-        window of another process, or unowned, meets the region above it. Returns None with no record for that step, when the
+        (an owned dialog, a message box), meets the region, and no window of
+        another process, or unowned, meets the region above it. The topmost
+        owned window that meets it is returned. Returns None with no record for that step, when the
         recorded window is gone or now another process's, for any other
         process's window or an unowned one, and on any failure. Never raises.
         """

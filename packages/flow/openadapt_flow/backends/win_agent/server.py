@@ -1512,6 +1512,24 @@ class _User32:
             return None
         return (int(r.left), int(r.top), int(r.right), int(r.bottom))
 
+    def outer_rect(self, hwnd: int) -> Optional[tuple[int, int, int, int]]:
+        """Everything the window may paint: GetWindowRect joined with the
+        visible frame (a self-drawn frame can paint into the border DWM
+        leaves out)."""
+        r = self._wintypes.RECT()
+        frame = self.rect(hwnd)
+        if not self._dll.GetWindowRect(hwnd, self._ctypes.byref(r)):
+            return frame
+        outer = (int(r.left), int(r.top), int(r.right), int(r.bottom))
+        if frame is None:
+            return outer
+        return (
+            min(outer[0], frame[0]),
+            min(outer[1], frame[1]),
+            max(outer[2], frame[2]),
+            max(outer[3], frame[3]),
+        )
+
     def per_monitor_dpi(self) -> bool:
         """Put this thread in per-monitor-v2 DPI awareness, so window rects
         and points are physical pixels like the screenshot's."""
@@ -1702,8 +1720,10 @@ def _window_operation(
     to the captured window and answers with a window only when all of this
     holds: no visible window of another process, and none of the captured
     process that its owner chain does not tie to the captured window, meets
-    the region anywhere above the captured window; and an owned window
-    covers the region's center (its visible frame, not the resize border).
+    the region anywhere above the captured window; and an owned window meets
+    the region (its visible frame, not the resize border). The topmost such
+    window is the answer. Whether the covered part hides anything that
+    matters is for the caller, which still sees the uncovered part.
     A captured window that is gone or changed process, a cloak state that
     cannot be read for one of the app's windows, and anything else answer
     ``None``.
@@ -1755,7 +1775,6 @@ def _window_operation(
     if not user32.is_window(hwnd) or user32.pid_of(hwnd) != pid:
         return {"status": "ok", "window": None}
     box = (region[0], region[1], region[2], region[3])
-    center = (region[0] + region[2] // 2, region[1] + region[3] // 2)
     owned: Optional[dict[str, Any]] = None
     reached = False
     for candidate in user32.top_level_windows():
@@ -1770,7 +1789,9 @@ def _window_operation(
             return {"status": "ok", "window": None}  # cannot tell if it shows
         if cloaked:
             continue
-        rect = user32.rect(candidate)
+        # Another process's window is measured by everything it may paint;
+        # the app's own by its visible frame.
+        rect = user32.rect(candidate) if same_process else user32.outer_rect(candidate)
         if rect is None or rect[2] <= rect[0] or rect[3] <= rect[1]:
             continue
         if not _intersects(rect, box):
@@ -1785,10 +1806,7 @@ def _window_operation(
             link = user32.owner(link)
         if link != hwnd:
             return {"status": "ok", "window": None}  # not tied to the capture
-        covers_center = (
-            rect[0] <= center[0] < rect[2] and rect[1] <= center[1] < rect[3]
-        )
-        if owned is None and covers_center:
+        if owned is None:
             owned = {
                 "title": user32.title(candidate)[:512] or None,
                 "hwnd": candidate,
