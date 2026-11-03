@@ -225,8 +225,11 @@ is published. OpenAdapt isn't affiliated with the OpenEMR project.
 ## Every backend
 
 Record, compile and run take every surface; the evidence differs by surface
-([BACKEND_PARITY.md](packages/flow/docs/BACKEND_PARITY.md)), and repair and
-rollback run on web apps. Where
+([BACKEND_PARITY.md](packages/flow/docs/BACKEND_PARITY.md)). Self-repair runs
+on web apps and, outside a browser, on native and pixel-only apps
+([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709), [#1717](https://github.com/OpenAdaptAI/OpenAdapt/pull/1717)); it is qualified end to end on
+macOS AX ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)) and not yet on Windows UI Automation or RDP.
+Teaching the fix for a halted run and rollback run on web apps only. Where
 the app exposes its structure, OpenAdapt uses it; on remote desktops it works
 from pixels.
 
@@ -280,7 +283,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Confirms the right record before every write and reads the saved record back** from the system of record, never just the screen.
 - **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
-- **Repairs itself when a web app changes**, probing a fix up to the save and asking a person to approve it.
+- **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it (qualified end to end on web apps and macOS; not yet on Windows or RDP).
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
 - **Runs locally**: no model calls on healthy runs, patient data redacted, signed receipts.
 

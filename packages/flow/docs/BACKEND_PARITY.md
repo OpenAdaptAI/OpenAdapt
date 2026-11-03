@@ -46,7 +46,7 @@ A command picks the surface from, in order: the bundle's recorded surface, the
 | [Step checks and element identity](#step-checks-and-element-identity) | QUALIFIED | TESTED (real OS) | TESTED (real OS) | TESTED | QUALIFIED (stops only) | TESTED |
 | [Stop, hold and ask a person](#stop-hold-and-ask-a-person) | QUALIFIED | TESTED | TESTED (real OS, refusals) | TESTED | TESTED | TESTED |
 | [Approvals](#approvals) | TESTED (real app) | TESTED | CODE ONLY | CODE ONLY | CODE ONLY | CODE ONLY |
-| [Self-repair and teach the fix](#self-repair-and-teach-the-fix) | TESTED (real browser) | MISSING (live repair); CODE ONLY (offline teach) | MISSING (live repair); CODE ONLY (offline teach) | MISSING (live repair); CODE ONLY (offline teach) | MISSING (live repair); CODE ONLY (offline teach) | MISSING (live repair); CODE ONLY (offline teach) |
+| [Self-repair and teach the fix](#self-repair-and-teach-the-fix) | TESTED (real browser) | CODE ONLY (self-repair); MISSING (teach the fix) | TESTED (real OS, self-repair); MISSING (teach the fix) | MISSING (no element identity) | TESTED (self-repair); MISSING (teach the fix) | TESTED (self-repair); MISSING (teach the fix) |
 | [Rollback](#rollback-and-undo) | TESTED (real browser) | MISSING | MISSING | MISSING | MISSING | MISSING |
 | [Undo (`undo propose`, `undo run`)](#rollback-and-undo) | TESTED (real browser) | CODE ONLY | CODE ONLY | CODE ONLY | CODE ONLY | CODE ONLY |
 | [Write verifier](#write-verifier) | QUALIFIED | TESTED | TESTED | CODE ONLY | QUALIFIED | TESTED |
@@ -234,11 +234,16 @@ change while waiting: it reads the DOM on the web and OCR words elsewhere
 
 ### Self-repair and teach the fix
 
-Self-repair is refused off the web: "only browser runs can be repaired for
-now" (`cli_self_repair.py:206`). The repair code keys a fix on DOM identity
-(`repair/self_repair.py`), and the MCP `teach_repair` tool works on the halted
-run's own page, which only a browser run can hold open (`agent/repair.py`,
-`--hold-on-halt`). Offline `teach` and `teach-branch` read the bundle and a new
+Self-repair runs outside a browser ([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709), [#1717](https://github.com/OpenAdaptAI/OpenAdapt/pull/1717)). On a
+backend with an accessibility tree, a new click is admitted by its element
+identity (`element_identity_at`, on Windows and macOS) and a record check; on
+pixels only, by the record check alone; either way a person approves. Outside
+a browser, `run --self-repair` and repair by default need `repair.session` in
+`deploy.yaml` to start the app for each probe, and refuse without it. Linux
+has accessibility reads but no element identity yet, so it is refused rather
+than treated as pixels. Teaching the fix is still browser-only: the MCP
+`teach_repair` tool works on the halted run's own page, which only a browser
+run can hold open (`agent/repair.py`, `--hold-on-halt`). Offline `teach` and `teach-branch` read the bundle and a new
 recording, so they run anywhere, and so does the governed `repair` lifecycle
 (register, campaign, approve, stage, canary) on evidence frames and run
 reports. No test uses a non-web bundle for either.
@@ -247,8 +252,15 @@ reports. No test uses a non-web bundle for either.
   resumed and verified. On openIMIS 0 of 2 probes passed, and proof-15's
   OpenEMR stop was refused as `not_repairable`. No repair has succeeded on a
   third-party app.
-- **Windows, macOS, Linux, RDP and Citrix: live repair MISSING, offline teach
-  CODE ONLY.** `serve --teach` over MCP
+- **macOS, TESTED (real OS).** Qualified end to end on a native Cocoa test
+  app with SQLite through live AX ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)): stop, admitted click,
+  probe, replay and fault campaigns, one approval, resumed run `VERIFIED`
+  (`benchmark/repair_every_backend`). Not on a third-party app.
+- **Windows, CODE ONLY; RDP and Citrix, TESTED with fakes.** Not yet qualified
+  end to end on Windows UI Automation or a real RDP session
+  (`tests/test_repair_element_identity.py`).
+- **Teach the fix on Windows, macOS, Linux, RDP and Citrix: MISSING; offline
+  teach CODE ONLY.** `serve --teach` over MCP
   on RDP and Citrix records and passes its record check, but the canary is
   refused ("UNARMED"), so nothing is admitted
   (`tests/test_mcp_teach_surfaces.py`).
@@ -337,7 +349,8 @@ The main refusals on one surface or more. Each stops before anything runs.
 
 | Command or feature | Surfaces refused | Message (file) |
 | --- | --- | --- |
-| `run --self-repair`, auto-repair | all but web | "only browser runs can be repaired for now" (`cli_self_repair.py`) |
+| `run --self-repair`, auto-repair | desktop and remote without `repair.session`; Linux | refused with that reason (`cli_self_repair.py`); Linux has no element identity |
+| `run --hold-on-halt`, MCP `teach_repair` | all but web | browser-only (`__main__.py`, `agent/repair.py`) |
 | rollback | all but web | "rollback is on, and it doesn't run on a desktop or remote-display backend yet" (`__main__.py`) |
 | `serve-execute` | all but web | "the reference Execute worker drives a browser only" (`execute/dispatch.py`) |
 | `compile-agent` | all but web | "compile-agent runs web apps only so far" (`compile_agent/pipeline.py`) |
@@ -359,7 +372,7 @@ Citrix. Each has an issue labelled
 
 | # | Gap | Issue |
 | --- | --- | --- |
-| 1 | Live self-repair and teaching a fix over MCP refuse every non-web run | [#1694](https://github.com/OpenAdaptAI/OpenAdapt/issues/1694) |
+| 1 | Teaching a fix over MCP refuses every non-web run; non-web self-repair is qualified on macOS only | [#1694](https://github.com/OpenAdaptAI/OpenAdapt/issues/1694) |
 | 2 | No third-party Windows desktop app has been run; CI never replays through `WindowsBackend` | [#1695](https://github.com/OpenAdaptAI/OpenAdapt/issues/1695) |
 | 3 | No real Citrix session has been run, from outside or inside the session | [#1696](https://github.com/OpenAdaptAI/OpenAdapt/issues/1696) |
 | 4 | The governed run path (person recording, run gate, profiles, approvals, hold and resume) has never run on a real RDP session | [#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697) |
