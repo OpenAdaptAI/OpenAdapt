@@ -452,6 +452,8 @@
     "benchmark/rdp_multiapp/policy.yaml",
     "benchmark/rdp_pool/results.json",
     "benchmark/reliability/summary.json",
+    "benchmark/repair_every_backend/results/macos-ax-20261102.json",
+    "benchmark/repair_every_backend/results/macos-pixel-20261102.json",
     "benchmark/results.json",
     "benchmark/rollback/results/mockmed-qualify.json",
     "benchmark/rollback/results/mockmed.json",

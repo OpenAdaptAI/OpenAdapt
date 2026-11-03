@@ -910,6 +910,100 @@ def test_consequential_remote_hover_target_movement_halts_before_input(bundle, r
     assert "target moved before actuation" in report.results[0].error
 
 
+def _remote_hover_run(bundle, run_dir, *regions):
+    backend = RemoteLeaseBackend(
+        initial_frame=make_png(color=(240, 240, 240)),
+        fresh_frame=make_png(color=(239, 240, 240)),
+    )
+    vision = FakeVision()
+    # The resolver places the click at the match box plus the recorded offset
+    # (10, 5), so each box below is one resolved point.
+    vision.template_results = [
+        Match(point=(0, 0), region=region, confidence=0.95) for region in regions
+    ]
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="reversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    return backend, report
+
+
+def test_remote_hover_codec_jitter_reprepares_and_clicks_the_exact_point(
+    bundle, run_dir
+):
+    """A one-pixel re-match inside the same box gets one exact second look.
+
+    Measured on real AVC444 frames (benchmark/rdp_avc_real): Save Note matched
+    at (560, 489) before the hover and (561, 490) after it, in 10 of 10 runs.
+    """
+    backend, report = _remote_hover_run(
+        bundle,
+        run_dir,
+        (100, 100, 50, 20),
+        (101, 101, 50, 20),
+        (101, 101, 50, 20),
+    )
+
+    assert report.success is True, report.results[0].error
+    assert backend.prepared_pointer_points == [(110, 105), (111, 106)]
+    assert backend.actions == [("click", 111, 106, False)]
+
+
+def test_remote_hover_jitter_that_keeps_moving_halts(bundle, run_dir):
+    backend, report = _remote_hover_run(
+        bundle,
+        run_dir,
+        (100, 100, 50, 20),
+        (101, 101, 50, 20),
+        (100, 100, 50, 20),
+    )
+
+    assert report.success is False
+    assert backend.prepared_pointer_points == [(110, 105), (111, 106)]
+    assert backend.actions == []
+    assert report.results[0].safety_halt is True
+    assert "target moved before actuation" in report.results[0].error
+
+
+@pytest.mark.parametrize(
+    "fresh_region",
+    [
+        (103, 100, 50, 20),  # three pixels right: beyond codec jitter
+        (100, 103, 50, 20),  # three pixels down
+        (98, 97, 50, 20),  # three pixels up
+    ],
+)
+def test_remote_hover_movement_beyond_jitter_still_halts(bundle, run_dir, fresh_region):
+    backend, report = _remote_hover_run(
+        bundle, run_dir, (100, 100, 50, 20), fresh_region
+    )
+
+    assert report.success is False
+    assert backend.prepared_pointer_points == [(110, 105)]
+    assert backend.actions == []
+    assert report.results[0].safety_halt is True
+    assert "target moved before actuation" in report.results[0].error
+
+
+@pytest.mark.parametrize(
+    ("fresh", "prepared", "region", "same"),
+    [
+        ((111, 106), (110, 105), (101, 101, 50, 20), True),
+        ((112, 103), (110, 105), (100, 100, 50, 20), True),
+        ((113, 105), (110, 105), (100, 100, 50, 20), False),
+        ((101, 101), (100, 100), (101, 101, 50, 20), False),  # prepared outside
+        ((150, 105), (149, 105), (100, 100, 50, 20), False),  # fresh on the edge
+        ((111, 106), (110, 105), None, False),
+        ((111, 106), (110, 105), (101, 101, 0, 20), False),
+    ],
+)
+def test_within_hover_jitter(fresh, prepared, region, same):
+    from openadapt_flow.runtime.replayer import _within_hover_jitter
+
+    assert _within_hover_jitter(fresh, prepared, region) is same
+
+
 def test_consequential_remote_anchored_type_reacquires_after_focus_click(
     bundle, run_dir
 ):

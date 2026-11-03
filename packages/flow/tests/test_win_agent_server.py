@@ -788,3 +788,184 @@ def test_windows_backend_talks_to_authed_agent(authed_agent: RunningAgent) -> No
     assert unauth.probe() is False
     with pytest.raises(RuntimeError):
         unauth.click(1, 1)
+
+
+def test_element_identity_names_the_element_and_its_window_path(monkeypatch) -> None:
+    button = _FakeControl(
+        "ButtonControl", automation_id="saveButton", name="Save  Note"
+    )
+    group = _FakeControl("PaneControl", name="Note editor")
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(group))
+    group.children = [button]
+    button.parent = group
+    module = sys.modules["uiautomation"]
+    module.ControlFromPoint = lambda _x, _y: button
+
+    result = _perform_uia("element-identity-at", {"x": 550, "y": 460})
+
+    assert result == {
+        "status": "ok",
+        "identity": {
+            "source": "uia",
+            "role": "button",
+            "name": "Save Note",
+            "automation_id": "saveButton",
+            "ancestry": [[None, "Note editor"], [None, "Patient Notes"]],
+            "window": "Patient Notes",
+            "process": None,
+        },
+    }
+
+
+def test_element_identity_climbs_to_the_actionable_control(monkeypatch) -> None:
+    button = _FakeControl("ButtonControl", name="Save Note")
+    label = _FakeControl("TextControl", name="Save Note", parent=button)
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    sys.modules["uiautomation"].ControlFromPoint = lambda _x, _y: label
+
+    identity = _perform_uia("element-identity-at", {"x": 1, "y": 1})["identity"]
+
+    assert identity["role"] == "button"
+    assert identity["automation_id"] is None
+    assert identity["ancestry"] == [[None, "Patient Notes"]]
+
+
+def test_element_identity_without_a_window_is_none(monkeypatch) -> None:
+    orphan = _FakeControl("ButtonControl", name="Save Note")
+    orphan.parent = _FakeControl("PaneControl")
+    monkeypatch.setitem(
+        sys.modules,
+        "uiautomation",
+        types.SimpleNamespace(
+            ControlFromPoint=lambda _x, _y: orphan,
+            UIAutomationInitializerInThread=_FakeUiaContext,
+        ),
+    )
+    assert _perform_uia("element-identity-at", {"x": 1, "y": 1}) == {
+        "status": "ok",
+        "identity": None,
+    }
+
+
+def test_element_identity_with_a_cyclic_parent_chain_is_none(monkeypatch) -> None:
+    button = _FakeControl("ButtonControl", name="Save Note")
+    window = _FakeControl("WindowControl", name="Patient Notes", parent=None)
+    window.parent = window  # a provider that never reaches the root
+    button.parent = window
+    monkeypatch.setitem(
+        sys.modules,
+        "uiautomation",
+        types.SimpleNamespace(
+            ControlFromPoint=lambda _x, _y: button,
+            UIAutomationInitializerInThread=_FakeUiaContext,
+        ),
+    )
+    assert _perform_uia("element-identity-at", {"x": 1, "y": 1})["identity"] is None
+
+
+def test_element_identity_with_nothing_under_the_point_is_none(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module())
+    assert _perform_uia("element-identity-at", {"x": 1, "y": 1}) == {
+        "status": "ok",
+        "identity": None,
+    }
+
+
+def test_element_identity_refuses_extra_fields(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module())
+    with pytest.raises(AgentRequestError) as caught:
+        _perform_uia("element-identity-at", {"x": 1, "y": 1, "depth": 3})
+    assert caught.value.status == 400
+
+
+def _identity_with_leaf(monkeypatch, leaf: _FakeControl, *ancestors: _FakeControl):
+    """Run element-identity-at for ``leaf`` under ancestors (parent-first)."""
+    chain = [leaf, *ancestors]
+    for child, parent in zip(chain, chain[1:]):
+        child.parent = parent
+    monkeypatch.setitem(
+        sys.modules,
+        "uiautomation",
+        types.SimpleNamespace(
+            ControlFromPoint=lambda _x, _y: leaf,
+            UIAutomationInitializerInThread=_FakeUiaContext,
+        ),
+    )
+    return _perform_uia("element-identity-at", {"x": 1, "y": 1})["identity"]
+
+
+def test_element_identity_of_an_unnamed_custom_drawn_cell_is_none(monkeypatch) -> None:
+    # Every cell of an owner-drawn grid would otherwise read the same.
+    cell = _FakeControl("CustomControl")
+    window = _FakeControl("WindowControl", name="Schedule")
+    assert (
+        _identity_with_leaf(monkeypatch, cell, window, _FakeControl("PaneControl"))
+        is None
+    )
+
+
+def test_element_identity_names_the_outermost_window_of_nested_windows(
+    monkeypatch,
+) -> None:
+    button = _FakeControl("ButtonControl", name="OK")
+    dialog = _FakeControl("WindowControl", name="Confirm delete")
+    owner = _FakeControl("WindowControl", name="Patient chart")
+    identity = _identity_with_leaf(
+        monkeypatch,
+        button,
+        dialog,
+        owner,
+        _FakeControl("PaneControl", name="Desktop 1"),
+    )
+    assert identity["window"] == "Patient chart"
+    assert identity["ancestry"] == [[None, "Confirm delete"], [None, "Patient chart"]]
+
+
+def test_element_identity_when_a_parent_read_fails_is_none(monkeypatch) -> None:
+    class Faulty(_FakeControl):
+        def GetParentControl(self):
+            raise OSError("COM provider went away")
+
+    button = _FakeControl("ButtonControl", name="Save Note")
+    inner = Faulty("WindowControl", name="Note editor")
+    # Without the fault guard the inner window would pass as top level.
+    assert _identity_with_leaf(monkeypatch, button, inner) is None
+
+
+def test_element_identity_whose_chain_stops_at_a_window_is_none(monkeypatch) -> None:
+    button = _FakeControl("ButtonControl", name="Save Note")
+    window = _FakeControl("WindowControl", name="Patient Notes")
+    assert _identity_with_leaf(monkeypatch, button, window) is None
+
+
+def test_element_identity_with_an_overlong_name_is_none(monkeypatch) -> None:
+    row = _FakeControl("ListItemControl", name="a" * 513)
+    window = _FakeControl("WindowControl", name="Notes")
+    root = _FakeControl("PaneControl")
+    assert _identity_with_leaf(monkeypatch, row, window, root) is None
+    row.Name = "a" * 512
+    assert _identity_with_leaf(monkeypatch, row, window, root)["name"] == "a" * 512
+
+
+def test_element_identity_round_trips_through_the_agent_and_backend(
+    monkeypatch,
+) -> None:
+    from openadapt_flow.backends.windows_backend import WindowsBackend
+
+    button = _FakeControl("ButtonControl", automation_id="saveButton", name="Save")
+    monkeypatch.setitem(sys.modules, "uiautomation", _fake_uia_module(button))
+    agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0, token="secret"))
+    try:
+        backend = WindowsBackend(agent.url, auth_token="secret")
+        assert backend.element_identity_at(550, 460) == {
+            "source": "uia",
+            "role": "button",
+            "name": "Save",
+            "automation_id": "saveButton",
+            "ancestry": [[None, "Patient Notes"]],
+            "window": "Patient Notes",
+            "process": None,
+        }
+        assert WindowsBackend(agent.url).element_identity_at(550, 460) is None
+    finally:
+        agent.close()

@@ -17,7 +17,17 @@
 
 ## Unreleased
 
+### Fixes
+
+- A durable run (`standard` or `regulated`) on macOS no longer refuses every click the AX tree resolves (`remote delivery receipt does not bind the resolved target`). `MacOSBackend.act_structural` re-finds the locator's one element, refuses unless its fingerprint (AX path, role, name, app, window, bounds) still equals the resolved handle's, and delivers the gated physical click at its center; the receipt binds that fingerprint. The receipt check is unchanged ([#1710](https://github.com/OpenAdaptAI/OpenAdapt/issues/1710)).
+
+## v2.5.0 (2026-11-02)
+
+Shadow mode checks the writes of an agent you already run against the system of record without blocking any of them, the whole-database frame works on PostgreSQL, a write that lands after the verdict can be caught by a recheck, and several verifier checks that could be unreadable or pass on the wrong value now read and compare exactly.
+
 ### Features
+
+- Self-repair's new clicks no longer need a browser. On a backend with an accessibility tree, a click with no record identity under it is admitted when its element (role, name, ancestry, window) is the only one with that locator in the pinned window and a record check covers every save: a system-of-record verifier, a `standard` or `regulated` profile, and confirmed effects and an armed identity check on each save. On a pixel-only backend the record check alone admits it. The new step carries the dialog around it as its identity band, a screen pre-check, and only a person approves such a fix; a signed standard change can't. The browser rule is unchanged. `MacOSBackend.element_identity_at` reads the AX element, the repair hold answers `element_identity`, and agent teach takes the dialog box from it. Design: `docs/REPAIR_ON_EVERY_BACKEND.md` ([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709)).
 
 - Shadow mode: `openadapt shadow` runs beside an agent you already have, as a loopback pass-through proxy, and checks each write it makes against the system of record (`CONFIRMED`, `REFUTED`, `UNCERTAIN`). It never blocks, changes or resends a write; the only delay is the read before a write, at most `hold_ms`, measured per write. FHIR writes are checked by `ensure_record.verify_ensure` and SQL writes by `verifier.begin_write`/`verify_write` with the whole-database frame. Each `CONFIRMED` is checked again later (`recheck_s`, or the contract's `recheck_after_s`), and a late `REFUTED` gets its own line in `report.html` and `report.json`. `verify_ensure` takes `declared`: resources of other writes the caller saw, judged on their own ([#1678](https://github.com/OpenAdaptAI/OpenAdapt/pull/1678)).
 
