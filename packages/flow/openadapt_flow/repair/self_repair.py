@@ -2663,7 +2663,9 @@ def _covered_band_halt(
       and no input reached it;
     - no step that saves received input and no effect was observed;
     - the backend proves that a window of the app itself covers the step's
-      identity band on the halted screen (``owned_window_over``);
+      identity band on the halted screen (``owned_window_over``): a window of
+      the same process, owned by the top-level window the backend captured
+      when the last identity-verified step passed (``pinned_step_id``);
     - the part of the band that was read still matches the recorded record:
       no contradicted, look-alike, glyph-ambiguous or unexplained name token,
       and at least half the recorded band matched
@@ -2714,8 +2716,20 @@ def _covered_band_halt(
         dx = int(halted.resolution.point[0]) - int(step.anchor.click_point[0])
         dy = int(halted.resolution.point[1]) - int(step.anchor.click_point[1])
         region = (region[0] + dx, region[1] + dy, region[2], region[3])
+    # The window the run was in is the one the last identity-verified step
+    # captured, not a hit-test at the halted step (which the dialog covers).
+    pinned = next(
+        (
+            r.step_id
+            for r in reversed(report.results)
+            if r.ok and r.identity is not None and r.identity.status == "verified"
+        ),
+        None,
+    )
+    if pinned is None:
+        return None
     try:
-        cover = probe(region)
+        cover = probe(region, pinned_step_id=pinned)
     except Exception:  # noqa: BLE001 - no proof means no reclassification
         return None
     if not cover or not _uncovered_band_matches(step, halted.identity.observed):

@@ -84,6 +84,7 @@ def _report(
     search_ok: bool = True,
     point=(300, 350),
     observed: str = READ_BESIDE_DIALOG,
+    search_verified: bool = True,
 ) -> RunReport:
     return RunReport(
         workflow_name="notes",
@@ -94,6 +95,9 @@ def _report(
                 intent="click 'Search'",
                 ok=search_ok,
                 delivery_attempted=True,
+                identity=IdentityCheck(status="verified", mode="context")
+                if search_verified
+                else None,
                 resolution=Resolution(
                     rung=search_rung, point=(500, 50), confidence=1.0, elapsed_ms=1
                 ),
@@ -117,9 +121,11 @@ class Backend:
     def __init__(self, covered: Any = True) -> None:
         self.covered = covered
         self.regions: list[tuple] = []
+        self.pinned: list[str] = []
 
-    def owned_window_over(self, region) -> Optional[dict]:
+    def owned_window_over(self, region, *, pinned_step_id) -> Optional[dict]:
         self.regions.append(tuple(region))
+        self.pinned.append(pinned_step_id)
         if isinstance(self.covered, Exception):
             raise self.covered
         return {"kind": "dialog", "title": "Session notice"} if self.covered else None
@@ -132,6 +138,15 @@ def test_a_covered_band_is_repaired_after_the_previous_click() -> None:
     step, mode, result = found
     assert (step.id, mode, result.step_id) == ("search", "after", "search")
     assert backend.regions == [BAND]
+    assert backend.pinned == ["search"]  # the last identity-verified step
+
+
+def test_no_identity_verified_step_means_no_pinned_window() -> None:
+    backend = Backend()
+    assert (
+        _covered_band_halt(_report(search_verified=False), _workflow(), backend) is None
+    )
+    assert backend.regions == []
 
 
 def test_the_band_moves_with_the_resolved_point() -> None:
