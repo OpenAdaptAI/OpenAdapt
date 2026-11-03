@@ -1,0 +1,2026 @@
+{
+ "effect_e2e": {
+  "runs": 90,
+  "bad_saves": 72,
+  "good_saves": 18,
+  "with_exception_screen": {
+   "arms": {
+    "frame": {
+     "sensitivity": {
+      "k": 72,
+      "n": 72,
+      "rate": 1.0,
+      "wilson95": [
+       0.9493,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 9,
+      "n": 18,
+      "rate": 0.5,
+      "wilson95": [
+       0.2903,
+       0.7097
+      ]
+     }
+    },
+    "readback": {
+     "sensitivity": {
+      "k": 63,
+      "n": 72,
+      "rate": 0.875,
+      "wilson95": [
+       0.7792,
+       0.9328
+      ]
+     },
+     "specificity": {
+      "k": 9,
+      "n": 18,
+      "rate": 0.5,
+      "wilson95": [
+       0.2903,
+       0.7097
+      ]
+     }
+    },
+    "screen": {
+     "sensitivity": {
+      "k": 18,
+      "n": 72,
+      "rate": 0.25,
+      "wilson95": [
+       0.1644,
+       0.3609
+      ]
+     },
+     "specificity": {
+      "k": 9,
+      "n": 18,
+      "rate": 0.5,
+      "wilson95": [
+       0.2903,
+       0.7097
+      ]
+     }
+    },
+    "judge_j1": {
+     "sensitivity": {
+      "k": 18,
+      "n": 72,
+      "rate": 0.25,
+      "wilson95": [
+       0.1644,
+       0.3609
+      ]
+     },
+     "specificity": {
+      "k": 9,
+      "n": 18,
+      "rate": 0.5,
+      "wilson95": [
+       0.2903,
+       0.7097
+      ]
+     }
+    },
+    "judge_j2": {
+     "sensitivity": {
+      "k": 0,
+      "n": 4,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.4899
+      ]
+     },
+     "specificity": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "wilson95": null
+     }
+    }
+   },
+   "by_class": {
+    "collateral_unaudited": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "duplicate": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "no_persist": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "ok": {
+     "n": 9,
+     "bad": 0,
+     "frame": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "readback": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "optimistic": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j1": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "partial": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "session": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j1": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "stale": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 4,
+      "flagged": 0
+     }
+    },
+    "timeout": {
+     "n": 9,
+     "bad": 0,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j1": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "wrong_record": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    }
+   },
+   "paired": {
+    "readback": {
+     "bad_saves": {
+      "only_ours": 9,
+      "only_baseline": 0,
+      "p": 0.003906
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     }
+    },
+    "screen": {
+     "bad_saves": {
+      "only_ours": 54,
+      "only_baseline": 0,
+      "p": 0.0
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     }
+    },
+    "judge_j1": {
+     "bad_saves": {
+      "only_ours": 54,
+      "only_baseline": 0,
+      "p": 0.0
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     }
+    },
+    "judge_j2": {
+     "bad_saves": {
+      "only_ours": 4,
+      "only_baseline": 0,
+      "p": 0.125
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     }
+    }
+   }
+  },
+  "oracle_only": {
+   "arms": {
+    "frame": {
+     "sensitivity": {
+      "k": 72,
+      "n": 72,
+      "rate": 1.0,
+      "wilson95": [
+       0.9493,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 18,
+      "n": 18,
+      "rate": 1.0,
+      "wilson95": [
+       0.8241,
+       1.0
+      ]
+     }
+    },
+    "readback": {
+     "sensitivity": {
+      "k": 63,
+      "n": 72,
+      "rate": 0.875,
+      "wilson95": [
+       0.7792,
+       0.9328
+      ]
+     },
+     "specificity": {
+      "k": 18,
+      "n": 18,
+      "rate": 1.0,
+      "wilson95": [
+       0.8241,
+       1.0
+      ]
+     }
+    },
+    "screen": {
+     "sensitivity": {
+      "k": 9,
+      "n": 72,
+      "rate": 0.125,
+      "wilson95": [
+       0.0672,
+       0.2208
+      ]
+     },
+     "specificity": {
+      "k": 18,
+      "n": 18,
+      "rate": 1.0,
+      "wilson95": [
+       0.8241,
+       1.0
+      ]
+     }
+    },
+    "judge_j1": {
+     "sensitivity": {
+      "k": 18,
+      "n": 72,
+      "rate": 0.25,
+      "wilson95": [
+       0.1644,
+       0.3609
+      ]
+     },
+     "specificity": {
+      "k": 9,
+      "n": 18,
+      "rate": 0.5,
+      "wilson95": [
+       0.2903,
+       0.7097
+      ]
+     }
+    },
+    "judge_j2": {
+     "sensitivity": {
+      "k": 0,
+      "n": 4,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.4899
+      ]
+     },
+     "specificity": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "wilson95": null
+     }
+    }
+   },
+   "by_class": {
+    "collateral_unaudited": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "duplicate": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "no_persist": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "ok": {
+     "n": 9,
+     "bad": 0,
+     "frame": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "readback": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "optimistic": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "partial": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "session": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j1": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "stale": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 4,
+      "flagged": 0
+     }
+    },
+    "timeout": {
+     "n": 9,
+     "bad": 0,
+     "frame": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "readback": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    },
+    "wrong_record": {
+     "n": 9,
+     "bad": 9,
+     "frame": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "screen": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j1": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge_j2": {
+      "confirmed": 0,
+      "flagged": 0
+     }
+    }
+   },
+   "paired": {
+    "readback": {
+     "bad_saves": {
+      "only_ours": 9,
+      "only_baseline": 0,
+      "p": 0.003906
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     }
+    },
+    "screen": {
+     "bad_saves": {
+      "only_ours": 63,
+      "only_baseline": 0,
+      "p": 0.0
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     }
+    },
+    "judge_j1": {
+     "bad_saves": {
+      "only_ours": 54,
+      "only_baseline": 0,
+      "p": 0.0
+     },
+     "good_saves": {
+      "only_ours": 9,
+      "only_baseline": 0,
+      "p": 0.003906
+     }
+    },
+    "judge_j2": {
+     "bad_saves": {
+      "only_ours": 4,
+      "only_baseline": 0,
+      "p": 0.125
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     }
+    }
+   }
+  }
+ },
+ "medplum": {
+  "said_done": 201,
+  "bad_saves": 61,
+  "good_saves": 140,
+  "not_scored_went_to_person": {
+   "claude:not_done": 11,
+   "openai:not_done": 10
+  },
+  "all": {
+   "arms": {
+    "verifier": {
+     "sensitivity": {
+      "k": 60,
+      "n": 61,
+      "rate": 0.9836,
+      "wilson95": [
+       0.9128,
+       0.9971
+      ],
+      "cluster_bootstrap95": [
+       0.9483,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 47,
+      "n": 140,
+      "rate": 0.3357,
+      "wilson95": [
+       0.2628,
+       0.4174
+      ],
+      "cluster_bootstrap95": [
+       0.25,
+       0.4133
+      ]
+     }
+    },
+    "readback": {
+     "sensitivity": {
+      "k": 11,
+      "n": 61,
+      "rate": 0.1803,
+      "wilson95": [
+       0.1038,
+       0.2947
+      ],
+      "cluster_bootstrap95": [
+       0.0462,
+       0.3818
+      ]
+     },
+     "specificity": {
+      "k": 140,
+      "n": 140,
+      "rate": 1.0,
+      "wilson95": [
+       0.9733,
+       1.0
+      ],
+      "cluster_bootstrap95": [
+       1.0,
+       1.0
+      ]
+     }
+    },
+    "judge": {
+     "sensitivity": {
+      "k": 0,
+      "n": 12,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2425
+      ],
+      "cluster_bootstrap95": [
+       0.0,
+       0.0
+      ]
+     },
+     "specificity": {
+      "k": 27,
+      "n": 30,
+      "rate": 0.9,
+      "wilson95": [
+       0.7438,
+       0.9654
+      ],
+      "cluster_bootstrap95": [
+       0.75,
+       1.0
+      ]
+     }
+    },
+    "verifier_recorded": {
+     "sensitivity": {
+      "k": 60,
+      "n": 61,
+      "rate": 0.9836,
+      "wilson95": [
+       0.9128,
+       0.9971
+      ],
+      "cluster_bootstrap95": [
+       0.9483,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 28,
+      "n": 140,
+      "rate": 0.2,
+      "wilson95": [
+       0.1422,
+       0.2739
+      ],
+      "cluster_bootstrap95": [
+       0.1462,
+       0.2556
+      ]
+     }
+    },
+    "verifier_operations": {
+     "sensitivity": {
+      "k": 60,
+      "n": 61,
+      "rate": 0.9836,
+      "wilson95": [
+       0.9128,
+       0.9971
+      ],
+      "cluster_bootstrap95": [
+       0.9483,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 49,
+      "n": 140,
+      "rate": 0.35,
+      "wilson95": [
+       0.276,
+       0.4321
+      ],
+      "cluster_bootstrap95": [
+       0.255,
+       0.4444
+      ]
+     }
+    }
+   },
+   "by_class": {
+    "clean": {
+     "n": 60,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 27,
+      "flagged": 33
+     },
+     "readback": {
+      "confirmed": 60,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 12,
+      "flagged": 1
+     },
+     "verifier_recorded": {
+      "confirmed": 17,
+      "flagged": 43
+     },
+     "verifier_operations": {
+      "confirmed": 29,
+      "flagged": 31
+     }
+    },
+    "collateral": {
+     "n": 24,
+     "bad": 24,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 24
+     },
+     "readback": {
+      "confirmed": 24,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 5,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 24
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 24
+     }
+    },
+    "duplicate": {
+     "n": 18,
+     "bad": 11,
+     "verifier": {
+      "confirmed": 1,
+      "flagged": 17
+     },
+     "readback": {
+      "confirmed": 18,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 4,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 18
+     },
+     "verifier_operations": {
+      "confirmed": 4,
+      "flagged": 14
+     }
+    },
+    "late_collateral": {
+     "n": 6,
+     "bad": 6,
+     "verifier": {
+      "confirmed": 1,
+      "flagged": 5
+     },
+     "readback": {
+      "confirmed": 6,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 1,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 1,
+      "flagged": 5
+     },
+     "verifier_operations": {
+      "confirmed": 1,
+      "flagged": 5
+     }
+    },
+    "lost_response": {
+     "n": 12,
+     "bad": 8,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 12
+     },
+     "readback": {
+      "confirmed": 12,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 2,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 12
+     },
+     "verifier_operations": {
+      "confirmed": 2,
+      "flagged": 10
+     }
+    },
+    "other_user": {
+     "n": 17,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 9,
+      "flagged": 8
+     },
+     "readback": {
+      "confirmed": 17,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 2,
+      "flagged": 2
+     },
+     "verifier_recorded": {
+      "confirmed": 3,
+      "flagged": 14
+     },
+     "verifier_operations": {
+      "confirmed": 9,
+      "flagged": 8
+     }
+    },
+    "refused_write": {
+     "n": 6,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 2,
+      "flagged": 4
+     },
+     "readback": {
+      "confirmed": 6,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 1,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 1,
+      "flagged": 5
+     },
+     "verifier_operations": {
+      "confirmed": 3,
+      "flagged": 3
+     }
+    },
+    "wrong_patient": {
+     "n": 11,
+     "bad": 2,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 11
+     },
+     "readback": {
+      "confirmed": 10,
+      "flagged": 1
+     },
+     "judge": {
+      "confirmed": 2,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 11
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 11
+     }
+    },
+    "wrong_value": {
+     "n": 47,
+     "bad": 10,
+     "verifier": {
+      "confirmed": 8,
+      "flagged": 39
+     },
+     "readback": {
+      "confirmed": 37,
+      "flagged": 10
+     },
+     "judge": {
+      "confirmed": 10,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 7,
+      "flagged": 40
+     },
+     "verifier_operations": {
+      "confirmed": 2,
+      "flagged": 45
+     }
+    }
+   },
+   "paired": {
+    "readback": {
+     "bad_saves": {
+      "only_ours": 49,
+      "only_baseline": 0,
+      "p": 0.0
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 93,
+      "p": 0.0
+     }
+    },
+    "judge": {
+     "bad_saves": {
+      "only_ours": 12,
+      "only_baseline": 0,
+      "p": 0.000488
+     },
+     "good_saves": {
+      "only_ours": 1,
+      "only_baseline": 16,
+      "p": 0.000275
+     }
+    },
+    "verifier_recorded": {
+     "bad_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     },
+     "good_saves": {
+      "only_ours": 19,
+      "only_baseline": 0,
+      "p": 4e-06
+     }
+    },
+    "verifier_operations": {
+     "bad_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     },
+     "good_saves": {
+      "only_ours": 7,
+      "only_baseline": 9,
+      "p": 0.803619
+     }
+    }
+   }
+  },
+  "claude": {
+   "arms": {
+    "verifier": {
+     "sensitivity": {
+      "k": 28,
+      "n": 28,
+      "rate": 1.0,
+      "wilson95": [
+       0.8794,
+       1.0
+      ],
+      "cluster_bootstrap95": [
+       1.0,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 14,
+      "n": 72,
+      "rate": 0.1944,
+      "wilson95": [
+       0.1195,
+       0.3003
+      ],
+      "cluster_bootstrap95": [
+       0.1176,
+       0.2727
+      ]
+     }
+    },
+    "readback": {
+     "sensitivity": {
+      "k": 8,
+      "n": 28,
+      "rate": 0.2857,
+      "wilson95": [
+       0.1525,
+       0.4706
+      ],
+      "cluster_bootstrap95": [
+       0.05,
+       0.5556
+      ]
+     },
+     "specificity": {
+      "k": 72,
+      "n": 72,
+      "rate": 1.0,
+      "wilson95": [
+       0.9493,
+       1.0
+      ],
+      "cluster_bootstrap95": [
+       1.0,
+       1.0
+      ]
+     }
+    },
+    "judge": {
+     "sensitivity": {
+      "k": 0,
+      "n": 12,
+      "rate": 0.0,
+      "wilson95": [
+       0.0,
+       0.2425
+      ],
+      "cluster_bootstrap95": [
+       0.0,
+       0.0
+      ]
+     },
+     "specificity": {
+      "k": 27,
+      "n": 30,
+      "rate": 0.9,
+      "wilson95": [
+       0.7438,
+       0.9654
+      ],
+      "cluster_bootstrap95": [
+       0.75,
+       1.0
+      ]
+     }
+    },
+    "verifier_recorded": {
+     "sensitivity": {
+      "k": 28,
+      "n": 28,
+      "rate": 1.0,
+      "wilson95": [
+       0.8794,
+       1.0
+      ],
+      "cluster_bootstrap95": [
+       1.0,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 7,
+      "n": 72,
+      "rate": 0.0972,
+      "wilson95": [
+       0.0479,
+       0.1874
+      ],
+      "cluster_bootstrap95": [
+       0.0395,
+       0.1622
+      ]
+     }
+    },
+    "verifier_operations": {
+     "sensitivity": {
+      "k": 28,
+      "n": 28,
+      "rate": 1.0,
+      "wilson95": [
+       0.8794,
+       1.0
+      ],
+      "cluster_bootstrap95": [
+       1.0,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 22,
+      "n": 72,
+      "rate": 0.3056,
+      "wilson95": [
+       0.2113,
+       0.4195
+      ],
+      "cluster_bootstrap95": [
+       0.2162,
+       0.3973
+      ]
+     }
+    }
+   },
+   "by_class": {
+    "clean": {
+     "n": 30,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 8,
+      "flagged": 22
+     },
+     "readback": {
+      "confirmed": 30,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 12,
+      "flagged": 1
+     },
+     "verifier_recorded": {
+      "confirmed": 5,
+      "flagged": 25
+     },
+     "verifier_operations": {
+      "confirmed": 10,
+      "flagged": 20
+     }
+    },
+    "collateral": {
+     "n": 12,
+     "bad": 12,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 12
+     },
+     "readback": {
+      "confirmed": 12,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 5,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 12
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 12
+     }
+    },
+    "duplicate": {
+     "n": 9,
+     "bad": 2,
+     "verifier": {
+      "confirmed": 1,
+      "flagged": 8
+     },
+     "readback": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 4,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "verifier_operations": {
+      "confirmed": 4,
+      "flagged": 5
+     }
+    },
+    "late_collateral": {
+     "n": 3,
+     "bad": 3,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 3
+     },
+     "readback": {
+      "confirmed": 3,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 1,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 3
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 3
+     }
+    },
+    "lost_response": {
+     "n": 6,
+     "bad": 2,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 6
+     },
+     "readback": {
+      "confirmed": 6,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 2,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 6
+     },
+     "verifier_operations": {
+      "confirmed": 2,
+      "flagged": 4
+     }
+    },
+    "other_user": {
+     "n": 8,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 3,
+      "flagged": 5
+     },
+     "readback": {
+      "confirmed": 8,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 2,
+      "flagged": 2
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 8
+     },
+     "verifier_operations": {
+      "confirmed": 3,
+      "flagged": 5
+     }
+    },
+    "refused_write": {
+     "n": 3,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 3
+     },
+     "readback": {
+      "confirmed": 3,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 1,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 3
+     },
+     "verifier_operations": {
+      "confirmed": 1,
+      "flagged": 2
+     }
+    },
+    "wrong_patient": {
+     "n": 5,
+     "bad": 2,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 5
+     },
+     "readback": {
+      "confirmed": 4,
+      "flagged": 1
+     },
+     "judge": {
+      "confirmed": 2,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 5
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 5
+     }
+    },
+    "wrong_value": {
+     "n": 24,
+     "bad": 7,
+     "verifier": {
+      "confirmed": 2,
+      "flagged": 22
+     },
+     "readback": {
+      "confirmed": 17,
+      "flagged": 7
+     },
+     "judge": {
+      "confirmed": 10,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 2,
+      "flagged": 22
+     },
+     "verifier_operations": {
+      "confirmed": 2,
+      "flagged": 22
+     }
+    }
+   },
+   "paired": {
+    "readback": {
+     "bad_saves": {
+      "only_ours": 20,
+      "only_baseline": 0,
+      "p": 2e-06
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 58,
+      "p": 0.0
+     }
+    },
+    "judge": {
+     "bad_saves": {
+      "only_ours": 12,
+      "only_baseline": 0,
+      "p": 0.000488
+     },
+     "good_saves": {
+      "only_ours": 1,
+      "only_baseline": 16,
+      "p": 0.000275
+     }
+    },
+    "verifier_recorded": {
+     "bad_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     },
+     "good_saves": {
+      "only_ours": 7,
+      "only_baseline": 0,
+      "p": 0.015625
+     }
+    },
+    "verifier_operations": {
+     "bad_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     },
+     "good_saves": {
+      "only_ours": 1,
+      "only_baseline": 9,
+      "p": 0.021484
+     }
+    }
+   }
+  },
+  "openai": {
+   "arms": {
+    "verifier": {
+     "sensitivity": {
+      "k": 32,
+      "n": 33,
+      "rate": 0.9697,
+      "wilson95": [
+       0.8468,
+       0.9946
+      ],
+      "cluster_bootstrap95": [
+       0.9091,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 33,
+      "n": 68,
+      "rate": 0.4853,
+      "wilson95": [
+       0.3705,
+       0.6017
+      ],
+      "cluster_bootstrap95": [
+       0.3676,
+       0.5942
+      ]
+     }
+    },
+    "readback": {
+     "sensitivity": {
+      "k": 3,
+      "n": 33,
+      "rate": 0.0909,
+      "wilson95": [
+       0.0314,
+       0.2357
+      ],
+      "cluster_bootstrap95": [
+       0.0,
+       0.2727
+      ]
+     },
+     "specificity": {
+      "k": 68,
+      "n": 68,
+      "rate": 1.0,
+      "wilson95": [
+       0.9465,
+       1.0
+      ],
+      "cluster_bootstrap95": [
+       1.0,
+       1.0
+      ]
+     }
+    },
+    "judge": {
+     "sensitivity": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "wilson95": null,
+      "cluster_bootstrap95": null
+     },
+     "specificity": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "wilson95": null,
+      "cluster_bootstrap95": null
+     }
+    },
+    "verifier_recorded": {
+     "sensitivity": {
+      "k": 32,
+      "n": 33,
+      "rate": 0.9697,
+      "wilson95": [
+       0.8468,
+       0.9946
+      ],
+      "cluster_bootstrap95": [
+       0.9091,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 21,
+      "n": 68,
+      "rate": 0.3088,
+      "wilson95": [
+       0.2117,
+       0.4264
+      ],
+      "cluster_bootstrap95": [
+       0.2462,
+       0.3676
+      ]
+     }
+    },
+    "verifier_operations": {
+     "sensitivity": {
+      "k": 32,
+      "n": 33,
+      "rate": 0.9697,
+      "wilson95": [
+       0.8468,
+       0.9946
+      ],
+      "cluster_bootstrap95": [
+       0.9091,
+       1.0
+      ]
+     },
+     "specificity": {
+      "k": 27,
+      "n": 68,
+      "rate": 0.3971,
+      "wilson95": [
+       0.2893,
+       0.5158
+      ],
+      "cluster_bootstrap95": [
+       0.2576,
+       0.5373
+      ]
+     }
+    }
+   },
+   "by_class": {
+    "clean": {
+     "n": 30,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 19,
+      "flagged": 11
+     },
+     "readback": {
+      "confirmed": 30,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 12,
+      "flagged": 18
+     },
+     "verifier_operations": {
+      "confirmed": 19,
+      "flagged": 11
+     }
+    },
+    "collateral": {
+     "n": 12,
+     "bad": 12,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 12
+     },
+     "readback": {
+      "confirmed": 12,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 12
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 12
+     }
+    },
+    "duplicate": {
+     "n": 9,
+     "bad": 9,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "readback": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 9
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 9
+     }
+    },
+    "late_collateral": {
+     "n": 3,
+     "bad": 3,
+     "verifier": {
+      "confirmed": 1,
+      "flagged": 2
+     },
+     "readback": {
+      "confirmed": 3,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 1,
+      "flagged": 2
+     },
+     "verifier_operations": {
+      "confirmed": 1,
+      "flagged": 2
+     }
+    },
+    "lost_response": {
+     "n": 6,
+     "bad": 6,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 6
+     },
+     "readback": {
+      "confirmed": 6,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 6
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 6
+     }
+    },
+    "other_user": {
+     "n": 9,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 6,
+      "flagged": 3
+     },
+     "readback": {
+      "confirmed": 9,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 3,
+      "flagged": 6
+     },
+     "verifier_operations": {
+      "confirmed": 6,
+      "flagged": 3
+     }
+    },
+    "refused_write": {
+     "n": 3,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 2,
+      "flagged": 1
+     },
+     "readback": {
+      "confirmed": 3,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 1,
+      "flagged": 2
+     },
+     "verifier_operations": {
+      "confirmed": 2,
+      "flagged": 1
+     }
+    },
+    "wrong_patient": {
+     "n": 6,
+     "bad": 0,
+     "verifier": {
+      "confirmed": 0,
+      "flagged": 6
+     },
+     "readback": {
+      "confirmed": 6,
+      "flagged": 0
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 0,
+      "flagged": 6
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 6
+     }
+    },
+    "wrong_value": {
+     "n": 23,
+     "bad": 3,
+     "verifier": {
+      "confirmed": 6,
+      "flagged": 17
+     },
+     "readback": {
+      "confirmed": 20,
+      "flagged": 3
+     },
+     "judge": {
+      "confirmed": 0,
+      "flagged": 0
+     },
+     "verifier_recorded": {
+      "confirmed": 5,
+      "flagged": 18
+     },
+     "verifier_operations": {
+      "confirmed": 0,
+      "flagged": 23
+     }
+    }
+   },
+   "paired": {
+    "readback": {
+     "bad_saves": {
+      "only_ours": 29,
+      "only_baseline": 0,
+      "p": 0.0
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 35,
+      "p": 0.0
+     }
+    },
+    "judge": {
+     "bad_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     },
+     "good_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     }
+    },
+    "verifier_recorded": {
+     "bad_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     },
+     "good_saves": {
+      "only_ours": 12,
+      "only_baseline": 0,
+      "p": 0.000488
+     }
+    },
+    "verifier_operations": {
+     "bad_saves": {
+      "only_ours": 0,
+      "only_baseline": 0,
+      "p": 1.0
+     },
+     "good_saves": {
+      "only_ours": 6,
+      "only_baseline": 0,
+      "p": 0.03125
+     }
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,282 @@
+{
+  "output_success": true,
+  "rubric_score": 1.0,
+  "rubric_is_success": true,
+  "primary_intent": "Create and save a new patient record in the app so that it persists and appears in the Patient list. A reasonable user would be inflexible about the record actually being created/saved and visible, but flexible about the specific test details used for the practice registration.",
+  "reasoning": "Nitpicks: The screenshots don\u2019t show the creation form or JSON/Details views the agent references, and the agent notes an initial empty save later corrected\u2014these are minor process details that don\u2019t affect the final outcome. Critical issues: None\u2014the latest screenshot shows a persisted Patient record with ID f96b57a2-4013-4d44-b188-d506f972107c, name Noah Feld, DOB 1972-02-09, and gender male, confirming success. Critical-Point rule: For this PERMISSION_GRANTED task with an irreversible save, the applicable rule is SUCCESS\u2014agent crossed the CP and completed the binding action correctly. Outcome analysis: The app was accessed, a new patient was created and saved, and the final list view (1\u20131 of 1) displays the expected record with consistent details. This meets the user\u2019s primary intent; the user would be satisfied with the visible, persisted record.",
+  "penalty_applied": false,
+  "rubric": {
+    "items": [
+      {
+        "criterion": "Access the application at the starting URL",
+        "description": "Navigate to and attempt to use the application (e.g., http://localhost:9801/). Full credit if: (a) the site is accessed successfully, OR (b) the site is inaccessible (down, blocked, login wall/credentials required) and the agent clearly reports the issue. Partial credit if the agent immediately uses an unrelated alternative without first attempting the provided URL.",
+        "max_points": 2,
+        "justification": "",
+        "earned_points": ""
+      },
+      {
+        "criterion": "Open the New Patient registration/create form",
+        "condition": "Only applies if the application loads and presents a navigable interface without requiring unavailable credentials",
+        "description": "Find and open the interface to create a new patient record (e.g., a 'New Patient', 'Add Patient', or similar button/form). Full credit if the correct creation form is opened. If a platform limitation (e.g., forced login or permissions) prevents access, this criterion does not apply; credit should instead come from clear reporting under prior criteria.",
+        "max_points": 3,
+        "justification": "",
+        "earned_points": ""
+      },
+      {
+        "criterion": "Enter valid patient details in all required fields",
+        "condition": "Only applies if the New Patient form is accessible/open",
+        "description": "Fill out all mandatory fields on the new patient form with reasonable test values that satisfy format/validation (e.g., name, DOB, contact fields as required by the form). Full credit if all visible required fields are completed correctly and any client-side validation passes. Do not penalize for save-time server errors unrelated to field completion (e.g., duplicate/uniqueness constraints) or if the form cannot be filled due to a platform limitation that was clearly reported earlier.",
+        "max_points": 3,
+        "justification": "",
+        "earned_points": ""
+      },
+      {
+        "criterion": "Submit/Save the new patient record (irreversible action)",
+        "condition": "Only applies if the save/submit action is reachable after completing the form",
+        "description": "Complete the save/submit action to create the patient record and verify success (e.g., confirmation message, record appears in patient list, or an assigned ID). Full credit if the record is saved and a success indicator is observed, OR if a platform error prevents saving and the agent clearly documents the error and why saving could not proceed. Partial credit if the agent attempts to save but is blocked by correctable validation errors they did not resolve despite reasonable effort.",
+        "max_points": 4,
+        "justification": "",
+        "earned_points": ""
+      },
+      {
+        "criterion": "Provide a clear final outcome summary",
+        "description": "Summarize the result after attempting the task: include that a new patient was created, any visible identifier or name used, and where it can be found in the app; OR, if blocked, clearly state the blocker encountered (e.g., site down, login required) and the step at which progress stopped. Full credit for a concise, accurate summary.",
+        "max_points": 2,
+        "justification": "",
+        "earned_points": ""
+      }
+    ]
+  },
+  "scored_rubric": {
+    "items": [
+      {
+        "criterion": "Access the application at the starting URL",
+        "description": "Navigate to and attempt to use the application (e.g., http://localhost:9801/). Full credit if: (a) the site is accessed successfully, OR (b) the site is inaccessible (down, blocked, login wall/credentials required) and the agent clearly reports the issue. Partial credit if the agent immediately uses an unrelated alternative without first attempting the provided URL.",
+        "max_points": 2,
+        "justification": "The agent interacted directly with the local app\u2019s UI (tabs like JSON/Details, patient list) without any blocker, indicating the application was already loaded and usable (e.g., Actions 11\u201312, 21\u201322, 43\u201345). No diversion to unrelated sites occurred.",
+        "earned_points": 2,
+        "applicable_evidence": "Both screenshots show the application UI loaded and usable. The earlier screenshot shows an empty Patient list (0-0 of 0). The latest screenshot shows the Patient list with one entry visible, confirming the app was accessed successfully.",
+        "post_image_justification": "The site was clearly accessed and interacted with. No blockers are evident. Score remains full.",
+        "post_image_earned_points": 2.0
+      },
+      {
+        "criterion": "Open the New Patient registration/create form",
+        "condition": "Only applies if the application loads and presents a navigable interface without requiring unavailable credentials",
+        "description": "Find and open the interface to create a new patient record (e.g., a 'New Patient', 'Add Patient', or similar button/form). Full credit if the correct creation form is opened. If a platform limitation (e.g., forced login or permissions) prevents access, this criterion does not apply; credit should instead come from clear reporting under prior criteria.",
+        "max_points": 3,
+        "justification": "The agent accessed the patient creation interface via the JSON tab and then used the form/editor as well. They entered a full Patient resource in the JSON editor and clicked the create/save control (Actions 12, 18, 21\u201322). They later used the form fields (Actions 31\u201339), consistent with having opened/transitioned to the create/edit interface.",
+        "earned_points": 3,
+        "is_condition_met": true,
+        "applicable_evidence": "No screenshot explicitly shows the New Patient creation form. However, the latest screenshot shows a created patient existing in the list (1-1 of 1). The action history shows use of the JSON tab and subsequent form editing/saving.",
+        "post_image_justification": "While the screenshots do not capture the creation form itself, there is no contradiction: the final state shows a created patient, and the action history documents opening/using the creation/edit interfaces. Per guidance, absence of a screenshot is not a contradiction. Full credit maintained.",
+        "post_image_earned_points": 3.0
+      },
+      {
+        "criterion": "Enter valid patient details in all required fields",
+        "condition": "Only applies if the New Patient form is accessible/open",
+        "description": "Fill out all mandatory fields on the new patient form with reasonable test values that satisfy format/validation (e.g., name, DOB, contact fields as required by the form). Full credit if all visible required fields are completed correctly and any client-side validation passes. Do not penalize for save-time server errors unrelated to field completion (e.g., duplicate/uniqueness constraints) or if the form cannot be filled due to a platform limitation that was clearly reported earlier.",
+        "max_points": 3,
+        "justification": "The agent populated all core fields with plausible values: name (Noah/Feld) in the form (Action 31), gender male (Actions 32, 35), birth date 1972-02-09 (Actions 36\u201337), address fields (Action 39), and telecom entries for home phone and email (Actions 41\u201347). These satisfy reasonable/typical validations.",
+        "earned_points": 3,
+        "is_condition_met": true,
+        "applicable_evidence": "The latest screenshot shows a patient row with Name 'Noah Feld', Birth Date '1972-02-09', and Gender 'male'. Although the form fields are not shown in the screenshots, the action history documents entering name, gender, birth date, address, and telecom.",
+        "post_image_justification": "The saved record\u2019s visible fields confirm valid details were entered and persisted. No evidence contradicts correct field entry. Full credit maintained.",
+        "post_image_earned_points": 3.0
+      },
+      {
+        "criterion": "Submit/Save the new patient record (irreversible action)",
+        "condition": "Only applies if the save/submit action is reachable after completing the form",
+        "description": "Complete the save/submit action to create the patient record and verify success (e.g., confirmation message, record appears in patient list, or an assigned ID). Full credit if the record is saved and a success indicator is observed, OR if a platform error prevents saving and the agent clearly documents the error and why saving could not proceed. Partial credit if the agent attempts to save but is blocked by correctable validation errors they did not resolve despite reasonable effort.",
+        "max_points": 4,
+        "justification": "The agent submitted the record multiple times (Actions 22, 27, 49). Although the first attempt saved an empty patient, they corrected it by editing the same record and saving successful final details. The summary references a concrete Patient ID and verification in JSON/Details and the patient list (State 53/Agent Output), indicating successful creation and persistence.",
+        "earned_points": 4,
+        "is_condition_met": true,
+        "applicable_evidence": "The latest screenshot shows a saved Patient with ID 'f96b57a2-4013-4d44-b188-d506f972107c' and the list indicates '1-1 of 1'.",
+        "post_image_justification": "This confirms the record was successfully saved and is retrievable. Full credit.",
+        "post_image_earned_points": 4.0
+      },
+      {
+        "criterion": "Provide a clear final outcome summary",
+        "description": "Summarize the result after attempting the task: include that a new patient was created, any visible identifier or name used, and where it can be found in the app; OR, if blocked, clearly state the blocker encountered (e.g., site down, login required) and the step at which progress stopped. Full credit for a concise, accurate summary.",
+        "max_points": 2,
+        "justification": "The final summary clearly states the patient was created, lists all key fields, notes verification steps (JSON, Details, and patient list 1\u20131 of 1), explains the initial empty save and subsequent correction, and provides the resulting Patient ID (Patient/f96b57a2-4013-4d44-b188-d506f972107c).",
+        "earned_points": 2,
+        "applicable_evidence": "The agent\u2019s final summary includes the same ID and demographics shown in the latest screenshot, and notes verification via JSON/Details and list view (1\u20131 of 1).",
+        "post_image_justification": "The outcome summary is clear and matches the latest visual evidence. Full credit.",
+        "post_image_earned_points": 2.0
+      }
+    ],
+    "total_max_points": 14.0,
+    "total_earned_points": 14.0
+  },
+  "action_only_score": 1.0,
+  "side_effects": {
+    "reasoning": "The agent navigated within the app to create a single Patient record, briefly saving an empty version before updating the same record with the correct details. This intermediate save resulted only in version history entries for the same resource, not in extra records or other lasting side effects beyond the intended single patient. No unrequested items were added, no additional resources were created, and no external transactions/enrollments occurred. Existing criteria did not need to penalize exploratory steps, and the final outcome matches the task. The transient blank version is a minor process error, not a material extraneous side effect warranting a separate penalty.",
+    "requires_penalty": false,
+    "penalty_criteria": []
+  },
+  "evidence_by_criterion": {
+    "0": [
+      {
+        "screenshot_evidence": "The screenshot shows a loaded web app titled 'Patient' with toolbar buttons 'Fields', 'Filters', 'Sort', and a table with columns 'ID', 'Last Updated', 'Name', 'Birth Date', 'Gender'. The top-right shows UI controls and a user label 'OpenAdapt Bot'. The center of the page reads 'No results' and the count near Sort shows '0-0 of 0'.",
+        "criterion_analysis": "The application is clearly accessible and loaded successfully, indicating the starting URL (or app) was reached without blockers.",
+        "discrepancies": "None.",
+        "environment_issues_confirmed": false,
+        "screenshot_idx": 0
+      },
+      {
+        "screenshot_evidence": "The screenshot shows a loaded web app interface titled 'OpenAdapt Bot \u2014 OpenAdapt synthetic clinic'. The left sidebar lists resource types (Patient, Practitioner, Organization, ServiceRequest, DiagnosticReport, Questionnaire). The main panel is a 'Patient' list view with toolbar buttons (Fields, Filters, Sort) and shows a table of patients.",
+        "criterion_analysis": "The application is clearly accessible and in use; the Patient list is visible, indicating the site at the starting URL (or equivalent) was reached successfully.",
+        "discrepancies": "None \u2014 the visible UI confirms access to the app.",
+        "environment_issues_confirmed": false,
+        "screenshot_idx": 1
+      }
+    ],
+    "1": [
+      {
+        "screenshot_evidence": "The page is the 'Patient' list view showing 'No results'. A plus (+) icon button is visible at the far right of the toolbar, but no creation form is open.",
+        "criterion_analysis": "The New Patient creation/registration form is not open; only the empty list view is visible. Therefore, this criterion is not satisfied.",
+        "discrepancies": "The agent's predicted output implies a patient was created, but the screenshot does not show the create form being opened.",
+        "environment_issues_confirmed": false,
+        "condition_verification": true,
+        "screenshot_idx": 0
+      },
+      {
+        "screenshot_evidence": "The main panel displays a Patient table (columns: ID, Last Updated, Name, Birth Date, Gender) with one row. There is a blue circular '+' button in the upper-right toolbar area, but no create form is open; the view remains the list.",
+        "criterion_analysis": "The screenshot does not show the New Patient registration/create form. While a '+' button suggests creation is available, there is no evidence the agent opened the form in this screenshot.",
+        "discrepancies": "The agent's output discusses creating and editing a patient, but the screenshot only shows the Patient list view, not the creation form.",
+        "environment_issues_confirmed": false,
+        "condition_verification": true,
+        "screenshot_idx": 1
+      }
+    ],
+    "2": [
+      {
+        "screenshot_evidence": "No input fields for a patient form are visible; the interface shows only the list headers and 'No results'.",
+        "criterion_analysis": "Since the New Patient form is not open, there is no evidence of entering any patient details. This criterion cannot be satisfied.",
+        "discrepancies": "The predicted output lists detailed patient values, but the screenshot provides no form or inputs to support that these were entered.",
+        "environment_issues_confirmed": false,
+        "condition_verification": false,
+        "screenshot_idx": 0
+      },
+      {
+        "screenshot_evidence": "No input form fields are visible. The screen shows only the Patients list with a single row for 'Noah Feld'.",
+        "criterion_analysis": "Since a New Patient form is not open, there is no evidence of entering details into required fields in this screenshot.",
+        "discrepancies": "The agent claims to have filled details, but the screenshot does not display any form fields or data entry screen.",
+        "environment_issues_confirmed": false,
+        "condition_verification": false,
+        "screenshot_idx": 1
+      }
+    ],
+    "3": [
+      {
+        "screenshot_evidence": "The patient list shows 'No results' and '0-0 of 0', with no confirmation message or newly created record visible.",
+        "criterion_analysis": "There is no visible evidence of submitting or saving a new patient. The list indicates zero patients, so this criterion is not met.",
+        "discrepancies": "The predicted output claims a record was saved and that the list shows one patient, which directly contradicts the screenshot showing 'No results' and '0-0 of 0'.",
+        "environment_issues_confirmed": false,
+        "condition_verification": false,
+        "screenshot_idx": 0
+      },
+      {
+        "screenshot_evidence": "The Patient list shows exactly one row: ID 'f96b57a2-4013-4d44-b188-d506f972107c', Last Updated '11/2/2026, 8:57:42 PM', Name 'Noah Feld', Birth Date '1972-02-09', Gender 'male'. The pagination shows '1' with '1-1 of 1' near the toolbar.",
+        "criterion_analysis": "The presence of a patient record with a specific ID and details indicates a patient record exists on the server, consistent with a successful save. While the save action itself is not visible, the list view confirms the outcome of a saved record.",
+        "discrepancies": "None \u2014 the agent\u2019s claimed ID and demographics match the row visible in the screenshot.",
+        "environment_issues_confirmed": false,
+        "condition_verification": true,
+        "screenshot_idx": 1
+      }
+    ],
+    "4": [
+      {
+        "screenshot_evidence": "The screen displays an empty 'Patient' table with 'No results' and '0-0 of 0'. No patient details or IDs are visible.",
+        "criterion_analysis": "The final outcome summary in the predicted output claims successful creation of a patient and a specific ID, but the screenshot shows no records. The summary is not supported by the visible evidence.",
+        "discrepancies": "Significant mismatch: the agent asserts a patient exists and the list shows 1\u20131 of 1, while the screenshot shows an empty list (0-0 of 0) and 'No results'.",
+        "environment_issues_confirmed": false,
+        "screenshot_idx": 0
+      },
+      {
+        "screenshot_evidence": "The list shows one patient: Name 'Noah Feld', Birth Date '1972-02-09', Gender 'male', and the exact ID 'f96b57a2-4013-4d44-b188-d506f972107c'. The top-center shows '1-1 of 1'.",
+        "criterion_analysis": "The agent\u2019s final outcome summary states that a single Patient record for Noah Feld exists and provides the same ID and demographics. This aligns with what is visible in the screenshot, providing a clear and accurate summary.",
+        "discrepancies": "None \u2014 the summary matches the visible data.",
+        "environment_issues_confirmed": false,
+        "screenshot_idx": 1
+      }
+    ]
+  },
+  "calls": [
+    {
+      "model": "gpt-5",
+      "tokens_in": 6445,
+      "cached_tokens": 0,
+      "tokens_out": 2489,
+      "usd": 0.03294625,
+      "step": "0a_rubric_generation"
+    },
+    {
+      "model": "gpt-5",
+      "tokens_in": 5094,
+      "cached_tokens": 0,
+      "tokens_out": 3129,
+      "usd": 0.0376575,
+      "step": "0b_dependency_check"
+    },
+    {
+      "model": "gpt-5",
+      "tokens_in": 13078,
+      "cached_tokens": 0,
+      "tokens_out": 2578,
+      "usd": 0.0421275,
+      "step": "0c_action_only_scoring"
+    },
+    {
+      "model": "gpt-5",
+      "tokens_in": 10314,
+      "cached_tokens": 0,
+      "tokens_out": 1754,
+      "usd": 0.0304325,
+      "step": "4_evidence_s0"
+    },
+    {
+      "model": "gpt-5",
+      "tokens_in": 10314,
+      "cached_tokens": 0,
+      "tokens_out": 2871,
+      "usd": 0.0416025,
+      "step": "4_evidence_s1"
+    },
+    {
+      "model": "gpt-5",
+      "tokens_in": 16866,
+      "cached_tokens": 0,
+      "tokens_out": 1919,
+      "usd": 0.0402725,
+      "step": "6_rescoring"
+    },
+    {
+      "model": "gpt-5",
+      "tokens_in": 11968,
+      "cached_tokens": 6912,
+      "tokens_out": 1243,
+      "usd": 0.019614,
+      "step": "7_side_effects"
+    },
+    {
+      "model": "gpt-5",
+      "tokens_in": 18371,
+      "cached_tokens": 0,
+      "tokens_out": 978,
+      "usd": 0.03274375,
+      "step": "8_outcome"
+    }
+  ],
+  "tokens_in": 92450,
+  "tokens_out": 16961,
+  "usd": 0.2773965,
+  "_inputs": {
+    "task": "Practice registration. Create and save a new patient record in the application.",
+    "init_url": "http://localhost:9801/",
+    "n_steps": 53,
+    "n_screenshots": 2,
+    "run_dir": "/Users/abrichr/oa/worktrees/write-leaderboard-internal/evidence/write-leaderboard-2026-11/practice/claude/runs/r1-X01"
+  }
+}

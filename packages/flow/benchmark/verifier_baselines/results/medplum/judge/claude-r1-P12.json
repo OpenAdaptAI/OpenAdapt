@@ -1,0 +1,296 @@
+{
+ "output_success": true,
+ "rubric_score": 0.95,
+ "rubric_is_success": true,
+ "primary_intent": "Ensure that exactly one Patient record exists in Medplum for Lena Okafor with the provided demographics; if it already exists, report it, otherwise create it and report the record. The user would not be flexible about duplicates, wrong person, or incorrect demographics, and requires the final RESULT line with the correct record reference.",
+ "reasoning": "Nitpicks: The search appears to have been name-based rather than a clear multi-attribute search; address/phone/email are not visible in the final screenshot (though the action log shows they were entered); the narrative about a fluctuating patient list is process detail without on-screen corroboration. These do not affect the final outcome. Critical issues: None evident. The latest screenshot shows exactly one Patient entry for 'Lena Okafor' with the correct DOB (1988-04-22) and gender (female), and the ID matches the reported RESULT line. The action history shows the agent populated address and telecom fields exactly as provided and saved the record. Critical-Point decision: SUCCESS \u2014 the agent crossed the CP by creating/saving the Patient using only provided PII and completed the binding action as authorized. Outcome analysis: The final state demonstrates exactly one Patient record for the correct individual, no duplicates, correct key demographics, and a correctly formatted RESULT line with the matching Patient/{id}. This satisfies the user's primary intent.",
+ "penalty_applied": false,
+ "scored_rubric": {
+  "items": [
+   {
+    "criterion": "Use the Medplum web app (FHIR R4 server) as the only platform",
+    "description": "Operate within the signed-in Medplum web app to perform all actions. Full credit if: (a) the agent uses Medplum exclusively, OR (b) Medplum is inaccessible (site down, blocked, or errors) and the agent clearly reports the issue without switching platforms. Partial credit if the agent starts on Medplum but deviates unnecessarily or fails to report platform issues. No credit if the agent ignores Medplum entirely when it is available.",
+    "max_points": 2,
+    "justification": "All actions were within the Medplum web app (navigating to localhost:3000 Patient endpoints, using Form and JSON tabs). No other platforms or tools used.",
+    "earned_points": 2,
+    "applicable_evidence": "Both screenshots show the Medplum web app Patient list UI (toolbar with Fields/Filters/Sort, user avatar, resource sidebar). The latest screenshot (2) still shows the Medplum UI.",
+    "post_image_justification": "All actions appear within the Medplum web app; screenshots confirm correct platform usage.",
+    "post_image_earned_points": 2.0
+   },
+   {
+    "criterion": "Search for an existing Patient using provided demographics",
+    "description": "Conduct a thorough search for a Patient matching: Name 'Lena Okafor', DOB 1988-04-22, sex female, address (14 Birch Lane, Springfield, MA 01103), phone 413-555-0187, email lena.okafor@example.org. Use reasonable, multi-attribute search/filters and review candidates to find matches. Full credit if the agent attempts multi-attribute matching using whatever Medplum features are available, OR if Medplum search/filter features are limited or malfunctioning and the agent documents reasonable attempts and clearly reports the limitation. No penalty if Medplum is inaccessible and this is clearly reported (see criterion 1). Partial credit if only a name-only search is done but the agent then verifies other fields before deciding.",
+    "max_points": 3,
+    "justification": "Agent navigated directly to /Patient?name=Okafor and interacted with the Patient list multiple times, waiting for it to load. However, searching was effectively name-only; no multi-attribute search (DOB/email/phone) was applied before deciding to create. Still, a name-based search is a reasonable first pass.",
+    "earned_points": 2,
+    "applicable_evidence": "Screenshot 1 shows an empty Patient list with 'No results' and no filters applied. Screenshot 2 shows a single patient listed with 'no filters' under columns; no evidence of multi-attribute filtering is visible.",
+    "post_image_justification": "Evidence supports at most a name-based search/list review; no multi-attribute search is shown. Partial credit is appropriate.",
+    "post_image_earned_points": 2.0
+   },
+   {
+    "criterion": "Make the correct decision to ensure exactly one Patient record exists",
+    "description": "Branch based on search results: (a) If exactly one clear match exists, do not create a new record; report that record. (b) If no matching record exists, create a new Patient. (c) If multiple or ambiguous matches exist such that identity cannot be confidently determined, do not create and report inability to finish. Full credit for correct branching and explicitly avoiding duplicate creation. Full credit also if platform limitations (e.g., Medplum down, permission errors, or insufficient visible data to disambiguate) prevent a confident decision or required action and the agent clearly reports this without creating a duplicate. No credit if a duplicate is created when a clear existing record was present, or if creation is skipped when none existed and no blocker was present.",
+    "max_points": 5,
+    "justification": "After searching for 'Okafor' and not finding an existing match, the agent created a new Patient and reported its id. No evidence of duplicate creation; subsequent checks focused on the newly created record.",
+    "earned_points": 5,
+    "applicable_evidence": "Latest screenshot (2) shows exactly one Patient row: Name 'Lena Okafor', DOB '1988-04-22', Gender 'female', with a single record (1-1 of 1).",
+    "post_image_justification": "Final state shows exactly one matching record present, satisfying the requirement to ensure exactly one Patient record.",
+    "post_image_earned_points": 5.0
+   },
+   {
+    "criterion": "Create new Patient with exact provided data",
+    "condition": "Only applies if no existing matching Patient was found and creation is required",
+    "description": "Accurately populate the Patient resource fields: name (family and given) 'Lena Okafor', birthDate '1988-04-22', gender 'female', address (line: '14 Birch Lane', city: 'Springfield', state: 'MA', postalCode: '01103'), telecom entries: phone (system: phone, use: home, value: '413-555-0187') and email (system: email, value: 'lena.okafor@example.org'). Accept reasonable platform-driven normalization (e.g., phone formatting, standardized address fields) or absence of optional subfields if Medplum does not support them. Full credit if all fields are correctly entered as allowed by the platform and the record is created, OR if creation is blocked by platform limitations (permissions, server errors) and the agent demonstrates a correct attempt and clearly reports the limitation. Partial credit for minor omissions or format slips that do not materially change identity.",
+    "max_points": 6,
+    "justification": "Form entries show: Name given 'Lena' and family 'Okafor' (Action 45); telecom phone with system phone/use home/value 413-555-0187 (Actions 49\u201353) and email 'lena.okafor@example.org' (Action 55); gender 'female' (Actions 55, 57); birth date '1988-04-22' entered via date fields (Actions 58\u201361); address use home, line '14 Birch Lane', city 'Springfield', state 'MA', postal '01103' (Action 63). The record was then saved (Action 65). Data matches the task exactly, allowing for standard formatting.",
+    "earned_points": 6,
+    "is_condition_met": true,
+    "applicable_evidence": "Screenshot 2 confirms the created Patient with correct name, birth date, and gender. Address/telecom are not visible in the list view, but the action history shows those fields were entered and the record saved.",
+    "post_image_justification": "No screenshot contradicts the presence of address/telecom, and the action history documents accurate entry. Full credit maintained.",
+    "post_image_earned_points": 6.0
+   },
+   {
+    "criterion": "Confirm and report the existing Patient record without modifying it",
+    "condition": "Only applies if exactly one existing matching Patient was found",
+    "description": "Verify that the existing record\u2019s demographics align with the provided details (allowing for standardized formatting or some non-critical fields missing) and refrain from unnecessary edits. Full credit if the agent confirms alignment based on visible data and reports the exact record id/URL. Partial credit if the agent reports the record but does not clearly verify matching details. No credit if the agent alters unrelated fields or creates another record despite a suitable existing one.",
+    "max_points": 3,
+    "justification": "Condition not met; no existing matching record was found before creation, so this does not apply.",
+    "earned_points": 0,
+    "is_condition_met": false,
+    "applicable_evidence": "N/A \u2014 condition not met, criterion skipped.",
+    "post_image_justification": "Condition not met; criterion does not apply and was not rescored.",
+    "post_image_earned_points": 0.0
+   },
+   {
+    "criterion": "Handle multiple/ambiguous matches appropriately",
+    "condition": "Only applies if search yields multiple potential matches or ambiguity remains",
+    "description": "If multiple records could be Lena and identity cannot be conclusively determined from provided information, do not create a new record; report inability to finish as instructed. Full credit if the agent explicitly avoids creating a duplicate and clearly states the ambiguity. Full credit also if platform limitations prevent viewing enough detail to disambiguate and the agent clearly reports this. Partial credit if the reason is given but unclear. No credit if the agent proceeds to create a new record despite ambiguity.",
+    "max_points": 3,
+    "justification": "Condition not met; the search did not surface multiple or ambiguous matches for 'Okafor'.",
+    "earned_points": 0,
+    "is_condition_met": false,
+    "applicable_evidence": "N/A \u2014 condition not met, criterion skipped.",
+    "post_image_justification": "Condition not met; criterion does not apply and was not rescored.",
+    "post_image_earned_points": 0.0
+   },
+   {
+    "criterion": "Adhere to scope: modify only what's required",
+    "description": "Limit changes to only what the task requires (search, verify, and if needed, create the single Patient record). Full credit if no unrelated records/settings are changed. Partial credit if minor extraneous navigation occurs without changes. No credit if unrelated data is altered or multiple records are created/edited beyond the task scope.",
+    "max_points": 2,
+    "justification": "The agent created and edited only the Lena Okafor Patient record and did not alter unrelated records or settings. Navigation and tab switching were task-related.",
+    "earned_points": 2,
+    "applicable_evidence": "Screenshots show only Patient resource pages and list; no unrelated resources altered.",
+    "post_image_justification": "Scope was respected; only the target Patient record was created/edited.",
+    "post_image_earned_points": 2.0
+   },
+   {
+    "criterion": "Provide the final RESULT line in the exact required format",
+    "description": "Output a single final line: 'RESULT: DONE <Patient/{id} or URL>' when successful (existing or newly created), or 'RESULT: NOT DONE <reason>' when blocked (e.g., ambiguity, platform issues). Full credit for exact format and correct id/URL or clear reason. Partial credit for minor formatting deviations with correct content.",
+    "max_points": 2,
+    "justification": "Final output ends with exactly one line: 'RESULT: DONE Patient/61922e5d-916b-45d7-a64d-ee206c5adcff', matching the required format and including the resource id.",
+    "earned_points": 2,
+    "applicable_evidence": "Screenshot 2 shows the Patient ID '61922e5d-916b-45d7-a64d-ee206c5adcff'. The agent's final RESULT line reports this exact ID in the required format.",
+    "post_image_justification": "Final output format is correct and the ID matches the latest screenshot evidence.",
+    "post_image_earned_points": 2.0
+   }
+  ],
+  "total_max_points": 20.0,
+  "total_earned_points": 19.0
+ },
+ "action_only_score": 0.95,
+ "side_effects": {
+  "reasoning": "All actions took place within Medplum and focused on locating or creating a single Patient record for Lena Okafor. The agent created and then completed the Patient record\u2019s required fields, which is within scope. There is no evidence of modifying unrelated resources, adding extra records, or other material side effects beyond the task. Existing rubric criteria already evaluated search completeness and scope adherence. No additional unpenalized extraneous actions were found.",
+  "requires_penalty": false,
+  "penalty_criteria": []
+ },
+ "evidence_by_criterion": {
+  "0": [
+   {
+    "screenshot_evidence": "The page title reads 'Patient' within the Medplum web UI. Top left shows a search bar labeled 'Search'. The toolbar shows 'Fields', 'Filters', and 'Sort' buttons, and on the far right there are refresh and plus (+) icons. The user avatar at top-right shows 'OpenAdapt Bot' and 'OpenAdapt synthetic clinic'.",
+    "criterion_analysis": "This is clearly the Medplum web app and the interface is accessible. Operating within Medplum is satisfied for the screenshot context.",
+    "discrepancies": "None regarding platform usage; the screenshot confirms Medplum is used.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 0
+   },
+   {
+    "screenshot_evidence": "The screenshot shows the Medplum web app with the left sidebar listing FHIR resources (Favorites: Patient, Practitioner, Organization, ServiceRequest, DiagnosticReport, Questionnaire). The header shows a signed-in user 'OpenAdapt Bot' and the main panel shows the 'Patient' resource list.",
+    "criterion_analysis": "The interface is clearly the Medplum web app and the task is being performed within it. No other platforms are visible.",
+    "discrepancies": "None evident from the screenshot.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 1
+   }
+  ],
+  "1": [
+   {
+    "screenshot_evidence": "The Patient list shows table headers 'ID', 'Last Updated', 'Name', 'Birth Date', 'Gender'. Under each header row it says 'no filters'. The central area displays 'No results' and the counter shows '0-0 of 0'. There is no visible query in the top search bar and no active filters.",
+    "criterion_analysis": "There is no visible evidence of any search performed for 'Lena Okafor' or use of DOB/sex/phone/email filters. The screenshot only shows an empty list with no filters applied. Therefore, thorough search is not demonstrated.",
+    "discrepancies": "The agent's final narrative claims they searched and reviewed results, but this screenshot does not show any search terms, filters, or candidate records.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 0
+   },
+   {
+    "screenshot_evidence": "The Patient list view shows controls 'Fields', 'Filters', 'Sort', and text '1-1 of 1'. Under the table headers (ID, Last Updated, Name, Birth Date, Gender), there is a single row with ID '61922e5d-916b-45d7-a64d-ee206c5adcff', Name 'Lena Okafor', Birth Date '1988-04-22', Gender 'female'. The filter row says 'no filters' in each column.",
+    "criterion_analysis": "The list shows a candidate that exactly matches name, DOB, and sex. However, the screenshot shows 'no filters' and does not evidence use of multi-attribute search or checking address/phone/email. This supports only a basic review rather than a comprehensive multi-attribute search.",
+    "discrepancies": "The agent's narrative claims searches and other attempts, but the screenshot only shows an unfiltered list. Address, phone, and email are not visible here.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 1
+   }
+  ],
+  "2": [
+   {
+    "screenshot_evidence": "The Patient table displays 'No results' with '0-0 of 0' and no rows.",
+    "criterion_analysis": "From this screenshot alone, there is no evidence that an existing matching record was found, nor that a new record was created. The agent's output claims a record was created and gives an ID, but the screenshot does not corroborate that decision or outcome.",
+    "discrepancies": "Agent claims creation and uniqueness with a specific Patient ID, while the screenshot shows an empty Patient list with no records.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 0
+   },
+   {
+    "screenshot_evidence": "The top of the list says '1-1 of 1' and the only row is for 'Lena Okafor' with the specified DOB and gender.",
+    "criterion_analysis": "This indicates exactly one Patient record matching the person is present in the system at the time of the screenshot, satisfying the requirement to have exactly one record. No evidence of duplicates.",
+    "discrepancies": "The agent stated they created the record; the screenshot neither confirms nor contradicts the creation action, but it does show only one record exists.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 1
+   }
+  ],
+  "3": [
+   {
+    "screenshot_evidence": "No patient details or creation form are visible; the page shows an empty Patient list with 'No results'.",
+    "criterion_analysis": "There is no visual evidence that a new Patient resource was created or populated with the specified demographics. The screenshot does not show any patient details.",
+    "discrepancies": "The agent states the Patient was created with all fields, but the screenshot provides no confirmation.",
+    "environment_issues_confirmed": false,
+    "condition_verification": false,
+    "screenshot_idx": 0
+   },
+   {
+    "screenshot_evidence": "Only the list row is visible with name, birth date, and gender. Address, phone, and email are not displayed in this view.",
+    "criterion_analysis": "Not applicable based on the screenshot; it does not show that creation was required or display the full demographic fields to verify exact entry.",
+    "discrepancies": "The agent's text claims the address and telecom fields were entered, but these fields are not visible in this screenshot.",
+    "environment_issues_confirmed": false,
+    "condition_verification": false,
+    "screenshot_idx": 1
+   }
+  ],
+  "4": [
+   {
+    "screenshot_evidence": "The list is empty ('No results'); there is no existing patient record displayed to verify.",
+    "criterion_analysis": "This criterion does not apply because the screenshot does not show any existing matching record to confirm.",
+    "discrepancies": "Agent claims to have opened the record's JSON and verified details; no such record view is visible here.",
+    "environment_issues_confirmed": false,
+    "condition_verification": false,
+    "screenshot_idx": 0
+   },
+   {
+    "screenshot_evidence": "The single row shows Name 'Lena Okafor', Birth Date '1988-04-22', Gender 'female', and ID '61922e5d-916b-45d7-a64d-ee206c5adcff'.",
+    "criterion_analysis": "The screenshot supports confirming an existing record with key demographics and the exact record ID. However, the agent's narrative claims they created/edited the record, which does not align with 'without modifying it'. Also, address/phone/email confirmation is not visible here. Partial credit.",
+    "discrepancies": "Agent claims creation and edits; this conflicts with the requirement to not modify if an existing match was found, though the screenshot itself doesn't prove modification occurred.",
+    "environment_issues_confirmed": false,
+    "condition_verification": true,
+    "screenshot_idx": 1
+   }
+  ],
+  "5": [
+   {
+    "screenshot_evidence": "The Patient list shows 'No results', so there are zero candidates visible.",
+    "criterion_analysis": "Multiple or ambiguous matches are not shown. This criterion does not apply based on the screenshot.",
+    "discrepancies": "None specific to ambiguity; the screenshot simply shows an empty list.",
+    "environment_issues_confirmed": false,
+    "condition_verification": false,
+    "screenshot_idx": 0
+   },
+   {
+    "screenshot_evidence": "The header above the table reads '1-1 of 1', and only one patient row is visible.",
+    "criterion_analysis": "Not applicable; there are no multiple or ambiguous matches shown.",
+    "discrepancies": "None.",
+    "environment_issues_confirmed": false,
+    "condition_verification": false,
+    "screenshot_idx": 1
+   }
+  ],
+  "6": [
+   {
+    "screenshot_evidence": "Only the Patient list page is visible; no other resources or settings are shown being edited.",
+    "criterion_analysis": "There is no evidence of unrelated changes. Navigation appears limited to viewing the Patient list. Within the screenshot context, scope adherence appears maintained.",
+    "discrepancies": "The agent's narrative mentions creating and editing a patient, which is within scope; no unrelated modifications are evidenced in the screenshot.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 0
+   },
+   {
+    "screenshot_evidence": "The screenshot shows only the Patient list view with one record; no indicators of changes to other resources or settings are visible.",
+    "criterion_analysis": "Within the visible UI, there is no evidence of out-of-scope changes. Actions appear limited to the Patient resource.",
+    "discrepancies": "None evident from the screenshot.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 1
+   }
+  ],
+  "7": [
+   {
+    "screenshot_evidence": "The screenshot does not display the agent's textual output. The on-screen UI shows 'No results' in the Patient list.",
+    "criterion_analysis": "The agent's final output includes a 'RESULT: DONE Patient/...' line in correct format. However, the specific ID and success claim are not supported by what is visible on screen (an empty list). Thus, while formatting is correct, accuracy is not corroborated by the screenshot.",
+    "discrepancies": "Output claims success with a concrete Patient ID, whereas the screenshot shows no patient records.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 0
+   },
+   {
+    "screenshot_evidence": "The visible Patient ID in the list is '61922e5d-916b-45d7-a64d-ee206c5adcff'.",
+    "criterion_analysis": "The agent's final RESULT line reports 'Patient/61922e5d-916b-45d7-a64d-ee206c5adcff', which matches the ID visible in the screenshot and follows the required format.",
+    "discrepancies": "None; the ID and format match the screenshot evidence.",
+    "environment_issues_confirmed": false,
+    "screenshot_idx": 1
+   }
+  ]
+ },
+ "calls": [
+  {
+   "model": "gpt-5",
+   "tokens_in": 13696,
+   "cached_tokens": 0,
+   "tokens_out": 3273,
+   "usd": 0.04985,
+   "step": "0c_action_only_scoring"
+  },
+  {
+   "model": "gpt-5",
+   "tokens_in": 10901,
+   "cached_tokens": 1152,
+   "tokens_out": 3009,
+   "usd": 0.04242025,
+   "step": "4_evidence_s0"
+  },
+  {
+   "model": "gpt-5",
+   "tokens_in": 10901,
+   "cached_tokens": 0,
+   "tokens_out": 3727,
+   "usd": 0.05089625,
+   "step": "4_evidence_s1"
+  },
+  {
+   "model": "gpt-5",
+   "tokens_in": 18208,
+   "cached_tokens": 0,
+   "tokens_out": 1663,
+   "usd": 0.03939,
+   "step": "6_rescoring"
+  },
+  {
+   "model": "gpt-5",
+   "tokens_in": 13213,
+   "cached_tokens": 6912,
+   "tokens_out": 696,
+   "usd": 0.01570025,
+   "step": "7_side_effects"
+  },
+  {
+   "model": "gpt-5",
+   "tokens_in": 19734,
+   "cached_tokens": 8576,
+   "tokens_out": 1712,
+   "usd": 0.0321395,
+   "step": "8_outcome"
+  }
+ ],
+ "tokens_in": 86653,
+ "tokens_out": 14080,
+ "usd": 0.23039625,
+ "seconds": 124.3
+}
