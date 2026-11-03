@@ -128,7 +128,7 @@ class VerifyBridge:
     def hold_needed(
         self, arguments: Mapping[str, Any], tool: str = "teach_act"
     ) -> None:
-        """The MCP layer passes the tool name (``teach_act`` or ``teach_run``)."""
+        """Always None: this bridge has no person holds. ``tool`` is ignored."""
 
         return None
 

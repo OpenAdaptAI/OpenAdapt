@@ -288,7 +288,8 @@ def _server_instructions(
     elif teach is not None:
         text += (
             " To add a workflow, teach it: call teach_start with the task, then "
-            "teach_observe and teach_act until it is done, then teach_finish. "
+            "teach_observe and teach_run (web apps) or teach_act until it is "
+            "done, then teach_finish. "
             "Run 1 makes a real entry in the app; use test records. A person "
             "confirms the record check (teach_confirm_checks shows them a form) "
             "and teach_admit admits it only under the operator's signed policy. "
