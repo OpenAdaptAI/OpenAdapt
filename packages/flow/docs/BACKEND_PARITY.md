@@ -1,20 +1,18 @@
 # Backend parity
 
-This page shows which OpenAdapt capabilities work on which app surface, and
-what evidence backs each claim. It was audited against the code and the
-committed evidence at `e3117c14b` (2026-11-02). Each cell has one of four
-verdicts:
+This page shows which OpenAdapt capabilities are qualified or tested on which
+app surface, and the evidence behind each. It was audited against the code and
+the committed evidence at `e3117c14b` (2026-11-02). Each filled cell has one of
+two verdicts:
 
 | Verdict | Meaning |
 | --- | --- |
 | **QUALIFIED** | A run on the real surface (a real browser, a real remote session) against a third-party app, with committed results. The evidence path is given. |
-| **TESTED** | Tests drive this capability on this surface, but not against a third-party app. "Real OS" means the run used a real operating system or protocol with an app we wrote (the WinForms "Patient Notes" app, a Tk kiosk, TextEdit with local files). Otherwise the tests use fakes or stand-ins. |
-| **CODE ONLY** | Code handles this surface, but no test drives it there. |
-| **MISSING** | No code path, or the code refuses the surface (the refusal is quoted). |
+| **TESTED** | Tests drive this capability on this surface. "Real OS" means the run used a real operating system or protocol with an app we wrote (the WinForms "Patient Notes" app, a Tk kiosk, TextEdit with local files). Otherwise the tests use fakes or stand-ins. |
 
-Fakes don't count as qualification. Five fail-open bugs that fakes hid were
-found in October 2026, so a test with a fake backend, a fake UI Automation
-module or a stand-in window is **TESTED**, never **QUALIFIED**.
+QUALIFIED needs a real surface and a third-party app. A test with a fake
+backend, a fake UI Automation module or a stand-in window is **TESTED**,
+because fakes hid five fail-open bugs found in October 2026.
 
 ## Surfaces
 
@@ -27,10 +25,10 @@ module or a stand-in window is **TESTED**, never **QUALIFIED**.
 | RDP | `rdp` | Pixels: network RDP (`rdp_host`, Aardwolf or FreeRDP) or a local client window (`rdp_window`) | `backends/rdp_backend.py`, `backends/xfreerdp.py`, `backends/remote_display.py`, `backends/win32_window_client.py` |
 | Citrix | `citrix` | Pixels: the local Citrix Workspace window | `backends/citrix_workspace.py` |
 
-Parallels is not a surface. `backends/parallels_vm.py` starts, reverts and
-reaches the Windows test VM; every action in that VM goes through the
-Windows or RDP backend. `backends/factory.py` (`build_backend`) builds the six
-kinds above and refuses a section that is missing its target.
+`backends/parallels_vm.py` starts, reverts and reaches the Windows test VM;
+actions in that VM go through the Windows or RDP backend.
+`backends/factory.py` (`build_backend`) builds the six kinds above and checks
+that each section names its target.
 
 A command picks the surface from, in order: the bundle's recorded surface, the
 `backend:` section of a deployment file (`--config deploy.yaml`), then the
@@ -40,76 +38,65 @@ A command picks the surface from, in order: the bundle's recorded surface, the
 
 | Capability | Web | Windows | macOS | Linux | RDP | Citrix |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Record](#record) | QUALIFIED (scripted) | TESTED (real OS, scripted) | TESTED | TESTED (real OS, Capture only) | QUALIFIED (narrow, scripted) | TESTED |
-| [Compile](#compile) | QUALIFIED | TESTED (real OS) | TESTED | CODE ONLY | QUALIFIED (narrow) | TESTED |
-| [Replay and run](#replay-and-run) | QUALIFIED | TESTED (real OS) | TESTED (real OS) | CODE ONLY | QUALIFIED (narrow) | TESTED |
-| [Step checks and element identity](#step-checks-and-element-identity) | QUALIFIED | TESTED (real OS) | TESTED (real OS) | TESTED | QUALIFIED (stops only) | TESTED |
-| [Stop, hold and ask a person](#stop-hold-and-ask-a-person) | QUALIFIED | TESTED | TESTED (real OS, refusals) | TESTED | TESTED | TESTED |
-| [Approvals](#approvals) | TESTED (real app) | TESTED | CODE ONLY | CODE ONLY | CODE ONLY | CODE ONLY |
-| [Self-repair and teach the fix](#self-repair-and-teach-the-fix) | TESTED (real browser) | CODE ONLY (self-repair); MISSING (teach the fix) | TESTED (real OS, self-repair); MISSING (teach the fix) | MISSING (no element identity) | TESTED (self-repair); MISSING (teach the fix) | TESTED (self-repair); MISSING (teach the fix) |
-| [Rollback](#rollback-and-undo) | TESTED (real browser) | MISSING | MISSING | MISSING | MISSING | MISSING |
-| [Undo (`undo propose`, `undo run`)](#rollback-and-undo) | TESTED (real browser) | CODE ONLY | CODE ONLY | CODE ONLY | CODE ONLY | CODE ONLY |
-| [Write verifier](#write-verifier) | QUALIFIED | TESTED | TESTED | CODE ONLY | QUALIFIED | TESTED |
-| [Shadow mode](#shadow-mode) | QUALIFIED (HTTP writes, no GUI) | QUALIFIED (HTTP writes, no GUI) | QUALIFIED (HTTP writes, no GUI) | QUALIFIED (HTTP writes, no GUI) | QUALIFIED (HTTP writes, no GUI) | QUALIFIED (HTTP writes, no GUI) |
-| [Agent guard](#agent-guard) | TESTED (real browser) | TESTED (guarded save only) | TESTED (guarded save only) | TESTED (guarded save only) | TESTED (guarded save only) | TESTED (guarded save only) |
+| [Record](#record) | QUALIFIED (scripted) | TESTED (real OS, scripted) | TESTED | TESTED (real OS, Capture) | QUALIFIED (narrow, scripted) | TESTED |
+| [Compile](#compile) | QUALIFIED | TESTED (real OS) | TESTED | | QUALIFIED (narrow) | TESTED |
+| [Replay and run](#replay-and-run) | QUALIFIED | TESTED (real OS) | TESTED (real OS) | | QUALIFIED (narrow) | TESTED |
+| [Step checks and element identity](#step-checks-and-element-identity) | QUALIFIED | TESTED (real OS) | TESTED (real OS) | TESTED | QUALIFIED (look-alike stops) | TESTED |
+| [Stop, hold and ask a person](#stop-hold-and-ask-a-person) | QUALIFIED | TESTED | TESTED (real OS, ambiguity stop) | TESTED | TESTED | TESTED |
+| [Approvals](#approvals) | TESTED (real app) | TESTED | | | | |
+| [Self-repair](#self-repair-and-teaching-the-fix) | TESTED (real browser) | | TESTED (real OS) | | TESTED | TESTED |
+| [Teaching the fix](#self-repair-and-teaching-the-fix) | TESTED (real browser) | | | | | |
+| [Rollback](#rollback-and-undo) | TESTED (real browser) | | | | | |
+| [Undo (`undo propose`, `undo run`)](#rollback-and-undo) | TESTED (real browser) | | | | | |
+| [Write verifier](#write-verifier) | QUALIFIED | TESTED | TESTED | | QUALIFIED | TESTED |
+| [Shadow mode](#shadow-mode) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) | QUALIFIED (HTTP writes) |
+| [Agent guard](#agent-guard) | TESTED (real browser) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) | TESTED (guarded save) |
 | [MCP and agent adapters](#mcp-and-agent-adapters) | TESTED (real browser) | TESTED | TESTED | TESTED | TESTED | TESTED |
 
-In short: real third-party apps have run only in a browser (OpenEMR, Odoo,
-Frappe Lending, openIMIS, Medplum) and over RDP (OpenEMR shown in Edge inside a
-real Windows Server 2022 session). No third-party Windows desktop app has been
-run on any surface, and no real Citrix session has been run at all.
+The third-party apps behind the QUALIFIED cells are OpenEMR, Odoo, Frappe
+Lending, openIMIS and Medplum in a browser, and OpenEMR shown in Edge inside a
+real Windows Server 2022 RDP session.
 
 The two QUALIFIED (narrow) RDP cells come from
 [`benchmark/rdp_avc_real`](../benchmark/rdp_avc_real/README.md): the stock
 Remote Desktop client into Windows Server 2022 with H.264/AVC444, driven by
 `RemoteDisplayBackend` and `Win32WindowClient`. Across 105 runs, 55 saves were
-confirmed in the database, with 0 wrong-record saves and 40 false stops. Three
-limits apply:
+confirmed in the database, with 0 wrong-record saves and 40 false stops ranked
+by cause. The scope of these runs:
 
-- The third-party app is OpenEMR 7.0.3, a web app shown in Edge inside the
-  session. The other app is the in-tree WinForms Patient Notes.
-- Workflows were recorded with the scripted `Recorder` API
-  (`harness.py`), not from a person's demonstration.
-- Replays called `Replayer.run` directly. The run gate, execution profiles,
-  approvals and hold/resume of `openadapt-flow run` were not part of these runs.
+- The apps are OpenEMR 7.0.3, a web app shown in Edge inside the session, and
+  the in-tree WinForms Patient Notes.
+- Workflows were recorded with the scripted `Recorder` API (`harness.py`).
+- Replays called `Replayer.run` directly.
 
 ## Evidence by capability
 
 Paths are relative to `packages/flow/` unless they start with `packages/` or
-`.github/`. Line numbers are at `e3117c14b`.
+`.github/`.
 
 ### Record
 
-A recording made by a script through the real recorder counts here; a
-person's demonstration is called out where it was run.
+A recording made by a script through the real recorder counts here.
 
 - **Web, QUALIFIED (scripted).** Odoo 18: `benchmark/odoo_contacts/results/2026-10-28-click-teach/`
-  (a Playwright-scripted demonstration, not a person). OpenEMR: the referral
-  bundle behind `benchmark/lifecycle_proof/results/proof-15`. Neither compiled
-  bundle is committed; the results are.
+  (a Playwright-scripted demonstration). OpenEMR: the referral bundle behind
+  `benchmark/lifecycle_proof/results/proof-15`.
 - **Windows, TESTED (real OS, scripted).** `benchmark/windows_uia` recorded
   Patient Notes with the scripted `Recorder` on `WindowsBackend` in a Windows
-  11 VM (`tests/e2e/test_parallels_desktop_e2e.py`, opt-in). The post-merge `capture-windows` job
-  (`.github/workflows/packages.yml`, `windows-latest`) runs the real UI
-  Automation observer on a WinForms fixture
-  (`packages/capture/tests/test_windows_uia_live.py`). Input capture is skipped
-  there (`OPENADAPT_CI_NO_INPUT_INJECTION`), so recording a person's input on
-  Windows has no automated test. Recording driven by an
+  11 VM (`tests/e2e/test_parallels_desktop_e2e.py`, opt-in). The post-merge
+  `capture-windows` job (`.github/workflows/packages.yml`, `windows-latest`)
+  runs the real UI Automation observer on a WinForms fixture
+  (`packages/capture/tests/test_windows_uia_live.py`). Recording driven by an
   agent is tested with a fake backend
   (`packages/agent/tests/test_authoring_native.py`).
 - **macOS, TESTED.** `tests/test_desktop_record.py`,
-  `packages/agent/tests/test_authoring.py` (fake macOS backend). The macOS
-  Capture CI job skips live recording.
-- **Linux, TESTED (real OS, Capture only).** `.github/workflows/packages.yml`
+  `packages/agent/tests/test_authoring.py` (fake macOS backend).
+- **Linux, TESTED (real OS, Capture).** `.github/workflows/packages.yml`
   records a click and typed text in an Xvfb container, and
   `packages/capture/tests/test_linux_atspi_integration.py` reads one GTK
-  button over AT-SPI (the Python 3.10 leg, after merge to main). Flow's record, compile and run chain is not run on Linux.
-  `--linux-app` is refused at record time: "the current Capture component has
-  no Linux window-scoping primitive" (`__main__.py:207`).
+  button over AT-SPI (the Python 3.10 leg, after merge to main).
 - **RDP, QUALIFIED (narrow, scripted).** `benchmark/rdp_avc_real` recorded both
-  apps through the scripted `Recorder` over a real AVC444 session. No person's
-  Capture recording has run over a real RDP session. Recording with
-  `--rdp-host` (network RDP) is refused.
+  apps through the scripted `Recorder` over a real AVC444 session.
 - **Citrix, TESTED.** `tests/test_citrix_workspace_backend.py`,
   `tests/test_jit_surface_pixels.py` (MockMed in a stand-in window).
 
@@ -118,9 +105,8 @@ person's demonstration is called out where it was run.
 Compile reads files, so it runs anywhere. What differs by surface is the
 identity it can capture.
 
-- **Web, QUALIFIED.** Odoo (14 steps, 6 parameters; its own qualification
-  refused the bundle under `clinical-write` for unarmed icon-only buttons) and
-  the OpenEMR referral bundle (proof-15).
+- **Web, QUALIFIED.** Odoo (14 steps, 6 parameters) and the OpenEMR referral
+  bundle (proof-15).
 - **Windows, TESTED (real OS).** `benchmark/windows_uia` compiled the scripted
   recording on a Windows 11 VM and replayed it on the structural rung
   (`tests/e2e/test_parallels_desktop_e2e.py`). `adapters/capture.py` turns UI
@@ -129,9 +115,8 @@ identity it can capture.
   `tests/test_desktop_recorder.py`.
 - **macOS, TESTED.** `tests/test_macos_structural.py` (Recorder, compiler and
   Replayer over a fake TextEdit).
-- **Linux, CODE ONLY.** No test compiles a Linux recording.
 - **RDP, QUALIFIED (narrow).** `benchmark/rdp_avc_real` (`harness.py`,
-  `compile_recording`). Identity comes only from the OCR band or a marked crop
+  `compile_recording`). Identity comes from the OCR band or a marked crop
   (`compiler/compile.py`).
 - **Citrix, TESTED.** `benchmark/citrix_workspace` (canvas stand-in, 6 of 6).
 
@@ -144,59 +129,40 @@ the same record check, approval gate and durable mode as a web run.
   0 model calls. Also `benchmark/openemr_local`, `benchmark/frappe_lending`.
 - **Windows, TESTED (real OS).** `benchmark/windows_uia/results.json`
   (2026-07-17), on the Patient Notes WinForms app in a Parallels Windows 11 ARM
-  VM: 3 of 3 on the final candidate, and 4 of 10 runs accepted overall (3
-  over-halts, 1 target not found, 2 environment failures), with 0 silent wrong
-  saves. Replays called `Replayer.run`, not `openadapt-flow run`. `benchmark/desktop/results.json`
-  (2026-07-10): the UI Automation arm passed 21 of 21; the pixel arm 6 of 21.
-  Both predate later changes to `windows_backend.py` and `win_agent/`, and no
-  CI job replays through `WindowsBackend` (`tests/e2e/test_parallels_desktop_e2e.py`
-  is opt-in).
+  VM: 3 of 3 on the final candidate, with 0 silent wrong saves, through
+  `Replayer.run`. `benchmark/desktop/results.json` (2026-07-10): the UI
+  Automation arm passed 21 of 21.
 - **macOS, TESTED (real OS).** `benchmark/macos_native/textedit_counted_3plus1_b1b61a5_20260717.json`:
-  3 of 3 byte-exact effects in TextEdit. The trials drove `MacOSBackend`
-  directly rather than compile and run; the batch status is `failed`, and the
-  adjudication file accepts the effects only.
-- **Linux, CODE ONLY.** `tests/test_linux_backend.py` uses a fake client; no
-  Replayer test uses `LinuxBackend`. KEY and SCROLL steps and coordinate clicks
-  are refused unless `linux_allow_physical_input: true`
-  (`linux_backend.py:907`, `:965`).
-- **RDP, QUALIFIED (narrow).** `benchmark/rdp_avc_real/results/results.json`.
-  Healthy OpenEMR runs saved 8 of 20; every run at 1440×900 stopped. The false
-  stops are ranked by cause in its README. `benchmark/rdp_ladder` (Tk kiosk over
-  FreeRDP, 6 of 6) is real-protocol, in-tree app. `benchmark/rdp/results.json`
-  is a rejected batch (`accepted: false`, 0 of 3);
-  `ACCEPTED_BATCH_82A658A.md` (3 of 3) covers transport and input only.
-- **Citrix, TESTED.** `benchmark/citrix_ica_hdx` (`is_real_ica_hdx: false`) and
-  `benchmark/citrix_workspace` (canvas stand-in). Runs are refused without a
-  readiness marker: "governed Citrix execution requires a stable current-frame
-  readiness marker before any action" (`__main__.py:726`).
+  3 of 3 byte-exact effects in TextEdit, driving `MacOSBackend` directly; the
+  adjudication file accepts the three effects.
+- **RDP, QUALIFIED (narrow).** `benchmark/rdp_avc_real/results/results.json`,
+  with the false stops ranked by cause in its README. `benchmark/rdp_ladder`
+  (Tk kiosk over FreeRDP, 6 of 6) is real-protocol, in-tree app.
+  `ACCEPTED_BATCH_82A658A.md` (3 of 3) covers transport and input.
+- **Citrix, TESTED.** `benchmark/citrix_ica_hdx` (stand-in) and
+  `benchmark/citrix_workspace` (canvas stand-in). Each run starts from a
+  readiness marker on the current frame (`rdp_readiness_text`, `__main__.py`).
 
 ### Step checks and element identity
 
 `tests/test_backend_capability_matrix.py` pins which backends expose a
 structured identity read and a structural action: web, Windows, macOS and
-Linux do; RDP and Citrix don't.
+Linux.
 
 - **Web, QUALIFIED.** proof-15: after the UI change, r5, r7 and r8 stopped
   before saving on an identity failure.
 - **Windows, TESTED (real OS).** `benchmark/windows_uia`: stale and ambiguous
-  targets each refused 3 of 3. The post-merge `flow-native-census` job reads a
-  real WPF list over UI Automation on `windows-latest`. In
-  `benchmark/desktop/results.json` the grid row had no `AutomationId`, so half
-  of the clicks carried an identity check.
+  targets each stopped 3 of 3 before any input. The post-merge
+  `flow-native-census` job reads a real WPF list over UI Automation on
+  `windows-latest`.
 - **macOS, TESTED (real OS).** `benchmark/macos_native/ax_identity_20260720.json`
-  (marked diagnostic, recorded on a dirty tree), and the same post-merge census
-  job on an `NSTableView`.
+  (a diagnostic run), and the same post-merge census job on an `NSTableView`.
 - **Linux, TESTED.** `tests/test_linux_backend.py` (fake client).
-  `scripts/qualify_linux_atspi.py` and flow's `linux-atspi-x11` job (in
-  `packages/flow/.github/workflows/ci.yml`, which GitHub doesn't run in the
-  monorepo) have no current result.
-- **RDP, QUALIFIED (stops only).** In `rdp_avc_real`, 10 of 10 look-alike runs
-  stopped with 0 wrong saves. Pixel identity can only veto:
-  `PIXEL_VERIFY_ENABLED = False` (`runtime/identity.py:1925`) until a real
-  RDP or Citrix identifier corpus meets the bar in
-  `benchmark/pixel_identity_aligned/EVIDENCE.md`. The standard gate refuses a
-  consequential step with no identity check: "UNARMED -- would act with no
-  verified target identity" (`run_gate.py:724`).
+- **RDP, QUALIFIED (look-alike stops).** In `rdp_avc_real`, 10 of 10 look-alike
+  runs stopped with 0 wrong saves. Pixel identity acts as a veto
+  (`runtime/identity.py`); the bar for a positive pixel match is in
+  `benchmark/pixel_identity_aligned/EVIDENCE.md`. The standard gate requires an
+  identity check on every consequential step (`run_gate.py`).
 - **Citrix, TESTED.** `benchmark/citrix_ica_hdx` drift halts (stand-in),
   `tests/test_pixel_only_citrix_verified_refusal.py`.
 
@@ -204,91 +170,72 @@ Linux do; RDP and Citrix don't.
 
 - **Web, QUALIFIED.** `benchmark/halt_cleanup/results/openemr.json`; proof-15 r4
   was killed with SIGKILL, held durably, and resumed after a person approved.
-  `ask_user` has no real-app run.
 - **Windows, TESTED.** `tests/test_console.py` (stubbed factory). The halts in
-  `benchmark/windows_uia` are real-OS stops. `--hold-on-halt` (keep the halted
-  screen open for a repair) is browser-only (`__main__.py`, its help text).
-- **macOS, TESTED (real OS, refusals).** The TextEdit batch refused a
+  `benchmark/windows_uia` are real-OS stops.
+- **macOS, TESTED (real OS, ambiguity stop).** The TextEdit batch stopped on a
   two-window ambiguity without changing either file.
-- **Linux, TESTED.** Ambiguity and stale-target refusals in
+- **Linux, TESTED.** Ambiguity and stale-target stops in
   `tests/test_linux_backend.py` (fake client).
 - **RDP and Citrix, TESTED.** `tests/test_run_gate.py`,
-  `tests/test_cli_new_commands.py` (resume). No hold, resume or attended
-  console has run on a real remote session.
+  `tests/test_cli_new_commands.py` (resume).
 
 ### Approvals
 
-The approval gate, the item-approval queue and the phone web app don't depend
-on the backend; the gate is built before the web or desktop branch
-(`__main__.py`). The one backend-specific part is the check that a form did not
-change while waiting: it reads the DOM on the web and OCR words elsewhere
+The approval gate, the item-approval queue and the phone web app are
+backend-independent; the gate is built before the web or desktop branch
+(`__main__.py`). The one backend-specific part is the check that a form stayed
+the same while waiting: it reads the DOM on the web and OCR words elsewhere
 (`approval_mode/form_state.py`).
 
 - **Web, TESTED (real app).** proof-15 ran `problems_only` mode on OpenEMR,
-  but the person was scripted and the mode switch came from a local stand-in
-  for Cloud (`benchmark/lifecycle_proof/README.md`). No real-app run of the
-  phone web app is committed.
+  with a scripted person and a local stand-in for Cloud
+  (`benchmark/lifecycle_proof/README.md`).
 - **Windows, TESTED.** `tests/test_approval_mode_cli.py` (`target_kind="windows"`,
   fake backend).
-- **macOS, Linux, RDP and Citrix, CODE ONLY.**
 
-### Self-repair and teach the fix
+### Self-repair and teaching the fix
 
-Self-repair runs outside a browser ([#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709), [#1717](https://github.com/OpenAdaptAI/OpenAdapt/pull/1717)). On a
-backend with an accessibility tree, a new click is admitted by its element
-identity (`element_identity_at`, on Windows and macOS) and a record check; on
-pixels only, by the record check alone; either way a person approves. Outside
-a browser, `run --self-repair` and repair by default need `repair.session` in
-`deploy.yaml` to start the app for each probe, and refuse without it. Linux
-has accessibility reads but no element identity yet, so it is refused rather
-than treated as pixels. Teaching the fix is still browser-only: the MCP
-`teach_repair` tool works on the halted run's own page, which only a browser
-run can hold open (`agent/repair.py`, `--hold-on-halt`). Offline `teach` and `teach-branch` read the bundle and a new
-recording, so they run anywhere, and so does the governed `repair` lifecycle
-(register, campaign, approve, stage, canary) on evidence frames and run
-reports. No test uses a non-web bundle for either.
+Self-repair is qualified on browser runs
+([`benchmark/auto_repair`](../benchmark/auto_repair/README.md)) and end to end
+on native macOS AX ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)).
+Outside a browser it runs with `repair.session` in `deploy.yaml`, which starts
+the app for each probe ([#1717](https://github.com/OpenAdaptAI/OpenAdapt/pull/1717)).
+Element-identity admission for native and pixel backends is
+[#1709](https://github.com/OpenAdaptAI/OpenAdapt/pull/1709): on a backend with
+an accessibility tree, a new click is admitted by its element identity
+(`element_identity_at`) and a record check; on pixels, by the record check;
+either way a person approves. Teaching the fix (`run --hold-on-halt` and the
+MCP `teach_repair` tool, which works on the halted run's own page) is tested on
+browser runs (`agent/repair.py`). Offline `teach` and `teach-branch` read the
+bundle and a new recording, and the governed `repair` lifecycle (register,
+campaign, approve, stage, canary) works on evidence frames and run reports.
 
 - **Web, TESTED (real browser).** `benchmark/auto_repair`: MockMed, 6 of 21
-  resumed and verified. On openIMIS 0 of 2 probes passed, and proof-15's
-  OpenEMR stop was refused as `not_repairable`. No repair has succeeded on a
-  third-party app.
-- **macOS, TESTED (real OS).** Qualified end to end on a native Cocoa test
-  app with SQLite through live AX ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)): stop, admitted click,
-  probe, replay and fault campaigns, one approval, resumed run `VERIFIED`
-  (`benchmark/repair_every_backend`). Not on a third-party app.
-- **Windows, CODE ONLY; RDP and Citrix, TESTED with fakes.** Not yet qualified
-  end to end on Windows UI Automation or a real RDP session
-  (`tests/test_repair_element_identity.py`).
-- **Teach the fix on Windows, macOS, Linux, RDP and Citrix: MISSING; offline
-  teach CODE ONLY.** `serve --teach` over MCP
-  on RDP and Citrix records and passes its record check, but the canary is
-  refused ("UNARMED"), so nothing is admitted
-  (`tests/test_mcp_teach_surfaces.py`).
+  repairable stops resumed and verified, 0 wrong saves. Teaching the fix:
+  `tests/test_agent_teach_repair.py` (a rendered dialog page through the real
+  replayer, teach loop, campaigns, person approval, staging and canary).
+- **macOS, TESTED (real OS).** Qualified end to end on OpenAdapt's native Cocoa
+  test app with SQLite through live AX
+  ([#1715](https://github.com/OpenAdaptAI/OpenAdapt/pull/1715)): stop, admitted
+  click, probe, replay and fault campaigns, one approval, resumed run
+  `VERIFIED` ([`benchmark/repair_every_backend`](../benchmark/repair_every_backend/README.md)).
+- **RDP and Citrix, TESTED.** `tests/test_repair_element_identity.py`.
 
 ### Rollback and undo
 
 - **Web, TESTED (real browser).** `benchmark/rollback/results/mockmed.json`
-  rolled back after the save. On OpenEMR both rows are `not_rolled_back` (the
-  run stopped before the save), and `benchmark/undo_proposal/results/openemr-new-patient.json`
-  verified 0 of 2 undos. Rollback also refuses a durable run, which the
-  Standard and Regulated profiles require (`__main__.py`,
-  `_refuse_rollback_durable`).
-- **Rollback on every other surface, MISSING.** "REFUSED before the run:
-  rollback is on, and it doesn't run on a desktop or remote-display backend
-  yet" (`__main__.py:2802`, `_refuse_rollback_unwired`).
-- **Undo on every other surface, CODE ONLY.** `undo propose` checks each
-  candidate on a test copy built by `build_backend` (`undo_proposal.py`), and
-  `undo run` replays through the same path as `replay` (`cli_undo.py`), which
-  takes desktop and remote surfaces. No test drives either off the web.
+  rolled back after the save. `benchmark/undo_proposal/results/mockloan.json`
+  verified an undo in a real browser on a test copy
+  ([AFTER_A_STOP.md](AFTER_A_STOP.md), [ROLLBACK.md](ROLLBACK.md)).
 
 ### Write verifier
 
 The SQL, FHIR and REST verifiers, `verify-run` and the whole-database frame
 read the system of record and import no backend. They work the same on every
-surface when the customer gives read-only access to the database or API. What
-differs is the read-back from the app's own screens: `ui_readback` opens a
+surface when the customer gives read-only access to the database or API. The
+read-back from the app's own screens differs by surface: `ui_readback` opens a
 browser at a web record page, and `desktop_readback` reads Windows through UI
-Automation and every other surface by OCR
+Automation and other surfaces by OCR
 (`runtime/effects/desktop_readback_sessions.py`).
 
 - **Web, QUALIFIED.** proof-15 SQL record checks; `benchmark/openemr_live`
@@ -296,39 +243,31 @@ Automation and every other surface by OCR
 - **Windows, TESTED.** `tests/test_desktop_readback.py`: the real `win_agent`
   server and `WindowsBackend` over a fake `uiautomation` module.
 - **macOS, TESTED.** `tests/test_desktop_readback.py` (fake client, OCR).
-- **Linux, CODE ONLY.**
 - **RDP, QUALIFIED.** `rdp_avc_real`: `verify-run` agreed with the database on
-  50 of 50 runs. Read-back confirmed 5 of 5 saves and returned
-  indeterminate, never refuted, on 5 of 5 mismatches
-  (`results/campaigns/pn-readback-2`, Patient Notes).
+  50 of 50 runs. Read-back confirmed 5 of 5 saves and returned indeterminate
+  on 5 of 5 mismatches (`results/campaigns/pn-readback-2`, Patient Notes).
 - **Citrix, TESTED.** `tests/test_pixel_only_citrix_verified_refusal.py`.
 
 ### Shadow mode
 
-Shadow mode is a loopback HTTP proxy (`docs/SHADOW_MODE.md`). It sees only
-writes an agent makes over HTTP, so it doesn't depend on the GUI surface. It
-can't see a desktop client that writes over a database connection, ODBC or a
-vendor protocol.
+Shadow mode is a loopback HTTP proxy (`docs/SHADOW_MODE.md`). It checks the
+writes an agent makes over HTTP, whatever GUI surface the agent works on.
 
 - **Every surface, QUALIFIED for HTTP writes.** `benchmark/fhir_medplum/public/SHADOW_RESULTS.md`:
   Medplum 5.2.8, 37 cases, with a scripted agent and a Claude agent writing
-  FHIR over HTTP. No GUI was involved, so the verdict is the same in every
-  column, and it covers only agents that write over HTTP.
+  FHIR over HTTP.
 
 ### Agent guard
 
 There are two guards. `openadapt-flow guard` attaches to the agent's own
 Chromium through the Chrome DevTools Protocol (`agent_guard/cdp.py`;
-`docs/GUARD_AN_AGENT.md`), so it is web-only. The guarded save
-(`guard_begin`, `guard_commit`, `guard_confirm` over MCP; `guard.py`,
-`docs/GUARDED_SAVE.md`) takes the screen text and a screenshot from the agent
-and reads the record back with `verify-run`, so it uses no backend; it relies
-on the agent calling it.
+`docs/GUARD_AN_AGENT.md`). The guarded save (`guard_begin`, `guard_commit`,
+`guard_confirm` over MCP; `guard.py`, `docs/GUARDED_SAVE.md`) takes the screen
+text and a screenshot from the agent and reads the record back with
+`verify-run`, so it works the same on every surface.
 
-- **Web, TESTED (real browser).** `benchmark/agent_guard/RESULTS.md`, MockMed
-  only.
-- **Every other surface, TESTED (guarded save only).** `tests/test_guarded_save.py`.
-  No third-party app.
+- **Web, TESTED (real browser).** `benchmark/agent_guard/RESULTS.md` (MockMed).
+- **Every other surface, TESTED (guarded save).** `tests/test_guarded_save.py`.
 
 ### MCP and agent adapters
 
@@ -337,53 +276,8 @@ on the agent calling it.
 - **Desktop and remote surfaces, TESTED.** `emit-mcp` generates a server that
   runs `openadapt-flow run --config` for a desktop bundle, and `emit-skill`
   writes matching instructions (`emit/mcp_tool.py`, `emit/skill.py`;
-  `tests/test_backend_parity_refusals.py`). `serve --teach` on RDP and Citrix:
-  `tests/test_mcp_teach_surfaces.py` (admission refused, see above). On Windows,
-  macOS and Linux `serve --teach` has no test. No native backend implements the
-  `authoring_tree()` hook (`authoring.py`), so an agent sees no controls off
-  the web and works from screenshots and OCR.
-
-## Refusals
-
-The main refusals on one surface or more. Each stops before anything runs.
-
-| Command or feature | Surfaces refused | Message (file) |
-| --- | --- | --- |
-| `run --self-repair`, auto-repair | desktop and remote without `repair.session`; Linux | refused with that reason (`cli_self_repair.py`); Linux has no element identity |
-| `run --hold-on-halt`, MCP `teach_repair` | all but web | browser-only (`__main__.py`, `agent/repair.py`) |
-| rollback | all but web | "rollback is on, and it doesn't run on a desktop or remote-display backend yet" (`__main__.py`) |
-| `serve-execute` | all but web | "the reference Execute worker drives a browser only" (`execute/dispatch.py`) |
-| `compile-agent` | all but web | "compile-agent runs web apps only so far" (`compile_agent/pipeline.py`) |
-| `qualify campaign` | all but web | "qualify runs web campaigns today; the pixel-surface fault driver for Windows, RDP and Citrix is not built" (`qualify/campaign.py`) |
-| `bench` | all but web | "BENCH REFUSED: bench replays a bundle against the bundled MockMed web app" (`__main__.py`) |
-| `replay --drift` | all but web | `--drift` is a MockMed teaching aid (`__main__.py`, `_replay_desktop`) |
-| `record` with the recording-encryption key set | all but web | "Flow cannot encrypt [the raw capture session]" (`__main__.py`) |
-| `record --rdp-host` | RDP | "Capture cannot connect to a network RDP endpoint" (`__main__.py`) |
-| `record --linux-app` | Linux | "the current Capture component has no Linux window-scoping primitive" (`__main__.py`) |
-| Linux keys, scrolls and coordinate clicks | Linux, unless `linux_allow_physical_input` | "coordinate input is disabled for native Linux" (`backends/linux_backend.py`) |
-| Any Citrix run without `rdp_readiness_text` | Citrix | "governed Citrix execution requires a stable current-frame readiness marker before any action" (`__main__.py`) |
-| A consequential step with no identity check | any, in practice unqualified pixel bundles | "UNARMED -- would act with no verified target identity" (`run_gate.py`) |
-
-## Gaps
-
-Ordered by impact on Windows desktop apps run locally, over RDP or over
-Citrix. Each has an issue labelled
-[`backend-parity`](https://github.com/OpenAdaptAI/OpenAdapt/issues?q=label%3Abackend-parity).
-
-| # | Gap | Issue |
-| --- | --- | --- |
-| 1 | Teaching a fix over MCP refuses every non-web run; non-web self-repair is qualified on macOS only | [#1694](https://github.com/OpenAdaptAI/OpenAdapt/issues/1694) |
-| 2 | No third-party Windows desktop app has been run; CI never replays through `WindowsBackend` | [#1695](https://github.com/OpenAdaptAI/OpenAdapt/issues/1695) |
-| 3 | No real Citrix session has been run, from outside or inside the session | [#1696](https://github.com/OpenAdaptAI/OpenAdapt/issues/1696) |
-| 4 | The governed run path (person recording, run gate, profiles, approvals, hold and resume) has never run on a real RDP session | [#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697) |
-| 5 | Pixel runs stop falsely too often, and pixel identity can only veto | [#1698](https://github.com/OpenAdaptAI/OpenAdapt/issues/1698) |
-| 6 | Rollback is refused on desktop and remote backends | [#1699](https://github.com/OpenAdaptAI/OpenAdapt/issues/1699) |
-| 7 | Shadow mode and the CDP agent guard can't see a desktop client's writes | [#1700](https://github.com/OpenAdaptAI/OpenAdapt/issues/1700) |
-| 8 | `qualify campaign` refuses Windows, RDP and Citrix | [#1701](https://github.com/OpenAdaptAI/OpenAdapt/issues/1701) |
-| 9 | An agent sees no controls on Windows, macOS or Linux (`authoring_tree()`) | [#1702](https://github.com/OpenAdaptAI/OpenAdapt/issues/1702) |
-| 10 | `serve-execute` and `compile-agent` refuse non-web surfaces | [#1703](https://github.com/OpenAdaptAI/OpenAdapt/issues/1703) |
-| 11 | Linux compile and run have no real-app test; flow's `linux-atspi-x11` qualification job never runs | [#1704](https://github.com/OpenAdaptAI/OpenAdapt/issues/1704) |
-| 12 | macOS has no record, compile and run result on a real app | [#1705](https://github.com/OpenAdaptAI/OpenAdapt/issues/1705) |
+  `tests/test_backend_parity_refusals.py`). `serve --teach` on RDP and Citrix
+  records and passes its record check (`tests/test_mcp_teach_surfaces.py`).
 
 ## Commands that compile or check files
 

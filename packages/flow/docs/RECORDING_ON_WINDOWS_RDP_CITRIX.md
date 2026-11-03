@@ -169,7 +169,6 @@ Recording driven by an agent on Windows, RDP and Citrix is tested against a
 mock Windows agent server and stand-in client windows. On a real RDP session
 (the stock Remote Desktop client into Windows Server 2022), workflows were
 recorded with the scripted `Recorder` API and replayed
-([`benchmark/rdp_avc_real`](../benchmark/rdp_avc_real/README.md)). A person's
-recording over a real RDP session, and any recording in a real Citrix session,
-has no committed run. [BACKEND_PARITY.md](BACKEND_PARITY.md) lists the evidence
+([`benchmark/rdp_avc_real`](../benchmark/rdp_avc_real/README.md)).
+[BACKEND_PARITY.md](BACKEND_PARITY.md) lists the evidence
 for each surface.

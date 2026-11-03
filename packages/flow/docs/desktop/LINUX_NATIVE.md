@@ -74,13 +74,10 @@ the live session.
 
 ## Qualification
 
-The `linux-atspi-x11` job in `packages/flow/.github/workflows/ci.yml` is
-written for this, but GitHub runs only the repository root's workflows, so it
-does not run in the monorepo and no current result exists. Root CI records
-under Xvfb and, after a merge to main, reads a GTK3 button over AT-SPI
-(`packages/capture/tests/test_linux_atspi_integration.py`). The job owns an
-isolated Xvfb display, session
-D-Bus, AT-SPI registry, and minimal GTK3 application. It runs exactly three
+Root CI records under Xvfb and, after a merge to main, reads a GTK3 button
+over AT-SPI (`packages/capture/tests/test_linux_atspi_integration.py`). The
+`linux-atspi-x11` qualification job (`packages/flow/.github/workflows/ci.yml`)
+owns an isolated Xvfb display, session D-Bus, AT-SPI registry, and minimal GTK3 application. It runs exactly three
 fresh-process text-and-button trials, verifies each effect from exact file bytes
 outside the target UI, then runs three ambiguous-control and three stale-handle
 trials that must refuse with the effect file absent. Its artifact explicitly

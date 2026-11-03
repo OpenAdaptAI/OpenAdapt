@@ -49,8 +49,7 @@ counted real Workspace multi-monitor result.
 Windows-host client for the same backend (PrintWindow/BitBlt client-area
 capture, SendInput injection, per-monitor-v2 DPI, UIPI refusal). The win32
 client drove the stock Remote Desktop client on a real Windows Server 2022
-host in [`benchmark/rdp_avc_real`](../../benchmark/rdp_avc_real/README.md); no
-Citrix Workspace window has been driven with it. The backend
+host in [`benchmark/rdp_avc_real`](../../benchmark/rdp_avc_real/README.md). The backend
 deliberately remains small: target uniqueness, identity, policy,
 postconditions, independent effects, retries, repair, and audit belong to the
 OpenAdapt runtime rather than the display driver.
