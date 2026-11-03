@@ -252,7 +252,8 @@ def test_demo_replay_still_cannot_reach_verified(
                 "--run-dir",
                 str(run_dir),
             ]
-        ) == 1
+        )
+        == 1
     )
     report = _report(run_dir)
     assert report.execution_profile == "demo"

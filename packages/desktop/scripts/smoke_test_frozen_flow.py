@@ -663,12 +663,16 @@ def main() -> int:
             ],
             env=env,
         )
+        # A Flow that serves the demo app only when asked takes --demo-app;
+        # an older pinned Flow serves it whenever no URL is given.
+        replay_help, _ = _run([*flow, "replay", "--help"], env=env)
+        demo_app = ["--demo-app"] if "--demo-app" in replay_help else []
         _, replay_seconds = _run(
             [
                 *flow,
                 "replay",
                 str(root / "bundle"),
-                "--demo-app",
+                *demo_app,
                 "--run-dir",
                 str(root / "run"),
             ],
