@@ -123,13 +123,38 @@ OpenAdaptAI/OpenAdapt (all four, or none):
 | `SIGNPATH_PROJECT_SLUG` | `OpenAdapt` |
 | `SIGNPATH_SIGNING_POLICY_SLUG` | `test-signing` first; `release-signing` once the production certificate is issued |
 
-The Windows job then builds the installers, uploads them, submits one signing
-request with `signpath/github-action-submit-signing-request` (pinned by commit),
-waits for it, checks that each returned installer carries a valid Authenticode
-signature, and smoke-tests the signed files: the MSI install must yield a
-signed `openadapt-desktop.exe`, and the NSIS setup must be signed itself. It
-publishes them as `authenticode`. Without the secrets it publishes the same
-installers as `unsigned`.
+With `release-signing`, the release's Windows job builds the installers,
+uploads them, submits one signing request with
+`signpath/github-action-submit-signing-request` (pinned by commit), waits for
+it, checks that each returned installer carries a valid Authenticode signature,
+and smoke-tests the signed files: the MSI install must yield a signed
+`openadapt-desktop.exe`, and the NSIS setup must be signed itself. It publishes
+them as `authenticode`. Without the secrets it publishes the same installers as
+`unsigned`.
+
+With `test-signing`, releases do not use SignPath at all: they publish Windows
+as `unsigned`, exactly as with no secrets. A test certificate is not trusted, so
+its signature never ships and is never labelled `authenticode`. Any other
+policy slug fails the release.
+
+### Test-sign a build for SignPath's review
+
+SignPath issues the production certificate after it reviews a test-signed
+build. To make one, run **Actions → SignPath test-sign → Run workflow** on
+`main` (`gh workflow run signpath-test-sign.yml --ref main`). The workflow
+(`.github/workflows/signpath-test-sign.yml`) builds the installers the same way
+the release does, refuses to run unless the policy secret is `test-signing`,
+submits one signing request, and checks that every returned file, including the
+program files inside the MSI, carries an Authenticode signature. The test
+certificate is not trusted, so the status is `NotTrusted` or `UnknownError`
+rather than `Valid`. The run summary lists the signing request and each file's
+status and signer. The signed files are kept as a workflow artifact for seven
+days. The workflow publishes nothing. SignPath refuses re-runs, so dispatch a
+new run instead of re-running one.
+
+Once SignPath imports the production certificate, set
+`SIGNPATH_SIGNING_POLICY_SLUG` to `release-signing`. The next Desktop release
+then signs Windows through SignPath and publishes it as `authenticode`.
 
 SignPath cannot open an NSIS archive, so the program files the NSIS setup
 installs and its uninstaller are not signed. The MSI is the fully signed

@@ -13,7 +13,12 @@ from pathlib import Path
 import pytest
 
 WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
-RELEASES = ["desktop-release.yml", "release-package.yml", "release-and-publish.yml"]
+RELEASES = [
+    "desktop-release.yml",
+    "release-package.yml",
+    "release-and-publish.yml",
+    "signpath-test-sign.yml",
+]
 
 
 def _steps(text: str) -> list[tuple[str, str]]:

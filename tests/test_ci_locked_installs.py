@@ -26,6 +26,8 @@ ALLOWED = {
     ("main.yml", "pip install dist/*.whl"),
     # Bootstraps uv itself: one exact, dependency-free wheel.
     ("desktop-release.yml", "pip install --disable-pip-version-check uv==0.11.29"),
+    # The same Windows build steps, test-signed (tests keep them identical).
+    ("signpath-test-sign.yml", "pip install --disable-pip-version-check uv==0.11.29"),
     # Not on PyPI; pinned to a commit, installed without dependencies.
     ("packages.yml", "uv pip install --system --no-deps 'harness2 @ git+"),
     # Not an install: the test reads the fix the launcher prints.

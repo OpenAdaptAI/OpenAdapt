@@ -47,9 +47,11 @@
 # PyPI to serve the attested wheel and sdist, and publishes the draft.
 #
 # Signing: macOS DMGs are ad-hoc signed unless Developer ID credentials exist.
-# Windows goes through SignPath when the four SIGNPATH_* secrets are set (one
-# request deep-signs the MSI and its program files and signs the NSIS setup),
-# and ships unsigned otherwise. Linux bytes are covered by the GitHub
+# Windows goes through SignPath when the four SIGNPATH_* secrets are set and
+# the policy is release-signing (one request deep-signs the MSI and its program
+# files and signs the NSIS setup), and ships unsigned otherwise. With the
+# test-signing policy it ships unsigned too: a test certificate never ships
+# (signpath-test-sign.yml makes test-signed builds and publishes nothing). Linux bytes are covered by the GitHub
 # attestation. File names, the website manifest, the channel, and the release
 # notes state each platform's mode. The result is an unadmitted release
 # candidate; it creates no Production state.
@@ -598,10 +600,11 @@ jobs:
     needs: gate
     if: needs.gate.outputs.release == 'true'
     runs-on: windows-2022
-    # The protected environment holds the SignPath credentials. With all four,
-    # one SignPath request deep-signs the MSI (the installer and the program
-    # files in it) and signs the NSIS setup; with none, both ship unsigned and
-    # say so; with some, the build fails. The artifact configuration is
+    # The protected environment holds the SignPath credentials. With all four
+    # and the release-signing policy, one SignPath request deep-signs the MSI
+    # (the installer and the program files in it) and signs the NSIS setup;
+    # with none, or with the test-signing policy, both ship unsigned and say
+    # so; with some, or with any other policy, the build fails. The artifact configuration is
     # .signpath/artifact-configurations/openadapt-desktop-installers.xml.
     environment: native-release
     permissions:
