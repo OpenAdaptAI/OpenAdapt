@@ -3015,6 +3015,34 @@ _NOTICE_EXPIRY_WORDS = frozenset({"expire", "expires", "expiring"})
 _NOTICE_DISMISS_LABEL = "ok"
 
 
+def _notice_parts(token: str) -> Optional[list[str]]:
+    """``token`` as allowlisted notice words and ASCII numbers, or None.
+
+    OCR often runs a line's words together (``yoursession``, ``in5minutes``),
+    so a token may be several words; it is accepted only when it splits
+    completely into notice words of two or more letters and digit runs. A
+    one-letter word (``a``, ``i``, ``x``) counts only as a whole token.
+    """
+
+    if token in _NOTICE_DIALOG_WORDS or (token.isascii() and token.isdecimal()):
+        return [token]
+    if not token.isascii():
+        return None
+    words = sorted((w for w in _NOTICE_DIALOG_WORDS if len(w) > 1), key=len)
+    best: list[Optional[list[str]]] = [None] * (len(token) + 1)
+    best[0] = []
+    for end in range(1, len(token) + 1):
+        for start in range(end):
+            before = best[start]
+            if before is None:
+                continue
+            piece = token[start:end]
+            if piece in words or piece.isdecimal():
+                best[end] = [*before, piece]
+                break
+    return best[len(token)]
+
+
 def _dialog_message_refusal(text: str) -> Optional[str]:
     """Why a covering dialog's text forbids dismissing it, or None.
 
@@ -3042,19 +3070,13 @@ def _dialog_message_refusal(text: str) -> Optional[str]:
     words_list = [w for w in "".join(c if c.isalnum() else " " for c in words).split()]
     if not words_list:
         return "the covering dialog's message can't be read"
-    other = sorted(
-        {
-            w
-            for w in words_list
-            if w not in _NOTICE_DIALOG_WORDS and not (w.isascii() and w.isdecimal())
-        }
-    )
+    other = sorted({w for w in words_list if _notice_parts(w) is None})
     if other:
         return (
             "the covering dialog shows words a session notice does not "
             f"({', '.join(other[:6])}); it is not dismissed"
         )
-    present = set(words_list)
+    present = {part for w in words_list for part in _notice_parts(w) or ()}
     if not present & _NOTICE_SUBJECT_WORDS or not present & _NOTICE_EXPIRY_WORDS:
         return (
             "the covering dialog's text does not say that a session expires; "

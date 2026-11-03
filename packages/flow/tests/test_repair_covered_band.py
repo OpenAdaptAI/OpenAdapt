@@ -707,3 +707,61 @@ def test_band_text_that_ends_at_the_dialog_edge_is_not_its_message() -> None:
         at={"hwnd": 7, "pid": 42}, message="Your session expires in 5 minutes."
     )
     assert queried
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Sessionnotice Yoursession expires in5minutes. OK",
+        "Session notice Yoursessionexpiresin5minutes. OK ×",
+    ],
+)
+def test_words_ocr_runs_together_still_pass(text) -> None:
+    from openadapt_flow.repair.self_repair import _dialog_message_refusal
+
+    assert _dialog_message_refusal(text) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Yoursession expires. Deleteall OK",
+        "Session notice Your session expires axdelete OK",
+        "Session notice Your session expiresnow OK",
+    ],
+)
+def test_a_run_together_token_must_split_into_notice_words(text) -> None:
+    from openadapt_flow.repair.self_repair import _dialog_message_refusal
+
+    assert _dialog_message_refusal(text) is not None
+
+
+def test_the_real_ocr_reads_a_session_notice_as_dismissable() -> None:
+    # The run's own OCR on a drawn "Session notice" dialog (the lab app's
+    # wording), so OCR quirks such as run-together words are covered.
+    pytest.importorskip("rapidocr_onnxruntime")
+    import io
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    from openadapt_flow.repair.self_repair import _dialog_message_refusal
+    from openadapt_flow.vision import ocr
+
+    img = Image.new("RGB", (520, 300), "white")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("DejaVuSans.ttf", 18)
+    except OSError:
+        try:
+            font = ImageFont.truetype("Arial.ttf", 18)
+        except OSError:
+            pytest.skip("no TrueType font to draw the dialog")
+    draw.text((20, 20), "Session notice", fill="black", font=font)
+    draw.text((480, 20), "×", fill="black", font=font)
+    draw.text((70, 110), "Your session expires in 5 minutes.", fill="black", font=font)
+    draw.rectangle((380, 230, 490, 270), outline="black")
+    draw.text((420, 238), "OK", fill="black", font=font)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    text = " ".join(line.text for line in ocr(buf.getvalue()))
+    assert _dialog_message_refusal(text) is None, text
