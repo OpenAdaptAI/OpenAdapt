@@ -378,3 +378,38 @@ def test_hosted_validation_matches_a_redacted_entry_url():
     url = _openemr_url(_token())
     assert _openemr_url(REDACTED) in _entry_url_forms(url)
     assert url in _entry_url_forms(url)
+
+
+@pytest.mark.parametrize(
+    ("app", "text", "name"),
+    [
+        # The motivating case: a per-session CSRF token in a query parameter.
+        ("OpenEMR", "/interface/main/tabs/main.php?token_main={v}&x=1", "token_main"),
+        ("OpenEMR", "csrf_token_form={v}&pid=3", "csrf_token_form"),
+        # The same rule, with no per-app list, on other apps' credential names.
+        ("Frappe", "X-Frappe-CSRF-Token: {v}", "x-frappe-csrf-token"),
+        ("EspoCRM", "Espo-Authorization: {v}", "espo-authorization"),
+        ("any", "/list?next=2&app_sessid={v}", "app_sessid"),
+    ],
+)
+def test_credential_names_are_found_by_their_parts_in_any_app(app, text, name):
+    value = _token()
+    out, reasons = redact_text(text.format(v=value))
+    assert value not in out, app
+    assert any(reason.endswith(name) for reason in reasons), reasons
+
+
+def test_credential_name_parts_leave_ordinary_names_alone():
+    assert not report_redaction.is_credential_name("tokenizer")
+    assert not report_redaction.is_credential_name("input_tokens")
+    assert not report_redaction.is_credential_name("patient_id")
+    text = "/list?tokenizer=bpe&page=2&input_tokens=12"
+    assert redact_text(text) == (text, [])
+
+
+def test_a_credential_pair_in_a_har_entry_is_redacted():
+    value = _token()
+    report = {"request": {"headers": [{"name": "X-Frappe-CSRF-Token", "value": value}]}}
+    redacted, found = redact_report(report)
+    assert value not in json.dumps(redacted)
+    assert found and found[0].pointer == "/request/headers/0/value"

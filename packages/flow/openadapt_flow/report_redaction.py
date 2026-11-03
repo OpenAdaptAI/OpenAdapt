@@ -2,16 +2,18 @@
 
 A run report (``report.json``) is a shareable artifact: an offline Seal signs
 its exact bytes and the signed report can be published as a receipt. URLs the
-run saw can carry the application's session: OpenEMR puts its per-session
-CSRF token in ``main.php?token_main=...``, OAuth redirects carry ``code`` and
+run saw can carry the application's session: an app may put its per-session
+CSRF token in a query parameter such as ``main.php?csrf_token=...``, OAuth redirects carry ``code`` and
 ``state``, and a captured header can hold ``Authorization: Bearer ...`` or a
 ``Cookie``. None of that belongs in a receipt.
 
 :func:`redact_report` walks every string in the report and replaces
 
-* the value of a secret query, fragment or form parameter (``token_main=``,
-  ``csrf_token_form=``, ``PHPSESSID=``, ``access_token=``, ``code=``,
-  ``state=``, ``signature=`` and the rest of :data:`DEFAULT_PARAMS`);
+* the value of a secret query, fragment or form parameter: one in
+  :data:`DEFAULT_PARAMS` (``PHPSESSID=``, ``access_token=``, ``code=``,
+  ``state=``, ``signature=``, ...) or one whose name has a CSRF, XSRF,
+  token or session-id part (:func:`is_credential_name`: ``csrf_token_form=``,
+  ``token_main=``, ``auth_token=``);
 * the value of a credential header (``Authorization``, ``Cookie``,
   ``Set-Cookie`` and the rest of :data:`DEFAULT_HEADERS`), in a
   ``Name: value`` line, a JSON key, or a ``{"name": ..., "value": ...}`` pair;
@@ -40,7 +42,7 @@ policy file (``OPENADAPT_FLOW_REPORT_REDACTION``, else
 
 ``keep`` may only name the parameters that are also ordinary words in some
 apps (:data:`KEEPABLE_PARAMS`, such as ``state`` for a US state field); a
-credential name such as ``token_main`` or ``access_token`` is always redacted.
+credential name such as ``csrf_token`` or ``access_token`` is always redacted.
 Nothing here touches the network.
 """
 
@@ -65,9 +67,8 @@ POLICY_FILE: Final = "report-redaction.json"
 #: credential, OAuth grant or request signature. Compared case-insensitively.
 DEFAULT_PARAMS: Final = frozenset(
     {
-        # CSRF and per-session tokens (OpenEMR, Laravel, Rails, Django, ...)
-        "token_main",
-        "csrf_token_form",
+        # CSRF and per-session tokens (Laravel, Rails, Django, ...); any other
+        # name with such a part is caught by is_credential_name.
         "csrf_token",
         "csrf",
         "_csrf",
@@ -128,9 +129,7 @@ DEFAULT_HEADERS: Final = frozenset(
 #: JSON object keys whose whole string value is a credential, besides headers.
 _SECRET_KEYS: Final = frozenset(
     {
-        "token_main",
         "csrf_token",
-        "csrf_token_form",
         "access_token",
         "id_token",
         "refresh_token",
@@ -213,6 +212,36 @@ class RedactionPolicy:
 
 
 DEFAULT_POLICY: Final = RedactionPolicy()
+
+#: Name parts that make a parameter or JSON key a credential in any app.
+_CREDENTIAL_PARTS: Final = frozenset(
+    {
+        "token",
+        "csrf",
+        "xsrf",
+        "csrftoken",
+        "xsrftoken",
+        "sessid",
+        "sessionid",
+        "authorization",
+    }
+)
+_NAME_PARTS: Final = re.compile(r"[a-z0-9]+")
+
+
+def is_credential_name(name: str) -> bool:
+    """Whether a parameter or key name says its value is a credential.
+
+    The name is split into parts on anything but letters and digits; a part
+    that is a token, CSRF/XSRF token or session id makes it one
+    (``csrf_token_form``, ``X-Frappe-CSRF-Token``, ``Espo-Authorization``,
+    ``app_sessid``). A parameter or header named so is redacted in every app
+    and cannot be kept.
+    """
+    parts = _NAME_PARTS.findall(name.lower())
+    return any(
+        part in _CREDENTIAL_PARTS or part.startswith(("csrf", "xsrf")) for part in parts
+    )
 
 
 @dataclass(frozen=True)
@@ -349,7 +378,9 @@ def _redact_params(text: str, policy: RedactionPolicy, reasons: list[str]) -> st
         if match.start() < cursor:
             continue  # inside a value already redacted
         name = match.group("name").lower()
-        if name not in policy.params_for(_host_at(text, match.start())):
+        if name not in policy.params_for(
+            _host_at(text, match.start())
+        ) and not is_credential_name(name):
             continue
         value = _PARAM_VALUE.match(text, match.end())
         if value is None:
@@ -370,7 +401,7 @@ def redact_text(
 
     def header(match: re.Match[str]) -> str:
         name = match.group("name")
-        if name.lower() not in policy.headers:
+        if name.lower() not in policy.headers and not is_credential_name(name):
             return match.group(0)
         new = _header_value(name, match.group("value"))
         if new == match.group("value") or new.strip() == match.group("value").strip():
@@ -415,7 +446,7 @@ def _redact_node(
     pair_header = (
         pair_name.lower()
         if isinstance(pair_name, str)
-        and pair_name.lower() in policy.headers
+        and (pair_name.lower() in policy.headers or is_credential_name(pair_name))
         and isinstance(node.get("value"), str)
         else None
     )
@@ -425,7 +456,8 @@ def _redact_node(
         header_key = lowered if lowered in policy.headers else None
         if key == "value" and pair_header:
             header_key = pair_header
-        if isinstance(item, str) and (header_key or lowered in _SECRET_KEYS):
+        secret_key = lowered in _SECRET_KEYS or is_credential_name(lowered)
+        if isinstance(item, str) and (header_key or secret_key):
             new = _header_value(header_key or lowered, item) if item else item
             if item and new != item:
                 reason = f"header:{header_key}" if header_key else f"key:{lowered}"
