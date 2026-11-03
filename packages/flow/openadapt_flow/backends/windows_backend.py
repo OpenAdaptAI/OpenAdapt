@@ -265,6 +265,8 @@ class WindowsBackend:
         self._auth_token = auth_token or None
         self._pin_fingerprint = pin_fingerprint or None
         self._allow_legacy_exec = bool(allow_legacy_exec)
+        # Top-level window (HWND, PID) each verified step was in, by step id.
+        self._verified_windows: dict[str, tuple[int, int]] = {}
         self._guarded_coordinate: Optional[
             tuple[tuple[int, int], dict[str, Optional[str]]]
         ] = None
@@ -801,6 +803,80 @@ class WindowsBackend:
             return _json.loads(payload)
         except Exception:
             return None
+
+    def record_verified_window(self, step_id: str, x: int, y: int) -> bool:
+        """Remember the top-level window under (x, y) for ``step_id``.
+
+        Call it when that step's identity check verifies, at the verified
+        target's point, before anything else can open: later,
+        :meth:`owned_window_over` compares live window state against this
+        capture instead of hit-testing at a halted step, where a dialog would
+        answer for itself. Returns False (and records nothing) when the agent
+        cannot say which window that is. Never raises.
+        """
+        typed = self._post_typed_read("/window/root-at", {"x": int(x), "y": int(y)})
+        window = typed.payload.get("window") if typed.payload is not None else None
+        if (
+            not isinstance(window, dict)
+            or set(window) != {"hwnd", "pid"}
+            or not all(
+                isinstance(window[k], int)
+                and not isinstance(window[k], bool)
+                and window[k] > 0
+                for k in ("hwnd", "pid")
+            )
+        ):
+            self._verified_windows.pop(step_id, None)
+            return False
+        self._verified_windows[step_id] = (window["hwnd"], window["pid"])
+        return True
+
+    def owned_window_over(
+        self, region: tuple[int, int, int, int], *, pinned_step_id: str
+    ) -> Optional[dict]:
+        """A window the app itself owns, over ``region``, or None.
+
+        ``region`` is ``(x, y, w, h)`` in click pixels; ``pinned_step_id`` is
+        the last step whose identity check verified (its window recorded by
+        :meth:`record_verified_window`). Returns ``{"title", "hwnd",
+        "owner_hwnd", "pid"}`` only when the first visible window above the
+        recorded one that meets the region belongs to the same process and
+        its owner chain reaches the recorded window (an owned dialog, a
+        message box). Returns None with no record for that step, when the
+        recorded window is gone or now another process's, for any other
+        process's window or an unowned one, and on any failure. Never raises.
+        """
+        pinned = self._verified_windows.get(pinned_step_id)
+        try:
+            x, y, w, h = (int(v) for v in region)
+        except Exception:
+            return None
+        if pinned is None or w <= 0 or h <= 0:
+            return None
+        typed = self._post_typed_read(
+            "/window/owned-over",
+            {"hwnd": pinned[0], "pid": pinned[1], "region": [x, y, w, h]},
+        )
+        window = typed.payload.get("window") if typed.payload is not None else None
+        if not isinstance(window, dict) or set(window) != {
+            "title",
+            "hwnd",
+            "owner_hwnd",
+            "pid",
+        }:
+            return None
+        title = window["title"]
+        ints = [window[k] for k in ("hwnd", "owner_hwnd", "pid")]
+        if (
+            (title is not None and (not isinstance(title, str) or len(title) > 512))
+            or any(
+                isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in ints
+            )
+            or window["pid"] != pinned[1]
+            or window["hwnd"] == pinned[0]
+        ):
+            return None
+        return dict(window)
 
     def element_identity_at(self, x: int, y: int) -> Optional[dict]:
         """Return the UIA identity of the element under (x, y), or None.

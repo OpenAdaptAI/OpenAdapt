@@ -804,3 +804,108 @@ def test_native_action_receipts_the_agent_issues(operation, accepted) -> None:
                 backend.act_structural(locator, handle)
     finally:
         server.shutdown()
+
+
+def _serve_window_routes(routes: dict):
+    """Answer each POST path with its scripted (status, body); record calls."""
+    calls: list[tuple[str, object]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a: object) -> None:
+            pass
+
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length") or 0)
+            calls.append((self.path, json.loads(self.rfile.read(length))))
+            status, body = routes.get(self.path, (404, {"status": "error"}))
+            raw = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, calls
+
+
+_OWNED = {"title": "Session notice", "hwnd": 0x200, "owner_hwnd": 0x100, "pid": 10}
+
+
+def test_owned_window_over_uses_the_verified_steps_window() -> None:
+    server, calls = _serve_window_routes(
+        {
+            "/window/root-at": (
+                200,
+                {"status": "ok", "window": {"hwnd": 0x100, "pid": 10}},
+            ),
+            "/window/owned-over": (200, {"status": "ok", "window": _OWNED}),
+        }
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.record_verified_window("step_002", 260, 54) is True
+        assert (
+            backend.owned_window_over((250, 250, 50, 20), pinned_step_id="step_002")
+            == _OWNED
+        )
+    finally:
+        server.shutdown()
+    assert calls[1] == (
+        "/window/owned-over",
+        {"hwnd": 0x100, "pid": 10, "region": [250, 250, 50, 20]},
+    )
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,  # the agent says no owned window is over the region
+        {**_OWNED, "pid": 11},  # another process
+        {**_OWNED, "hwnd": 0x100},  # the captured window itself
+        {**_OWNED, "extra": 1},
+        {**_OWNED, "hwnd": True},
+    ],
+)
+def test_owned_window_over_is_none_outside_the_contract(answer) -> None:
+    server, _ = _serve_window_routes(
+        {
+            "/window/root-at": (
+                200,
+                {"status": "ok", "window": {"hwnd": 0x100, "pid": 10}},
+            ),
+            "/window/owned-over": (200, {"status": "ok", "window": answer}),
+        }
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        backend.record_verified_window("step_002", 1, 1)
+        assert (
+            backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+        )
+    finally:
+        server.shutdown()
+
+
+def test_owned_window_over_without_a_capture_never_asks_the_agent() -> None:
+    server, calls = _serve_window_routes(
+        {"/window/root-at": (503, {"status": "error"})}
+    )
+    try:
+        backend = WindowsBackend(f"http://127.0.0.1:{server.server_port}")
+        assert backend.record_verified_window("step_002", 1, 1) is False
+        assert (
+            backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+        )
+        assert backend.owned_window_over((0, 0, 5, 5), pinned_step_id="other") is None
+    finally:
+        server.shutdown()
+    assert [path for path, _ in calls] == ["/window/root-at"]
+
+
+def test_owned_window_over_with_a_dead_agent_is_none() -> None:
+    backend = WindowsBackend("http://127.0.0.1:9", timeout_s=0.5)
+    backend._verified_windows["step_002"] = (0x100, 10)
+    assert backend.owned_window_over((0, 0, 5, 5), pinned_step_id="step_002") is None
+    assert backend.owned_window_over(("x", 0, 5, 5), pinned_step_id="step_002") is None

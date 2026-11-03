@@ -1232,3 +1232,167 @@ def test_an_invoke_that_raises_is_a_failed_action(monkeypatch) -> None:
     with pytest.raises(AgentRequestError) as caught:
         _act_click(_fingerprint())
     assert caught.value.code == "native_action_failed"
+
+
+class _FakeDesktop:
+    """A z-ordered stack of top-level windows (topmost first) for the
+    owned-window checks: pid, owner, rect, visibility and cloaking."""
+
+    PINNED = 0x100
+
+    def __init__(self) -> None:
+        # hwnd -> (pid, owner, rect, visible, cloaked, title)
+        self.stack: list[int] = [self.PINNED]
+        self.windows = {
+            self.PINNED: (10, 0, (0, 0, 800, 600), True, False, "Patient Notes")
+        }
+
+    def add(
+        self,
+        hwnd,
+        *,
+        pid=10,
+        owner=0,
+        rect=(200, 200, 500, 400),
+        visible=True,
+        cloaked=False,
+        title="Window",
+    ):
+        self.stack.insert(0, hwnd)  # new windows go on top
+        self.windows[hwnd] = (pid, owner, rect, visible, cloaked, title)
+
+    def top_level_windows(self):
+        return list(self.stack)
+
+    def is_window(self, hwnd):
+        return hwnd in self.windows
+
+    def pid_of(self, hwnd):
+        return self.windows[hwnd][0]
+
+    def owner(self, hwnd):
+        return self.windows.get(hwnd, (0, 0))[1]
+
+    def rect(self, hwnd):
+        return self.windows[hwnd][2]
+
+    def is_visible(self, hwnd):
+        return self.windows[hwnd][3]
+
+    def is_cloaked(self, hwnd):
+        return self.windows[hwnd][4]
+
+    def title(self, hwnd):
+        return self.windows[hwnd][5]
+
+    def window_from_point(self, x, y):
+        return self.stack[0]
+
+    def ancestor(self, hwnd, flag):
+        return hwnd
+
+
+def _owned_over(monkeypatch, desktop, region=(250, 250, 50, 20), **pinned):
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    payload = {"hwnd": _FakeDesktop.PINNED, "pid": 10, "region": list(region)}
+    payload.update(pinned)
+    return _perform_uia("owned-window-over", payload)["window"]
+
+
+def test_an_owned_dialog_over_the_region_is_reported(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
+    assert _owned_over(monkeypatch, desktop) == {
+        "title": "Session notice",
+        "hwnd": 0x200,
+        "owner_hwnd": _FakeDesktop.PINNED,
+        "pid": 10,
+    }
+
+
+def test_a_dialog_owned_through_a_chain_counts(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(700, 0, 800, 50))
+    desktop.add(0x300, owner=0x200, title="Confirm")
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x300
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [
+        "foreign_window_over",
+        "same_process_unowned",
+        "owned_but_not_over_the_region",
+        "foreign_over_an_owned_dialog",
+    ],
+)
+def test_anything_but_an_owned_window_over_the_region_is_none(
+    monkeypatch, layout
+) -> None:
+    desktop = _FakeDesktop()
+    if layout == "foreign_window_over":
+        desktop.add(0x900, pid=99, title="Untitled - Notepad")
+    elif layout == "same_process_unowned":
+        desktop.add(0x200, owner=0, title="Second Patient Notes window")
+    elif layout == "owned_but_not_over_the_region":
+        desktop.add(0x200, owner=_FakeDesktop.PINNED, rect=(600, 500, 700, 580))
+    elif layout == "foreign_over_an_owned_dialog":
+        desktop.add(0x200, owner=_FakeDesktop.PINNED)
+        desktop.add(0x900, pid=99, rect=(240, 240, 320, 300))
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+def test_hidden_and_cloaked_windows_do_not_decide(monkeypatch) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED, title="Session notice")
+    desktop.add(0x800, pid=99, visible=False)
+    desktop.add(0x801, pid=99, cloaked=True)
+    assert _owned_over(monkeypatch, desktop)["hwnd"] == 0x200
+
+
+@pytest.mark.parametrize("change", ["gone", "pid_changed", "not_listed"])
+def test_a_captured_window_that_changed_is_none(monkeypatch, change) -> None:
+    desktop = _FakeDesktop()
+    desktop.add(0x200, owner=_FakeDesktop.PINNED)
+    if change == "gone":
+        del desktop.windows[_FakeDesktop.PINNED]
+        desktop.stack.remove(_FakeDesktop.PINNED)
+    elif change == "pid_changed":
+        desktop.windows[_FakeDesktop.PINNED] = (11,) + desktop.windows[
+            _FakeDesktop.PINNED
+        ][1:]
+    else:
+        desktop.stack.remove(_FakeDesktop.PINNED)
+        desktop.windows[0x200] = (10, 0x555) + desktop.windows[0x200][2:]
+    assert _owned_over(monkeypatch, desktop) is None
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"hwnd": True},
+        {"pid": 0},
+        {"region": [1, 2, 3]},
+        {"region": [1, 2, 0, 5]},
+        {"extra": 1},
+    ],
+)
+def test_owned_window_over_refuses_a_malformed_request(monkeypatch, bad) -> None:
+    with pytest.raises(AgentRequestError) as caught:
+        _owned_over(monkeypatch, _FakeDesktop(), **bad)
+    assert caught.value.status == 400
+
+
+def test_window_root_at_names_the_top_level_window(monkeypatch) -> None:
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    desktop = _FakeDesktop()
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    assert _perform_uia("window-root-at", {"x": 5, "y": 5}) == {
+        "status": "ok",
+        "window": {"hwnd": _FakeDesktop.PINNED, "pid": 10},
+    }
