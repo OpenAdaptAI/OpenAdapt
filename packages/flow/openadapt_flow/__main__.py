@@ -682,7 +682,9 @@ def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optiona
     if explicit or os.environ.get(crypto.ENV_KEY):
         return explicit or crypto.resolve_key(None)
     try:
-        return crypto.resolve_key(None) if at_rest.seal_new("a recording", out) else None
+        return (
+            crypto.resolve_key(None) if at_rest.seal_new("a recording", out) else None
+        )
     except at_rest.AtRestRefused as exc:
         raise SystemExit(f"record: {exc}") from exc
 
@@ -12625,7 +12627,9 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
             at_rest.unsealed_write("a healed bundle (--save-healed-to)", healed)
         workers = getattr(args, "workers", None)
         if isinstance(workers, int) and workers > 0:
-            at_rest.unsealed_write("the worker pool report (--workers)", "the run directory")
+            at_rest.unsealed_write(
+                "the worker pool report (--workers)", "the run directory"
+            )
     func = getattr(args, "func", None)
     command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
     artifact = _UNSEALED_OUTPUT_COMMANDS.get(command)
