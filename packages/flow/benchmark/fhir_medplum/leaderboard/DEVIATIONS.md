@@ -35,7 +35,7 @@ the protocol's order.
 
 **Effect on scoring:** none. Only the wall-clock time changes.
 
-## 3. Signed-out runs rerun; the session is renewed (2026-11-03, about 00:15 EST)
+## 3. Signed-out runs rerun; the session is renewed (2026-11-03, about 00:00 EST)
 
 **What happened:** the harness signed the agent's user in once per process.
 Medplum's session lasts an hour, and nothing renewed it, so every run that
