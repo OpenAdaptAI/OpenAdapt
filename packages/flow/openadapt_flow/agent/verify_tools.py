@@ -125,7 +125,11 @@ class VerifyBridge:
     def handles(self, name: str) -> bool:
         return name in VERIFY_TOOLS
 
-    def hold_needed(self, arguments: Mapping[str, Any]) -> None:
+    def hold_needed(
+        self, arguments: Mapping[str, Any], tool: str = "teach_act"
+    ) -> None:
+        """The MCP layer passes the tool name (``teach_act`` or ``teach_run``)."""
+
         return None
 
     def list_tool_specs(self) -> list[ToolSpec]:

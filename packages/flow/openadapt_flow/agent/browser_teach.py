@@ -1011,7 +1011,11 @@ class BrowserTeachBridge:
     def handles(self, name: str) -> bool:
         return name in BROWSER_TEACH_TOOLS or name in self.programs
 
-    def hold_needed(self, arguments: Mapping[str, Any]) -> None:
+    def hold_needed(
+        self, arguments: Mapping[str, Any], tool: str = "teach_act"
+    ) -> None:
+        """The MCP layer passes the tool name (``teach_act`` or ``teach_run``)."""
+
         return None
 
     def list_tool_specs(self) -> list[ToolSpec]:
