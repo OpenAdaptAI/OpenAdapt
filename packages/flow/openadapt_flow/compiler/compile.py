@@ -823,11 +823,11 @@ def _text_carries_phi(text: str) -> bool:
     return bool(scrubbed) and scrubbed != text
 
 
-_VALUE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9./-]*")
+_VALUE_TOKEN = re.compile(r"[^\W_][\w./-]*")
 
 
 def _value_tokens(text: str) -> set[str]:
-    """Data-like words of a line: names, numbers and dates, not labels.
+    """Data-like words of a line: names, ids and dates, not labels.
 
     A token counts when it carries a digit (four or more characters: an id,
     a date) or is a capitalized word of three or more letters that is not a
@@ -837,8 +837,7 @@ def _value_tokens(text: str) -> set[str]:
     tokens: set[str] = set()
     for match in _VALUE_TOKEN.finditer(text):
         word = match.group(0).rstrip(".")
-        after = text[match.end() : match.end() + 1]
-        if after == ":":
+        if text[match.end() : match.end() + 1] == ":":
             continue
         if any(c.isdigit() for c in word):
             if len(word) >= 4:
@@ -848,36 +847,75 @@ def _value_tokens(text: str) -> set[str]:
     return tokens
 
 
+def _label_words(text: str) -> tuple[str, ...]:
+    """The line's words that are not data words, in order (its label)."""
+    data = _value_tokens(text)
+    return tuple(
+        word.casefold()
+        for word in (m.group(0).rstrip(".") for m in _VALUE_TOKEN.finditer(text))
+        if word.casefold() not in data
+    )
+
+
+def _same_band(a: OcrLine, b: OcrLine) -> bool:
+    top = max(a.region[1], b.region[1])
+    bottom = min(a.region[1] + a.region[3], b.region[1] + b.region[3])
+    return bottom - top >= 0.5 * min(a.region[3], b.region[3])
+
+
+def _overlaps(a: OcrLine, b: OcrLine) -> bool:
+    ax, ay, aw, ah = a.region
+    bx, by, bw, bh = b.region
+    return ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
+
+
 def _echoes_screen_rows(
     line: OcrLine,
+    before_lines: list[OcrLine],
     after_lines: list[OcrLine],
     click_point: Optional[Point] = None,
 ) -> bool:
-    """Whether ``line`` repeats data shown elsewhere on the same screen.
+    """Whether ``line`` is a detail field restating a row the person did not click.
 
-    A detail header or status line that restates a list row ("Patient: Neil
-    Sorenson (1984-03-12)" over a grid whose first row reads Neil, Sorenson,
-    1984-03-12) describes whatever row the app has selected, often one it
-    selected by itself. Asserting it compiles the app's choice into the
-    check: with another row first, the header names that row and the step
-    stops though nothing went wrong. Two or more of the line's data words
-    found in other lines of the frame mark it as such an echo. Lines on the
-    row the demonstrator clicked are not "elsewhere": a header restating the
-    row a person chose describes their click and stays a valid check.
+    A detail header that follows a list's selection ("Patient: Neil Sorenson
+    (1984-03-12)" under a grid whose first row the app selected) describes
+    whatever row is selected, often one the app chose. Asserting it compiles
+    the app's choice into the check: with another row first, the header
+    names that row and the step stops though nothing went wrong.
+
+    All of these must hold, so identity banners, titles and save messages
+    stay checks:
+
+    - the line replaced a line at the same place in the before frame with
+      the same label words (a field whose value changed, not a new banner);
+    - two or more of its data words (names, ids, dates) appear in one other
+      row of the after frame: two or more separate lines on one row band;
+    - that row is not the row the demonstrator clicked.
     """
     tokens = _value_tokens(line.text)
     if len(tokens) < 2:
         return False
-    elsewhere: set[str] = set()
-    for other in after_lines:
-        if other is line:
+    label = _label_words(line.text)
+    if not label or not any(
+        _overlaps(line, prior)
+        and _label_words(prior.text) == label
+        and _value_tokens(prior.text) != tokens
+        for prior in before_lines
+    ):
+        return False
+    others = [o for o in after_lines if o is not line and not _overlaps(o, line)]
+    for anchor in others:
+        row = [o for o in others if _same_band(anchor, o)]
+        if len(row) < 2:
             continue
-        if click_point is not None:
-            top, height = other.region[1], other.region[3]
-            if top <= click_point[1] < top + height:
-                continue  # the clicked row itself
-        elsewhere |= _value_tokens(other.text)
-    return len(tokens & elsewhere) >= 2
+        if click_point is not None and any(
+            o.region[1] <= click_point[1] < o.region[1] + o.region[3] for o in row
+        ):
+            continue  # the clicked row: a header restating it is the person's choice
+        cells = [_value_tokens(o.text) & tokens for o in row]
+        if sum(1 for c in cells if c) >= 2 and len(set().union(*cells)) >= 2:
+            return True
+    return False
 
 
 def _new_text_postcondition(
@@ -898,8 +936,8 @@ def _new_text_postcondition(
 
     1. Candidates must be new (not in the before frame), confidently read,
        not a parameterized value, not a click-target label, and not a
-       restatement of rows shown elsewhere on the screen (the selected-row
-       header a list fills in for whatever row it selected).
+       detail field that changed to restate a list row the person did not
+       click (the header a list fills in for a row it selected itself).
     2. Volatile candidates are rejected (clock times, dates near the
        recording date, digit-dominated fragments, low-entropy noise); a
        date FAR from the recording date — a DOB in an identity banner — is
@@ -966,7 +1004,7 @@ def _new_text_postcondition(
             continue
         if _matches_label(text, avoid_labels):
             continue
-        if _echoes_screen_rows(line, after_lines, click_point):
+        if _echoes_screen_rows(line, before_lines, after_lines, click_point):
             # A restatement of a row selected elsewhere (often by the app,
             # not the demonstrator): never a check of this step's effect.
             continue
