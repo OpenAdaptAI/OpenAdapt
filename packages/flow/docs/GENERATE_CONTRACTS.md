@@ -360,6 +360,14 @@ no more than five minutes ahead, by the database's local clock or by UTC. A
 NULL fails. Without it, such a column may hold any value. It only adds a
 check.
 
+**Checking both readings.** With `strict_pins: true`, a new-row column the
+demonstrations can't settle is checked instead of refusing the kind, in
+three cases: it holds one value that is also a copy of a column a key points
+to (both are checked), it holds the acting user's id and such a copy (both
+are checked), or its field set was seen in one demonstration only with one
+value (that value is pinned). Each only adds a check: a wrong guess stops
+correct writes, never passes a wrong one.
+
 **Setting up with no person answers.** `python -m
 openadapt_flow.generate.zero_touch` answers these questions by fixed rules
 and admits a kind only after a sandbox copy of the store confirms held-out

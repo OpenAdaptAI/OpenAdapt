@@ -732,9 +732,12 @@ def column_roles(
             out[name] = ColumnRole("free", detail={"empty": empty})
             continue
         if one:
-            out[name] = ColumnRole(
-                "varies", detail={"why": "seen in one demonstration only"}
-            )
+            detail = {"why": "seen in one demonstration only"}
+            if len(distinct) == 1:
+                # ``strict_pins`` pins the one value seen: too strict at
+                # worst, which a held-out write shows.
+                detail["strict"] = {"constant": values[0]}
+            out[name] = ColumnRole("varies", detail=detail)
             continue
         if len(distinct) == 1:
             v = values[0]

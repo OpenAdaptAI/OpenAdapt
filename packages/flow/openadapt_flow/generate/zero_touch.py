@@ -525,8 +525,11 @@ def plant_value(
     sb: "Sandbox", table: Table, column: str, current: Optional[str]
 ) -> Optional[str]:
     """A value to plant in ``table.column`` instead of ``current``: another
-    row's key for a declared foreign key, else a value the column already
-    holds in another row (the store accepts it), else :func:`mutate`."""
+    row's key for a declared foreign key; for a type the store takes any
+    value of (a date or time, a flag, JSON, a UUID, bytes), a value made by
+    :func:`mutate`, far from anything a write would store; for text and
+    numbers, a value the column already holds in another row (a length or an
+    enum the schema doesn't show still accepts it), else :func:`mutate`."""
 
     fk = next((f for f in table.foreign_keys if f.column == column), None)
     if fk is not None:
@@ -534,6 +537,11 @@ def plant_value(
             v = r.get(fk.ref_column)
             if v is not None and v != current:
                 return v
+    col = table.column(column)
+    if col is not None and col.kind not in ("text", "number"):
+        made = mutate(table, column, current)
+        if made is not None:
+            return made
     for v in sb.distinct(table.name, column, 5):
         if v is not None and v != current:
             return v
