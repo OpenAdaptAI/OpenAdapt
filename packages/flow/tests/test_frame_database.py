@@ -18,6 +18,7 @@ import pytest
 
 from openadapt_flow.runtime.effects.db_snapshot import (
     CLOCK_DEFAULT,
+    SnapshotError,
     cell_hash,
     is_default,
     take_snapshot,
@@ -351,6 +352,38 @@ def test_skipping_a_table_needs_a_reason(tmp_path: Path) -> None:
         _doc(db, allow_tables=[{"table": "log", "mode": "skip", "reason": "test"}])
     )
     assert cfg.frame is not None and cfg.frame.database is not None
+
+
+@pytest.mark.parametrize("dialect", ["sqlite", "mysql"])
+def test_a_schema_wildcard_is_postgresql_only(tmp_path: Path, dialect: str) -> None:
+    # #1674: only PostgreSQL has schemas to skip; elsewhere "<schema>.*" is
+    # refused when the contract loads, with a clear reason. Reported by
+    # yunusarda-sudo in #1689.
+    db = _db(tmp_path)
+    doc = _doc(db, allow_tables=[{"table": "audit.*", "mode": "skip", "reason": "t"}])
+    doc["frame"]["database"]["dialect"] = dialect
+    if dialect == "mysql":
+        doc["frame"]["database"]["read"] = {"sql_driver": "pymysql"}
+    with pytest.raises(Exception, match=r"'audit\.\*' .* is PostgreSQL only"):
+        parse_verify_config(doc)
+    doc["frame"]["database"]["dialect"] = "postgresql"
+    doc["frame"]["database"]["read"] = {"sql_driver": "psycopg"}
+    assert parse_verify_config(doc).frame is not None
+
+
+def test_a_schema_wildcard_snapshot_is_refused_before_connecting(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path)
+    opened: list[str] = []
+
+    def connect() -> sqlite3.Connection:
+        opened.append("connection")
+        return sqlite3.connect(db)
+
+    with pytest.raises(SnapshotError, match=r"'audit\.\*' .* is PostgreSQL only"):
+        take_snapshot(connect, "sqlite", key=b"k", modes={"audit.*": "skip"})
+    assert opened == []
 
 
 def test_a_large_table_holds_a_clean_save_and_catches_a_stray_one(
