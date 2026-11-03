@@ -447,7 +447,7 @@ def test_frozen_flow_pin_must_request_the_console_and_browser_extras(tmp_path: P
         return root
 
     version, extras = frozen_notices.bundled_flow_pin(build.ROOT)
-    assert version == "2.4.0"
+    assert version == "2.4.1"
     assert set(frozen_notices.FLOW_REQUIRED_EXTRAS) <= set(extras)
 
     with pytest.raises(ValueError, match="console"):

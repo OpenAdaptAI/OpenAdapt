@@ -1858,3 +1858,57 @@ class TestRiskOverrides:
                 name="risky",
                 risk_overrides={"step_000": "dangerous"},
             )
+
+
+class TestClickLabelsThatShareAWordWithAParameter:
+    """A click's OCR label is dropped only where it can be the typed value.
+
+    Nightly run 40891855483: the "Triage" button compiled with no label
+    because the note parameter contains "triage". When Triage and Consult
+    swapped places, the geometry rung clicked Consult and the run saved the
+    wrong encounter type (tests/e2e/test_chaos.py::TestLayoutSwapMidRun).
+    """
+
+    NOTE = "Triage booking three months"
+    FIELD = (100, 300, 700, 60)
+
+    def _compile(self, tmp_path: Path, click: tuple[int, int], screen: np.ndarray):
+        empty = blank()
+        typed = empty.copy()
+        draw_text(typed, 110, 316, self.NOTE)
+        events = [
+            {
+                "i": 0,
+                "kind": "type",
+                "text": self.NOTE,
+                "param": "note",
+                "field_rect": list(self.FIELD),
+                "t": 1.0,
+            },
+            {"i": 1, "kind": "click", "x": click[0], "y": click[1], "t": 2.0},
+        ]
+        recording = tmp_path / "rec"
+        _write_recording(
+            recording,
+            events,
+            {0: (empty, typed), 1: (screen, screen)},
+            params={"note": self.NOTE},
+        )
+        wf = compile_recording(recording, tmp_path / "bundle", name="labels")
+        step = next(s for s in wf.steps if s.action is ActionKind.CLICK)
+        assert step.anchor is not None
+        return step.anchor.ocr_text
+
+    def test_a_button_typed_after_the_note_keeps_its_label(self, tmp_path) -> None:
+        screen = blank()
+        draw_text(screen, 110, 316, self.NOTE)
+        draw_button(screen, 560, 520, 160, 48, "Triage")
+        label = self._compile(tmp_path, (640, 544), screen)
+        assert label is not None and fuzzy_eq(label, "Triage")
+
+    def test_the_typed_note_under_a_click_is_never_the_label(self, tmp_path) -> None:
+        # The field wraps the note; the click lands on its first line.
+        screen = blank()
+        draw_text(screen, 110, 316, "Triage booking")
+        label = self._compile(tmp_path, (180, 328), screen)
+        assert label is None

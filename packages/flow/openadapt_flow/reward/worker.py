@@ -72,6 +72,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectVerdict,
     Verdict,
     record_matches,
+    selector_value,
 )
 
 
@@ -242,7 +243,7 @@ def _in_scope(record: dict[str, Any], effect: Effect) -> bool:
 
     if carries_composite_key(record, effect):
         return True
-    selector = {key: str(want) for key, want in effect.match.items()}
+    selector = {key: selector_value(want) for key, want in effect.match.items()}
     if not record_matches(record, selector) or effect.composite_key:
         return False
     if effect.idempotency_key is None:

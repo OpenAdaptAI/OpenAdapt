@@ -31,6 +31,7 @@ if TYPE_CHECKING:  # pragma: no cover
 from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
+    FormIdentity,
     StructuralHandle,
     StructuralLocator,
     SubmitBinding,
@@ -42,8 +43,16 @@ from openadapt_flow.runtime.resolver import (
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,
     SUBMIT_BINDING_FIELD_SELECTOR,
+    form_values_from_page,
+    form_values_record,
     observation_from_page,
+    verify_form_identity,
     verify_submit_binding,
+)
+from openadapt_flow.wire_check import (
+    ExpectedSubmission,
+    WireCheck,
+    expected_submission,
 )
 
 VIEWPORT: tuple[int, int] = (1280, 800)
@@ -720,7 +729,9 @@ _SUBMIT_BINDING_AT_JS = (
     + OBSERVE_SUBMIT_BINDING_JS
     + r""";
     const fills = window[args.fillKey];
-    return observe(control, Array.isArray(fills) ? fills : []);
+    return observe(
+        control, Array.isArray(fills) ? fills : [], window[args.fillKey + '_hidden']
+    );
 }"""
 )
 
@@ -738,9 +749,141 @@ _REGISTER_FILLED_FIELD_JS = (
         Object.defineProperty(window, key, {value: fills, configurable: true});
     }
     if (fills.indexOf(el) < 0) fills.push(el);
+    // Each hidden control's value as typing starts, so a create-new form's
+    // fingerprint can tell a token that rotates while the form is filled in.
+    let hidden = window[key + '_hidden'];
+    if (!(hidden instanceof WeakMap)) {
+        hidden = new WeakMap();
+        Object.defineProperty(
+            window, key + '_hidden', {value: hidden, configurable: true});
+    }
+    for (const input of el.ownerDocument.querySelectorAll('input[type="hidden"]')) {
+        if (!hidden.has(input)) hidden.set(input, String(input.value));
+    }
     return true;
 }"""
 )
+
+# Remember what a field holds once the run has finished typing into it, and
+# whether that is exactly what the run typed, for a create-new form's identity
+# check (openadapt_flow.ir.FormIdentity). A select holds what was typed when
+# its chosen option's label is the typed text. A field that reformatted the
+# typed text (a controlled input, a mask) does not. The WeakMap lives in the
+# field's own document under a per-backend random key and is only compared in
+# the page; no value is returned to Python.
+_SNAPSHOT_FILLED_VALUE_JS = r"""(el, args) => {
+    let values = window[args.key];
+    if (!(values instanceof WeakMap)) {
+        values = new WeakMap();
+        Object.defineProperty(window, args.key, {value: values, configurable: true});
+    }
+    const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const value = ('value' in el) ? String(el.value) : String(el.innerText || '');
+    let typed;
+    if (el.localName === 'select') {
+        const option = el.options[el.selectedIndex];
+        typed = Boolean(option) && clean(option.text) === clean(args.typed);
+    } else if ('value' in el) {
+        typed = value === String(args.typed);
+    } else {
+        typed = clean(value) === clean(args.typed);
+    }
+    values.set(el, {value: value, typed: typed});
+    return true;
+}"""
+
+# A create-new form's identity at a point: the submit-binding observation of
+# the control there against the fields this run typed into, and how many of
+# those fields in the control's form no longer hold what the run left in them
+# (or were never snapshotted). Counts only: no value leaves the page.
+_FORM_IDENTITY_AT_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    if (!hit) return null;
+    const control = hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""");
+    if (!control) return null;
+    const observe = """
+    + OBSERVE_SUBMIT_BINDING_JS
+    + r""";
+    const fills = Array.isArray(window[args.fillKey]) ? window[args.fillKey] : [];
+    const out = observe(control, fills, window[args.fillKey + '_hidden']);
+    const values = window[args.valueKey];
+    const form = control.form || control.closest('form');
+    let changed = 0;
+    for (const field of fills) {
+        if (!field || !field.isConnected || !form) continue;
+        const owner = field.form || field.closest('form');
+        if (owner !== form) continue;
+        const now = ('value' in field) ? String(field.value)
+            : String(field.innerText || '');
+        const left = (values instanceof WeakMap) ? values.get(field) : null;
+        if (!left || !left.typed || left.value !== now) changed += 1;
+    }
+    return {observation: out.observation, changed: changed};
+}"""
+)
+
+# Before a create-new form's save: what the checked button would send (the
+# address with its query, the method, and every field, from the form's
+# controls, never from new FormData(), which runs the page's own formdata
+# listeners). The wire check holds the save's request to exactly this.
+_FORM_EXPECTED_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    const control = hit ? hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""") : null;
+    const form = control ? (control.form || control.closest('form')) : null;
+    if (!form) return null;
+    const exempt = new Set(args.exempt || []);
+    const expected_parts = () => {
+        const pairs = [];
+        for (const el of Array.from(form.elements)) {
+            const name = el.name;
+            if (!name || exempt.has(name)) continue;
+            let disabled = false;
+            try { disabled = el.matches(':disabled'); } catch (_) {}
+            if (disabled) continue;
+            const type = String(el.type || el.localName || '').toLowerCase();
+            if (['submit', 'button', 'reset', 'image'].indexOf(type) >= 0) {
+                if (el === control && type !== 'image') pairs.push([name, String(el.value)]);
+                continue;
+            }
+            if (['fieldset', 'object', 'output'].indexOf(el.localName) >= 0) continue;
+            if ((type === 'checkbox' || type === 'radio') && !el.checked) continue;
+            if (type === 'file') {
+                const files = Array.from(el.files || []);
+                if (!files.length) pairs.push([name, 'file:']);
+                for (const f of files) pairs.push([name, 'file:' + f.name]);
+                continue;
+            }
+            if (el.localName === 'select') {
+                for (const o of Array.from(el.selectedOptions)) pairs.push([name, String(o.value)]);
+                continue;
+            }
+            pairs.push([name, String(el.value)]);
+        }
+        const target = control.hasAttribute('formaction') ? control.formAction : form.action;
+        let address = String(target);
+        const query = [];
+        try {
+            const url = new URL(target, document.baseURI);
+            address = url.origin + url.pathname;
+            for (const [k, v] of url.searchParams) if (!exempt.has('?' + k)) query.push([k, v]);
+        } catch (_) {}
+        const method = String((control.hasAttribute('formmethod')
+            ? control.formMethod : form.method) || 'get').toLowerCase();
+        const order = (x, y) => (x[0] + '\u0000' + x[1]) < (y[0] + '\u0000' + y[1]) ? -1 : 1;
+        pairs.sort(order);
+        query.sort(order);
+        return {address, query, method, pairs};
+    };
+    return expected_parts();
+}"""
+)
+
 
 # Page-structure identity of a FORM FIELD that sits in no record row.
 #
@@ -1418,18 +1561,27 @@ _STRUCTURAL_LOCATOR_AT_JS = (
             '#' + CSS.escape(id)).length === 1) {
         selector = '#' + CSS.escape(id);
     }
+    // <input type=submit> and its kin are buttons named by their value,
+    // as the accessibility tree (and get_by_role) names them.
+    const inputType = (actionable.getAttribute('type') || '').toLowerCase();
+    const inputButton = tag === 'input' &&
+        ['submit', 'button', 'reset', 'image'].includes(inputType);
     let role = actionable.getAttribute('role');
     if (!role) {
         const map = {button: 'button', a: 'link', input: 'textbox',
             select: 'combobox', textarea: 'textbox'};
-        role = map[tag] || null;
+        role = inputButton ? 'button' : (map[tag] || null);
         if (tag === 'a' && !actionable.getAttribute('href')) role = null;
     }
     const fieldLabel = """
     + _FIELD_LABEL_JS
     + r""";
     let name = actionable.getAttribute('aria-label');
-    if (!name) name = fieldLabel(actionable);
+    if (!name && inputButton) {
+        name = (actionable.getAttribute(inputType === 'image' ? 'alt' : 'value') ||
+            '').replace(/\s+/g, ' ').trim() || null;
+    }
+    if (!name && !inputButton) name = fieldLabel(actionable);
     if (!name) {
         const text = (actionable.textContent || '').replace(/\s+/g, ' ').trim();
         name = text ? text.slice(0, 120) : null;
@@ -1571,11 +1723,16 @@ class PlaywrightBackend:
         closed_page_frame: bool = False,
         bring_to_front_before_capture: bool = False,
         native_fill: Optional[bool] = None,
+        ws_guard: Optional[str] = None,
     ) -> None:
         """Wrap an existing Playwright page.
 
         Args:
             page: A Playwright page.
+            ws_guard: What :func:`prepare_ws_guard` returned for the page's
+                context (kept for callers; the backend looks the guard up on
+                the context, or prepares it). Documents opened before it was
+                prepared can't hold a create-form save.
             native_fill: Insert typed text in one call when the focused
                 element is an ordinary text field. Off by default; the
                 ``fast`` speed profile (``runtime/speed.py``) turns it on
@@ -1648,6 +1805,31 @@ class PlaywrightBackend:
         # Fields this backend typed into, kept page-side per document (element
         # references only) for submit bindings. A new backend starts empty.
         self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
+        self._fill_value_slot = f"__oaflow_filled_values_{uuid.uuid4().hex}"
+        self._form_wire: Any = None
+        # The page-side guard (see _arm_wire_check): one per browser context,
+        # kept in each document under a private key, installed by an init
+        # script so documents loaded from now on are guarded from their
+        # start. A page opened before it (``launch`` and the CLI prepare
+        # theirs first) can't hold a save.
+        (
+            self._ws_guard_key,
+            self._ws_guard_proof,
+            self._ws_guard_late,
+        ) = _ws_guard_secrets(self.page)
+        # The current hold's id and the secret that ends it (its hash goes
+        # to the page with the hold; the secret only when the hold ends).
+        self._ws_hold: Optional[str] = None
+        self._ws_release = ""
+        self._ws_commitment = ""
+        self._ws_hold_script: Any = None
+        self._held_pages: list[tuple[Any, Callable[[Any], None]]] = []
+        try:
+            # A message that still reaches the wire from this page's
+            # WebSockets while a save is held is reported.
+            self.page.on("websocket", self._watch_websocket)
+        except Exception:  # noqa: BLE001 - a page stand-in without events
+            pass
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         # One-shot expectation that the next click closes this page surface
@@ -2341,6 +2523,437 @@ class PlaywrightBackend:
         self._focused_element_call(
             _REGISTER_FILLED_FIELD_JS, arg=self._fill_store_key, with_arg=True
         )
+
+    def _snapshot_focused_field(self, typed: str) -> None:
+        """Remember what the focused field holds now that ``typed`` is in,
+        and whether that is exactly ``typed``.
+
+        A create-new form's identity check compares each filled field with
+        this snapshot before the save. A field with no snapshot, or one that
+        did not end up holding exactly what was typed, counts as changed, so
+        a failure here makes that check refuse: the safe direction.
+        """
+
+        self._focused_element_call(
+            _SNAPSHOT_FILLED_VALUE_JS,
+            arg={"key": self._fill_value_slot, "typed": typed},
+            with_arg=True,
+        )
+
+    def form_identity_at(self, x: int, y: int, identity: FormIdentity) -> Optional[str]:
+        """Check a create-new form's identity for the control at a point.
+
+        Returns None when the control is still the submit button of the
+        demonstrated form (same address, method and set of fields), the form
+        owns exactly the fields this run typed into, each holding exactly what
+        the run typed, and every other field holds its demonstrated value.
+        Then it arms a one-shot guard that cancels any other submit during the
+        click (:meth:`form_submit_guard_refusal` reports it). Otherwise the
+        reason, in plain words, including when the page can't be read.
+        """
+
+        late = self.cancel_form_submit_guard()
+        if late is not None:
+            return f"after the previous save, {late}; that submission was cancelled"
+        try:
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return "the resolved point has no readable page"
+            raw = point.scope.evaluate(
+                _FORM_IDENTITY_AT_JS,
+                {
+                    "x": point.x,
+                    "y": point.y,
+                    "fillKey": self._fill_store_key,
+                    "valueKey": self._fill_value_slot,
+                },
+            )
+            if not isinstance(raw, dict):
+                return "no control at the resolved point"
+            observation = observation_from_page(raw.get("observation"))
+            values = form_values_from_page(raw.get("observation"))
+            changed = int(raw.get("changed", -1))
+        except Exception:
+            return "could not read the form at the resolved point"
+        if changed < 0:
+            return "could not read the form's field values"
+        reason = verify_form_identity(
+            identity, observation, changed_fields=changed, values=values
+        )
+        if reason is not None:
+            return reason
+        try:
+            expected = point.scope.evaluate(
+                _FORM_EXPECTED_JS,
+                {"x": point.x, "y": point.y, "exempt": list(identity.exempt)},
+            )
+        except Exception:
+            expected = None
+        if not isinstance(expected, dict):
+            return "could not read what the form would send"
+        return self._arm_wire_check(expected_submission(expected, identity.exempt))
+
+    # -- the wire check (openadapt_flow.wire_check) --------------------------
+
+    def _arm_wire_check(self, submission: ExpectedSubmission) -> Optional[str]:
+        """Hold the save's request at the network to the checked form.
+
+        Until it is disarmed, every write request from any page of this
+        browser context (a popup or new tab included), and a GET navigation
+        to the form's address, goes through a
+        :class:`~openadapt_flow.wire_check.WireCheck`: the checked submission
+        goes once; anything else is aborted before it is sent. Connections
+        that don't go through those routes are held in the page by a guard
+        installed on the context (:func:`prepare_ws_guard`) that runs
+        before any page script in every document: a WebSocket,
+        WebTransport, RTCPeerConnection, Worker or SharedWorker constructed
+        meanwhile is refused at construction, so it is never created, and a
+        message sent on a WebSocket or RTCDataChannel already open is
+        dropped; each is reported. The page-side hold is set before the
+        click and released only when the outcome has been read
+        (:meth:`_disarm_wire_check`). A save is refused before the click
+        when a document on the page loaded before the guard (its scripts
+        may hold the browser's own constructors), when the guard can't be
+        kept in a frame, and when a dedicated worker runs (its WebSockets
+        skip the guard); a worker that still starts is reported. Not held:
+        a WebTransport session's streams opened before the hold, and a
+        shared worker started before it.
+        A service worker's requests skip routes, so a page a service
+        worker controls is refused before the click (the runner's contexts
+        block service workers), and one that starts meanwhile is reported.
+        Returns why the save can't be held, or None once it is.
+        """
+
+        self._disarm_wire_check()
+        context = self.page.context
+        try:
+            controlled = bool(context.service_workers) or bool(
+                self.page.evaluate(
+                    "() => !!(navigator.serviceWorker && navigator.serviceWorker.controller)"
+                )
+            )
+        except Exception:  # noqa: BLE001
+            return "could not tell whether a service worker controls the page"
+        if controlled:
+            return (
+                "a service worker runs on this page, and its requests can't be "
+                "checked; run with service workers blocked"
+            )
+        try:
+            pages = list(context.pages)
+            workers = any(page.workers for page in pages)
+        except Exception:  # noqa: BLE001
+            return "could not tell whether a worker runs on the page"
+        if workers:
+            # A worker's WebSockets skip the page's guard and its routes.
+            return "a worker runs on this page, and its WebSockets can't be held"
+        check = WireCheck(submission=submission)
+
+        def handler(route: Any) -> None:
+            check.handle(route, proceed=route.fallback)
+
+        # What the backend saw beside the requests it aborted.
+        notes: list[str] = []
+
+        def on_worker(_worker: Any) -> None:
+            notes.append(
+                "a service worker started while the save was held, and its "
+                "requests can't be checked"
+            )
+
+        def on_page_worker(_worker: Any) -> None:
+            # The page-side guard refuses new workers; one that still
+            # started is reported.
+            notes.append(
+                "a worker started while the save was held, and its "
+                "WebSockets can't be held"
+            )
+
+        context.route("**/*", handler)
+        context.on("serviceworker", on_worker)
+        for page in pages:
+            try:
+                page.on("worker", on_page_worker)
+            except Exception:  # noqa: BLE001
+                continue
+            self._held_pages.append((page, on_page_worker))
+        self._form_wire = (handler, check, on_worker, notes)
+        # Hold the page side: documents loaded from now on start held, and
+        # every open document is held now. The page decides at construction
+        # time, so no socket's fate depends on when Python services it.
+        hold = uuid.uuid4().hex
+        self._ws_hold = hold
+        self._ws_release = uuid.uuid4().hex + uuid.uuid4().hex
+        commitment = hashlib.sha256(self._ws_release.encode()).hexdigest()
+        self._ws_commitment = commitment
+        try:
+            self._ws_hold_script = context.add_init_script(
+                _ws_guard_call(
+                    self._ws_guard_key, None, False, "armed", hold, commitment
+                )
+            )
+        except Exception:  # noqa: BLE001
+            self._disarm_wire_check()
+            return "could not hold the page's WebSockets"
+        (_counts, late), unheld = self._ws_guard_frames("hold", commitment, on=True)
+        if self._ws_guard_tampered:
+            self._disarm_wire_check()
+            return (
+                "a page answered for the WebSocket guard, so saves in this "
+                "browser can't be held"
+            )
+        if unheld:
+            self._disarm_wire_check()
+            return (
+                "could not hold the WebSockets of a frame on the page, so "
+                "the save can't be held"
+            )
+        if late:
+            # Its scripts ran before the guard and may hold the browser's own
+            # WebSocket, Worker or send: nothing here can stop those.
+            self._disarm_wire_check()
+            return (
+                "the page loaded before the WebSocket guard was installed, so "
+                "the save can't be held; open the page after the backend "
+                "exists (reload it)"
+            )
+        return None
+
+    @property
+    def _ws_guard_tampered(self) -> bool:
+        """Whether a page on this context answered for the guard. The
+        secret may have reached page code, so no save on the context can be
+        held from then on."""
+
+        try:
+            return getattr(self.page.context, "_oaflow_ws_guard_tampered", 0) is True
+        except Exception:  # noqa: BLE001 - the context is gone
+            return True
+
+    @_ws_guard_tampered.setter
+    def _ws_guard_tampered(self, value: bool) -> None:
+        try:
+            self.page.context._oaflow_ws_guard_tampered = bool(value)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _ws_guard_frames(
+        self, op: str, extra: str = "", *, on: bool
+    ) -> tuple[tuple[tuple[int, int, int], int], int]:
+        """Run ``op`` on the page-side guard for the current hold in every
+        frame of every page of this context (installing the guard where the
+        document predates it). Returns what it refused for the hold
+        (sockets, workers, messages), how many documents were not guarded
+        from their start, and how many frames it could not reach. ``on`` is
+        whether the hold should be on afterwards.
+
+        Each answer is checked against the guard's signature over the
+        nonce, the operation and the result. One that fails, or that names a
+        document already seen in this pass (an answer passed on from
+        another document's guard), means something else answered for the
+        guard, and no save on this browser is held from then on."""
+
+        hold = self._ws_hold or ""
+        sockets = workers = sends = late = unreached = 0
+        docs: set[str] = set()
+        try:
+            pages = list(self.page.context.pages)
+        except Exception:  # noqa: BLE001 - the context is gone
+            return ((0, 0, 0), 0), 1
+        for page in pages:
+            try:
+                frames = list(page.frames)
+            except Exception:  # noqa: BLE001
+                unreached += 1
+                continue
+            for frame in frames:
+                nonce = uuid.uuid4().hex
+                key = json.dumps(self._ws_guard_key)
+                call = _ws_guard_call(
+                    self._ws_guard_key,
+                    self._ws_guard_late,
+                    False,
+                    op,
+                    hold,
+                    extra,
+                    nonce,
+                )
+                try:
+                    had, answer = frame.evaluate(
+                        f"(() => {{ const had = {key} in globalThis; "
+                        f"return [had, {call}]; }})()"
+                    )
+                except Exception:  # noqa: BLE001 - detached or closing
+                    unreached += 1
+                    continue
+                if not (
+                    isinstance(answer, list)
+                    and len(answer) == 7
+                    and all(isinstance(n, int) and n >= 0 for n in answer[:3])
+                    and isinstance(answer[3], bool)
+                    and isinstance(answer[4], str)
+                    and isinstance(answer[5], bool)
+                    and isinstance(answer[6], str)
+                ):
+                    if had:
+                        # Something else is under the guard's name.
+                        self._ws_guard_tampered = True
+                    unreached += 1
+                    continue
+                c0, c1, c2, early, doc, is_on, mac = answer
+                secret = self._ws_guard_proof if early else self._ws_guard_late
+                # The hold must be bound to Python's commitment, not one the
+                # page swapped in or took first.
+                commitment = self._ws_commitment if is_on else ""
+                signed = (
+                    f"{secret}|{nonce}|{doc}|{op}|{hold}|{int(is_on)}|"
+                    f"{commitment}|{c0},{c1},{c2}|{int(early)}"
+                )
+                relayed = doc in docs
+                docs.add(doc)
+                if relayed or mac != hashlib.sha256(signed.encode()).hexdigest():
+                    self._ws_guard_tampered = True
+                    late += 1
+                    continue
+                sockets += c0
+                workers += c1
+                sends += c2
+                if not early:
+                    late += 1
+                elif is_on != on:
+                    unreached += 1
+        return ((sockets, workers, sends), late), unreached
+
+    def _ws_guard_notes(self) -> list[str]:
+        ((sockets, workers, sends), _late), _unreached = self._ws_guard_frames(
+            "read", on=True
+        )
+        notes = []
+        if sockets:
+            notes.append(
+                "the page opened a connection (WebSocket, WebTransport or "
+                "WebRTC) while the save was held; it was refused before it "
+                "connected"
+            )
+        if workers:
+            notes.append(
+                "the page started a worker while the save was held; it was "
+                "refused before it ran"
+            )
+        if sends:
+            notes.append(
+                "the page sent a WebSocket or data channel message while the "
+                "save was held; it was not sent"
+            )
+        return notes
+
+    def _release_ws_guard(self) -> None:
+        hold, self._ws_hold = self._ws_hold, None
+        handle, self._ws_hold_script = self._ws_hold_script, None
+        if hold is None:
+            return
+        context = self.page.context
+        dispose = getattr(handle, "dispose", None)
+        try:
+            if callable(dispose):
+                dispose()
+            else:
+                # Playwright before 1.5x can't remove an init script: a
+                # later one marks this hold released for new documents.
+                context.add_init_script(
+                    _ws_guard_call(
+                        self._ws_guard_key,
+                        None,
+                        False,
+                        "released",
+                        hold,
+                        self._ws_release,
+                    )
+                )
+        except Exception:  # noqa: BLE001 - the context is gone
+            pass
+        self._ws_hold = hold  # the release names it
+        self._ws_guard_frames("release", self._ws_release, on=False)
+        self._ws_hold, self._ws_release, self._ws_commitment = None, "", ""
+
+    def _watch_websocket(self, ws: Any) -> None:
+        def on_frame(_payload: Any) -> None:
+            wire = self._form_wire
+            if wire is not None:
+                wire[3].append(
+                    "the page sent a WebSocket message while the save was held"
+                )
+
+        ws.on("framesent", on_frame)
+
+    def _disarm_wire_check(self) -> list[str]:
+        wire = self._form_wire
+        if wire is None:
+            return []
+        handler, check, on_worker, notes = wire
+        reasons = _wire_reasons(check, notes + self._ws_guard_notes())
+        # The page decides at construction, so releasing it is the last
+        # step that can matter: nothing waits on Python to refuse a socket.
+        self._release_ws_guard()
+        held_pages, self._held_pages = self._held_pages, []
+        for page, listener in held_pages:
+            try:
+                page.remove_listener("worker", listener)
+            except Exception:  # noqa: BLE001 - the page is gone
+                pass
+        context = self.page.context
+        try:
+            context.unroute("**/*", handler)
+            context.remove_listener("serviceworker", on_worker)
+        except Exception:  # noqa: BLE001 - the context is gone
+            pass
+        self._form_wire = None
+        return reasons
+
+    def wait_form_submit_guard(self, ms: int) -> None:
+        """Let the page and the wire check run for ``ms`` milliseconds."""
+
+        try:
+            self.page.wait_for_timeout(ms)
+        except Exception:  # noqa: BLE001 - the page is gone
+            time.sleep(ms / 1000)
+
+    def form_submit_guard_refusal(self, *, disarm: bool = False) -> Optional[str]:
+        """Why the wire check refused a request so far, or None. ``disarm``
+        also removes it."""
+
+        wire = self._form_wire
+        if wire is None:
+            return None
+        if disarm:
+            reasons = self._disarm_wire_check()
+        else:
+            reasons = _wire_reasons(wire[1], wire[3] + self._ws_guard_notes())
+        return "; ".join(dict.fromkeys(reasons)) if reasons else None
+
+    @property
+    def form_submit_guard_armed(self) -> bool:
+        return self._form_wire is not None
+
+    def cancel_form_submit_guard(self) -> Optional[str]:
+        """Read the wire check's last refusals and disarm it."""
+
+        return self.form_submit_guard_refusal(disarm=True)
+
+    def form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """RECORD-TIME: the values of the form's fields the demonstration did
+        not type into, for the control at a point (see
+        :func:`~openadapt_flow.submit_binding.form_values_record`), or None.
+        Plaintext for the recording only; the compiler keeps salted digests.
+        Never raises.
+        """
+
+        try:
+            raw = self._observe_submit_binding(x, y)
+            values = form_values_from_page(raw.get("observation")) if raw else None
+        except Exception:
+            return None
+        return form_values_record(values) if values is not None else None
 
     def _focused_element_call(
         self,
@@ -3562,13 +4175,15 @@ class PlaywrightBackend:
         """Type through the pre-identity focused-element lease."""
 
         self._register_focused_field()
-        return self._act_guarded_keyboard(
+        receipt = self._act_guarded_keyboard(
             expected_frame_sha256=expected_frame_sha256,
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
             # keyboard, so delivery stays bound to the checked target.
             deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
         )
+        self._snapshot_focused_field(text)
+        return receipt
 
     def _handle_screenshot_frame_lifecycle(self, _frame: Any = None) -> None:
         """Advance the irreversible frame-tree generation."""
@@ -4143,6 +4758,7 @@ class PlaywrightBackend:
         self._assert_qualification_environment_current()
         self._register_focused_field()
         self._deliver_text(text, lambda: self.page.keyboard.type(text))
+        self._snapshot_focused_field(text)
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'Meta+a'``."""
@@ -4204,10 +4820,14 @@ class PlaywrightBackend:
                 device_scale_factor=1,
                 record_video_dir=record_video_dir,
                 record_video_size=viewport,
+                service_workers="block",
             )
             page = context.new_page()
         else:
-            page = browser.new_page(viewport=viewport, device_scale_factor=1)
+            # No service workers: their requests would skip the wire check.
+            page = browser.new_page(
+                viewport=viewport, device_scale_factor=1, service_workers="block"
+            )
 
         def close() -> None:
             if shared is not None:
@@ -4231,8 +4851,11 @@ class PlaywrightBackend:
             except BaseException:
                 close()
                 raise
+        # Guard WebSockets before the first document loads, so no page
+        # script can keep a reference to an unguarded constructor.
+        ws_guard = prepare_ws_guard(page)
         page.goto(url)
-        backend = cls(page)
+        backend = cls(page, ws_guard=ws_guard)
         # Read by the generic web environment observer: the environment
         # digest of a headless and a headed browser differ.
         backend.headless = headless
@@ -4244,3 +4867,306 @@ from openadapt_flow.backends._browser_process import (  # noqa: E402
     _start_browser,
     shared_browser,  # noqa: F401 - re-exported
 )
+
+# The page-side guard, run (``_ws_guard_call``) at the start of every
+# document by an init script, and in every open frame when a save is held.
+# It wraps the page's WebSocket, WebTransport, RTCPeerConnection, Worker and
+# SharedWorker constructors so one constructed while the document is held is
+# refused there and never created, and it drops what is sent on a WebSocket
+# or RTCDataChannel while held. No ``prototype.constructor`` on a wrapped
+# chain leads back to the unwrapped constructor, and the wrapper's own
+# prototype is EventTarget.
+#
+# Nothing the page can reach can end a hold or answer for the guard, even a
+# page that sees every call the backend makes (Playwright evaluates through
+# the page's own ``eval``):
+#
+# * Its state lives in a closure; it is strict mode code (no ``.arguments``
+#   or ``.caller``); calls take only string arguments, and while it runs it
+#   touches only what it captured when it installed, typed arrays and
+#   operators. The page sees one non-writable, non-configurable function
+#   under ``key``; if ``key`` is already defined when it would install, it
+#   installs nothing (-1), so holding refuses.
+# * A hold comes with the SHA-256 of a secret, and only that secret ends it;
+#   Python sends the secret only to end the hold.
+# * A hold taken again under a different commitment answers -1.
+# * Every answer is signed (SHA-256 over a secret, the call's nonce, the
+#   document's name, the operation, the hold's commitment and the result)
+#   with the secret the guard was installed with and never receives again:
+#   the init script's for a document guarded from its start, another for
+#   one guarded late. An answer Python can't verify (a commitment the page
+#   swapped in included), or one that names a document twice in a pass
+#   (passed on from another document's guard), stops all holds on that
+#   browser.
+#
+# An answer is ``[sockets, workers, sends, early, document, on, signature]``
+# for the hold, or -1 when the guard can't be kept here.
+_WS_GUARD_JS = r"""(key, secret, start, op, x, extra, nonce) => {
+  'use strict';  // no function here exposes .arguments or .caller
+  const g = globalThis;
+  if (key in g) {
+    if (start) return -1;  // defined before the guard: never trust it
+    const control = g[key];
+    if (typeof control !== 'function') return -1;
+    try { return control(op, x, extra, nonce); } catch (e) { return -1; }
+  }
+  // Only the start of a document or Python's own call installs a guard.
+  if (typeof secret !== 'string') return -1;
+  // Captured now: later page changes to these don't reach the guard.
+  const construct = Reflect.construct, apply = Reflect.apply;
+  const U8 = Uint8Array, U32 = Uint32Array, I32 = Int32Array;
+  const code = String.prototype.charCodeAt;
+  const HEX = '0123456789abcdef';
+  const K = new U32([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+    0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+    0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+    0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+    0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+    0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
+  const IV = new U32([0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]);
+  // SHA-256 of an ASCII string, as hex: typed arrays and operators only, so
+  // nothing the page can change runs while it hashes.
+  const sha = (str) => {
+    const len = str.length, total = ((len + 9 + 63) >>> 6) << 6;
+    const m = new U8(total), h = new U32(8), w = new U32(64);
+    for (let i = 0; i < len; i++) m[i] = apply(code, str, [i]) & 0xff;
+    m[len] = 0x80;
+    const bits = len * 8;
+    m[total - 4] = (bits >>> 24) & 0xff; m[total - 3] = (bits >>> 16) & 0xff;
+    m[total - 2] = (bits >>> 8) & 0xff; m[total - 1] = bits & 0xff;
+    for (let i = 0; i < 8; i++) h[i] = IV[i];
+    for (let off = 0; off < total; off += 64) {
+      for (let i = 0; i < 16; i++) {
+        const j = off + 4 * i;
+        w[i] = (m[j] << 24) | (m[j + 1] << 16) | (m[j + 2] << 8) | m[j + 3];
+      }
+      for (let i = 16; i < 64; i++) {
+        const a = w[i - 15], b = w[i - 2];
+        const s0 = ((a >>> 7) | (a << 25)) ^ ((a >>> 18) | (a << 14)) ^ (a >>> 3);
+        const s1 = ((b >>> 17) | (b << 15)) ^ ((b >>> 19) | (b << 13)) ^
+          (b >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5],
+        q = h[6], r = h[7];
+      for (let i = 0; i < 64; i++) {
+        const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^
+          ((e >>> 25) | (e << 7));
+        const t1 = (r + S1 + ((e & f) ^ (~e & q)) + K[i] + w[i]) | 0;
+        const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^
+          ((a >>> 22) | (a << 10));
+        const t2 = (S0 + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        r = q; q = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a;
+        a = (t1 + t2) | 0;
+      }
+      h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0;
+      h[3] = (h[3] + d) | 0; h[4] = (h[4] + e) | 0; h[5] = (h[5] + f) | 0;
+      h[6] = (h[6] + q) | 0; h[7] = (h[7] + r) | 0;
+    }
+    let out = '';
+    for (let i = 0; i < 8; i++) {
+      for (let j = 28; j >= 0; j -= 4) out += HEX[(h[i] >>> j) & 15];
+    }
+    return out;
+  };
+  const define = Object.defineProperty, own = Object.getOwnPropertyNames;
+  const describe = Object.getOwnPropertyDescriptor;
+  const protoOf = Object.getPrototypeOf, setProto = Object.setPrototypeOf;
+  const hasOwn = Object.prototype.hasOwnProperty;
+  const DOMEx = g.DOMException, TypeErr = TypeError;
+  const early = start === true;
+  // Names this document in answers: an answer passed on from another
+  // document's guard shows that document's name a second time.
+  const doc = String(Math.random()).slice(2) + String(Date.now());
+  const holds = Object.create(null);
+  const counts = Object.create(null);
+  const guarded = Object.create(null);
+  const patched = [];
+  let held = 0;
+  const bump = (i) => {
+    for (const h in holds) {
+      const c = counts[h] || (counts[h] = new I32(3));
+      c[i] += 1;
+    }
+  };
+  const base = typeof g.EventTarget === 'function' ? g.EventTarget : null;
+  const stop = base ? base.prototype : Object.prototype;
+  const seen = (q) => {
+    for (let i = 0; i < patched.length; i++) if (patched[i] === q) return true;
+    return false;
+  };
+  const patchSend = (q) => {
+    if (!q || !apply(hasOwn, q, ['send']) || seen(q)) return true;
+    const send = q.send;
+    if (typeof send !== 'function') return true;
+    try {
+      define(q, 'send', {
+        value: function send_(...args) {
+          if (held > 0) { bump(2); return undefined; }
+          return apply(send, this, args);
+        }, writable: true, configurable: true, enumerable: true,
+      });
+    } catch (e) { return false; }
+    patched[patched.length] = q;
+    return true;
+  };
+  const wrap = (name, slot) => {
+    const inner = g[name];
+    if (typeof inner !== 'function' || inner === guarded[name]) return true;
+    const Guarded = {[name]: function (...args) {
+      if (!new.target) {
+        throw new TypeErr("Failed to construct '" + name + "': " +
+          "Please use the 'new' operator");
+      }
+      if (held > 0) {
+        bump(slot);
+        throw new DOMEx(
+          'A ' + name + ' cannot start while a checked save is held',
+          'SecurityError');
+      }
+      return construct(
+        inner, args, new.target === Guarded ? inner : new.target);
+    }}[name];
+    Guarded.prototype = inner.prototype;
+    if (base) setProto(Guarded, base);
+    const names = own(inner);
+    for (let i = 0; i < names.length; i++) {
+      const k = names[i];
+      if (k === 'prototype' || k === 'length' || k === 'name') continue;
+      try { define(Guarded, k, describe(inner, k)); } catch (e) { return false; }
+    }
+    // No prototype's constructor leads back to the unguarded one.
+    for (let q = inner.prototype; q && q !== stop && q !== Object.prototype;
+         q = protoOf(q)) {
+      try {
+        define(q, 'constructor', {
+          value: Guarded, writable: true, configurable: true, enumerable: false,
+        });
+      } catch (e) { return false; }
+      if (name === 'WebSocket' && !patchSend(q)) return false;
+    }
+    try {
+      define(g, name, {
+        value: Guarded, writable: true, configurable: true, enumerable: false,
+      });
+    } catch (e) { return false; }
+    guarded[name] = Guarded;
+    return true;
+  };
+  const kept = wrap('WebSocket', 0) && wrap('WebTransport', 0) &&
+    wrap('RTCPeerConnection', 0) && wrap('webkitRTCPeerConnection', 0) &&
+    wrap('Worker', 1) && wrap('SharedWorker', 1) &&
+    (!g.RTCDataChannel || patchSend(g.RTCDataChannel.prototype));
+  if (!kept) return -1;
+  const zero = new I32(3);
+  // Python's only way in. Every argument is a string, read as is (nothing
+  // on the page's prototypes runs). A hold is ended only with the secret
+  // whose hash came with it, which Python sends only to end it. The answer
+  // is signed with the secret this guard was installed with, over what it
+  // did and the nonce, so nothing else can answer for it.
+  const control = function (op, x, extra, n) {
+    if (typeof op !== 'string' || typeof x !== 'string' ||
+        typeof extra !== 'string' || typeof n !== 'string') return -1;
+    if (op === 'hold' || op === 'armed') {
+      // A hold already taken under another commitment was taken by
+      // something else: refuse, and Python stops holding on this browser.
+      if (x in holds && holds[x] !== extra) return -1;
+      if (!(x in holds)) { holds[x] = extra; held += 1; }
+      if (op === 'hold') counts[x] = new I32(3);
+    } else if (op === 'release' || op === 'released') {
+      if (x in holds && sha(extra) === holds[x]) { delete holds[x]; held -= 1; }
+    } else if (op !== 'read') {
+      return -1;
+    }
+    const c = counts[x] || zero;
+    const on = x in holds;
+    const c0 = c[0], c1 = c[1], c2 = c[2];
+    const commitment = on ? holds[x] : '';
+    if (op === 'release' && !on) delete counts[x];
+    // Signs everything the answer says and what the hold is bound to.
+    const mac = sha(secret + '|' + n + '|' + doc + '|' + op + '|' + x + '|' +
+      (on ? '1' : '0') + '|' + commitment + '|' + c0 + ',' + c1 + ',' + c2 +
+      '|' + (early ? '1' : '0'));
+    return [c0, c1, c2, early, doc, on, mac];
+  };
+  try {
+    define(g, key, {
+      value: control, writable: false, configurable: false, enumerable: false,
+    });
+  } catch (e) { return -1; }
+  return control(op, x, extra, nonce);
+}"""
+
+
+def _ws_guard_call(
+    key: str,
+    secret: Optional[str],
+    start: bool,
+    op: str,
+    hold: str = "",
+    extra: str = "",
+    nonce: str = "",
+) -> str:
+    """A call of the page-side guard as JavaScript source, every argument a
+    literal (nothing passes through the page's objects on the way in)."""
+
+    args = ", ".join(
+        json.dumps(value) for value in (key, secret, start, op, hold, extra, nonce)
+    )
+    return f"({_WS_GUARD_JS})({args})"
+
+
+def prepare_ws_guard(target: Any) -> str:
+    """Install the page-side WebSocket guard on a browser context (once) and
+    return its key. ``target`` is the context or one of its pages. Call it
+    before the context's pages load anything, as
+    :meth:`PlaywrightBackend.launch` and the CLI do: a document loaded
+    before it can't hold a create-form save. It changes nothing while no
+    save is held. Never raises: if it can't install, holding refuses."""
+
+    return _ws_guard_secrets(target)[0]
+
+
+def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
+    """The context's guard key and the secrets its guards sign answers
+    with, installing the guard on first use: ``proof`` (in the init script
+    only, so only a guard installed at a document's start has it) and
+    ``late`` (for a guard installed in a document already open)."""
+
+    context = target
+    if not hasattr(target, "new_page"):  # a page: guard its context
+        context = getattr(target, "context", None)
+    known = getattr(context, "_oaflow_ws_guard", None)
+    if (
+        isinstance(known, tuple)
+        and len(known) == 3
+        and all(isinstance(part, str) for part in known)
+    ):
+        return known
+    secrets = (
+        f"__oaflow_ws_{uuid.uuid4().hex}",
+        uuid.uuid4().hex + uuid.uuid4().hex,
+        uuid.uuid4().hex + uuid.uuid4().hex,
+    )
+    key, proof, _late = secrets
+    try:
+        context.add_init_script(_ws_guard_call(key, proof, True, "read"))
+        context._oaflow_ws_guard = secrets
+    except Exception:  # noqa: BLE001 - a stand-in context; holding refuses
+        pass
+    return secrets
+
+
+def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:
+    """Each refusal says what happened: an aborted request never left."""
+
+    return [
+        f"{why}; it was cancelled before it left the page" for why in check.refused
+    ] + notes

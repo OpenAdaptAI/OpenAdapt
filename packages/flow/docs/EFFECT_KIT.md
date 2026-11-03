@@ -1161,7 +1161,27 @@ qualified verifier exists and remains fully compatible with prior deployments.
 The `sql` kind refuses to construct unless `sql_query` passes the read-only
 statement filter (single statement, `SELECT`/`WITH` leading keyword, no
 comments, no mutating/DDL/control keywords or known side-effecting functions,
-values bound only through DB-API parameters). **The filter is defense in
+values bound only through DB-API parameters). The filter reads the query's
+tokens, not its raw text. A string literal or a quoted identifier is never
+read as SQL, so `GROUP_CONCAT(x SEPARATOR ';')`, a table quoted as
+`` `call` `` or `"call"`, a qualified name such as `t.update`, and the
+string function `REPLACE(phone, '-', '')` all pass. A bare keyword is still
+refused (quote a table named `call`), and so is a call to a side-effecting
+function, even quoted or schema qualified. The filter refuses what it can't
+read the same way in every dialect: a backslash anywhere (MySQL reads `\'`
+as an escaped quote, standard SQL as the end of the literal), a
+dollar-quoted string, an unterminated literal, and a comment (`--`, `/*`,
+`#`) outside a literal. When the query has parameters, it also refuses a
+`%` placeholder (`%s`, `%(name)s`) inside a literal or quoted name, because
+pymysql and psycopg2 substitute it without regard to quotes and a parameter
+value could then change the query; write a literal percent sign as `%%`.
+Without parameters no driver formats the query, so `DATE_FORMAT(ts,
+'%H:%i')` and `LIKE '%smith%'` pass. It refuses a row lock (`FOR SHARE`,
+`FOR KEY SHARE`, `LOCK IN SHARE MODE`), and calls that lock, wait, end
+sessions, notify or read files (`get_lock`, `pg_advisory_*`,
+`pg_sleep_for`, `pg_sleep_until`, `master_pos_wait`, `source_pos_wait`,
+`pg_terminate_backend`, `pg_cancel_backend`, `pg_notify`, `load_file`,
+`pg_read_file`, `pg_ls_dir`). **The filter is defense in
 depth, not proof**: on Postgres/MySQL a lexically-clean `SELECT` can still
 call a side-effecting function (a UDF, `nextval`, `dblink`), so **always run
 the SQL verifier under a dedicated read-only database role** — no

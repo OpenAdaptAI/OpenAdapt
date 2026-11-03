@@ -194,7 +194,7 @@ release, never another `openadapt-flow` it finds on your `PATH`, and `doctor`
 says which one it found:
 
 ```bash
-pip install openadapt-desktop "openadapt-flow[browser,console]==2.4.0"
+pip install openadapt-desktop "openadapt-flow[browser,console]==2.4.1"
 openadapt-desktop doctor
 ```
 

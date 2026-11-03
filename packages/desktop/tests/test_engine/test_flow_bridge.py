@@ -278,7 +278,7 @@ class TestFlowBridgeInvocation:
         monkeypatch.setattr("openadapt_desktop.flow_bridge.find_spec", lambda _name: object())
         monkeypatch.setattr(
             "openadapt_desktop.flow_bridge._installed_flow_version",
-            lambda: "2.4.0",
+            lambda: "2.4.1",
         )
         calls: list = []
 

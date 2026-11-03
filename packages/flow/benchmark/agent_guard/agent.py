@@ -6,6 +6,12 @@ MockMed, opens a patient, starts an encounter, picks Triage, types the note
 and clicks Save, with ``think_s`` between actions where a model-driven agent
 would be thinking. It calls no model.
 
+When the guard records the run, the agent first waits (``before_action``)
+until the recording has kept its last action. A model-driven agent's thinking
+gives the recorder that time; a script on a loaded machine can act sooner,
+and the recorder then refuses the run rather than keep a step without its
+own after-frame.
+
 The only change a developer makes for the guard is the DevTools port on the
 browser their agent already launches, marked ``# OpenAdapt guard`` below.
 """
@@ -14,7 +20,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 __all__ = ["AgentRun", "ScriptedAgent"]
 
@@ -33,10 +39,19 @@ class AgentRun:
 class ScriptedAgent:
     """One browser, one tab, driven by a fixed script."""
 
-    def __init__(self, *, port: int, headless: bool = True, think_s: float = 1.0):
+    def __init__(
+        self,
+        *,
+        port: int,
+        headless: bool = True,
+        think_s: float = 1.0,
+        before_action: Optional[Callable[[int], None]] = None,
+    ):
         from playwright.sync_api import sync_playwright
 
         self.think_s = think_s
+        #: Called with the number of actions taken so far, before the next.
+        self.before_action = before_action
         self._pw = sync_playwright().start()
         self.browser = self._pw.chromium.launch(
             headless=headless,
@@ -49,6 +64,8 @@ class ScriptedAgent:
         self.page.wait_for_selector("#tasks-table")
 
     def _act(self, run: AgentRun, what: str, fn: Any) -> None:
+        if self.before_action is not None:
+            self.before_action(run.actions)
         time.sleep(self.think_s)
         fn()
         run.actions += 1

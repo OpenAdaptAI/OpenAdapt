@@ -77,7 +77,10 @@ def {func_name}(url: str{param_sig}) -> dict:
 
     from openadapt_flow._browser_setup import launch_chromium
 
-    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.backends.playwright_backend import (
+        PlaywrightBackend,
+        prepare_ws_guard,
+    )
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 
@@ -86,6 +89,7 @@ def {func_name}(url: str{param_sig}) -> dict:
     with sync_playwright() as p:
         browser = launch_chromium(p.chromium, headless=True)
         page = browser.new_page(viewport={{"width": 1280, "height": 800}})
+        prepare_ws_guard(page)
         page.goto(url)
         try:
             backend = PlaywrightBackend(page)

@@ -10,7 +10,7 @@ only the fixed `openadapt://connect` action and forwards it to the sidecar's
 strict, transactional pairing flow.
 
 The canonical compiler and governed runtime remain in `openadapt-flow`. Each
-native installer freezes the exact `openadapt-flow[browser,console]==2.4.0`
+native installer freezes the exact `openadapt-flow[browser,console]==2.4.1`
 runtime and its `playwright==1.61.0` browser automation dependency into the
 Desktop sidecar. The `console` extra is what lets an installed application
 serve the attended decision console the mobile decision portal relays; the
@@ -63,7 +63,7 @@ carry:
 | Platform | Architectures | Packages | Signing labels |
 | --- | --- | --- | --- |
 | macOS | Apple Silicon (`arm64`), Intel (`x86_64`) | DMG | `adhoc` today; `developer-id-notarized` once credentials exist |
-| Windows | `x86_64` | MSI and NSIS setup executable | `unsigned`, or `authenticode` once SignPath is configured |
+| Windows | `x86_64` | MSI and NSIS setup executable | `unsigned`, or `authenticode` once the SignPath policy is `release-signing` |
 | Linux | `x86_64` | DEB and AppImage | `github-attested` exact bytes |
 
 The "Signing in this release" section above states which labels this release
@@ -124,9 +124,9 @@ build, and an absent set ships the platform's unsigned label instead.
 
 - Windows Authenticode through SignPath (free for open source projects through
   the SignPath Foundation): `SIGNPATH_API_TOKEN`, `SIGNPATH_ORGANIZATION_ID`,
-  `SIGNPATH_PROJECT_SLUG` (`openadapt-desktop`), and
+  `SIGNPATH_PROJECT_SLUG` (`OpenAdapt`), and
   `SIGNPATH_SIGNING_POLICY_SLUG` (`release-signing`). The pipeline policy is in
-  `.signpath/policies/openadapt-desktop/release-signing.yml` at the monorepo
+  `.signpath/policies/OpenAdapt/release-signing.yml` at the monorepo
   root.
 - macOS Developer ID and notarization, if it is ever configured:
   `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,

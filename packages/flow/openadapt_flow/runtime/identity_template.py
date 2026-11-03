@@ -97,6 +97,13 @@ def _signal_hash(salt: bytes, text: str) -> str:
     return hmac.new(salt, text.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+def salted_digest(salt_hex: str, text: str) -> str:
+    """Full salted digest of ``text`` under a stored salt (the env salt wins),
+    for identity evidence that is compared whole rather than per token."""
+
+    return _signal_hash(_salt_bytes(salt_hex), text)
+
+
 def new_salt_hex() -> str:
     """Fresh per-bundle salt (hex). Empty when an external env salt is set, so
     the bundle stores no salt and the hashes are one-way without the secret."""

@@ -253,21 +253,32 @@ def test_a_clean_run_lists_only_the_rules_it_used(tmp_path: Path) -> None:
     assert used == ["log"]
 
 
-def test_a_colleague_who_wrote_in_the_window_owns_their_ui_state(
+def test_a_colleagues_own_ui_state_is_theirs_only_by_their_entry_for_it(
     tmp_path: Path,
 ) -> None:
-    active = _x(
+    # Owner-scoped attribution (runtime/effects/frame.py): their write entry
+    # for user_settings, and the row is theirs.
+    own = _x(
+        "INSERT INTO log (user, patient_id, event, tbl) "
+        "VALUES ('clinic2', NULL, 'insert', 'user_settings')",
+        "INSERT INTO user_settings VALUES (1, 'dem_expand', '1')",
+    )
+    result = _run(tmp_path / "a", own)
+    assert _frame(result) == "held", result["evidence"]["frame"]
+    assert result["evidence"]["frame"]["concurrent_count"] == 1
+    # A write to another table no longer makes their UI state theirs.
+    elsewhere = _x(
         "INSERT INTO log (user, patient_id, event, tbl) "
         "VALUES ('clinic2', 3, 'update', 'patient_data')",
         "INSERT INTO user_settings VALUES (1, 'dem_expand', '1')",
     )
-    assert _frame(_run(tmp_path / "a", active)) == "held"
+    assert _frame(_run(tmp_path / "b", elsewhere)) == "refuted"
     idle = _x("INSERT INTO user_settings VALUES (1, 'dem_expand', '1')")
-    assert _frame(_run(tmp_path / "b", idle)) == "refuted"
+    assert _frame(_run(tmp_path / "c", idle)) == "refuted"
     # Credentials never widen: an active colleague's password still refutes.
     password = _x(
         "INSERT INTO log (user, patient_id, event, tbl) "
         "VALUES ('clinic2', 3, 'update', 'patient_data')",
         "UPDATE users_secure SET login_fail_counter = 3 WHERE username = 'clinic2'",
     )
-    assert _frame(_run(tmp_path / "c", password)) == "refuted"
+    assert _frame(_run(tmp_path / "d", password)) == "refuted"

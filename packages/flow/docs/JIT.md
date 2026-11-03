@@ -11,7 +11,10 @@ the system of record before the run reports `VERIFIED`.
 
 ```python
 from openadapt_flow.jit import (
-    TaskSignature, WebApp, compile_agent, load_customer_model_key,
+    TaskSignature,
+    WebApp,
+    compile_agent,
+    load_customer_model_key,
 )
 from openadapt_flow.runtime.effects import RestRecordVerifier
 
@@ -29,11 +32,13 @@ jit = compile_agent(
     model_key=load_customer_model_key("anthropic"),  # your key, not OpenAdapt's
 )
 
-first = jit.run(note="Follow up in two weeks")   # status: needs_human_admit (DRAFT)
-confirmed = jit.confirm_params(principal_id="dana@clinic.example",
-                               accept_params=["note"], confirm="ok")
-jit.review(principal_id="dana@clinic.example", reviewed_steps=confirmed["steps"],
-           confirm="ok")
+first = jit.run(note="Follow up in two weeks")  # status: needs_human_admit (DRAFT)
+confirmed = jit.confirm_params(
+    principal_id="dana@clinic.example", accept_params=["note"], confirm="ok"
+)
+jit.review(
+    principal_id="dana@clinic.example", reviewed_steps=confirmed["steps"], confirm="ok"
+)
 jit.canary(principal_id="dana@clinic.example", note="Canary test note")
 jit.admit(principal_id="dana@clinic.example", confirm="ok")  # at a terminal
 # Headless (CI): jit.admit_with_key(principal_from_key(load_encrypted_key(...), key_dir))
@@ -182,8 +187,14 @@ To keep the loop in your own code, leave out the agent and use
 `recording()` as a context manager:
 
 ```python
-jit = compile_agent(task=..., app=..., verifier=..., policy="clinical-write",
-                    dialect="anthropic", model_key=load_customer_model_key("anthropic"))
+jit = compile_agent(
+    task=...,
+    app=...,
+    verifier=...,
+    policy="clinical-write",
+    dialect="anthropic",
+    model_key=load_customer_model_key("anthropic"),
+)
 with jit.recording(note="Follow up in two weeks") as rec:
     my_cua_loop(rec.request.instruction, rec.computer.execute)
 print(rec.result.status)  # needs_human_admit, unsupported, or capture_failed
@@ -300,7 +311,11 @@ exact values the save may write, and any other text it may type.
 from openadapt_flow.mockmed.teach_scope import encounter_scope
 
 jit = compile_agent(
-    agent, task=task, app=app, verifier=verifier, policy="clinical-write",
+    agent,
+    task=task,
+    app=app,
+    verifier=verifier,
+    policy="clinical-write",
     teach_scope=lambda params: encounter_scope(
         base_url, patient_id="p1", note=params["note"]
     ),
