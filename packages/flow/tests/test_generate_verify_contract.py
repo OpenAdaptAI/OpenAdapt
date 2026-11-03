@@ -457,3 +457,143 @@ def test_each_fault_is_stopped(generated: dict[str, Any], name: str) -> None:
                     cur.execute(
                         f"INSERT INTO {t} VALUES ({', '.join(['%s'] * len(r))})", r
                     )
+
+
+# -- the recheck sees the contract's own tables --------------------------------
+
+TABLES = ("issues", "journals", "journal_details", "custom_values", "settings")
+
+
+def _snapshot(app: App) -> dict[str, list[tuple]]:
+    out = {}
+    with app.con() as c, c.cursor() as cur:
+        for t in TABLES:
+            cur.execute(f"SELECT * FROM {t}")
+            out[t] = cur.fetchall()
+    return out
+
+
+def _restore(app: App, snapshot: dict[str, list[tuple]]) -> None:
+    with app.con() as c, c.cursor() as cur:
+        for t, rows in snapshot.items():
+            cur.execute(f"DELETE FROM {t}")
+            for r in rows:
+                cur.execute(f"INSERT INTO {t} VALUES ({', '.join(['%s'] * len(r))})", r)
+
+
+def _write_then_recheck(
+    generated: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+    values: dict[str, Any],
+    write: Callable[[], Any],
+    late: Callable[[], Any],
+) -> tuple[str, str]:
+    """A write, its verdict, a late write after the verdict, and the
+    recheck's verdict."""
+
+    from openadapt_flow import verifier
+    from openadapt_flow.verifier import Actor, begin_write, recheck, verify_write
+
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    actor = Actor("agent", "ops-bot")
+    contract, params = gen.choose(
+        generated["out"] / "manifest.yaml", kind, values, {"bot_user_id": str(BOT)}
+    )
+    app = generated["app"]
+    saved = _snapshot(app)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            pending = begin_write(contract, params, actor=actor, ledger=None,
+                                  write_key=f"t-{time.time_ns()}", workdir=tmp)  # fmt: skip
+            write()
+            result = verify_write(pending)
+            first = str(getattr(result.outcome, "value", result.outcome))
+            if not result.verified:
+                return first + " " + "; ".join(result.reasons)[:400], ""
+            late()
+            again = recheck(contract, result, params=params, actor=actor, ledger=None)
+            outcome = str(getattr(again.outcome, "value", again.outcome))
+            return first, outcome + " " + "; ".join(again.reasons)[:400]
+    finally:
+        _restore(app, saved)
+
+
+def test_the_generated_frame_compares_its_own_tables(generated: dict[str, Any]) -> None:
+    """The main record's table and the tables of rows that hold values are
+    compared, and left to the contract's own read only for the rows that
+    read saw move (``judged_by``): never skipped, never append-only."""
+
+    out = generated["out"]
+    manifest = yaml.safe_load((out / "manifest.yaml").read_text())
+    for kind in ("create_issue", "update_issue"):
+        for v in manifest["kinds"][kind]["variants"]:
+            for flavor in ("create", "update", "found"):
+                if flavor not in v:
+                    continue
+                db = yaml.safe_load((out / v[flavor]).read_text())["frame"]["database"]
+                allowed = {t["table"] for t in db["allow_tables"]}
+                assert db["judged_by"]["issues"] == "record"
+                assert not set(db["judged_by"]) & allowed, (kind, flavor)
+                assert not set(db["judged_by"]) & set(db.get("views", {}))
+
+
+def test_a_late_update_of_a_look_alike_is_refuted_at_the_recheck(
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A correct update, then a change to the look-alike issue in the other
+    project after the verdict: the recheck stops it. The columns the update
+    may change are excused on the target only."""
+
+    app = generated["app"]
+
+    def target() -> int:
+        return app.find("Billing Portal", "Refund button missing")
+
+    def legacy() -> int:
+        return app.find("Billing Portal Legacy", "Refund button missing")
+
+    lates = {
+        "the same update on the look-alike": lambda: app.update_issue(legacy(), UPDATE),
+        "only the look-alike's status": lambda: app.q(
+            "UPDATE issues SET status_id=3, updated_on=now() WHERE id=%s", (legacy(),)),
+        "a second change to the target": lambda: app.q(
+            "UPDATE issues SET done_ratio=90 WHERE id=%s", (target(),)),
+    }  # fmt: skip
+    for name, late_write in lates.items():
+        first, late = _write_then_recheck(
+            generated, monkeypatch, "update_issue", UPDATE,
+            lambda: app.update_issue(target(), UPDATE), late_write,
+        )  # fmt: skip
+        assert first == "CONFIRMED", (name, first)
+        assert late.startswith("REFUTED"), (name, late)
+
+
+def test_a_late_duplicate_create_is_refuted_at_the_recheck(
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app = generated["app"]
+    first, late = _write_then_recheck(
+        generated, monkeypatch, "create_issue", CREATE,
+        lambda: app.create_issue(CREATE),
+        lambda: app.create_issue(CREATE, project_id=2),
+    )  # fmt: skip
+    assert first == "CONFIRMED", first
+    assert late.startswith("REFUTED"), late
+
+
+@pytest.mark.parametrize("kind", ["create_issue", "update_issue"])
+def test_a_correct_write_with_nothing_late_is_confirmed_at_the_recheck(
+    generated: dict[str, Any], monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    app = generated["app"]
+    if kind == "create_issue":
+        values, write = CREATE, lambda: app.create_issue(CREATE)
+    else:
+        iid = app.find("Billing Portal", "Refund button missing")
+        values, write = UPDATE, lambda: app.update_issue(iid, UPDATE)
+    first, late = _write_then_recheck(
+        generated, monkeypatch, kind, values, write, lambda: None
+    )
+    assert first == "CONFIRMED", first
+    assert late.startswith("CONFIRMED"), late
