@@ -37,13 +37,16 @@ element is acted on by the gated physical click, not a bypassing AX action.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import sys
 import time
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from openadapt_flow.backend import FreshActuationRequired, StructuralResolutionRefused
@@ -61,6 +64,7 @@ from openadapt_flow.backends.remote_display import (
     require_pyobjc,
 )
 from openadapt_flow.ir import (
+    ActionDeliveryReceipt,
     StructuralHandle,
     StructuralLocator,
 )
@@ -272,6 +276,13 @@ class MacAXClient(Protocol):
         """Exact AX text of ``element`` (value/title/description), or None."""
         ...
 
+    # Optional (act_structural): a client without it can't prove the element
+    # under the pointer is the target, so every structural click is refused.
+    #
+    # def is_part_of(self, hit: MacElement, target: MacElement) -> bool:
+    #     """Whether the live hit-tested element is the target, or under it in
+    #     the tree with nothing pressable in between."""
+    #
     # Optional (IdentityCandidatesBackend): a client without it cannot count
     # look-alike rows, and the runtime halts a row pick before a write.
     #
@@ -537,6 +548,83 @@ class QuartzMacAXClient:
         except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
             return None
 
+    #: AX actions that don't change the app: a node offering only these is
+    #: not pressable for ``is_part_of``.
+    _INERT_ACTIONS = frozenset({"AXScrollToVisible", "AXShowMenu"})
+
+    def is_part_of(self, hit: MacElement, target: MacElement) -> bool:
+        """Whether the live ``hit`` is ``target`` or under it with nothing pressable.
+
+        Walks ``AXParent`` from the hit with ``CFEqual`` until it reaches the
+        target, at most 16 steps. Every node on the way, the hit included,
+        must offer no AX action besides scrolling or a context menu. False
+        on any failure.
+        """
+        try:
+            from ApplicationServices import (
+                AXUIElementCopyActionNames,
+                kAXParentAttribute,
+            )
+            from CoreFoundation import CFEqual
+
+            node, goal = hit.native, target.native
+            if node is None or goal is None:
+                return False
+            for _ in range(16):
+                if CFEqual(node, goal):
+                    return True
+                error, actions = AXUIElementCopyActionNames(node, None)
+                if error != 0:
+                    return False
+                if any(str(a) not in self._INERT_ACTIONS for a in actions or ()):
+                    return False
+                node = self._attr(node, kAXParentAttribute)
+                if node is None:
+                    return False
+            return False
+        except Exception:  # noqa: BLE001 - unobservable AX is never a match
+            return False
+
+    def ancestry(
+        self, element: MacElement
+    ) -> Optional[list[tuple[str, Optional[str], Optional[tuple]]]]:
+        """(raw AX role, name, screen bounds) of each ancestor, parent first.
+
+        Ends at the element's ``AXWindow``, which must carry the element's
+        exact window title. None when the walk fails or never reaches it.
+        """
+        try:
+            from ApplicationServices import (
+                kAXParentAttribute,
+                kAXRoleAttribute,
+                kAXSubroleAttribute,
+            )
+
+            node = element.native
+            if node is None:
+                return None
+            trail: list[tuple[str, Optional[str], Optional[tuple]]] = []
+            for _ in range(32):
+                node = self._attr(node, kAXParentAttribute)
+                if node is None:
+                    return None
+                role = str(self._attr(node, kAXRoleAttribute) or "")
+                if not role:
+                    return None
+                subrole = str(self._attr(node, kAXSubroleAttribute) or "")
+                if role == "AXWindow" and subrole in ("AXDialog", "AXSystemDialog"):
+                    shown = subrole
+                else:
+                    shown = role
+                trail.append((shown, self._name(node), self._bounds(node)))
+                if role == "AXWindow":
+                    return trail if self._name(node) == element.window_title else None
+                if role == "AXApplication":
+                    return None
+            return None
+        except Exception:  # noqa: BLE001 - unobservable AX is an ordinary miss
+            return None
+
     def row_census(
         self, pid: int, window_title: str, x: float, y: float, *, limit: int
     ) -> Optional[dict[str, Any]]:
@@ -732,6 +820,9 @@ class MacOSBackend(RemoteDisplayBackend):
         self._foreground_retries = max(1, int(foreground_retries))
         self._foreground_settle_s = max(0.0, float(foreground_settle_s))
         self._captured_window: Optional[WindowInfo] = None
+        #: Set by ``act_structural`` for the length of its click: re-proves the
+        #: AX element right before every mouse-down edge.
+        self._pre_edge_check: Optional[Any] = None
         # Opaque AX object captured with the one-shot actuation frame. It is
         # process-local, never serialized/logged, and prevents an unchanged-
         # pixel focus switch from redirecting consequential TYPE/KEY input.
@@ -968,6 +1059,13 @@ class MacOSBackend(RemoteDisplayBackend):
             counts = 2 if double else 1
             for index in range(counts):
                 self._assert_bound_physical_target(bound, point=point)
+                if self._pre_edge_check is not None:
+                    try:
+                        self._pre_edge_check(bound, sx, sy)
+                    except StructuralResolutionRefused as exc:
+                        if index == 0:
+                            raise  # nothing was pressed yet
+                        raise MacOSBackendError(str(exc)) from exc
                 self._mac_client.mouse(
                     sx,
                     sy,
@@ -1298,6 +1396,46 @@ class MacOSBackend(RemoteDisplayBackend):
             window_name=window.title,
         )
 
+    def element_identity_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The AX element identity under pixel (x, y), for a repair's new click.
+
+        Shape: :class:`openadapt_flow.repair.element_identity.ElementIdentity`.
+        Scoped to this backend's exact window; None on any miss (never raises).
+        """
+        try:
+            window = self._ensure_captured()
+            screen_x, screen_y = self._pixel_to_screen(window, int(x), int(y))
+            element = self._ax_client.element_at_point(
+                window.pid, window.title, screen_x, screen_y
+            )
+            if element is None or not self._scoped_to_target(element):
+                return None
+            if self._in_window_pixel_rect(window, element.bounds) is None:
+                return None
+            read = getattr(self._ax_client, "ancestry", None)
+            trail = read(element) if callable(read) else None
+            if not trail:
+                return None
+            from openadapt_flow.repair.element_identity import DIALOG_ROLES
+
+            dialog_region = None
+            for role, _name, bounds in trail:
+                if role in DIALOG_ROLES and bounds is not None:
+                    dialog_region = self._in_window_pixel_rect(window, bounds)
+                    break
+            return {
+                "source": "ax",
+                "role": element.role,
+                "name": element.name,
+                "automation_id": element.accessible_id,
+                "ancestry": [[role, name] for role, name, _bounds in trail],
+                "window": window.title,
+                "process": window.owner,
+                "dialog_region": list(dialog_region) if dialog_region else None,
+            }
+        except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
+
     def _unique_candidate(self, locator: StructuralLocator) -> Optional[MacElement]:
         window = self._resolve_window()
         if (
@@ -1363,6 +1501,94 @@ class MacOSBackend(RemoteDisplayBackend):
             candidate_count=1,
             supported_operations=list(candidate.supported_operations),
         )
+
+    def act_structural(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        """Click the same unique AX element the resolver found, or refuse.
+
+        Re-finds ``locator``'s one element and requires its fingerprint (AX
+        path, role, name, id, app, window and bounds) to still equal the
+        handle's, then delivers the fully gated physical click at its center.
+        Right before every mouse-down edge it proves the element again: still
+        the one match with that fingerprint, and the AX client's
+        ``is_part_of`` says the live element the hit-test finds at the point
+        is that element, or lies under it in the tree with nothing pressable
+        in between (its label). A nested button or link there, an overlay
+        from another subtree, or a client that can't tell is refused.
+
+        The receipt binds that fingerprint. It proves input delivery to that
+        element only: the fingerprint is positional, so a same-looking record
+        in its place is caught by the identity check that ran before, not by
+        this. Postconditions and system-of-record effects decide the outcome.
+        Every refusal before the first mouse-down is a
+        :class:`StructuralResolutionRefused` (no input was sent).
+        """
+        expected = handle.target_fingerprint
+        if not expected:
+            raise StructuralResolutionRefused(
+                "AX actuation requires a target fingerprint"
+            )
+        with self._input_lock:
+            window = self._ensure_captured()
+            candidate = self._same_element(locator, expected)
+            rect = self._in_window_pixel_rect(window, candidate.bounds)
+            if rect is None:
+                raise StructuralResolutionRefused(
+                    "AX target is no longer inside the window"
+                )
+            x, y, w, h = rect
+            point = (x + w // 2, y + h // 2)
+            if point != tuple(handle.point):
+                raise StructuralResolutionRefused(
+                    "AX target moved between resolution and actuation"
+                )
+
+            def check(bound: WindowInfo, sx: float, sy: float) -> None:
+                current = self._same_element(locator, expected)
+                hit = self._ax_client.element_at_point(bound.pid, bound.title, sx, sy)
+                part_of = getattr(self._ax_client, "is_part_of", None)
+                if (
+                    hit is None
+                    or not callable(part_of)
+                    or part_of(hit, current) is not True
+                ):
+                    raise StructuralResolutionRefused(
+                        "the element under the pointer is not the resolved AX "
+                        "target; refusing the click"
+                    )
+
+            self._pre_edge_check = check
+            try:
+                self.click(*point, double=double)
+            finally:
+                self._pre_edge_check = None
+        return ActionDeliveryReceipt(
+            receipt_id=secrets.token_hex(12),
+            operation="physical_double_click" if double else "physical_click",
+            native=False,
+            target_fingerprint=expected,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+            outcome_verified=False,
+        )
+
+    def _same_element(self, locator: StructuralLocator, expected: str) -> MacElement:
+        """``locator``'s one element, if its fingerprint is still ``expected``."""
+        candidate = self._unique_candidate(locator)
+        if candidate is None:
+            raise StructuralResolutionRefused(
+                "AX target disappeared between resolution and actuation"
+            )
+        if not hmac.compare_digest(expected, _fingerprint(candidate)):
+            raise StructuralResolutionRefused(
+                "AX target changed between resolution and actuation; refusing a "
+                "stale click"
+            )
+        return candidate
 
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Census of the rows that read the same as the element at (x, y).

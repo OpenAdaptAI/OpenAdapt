@@ -300,6 +300,35 @@ refuted. The read account needs `TRIGGER` and `SHOW VIEW` besides `SELECT`:
 without them a trigger planted in the window can't be seen, and the frame is
 not checked.
 
+`judged_by` names a table whose rows one of the contract's own reads
+declares, such as an update's read of its main record's table:
+
+```yaml
+    judged_by:
+      assets: record            # the table, and the surface that declares its rows
+```
+
+The surface only says which rows are declared: its records, before or after
+the save, that an effect routed to it selects, matched to the table by
+primary key. The table judges every row itself, every column exactly as
+stored, so a lossy read (`substr`, `COALESCE`, a cast) can't hide a change.
+A declared row may change only the surface's fields in
+`target_fields_by_surface`, and a declared new row may set only the columns
+the effects name or `new_row_fields` lists; every other column must hold its
+default. Every other row of the table must not move, and the app profile's
+bookkeeping rules apply as on any table. A recheck reads no surface, so
+there nothing is declared and any change since the post-save read refutes
+the write.
+
+A `judged_by` table is compared, not allow-listed, so it can't also appear
+in `allow_tables` or `views`. One surface declares rows of one table only,
+and the surface may not ignore a field (`frame.ignore_fields`, or a
+`record_field` attribution's `server_set`) that the table doesn't ignore
+(`ignore_columns`). When a declared record's key can't be read, nothing is
+declared, and the change stops the write. The database is read before the
+surfaces, so a change can't land between the surface's read and the read a
+recheck compares with.
+
 Every column type is read, and none is dropped. On MySQL and MariaDB each
 row is read as `JSON_OBJECT`. A type whose value it can't carry as exact text
 is read another way: binary strings, blobs, `BIT`, geometries and vectors as
