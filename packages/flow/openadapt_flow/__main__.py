@@ -883,6 +883,7 @@ def _build_and_run_replayer(
     api_steps_off_reason: Optional[str] = None,
     rollback_plan=None,
     fresh_session=None,
+    gui_undo_counts: Optional[bool] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow.
 
@@ -890,7 +891,10 @@ def _build_and_run_replayer(
     ``rollback_plan`` (``openadapt_flow.rollback``) reads the system of
     record before the run and, after a stop, runs the approved
     compensations and proves the store is back; ``fresh_session`` returns
-    the backend to a signed-out start for a GUI compensation.
+    the backend to a start for a GUI compensation. ``gui_undo_counts``
+    False: a GUI compensation runs after a stop, but doesn't count as an
+    undo for the undo-or-person rule (a desktop screen with no qualified
+    cleanup), so each save goes to a person first.
     """
     replayer = _configured_replayer(
         backend,
@@ -923,7 +927,10 @@ def _build_and_run_replayer(
     _refuse_rollback_durable(rollback_plan, durable)
     if rollback_plan is not None:
         _require_undo_or_person(
-            workflow, rollback_plan, approval_gate, api_only=fresh_session is None
+            workflow,
+            rollback_plan,
+            approval_gate,
+            api_only=fresh_session is None or gui_undo_counts is False,
         )
     before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
     if rollback_plan is not None and before is None:
@@ -1264,7 +1271,7 @@ def _replay_desktop(
     prove it either way.
     """
     from openadapt_flow.backends.factory import build_backend
-    from openadapt_flow.rollback import screen_fresh_session
+    from openadapt_flow.rollback import screen_fresh_session, screen_undo_counts
 
     if args.drift:
         raise SystemExit(
@@ -1317,6 +1324,7 @@ def _replay_desktop(
                 if rollback_plan is not None
                 else None
             ),
+            gui_undo_counts=screen_undo_counts(workflow),
         )
     finally:
         for owned in (backend, *surface_backends.values()):
