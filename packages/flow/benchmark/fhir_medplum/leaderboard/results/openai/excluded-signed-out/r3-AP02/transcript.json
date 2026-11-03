@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_06978cf68713c393016ae9699c6fb087d2a0025b29f67d66ee",
+     "call_id": "call_I2MuvBdfGnB3FN0TWOyKlOKl",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in screen, so I cannot find the patient or verify or book the appointment.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 45,
+   "usd": 0.000918,
+   "cached": 2311
+  },
+  {
+   "in": 3531,
+   "out": 48,
+   "usd": 0.001192,
+   "cached": 3528
+  }
+ ]
+}

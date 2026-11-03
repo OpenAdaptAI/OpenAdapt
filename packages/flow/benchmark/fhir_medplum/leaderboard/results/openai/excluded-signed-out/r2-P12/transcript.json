@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c8eebcf1eb571d4016ae95e03f68487d2957a729429ddfe73",
+     "call_id": "call_3ysp5RaL6sJcvVDkae0XsikW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app is showing the sign-in page, so I cannot check for or create the Patient record.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2293,
+   "out": 36,
+   "usd": 0.004946,
+   "cached": 0
+  },
+  {
+   "in": 3510,
+   "out": 28,
+   "usd": 0.003178,
+   "cached": 2290
+  }
+ ]
+}

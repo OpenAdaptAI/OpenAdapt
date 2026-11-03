@@ -1,0 +1,189 @@
+{
+ "id": "AP04",
+ "class": "wrong_value",
+ "type": "appointment",
+ "expect": "create",
+ "note": "The write path books the other practitioner.",
+ "agent_s": 157.0,
+ "cost_usd": 0.338729,
+ "claim": {
+  "status": "done",
+  "id": "Appointment/e2496184-e5fc-407c-9cd2-15be34670ce4",
+  "note": "RESULT: DONE Appointment/e2496184-e5fc-407c-9cd2-15be34670ce4",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Appointment/e2496184-e5fc-407c-9cd2-15be34670ce4/json",
+  "final_text": "RESULT: DONE Appointment/e2496184-e5fc-407c-9cd2-15be34670ce4",
+  "model_calls": 41,
+  "actions": 52,
+  "tokens_in": 1131482,
+  "tokens_out": 1698
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "e2496184-e5fc-407c-9cd2-15be34670ce4",
+  "reasons": [
+   "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Appointment"
+   ],
+   "corrected": true,
+   "writes_to_record": 2
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Appointment"
+   ]
+  },
+  "unreadable": false
+ },
+ "verify_s": 5.2,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Appointment/e2496184-e5fc-407c-9cd2-15be34670ce4"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Appointment/e2496184-e5fc-407c-9cd2-15be34670ce4": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Practitioner",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Appointment",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Appointment",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Appointment",
+   "write": 2,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 26.6,
+  "end": 29.8,
+  "waited_s": 0
+ }
+}

@@ -1,0 +1,100 @@
+{
+ "id": "P01",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 76.0,
+ "cost_usd": 0.101162,
+ "claim": {
+  "status": "done",
+  "id": "Patient/e1db064b-2c15-45ea-a290-ba3e737abcf0",
+  "note": "RESULT: DONE Patient/e1db064b-2c15-45ea-a290-ba3e737abcf0",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/e1db064b-2c15-45ea-a290-ba3e737abcf0/json",
+  "final_text": "RESULT: DONE Patient/e1db064b-2c15-45ea-a290-ba3e737abcf0",
+  "model_calls": 18,
+  "actions": 22,
+  "tokens_in": 238461,
+  "tokens_out": 1002
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/e1db064b-2c15-45ea-a290-ba3e737abcf0"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/e1db064b-2c15-45ea-a290-ba3e737abcf0": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 32.0,
+  "end": 30.2,
+  "waited_s": 120
+ }
+}

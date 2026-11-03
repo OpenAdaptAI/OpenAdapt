@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0ced49337b431afb016ae968d6257c87d285307d85c6de2bcb",
+     "call_id": "call_kZnXFqOodw53ZJ1MOEHIfIgG",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app is on the sign-in screen, so I couldn't check for an existing Patient record or create one.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2293,
+   "out": 51,
+   "usd": 0.005096,
+   "cached": 0
+  },
+  {
+   "in": 3510,
+   "out": 47,
+   "usd": 0.003368,
+   "cached": 2290
+  }
+ ]
+}

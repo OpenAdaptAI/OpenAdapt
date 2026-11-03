@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_088cbf5ad0c38608016ae9690f15a887d2acf31067268477bf",
+     "call_id": "call_nsP8GkcuPXA3nYHM4LZnfz84",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app is showing the sign-in screen; I cannot access the patient record without an authenticated session.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2343,
+   "out": 15,
+   "usd": 0.000624,
+   "cached": 2340
+  },
+  {
+   "in": 3560,
+   "out": 45,
+   "usd": 0.001167,
+   "cached": 3557
+  }
+ ]
+}

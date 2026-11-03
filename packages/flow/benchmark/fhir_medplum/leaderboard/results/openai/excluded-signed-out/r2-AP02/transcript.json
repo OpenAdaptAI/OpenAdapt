@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_095477c3b6dbbf69016ae9647735e887d285f055ef370fb3e0",
+     "call_id": "call_2swrWgDBs7RywFaNFTyfPueq",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in page, so I cannot access the Patient record or verify or book the appointment.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 41,
+   "usd": 0.000878,
+   "cached": 2311
+  },
+  {
+   "in": 3531,
+   "out": 56,
+   "usd": 0.001272,
+   "cached": 3528
+  }
+ ]
+}

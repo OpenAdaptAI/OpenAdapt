@@ -1,0 +1,56 @@
+{
+ "id": "P12",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration, without the sentence that says which elements to write.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 7.0,
+ "cost_usd": 0.008464,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE The app is on the sign-in screen, so I couldn't check for an existing Patient record or create one.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/signin?next=%2F",
+  "final_text": "RESULT: NOT DONE The app is on the sign-in screen, so I couldn't check for an existing Patient record or create one.",
+  "model_calls": 2,
+  "actions": 0,
+  "tokens_in": 5803,
+  "tokens_out": 98
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 31.7,
+  "end": 34.4,
+  "waited_s": 30
+ }
+}

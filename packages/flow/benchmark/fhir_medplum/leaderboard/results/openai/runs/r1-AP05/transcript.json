@@ -1,0 +1,1139 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96bfc585887d2985f4e693bd26b92",
+     "call_id": "call_MvMfpnwQkzEJE5qIzkkZbzeA",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96bff930c87d2bed2d9b8726e457a",
+     "call_id": "call_JYbRY9E9zo1DbhSSdUIJ0HvR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 224,
+       "y": 297
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c023bd887d2830195e5002cd7d8",
+     "call_id": "call_B7JQZ3NOrx5JHUdW83S9nx9E",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 472,
+       "y": 149
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c04896887d28d3a7fa31f8f87b4",
+     "call_id": "call_DHpgtC0GT7OH44kvmTCPHLvk",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 152,
+       "y": 33
+      },
+      {
+       "text": "Practitioner",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c076e8087d2b81fa1bd5836d6b0",
+     "call_id": "call_C9NZjkA475kudOSOtFe3QexC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c0c15cc87d2ae86a6982bf585c9",
+     "call_id": "call_GaBN6mP4ma6haB23jyYO5TE7",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "ENTER"
+       ],
+       "type": "keypress"
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c10962487d2b81f1d91a00cc41f",
+     "call_id": "call_dnGJOaho1h09gY9PDBSmfoeC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 31,
+       "y": 30
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c15104887d2b7543bddb34829cc",
+     "call_id": "call_m0cufdQQykOeXnbRO8E6hiAU",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 95,
+       "y": 215
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c17d4a887d2a148ceae9b19477f",
+     "call_id": "call_ANkSc0P2RV1qCjYredjvVxKX",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c1b381487d29a2102de49726b06",
+     "call_id": "call_1Pw6WlB97TJ3eIvGnZKwUbDF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c206fa087d2accda3f9873f9e13",
+     "call_id": "call_QZRb0RBjCgfr8mQwweJrxqZO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c24287487d29289d8dab3a2c019",
+     "call_id": "call_SrPlZzOfBsPzIDAM9l3Xx8gC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "r"
+       ],
+       "type": "keypress"
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c28ad6c87d28a6dd3fd01ceca30",
+     "call_id": "call_9Gx4bSppSEz4KWcrZ5y2y0mN",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 117,
+       "y": 89
+      },
+      {
+       "text": "Appointment",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c2c1b5c87d2ac59dbcfa946ffc5",
+     "call_id": "call_4s3um6NZ7SjdJmdcO6AsoDtx",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c304da887d2bdf3280ad3a837ca",
+     "call_id": "call_lH7S46P8yWUAd5ofg7Lda4V4",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c341c6c87d29785d2b3a537cf44",
+     "call_id": "call_fjr6sN2IRUeXFQFWCf1OCbwO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 91,
+       "y": 137
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c3761ec87d29e4466c5196bae8a",
+     "call_id": "call_NOBJvcLU40gOiZZvbhu4HF58",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c3b31f887d2bf28a39cbe914d1e",
+     "call_id": "call_vd048t8tuuPu0fj4f0SX6EAm",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c3ee08887d29f844b920958f7ee",
+     "call_id": "call_mN6TWXapUghiH66JwMpnzlfD",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c42a72087d28047403babbbc22b",
+     "call_id": "call_lMyAOfjor5bUsKZ90FrNFpqs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "r"
+       ],
+       "type": "keypress"
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c46ce2c87d2abda78e77efc2c2b",
+     "call_id": "call_4EHEHSXYZsr2ZpPaTpgT28fO",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1232,
+       "y": 167
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c4a7e6c87d293c670ae34e852a0",
+     "call_id": "call_YUah6ki4b6de5Xcv0FrimIRJ",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 350,
+       "y": 131
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c4e1d0887d2b62c54073a1e3f06",
+     "call_id": "call_sGPaJ7lWONJyEN2uByjgI4F5",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 583,
+       "y": 334
+      },
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      },
+      {
+       "text": "{\n  \"resourceType\": \"Appointment\",\n  \"status\": \"booked\",\n  \"start\": \"2026-11-17T14:00:00Z\",\n  \"end\": \"2026-11-17T14:30:00Z\",\n  \"participant\": [\n    {\n      \"actor\": {\"reference\": \"Patient/c7c04d77-5d1e-4b6d-aa9f-4e6f5f3d3ebe\"},\n      \"status\": \"accepted\"\n    },\n    {\n      \"actor\": {\"reference\": \"Practitioner/b8ff40c9-183d-40c5-8259-e6a3ea672766\"},\n      \"status\": \"accepted\"\n    }\n  ]\n}",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c59fb3887d28596d59a4c78b00d",
+     "call_id": "call_3XOkYyoJqMQCRsYCAjFncKCV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "Control",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c600b7487d2ad9a8975a1c1771d",
+     "call_id": "call_hDVM33cSUNOXjwezSF7c9LNe",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c63d05487d2a3fbd4abfc52d44b",
+     "call_id": "call_hVA1kT9K4BPMz4r6Xd3KgbYt",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "a"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c69048c87d2a175502618c0695d",
+     "call_id": "call_aB4Yq3vcl09uhCJTRcyarwni",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c6c6a4c87d290d4ba7964cd3588",
+     "call_id": "call_G5Dmyiy76RBJlEUanPkq9zqs",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "A"
+       ],
+       "type": "keypress"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c6f639487d2856bd17a73117b06",
+     "call_id": "call_Ha9Tff6e5HNMF43qPDOzkjRR",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "path": [
+        {
+         "x": 351,
+         "y": 530
+        },
+        {
+         "x": 330,
+         "y": 490
+        },
+        {
+         "x": 330,
+         "y": 390
+        },
+        {
+         "x": 330,
+         "y": 290
+        },
+        {
+         "x": 330,
+         "y": 210
+        }
+       ],
+       "type": "drag"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c756db487d2bf15afc095575b05",
+     "call_id": "call_m0RiV60VzVA0j2PvPLEQFYYY",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "text": "{\n  \"resourceType\": \"Appointment\",\n  \"status\": \"booked\",\n  \"start\": \"2026-11-17T14:00:00Z\",\n  \"end\": \"2026-11-17T14:30:00Z\",\n  \"participant\": [\n    {\"actor\": {\"reference\": \"Patient/c7c04d77-5d1e-4b6d-aa9f-4e6f5f3d3ebe\"}, \"status\": \"accepted\"},\n    {\"actor\": {\"reference\": \"Practitioner/b8ff40c9-183d-40c5-8259-e6a3ea672766\"}, \"status\": \"accepted\"}\n  ]\n}",
+       "type": "type"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c7ca20087d29017d085d6f0afe2",
+     "call_id": "call_aOdro9NEKCVuCH3o01V6LBUa",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 1184,
+       "y": 720
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c7ffd2087d29045f4062d63b2ab",
+     "call_id": "call_3tTjXrmLP5qKuVfq6h6hFFJS",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c846c6487d2a0ef7f7bb7f89c77",
+     "call_id": "call_ly0jOHe3HxicL5QTAggRvUgW",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "button": "left",
+       "type": "click",
+       "x": 722,
+       "y": 137
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_07d4297cb68823c4016ae96c88c14c87d280b0b4e457aacf9c",
+     "call_id": "call_gzfhuwas8CRaYgNp4z1gnknV",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: DONE Appointment/81015aed-8ca2-48f6-81fa-f951b77ed641",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "click",
+   "x": 224,
+   "y": 297,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 472,
+   "y": 149,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 152,
+   "y": 33,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Practitioner"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "ENTER"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 31,
+   "y": 30,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 95,
+   "y": 215,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "r"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 117,
+   "y": 89,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "type",
+   "text": "Appointment"
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 91,
+   "y": 137,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "r"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 1232,
+   "y": 167,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 350,
+   "y": 131,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "click",
+   "x": 583,
+   "y": 334,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\n  \"resourceType\": \"Appointment\",\n  \"status\": \"booked\",\n  \"start\": \"2026-11-17T14:00:00Z\",\n  \"end\": \"2026-11-17T14:30:00Z\",\n  \"participant\": [\n    {\n      \"actor\": {\"reference\": \"Patient/c7c04d77-5d1e-4b6d-aa9f-4e6f5f3d3ebe\"},\n      \"status\": \"accepted\"\n    },\n    {\n      \"actor\": {\"reference\": \"Practitioner/b8ff40c9-183d-40c5-8259-e6a3ea672766\"},\n      \"status\": \"accepted\"\n    }\n  ]\n}"
+  },
+  {
+   "a": "key",
+   "keys": [
+    "Control",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "a"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "A"
+   ]
+  },
+  {
+   "a": "drag",
+   "path": [
+    [
+     351,
+     530
+    ],
+    [
+     330,
+     490
+    ],
+    [
+     330,
+     390
+    ],
+    [
+     330,
+     290
+    ],
+    [
+     330,
+     210
+    ]
+   ]
+  },
+  {
+   "a": "type",
+   "text": "{\n  \"resourceType\": \"Appointment\",\n  \"status\": \"booked\",\n  \"start\": \"2026-11-17T14:00:00Z\",\n  \"end\": \"2026-11-17T14:30:00Z\",\n  \"participant\": [\n    {\"actor\": {\"reference\": \"Patient/c7c04d77-5d1e-4b6d-aa9f-4e6f5f3d3ebe\"}, \"status\": \"accepted\"},\n    {\"actor\": {\"reference\": \"Practitioner/b8ff40c9-183d-40c5-8259-e6a3ea672766\"}, \"status\": \"accepted\"}\n  ]\n}"
+  },
+  {
+   "a": "click",
+   "x": 1184,
+   "y": 720,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  },
+  {
+   "a": "click",
+   "x": 722,
+   "y": 137,
+   "button": "left",
+   "count": 1,
+   "mods": []
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 50,
+   "usd": 0.005128,
+   "cached": 0
+  },
+  {
+   "in": 3531,
+   "out": 31,
+   "usd": 0.003212,
+   "cached": 2311
+  },
+  {
+   "in": 4787,
+   "out": 31,
+   "usd": 0.003534,
+   "cached": 3528
+  },
+  {
+   "in": 6043,
+   "out": 40,
+   "usd": 0.003875,
+   "cached": 4784
+  },
+  {
+   "in": 7312,
+   "out": 19,
+   "usd": 0.003942,
+   "cached": 6040
+  },
+  {
+   "in": 8552,
+   "out": 28,
+   "usd": 0.004228,
+   "cached": 7309
+  },
+  {
+   "in": 9805,
+   "out": 42,
+   "usd": 0.004642,
+   "cached": 8549
+  },
+  {
+   "in": 11072,
+   "out": 31,
+   "usd": 0.00481,
+   "cached": 9802
+  },
+  {
+   "in": 12328,
+   "out": 19,
+   "usd": 0.004922,
+   "cached": 11069
+  },
+  {
+   "in": 13568,
+   "out": 19,
+   "usd": 0.005141,
+   "cached": 12325
+  },
+  {
+   "in": 14808,
+   "out": 34,
+   "usd": 0.005539,
+   "cached": 13565
+  },
+  {
+   "in": 16063,
+   "out": 39,
+   "usd": 0.005867,
+   "cached": 14805
+  },
+  {
+   "in": 17327,
+   "out": 39,
+   "usd": 0.006136,
+   "cached": 16060
+  },
+  {
+   "in": 18595,
+   "out": 19,
+   "usd": 0.006197,
+   "cached": 17324
+  },
+  {
+   "in": 19835,
+   "out": 19,
+   "usd": 0.006394,
+   "cached": 18592
+  },
+  {
+   "in": 21075,
+   "out": 31,
+   "usd": 0.006762,
+   "cached": 19832
+  },
+  {
+   "in": 22331,
+   "out": 19,
+   "usd": 0.006922,
+   "cached": 21072
+  },
+  {
+   "in": 23571,
+   "out": 19,
+   "usd": 0.007142,
+   "cached": 22328
+  },
+  {
+   "in": 24811,
+   "out": 19,
+   "usd": 0.00739,
+   "cached": 23568
+  },
+  {
+   "in": 26051,
+   "out": 30,
+   "usd": 0.007748,
+   "cached": 24808
+  },
+  {
+   "in": 27306,
+   "out": 32,
+   "usd": 0.008046,
+   "cached": 26048
+  },
+  {
+   "in": 28563,
+   "out": 31,
+   "usd": 0.008291,
+   "cached": 27303
+  },
+  {
+   "in": 29819,
+   "out": 232,
+   "usd": 0.01055,
+   "cached": 28560
+  },
+  {
+   "in": 31284,
+   "out": 65,
+   "usd": 0.009549,
+   "cached": 29816
+  },
+  {
+   "in": 32570,
+   "out": 71,
+   "usd": 0.009544,
+   "cached": 31281
+  },
+  {
+   "in": 33862,
+   "out": 39,
+   "usd": 0.009493,
+   "cached": 32567
+  },
+  {
+   "in": 35122,
+   "out": 56,
+   "usd": 0.009858,
+   "cached": 33859
+  },
+  {
+   "in": 36399,
+   "out": 26,
+   "usd": 0.009844,
+   "cached": 35119
+  },
+  {
+   "in": 37646,
+   "out": 52,
+   "usd": 0.010299,
+   "cached": 36396
+  },
+  {
+   "in": 38923,
+   "out": 191,
+   "usd": 0.011999,
+   "cached": 37643
+  },
+  {
+   "in": 40335,
+   "out": 32,
+   "usd": 0.010934,
+   "cached": 38920
+  },
+  {
+   "in": 41592,
+   "out": 19,
+   "usd": 0.010776,
+   "cached": 40332
+  },
+  {
+   "in": 42832,
+   "out": 31,
+   "usd": 0.011114,
+   "cached": 41589
+  },
+  {
+   "in": 44088,
+   "out": 19,
+   "usd": 0.011274,
+   "cached": 42829
+  },
+  {
+   "in": 45328,
+   "out": 29,
+   "usd": 0.011593,
+   "cached": 44085
+  }
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "id": "P01",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A plain registration.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 7.7,
+ "cost_usd": 0.004061,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is showing the sign-in page, so I cannot check for an existing Patient record or create one.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/signin?next=%2F",
+  "final_text": "RESULT: NOT DONE Medplum is showing the sign-in page, so I cannot check for an existing Patient record or create one.",
+  "model_calls": 2,
+  "actions": 0,
+  "tokens_in": 5849,
+  "tokens_out": 69
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 29.0,
+  "end": 26.6,
+  "waited_s": 0
+ }
+}

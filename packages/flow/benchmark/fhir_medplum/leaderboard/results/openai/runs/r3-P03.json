@@ -1,0 +1,75 @@
+{
+ "id": "P03",
+ "class": "clean",
+ "type": "patient",
+ "expect": "create",
+ "note": "A look-alike (same name, born a day later) exists; a new record is right.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 15.8,
+ "cost_usd": 0.020004,
+ "claim": {
+  "status": "not_done",
+  "id": "Patient/cdeb7a13-bcde-4393-b9ed-cf6070cf3476",
+  "note": "RESULT: NOT DONE Found Patient/cdeb7a13-bcde-4393-b9ed-cf6070cf3476 for Lena Okafor with birth date 1988-04-23 and no address or contact details; cannot confirm identity. No changes made.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/cdeb7a13-bcde-4393-b9ed-cf6070cf3476/json",
+  "final_text": "RESULT: NOT DONE Found Patient/cdeb7a13-bcde-4393-b9ed-cf6070cf3476 for Lena Okafor with birth date 1988-04-23 and no address or contact details; cannot confirm identity. No changes made.",
+  "model_calls": 5,
+  "actions": 2,
+  "tokens_in": 23956,
+  "tokens_out": 210
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Patient was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 27.1,
+  "end": 22.0,
+  "waited_s": 150
+ }
+}

@@ -1,0 +1,56 @@
+{
+ "id": "P10",
+ "class": "ambiguous",
+ "type": "patient",
+ "expect": "ambiguous",
+ "note": "Two records already match the person; a person has to merge them.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Patient returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 6.6,
+ "cost_usd": 0.002001,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is showing the sign-in screen, so I cannot check for or create the Patient record.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/signin?next=%2F",
+  "final_text": "RESULT: NOT DONE Medplum is showing the sign-in screen, so I cannot check for or create the Patient record.",
+  "model_calls": 2,
+  "actions": 0,
+  "tokens_in": 5849,
+  "tokens_out": 82
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "needs_person",
+  "reasons": [
+   "2 records already match; a person must merge them"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 31.1,
+  "end": 29.5,
+  "waited_s": 0
+ }
+}

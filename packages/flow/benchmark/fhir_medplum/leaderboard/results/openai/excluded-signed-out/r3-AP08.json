@@ -1,0 +1,56 @@
+{
+ "id": "AP08",
+ "class": "other_user",
+ "type": "appointment",
+ "expect": "create",
+ "note": "Another clinician books a different patient with the other practitioner during the run.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/Appointment returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 8.4,
+ "cost_usd": 0.005221,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is showing the sign-in screen; I cannot find the patient or verify or book the appointment without access.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/signin?next=%2F",
+  "final_text": "RESULT: NOT DONE Medplum is showing the sign-in screen; I cannot find the patient or verify or book the appointment without access.",
+  "model_calls": 3,
+  "actions": 1,
+  "tokens_in": 10631,
+  "tokens_out": 82
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no Appointment was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 21.3,
+  "end": 20.4,
+  "waited_s": 0
+ }
+}

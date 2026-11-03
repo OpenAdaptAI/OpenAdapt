@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0dc02994015d4f70016ae969c0c1c087d2b803e19b8ba6c0da",
+     "call_id": "call_Wj4jR9SCPVlO22ibFD5MZcHh",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app is showing the Medplum sign-in page, so I cannot find the Patient record or verify and book the appointment.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 179,
+   "usd": 0.002258,
+   "cached": 2311
+  },
+  {
+   "in": 3531,
+   "out": 51,
+   "usd": 0.003412,
+   "cached": 2311
+  }
+ ]
+}

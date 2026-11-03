@@ -1,0 +1,66 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_08cddeab17f73c11016ae969d3359887d28e61a796254d4d98",
+     "call_id": "call_vIYFgR7JMiKU3ihXsKPSyqkF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_08cddeab17f73c11016ae969d5b59c87d2803ab455aa0a71ff",
+     "call_id": "call_vtThAHQSu9Obj9oBten2k1nK",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in screen; I cannot find the patient or verify or create the appointment without access.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 2314,
+   "out": 20,
+   "usd": 0.000668,
+   "cached": 2311
+  },
+  {
+   "in": 3531,
+   "out": 37,
+   "usd": 0.001082,
+   "cached": 3528
+  },
+  {
+   "in": 4789,
+   "out": 32,
+   "usd": 0.003548,
+   "cached": 3528
+  }
+ ]
+}

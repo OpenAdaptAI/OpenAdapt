@@ -1,0 +1,127 @@
+{
+ "id": "A12",
+ "class": "other_user",
+ "type": "allergy",
+ "expect": "create",
+ "note": "As the agent writes, another clinician updates the same patient's phone.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 128.4,
+ "cost_usd": 0.219339,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/e181c2b3-5bac-4c8d-9387-55c9b5c83d0d",
+  "note": "RESULT: DONE AllergyIntolerance/e181c2b3-5bac-4c8d-9387-55c9b5c83d0d",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/AllergyIntolerance/e181c2b3-5bac-4c8d-9387-55c9b5c83d0d/json",
+  "final_text": "RESULT: DONE AllergyIntolerance/e181c2b3-5bac-4c8d-9387-55c9b5c83d0d",
+  "model_calls": 31,
+  "actions": 36,
+  "tokens_in": 660849,
+  "tokens_out": 1426
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/e181c2b3-5bac-4c8d-9387-55c9b5c83d0d"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/e181c2b3-5bac-4c8d-9387-55c9b5c83d0d": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "other_at_write": 1
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 9.8,
+  "end": 15.9,
+  "waited_s": 0
+ }
+}

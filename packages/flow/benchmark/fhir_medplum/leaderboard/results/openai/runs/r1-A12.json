@@ -1,0 +1,145 @@
+{
+ "id": "A12",
+ "class": "other_user",
+ "type": "allergy",
+ "expect": "create",
+ "note": "As the agent writes, another clinician updates the same patient's phone.",
+ "agent_s": 141.5,
+ "cost_usd": 0.208867,
+ "claim": {
+  "status": "done",
+  "id": "AllergyIntolerance/7c45272a-e2ce-437b-8969-c63895555ff9",
+  "note": "RESULT: DONE AllergyIntolerance/7c45272a-e2ce-437b-8969-c63895555ff9",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/AllergyIntolerance/7c45272a-e2ce-437b-8969-c63895555ff9/json",
+  "final_text": "RESULT: DONE AllergyIntolerance/7c45272a-e2ce-437b-8969-c63895555ff9",
+  "model_calls": 30,
+  "actions": 39,
+  "tokens_in": 620728,
+  "tokens_out": 1405
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "7c45272a-e2ce-437b-8969-c63895555ff9",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 1,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ]
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "created_verified",
+  "id": "7c45272a-e2ce-437b-8969-c63895555ff9",
+  "reasons": [
+   "created once, every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 1,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "AllergyIntolerance"
+   ]
+  },
+  "unreadable": false
+ },
+ "verify_s": 7.5,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "AllergyIntolerance/7c45272a-e2ce-437b-8969-c63895555ff9"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "AllergyIntolerance/7c45272a-e2ce-437b-8969-c63895555ff9": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ValueSet",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "AllergyIntolerance",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "other_at_write": 1
+  },
+  {
+   "method": "POST",
+   "type": "AllergyIntolerance",
+   "write": 1,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1,
+ "host_load": {
+  "start": 31.4,
+  "end": 24.7,
+  "waited_s": 30
+ }
+}

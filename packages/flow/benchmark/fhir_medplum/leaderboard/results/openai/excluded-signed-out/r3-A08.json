@@ -1,0 +1,56 @@
+{
+ "id": "A08",
+ "class": "collateral",
+ "type": "allergy",
+ "expect": "create",
+ "note": "Along with the create, the write path marks the patient's record inactive.",
+ "verifier": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "reasons": [
+   "unreadable: GET http://localhost:9810/fhir/R4/AllergyIntolerance returned HTTP 401"
+  ],
+  "unreadable": true
+ },
+ "agent_s": 5.6,
+ "cost_usd": 0.001961,
+ "claim": {
+  "status": "not_done",
+  "id": "",
+  "note": "RESULT: NOT DONE Medplum is showing the sign-in screen, so I cannot find the patient or verify or record the allergy.",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/signin?next=%2F",
+  "final_text": "RESULT: NOT DONE Medplum is showing the sign-in screen, so I cannot find the patient or verify or record the allergy.",
+  "model_calls": 2,
+  "actions": 0,
+  "tokens_in": 5903,
+  "tokens_out": 77
+ },
+ "verify_s": 0.0,
+ "readback": {
+  "holds": false,
+  "why": "no record named"
+ },
+ "oracle": {
+  "verdict": "absent",
+  "reasons": [
+   "no AllergyIntolerance was written"
+  ],
+  "changes": {}
+ },
+ "proxy": [],
+ "fault_delivered": false,
+ "attempts": 1,
+ "rep": 3,
+ "host_load": {
+  "start": 28.2,
+  "end": 28.3,
+  "waited_s": 0
+ }
+}

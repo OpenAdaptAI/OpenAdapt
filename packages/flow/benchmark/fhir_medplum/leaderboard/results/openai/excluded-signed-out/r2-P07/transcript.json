@@ -1,0 +1,80 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04321b8d45a06fb4016ae95dc16dd487d2bdf55eabdb58fd35",
+     "call_id": "call_ANCQ1D9yqDuluCtglG4POTSH",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_04321b8d45a06fb4016ae95dc4638087d2a574f44d73dfdc45",
+     "call_id": "call_34Lgl3kHEkH5iWm267kXsSY2",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "keys": [
+        "CTRL",
+        "r"
+       ],
+       "type": "keypress"
+      },
+      {
+       "type": "wait"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in screen, so I cannot check for an existing record or create one.",
+   "calls": []
+  }
+ ],
+ "actions": [
+  {
+   "a": "key",
+   "keys": [
+    "CTRL",
+    "r"
+   ]
+  },
+  {
+   "a": "wait",
+   "s": 1.0
+  }
+ ],
+ "usage": [
+  {
+   "in": 2316,
+   "out": 19,
+   "usd": 0.000659,
+   "cached": 2313
+  },
+  {
+   "in": 3533,
+   "out": 49,
+   "usd": 0.001202,
+   "cached": 3530
+  },
+  {
+   "in": 4807,
+   "out": 53,
+   "usd": 0.00379,
+   "cached": 3530
+  }
+ ]
+}

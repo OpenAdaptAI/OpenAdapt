@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0580e8d2bf35ff14016ae95d35cb0887d28b8f6785e879c6c6",
+     "call_id": "call_6HHqSNOe8VbKwBePSUPTmpae",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in screen; I cannot check for or create the Patient record without access.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2316,
+   "out": 18,
+   "usd": 0.004812,
+   "cached": 0
+  },
+  {
+   "in": 3533,
+   "out": 47,
+   "usd": 0.003373,
+   "cached": 2313
+  }
+ ]
+}

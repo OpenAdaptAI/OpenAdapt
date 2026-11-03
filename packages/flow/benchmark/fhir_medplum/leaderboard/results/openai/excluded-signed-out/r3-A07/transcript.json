@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c2d2850f082b792016ae96954de9c87d2af5839de79265764",
+     "call_id": "call_uwIkfgTs54x64tdYYEHUn8UC",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE Medplum is showing the sign-in screen; I cannot find the patient or verify or record the allergy without access.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2343,
+   "out": 20,
+   "usd": 0.000674,
+   "cached": 2340
+  },
+  {
+   "in": 3560,
+   "out": 48,
+   "usd": 0.001197,
+   "cached": 3557
+  }
+ ]
+}

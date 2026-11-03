@@ -1,0 +1,39 @@
+{
+ "transcript": [
+  {
+   "text": "",
+   "calls": [
+    {
+     "id": "cu_0c48cc1e9abc2aab016ae969250dcc87d2a411a1916b011758",
+     "call_id": "call_3PtOK5uw03kLOpoRyS830lQF",
+     "status": "completed",
+     "type": "computer_call",
+     "actions": [
+      {
+       "type": "screenshot"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "text": "RESULT: NOT DONE The app is showing the sign-in page, so I cannot access the patient record or verify or record the allergy.",
+   "calls": []
+  }
+ ],
+ "actions": [],
+ "usage": [
+  {
+   "in": 2343,
+   "out": 18,
+   "usd": 0.000654,
+   "cached": 2340
+  },
+  {
+   "in": 3560,
+   "out": 49,
+   "usd": 0.001207,
+   "cached": 3557
+  }
+ ]
+}

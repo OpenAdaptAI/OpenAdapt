@@ -1,0 +1,130 @@
+{
+ "id": "P06",
+ "class": "wrong_value",
+ "type": "patient",
+ "expect": "create",
+ "note": "The write path adds deceasedBoolean true.",
+ "agent_s": 89.2,
+ "cost_usd": 0.146137,
+ "claim": {
+  "status": "done",
+  "id": "Patient/5dd19483-322b-4f7f-adb7-caf1ed30acc2",
+  "note": "RESULT: DONE Patient/5dd19483-322b-4f7f-adb7-caf1ed30acc2",
+  "claim_line": true,
+  "end_url": "http://localhost:9811/Patient/5dd19483-322b-4f7f-adb7-caf1ed30acc2/details",
+  "final_text": "RESULT: DONE Patient/5dd19483-322b-4f7f-adb7-caf1ed30acc2",
+  "model_calls": 24,
+  "actions": 24,
+  "tokens_in": 408751,
+  "tokens_out": 1347
+ },
+ "verifier": {
+  "outcome": "created_verified",
+  "id": "5dd19483-322b-4f7f-adb7-caf1ed30acc2",
+  "reasons": [
+   "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ],
+   "corrected": true,
+   "writes_to_record": 2
+  },
+  "unreadable": false
+ },
+ "verifier_strict": {
+  "outcome": "needs_review",
+  "id": null,
+  "reasons": [
+   "the agent changed or deleted the record after creating it"
+  ],
+  "evidence": {
+   "before_matches": 0,
+   "after_matches": 1,
+   "agent_writes": 1,
+   "other_writes": 0,
+   "unattributed_writes": 0,
+   "unlogged_writes": 0,
+   "agent_write_types": [
+    "Patient"
+   ]
+  },
+  "unreadable": false
+ },
+ "verify_s": 4.3,
+ "readback": {
+  "holds": true,
+  "wrong": [],
+  "ref": "Patient/5dd19483-322b-4f7f-adb7-caf1ed30acc2"
+ },
+ "oracle": {
+  "verdict": "correct",
+  "reasons": [],
+  "changes": {
+   "Patient/5dd19483-322b-4f7f-adb7-caf1ed30acc2": "created"
+  }
+ },
+ "proxy": [
+  {
+   "method": "POST",
+   "type": "$graphql",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "Patient",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "POST",
+   "type": "Patient",
+   "write": 1,
+   "faulted": true
+  },
+  {
+   "fault": "mutate"
+  },
+  {
+   "method": "POST",
+   "type": "",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "GET",
+   "type": "ServiceRequest",
+   "write": 0,
+   "faulted": false
+  },
+  {
+   "method": "PUT",
+   "type": "Patient",
+   "write": 2,
+   "faulted": false
+  }
+ ],
+ "fault_delivered": true,
+ "attempts": 1,
+ "rep": 1
+}
