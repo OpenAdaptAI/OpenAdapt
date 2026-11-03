@@ -321,6 +321,20 @@ class Sandbox:
         got = self._exec(f"SELECT MAX({self.q(col.name)}) FROM {self.t(table)}")
         return int(got[0][0] or 0)
 
+    def put_many(self, ops: Sequence["Op"]) -> None:
+        """Put each op's row, in two phases: every key is deleted first, then
+        every row inserted, so rows swapping a unique key don't collide on
+        the way. The last op for a key wins."""
+
+        last: dict[tuple[str, str], Op] = {}
+        for op in ops:
+            last[(op.table, store.row_key(self._table(op.table), op.key))] = op
+        for op in last.values():
+            self.put(op.table, None, op.key)
+        for op in last.values():
+            if op.row is not None:
+                self.put(op.table, op.row, op.key)
+
     def put(
         self,
         table: str,
@@ -778,8 +792,18 @@ class Outcome:
 
 
 def _put_all(sb: Sandbox, ops: Sequence[Op]) -> None:
-    for op in ops:
-        sb.put(op.table, op.row, op.key)
+    sb.put_many(ops)
+
+
+def _unique_violation(exc: BaseException) -> bool:
+    """The store refused a row for a duplicate unique key (MySQL 1062,
+    PostgreSQL 23505)."""
+
+    code = getattr(exc, "pgcode", None)
+    if code == "23505":
+        return True
+    args = getattr(exc, "args", ())
+    return bool(args) and args[0] == 1062
 
 
 def run_case(
@@ -845,6 +869,11 @@ def run_case(
             )
         return Outcome(case.name, case.cls, case.correct, outcome, passed, reasons[:6])
     except Exception as exc:  # noqa: BLE001 - a case that can't run admits nothing
+        if case.cls == "duplicate" and _unique_violation(exc):
+            # The store's own unique key refuses this copy: such a duplicate
+            # can't exist, so it is neither stopped nor passed.
+            return Outcome(case.name, case.cls, case.correct, "NOT_APPLICABLE",
+                           False, [f"{type(exc).__name__}: {exc}"])  # fmt: skip
         return Outcome(
             case.name,
             case.cls,
@@ -854,8 +883,12 @@ def run_case(
             [f"{type(exc).__name__}: {exc}", traceback.format_exc(limit=3)],
         )
     finally:
-        for (table, _), (key, row) in saved.items():
-            sb.put(table, row, key)
+        try:
+            sb.put_many(
+                [Op(table, key, row) for (table, _), (key, row) in saved.items()]
+            )
+        except Exception as exc:  # noqa: BLE001 - the sandbox is no longer known
+            raise ZeroTouchError(f"the sandbox could not be restored: {exc}") from exc
 
 
 # -- answers ----------------------------------------------------------------------
@@ -977,8 +1010,7 @@ def validate(
         try:
             cases += faults(sb.schema, sb, demo, write)
         finally:
-            for op, row in saved:
-                sb.put(op.table, row, op.key)
+            sb.put_many([Op(op.table, op.key, row) for op, row in saved])
         for case in cases:
             res = run_case(
                 sb, manifest, demo, case, actor_id, extra, manifest.parent / "state"
@@ -1006,7 +1038,7 @@ def summarize(
     for k in kinds:
         rs = list(by_kind.get(k) or [])
         correct = [r for r in rs if r.correct]
-        fl = [r for r in rs if not r.correct]
+        fl = [r for r in rs if not r.correct and r.outcome != "NOT_APPLICABLE"]
         need = list(REQUIRED_CLASSES)
         if "create" in modes.get(k, set()):
             need += CREATE_CLASSES
@@ -1217,6 +1249,13 @@ def onboard(
                                          "recheck_after_s": SANDBOX_RECHECK_S})  # fmt: skip
             return auto_answers(first, picks)
 
+        def failed(tag: str, why: str) -> dict[str, Any]:
+            blank = {"admitted": False, "why": why, "correct_writes": 0,
+                     "false_stops": [], "faults": 0, "faults_stopped": 0,
+                     "faults_passed": [], "classes_not_planted": [], "by_class": {}}  # fmt: skip
+            return {"answers": {}, "ledger": [], "report": {}, "cases": [],
+                    "dir": work / tag, "summary": {k: dict(blank) for k in kind_names}}  # fmt: skip
+
         def trial(picks: Mapping[str, Mapping[str, int]], tag: str) -> dict[str, Any]:
             log(f"propose ({tag})")
             try:
@@ -1225,19 +1264,14 @@ def onboard(
                 rep = gen.propose(read=sread, kinds=kinds, demo_dir=demo_dir,
                                   out=work / tag, actor_params=actor_params,
                                   answers=sans)  # fmt: skip
-            except gen.GenerateError as exc:
-                # These answers don't fit together: nothing is admitted.
-                why = f"the generator refused these answers: {exc}"
-                return {"answers": {}, "ledger": [], "report": {}, "cases": [],
-                        "dir": work / tag,
-                        "summary": {k: {"admitted": False, "why": why, "correct_writes": 0,
-                                        "false_stops": [], "faults": 0, "faults_stopped": 0,
-                                        "faults_passed": [], "classes_not_planted": [],
-                                        "by_class": {}} for k in kind_names}}  # fmt: skip
-            cases: list[dict[str, Any]] = []
-            modes: dict[str, set[str]] = {}
-            by_kind = validate(sb, work / tag / "manifest.yaml", holdout, actor_id,
-                               dict(actor_params), log, cases, modes)  # fmt: skip
+                cases: list[dict[str, Any]] = []
+                modes: dict[str, set[str]] = {}
+                by_kind = validate(sb, work / tag / "manifest.yaml", holdout, actor_id,
+                                   dict(actor_params), log, cases, modes)  # fmt: skip
+            except (gen.GenerateError, ZeroTouchError) as exc:
+                # The answers don't fit together, or the sandbox broke:
+                # nothing is admitted.
+                return failed(tag, f"not validated: {exc}")
             return {"answers": answers, "ledger": ledger, "report": rep, "cases": cases,
                     "dir": work / tag, "summary": summarize(by_kind, kind_names, modes)}  # fmt: skip
 
