@@ -79,6 +79,9 @@ CONFIRMED_FILE = "verify.yaml"
 CHECKS_FILE = "record_checks.json"
 TRACE_FILE = "code_action_trace.json"
 AGENT_READS_FILE = "agent_reads.json"
+#: Salted digests of run 1's input values, never the values. ``admit`` uses
+#: them to refuse canaries that repeat run 1's values.
+RUN1_VALUES_FILE = "run1_values.json"
 
 _PLACEHOLDER_RE = re.compile(r"{([A-Za-z_][A-Za-z0-9_]*)}")
 
@@ -600,6 +603,7 @@ class FirstRunCompiler:
         # earlier draft must not carry over to it.
         for stale in (
             AGENT_READS_FILE,
+            RUN1_VALUES_FILE,
             PROPOSED_FILE,
             CONFIRMED_FILE,
             CHECKS_FILE,
@@ -607,6 +611,7 @@ class FirstRunCompiler:
             "emitted.json",
         ):
             (self.out_dir / stale).unlink(missing_ok=True)
+        _write_run1_values(self.out_dir / RUN1_VALUES_FILE, values)
         attempt = self.dir / "attempts" / _stamp()
         harnessed = _HarnessedAgent(
             agent,
@@ -1014,6 +1019,9 @@ class FirstRunCompiler:
                 "pass canary values: each canary saves them on the record "
                 f"{self.expect}, so choose values that are safe to write there",
             )
+        repeated = _repeats_run1(self.out_dir / RUN1_VALUES_FILE, self.task, rows)
+        if repeated is not None:
+            return self._result("draft", repeated)
         if admitter is not None:
             policy = getattr(admitter, "policy", None)
             count = policy.policy.min_clean_canaries if policy is not None else 1
@@ -1188,6 +1196,62 @@ def _confirmer(confirm: PersonOrCallback, compiler: FirstRunCompiler) -> Optiona
     if confirm is None or isinstance(confirm, str):
         return confirm
     return confirm(compiler.proposed())
+
+
+def _value_digest(salt: str, name: str, value: Any) -> str:
+    payload = json.dumps([salt, name, str(value)], ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _write_run1_values(path: Path, values: Mapping[str, Any]) -> None:
+    salt = uuid.uuid4().hex
+    _write_json(
+        path,
+        {
+            "salt": salt,
+            "digests": {
+                name: _value_digest(salt, name, value)
+                for name, value in sorted(values.items())
+            },
+        },
+    )
+
+
+def _repeats_run1(
+    path: Path, task: Any, rows: Sequence[Mapping[str, Any]]
+) -> Optional[str]:
+    """Why these canary rows can't prove the program, or None when they can.
+
+    A canary with run 1's values passes even when the program types the
+    demonstrated text as a constant, so it proves nothing about parameters.
+    Every parameter in every row must differ from run 1's value.
+    """
+
+    if not getattr(task, "params", None):
+        return None
+    if not path.is_file():
+        return (
+            "run 1's input digests are missing, so canary values can't be "
+            "checked against run 1's; record run 1 again"
+        )
+    data = json.loads(path.read_text())
+    salt, digests = data.get("salt"), data.get("digests") or {}
+    if not isinstance(salt, str) or not isinstance(digests, dict):
+        return "run 1's input digests are unreadable; record run 1 again"
+    for number, row in enumerate(rows, start=1):
+        values = task.validate(row)
+        same = sorted(
+            name
+            for name, value in values.items()
+            if name in digests and digests[name] == _value_digest(salt, name, value)
+        )
+        if same:
+            return (
+                f"canary {number} uses run 1's value for {', '.join(same)}; a "
+                "canary with run 1's values passes even when the program types "
+                "the demonstrated text, so choose different values"
+            )
+    return None
 
 
 def compile_first_run(

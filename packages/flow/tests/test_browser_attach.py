@@ -266,7 +266,11 @@ def test_backend_masks_password_and_declared_secret_fields_on_every_frame() -> N
     for options in page.screenshot_options:
         assert options["mask_color"] == "#000000"
     backend.stop_screenshot_mask_tracking()
-    assert not any(page.listeners.values())
+    # The frame listeners are gone (the wire check's WebSocket watcher stays).
+    assert not any(
+        page.listeners.get(event)
+        for event in ("frameattached", "framedetached", "framenavigated")
+    )
 
 
 def test_masked_screenshot_survives_three_iframe_storms_then_settles(

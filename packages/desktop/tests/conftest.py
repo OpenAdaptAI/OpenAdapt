@@ -41,6 +41,22 @@ def fake_native_recorder(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_real_secure_enclave(monkeypatch):
+    """Keep tests off this Mac's Secure Enclave and the in-app approver key.
+
+    The engine's default approver keychain would probe the Secure Enclave and
+    read the login Keychain. Tests get a computer without one (the terminal
+    path) unless they build an ``ApproverKeychain`` with a fake enclave. The
+    real-hardware test (tests/test_approver_keychain_real.py) makes its own.
+    """
+
+    from openadapt_desktop import approver_keychain
+
+    monkeypatch.setattr(approver_keychain, "default_enclave", approver_keychain.NoEnclave)
+    monkeypatch.setattr(approver_keychain, "_DEFAULT", [])
+
+
+@pytest.fixture(autouse=True)
 def restore_umask():
     """The engine entry points set a private umask; keep it from leaking between tests."""
 

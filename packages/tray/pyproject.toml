@@ -37,6 +37,12 @@ macos-native = [
     "rumps>=0.4.0",
     "pyobjc-framework-Cocoa>=9.0",
 ]
+# Shows recordings that `openadapt-flow record` or `capture record` start
+# without OpenAdapt Desktop. 1.3.0 is the first release with the recorder
+# control channel the tray reads.
+capture = [
+    "openadapt-capture>=1.3.0",
+]
 dev = [
     "pytest>=9.0.3",
     "pytest-mock>=3.10.0",

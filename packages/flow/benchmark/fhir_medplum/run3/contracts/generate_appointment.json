@@ -1,0 +1,58 @@
+{
+  "admitted": false,
+  "refusals": [
+    "patient: no single element holds it in every demonstration (it is in a list whose elements can't be told apart)",
+    "practitioner: no single element holds it in every demonstration (it is in a list whose elements can't be told apart)",
+    "participant.actor.reference: in a list whose elements can't be told apart",
+    "participant.status: in a list whose elements can't be told apart",
+    "identity: Appointment has no reviewed template, and the proposal ['status'] lacks a subject reference and a coded value"
+  ],
+  "to_confirm": [],
+  "provenance": {
+    "fields.end.path": "bound in 3 of 3 demonstrations",
+    "fields.start.path": "bound in 3 of 3 demonstrations",
+    "fields.status.path": "bound in 3 of 3 demonstrations",
+    "closed": "always: generation never opens the record",
+    "change_feed.audit": "facts: the audit trail logs writes and names the actor",
+    "change_feed.audit.heartbeat": "always on: an empty audit window proves nothing unless the verifier's own read shows up",
+    "change_feed.history": "facts: history_lists_versions",
+    "change_feed.history_author": "facts: meta_author_returned",
+    "change_feed.sweep_types": "the resource type",
+    "settle_s": "facts: 3 x the slowest audit lag measured, at least 1 s"
+  },
+  "checks": [],
+  "contract": {
+    "schema_version": "openadapt.ensure-record/v1",
+    "resource_type": "Appointment",
+    "base_url": "${MEDPLUM_FHIR_URL}",
+    "access_token_env": "MEDPLUM_RECORD_TOKEN",
+    "self": [
+      "${MEDPLUM_BOT_REF}"
+    ],
+    "fields": {
+      "end": {
+        "path": "end"
+      },
+      "start": {
+        "path": "start"
+      },
+      "status": {
+        "path": "status"
+      }
+    },
+    "identity": [],
+    "search": {},
+    "closed": true,
+    "change_feed": {
+      "audit": {
+        "heartbeat": true
+      },
+      "history": true,
+      "history_author": false,
+      "sweep_types": [
+        "Appointment"
+      ]
+    },
+    "settle_s": 1.0
+  }
+}

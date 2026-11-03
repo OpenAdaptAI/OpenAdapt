@@ -1,0 +1,411 @@
+{
+  "summary": {
+    "prs": 25,
+    "pr_wall_min_median": 33.2,
+    "pr_job_min_median": 63.0,
+    "queue_wall_min_median": 191.7,
+    "queue_job_min_median": 331.3
+  },
+  "rows": [
+    {
+      "pr": 1601,
+      "merged_at": "2026-10-28T20:47:29Z",
+      "pr_lane": {
+        "runs": 6,
+        "jobs": 18,
+        "wall_min": 28.2,
+        "job_min": 62.8
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1591,
+      "merged_at": "2026-10-28T18:38:00Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 21,
+        "wall_min": 11.1,
+        "job_min": 24.7
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1578,
+      "merged_at": "2026-10-25T15:44:03Z",
+      "pr_lane": {
+        "runs": 6,
+        "jobs": 36,
+        "wall_min": 54.9,
+        "job_min": 69.0
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1575,
+      "merged_at": "2026-10-25T15:07:02Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 19,
+        "wall_min": 35.4,
+        "job_min": 63.9
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1574,
+      "merged_at": "2026-10-25T16:07:50Z",
+      "pr_lane": {
+        "runs": 8,
+        "jobs": 22,
+        "wall_min": 7.7,
+        "job_min": 26.8
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1569,
+      "merged_at": "2026-10-25T16:14:18Z",
+      "pr_lane": {
+        "runs": 6,
+        "jobs": 18,
+        "wall_min": 40.5,
+        "job_min": 64.1
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1568,
+      "merged_at": "2026-10-25T15:16:22Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 19,
+        "wall_min": 59.2,
+        "job_min": 63.0
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1565,
+      "merged_at": "2026-10-25T16:03:20Z",
+      "pr_lane": {
+        "runs": 6,
+        "jobs": 18,
+        "wall_min": 30.2,
+        "job_min": 54.4
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1564,
+      "merged_at": "2026-10-25T14:30:25Z",
+      "pr_lane": {
+        "runs": 6,
+        "jobs": 18,
+        "wall_min": 28.3,
+        "job_min": 53.3
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1563,
+      "merged_at": "2026-10-25T11:53:44Z",
+      "pr_lane": {
+        "runs": 8,
+        "jobs": 22,
+        "wall_min": 6.8,
+        "job_min": 18.1
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1562,
+      "merged_at": "2026-10-25T09:53:22Z",
+      "pr_lane": {
+        "runs": 6,
+        "jobs": 14,
+        "wall_min": 6.6,
+        "job_min": 11.1
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1557,
+      "merged_at": "2026-10-25T10:21:58Z",
+      "pr_lane": {
+        "runs": 6,
+        "jobs": 16,
+        "wall_min": 70.5,
+        "job_min": 54.3
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1556,
+      "merged_at": "2026-10-25T08:27:30Z",
+      "pr_lane": {
+        "runs": 6,
+        "jobs": 20,
+        "wall_min": 37.2,
+        "job_min": 88.0
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1553,
+      "merged_at": "2026-10-25T07:42:32Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 22,
+        "wall_min": 33.2,
+        "job_min": 23.2
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1545,
+      "merged_at": "2026-10-25T06:03:36Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 23,
+        "wall_min": 56.2,
+        "job_min": 30.8
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1544,
+      "merged_at": "2026-10-25T06:45:37Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 19,
+        "wall_min": 79.0,
+        "job_min": 96.3
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1541,
+      "merged_at": "2026-10-25T08:59:10Z",
+      "pr_lane": {
+        "runs": 11,
+        "jobs": 41,
+        "wall_min": 30.0,
+        "job_min": 85.2
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1539,
+      "merged_at": "2026-10-25T15:43:04Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 19,
+        "wall_min": 49.6,
+        "job_min": 63.7
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1538,
+      "merged_at": "2026-10-25T14:28:56Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 19,
+        "wall_min": 27.6,
+        "job_min": 57.6
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1527,
+      "merged_at": "2026-10-25T07:48:12Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 19,
+        "wall_min": 59.7,
+        "job_min": 97.7
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1525,
+      "merged_at": "2026-10-25T05:41:08Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 19,
+        "wall_min": 135.6,
+        "job_min": 80.9
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1522,
+      "merged_at": "2026-10-25T05:40:45Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 22,
+        "wall_min": 33.2,
+        "job_min": 19.6
+      },
+      "queue": {
+        "runs": 24,
+        "jobs": 140,
+        "wall_min": 191.7,
+        "job_min": 331.3
+      }
+    },
+    {
+      "pr": 1519,
+      "merged_at": "2026-10-25T12:42:30Z",
+      "pr_lane": {
+        "runs": 8,
+        "jobs": 27,
+        "wall_min": 19.7,
+        "job_min": 72.7
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1518,
+      "merged_at": "2026-10-25T13:43:31Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 37,
+        "wall_min": 22.7,
+        "job_min": 74.3
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    },
+    {
+      "pr": 1517,
+      "merged_at": "2026-10-25T07:29:01Z",
+      "pr_lane": {
+        "runs": 7,
+        "jobs": 19,
+        "wall_min": 107.0,
+        "job_min": 80.7
+      },
+      "queue": {
+        "runs": 0,
+        "jobs": 0,
+        "wall_min": 0.0,
+        "job_min": 0.0
+      }
+    }
+  ]
+}

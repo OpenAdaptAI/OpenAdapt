@@ -182,6 +182,47 @@ def test_missing_required_param_fails_fast_naming_it(bundle, run_dir):
     assert backend.actions == []  # nothing ran
 
 
+def _date_param_workflow() -> Workflow:
+    return Workflow(
+        name="wf",
+        param_specs={
+            "DOB": ParamSpec(name="DOB", type=ParamKind.DATE, example="1985-02-03")
+        },
+        steps=[Step(id="t1", intent="type DOB", action=ActionKind.TYPE, param="DOB")],
+    )
+
+
+@pytest.mark.parametrize(
+    "value", ["04/20/1944", "1944-4-20", "1944-02-30", "", 19440420]
+)
+def test_a_malformed_date_param_halts_before_anything_is_typed(bundle, run_dir, value):
+    """A typed date must be a canonical ISO date before any step runs, so a
+    date written another way is never typed into the form and saved as
+    whatever the app makes of it."""
+    backend = FakeBackend()
+    report = Replayer(backend, vision=FakeVision()).run(
+        _date_param_workflow(),
+        params={"DOB": value},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is False
+    assert [r.step_id for r in report.results] == ["<params>"]
+    assert backend.actions == []  # nothing was typed
+
+
+def test_an_iso_date_param_runs(bundle, run_dir):
+    backend = FakeBackend()
+    report = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01).run(
+        _date_param_workflow(),
+        params={"DOB": "1944-04-20"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is True
+    assert backend.actions == [("type", "1944-04-20")]
+
+
 @pytest.mark.parametrize(
     ("kind", "value"),
     [(ParamKind.BOOLEAN, False), (ParamKind.NUMBER, 0)],

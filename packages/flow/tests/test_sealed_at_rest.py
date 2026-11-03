@@ -719,6 +719,9 @@ def test_sealed_run_pauses_and_resumes_without_plaintext(
             run_id=manifest.run_id,
             workflow_name=manifest.workflow_name,
             run_dir=run_dir,
+            # The refuted save was sent; the operator found the record missing
+            # and authorizes one retry.
+            authorize_uncertain_retry=True,
         )
         verifier.refute.clear()
         resumed_backend = FakeBackend()

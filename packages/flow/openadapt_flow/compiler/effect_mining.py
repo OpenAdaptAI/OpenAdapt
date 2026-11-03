@@ -156,6 +156,81 @@ def _as_records(value: Any) -> Optional[list[dict]]:
     return None
 
 
+#: Event keys for when the recorder read each snapshot (seconds since the
+#: recording started). Written by :class:`~openadapt_flow.recorder.Recorder`.
+SOR_T_BEFORE_KEY = "sor_t_before"
+SOR_T_AFTER_KEY = "sor_t_after"
+
+#: The least time between a step's after-snapshot and the next action's
+#: before-snapshot for "unchanged until the next action" to prove anything: a
+#: write that lands a little late (a debounced autosave, an outbox) must have
+#: had the chance to show. A recording that cannot show this gap (snapshots
+#: without times, or one snapshot reused for both) gives no proof.
+MIN_STORE_SETTLE_GAP_S = 1.0
+
+#: A dismiss-shaped control's label: it closes a notice or dialog. Only such a
+#: step may lose its placeholder on store evidence; a Save, Submit or Sign
+#: keeps it whatever the snapshot shows (the reader may not see every write).
+_DISMISS_SHAPED_LABEL = re.compile(
+    r"^\s*(?:continue(?:\s+to\s+\w+(?:\s+\w+)?)?|next|close|ok(?:ay)?|got\s+it|"
+    r"dismiss|not\s+now|maybe\s+later|ask\s+(?:me\s+)?(?:again\s+)?later|"
+    r"skip(?:\s+for\s+now)?|remind\s+me\s+later|no,?\s+thanks)\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_dismiss_shaped(step: Step) -> bool:
+    """A click whose label only closes a notice, with no other write word in
+    its retained context ("Continue to checkout" or "Continue and save" are
+    not dismiss-shaped)."""
+
+    from openadapt_flow.risk import only_weak_write_words, step_text
+
+    if step.action is not ActionKind.CLICK or step.anchor is None:
+        return False
+    structural = step.anchor.structural
+    label = (structural.name if structural is not None else None) or (
+        step.anchor.ocr_text or ""
+    )
+    if not _DISMISS_SHAPED_LABEL.match(label):
+        return False
+    return only_weak_write_words(step_text(step))
+
+
+def store_unchanged_through_next(
+    by_index: Mapping[Any, Mapping[str, Any]], i: int
+) -> Optional[bool]:
+    """Did the record store stay the same across event ``i`` and until the next
+    action began, at least :data:`MIN_STORE_SETTLE_GAP_S` later?
+
+    ``by_index`` maps each event's ``i`` to the event (build it once per
+    recording). ``True`` only when the recorder snapshotted the store before
+    and after event ``i`` AND before the event that followed it, all three
+    are equal, and the recorded times show the next snapshot was read at
+    least :data:`MIN_STORE_SETTLE_GAP_S` after this step's after-snapshot.
+    ``False`` when any two snapshots differ. ``None`` otherwise (a snapshot
+    or a time is missing, the gap is too short, or there is no next event):
+    no proof either way.
+    """
+
+    event, nxt = by_index.get(i), by_index.get(i + 1)
+    if event is None or nxt is None:
+        return None
+    before = event.get(SOR_BEFORE_KEY)
+    after = event.get(SOR_AFTER_KEY)
+    later = nxt.get(SOR_BEFORE_KEY)
+    if any(_as_records(v) is None for v in (before, after, later)):
+        return None
+    if not before == after == later:
+        return False
+    t_after, t_later = event.get(SOR_T_AFTER_KEY), nxt.get(SOR_T_BEFORE_KEY)
+    if not isinstance(t_after, (int, float)) or not isinstance(t_later, (int, float)):
+        return None
+    if t_later - t_after < MIN_STORE_SETTLE_GAP_S:
+        return None
+    return True
+
+
 def _new_records(before: list[dict], after: list[dict]) -> list[dict]:
     """Records present in ``after`` that were not in ``before`` (by identity).
 
@@ -823,6 +898,8 @@ def mine_step_effects(
     *,
     exclude_texts: tuple[str, ...] = (),
     param_bindings: Optional[Mapping[str, str]] = None,
+    store_unchanged: Optional[bool] = None,
+    write_requests: Optional[bool] = None,
 ) -> StepEffectMining:
     """Derive candidate system-of-record effects for one compiled step.
 
@@ -856,6 +933,17 @@ def mine_step_effects(
             parameter (``ValueExpr(param=...)``) instead of the demonstrated
             literal. Only system-of-record deltas use it. ``None`` keeps the
             literal, as before.
+        store_unchanged: The caller's proof that the step wrote nothing:
+            ``True`` only when :func:`store_unchanged_through_next` holds and
+            a network capture, if any, shows no write request in the step's
+            window. Only a dismiss-shaped step (:func:`is_dismiss_shaped`)
+            with that proof loses its placeholder ``record_written``; any
+            other consequential step keeps it. ``None`` (the default) keeps
+            the placeholder, as before.
+        write_requests: The network verdict behind ``store_unchanged``:
+            ``None`` when the recording had no network capture, ``False``
+            when the capture showed no write request. Only used to word the
+            reason.
 
     Returns:
         A :class:`StepEffectMining` describing the decision. ``effects`` is
@@ -867,8 +955,30 @@ def mine_step_effects(
         mined = _mine_from_sor_delta(step, before, after, exclude_texts, param_bindings)
         if mined is not None:
             return mined
-        # A snapshot existed but showed no single-record write. If the step is
-        # consequential, that is itself worth surfacing; otherwise it is an
+        # A snapshot existed but showed no single-record write. When the
+        # caller proved the store did not change at all, across the step and
+        # until the next action began, with no write request captured, the
+        # step changed only the screen (a dismissed notice, #1377): it gets no
+        # record_written, whatever its label's risk. A placeholder there would
+        # name a write the recording shows did not happen.
+        if store_unchanged is True and before == after and is_dismiss_shaped(step):
+            channel = (
+                "no network capture"
+                if write_requests is None
+                else "no write request in the step's window"
+            )
+            return StepEffectMining(
+                step_id=step.id,
+                disposition="none",
+                reason=(
+                    "dismiss-shaped step; record store snapshot unchanged across "
+                    "it and until the next action "
+                    f"(>= {MIN_STORE_SETTLE_GAP_S:g} s later); {channel}: no "
+                    "record_written attributed"
+                ),
+            )
+        # If the step is consequential, a store change the miner cannot bind
+        # to one new record is itself worth surfacing; otherwise it is an
         # honest no-op (e.g. a navigation click that touched no record).
         if step.risk == "irreversible":
             ph = _placeholder(step)

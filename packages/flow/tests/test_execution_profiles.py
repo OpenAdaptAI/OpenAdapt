@@ -91,7 +91,7 @@ from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier
 from openadapt_flow.runtime.replayer import Replayer as _RuntimeReplayer
 from openadapt_flow.verification import VerificationTier
 from openadapt_flow.vision.ocr import OcrLine
-from tests.test_durable_runtime import FakeSoRVerifier, _approval
+from tests.test_durable_runtime import FakeSoRVerifier, _approval, _retry_approval
 from tests.test_replayer import FakeBackend, FakeVision, make_png
 
 _KEY = "profile-test-key"
@@ -3076,7 +3076,7 @@ def test_standard_program_resume_preserves_exact_loop_contracts_without_reactuat
             effect_verifier=verifier,
             require_settled=True,
         ),
-        approval=_approval(bundle),
+        approval=_retry_approval(bundle),
     )
 
     assert resumed.execution_outcome == ExecutionOutcome.VERIFIED.value

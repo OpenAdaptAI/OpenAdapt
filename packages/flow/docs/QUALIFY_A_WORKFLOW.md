@@ -59,11 +59,15 @@ app:
   reset:
     python: benchmark.openemr_local.qualify_hooks:reset
 
-# Where the write is read back from. Not the screen.
+# Where the write is read back from. Not the screen. The read is filtered
+# by a duplicate-key field only, so it holds every chart that could be a
+# duplicate (see duplicate_key below).
 verifier:
   kind: rest
   base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
-  records_path: /apis/default/api/patient?_limit=1000
+  records_path: /apis/default/api/patient?lname={lname}
+  path_params:
+    lname: {param: lname}
   records_key: data
   session: benchmark.openemr_local.qualify_hooks:oracle_session
 
@@ -72,7 +76,7 @@ verifier:
 record:
   name: patient
   match: [email, lname]     # how to find the new record
-  duplicate_key: email      # an existing record with this value means "already done"
+  duplicate_key: [lname, fname, DOB]  # another chart with these means a duplicate
   fields:
     email: email            # field: input parameter name
     lname: lname
@@ -129,7 +133,21 @@ What each part does:
 
 - **record**: a shorter way to write the same list. `match` finds the record,
   `fields` says which input each field must equal, and `duplicate_key` is the
-  field that makes a second write a duplicate. It expands to one
+  field that makes a second write a duplicate. A list, such as
+  `duplicate_key: [lname, fname, DOB]`, names fields that are a duplicate only
+  together; the check then fails when more than one record carries all of
+  them, counting records that were already there. Those other records are
+  compared ignoring case and extra spaces (`SMITH` and `Smith ` agree), and a
+  date read back as a midnight datetime counts as its date; the saved record
+  itself is compared exactly. A list of one field works the same way, unlike
+  the plain string, which counts only new records when the check does. Because
+  existing records count, the read must hold all of them: filter
+  `records_path` or `sql_query` by key fields only, and do not cap it (a REST
+  `_limit` needs `records_total_path` or `records_next_path`; SQL takes no
+  `LIMIT`). `qualify` and `verify-run` refuse a read that breaks either rule.
+  A list key needs `expected_count: 1`. If your database driver returns a
+  DATE column as a datetime, the saved record's exact comparison on that
+  field fails and the check stops the run rather than confirming it. It expands to one
   `record_written` plus a `field_equals` per other field. Give `effects` or
   `record`, not both; leave both out when the compiler already bound the
   save's checks from the demonstration.

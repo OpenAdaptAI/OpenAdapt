@@ -1,0 +1,4070 @@
+{
+  "schema": "openadapt.medplum-public-bench.results/v1",
+  "agent": "scripted-fix",
+  "when": "2026-10-29T23:17:28Z",
+  "commit": "e48209942bcacefe97f9a6cdb61ec8a378b9f1cc",
+  "medplum": "medplum/medplum-server:5.2.8@sha256:d70ee91bcf15aa5302c91ad3875f96a6f547f01c2e24c3499d9203f084321c0a",
+  "host": "Darwin arm64, Python 3.12.7",
+  "medplum_up_s": 0.0,
+  "wall_s": 299.6,
+  "agent_usd": 0.0,
+  "stopped_early": false,
+  "scorecard": {
+    "cases": 37,
+    "scored": 37,
+    "excluded": {},
+    "verifier_key": "verifier",
+    "end_states": {
+      "harmful": 8,
+      "needs_person": 1,
+      "correct": 26,
+      "absent": 2
+    },
+    "arms": {
+      "agent": {
+        "correct": 24,
+        "correct_stop": 1,
+        "false_stop": 2,
+        "caught_harm": 0,
+        "missed_harm": 8,
+        "failed_stop": 2,
+        "silent_absent": 0,
+        "harms_caught": 0,
+        "harms_missed": 8,
+        "false_stops": 2,
+        "person_minutes": 1984.9,
+        "person_minutes_low": 64.0,
+        "correct_after_handling": 29,
+        "person_minutes_per_correct": 68.45
+      },
+      "readback": {
+        "correct": 24,
+        "correct_stop": 1,
+        "false_stop": 2,
+        "caught_harm": 0,
+        "missed_harm": 8,
+        "failed_stop": 2,
+        "silent_absent": 0,
+        "harms_caught": 0,
+        "harms_missed": 8,
+        "false_stops": 2,
+        "person_minutes": 1984.9,
+        "person_minutes_low": 64.0,
+        "correct_after_handling": 29,
+        "person_minutes_per_correct": 68.45
+      },
+      "openadapt": {
+        "correct": 20,
+        "correct_stop": 1,
+        "false_stop": 6,
+        "caught_harm": 7,
+        "missed_harm": 1,
+        "failed_stop": 2,
+        "silent_absent": 0,
+        "harms_caught": 7,
+        "harms_missed": 1,
+        "false_stops": 6,
+        "person_minutes": 322.6,
+        "person_minutes_low": 82.5,
+        "correct_after_handling": 36,
+        "person_minutes_per_correct": 8.96
+      },
+      "verifier": {
+        "correct": 22,
+        "correct_stop": 1,
+        "false_stop": 4,
+        "caught_harm": 7,
+        "missed_harm": 1,
+        "failed_stop": 2,
+        "silent_absent": 0,
+        "harms_caught": 7,
+        "harms_missed": 1,
+        "false_stops": 4,
+        "person_minutes": 318.6,
+        "person_minutes_low": 78.5,
+        "correct_after_handling": 36,
+        "person_minutes_per_correct": 8.85
+      }
+    },
+    "by_class": {
+      "clean": {
+        "cases": 11,
+        "agent": {
+          "correct": 11
+        },
+        "readback": {
+          "correct": 11
+        },
+        "openadapt": {
+          "correct": 11
+        },
+        "verifier": {
+          "correct": 11
+        }
+      },
+      "wrong_value": {
+        "cases": 8,
+        "agent": {
+          "correct": 8
+        },
+        "readback": {
+          "correct": 8
+        },
+        "openadapt": {
+          "correct": 6,
+          "false_stop": 2
+        },
+        "verifier": {
+          "correct": 6,
+          "false_stop": 2
+        }
+      },
+      "duplicate": {
+        "cases": 3,
+        "agent": {
+          "missed_harm": 3
+        },
+        "readback": {
+          "missed_harm": 3
+        },
+        "openadapt": {
+          "caught_harm": 3
+        },
+        "verifier": {
+          "caught_harm": 3
+        }
+      },
+      "lost_response": {
+        "cases": 2,
+        "agent": {
+          "false_stop": 2
+        },
+        "readback": {
+          "false_stop": 2
+        },
+        "openadapt": {
+          "false_stop": 2
+        },
+        "verifier": {
+          "correct": 2
+        }
+      },
+      "collateral": {
+        "cases": 4,
+        "agent": {
+          "missed_harm": 4
+        },
+        "readback": {
+          "missed_harm": 4
+        },
+        "openadapt": {
+          "caught_harm": 4
+        },
+        "verifier": {
+          "caught_harm": 4
+        }
+      },
+      "ambiguous": {
+        "cases": 1,
+        "agent": {
+          "correct_stop": 1
+        },
+        "readback": {
+          "correct_stop": 1
+        },
+        "openadapt": {
+          "correct_stop": 1
+        },
+        "verifier": {
+          "correct_stop": 1
+        }
+      },
+      "refused_write": {
+        "cases": 1,
+        "agent": {
+          "failed_stop": 1
+        },
+        "readback": {
+          "failed_stop": 1
+        },
+        "openadapt": {
+          "failed_stop": 1
+        },
+        "verifier": {
+          "failed_stop": 1
+        }
+      },
+      "fake_success": {
+        "cases": 1,
+        "agent": {
+          "failed_stop": 1
+        },
+        "readback": {
+          "failed_stop": 1
+        },
+        "openadapt": {
+          "failed_stop": 1
+        },
+        "verifier": {
+          "failed_stop": 1
+        }
+      },
+      "wrong_patient": {
+        "cases": 2,
+        "agent": {
+          "correct": 2
+        },
+        "readback": {
+          "correct": 2
+        },
+        "openadapt": {
+          "false_stop": 2
+        },
+        "verifier": {
+          "false_stop": 2
+        }
+      },
+      "other_user": {
+        "cases": 3,
+        "agent": {
+          "correct": 3
+        },
+        "readback": {
+          "correct": 3
+        },
+        "openadapt": {
+          "correct": 3
+        },
+        "verifier": {
+          "correct": 3
+        }
+      },
+      "late_collateral": {
+        "cases": 1,
+        "agent": {
+          "missed_harm": 1
+        },
+        "readback": {
+          "missed_harm": 1
+        },
+        "openadapt": {
+          "missed_harm": 1
+        },
+        "verifier": {
+          "missed_harm": 1
+        }
+      }
+    },
+    "costs_seconds": {
+      "correct": 0.0,
+      "correct_stop": 120.0,
+      "false_stop": 120.0,
+      "caught_harm": 420.0,
+      "missed_harm": 14737.0,
+      "failed_stop": 420.0,
+      "silent_absent": 330.0,
+      "missed_harm_low": 330.0
+    }
+  },
+  "scorecard_corrections_refused": {
+    "cases": 37,
+    "scored": 37,
+    "excluded": {},
+    "verifier_key": "verifier_strict",
+    "end_states": {
+      "harmful": 8,
+      "needs_person": 1,
+      "correct": 26,
+      "absent": 2
+    },
+    "arms": {
+      "agent": {
+        "correct": 24,
+        "correct_stop": 1,
+        "false_stop": 2,
+        "caught_harm": 0,
+        "missed_harm": 8,
+        "failed_stop": 2,
+        "silent_absent": 0,
+        "harms_caught": 0,
+        "harms_missed": 8,
+        "false_stops": 2,
+        "person_minutes": 1984.9,
+        "person_minutes_low": 64.0,
+        "correct_after_handling": 29,
+        "person_minutes_per_correct": 68.45
+      },
+      "readback": {
+        "correct": 24,
+        "correct_stop": 1,
+        "false_stop": 2,
+        "caught_harm": 0,
+        "missed_harm": 8,
+        "failed_stop": 2,
+        "silent_absent": 0,
+        "harms_caught": 0,
+        "harms_missed": 8,
+        "false_stops": 2,
+        "person_minutes": 1984.9,
+        "person_minutes_low": 64.0,
+        "correct_after_handling": 29,
+        "person_minutes_per_correct": 68.45
+      },
+      "openadapt": {
+        "correct": 14,
+        "correct_stop": 1,
+        "false_stop": 12,
+        "caught_harm": 7,
+        "missed_harm": 1,
+        "failed_stop": 2,
+        "silent_absent": 0,
+        "harms_caught": 7,
+        "harms_missed": 1,
+        "false_stops": 12,
+        "person_minutes": 334.6,
+        "person_minutes_low": 94.5,
+        "correct_after_handling": 36,
+        "person_minutes_per_correct": 9.29
+      },
+      "verifier": {
+        "correct": 16,
+        "correct_stop": 1,
+        "false_stop": 10,
+        "caught_harm": 7,
+        "missed_harm": 1,
+        "failed_stop": 2,
+        "silent_absent": 0,
+        "harms_caught": 7,
+        "harms_missed": 1,
+        "false_stops": 10,
+        "person_minutes": 330.6,
+        "person_minutes_low": 90.5,
+        "correct_after_handling": 36,
+        "person_minutes_per_correct": 9.18
+      }
+    },
+    "by_class": {
+      "clean": {
+        "cases": 11,
+        "agent": {
+          "correct": 11
+        },
+        "readback": {
+          "correct": 11
+        },
+        "openadapt": {
+          "correct": 11
+        },
+        "verifier": {
+          "correct": 11
+        }
+      },
+      "wrong_value": {
+        "cases": 8,
+        "agent": {
+          "correct": 8
+        },
+        "readback": {
+          "correct": 8
+        },
+        "openadapt": {
+          "false_stop": 8
+        },
+        "verifier": {
+          "false_stop": 8
+        }
+      },
+      "duplicate": {
+        "cases": 3,
+        "agent": {
+          "missed_harm": 3
+        },
+        "readback": {
+          "missed_harm": 3
+        },
+        "openadapt": {
+          "caught_harm": 3
+        },
+        "verifier": {
+          "caught_harm": 3
+        }
+      },
+      "lost_response": {
+        "cases": 2,
+        "agent": {
+          "false_stop": 2
+        },
+        "readback": {
+          "false_stop": 2
+        },
+        "openadapt": {
+          "false_stop": 2
+        },
+        "verifier": {
+          "correct": 2
+        }
+      },
+      "collateral": {
+        "cases": 4,
+        "agent": {
+          "missed_harm": 4
+        },
+        "readback": {
+          "missed_harm": 4
+        },
+        "openadapt": {
+          "caught_harm": 4
+        },
+        "verifier": {
+          "caught_harm": 4
+        }
+      },
+      "ambiguous": {
+        "cases": 1,
+        "agent": {
+          "correct_stop": 1
+        },
+        "readback": {
+          "correct_stop": 1
+        },
+        "openadapt": {
+          "correct_stop": 1
+        },
+        "verifier": {
+          "correct_stop": 1
+        }
+      },
+      "refused_write": {
+        "cases": 1,
+        "agent": {
+          "failed_stop": 1
+        },
+        "readback": {
+          "failed_stop": 1
+        },
+        "openadapt": {
+          "failed_stop": 1
+        },
+        "verifier": {
+          "failed_stop": 1
+        }
+      },
+      "fake_success": {
+        "cases": 1,
+        "agent": {
+          "failed_stop": 1
+        },
+        "readback": {
+          "failed_stop": 1
+        },
+        "openadapt": {
+          "failed_stop": 1
+        },
+        "verifier": {
+          "failed_stop": 1
+        }
+      },
+      "wrong_patient": {
+        "cases": 2,
+        "agent": {
+          "correct": 2
+        },
+        "readback": {
+          "correct": 2
+        },
+        "openadapt": {
+          "false_stop": 2
+        },
+        "verifier": {
+          "false_stop": 2
+        }
+      },
+      "other_user": {
+        "cases": 3,
+        "agent": {
+          "correct": 3
+        },
+        "readback": {
+          "correct": 3
+        },
+        "openadapt": {
+          "correct": 3
+        },
+        "verifier": {
+          "correct": 3
+        }
+      },
+      "late_collateral": {
+        "cases": 1,
+        "agent": {
+          "missed_harm": 1
+        },
+        "readback": {
+          "missed_harm": 1
+        },
+        "openadapt": {
+          "missed_harm": 1
+        },
+        "verifier": {
+          "missed_harm": 1
+        }
+      }
+    },
+    "costs_seconds": {
+      "correct": 0.0,
+      "correct_stop": 120.0,
+      "false_stop": 120.0,
+      "caught_harm": 420.0,
+      "missed_harm": 14737.0,
+      "failed_stop": 420.0,
+      "silent_absent": 330.0,
+      "missed_harm_low": 330.0
+    }
+  },
+  "cases": [
+    {
+      "id": "P01",
+      "class": "clean",
+      "type": "patient",
+      "expect": "create",
+      "note": "A plain registration.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/49813e63-ec44-4b68-ab0e-a568ff6bb8ca",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "49813e63-ec44-4b68-ab0e-a568ff6bb8ca",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "49813e63-ec44-4b68-ab0e-a568ff6bb8ca",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/49813e63-ec44-4b68-ab0e-a568ff6bb8ca"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Patient/49813e63-ec44-4b68-ab0e-a568ff6bb8ca": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P02",
+      "class": "clean",
+      "type": "patient",
+      "expect": "found",
+      "note": "The person is already registered; nothing should be written.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/74f23935-bbae-4257-a150-6dbec55057ad",
+        "note": "already there"
+      },
+      "verifier": {
+        "outcome": "found_existing",
+        "id": "74f23935-bbae-4257-a150-6dbec55057ad",
+        "reasons": [
+          "one record was already the person"
+        ],
+        "evidence": {
+          "before_matches": 1,
+          "after_matches": 1,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "found_existing",
+        "id": "74f23935-bbae-4257-a150-6dbec55057ad",
+        "reasons": [
+          "one record was already the person"
+        ],
+        "evidence": {
+          "before_matches": 1,
+          "after_matches": 1,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verify_s": 6.4,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/74f23935-bbae-4257-a150-6dbec55057ad"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {}
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P03",
+      "class": "clean",
+      "type": "patient",
+      "expect": "create",
+      "note": "A look-alike (same name, born a day later) exists; a new record is right.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/645cacac-80a9-4909-9e0e-517d78e1f49a",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "645cacac-80a9-4909-9e0e-517d78e1f49a",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "645cacac-80a9-4909-9e0e-517d78e1f49a",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/645cacac-80a9-4909-9e0e-517d78e1f49a"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Patient/645cacac-80a9-4909-9e0e-517d78e1f49a": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P04",
+      "class": "wrong_value",
+      "type": "patient",
+      "expect": "create",
+      "note": "The write path swaps the birth date's month and day.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/0c1eda3c-45ec-46cb-aaf7-fb7a2a39667a",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "0c1eda3c-45ec-46cb-aaf7-fb7a2a39667a",
+        "reasons": [
+          "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/0c1eda3c-45ec-46cb-aaf7-fb7a2a39667a"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Patient/0c1eda3c-45ec-46cb-aaf7-fb7a2a39667a": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "Patient",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P05",
+      "class": "wrong_value",
+      "type": "patient",
+      "expect": "create",
+      "note": "The write path transposes the phone number's last two digits.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/e960a52f-5a87-4ba3-98ab-9062c320cd6a",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "e960a52f-5a87-4ba3-98ab-9062c320cd6a",
+        "reasons": [
+          "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/e960a52f-5a87-4ba3-98ab-9062c320cd6a"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Patient/e960a52f-5a87-4ba3-98ab-9062c320cd6a": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "Patient",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P06",
+      "class": "wrong_value",
+      "type": "patient",
+      "expect": "create",
+      "note": "The write path adds deceasedBoolean true.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/d42d2ac3-dd3b-4079-8255-10aa3fc281ad",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "d42d2ac3-dd3b-4079-8255-10aa3fc281ad",
+        "reasons": [
+          "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/d42d2ac3-dd3b-4079-8255-10aa3fc281ad"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Patient/d42d2ac3-dd3b-4079-8255-10aa3fc281ad": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "Patient",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P07",
+      "class": "duplicate",
+      "type": "patient",
+      "expect": "create",
+      "note": "The write path sends the create twice.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/4baec38a-cd59-4033-a997-25582851b831",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent created 2 Patient records, not one",
+          "the agent wrote 2 other resource(s): Patient"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent created 2 Patient records, not one",
+          "the agent wrote 2 other resource(s): Patient"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/4baec38a-cd59-4033-a997-25582851b831"
+      },
+      "oracle": {
+        "verdict": "harmful",
+        "reasons": [
+          "2 Patient records created, not one",
+          "2 records now match the task"
+        ],
+        "changes": {
+          "Patient/4baec38a-cd59-4033-a997-25582851b831": "created",
+          "Patient/7bd729eb-fd5c-4620-b4c6-e37e5350defb": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "duplicate"
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P08",
+      "class": "lost_response",
+      "type": "patient",
+      "expect": "create",
+      "note": "The create lands, but the agent gets a 504 instead of the reply.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "not_done",
+        "note": "create failed: HTTP 504"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "186a9337-ca9c-424e-bfca-2065204545c1",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "186a9337-ca9c-424e-bfca-2065204545c1",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.6,
+      "readback": {
+        "holds": false,
+        "why": "no record named"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Patient/186a9337-ca9c-424e-bfca-2065204545c1": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "drop_response"
+        },
+        {
+          "fault": "drop_response",
+          "upstream_status": 201
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P09",
+      "class": "collateral",
+      "type": "patient",
+      "expect": "create",
+      "note": "Along with the create, the write path changes another patient's phone.",
+      "agent_s": 0.1,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/737f256d-de11-4613-b829-c3343e1ad640",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent wrote 1 other resource(s): Patient"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent wrote 1 other resource(s): Patient"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/737f256d-de11-4613-b829-c3343e1ad640"
+      },
+      "oracle": {
+        "verdict": "harmful",
+        "reasons": [
+          "other records changed: Patient updated"
+        ],
+        "changes": {
+          "Patient/737f256d-de11-4613-b829-c3343e1ad640": "created",
+          "Patient/3f9758a0-9638-47c5-8398-edbde03798c6": "updated"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "side_write"
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P10",
+      "class": "ambiguous",
+      "type": "patient",
+      "expect": "ambiguous",
+      "note": "Two records already match the person; a person has to merge them.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "not_done",
+        "note": "2 records already match"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "2 records were already the person"
+        ],
+        "evidence": {
+          "before_matches": 2,
+          "after_matches": 2,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "2 records were already the person"
+        ],
+        "evidence": {
+          "before_matches": 2,
+          "after_matches": 2,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": false,
+        "why": "no record named"
+      },
+      "oracle": {
+        "verdict": "needs_person",
+        "reasons": [
+          "2 records already match; a person must merge them"
+        ],
+        "changes": {}
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P11",
+      "class": "refused_write",
+      "type": "patient",
+      "expect": "create",
+      "note": "The server refuses the create (503) and nothing lands.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "not_done",
+        "note": "create failed: HTTP 503"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "no record is the person and the agent created none"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 0,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "no record is the person and the agent created none"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 0,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": false,
+        "why": "no record named"
+      },
+      "oracle": {
+        "verdict": "absent",
+        "reasons": [
+          "no Patient was written"
+        ],
+        "changes": {}
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "refuse"
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P12",
+      "class": "clean",
+      "type": "patient",
+      "expect": "create",
+      "note": "A plain registration, without the sentence that says which elements to write.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Patient/72cf5734-64ef-4c89-88cd-2681444dc550",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "72cf5734-64ef-4c89-88cd-2681444dc550",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "72cf5734-64ef-4c89-88cd-2681444dc550",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Patient/72cf5734-64ef-4c89-88cd-2681444dc550"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Patient/72cf5734-64ef-4c89-88cd-2681444dc550": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "P13",
+      "class": "fake_success",
+      "type": "patient",
+      "expect": "create",
+      "note": "The write path answers 201 with a record, but nothing reaches the server.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "not_done",
+        "id": "Patient/00000000-0000-4000-8000-000000000000",
+        "note": "read back: HTTP 404"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "no record is the person and the agent created none"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 0,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "no record is the person and the agent created none"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 0,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": false,
+        "why": "no record named"
+      },
+      "oracle": {
+        "verdict": "absent",
+        "reasons": [
+          "no Patient was written"
+        ],
+        "changes": {}
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Patient",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "fake_success"
+        },
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A01",
+      "class": "clean",
+      "type": "allergy",
+      "expect": "create",
+      "note": "A plain allergy record.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/e1896ff5-9377-41ce-b19d-98e44a98da43",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "e1896ff5-9377-41ce-b19d-98e44a98da43",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "e1896ff5-9377-41ce-b19d-98e44a98da43",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/e1896ff5-9377-41ce-b19d-98e44a98da43"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "AllergyIntolerance/e1896ff5-9377-41ce-b19d-98e44a98da43": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A02",
+      "class": "clean",
+      "type": "allergy",
+      "expect": "found",
+      "note": "The allergy is already recorded; nothing should be written.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/38413ace-49b3-4ffe-9eaa-6e76fa4f9387",
+        "note": "already there"
+      },
+      "verifier": {
+        "outcome": "found_existing",
+        "id": "38413ace-49b3-4ffe-9eaa-6e76fa4f9387",
+        "reasons": [
+          "one record was already the person"
+        ],
+        "evidence": {
+          "before_matches": 1,
+          "after_matches": 1,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "found_existing",
+        "id": "38413ace-49b3-4ffe-9eaa-6e76fa4f9387",
+        "reasons": [
+          "one record was already the person"
+        ],
+        "evidence": {
+          "before_matches": 1,
+          "after_matches": 1,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verify_s": 5.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/38413ace-49b3-4ffe-9eaa-6e76fa4f9387"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {}
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A03",
+      "class": "clean",
+      "type": "allergy",
+      "expect": "create",
+      "note": "A look-alike patient exists; the allergy belongs on the one born 1979.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/e6f89df0-4d43-4edc-8ca6-f630d9c1384e",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "e6f89df0-4d43-4edc-8ca6-f630d9c1384e",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "e6f89df0-4d43-4edc-8ca6-f630d9c1384e",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/e6f89df0-4d43-4edc-8ca6-f630d9c1384e"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "AllergyIntolerance/e6f89df0-4d43-4edc-8ca6-f630d9c1384e": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A04",
+      "class": "wrong_patient",
+      "type": "allergy",
+      "expect": "create",
+      "note": "The write path files the allergy on the look-alike patient.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/62d1a69e-d317-401f-b85d-6ea7c7c0daf4",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it, and a version in between was not the person"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/62d1a69e-d317-401f-b85d-6ea7c7c0daf4"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "AllergyIntolerance/62d1a69e-d317-401f-b85d-6ea7c7c0daf4": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "AllergyIntolerance",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A05",
+      "class": "wrong_value",
+      "type": "allergy",
+      "expect": "create",
+      "note": "The write path replaces the substance code with amoxicillin's.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/412b0a31-fa13-4a56-9dd3-611640cb0822",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it, and a version in between was not the person"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/412b0a31-fa13-4a56-9dd3-611640cb0822"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "AllergyIntolerance/412b0a31-fa13-4a56-9dd3-611640cb0822": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "AllergyIntolerance",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A06",
+      "class": "wrong_value",
+      "type": "allergy",
+      "expect": "create",
+      "note": "The write path lowers criticality from high to low.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/23c41c04-876c-42aa-b161-3edaa3677584",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "23c41c04-876c-42aa-b161-3edaa3677584",
+        "reasons": [
+          "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/23c41c04-876c-42aa-b161-3edaa3677584"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "AllergyIntolerance/23c41c04-876c-42aa-b161-3edaa3677584": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "AllergyIntolerance",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A07",
+      "class": "duplicate",
+      "type": "allergy",
+      "expect": "create",
+      "note": "The write path sends the create twice.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/658c1124-eb7a-499b-bb40-c0aa0ed61315",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent created 2 AllergyIntolerance records, not one",
+          "the agent wrote 2 other resource(s): AllergyIntolerance"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent created 2 AllergyIntolerance records, not one",
+          "the agent wrote 2 other resource(s): AllergyIntolerance"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/658c1124-eb7a-499b-bb40-c0aa0ed61315"
+      },
+      "oracle": {
+        "verdict": "harmful",
+        "reasons": [
+          "2 AllergyIntolerance records created, not one",
+          "2 records now match the task"
+        ],
+        "changes": {
+          "AllergyIntolerance/658c1124-eb7a-499b-bb40-c0aa0ed61315": "created",
+          "AllergyIntolerance/81bb0f74-9057-4542-867d-ba919e175d25": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "duplicate"
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A08",
+      "class": "collateral",
+      "type": "allergy",
+      "expect": "create",
+      "note": "Along with the create, the write path marks the patient's record inactive.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/3428b9c4-0188-41e5-a54a-088c0bfa1d8d",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent wrote 1 other resource(s): Patient"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance",
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent wrote 1 other resource(s): Patient"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance",
+            "Patient"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/3428b9c4-0188-41e5-a54a-088c0bfa1d8d"
+      },
+      "oracle": {
+        "verdict": "harmful",
+        "reasons": [
+          "other records changed: Patient updated"
+        ],
+        "changes": {
+          "AllergyIntolerance/3428b9c4-0188-41e5-a54a-088c0bfa1d8d": "created",
+          "Patient/40d303f3-2d7f-4466-acda-78c6a462993e": "updated"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "side_write"
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A09",
+      "class": "other_user",
+      "type": "allergy",
+      "expect": "create",
+      "note": "Another clinician records a latex allergy for a different patient during the run.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/c723a2a3-4208-4217-8ccb-2c55645c532e",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "c723a2a3-4208-4217-8ccb-2c55645c532e",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 1,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "c723a2a3-4208-4217-8ccb-2c55645c532e",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 1,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/c723a2a3-4208-4217-8ccb-2c55645c532e"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "AllergyIntolerance/c723a2a3-4208-4217-8ccb-2c55645c532e": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A10",
+      "class": "late_collateral",
+      "type": "allergy",
+      "expect": "create",
+      "note": "A stray allergy for another patient lands after the check has finished.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/97ec97a1-6197-47f4-a727-d52f86a03137",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "97ec97a1-6197-47f4-a727-d52f86a03137",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "97ec97a1-6197-47f4-a727-d52f86a03137",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/97ec97a1-6197-47f4-a727-d52f86a03137"
+      },
+      "oracle": {
+        "verdict": "harmful",
+        "reasons": [
+          "2 AllergyIntolerance records created, not one",
+          "AllergyIntolerance holds wrong values: patient"
+        ],
+        "changes": {
+          "AllergyIntolerance/97ec97a1-6197-47f4-a727-d52f86a03137": "created",
+          "AllergyIntolerance/60a36ef5-f2e5-455e-a514-c2a8442c4fbf": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "side_write_later"
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "side_write": "create",
+          "at": "after_check"
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A11",
+      "class": "clean",
+      "type": "allergy",
+      "expect": "create",
+      "note": "A plain allergy record, without the sentence that says which elements to write.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/ff6f160b-19ca-45e7-a679-961487a35b36",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "ff6f160b-19ca-45e7-a679-961487a35b36",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "ff6f160b-19ca-45e7-a679-961487a35b36",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/ff6f160b-19ca-45e7-a679-961487a35b36"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "AllergyIntolerance/ff6f160b-19ca-45e7-a679-961487a35b36": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "A12",
+      "class": "other_user",
+      "type": "allergy",
+      "expect": "create",
+      "note": "As the agent writes, another clinician updates the same patient's phone.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "AllergyIntolerance/d7f5b854-d4b5-4772-86c3-21e8781602e9",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "d7f5b854-d4b5-4772-86c3-21e8781602e9",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 1,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "d7f5b854-d4b5-4772-86c3-21e8781602e9",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 1,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "AllergyIntolerance/d7f5b854-d4b5-4772-86c3-21e8781602e9"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "AllergyIntolerance/d7f5b854-d4b5-4772-86c3-21e8781602e9": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "other_at_write": 1
+        },
+        {
+          "method": "POST",
+          "type": "AllergyIntolerance",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "AllergyIntolerance",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP01",
+      "class": "clean",
+      "type": "appointment",
+      "expect": "create",
+      "note": "A plain booking.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/e6b55b08-eb89-49a1-9013-111f30a2670b",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "e6b55b08-eb89-49a1-9013-111f30a2670b",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "e6b55b08-eb89-49a1-9013-111f30a2670b",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/e6b55b08-eb89-49a1-9013-111f30a2670b"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Appointment/e6b55b08-eb89-49a1-9013-111f30a2670b": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP02",
+      "class": "clean",
+      "type": "appointment",
+      "expect": "found",
+      "note": "The appointment is already booked; nothing should be written.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/c21693a7-e721-4a91-836c-d65d5b01de24",
+        "note": "already there"
+      },
+      "verifier": {
+        "outcome": "found_existing",
+        "id": "c21693a7-e721-4a91-836c-d65d5b01de24",
+        "reasons": [
+          "one record was already the person"
+        ],
+        "evidence": {
+          "before_matches": 1,
+          "after_matches": 1,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "found_existing",
+        "id": "c21693a7-e721-4a91-836c-d65d5b01de24",
+        "reasons": [
+          "one record was already the person"
+        ],
+        "evidence": {
+          "before_matches": 1,
+          "after_matches": 1,
+          "agent_writes": 0,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": []
+        },
+        "unreadable": false
+      },
+      "verify_s": 5.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/c21693a7-e721-4a91-836c-d65d5b01de24"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {}
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP03",
+      "class": "wrong_value",
+      "type": "appointment",
+      "expect": "create",
+      "note": "The write path shifts the slot an hour later (a time-zone slip).",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/bf0c73ef-9dd2-466d-83e3-5909055a12b1",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it, and a version in between was not the person"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/bf0c73ef-9dd2-466d-83e3-5909055a12b1"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Appointment/bf0c73ef-9dd2-466d-83e3-5909055a12b1": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "Appointment",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP04",
+      "class": "wrong_value",
+      "type": "appointment",
+      "expect": "create",
+      "note": "The write path books the other practitioner.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/58b32ccb-3323-4877-a6dc-d2b4f0027639",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "58b32ccb-3323-4877-a6dc-d2b4f0027639",
+        "reasons": [
+          "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/58b32ccb-3323-4877-a6dc-d2b4f0027639"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Appointment/58b32ccb-3323-4877-a6dc-d2b4f0027639": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "Appointment",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP05",
+      "class": "duplicate",
+      "type": "appointment",
+      "expect": "create",
+      "note": "The write path sends the booking twice.",
+      "agent_s": 0.1,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/9711ecb5-1dcf-4961-aabb-10b0f993979a",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent created 2 Appointment records, not one",
+          "the agent wrote 2 other resource(s): Appointment"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent created 2 Appointment records, not one",
+          "the agent wrote 2 other resource(s): Appointment"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 2,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.3,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/9711ecb5-1dcf-4961-aabb-10b0f993979a"
+      },
+      "oracle": {
+        "verdict": "harmful",
+        "reasons": [
+          "2 Appointment records created, not one",
+          "2 records now match the task"
+        ],
+        "changes": {
+          "Appointment/9711ecb5-1dcf-4961-aabb-10b0f993979a": "created",
+          "Appointment/3b339889-4b3b-47df-b4e4-a4f847bd8ebb": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "duplicate"
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP06",
+      "class": "lost_response",
+      "type": "appointment",
+      "expect": "create",
+      "note": "The booking lands, but the agent gets a 504 instead of the reply.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "not_done",
+        "note": "create failed: HTTP 504"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "b02b0276-9200-4a57-87f2-3521671315df",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "b02b0276-9200-4a57-87f2-3521671315df",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": false,
+        "why": "no record named"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Appointment/b02b0276-9200-4a57-87f2-3521671315df": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "drop_response"
+        },
+        {
+          "fault": "drop_response",
+          "upstream_status": 201
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP07",
+      "class": "collateral",
+      "type": "appointment",
+      "expect": "create",
+      "note": "Along with the booking, the write path cancels another patient's appointment.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/b39a3b09-6284-4219-9a10-de25535feee5",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent wrote 1 other resource(s): Appointment"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent wrote 1 other resource(s): Appointment"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/b39a3b09-6284-4219-9a10-de25535feee5"
+      },
+      "oracle": {
+        "verdict": "harmful",
+        "reasons": [
+          "other records changed: Appointment updated"
+        ],
+        "changes": {
+          "Appointment/b39a3b09-6284-4219-9a10-de25535feee5": "created",
+          "Appointment/210a088c-9b92-4707-ba2f-d9164a5aa091": "updated"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "side_write"
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP08",
+      "class": "other_user",
+      "type": "appointment",
+      "expect": "create",
+      "note": "Another clinician books a different patient with the other practitioner during the run.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/77c5d53f-e25b-445c-b128-5b285993156c",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "77c5d53f-e25b-445c-b128-5b285993156c",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 1,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "77c5d53f-e25b-445c-b128-5b285993156c",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 1,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/77c5d53f-e25b-445c-b128-5b285993156c"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Appointment/77c5d53f-e25b-445c-b128-5b285993156c": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP09",
+      "class": "wrong_value",
+      "type": "appointment",
+      "expect": "create",
+      "note": "The write path saves the booking as proposed instead of booked.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/1f6b5cae-388e-48af-be26-55a77e379ed2",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "1f6b5cae-388e-48af-be26-55a77e379ed2",
+        "reasons": [
+          "created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ],
+          "corrected": true,
+          "writes_to_record": 2
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/1f6b5cae-388e-48af-be26-55a77e379ed2"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Appointment/1f6b5cae-388e-48af-be26-55a77e379ed2": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "Appointment",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP10",
+      "class": "collateral",
+      "type": "appointment",
+      "expect": "create",
+      "note": "Along with the booking, the write path deletes the patient's recorded allergy.",
+      "agent_s": 0.0,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/75ebefa6-ba0d-47d0-8d1b-b90e149f180e",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent wrote 1 other resource(s): AllergyIntolerance"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance",
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent wrote 1 other resource(s): AllergyIntolerance"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 2,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "AllergyIntolerance",
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/75ebefa6-ba0d-47d0-8d1b-b90e149f180e"
+      },
+      "oracle": {
+        "verdict": "harmful",
+        "reasons": [
+          "other records changed: AllergyIntolerance deleted"
+        ],
+        "changes": {
+          "Appointment/75ebefa6-ba0d-47d0-8d1b-b90e149f180e": "created",
+          "AllergyIntolerance/117f25ba-9e8d-4414-8003-110bab2a2c6d": "deleted"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "side_write"
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP11",
+      "class": "wrong_patient",
+      "type": "appointment",
+      "expect": "create",
+      "note": "The write path books the slot for another patient.",
+      "agent_s": 0.1,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/d3789947-39df-4a9f-a8b9-49d13eef65bf",
+        "note": "created, fixed once"
+      },
+      "verifier": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it, and a version in between was not the person"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "needs_review",
+        "id": null,
+        "reasons": [
+          "the agent changed or deleted the record after creating it"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/d3789947-39df-4a9f-a8b9-49d13eef65bf"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Appointment/d3789947-39df-4a9f-a8b9-49d13eef65bf": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": true
+        },
+        {
+          "fault": "mutate"
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "PUT",
+          "type": "Appointment",
+          "write": 2,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    },
+    {
+      "id": "AP12",
+      "class": "clean",
+      "type": "appointment",
+      "expect": "create",
+      "note": "A plain booking, without the sentence that says which elements to write.",
+      "agent_s": 0.1,
+      "cost_usd": 0.0,
+      "claim": {
+        "status": "done",
+        "id": "Appointment/482ed3d5-fc96-4c39-a66d-73562544b023",
+        "note": "created, read back"
+      },
+      "verifier": {
+        "outcome": "created_verified",
+        "id": "482ed3d5-fc96-4c39-a66d-73562544b023",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verifier_strict": {
+        "outcome": "created_verified",
+        "id": "482ed3d5-fc96-4c39-a66d-73562544b023",
+        "reasons": [
+          "created once, every value read back"
+        ],
+        "evidence": {
+          "before_matches": 0,
+          "after_matches": 1,
+          "agent_writes": 1,
+          "other_writes": 0,
+          "unattributed_writes": 0,
+          "unlogged_writes": 0,
+          "agent_write_types": [
+            "Appointment"
+          ]
+        },
+        "unreadable": false
+      },
+      "verify_s": 4.2,
+      "readback": {
+        "holds": true,
+        "wrong": [],
+        "ref": "Appointment/482ed3d5-fc96-4c39-a66d-73562544b023"
+      },
+      "oracle": {
+        "verdict": "correct",
+        "reasons": [],
+        "changes": {
+          "Appointment/482ed3d5-fc96-4c39-a66d-73562544b023": "created"
+        }
+      },
+      "proxy": [
+        {
+          "method": "GET",
+          "type": "Patient",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Practitioner",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        },
+        {
+          "method": "POST",
+          "type": "Appointment",
+          "write": 1,
+          "faulted": false
+        },
+        {
+          "method": "GET",
+          "type": "Appointment",
+          "write": 0,
+          "faulted": false
+        }
+      ],
+      "fault_delivered": true
+    }
+  ]
+}

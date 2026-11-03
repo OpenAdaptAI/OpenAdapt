@@ -58,8 +58,13 @@ def playwright_session(config: VerifyConfig) -> SessionOpener:
                 viewport={"width": app.viewport[0], "height": app.viewport[1]},
                 device_scale_factor=1,
                 storage_state=storage_state,
+                service_workers="block",
             )
             page = context.new_page()
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(app.entry_url or app.url)
         except Exception:
             pw.stop()

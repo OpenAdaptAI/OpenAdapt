@@ -122,10 +122,38 @@ How it works:
   holds the command queue (`openadapt_desktop/ipc.py` `CONCURRENT_COMMANDS`). They read
   and answer only a run this engine started and hasn't finished, and only a
   request that is waiting now, for the exact digest the person saw.
-- Desktop has no person-level sign-in (its Cloud credential belongs to the
-  organization), so each answer is recorded with `--unauthenticated` and
-  `--route desktop_run_it`. Flow re-checks the answer, re-reads the form and
-  runs the right-record check again before it saves.
+- Desktop signs each answer with this computer's approver key, and Flow
+  counts it as a person's only because of that signature. Desktop has no
+  person-level sign-in (its Cloud credential belongs to the organization),
+  so the answer names no Cloud user (`--unauthenticated`, `--route
+  desktop_run_it`); it passes `--approver-key`, and the key's passphrase
+  reaches Flow only through the child process's environment. Flow re-checks
+  the answer, re-reads the form and runs the right-record check again before
+  it saves.
+- On a Mac with a Secure Enclave (Apple silicon or a T2 chip), the
+  approval screen shows **Set up your approver key** in place of Approve
+  until the key exists. One click and one Touch ID (or login password)
+  prompt make the key, seal it to the Secure Enclave, keep it in the login
+  Keychain and register its public key under `approvers` with Flow's own
+  `register_principal`. Each answer prompts again, and Flow gets only the
+  signature (`--approver-signer stdio`). Settings > Approver key replaces
+  the key (the new one is registered before the old one is retired) or
+  removes it. See `openadapt_desktop/approver_keychain.py`.
+- Elsewhere, set the key up once per computer, at a terminal. With
+  `OPENADAPT_JIT_KEY_PASSPHRASE` set, run `openadapt-flow jit keygen --out
+  ~/.openadapt/approver/desktop-approver.pem`, then start the signed
+  approver roster with it as the root: `openadapt-flow jit approver init
+  --principal NAME --key ~/.openadapt/approver/desktop-approver.pem`. Start
+  Desktop with `OPENADAPT_APPROVER_ROOT` set to that key's public key, which
+  pins the roster's root for Desktop's runs. Each later approver key (the
+  portal's, another person's) is added with an approver's signature:
+  `openadapt-flow jit approver add --principal NAME --public-key HEX
+  --signer-key ROOT_KEY --approver-root ROOT_HEX`. Nothing else adds an
+  approver: editing a file in the key directory, or pointing a run at
+  another key directory, counts for nothing. `openadapt-desktop
+  approver-key setup` makes both keys, keeps their passphrases in the OS
+  keychain and prints these commands. Until a key is set up and on the
+  roster, Desktop sends no answer, and Run it shows these steps.
 - A late answer (the run already stopped waiting) is never turned into a
   save: Desktop doesn't resume the run, and says to run the item again.
 - Before the practice item runs, Desktop calls `openadapt-flow qualify drills
@@ -222,6 +250,98 @@ this computer"):
    current runner setup, so the card shows the switch only for a task that
    already has one on this computer.
 6. **No approve-and-save path** for an item the switch held for approval.
+
+## Review stops
+
+Needs you has **Review one by one**, which opens Review stops: every stop as
+one card (`openadapt_desktop/stop_queue.py`, screen `src/screens/Stops.tsx`).
+
+| Card | Question | Evidence | Choices |
+| --- | --- | --- | --- |
+| `same_record` | "Same person?" or "Same record?" | The item's values next to each possible match the app listed, each value marked Same or Different, when Flow recorded the rows. Otherwise the row text and the screen where the run stopped. | Same: don't add it (skip); this item shouldn't be done (decline); different: I entered it by hand; not sure, leave it |
+| `confirm_save` | "Did it save?" | The item's values and the record check's differences | I checked: it saved; I checked: nothing saved, run it again; I fixed it by hand; leave it |
+| `halted` | "What should happen to this item?" | The item's values and why it stopped | Run it again; skip; decline; I did it by hand; leave it |
+| `approve_save` | "Approve this save?" | The item's values and the filled form | Approve and save; don't save (three reasons); leave it |
+| `rearm_problems_only` | "Turn "only ask about problems" back on?" | Why it went off, when, and the items saved and checked in a row since (Flow offers it only after 10) | Turn it back on; leave it |
+
+How it answers:
+
+- **It never decides.** A card's id is a digest of everything it shows. The
+  engine rebuilds the cards before it acts, so a card that changed, expired
+  or is gone, or a choice it doesn't offer, changes nothing.
+- **Signed.** An answer to a stopped item is a decision receipt that the
+  approver key signs (Touch ID on a Mac). Then the item's own action runs,
+  with its usual checks. A waiting save is answered through the signed
+  item approval. Receipts go to `stop_decisions.jsonl` with how long each
+  card was on screen (`shown_ms`).
+- **Keys.** 1-9 answer, J and K (or the arrows) move between cards, X adds
+  a card to a batch, Shift+1-9 answers the batch, Esc clears it, and ?
+  lists the keys.
+- **Batches.** Only stops with the same `batch_key` (same kind, task and
+  reason) batch together. A batch takes one choice and one Touch ID, and
+  each card is still checked on its own. One stale card stops the whole
+  batch. Save approvals never batch.
+- **No default.** No choice is styled as the default; the evidence decides.
+- **Re-arm.** Turning the switch back on is one Touch ID over Flow's own
+  re-arm bytes (`rearm_to_sign`) for exactly the request the card showed;
+  if another item finished since, the card changed and nothing happens.
+  Flow verifies the signature against the key registered under `approvers`,
+  never a key Desktop supplies for itself. Desktop's switch view honours a
+  re-arm signed by a registered approver. It is answered on the computer
+  only, and needs a Flow with signed re-arm (#1517).
+
+A stop where nothing was written now also offers "I did it by hand". For a
+possible duplicate that is a different person, running it again would stop
+at the same check.
+
+## Review stops on a paired phone
+
+A phone paired with the decision portal ([DECISION_PORTAL.md](DECISION_PORTAL.md))
+shows the same stop cards as Review stops, at `/stops` on the portal's
+address. The Decisions page links to it.
+
+| Where | What the person sees | Routes (all need an approved device session) |
+| --- | --- | --- |
+| `/stops` | One card at a time: the question, the item's values next to what the app shows with the differences marked, the screen where the run stopped, and each choice with what it does. Similar stops have checkboxes; the picked stops get one answer, which takes a second tap to confirm. | `GET /api/portal/stops`, `GET /api/portal/stops/<card>/screenshot`, `POST /api/portal/stops/<card>/answer`, `POST /api/portal/stops/answer` (a batch: `card_ids` and one `choice`) |
+
+How a phone's answer counts:
+
+- **Signed with the portal's key.** The phone can't reach Touch ID on the
+  computer. Desktop signs the decision receipt with the decision portal's
+  approver key (route `portal`, which `openadapt-desktop approver-key setup`
+  creates; a person registers it as `decision-portal`). The receipt in `stop_decisions.jsonl`
+  records `"key": "portal"` and the device session (`device.id`, the id the
+  computer lists and revokes devices by, and its label). The window can't
+  ask for this key: the portal calls a dispatcher method that no command
+  registers. Without the key, the phone shows a warning and every answer
+  changes nothing (`approver_key_missing`).
+- **Same checks as the window.** Desktop rebuilds every card before it acts.
+  A card that changed, expired or is gone, or a choice the card doesn't
+  offer, changes nothing and returns the dispatcher's code (`card_changed`,
+  `choice_not_offered`). A phone answer waits up to two seconds for a
+  command the window started when its answer runs an item again, then
+  returns `busy` and changes nothing. Closing a stop (skip, done by hand,
+  saved) doesn't wait, so it goes through while a run waits for a save.
+- **View-only on the phone.** A waiting save (`approve_save`) is answered on
+  the Decisions page, through the portal's save approval, which the Flow
+  console signs with the same portal key. Turning "only ask about problems"
+  back on is answered on the computer.
+- **Requests.** Answers need the portal's origin, the session's CSRF token
+  and a JSON body, like the portal's other decisions. Reads need the session
+  and are refused when `Origin` or `Sec-Fetch-Site` says another site sent
+  them. Every response is `no-store`, and the service worker caches none of
+  it.
+
+### Remote access
+
+The portal binds `127.0.0.1` by default, so only this computer can open it.
+To answer stops from a phone elsewhere, use the existing customer ingress:
+an HTTPS origin on the clinic's own reverse proxy, VPN or ZTNA
+(`OPENADAPT_PORTAL_INGRESS_MODE=customer_ingress` with an explicit
+`OPENADAPT_PORTAL_PUBLIC_ORIGIN`), then pair the phone with the one-use QR
+code and confirm its code on the computer. Every route except the pairing
+claim needs that pairing. OpenAdapt runs no relay for the portal: the cards,
+screenshots and answers stay between the phone and the clinic's network.
 
 ## Screenshots
 

@@ -152,6 +152,8 @@ must be refuted or ruled indeterminate.
 | `wrong_value` (one per declared field) | the target with that field changed | delta |
 | `wrong_record` | the values written to a look-alike record instead | delta |
 | `unrelated_edit` | the clean save, plus another record in the slice edited | frame |
+| `other_table` | the clean save, plus a record in another table edited | frame |
+| `side_write` | the clean save, plus a row in another table added for the saved record | frame |
 | `partial` | the target with its later fields blank | delta |
 | `duplicate` | the target twice | delta |
 | `missing` | no target | delta |
@@ -160,20 +162,29 @@ must be refuted or ruled indeterminate.
 `delayed` passes when the check does not confirm before the write lands. A
 check that confirms from a cache or a stale read fails it.
 
+`other_table` and `side_write` write outside the check's read: another
+chart's history edited, or an insurance row or a note added for the new
+patient (OpenAdaptAI/OpenAdapt#1506). A check that reads one table of a store
+that holds others can't see them. On a SQLite copy, the other tables are the
+database's other tables, and the saved record is named in them by
+`subject_field` (OpenEMR's `pid`). On a store with no other table, the two
+classes are not applicable.
+
 ### Coverage
 
 Coverage is faults killed over faults applicable. A fault is applicable when
 the check claims the part it targets: a check with no frame claims no
-`unrelated_edit`. The gate writes `check_coverage.json`:
+`unrelated_edit`, `other_table` or `side_write`. The gate writes
+`check_coverage.json`:
 
 ```json
 {
   "schema_version": "openadapt.check-coverage/v1",
   "check_sha256": "sha256:...",
-  "suite": {"id": "openadapt.fault-suite/public", "version": "1.0.0"},
+  "suite": {"id": "openadapt.fault-suite/public", "version": "1.1.0"},
   "test_copy": "sqlite",
   "claims": ["delta", "frame"],
-  "classes": {"wrong_value": {"applicable": 9, "killed": 9}, "...": {}},
+  "classes": {"wrong_value": {"applicable": 9, "killed": 9, "untestable": 0}, "...": {}},
   "killed": 15,
   "applicable": 15,
   "clean_pass": true
@@ -186,12 +197,29 @@ to the check, and its digest and totals go into the receipt.
 
 ### Admission policy
 
-A check is admitted only when the clean save passes and it kills every
-applicable fault. A policy can also require a minimum: a coverage floor over
-the whole suite, or named classes that must be applicable (for example,
-"every check must claim a frame"). `verify-run` reads the policy from the
+A check is admitted only when the clean save passes and, for every part it
+claims, every fault class of that part was tested and every one of its faults
+killed. A class with a surviving fault, a fault the copy couldn't build, or
+no entry in the record (coverage from an earlier suite) refuses the check,
+whatever the totals say: `policy` is `coverage_class_missed:other_table`,
+`coverage_class_untestable:side_write` or `coverage_class_missing:...`. A
+policy can also require named classes to be applicable (for example, "every
+check must claim a frame"). `verify-run` reads the policy from the
 `admission:` section and never issues `verified` for a check whose coverage
-record is missing, stale or below the policy.
+record is missing, stale or short of the policy. The receipt's
+`checked.coverage.classes` gives each claimed class's result: `killed`,
+`missed`, `untestable`, `not_applicable` or `missing`.
+
+The coverage must claim both `delta` and `frame`. `verify-run` judges the
+frame on every run, with or without a `frame:` section, and signs it into the
+receipt, so a gate run with a narrower `claims` can't admit the check
+(`coverage_claims_short:frame`).
+
+On a store that holds tables outside the check's read, such as an EMR, a test
+copy trimmed to the check's own table makes `other_table` and `side_write` not
+applicable. The coverage record keeps the copy's table count
+(`store_tables`). A deployment can refuse that kind of copy with
+`refuse_not_applicable: true`, or require a floor with `min_store_tables`.
 
 `scaffold-verifier`'s fault test becomes a call to this gate. With `--db` or a
 fixture it runs on a store copy. Without one it falls back to recorded
@@ -200,7 +228,7 @@ and a policy can refuse that kind.
 
 ### What is public
 
-The gate, the seven operators, the coverage format and a small sample suite
+The gate, the nine operators, the coverage format and a small sample suite
 are public. A grown fault corpus and deployment coverage floors are private
 under `source-policy.yaml` (`grown_corpus`, `deployment_thresholds`). The
 public default policy is the rule above, "catch every fault you claim", not a

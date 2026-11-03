@@ -1,0 +1,40 @@
+[
+ {
+  "resourceType": "Patient",
+  "name": [
+   {
+    "given": [
+     "Mei"
+    ],
+    "family": "Tanaka"
+   }
+  ],
+  "birthDate": "1958-07-27",
+  "gender": "female",
+  "telecom": [
+   {
+    "system": "phone",
+    "value": "207-555-0198"
+   },
+   {
+    "system": "email",
+    "value": "mei.tanaka@example.org"
+   }
+  ],
+  "address": [
+   {
+    "line": [
+     "3 Shore Rd"
+    ],
+    "city": "Portland",
+    "state": "ME",
+    "postalCode": "04101"
+   }
+  ],
+  "id": "e44f67db-0a5e-4aa5-b28c-f9fb9b1aa45a",
+  "meta": {
+   "versionId": "79f3b804-cc13-433e-aa98-baf26ebfdb02",
+   "lastUpdated": "2026-10-30T02:11:31.149Z"
+  }
+ }
+]

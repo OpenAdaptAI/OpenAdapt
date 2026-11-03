@@ -246,3 +246,93 @@ class TestTableDeltaAudit:
             raise sqlite3.OperationalError("db down")
 
         assert capture_table_counts(connect, ["encounters"]) is None
+
+
+# -- binary columns (OpenEMR keys rows by uuid binary(16)) --------------------
+
+#: The bytes the pinned OpenEMR fixture's first uuid started with: not UTF-8.
+OPENEMR_UUID = bytes.fromhex("a2f1c3d40e5b4c7a9b1d2e3f40516273")
+
+
+def _openemr_patients(path: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE patient_data (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "uuid BLOB, pid INTEGER, fname TEXT, lname TEXT, DOB TEXT, email TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO patient_data (uuid, pid, fname, lname, DOB, email) VALUES "
+        "(?, 1, 'Wendell', 'Priorchart', '1962-06-14', 'w.priorchart@example.test')",
+        (OPENEMR_UUID,),
+    )
+    conn.commit()
+    return conn
+
+
+def test_binary_column_reads_as_hex(tmp_path: Path) -> None:
+    path = tmp_path / "openemr.db"
+    _openemr_patients(path).close()
+    verifier = SqlRecordVerifier(
+        lambda: sqlite3.connect(path), "SELECT * FROM patient_data"
+    )
+    state = verifier.capture_pre_state()
+    assert state.reachable
+    assert state.records[0]["uuid"] == "0x" + OPENEMR_UUID.hex()
+    state.model_dump(mode="json")  # a baseline must serialize
+
+
+def test_verify_run_baselines_and_verifies_a_binary_keyed_table(tmp_path: Path) -> None:
+    """Before the fix, capture_baseline raised UnicodeDecodeError here."""
+
+    from openadapt_flow.verify_run import (
+        capture_baseline,
+        parse_verify_config,
+        verify_run,
+    )
+
+    path = tmp_path / "openemr.db"
+    conn = _openemr_patients(path)
+    cfg = parse_verify_config(
+        {
+            "schema_version": "openadapt.verify/v1",
+            "verifier": {
+                "kind": "sql",
+                "sqlite_database": str(path),
+                "sql_query": "SELECT * FROM patient_data",
+            },
+            "record": {
+                "name": "patient",
+                "match": ["email", "lname"],
+                "duplicate_key": "email",
+                "fields": {
+                    "email": "email",
+                    "lname": "lname",
+                    "fname": "fname",
+                    "DOB": "DOB",
+                },
+            },
+        }
+    )
+    params = {
+        "email": "ada.quill@example.test",
+        "lname": "Quill",
+        "fname": "Ada",
+        "DOB": "1984-03-07",
+    }
+    baseline = tmp_path / "baseline.json"
+    capture_baseline(cfg, params, baseline)
+    conn.execute(
+        "INSERT INTO patient_data (uuid, pid, fname, lname, DOB, email) VALUES "
+        "(?, 2, 'Ada', 'Quill', '1984-03-07', 'ada.quill@example.test')",
+        (bytes.fromhex("ff00ee11dd22cc33bb44aa5599668877"),),
+    )
+    conn.commit()
+    conn.close()
+    result = verify_run(
+        cfg,
+        params=params,
+        run_record={"executor_kind": "agent", "executor_id": "openadapt_actor"},
+        authorization_ref="binary-columns-test",
+        baseline_path=baseline,
+    )
+    assert result["receipt"]["outcome"] == "verified"

@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.jit import (
@@ -294,15 +296,17 @@ def _bundle(tmp_path: Path, texts: list[str]) -> Path:
 
 
 def test_lift_proposes_inputs_typed_whole_in_one_step(tmp_path: Path) -> None:
-    bundle = _bundle(tmp_path, ["Jane", "Follow up", "x Follow up x", "dup", "dup"])
+    bundle = _bundle(tmp_path, ["Jane", "Follow up", "x Follow up y", "dup", "dup"])
     report = lift_params(
-        bundle, {"name": "Jane", "note": "Follow up", "code": "dup", "missing": "zz"}
+        bundle,
+        {"name": "Jane", "note": "Follow up", "code": "dup", "missing": "zz"},
     )
-    assert [(p.name, p.step_id) for p in report.lifted] == [
-        ("name", "step_000"),
-        ("note", "step_001"),
-    ]
+    assert [(p.name, p.step_id) for p in report.lifted] == [("name", "step_000")]
     assert report.unlifted == {
+        "note": (
+            "typed whole in step_001 and inside longer text in step_002; the "
+            "longer text would repeat the demonstrated value"
+        ),
         "code": (
             "typed in 2 steps (step_003, step_004); no mined record check shows "
             "which field kept it"
@@ -310,10 +314,7 @@ def test_lift_proposes_inputs_typed_whole_in_one_step(tmp_path: Path) -> None:
         "missing": "not typed in any step",
     }
     proposals = json.loads((bundle / "param_proposals.json").read_text())["proposals"]
-    assert {p["name"]: p["source"] for p in proposals} == {
-        "name": "task_input",
-        "note": "task_input",
-    }
+    assert {p["name"]: p["source"] for p in proposals} == {"name": "task_input"}
     assert all("Jane" not in json.dumps(p) for p in proposals)  # masked only
 
 
@@ -322,6 +323,49 @@ def test_lift_reports_text_typed_inside_longer_text(tmp_path: Path) -> None:
     report = lift_params(bundle, {"name": "Jane"})
     assert report.unlifted == {"name": "typed inside longer text"}
     assert not (bundle / "param_proposals.json").exists()
+
+
+def test_lift_refuses_a_value_also_echoed_inside_longer_text(tmp_path: Path) -> None:
+    """A name typed into its field and again into a note is not lifted.
+
+    Lifting only the field would leave the note typing the demonstrated name
+    on every later run. The note is a constant, so every check accepts it.
+    """
+
+    bundle = _bundle(tmp_path, ["John Smith", "Called John Smith re: refill"])
+    report = lift_params(bundle, {"patient_name": "John Smith"})
+    assert report.lifted == []
+    assert "inside longer text in step_001" in report.unlifted["patient_name"]
+    assert not (bundle / "param_proposals.json").exists()
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    value=st.text(alphabet="abcXYZ 19", min_size=1, max_size=6),
+    texts=st.lists(st.text(alphabet="abcXYZ 19", max_size=12), max_size=6),
+)
+def test_lift_never_leaves_an_input_inside_a_lifted_workflow_literal(
+    tmp_path_factory: pytest.TempPathFactory, value: str, texts: list[str]
+) -> None:
+    """Property: once an input is lifted, no other typed step still contains it.
+
+    Every typed step whose text contains the value is either the lifted step
+    or the input is reported unlifted, so a person sees the leftover literal.
+    """
+
+    tmp = tmp_path_factory.mktemp("lift")
+    bundle = _bundle(tmp, texts)
+    report = lift_params(bundle, {"v": value})
+    for lifted in report.lifted:
+        others = [
+            f"step_{i:03d}"
+            for i, text in enumerate(texts)
+            if value in text and f"step_{i:03d}" != lifted.step_id
+        ]
+        assert all(sid in lifted.also_typed_in for sid in others), others
+        assert all(texts[int(sid[5:])] == value for sid in lifted.also_typed_in)
+    if not report.lifted:
+        assert "v" in report.unlifted
 
 
 def _detour_bundle(

@@ -56,6 +56,15 @@ from openadapt_flow.approval_mode.approver import (
     StepClass,
     WebhookRefused,
 )
+from openadapt_flow.approval_mode.human_attestation import (
+    ANSWER_DOMAIN,
+    ROUTE_METHOD,
+    ApproverSigner,
+    HumanAttestation,
+)
+from openadapt_flow.approval_mode.human_attestation import (
+    refusal as attestation_refusal,
+)
 from openadapt_flow.approval_mode.model import (
     DECISION_PORTAL_ROUTE,
     ITEM_APPROVAL_ROUTE,
@@ -90,6 +99,8 @@ POLICY_FILENAME = "approver-policy.json"
 GRANT_FILENAME = "approver-grant.json"
 #: Who started the run, written once by the run. A delegate never answers a
 #: run it started.
+#: The approver root and key directory the run pinned (approver_roster).
+ROOT_FILENAME = "approver-root.json"
 INITIATOR_FILENAME = "run-initiator.json"
 #: The initiator an agent-started run records when the agent has no id.
 UNIDENTIFIED_AGENT = "agent:unidentified"
@@ -305,16 +316,28 @@ class ItemApprovalAnswer(BaseModel):
     #: for a person, whose older fields above already name them. Left out of
     #: the file when absent, so earlier answers keep their digest.
     approver: Optional[ApproverIdentityV1] = None
+    #: A registered approver key's signature over the rest of the answer.
+    #: Required for a person's answer (:mod:`.human_attestation`).
+    attestation: Optional[HumanAttestation] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.approver is None:
             data.pop("approver", None)
+        if self.attestation is None:
+            data.pop("attestation", None)
         return data
 
     def digest(self) -> str:
         return _digest(self)
+
+    def signed_payload(self) -> dict[str, Any]:
+        """What an approver key signs: the answer without its signature."""
+
+        data = self.model_dump(mode="json")
+        data.pop("attestation", None)
+        return data
 
     def approver_identity(self) -> ApproverIdentityV1:
         """Who decided, for the audit trail."""
@@ -362,6 +385,16 @@ class ApproverContext:
     grant_refusal: Optional[str] = None
     initiator: Optional[str] = None
     initiator_known: bool = False
+    #: Where registered approver keys are looked up. ``None`` means a
+    #: person's answer can't be verified, so it is refused.
+    key_dir: Optional[Path] = None
+    #: The approver root this run pinned (:mod:`.approver_roster`), and the
+    #: roster head it recorded (a roster that doesn't extend it is refused).
+    approver_root: Optional[str] = None
+    approver_head: Any = None
+    #: Why the run's pin can't be trusted (another root or key directory
+    #: than the run recorded), or ``None``. A person's answer is then refused.
+    pin_refusal: Optional[str] = None
 
 
 def _as_context(
@@ -408,6 +441,43 @@ def _delegate_refusal(
     return None
 
 
+def _person_refusal(
+    answer: ItemApprovalAnswer, context: ApproverContext
+) -> Optional[str]:
+    """Why this answer isn't a verified person's, or ``None``.
+
+    ``decided_by``, the route, ``--unauthenticated`` and a named sign-in are
+    claims anyone who can run the CLI could make. Only a registered approver
+    key's signature, for the route's own method, makes the answer a
+    person's. A Cloud sign-in can't be verified here, so claiming one is
+    refused rather than trusted. Self-approval is refused whoever claims to
+    have answered.
+    """
+
+    if answer.auth_method != "none":
+        return "auth_method_unverified"
+    if context.pin_refusal is not None:
+        return context.pin_refusal
+    refusal_code = attestation_refusal(
+        answer.attestation,
+        domain=ANSWER_DOMAIN,
+        payload=answer.signed_payload(),
+        key_dir=context.key_dir,
+        method=ROUTE_METHOD.get(answer.route),
+        root=context.approver_root,
+        at_least=context.approver_head,
+    )
+    if refusal_code is not None:
+        return refusal_code
+    signer = answer.attestation.signer if answer.attestation else ""
+    if answer.approver_id is not None and answer.approver_id != signer:
+        return "answer_fields_inconsistent"
+    initiator = (context.initiator or "").lower()
+    if initiator and initiator in {signer.lower(), (answer.approver_id or "").lower()}:
+        return "self_approval"
+    return None
+
+
 def answer_refusal(
     request: ItemApprovalRequest,
     answer: ItemApprovalAnswer,
@@ -439,7 +509,12 @@ def answer_refusal(
             return "route_not_allowed"
         if approver is not None and approver.auth.value != answer.approver_kind:
             return "answer_fields_inconsistent"
+        refusal_code = _person_refusal(answer, context)
+        if refusal_code is not None:
+            return refusal_code
     else:
+        if answer.attestation is not None:
+            return "answer_fields_inconsistent"
         if answer.decided_by != "automation":
             return "answer_fields_inconsistent"
         if answer.route not in DELEGATED_ROUTES:
@@ -546,6 +621,10 @@ def _fsync_dir(path: Path) -> None:
         os.close(descriptor)
 
 
+def _head(value: Any) -> Optional[tuple[int, str]]:
+    return (int(value[0]), str(value[1])) if value else None
+
+
 class ItemApprovalStore:
     """The ``item-approval`` folder of one run directory."""
 
@@ -554,12 +633,29 @@ class ItemApprovalStore:
         run_dir: Path | str,
         *,
         key_dir: Optional[Path | str] = None,
+        approver_root: Optional[str] = None,
+        config_root: Optional[str] = None,
+        config_only: bool = False,
+        config_head: Optional[tuple[int, str]] = None,
     ) -> None:
         self.run_dir = Path(run_dir)
         self.dir = self.run_dir / APPROVAL_DIRNAME
         #: Where the signer registry lives (``$OPENADAPT_JIT_KEY_DIR`` or
         #: ``~/.openadapt/jit`` when ``None``). Keep it away from the agents.
         self._key_dir = Path(key_dir) if key_dir is not None else None
+        #: The approver root this caller names (else the environment's pin),
+        #: and the deployment config's. ``config_only``: only the config's
+        #: counts (a governed or agent-started run).
+        self._approver_root = approver_root
+        self._config_root = config_root
+        self._config_only = config_only
+        #: A roster head the deployment config carries (Desktop writes its
+        #: Keychain's): the roster must extend it.
+        self._config_head = config_head
+        # The pin this store wrote at run start; once set, the only one used.
+        self._pinned_root: Optional[
+            tuple[Optional[str], str, Optional[tuple[int, str]]]
+        ] = None
         # The policy this store wrote at run start. Once set, it is the only
         # policy this store applies, whatever the file says later.
         self._pinned_policy: Optional[ApproverPolicyV1] = None
@@ -665,6 +761,143 @@ class ItemApprovalStore:
             return False, None
         return True, value
 
+    # -- approver root (approver_roster) --------------------------------------
+    def _named_root(self) -> Optional[str]:
+        from openadapt_flow.approval_mode.approver_roster import pinned_root
+
+        return pinned_root(
+            self._approver_root,
+            config_root=self._config_root,
+            config_only=self._config_only,
+        )
+
+    def write_approver_root(self) -> None:
+        """Pin the run's approver root, key directory and roster head, once.
+
+        Called at run start. Every answer in this run is then checked against
+        this root's roster in this key directory, and that roster must extend
+        the head recorded here (an older roster put back is refused). A
+        governed or agent-started run (``config_only``) takes its root only
+        from the deployment config; without one it records that it has none,
+        and every person's answer is refused. A file already there naming
+        anything else (planted before the run) refuses the run.
+        """
+
+        from openadapt_flow.approval_mode import approver_roster as roster
+
+        try:
+            root = self._named_root()
+        except roster.RosterError as exc:
+            raise ItemApprovalRefused(exc.code, str(exc)) from exc
+        if root is None and not self._config_only:
+            # No pin: a person's answer will be refused (approver_root_unpinned).
+            return
+        key_dir = str(self._key_directory().resolve())
+        head: Optional[list[Any]] = None
+        if root is not None:
+            # A pinned run starts only on a roster it can verify, that extends
+            # every head recorded outside the run directory.
+            try:
+                roster.verified_approvers(key_dir, root, at_least=self._config_head)
+                seq, digest = roster.head(key_dir, root)
+            except roster.RosterError as exc:
+                raise ItemApprovalRefused(exc.code, str(exc)) from exc
+            head = [seq, digest]
+        record = {"approver_root": root, "key_dir": key_dir, "head": head}
+        self._checked_dir(create=True)
+        try:
+            _write_exclusive(self.dir / ROOT_FILENAME, canonical_json(record))
+        except FileExistsError:
+            if self._recorded_root() != (root, key_dir, _head(head)):
+                raise ItemApprovalRefused(
+                    "approver_root_changed",
+                    "this run already pins another approver root, key directory "
+                    "or roster",
+                ) from None
+        self._pinned_root = (root, key_dir, _head(head))
+
+    def _recorded_root(
+        self,
+    ) -> Optional[tuple[Optional[str], str, Optional[tuple[int, str]]]]:
+        try:
+            data = json.loads(_read_regular(self._path(ROOT_FILENAME)))
+        except (OSError, ItemApprovalRefused, ValueError):
+            return None
+        if not isinstance(data, dict) or set(data) != {
+            "approver_root",
+            "key_dir",
+            "head",
+        }:
+            return None
+        root, key_dir, head = data["approver_root"], data["key_dir"], data["head"]
+        if (root is not None and not isinstance(root, str)) or not isinstance(
+            key_dir, str
+        ):
+            return None
+        if head is not None and (
+            not isinstance(head, list)
+            or len(head) != 2
+            or not isinstance(head[0], int)
+            or not isinstance(head[1], str)
+        ):
+            return None
+        return root, key_dir, _head(head)
+
+    def _root_pin(self) -> tuple[Optional[str], Any, Optional[str]]:
+        """``(root, heads, refusal)`` this store checks answers against.
+
+        The run's own pin wins. A reader (the ``item-approval`` command, a
+        resume) brings its own pin (its deployment config, an explicit
+        ``--approver-root``, or for a non-governed reader the environment).
+        The run directory is never a trust anchor: a reader without its own
+        pin is refused, the run's record must name the same root and key
+        directory, and a governed reader refuses when the record is missing.
+        ``heads`` are the roster heads the roster must extend.
+        """
+
+        from openadapt_flow.approval_mode.approver_roster import RosterError
+
+        if self._pinned_root is not None:
+            root, _key_dir, head = self._pinned_root
+            heads = [head, self._config_head]
+            return root, heads, None if root is not None else "approver_root_unpinned"
+        try:
+            named = self._named_root()
+        except RosterError as exc:
+            return None, None, exc.code
+        if named is None:
+            return None, None, "approver_root_unpinned"
+        recorded = self._recorded_root()
+        if recorded is None:
+            if (self.dir / ROOT_FILENAME).exists():
+                return None, None, "approver_root_unreadable"
+            if self._config_only:
+                return None, None, "approver_root_record_missing"
+            return named, [self._config_head], None
+        root, key_dir, head = recorded
+        if root is None:
+            return None, None, "approver_root_unpinned"
+        if named != root:
+            return None, None, "approver_root_mismatch"
+        if str(self._key_directory().resolve()) != key_dir:
+            return None, None, "approver_key_dir_mismatch"
+        return root, [head, self._config_head], None
+
+    @property
+    def approver_root(self) -> Optional[str]:
+        return self._root_pin()[0]
+
+    @property
+    def approver_head(self) -> Any:
+        """The roster heads this store checks answers against."""
+
+        return self._root_pin()[1]
+
+    def key_directory(self) -> Path:
+        """Where this run's approver roster (``approvers.json``) is read."""
+
+        return self._key_directory()
+
     def _key_directory(self) -> Path:
         if self._key_dir is not None:
             return self._key_dir
@@ -681,10 +914,16 @@ class ItemApprovalStore:
 
         known, initiator = self._read_initiator()
 
+        root, head, pin_refusal = self._root_pin()
+
         def make(**fields: Any) -> ApproverContext:
             return ApproverContext(
                 initiator=initiator,
                 initiator_known=known,
+                key_dir=self._key_directory(),
+                approver_root=root,
+                approver_head=head,
+                pin_refusal=pin_refusal,
                 **fields,
             )
 
@@ -1100,8 +1339,13 @@ def make_answer(
     now: Optional[datetime] = None,
     approver: Optional[ApproverIdentityV1] = None,
     policy: "ApproverPolicyV1 | ApproverContext | None" = None,
+    signer: Optional[ApproverSigner] = None,
 ) -> ItemApprovalAnswer:
     """Build and check one answer. Raises :class:`ItemApprovalRefused`.
+
+    A person's answer must be signed: ``signer`` is the Desktop or decision
+    portal approver key (:func:`.human_attestation.load_signer`). Without it,
+    the answer is refused (``human_answer_unsigned``).
 
     ``approver`` names an agent or system; it is refused unless ``policy``
     (``store.context()``) holds a verified, person-signed grant that names it
@@ -1139,6 +1383,12 @@ def make_answer(
         raise ItemApprovalRefused(
             "answer_fields_invalid", "the answer's fields are not valid"
         ) from exc
+    if signer is not None:
+        answer = answer.model_copy(
+            update={
+                "attestation": signer.attest(ANSWER_DOMAIN, answer.signed_payload())
+            }
+        )
     refusal = answer_refusal(request, answer, now=now, policy=context)
     if refusal is not None:
         raise ItemApprovalRefused(refusal, f"the answer was refused ({refusal})")
