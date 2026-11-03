@@ -380,7 +380,9 @@ class ProcessContractV1(ProcessContract):
 def is_process_contract_artifact(path: Path | str) -> bool:
     """True when ``path`` is a process-contract parent directory."""
 
-    return (Path(path) / PROCESS_CONTRACT_FILENAME).is_file()
+    from openadapt_flow import artifacts
+
+    return artifacts.is_file(Path(path) / PROCESS_CONTRACT_FILENAME)
 
 
 def resolve_pointer(parent_dir: Path | str, stored: str) -> Path:

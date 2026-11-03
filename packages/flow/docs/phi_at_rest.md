@@ -203,10 +203,13 @@ takes tens to hundreds of milliseconds, so encryption adds about 1% or less.
 
 ## Commands on sealed input
 
-`record`, `compile`, `induce`, `scaffold-verifier`, `seal`, `certify`,
-`qualify`, `admit`, `run`, `replay`, `approve`, `resume` and `undo` read
-sealed bundles and encrypted recordings in memory, given the key, and keep
-what they write sealed:
+`record` (including `--with-check`), `compile`, `induce`,
+`scaffold-verifier`, `seal`, `certify`, `qualify`, `admit`, `run`, `replay`,
+`approve`, `resume`, `undo`, `visualize`, `explain`, `emit-skill`,
+`for-each`, `sections` and `check mark` read sealed bundles, run directories
+and encrypted recordings in memory, given the key, and keep what they write
+inside a sealed set sealed. Each reads artifact files through one reader,
+`openadapt_flow.artifacts`:
 
 - `compile` of an encrypted recording writes a sealed bundle, under
   `OPENADAPT_BUNDLE_KEY` or, when that is unset, the recording's key. It
@@ -225,6 +228,14 @@ what they write sealed:
   it acts, because those stores still write plaintext state.
 - `undo` keeps its approval, claim, parameters and result in the sealed run
   directory; the undo run is a sealed set of its own inside it.
+- `for-each` of a sealed bundle writes the looped bundle sealed, under the
+  same key rules as `compile`.
+- `emit-skill` copies a sealed bundle into the skill folder as ciphertext.
+  `visualize` and `emit-skill` write their page and `SKILL.md` outside the
+  sealed set: by default they name it on stderr and in the ledger, and strict
+  mode refuses them before they run.
+- `sections` and `check mark` write `sections.json` and `check.json` back
+  into the sealed bundle or recording, encrypted.
 
 Without the key, each of these refuses before it reads anything and names the
 variable to set. Any other command given a sealed path refuses with a message

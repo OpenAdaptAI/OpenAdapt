@@ -195,7 +195,9 @@ class Composition(BaseModel):
 def is_composition_artifact(path: Path | str) -> bool:
     """True when ``path`` is a composition parent directory."""
 
-    return (Path(path) / COMPOSITION_FILENAME).is_file()
+    from openadapt_flow import artifacts
+
+    return artifacts.is_file(Path(path) / COMPOSITION_FILENAME)
 
 
 def child_bundle_path(parent_dir: Path | str, child: ChildSpec) -> Path:
