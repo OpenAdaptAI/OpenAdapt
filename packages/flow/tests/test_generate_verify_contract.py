@@ -276,6 +276,18 @@ def generated(pg: Any) -> dict[str, Any]:
     app = App(port, "tracker")
     with app.con() as c, c.cursor() as cur:
         cur.execute(SCHEMA)
+        # Saved before: a version of 1 after a save would equal the bot's
+        # id, and the generator asks when a column is both the acting
+        # user's id and a copy of another row's column.
+        cur.execute("UPDATE issues SET lock_version = 4")
+        # Likewise new journal rows numbered from 1 would equal the bot's id
+        # (a link to a row the write added, or the acting user?).
+        for seq in (
+            "journals_id_seq",
+            "journal_details_id_seq",
+            "custom_values_id_seq",
+        ):
+            cur.execute(f"SELECT setval('{seq}', 100)")
     os.environ["OA_GEN_TEST_PW"] = "reader-pw"
     work = root / "work"
     work.mkdir()

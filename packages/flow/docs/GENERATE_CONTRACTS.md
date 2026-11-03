@@ -152,9 +152,11 @@ If places are still tied, that is a question.
 Equal ids are not a join. Demonstrations made on a fresh install often give
 a new row the same id as an unrelated row, so:
 
-- A row's own primary key is never a key to another table, and a new row's
-  own key never links it to its record, unless a declared foreign key says
-  so.
+- A row's own whole single-column key holding a generated number is never
+  a key to another table, and a new row's such key never links it to its
+  record, unless a declared foreign key says so. A member of a composite key
+  (an order line's `order_id` in `(order_id, line_no)`) and a copied token
+  (an extension table keyed by its parent's UUID) still link.
 - A value is never placed in the column a path arrived by (a child row's
   link column holds the record's key by construction).
 - A list item's link is the column that holds the record's key in every
@@ -212,7 +214,13 @@ too. A list parameter gets a contract per length, from 1 to 10 items.
 user, to the value every demonstration held, or to a copy of a column of the
 row a key points to (an invoice line's price from its product). A key, a
 link to a row the write added, the year, month, week or day of a date the
-task gives, and a generated token (a UUID) are recognized as such. Columns
+task gives, and a generated token (a UUID) are recognized as such. A link
+and a column that holds the row's own key need two demonstrations; the own
+key must sit in the same text in every row (`INV-{key}`), never as a mere
+substring. A date part must differ between the demonstrations: a constant
+that happens to equal the month of every demonstration's date is a
+constant. A copy is taken only through a declared key or a column named
+after its table. Columns
 that differ between demonstrations, free text every demonstration left
 empty, and the write's time stamps are listed in the bookkeeping question,
 and each is left unchecked only if the answer names it (`unchecked`). Free
@@ -233,8 +241,9 @@ kind has no contract until a person names it under `unchecked` or records a
 demonstration where it differs. A field set whose own demonstrations leave
 such a column open, while the kind's full set pins it, gets no contract
 (`rejected` in `report.json`). A column that holds the acting user's id in
-every row is the actor, even when it also equals a column of a row it points
-to. A row the app adds beside an update may hold the target's key: that is a
+every row is the actor, unless it is also a copy of a column of a row it
+points to, or a link: then the demonstrations can't tell, and the question
+lists it. Pins and widening count demonstrations, not rows. A row the app adds beside an update may hold the target's key: that is a
 link to the record, never a pinned id.
 
 **Rows the app adds on its own.** A row type the app added the same number of

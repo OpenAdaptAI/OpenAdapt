@@ -800,7 +800,7 @@ def _children(
                 and ch.after.get(loc.hops[0].column)
                 == (a.after or {}).get(loc.hops[0].ref_column)
             ]
-            if len(linked) >= 2:
+            if len({id(d) for d, _ in linked}) >= 2:
                 wide = column_roles(
                     schema, loc.hops[0].table, linked, explained, plan.actor_values
                 )
@@ -867,7 +867,7 @@ def _children(
                             c
                             for c, v in after.items()
                             if v == key
-                            and is_link_column(schema, ch.table, c, plan.anchor)
+                            and is_link_column(schema, ch.table, c, plan.anchor, v)
                         }
                         link_cols = here if link_cols is None else link_cols & here
                         table = ch.table
@@ -1040,7 +1040,7 @@ def _sides(
                     for ch in d.diff.of(t, "added")
                     if ch.after is not None
                 ]
-                if len(wide) >= 2:
+                if len({id(d) for d, _ in wide}) >= 2:
                     wide_links = [_link_keys(schema, plan, d) for d, _ in wide]
                     more = column_roles(
                         schema, t, wide, set(), actor_values, wide_links

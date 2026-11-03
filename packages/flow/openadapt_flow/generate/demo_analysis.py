@@ -399,7 +399,7 @@ def locate(
             if depth == 0 and changed_only and col.name not in changed:
                 continue
             for target, ref, declared in _fk_targets(schema, idx, t, col.name, v):
-                if col.name in t.primary_key and not declared:
+                if not declared and own_key(t, col.name, v):
                     # A row's own key names that row: equal to another
                     # table's key only by chance, unless a foreign key says so.
                     continue
@@ -440,7 +440,7 @@ def locate(
                     )
                     if not declared and not _IDLIKE.search(col.name):
                         continue
-                    if not declared and col.name in child.primary_key:
+                    if not declared and own_key(child, col.name, key):
                         continue  # the child's own key: equal by chance
 
                     walk(
@@ -482,19 +482,41 @@ def link_columns(
             cols = {
                 c
                 for c, v in ch.after.items()
-                if v == key and is_link_column(schema, ch.table, c, anchor.table)
+                if v == key and is_link_column(schema, ch.table, c, anchor.table, v)
             }
             out[ch.table] = out[ch.table] & cols if ch.table in out else cols
     return out
 
 
-def is_link_column(schema: Schema, table: str, column: str, parent: str) -> bool:
+#: A generated token (a UUID, a long hex id): equal in two rows only when
+#: one copied it from the other, never by chance.
+TOKEN = re.compile(
+    r"^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    r"|[0-9a-fA-F]{16,})$"
+)
+
+
+def own_key(t: Table, column: str, value: Any) -> bool:
+    """Is ``t.column`` the row's own whole single-column key, holding a value
+    that can equal another table's key by chance (a small generated number)?
+    A member of a composite key (an order line's ``order_id``) and a copied
+    token (an extension table's UUID) can link rows."""
+
+    return (
+        t.primary_key == [column] and value is not None and not TOKEN.match(str(value))
+    )
+
+
+def is_link_column(
+    schema: Schema, table: str, column: str, parent: str, value: Any = None
+) -> bool:
     """Can ``table.column`` link a row to a ``parent`` row? Not the row's own
-    primary key, unless a foreign key declares it (a one-to-one extension
-    table): a new row's key equals its parent's key only by chance."""
+    whole key holding a small generated number, unless a foreign key
+    declares it (a one-to-one extension table): a new row's key equals its
+    parent's key only by chance."""
 
     t = schema.tables.get(table)
-    if t is None or column not in t.primary_key:
+    if t is None or not own_key(t, column, "0" if value is None else value):
         return True
     return any(fk.column == column and fk.table == parent for fk in t.foreign_keys)
 
@@ -625,32 +647,49 @@ def column_roles(
             for p, av in actor_values.items()
             if values and all(v is not None and v == av for v in values)
         ]
-        if actor and not one:
-            # The acting user's id in every row: the person declared it
-            # (``--actor-param``), so it wins over a copy of another row's
-            # column that happens to hold the same id.
-            out[name] = ColumnRole("actor", detail={"param": actor[0]})
-            continue
         links = link_values or [set() for _ in rows]
-        if values and all(
-            v is not None
-            and (v in lv or (len(t.primary_key) == 1 and v == r.get(t.primary_key[0])))
-            for v, lv, (_, r) in zip(values, links, rows)
-        ):
-            out[name] = ColumnRole("link")
-            continue
-        if (
-            len(t.primary_key) == 1
-            and values
+        is_link = (
+            not one
+            and bool(values)
             and all(
                 v is not None
-                and r.get(t.primary_key[0]) is not None
-                and str(r.get(t.primary_key[0])) in v
-                and v != r.get(t.primary_key[0])
-                for v, (_, r) in zip(values, rows)
+                and (
+                    v in lv
+                    or (len(t.primary_key) == 1 and v == r.get(t.primary_key[0]))
+                )
+                for v, lv, (_, r) in zip(values, links, rows)
             )
-        ):
-            out[name] = ColumnRole("varies", detail={"why": "holds the row's own key"})
+        )
+        if actor and not one:
+            copy = _copied(schema, t, name, rows)
+            if copy is not None or is_link:
+                # The acting user's id in every row, and also a copy of
+                # another row's column or a link: the demonstrations can't
+                # tell which the app does.
+                other = (
+                    f"a copy of {copy['table']}.{copy['column']}"
+                    if copy is not None
+                    else "a link to a row the write added"
+                )
+                out[name] = ColumnRole(
+                    "varies",
+                    detail={
+                        "why": f"the acting user's id or {other}: the "
+                        "demonstrations can't tell"
+                    },
+                )
+                continue
+            out[name] = ColumnRole("actor", detail={"param": actor[0]})
+            continue
+        if is_link:
+            out[name] = ColumnRole("link")
+            continue
+        template = None if one else _key_template(t, values, rows)
+        if template is not None:
+            out[name] = ColumnRole(
+                "varies",
+                detail={"why": "holds the row's own key", "template": template},
+            )
             continue
         part = None if one else _date_part(values, [d for d, _ in rows])
         if part is not None:
@@ -700,6 +739,29 @@ def column_roles(
     return out
 
 
+def _key_template(
+    t: Table,
+    values: Sequence[Optional[str]],
+    rows: Sequence[tuple["Demo", Mapping[str, Optional[str]]]],
+) -> Optional[str]:
+    """``prefix{key}suffix`` when every row holds its own single-column key
+    between the same prefix and suffix (``INV-{key}``), else None."""
+
+    if len(t.primary_key) != 1 or not values:
+        return None
+    shapes = set()
+    for v, (_, r) in zip(values, rows):
+        key = r.get(t.primary_key[0])
+        if v is None or key is None or v == key or str(key) not in v:
+            return None
+        i = v.index(str(key))
+        shapes.add((v[:i], v[i + len(str(key)) :]))
+    if len(shapes) != 1:
+        return None
+    prefix, suffix = next(iter(shapes))
+    return prefix + "{key}" + suffix
+
+
 def _date_part(
     values: Sequence[Optional[str]], demos: Sequence["Demo"]
 ) -> Optional[str]:
@@ -707,6 +769,10 @@ def _date_part(
     task gives, in every row? (Redmine stores a time entry's ``tyear``,
     ``tmonth`` and ``tweek``.) The app computes it, so it isn't pinned."""
 
+    if len({v for v in values}) < 2:
+        # The same value in every row: a constant, not a date part (two
+        # demonstrations in one month can't tell them apart).
+        return None
     parts = {
         "year": lambda d: d.year,
         "month": lambda d: d.month,
@@ -759,9 +825,14 @@ def _copied(
                 or r.get(other.name) is None
             ):
                 continue
-            for target, ref, _declared in _fk_targets(
+            for target, ref, declared in _fk_targets(
                 schema, idx, t, other.name, str(r.get(other.name))
             ):
+                if _hop_cost(Hop("fk", target, other.name, ref, declared)) > 1:
+                    # Only a declared key, or a column named after its table:
+                    # a value equal to some row's id by chance (an issue id
+                    # that is also an audit row's id) points to nothing.
+                    continue
                 trow = idx.row(target, str(r.get(other.name)))
                 if trow is None:
                     continue

@@ -44,7 +44,7 @@ CREATE TABLE orders (id serial PRIMARY KEY, supplier text NOT NULL, note text,
   currency text NOT NULL, user_id integer NOT NULL, created_at timestamp);
 CREATE TABLE order_lines (id serial PRIMARY KEY, order_id integer NOT NULL,
   part text NOT NULL, qty integer NOT NULL);
-INSERT INTO users (login) VALUES ('bot');
+INSERT INTO users (login) VALUES ('bot'), ('ana');
 INSERT INTO customers (name) VALUES ('Acme'), ('Globex'), ('Initech'), ('Umbrella'),
   ('Hooli'), ('Vandelay'), ('Stark'), ('Wayne');
 INSERT INTO projects (name, customer_id) VALUES ('Apollo', 3), ('Gemini', 4),
@@ -63,8 +63,10 @@ class Book(App):
         return self.one("SELECT id FROM projects WHERE name=%s", (name,))
 
     def log_time(self, v: dict[str, Any]) -> None:
+        # Logged for user 2: were every row the bot's, a ticket's user could
+        # also be read as a copy of the user of the entry its ext_id names.
         self.q("INSERT INTO timesheets (project_id, hours, user_id, created_at) "
-               "VALUES (%s,%s,%s,now())", (self.project(v["project"]), v["hours"], BOT))  # fmt: skip
+               "VALUES (%s,%s,%s,now())", (self.project(v["project"]), v["hours"], 2))  # fmt: skip
 
     def open_ticket(self, v: dict[str, Any], ext: Any) -> None:
         self.q("INSERT INTO tickets (project_id, title, ext_id, user_id, created_at) "
