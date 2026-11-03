@@ -2675,10 +2675,29 @@ class MacWindowClient:
         img.convert("RGB").save(out, format="PNG")
         return out.getvalue(), w, h
 
+    @staticmethod
+    def _drain_workspace_updates() -> None:
+        """Apply NSWorkspace's pending updates before reading it.
+
+        ``frontmostApplication`` is updated by notifications the current run
+        loop delivers. A process that never runs one (a Python run, a test
+        harness) keeps reading the app that was frontmost when it first asked,
+        even after that app exited. One non-blocking pass applies them.
+        """
+        try:
+            from Foundation import NSDate, NSDefaultRunLoopMode, NSRunLoop
+
+            NSRunLoop.currentRunLoop().runMode_beforeDate_(
+                NSDefaultRunLoopMode, NSDate.date()
+            )
+        except Exception:  # noqa: BLE001 - a stale read then fails the focus check
+            pass
+
     def frontmost_pid(self) -> Optional[int]:
         try:
             from AppKit import NSWorkspace
 
+            self._drain_workspace_updates()
             app = NSWorkspace.sharedWorkspace().frontmostApplication()
             return int(app.processIdentifier()) if app is not None else None
         except Exception:  # noqa: BLE001
@@ -2736,6 +2755,7 @@ class MacWindowClient:
             options = (
                 NSApplicationActivateIgnoringOtherApps | NSApplicationActivateAllWindows
             )
+            self._drain_workspace_updates()
             source = NSWorkspace.sharedWorkspace().frontmostApplication()
             transfer = getattr(app, "activateFromApplication_options_", None)
             transferred = False

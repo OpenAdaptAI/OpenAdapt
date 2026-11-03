@@ -106,6 +106,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     ap.add_argument("--no-up", action="store_true")
     ap.add_argument("--down", action="store_true")
+    ap.add_argument(
+        "--receipts",
+        action="store_true",
+        help="sign each verdict as a write receipt under OUT/shadow/receipts",
+    )
     args = ap.parse_args(argv)
 
     suite = yaml.safe_load(Path(args.cases).read_text())
@@ -134,6 +139,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         out=out / "shadow",
         listen=("127.0.0.1", args.port + 2),
         quiet_s=3600,  # checked per case, after the agent answers
+        receipts=args.receipts,
     ).start()
     shadow_fhir = f"{shadow.url}/fhir/R4"
     rows: list[dict[str, Any]] = []
