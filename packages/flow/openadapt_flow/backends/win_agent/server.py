@@ -1440,7 +1440,7 @@ class _User32:
         dll.EnumWindows.argtypes = [self._enum_proc, wintypes.LPARAM]
         dll.EnumWindows.restype = wintypes.BOOL
         try:
-            dwm = ctypes.WinDLL("dwmapi")
+            dwm = getattr(ctypes, "WinDLL")("dwmapi")
             dwm.DwmGetWindowAttribute.argtypes = [
                 wintypes.HWND,
                 wintypes.DWORD,
