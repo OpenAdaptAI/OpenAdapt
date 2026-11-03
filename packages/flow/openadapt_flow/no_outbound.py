@@ -1,4 +1,4 @@
-"""Strict no-outbound mode: refuse every network connection that leaves the machine.
+"""Strict no-outbound mode: refuse this process's connections off the machine.
 
 Set ``OPENADAPT_NO_OUTBOUND=1`` and ``openadapt-flow`` installs a Python audit
 hook (PEP 578) at startup. The hook sees every ``socket.connect``,
@@ -30,11 +30,30 @@ Each refusal is appended as one JSON line to ``OPENADAPT_NO_OUTBOUND_LOG``
 when that is set. The line holds the event name, the peer and the time,
 never payload bytes.
 
-Limits: the hook covers this Python process. A child process (FreeRDP,
-``curl``) or native code that opens sockets without Python's ``socket``
-module is not covered. ``openadapt-flow service egress-audit`` checks the
-whole process tree from the operating system's socket table, and the site
-firewall stays the primary control.
+Child processes are refused unless something contains them. The hook cannot
+see a child's sockets, so starting one (``subprocess``, ``os.exec*``,
+``os.posix_spawn``, ``os.spawn*``, ``os.system``) raises
+:class:`OutboundBlocked` unless one of these holds:
+
+* the child is a Python interpreter or the ``openadapt-flow`` command and
+  keeps ``OPENADAPT_NO_OUTBOUND`` in its environment, so it installs the same
+  hook when it imports ``openadapt_flow``;
+* the child is one of the local system tools in :data:`LOCAL_TOOLS` that the
+  on-prem service runs (``ps``, ``lsof`` and the like), which open no network
+  connections;
+* ``OPENADAPT_NO_OUTBOUND_CHILDREN`` names what contains every child at the
+  kernel or site level (one of :data:`CONTAINMENTS`, for example ``pf`` when
+  the on-prem installer's firewall rules are loaded).
+
+Limits: the hook covers this Python process only. Native code that opens
+sockets without Python's ``socket`` module is not covered. A Python child
+that never imports ``openadapt_flow`` does not install the hook. A child
+allowed by a named containment is only as contained as that firewall. A
+service on this machine that the allowed loopback addresses reach (a proxy,
+an SSH tunnel, a browser's debugging port) can forward traffic off the
+machine. ``openadapt-flow service egress-audit`` samples the whole process
+tree from the operating system's socket table, and the site firewall stays
+the primary control.
 """
 
 from __future__ import annotations
@@ -52,6 +71,19 @@ ENV_MODE = "OPENADAPT_NO_OUTBOUND"
 ENV_ALLOW = "OPENADAPT_NO_OUTBOUND_ALLOW"
 ENV_LOG = "OPENADAPT_NO_OUTBOUND_LOG"
 ENV_ALLOW_FILE = "OPENADAPT_NO_OUTBOUND_ALLOW_FILE"
+ENV_CHILDREN = "OPENADAPT_NO_OUTBOUND_CHILDREN"
+
+#: Values ``OPENADAPT_NO_OUTBOUND_CHILDREN`` accepts: what contains every child
+#: process. Naming one is the operator's statement; Flow does not check it.
+CONTAINMENTS = frozenset(
+    {"pf", "systemd-ipaddressdeny", "windows-firewall", "site-firewall", "sandbox"}
+)
+
+#: Local system tools the on-prem service runs in strict mode. None of them
+#: opens a network connection.
+LOCAL_TOOLS = frozenset(
+    {"ps", "lsof", "stat", "sysctl", "launchctl", "pfctl", "sw_vers", "uname"}
+)
 
 _TRUE = {"1", "true", "on", "yes", "strict"}
 _LOCAL_NAMES = {"localhost", "localhost.", "ip6-localhost"}
@@ -62,6 +94,7 @@ _lock = threading.Lock()
 _installed = False
 _allow: tuple[Network, ...] = ()
 _log_path: Optional[str] = None
+_children: Optional[str] = None
 _blocked_count = 0
 
 
@@ -129,6 +162,67 @@ def allow_from_env(env: Optional[Mapping[str, str]] = None) -> tuple[Network, ..
     return tuple(nets)
 
 
+def parse_children(value: Optional[str]) -> Optional[str]:
+    """Parse ``OPENADAPT_NO_OUTBOUND_CHILDREN``. Raises ``ValueError`` on bad input."""
+    item = (value or "").strip().lower()
+    if not item:
+        return None
+    if item not in CONTAINMENTS:
+        raise ValueError(
+            f"{ENV_CHILDREN} names what contains child processes; it takes one "
+            f"of {', '.join(sorted(CONTAINMENTS))}, not {value!r}"
+        )
+    return item
+
+
+def children_containment() -> Optional[str]:
+    """The containment named for child processes in this process, if any."""
+    return _children
+
+
+def _is_python(path: str) -> bool:
+    name = os.path.basename(path).lower()
+    if name.endswith(".exe"):
+        name = name[:-4]
+    if name in ("openadapt-flow", "openadapt"):
+        return True
+    if path == sys.executable:
+        return True
+    rest = name[len("python") :] if name.startswith("python") else None
+    return rest is not None and all(ch.isdigit() or ch == "." for ch in rest)
+
+
+def _keeps_strict(env: Any) -> bool:
+    if env is None:
+        return enabled()
+    try:
+        items = env.items()
+    except AttributeError:
+        return False
+    for key, value in items:
+        if isinstance(key, bytes):
+            key = key.decode("utf-8", "replace")
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", "replace")
+        if key == ENV_MODE:
+            return str(value).strip().lower() in _TRUE
+    return False
+
+
+def child_is_covered(path: Any, env: Any) -> bool:
+    """True if a child at ``path`` with ``env`` stays inside no-outbound mode."""
+    if _children is not None:
+        return True
+    if isinstance(path, bytes):
+        path = path.decode("utf-8", "replace")
+    if not isinstance(path, (str, os.PathLike)):
+        return False
+    path = os.fspath(path)
+    if _is_python(path):
+        return _keeps_strict(env)
+    return os.path.basename(path) in LOCAL_TOOLS
+
+
 def _ip(host: Any) -> Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]:
     if isinstance(host, bytes):
         host = host.decode("ascii", "replace")
@@ -184,6 +278,22 @@ def _record(event: str, host: Any, port: Any) -> None:
         pass  # the refusal still stands; a log failure never opens a path
 
 
+def _refuse_child(event: str, path: Any) -> None:
+    _record(event, path, None)
+    raise OutboundBlocked(
+        f"no-outbound mode refused {event} of {path!r}: this hook cannot see a "
+        "child process's sockets. Contain child processes at the kernel or "
+        f"site level and name it in {ENV_CHILDREN} "
+        f"({', '.join(sorted(CONTAINMENTS))})."
+    )
+
+
+def _first_arg(args: Any) -> Any:
+    if isinstance(args, (list, tuple)) and args:
+        return args[0]
+    return None
+
+
 def _refuse(event: str, host: Any, port: Any) -> None:
     _record(event, host, port)
     raise OutboundBlocked(
@@ -199,6 +309,26 @@ def _peer(address: Any) -> "tuple[Any, Any]":
 
 
 def _hook(event: str, args: tuple) -> None:
+    if event == "subprocess.Popen":
+        executable, argv, _cwd, env = args
+        path = executable if executable is not None else _first_arg(argv)
+        if not child_is_covered(path, env):
+            _refuse_child(event, path)
+        return
+    if event in ("os.exec", "os.posix_spawn"):
+        if not child_is_covered(args[0], args[2]):
+            _refuse_child(event, args[0])
+        return
+    if event == "os.spawn":
+        if not child_is_covered(args[1], args[3]):
+            _refuse_child(event, args[1])
+        return
+    if event in ("os.system", "os.startfile"):
+        # A shell command line or a file opened by its associated program:
+        # nothing here says which program runs.
+        if _children is None:
+            _refuse_child(event, args[0])
+        return
     if event in ("socket.connect", "socket.sendto"):
         sock, address = args[0], args[1]
         family = getattr(sock, "family", None)
@@ -229,11 +359,19 @@ def enforce(env: Optional[Mapping[str, str]] = None) -> None:
     Raises ``ValueError`` if ``OPENADAPT_NO_OUTBOUND_ALLOW`` or the allow file
     is invalid, so a mistyped allow list stops startup instead of widening the
     mode.
+
+    A later call can name a containment for child processes
+    (``OPENADAPT_NO_OUTBOUND_CHILDREN``) when none was named yet, as the
+    on-prem service does once it has read its firewall record. A named
+    containment is never changed or removed.
     """
-    global _installed, _allow, _log_path
+    global _installed, _allow, _log_path, _children
     env = os.environ if env is None else env
     allow = allow_from_env(env)
+    children = parse_children(env.get(ENV_CHILDREN))
     with _lock:
+        if _children is None:
+            _children = children
         if _installed:
             return
         _allow = allow

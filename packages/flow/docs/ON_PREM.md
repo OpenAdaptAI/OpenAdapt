@@ -332,6 +332,14 @@ without the rules.
 This needs administrator rights at install. Without them the installer stops.
 `--no-pf` installs without the rules; the health check then reports it.
 
+When the installer records the rules as installed
+(`service/firewall.json`), the service sets
+`OPENADAPT_NO_OUTBOUND_CHILDREN=pf` so the queue, FreeRDP and the browser may
+start. With `--no-pf`, or on Linux and Windows, the service refuses to start
+in strict mode until you set `OPENADAPT_NO_OUTBOUND_CHILDREN` to what contains
+its children (`systemd-ipaddressdeny`, `windows-firewall`, `site-firewall` or
+`sandbox`).
+
 Limits: `pf` matches the account only for TCP and UDP, so other protocols
 (ICMP, for example) are not covered, and the rules apply to the service
 account only. The site firewall stays the primary control. Connection
@@ -373,10 +381,15 @@ report is written to `audit/egress-audit-<time>.json` and sealed with the
 local key. The command exits 0 only for `clean`.
 
 What the evidence covers: the in-process hook refuses outbound connections
-from the service's Python processes before any packet is sent; the audit
-covers every process in the tree, including FreeRDP and other child
-processes, at each sample. A connection that opens and closes between samples
-in a non-Python child is not seen by the audit. The site firewall remains the
+from the service's Python processes before any packet is sent, and refuses
+to start a child process that nothing contains (see
+[Child processes](OFFLINE_SEALS.md#child-processes)); the audit covers every
+process in the tree, including FreeRDP and other child processes, at each
+sample. A connection that opens and closes between samples in a non-Python
+child is not seen by the audit. Neither sees a relay: a proxy, tunnel or
+other service on this machine that the service reaches over loopback can
+forward traffic off the machine, and the hook and the `pf` rules both allow
+loopback. Run no such service on the host. The site firewall remains the
 primary control. On macOS, the `pf` rules the installer adds in strict mode
 close that gap for TCP and UDP (see [Firewall rules](#firewall-rules)).
 
@@ -388,7 +401,9 @@ The same commands run on Windows; only the service manager differs.
   service wrapper such as NSSM, or a Task Scheduler task set to run at logon
   and restart on failure. Use a logon session if the run drives a GUI or RDP
   client window. Set `OPENADAPT_NO_OUTBOUND=1` and `OPENADAPT_FLOW_SCRUB=on`
-  in the service environment.
+  in the service environment. After you add the outbound block rule (see
+  Egress audit below), set `OPENADAPT_NO_OUTBOUND_CHILDREN=windows-firewall`
+  as well; without it the service refuses to start in strict mode.
 - **Restart.** `service restart` runs `Restart-Service -Name <label>`; name
   the service `ai.openadapt.flow-service` or pass `--label`. Configure service
   recovery to restart on the first, second and later failures.
