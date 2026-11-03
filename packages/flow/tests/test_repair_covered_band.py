@@ -408,7 +408,7 @@ def _guard(
         _Line("Session notice", (395, 318, 80, 14)),
         _Line(message, (450, 374, 170, 14)),
         _Line("OK", (590, 433, 20, 14)),
-        _Line("Patient: Neil Sorenson (1984-", (230, 320, 150, 14)),  # outside
+        _Line("Patient: Neil Sorenson (1984-", (230, 320, 153, 14)),  # 3px in
     ]
     if not lines_in:
         lines = lines[-1:]
@@ -490,12 +490,16 @@ def test_a_cover_without_an_id_never_matches_a_click_without_one() -> None:
         "Session notice Your session expires in 5 minutes？ OK",  # fullwidth
         "¿Session notice OK",
         "Session notice; OK",
+        # nothing proves a notice: the message line was not read (third review)
+        "OK",
+        "This is the information. OK",
+        "Session notice OK",
     ],
 )
 def test_a_dialog_whose_message_can_lose_or_commit_data_is_refused(message) -> None:
     from openadapt_flow.repair.self_repair import SelfRepairRefused
 
-    with pytest.raises(SelfRepairRefused, match="covering dialog"):
+    with pytest.raises(SelfRepairRefused, match="covering dialog|session expires"):
         _guard(at={"hwnd": 7, "pid": 42}, message=message)
 
 
@@ -579,6 +583,7 @@ def test_a_covered_band_bridge_is_exactly_one_click(kinds) -> None:
         "Session notice Your session expires in 5 minutes. OK",
         "Session notice × Your session expires in 5 minutes. OK",
         "Session notice x Your session expires in 5 minutes. OK",
+        "Session notice i Your session expires in 5 minutes. OK",
     ],
 )
 def test_only_notice_words_pass_the_message_gate(text) -> None:
@@ -662,3 +667,43 @@ def test_the_dismiss_click_must_be_ok(name) -> None:
             (0, 0, 40, 20),
             SimpleNamespace(backend=object()),
         )
+
+
+def test_text_running_across_the_dialog_edge_is_refused() -> None:
+    from types import SimpleNamespace
+
+    from openadapt_flow.repair.self_repair import (
+        SelfRepair,
+        SelfRepairRefused,
+        _CoveredHalt,
+    )
+
+    cover = {"hwnd": 7, "pid": 42, "region": [380, 300, 270, 160]}
+    lines = [
+        _Line("Session notice", (395, 318, 80, 14)),
+        # merged with text outside: its center is left of the dialog
+        _Line("Patient: Neil Sorenson Delete this record", (200, 374, 300, 14)),
+        _Line("Your session expires in 5 minutes.", (450, 400, 170, 14)),
+        _Line("OK", (590, 433, 20, 14)),
+    ]
+    me = SimpleNamespace(
+        _covered=_CoveredHalt(("s", "after", None), cover=cover, pinned="search"),
+        vision=SimpleNamespace(ocr=lambda png: lines),
+    )
+
+    class Here:
+        def owned_window_over(self, region, *, pinned_step_id):
+            return {"hwnd": 7, "pid": 42}
+
+    with pytest.raises(SelfRepairRefused, match="across the covering dialog"):
+        SelfRepair._dismisses_the_cover(
+            me, SimpleNamespace(backend=Here()), (598, 440), b"png"
+        )
+
+
+def test_band_text_that_ends_at_the_dialog_edge_is_not_its_message() -> None:
+    # The cut band line ends where the dialog starts (within a few pixels).
+    queried = _guard(
+        at={"hwnd": 7, "pid": 42}, message="Your session expires in 5 minutes."
+    )
+    assert queried

@@ -172,7 +172,9 @@ The dismiss click is held to that dialog. It must land in the very window
 dialog's text must read as a notice only. Every word in it must be on a
 short list of session-notice words ("Your session expires in 5 minutes",
 "OK"), and it shows no punctuation beyond `. , : !`, so it asks no question
-in any script. The click's label must be "OK". Anything else refuses,
+in any script. It must also say that a session expires, so a dialog whose
+message wasn't read (only its "OK" was) is refused, and so is any text that
+runs across the dialog's edge. The click's label must be "OK". Anything else refuses,
 including an update prompt, a dialog in another language, or one with
 nothing readable in it.
 Answering "OK" to "Discard unsaved changes?" would lose data. The bridge is

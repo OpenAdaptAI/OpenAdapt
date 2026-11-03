@@ -1629,12 +1629,23 @@ class SelfRepair:
                 lines = self.vision.ocr(screen)
             except Exception:  # noqa: BLE001 - unreadable is a refusal below
                 lines = []
-            text = " ".join(
-                str(line.text)
-                for line in lines
-                if x <= line.region[0] + line.region[2] / 2 < x + w
-                and y <= line.region[1] + line.region[3] / 2 < y + h
-            )
+            inside: list[str] = []
+            for line in lines:
+                lx, ly, lw, lh = (int(v) for v in line.region)
+                overlap_w = min(lx + lw, x + w) - max(lx, x)
+                overlap_h = min(ly + lh, y + h) - max(ly, y)
+                if overlap_w <= 0 or overlap_h <= 0:
+                    continue
+                if lx >= x and ly >= y and lx + lw <= x + w and ly + lh <= y + h:
+                    inside.append(str(line.text))
+                elif overlap_w > _STRADDLE_SLACK_PX and overlap_h > _STRADDLE_SLACK_PX:
+                    # A line reaching into the dialog from outside may carry
+                    # its message merged with other text: it can't be read.
+                    raise SelfRepairRefused(
+                        "text runs across the covering dialog's edge, so its "
+                        "message can't be read on its own"
+                    )
+            text = " ".join(inside)
         refusal = _dialog_message_refusal(text)
         if refusal is not None:
             raise SelfRepairRefused(refusal)
@@ -2982,6 +2993,7 @@ _NOTICE_DIALOG_WORDS = frozenset(
         "the",
         "this",
         "will",
+        "i",  # the information icon, as OCR may read it
         "x",  # the close glyph, as OCR may read it
         "your",
     }
@@ -2990,6 +3002,14 @@ _NOTICE_DIALOG_WORDS = frozenset(
 #: Marks a notice may carry besides letters and digits: no question mark in
 #: any script, nothing else.
 _NOTICE_DIALOG_MARKS = frozenset(" \t\n.,:!×")
+
+#: How far, in pixels, an OCR line may reach over the dialog's edge before
+#: it counts as text running across it (a glyph's antialiasing, a border).
+_STRADDLE_SLACK_PX = 4
+
+#: A notice must say both: what it is about, and that it expires.
+_NOTICE_SUBJECT_WORDS = frozenset({"session"})
+_NOTICE_EXPIRY_WORDS = frozenset({"expire", "expires", "expiring"})
 
 #: The one label the dismiss click may have.
 _NOTICE_DISMISS_LABEL = "ok"
@@ -3031,9 +3051,14 @@ def _dialog_message_refusal(text: str) -> Optional[str]:
     )
     if other:
         return (
-            "the covering dialog's message reads as more than a notice "
-            f"({', '.join(other[:6])}); dismissing it may discard, end or commit "
-            "something"
+            "the covering dialog shows words a session notice does not "
+            f"({', '.join(other[:6])}); it is not dismissed"
+        )
+    present = set(words_list)
+    if not present & _NOTICE_SUBJECT_WORDS or not present & _NOTICE_EXPIRY_WORDS:
+        return (
+            "the covering dialog's text does not say that a session expires; "
+            "only that notice is dismissed (its message may not have been read)"
         )
     return None
 
