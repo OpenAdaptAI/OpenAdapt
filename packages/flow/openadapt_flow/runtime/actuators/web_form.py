@@ -77,6 +77,8 @@ class _FormParser(HTMLParser):
                 "action": a.get("action", ""),
                 "controls": {},
                 "handlers": sorted(k for k in a if k.startswith("on")),
+                "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
+                "buttons": [],
                 "novalidate": "novalidate" in a,
             }
             self.forms.append(self._form)
@@ -84,8 +86,21 @@ class _FormParser(HTMLParser):
         if self._form is None:
             return
         name = a.get("name")
+        kind = a.get("type", "text" if tag == "input" else "submit").lower()
+        if tag == "button" or (
+            tag == "input" and kind in ("submit", "button", "image")
+        ):
+            # A control that can start the submit: its click handlers run
+            # before the form's own.
+            self._form["buttons"].append(
+                {
+                    "id": a.get("id"),
+                    "name": name,
+                    "type": kind,
+                    "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
+                }
+            )
         if tag == "input" and name:
-            kind = a.get("type", "text").lower()
             if kind in ("submit", "button", "image", "reset", "file"):
                 return
             if kind in ("checkbox", "radio") and "checked" not in a:
@@ -162,6 +177,7 @@ def _native_rules(a: dict[str, str]) -> dict[str, Any]:
         "maxlength": a.get("maxlength"),
         "disabled": "disabled" in a,
         "handlers": sorted(k for k in a if k.startswith("on")),
+        "handler_src": {k: v for k, v in a.items() if k.startswith("on")},
     }
 
 
@@ -223,6 +239,55 @@ def unsupported_client_rules(rules: Optional[dict[str, Any]]) -> list[str]:
         if isinstance(rule, dict):
             out += [f"{name} {kind}" for kind in rule if kind not in CLIENT_RULE_KINDS]
     return sorted(out)
+
+
+_SCRIPT_SRC = re.compile(r"""<script\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""", re.I)
+_INLINE_SCRIPT = re.compile(r"<script\b(?![^>]*\bsrc\s*=)[^>]*>\s*\S", re.I)
+
+
+def _src_digest(source: str) -> str:
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()[:12]
+
+
+def page_scripts(
+    html: str, action_path: str, sent: Iterable[str], rules: Optional[dict[str, Any]]
+) -> list[str]:
+    """Every script the browser may run on this save, fingerprinted, sorted.
+
+    The form's own ``on*`` handlers, the ``on*`` handlers of the fields the
+    save sends and of the form's buttons (each with a digest of its source),
+    a page script listening for submit, every script the page loads (by
+    URL), whether it has inline script, and the validate.js rule kinds
+    outside :data:`CLIENT_RULE_KINDS`. Any entry means the API step runs the
+    page's script before each save
+    (:mod:`openadapt_flow.runtime.actuators.form_eval`), and a live page whose
+    list differs doesn't run the API step.
+    """
+
+    found: list[str] = []
+    form = _form(html, action_path)
+    if form is not None:
+        found += [f"form {h} {_src_digest(v)}" for h, v in form["handler_src"].items()]
+        sent_names = set(sent)
+        for name, control in form["controls"].items():
+            if name in sent_names:
+                found += [
+                    f"{name} {h} {_src_digest(v)}"
+                    for h, v in (control.get("handler_src") or {}).items()
+                ]
+        for button in form["buttons"]:
+            label = button["id"] or button["name"] or button["type"]
+            found += [
+                f"button {label} {h} {_src_digest(v)}"
+                for h, v in button["handler_src"].items()
+            ]
+    if _SUBMIT_LISTENER.search(html):
+        found.append("a page script listening for submit")
+    found += [f"script {src}" for src in _SCRIPT_SRC.findall(html)]
+    if _INLINE_SCRIPT.search(html):
+        found.append("inline script")
+    found += [f"{rule} (validate.js)" for rule in unsupported_client_rules(rules)]
+    return sorted(set(found))
 
 
 _EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -347,6 +412,32 @@ def option_for_label(control: dict[str, Any], label: str) -> Optional[str]:
     return hits[0] if len(hits) == 1 else None
 
 
+def web_form_effects(steps: Any, save: Any) -> list[Any]:
+    """The record check an API step must carry: the save's, then each step write's.
+
+    A ``step`` write (WebFormWrite) is read back by the record check declared
+    on the step it was sent during, so the binding's record check is the
+    save step's effects followed by those steps' effects, in write order,
+    each step once.
+    """
+
+    out = list(save.effects)
+    binding = getattr(save, "api_binding", None)
+    spec = getattr(binding, "web_form", None)
+    if spec is None:
+        return out
+    by_id = {s.id: s for s in steps}
+    seen: set[str] = set()
+    for write in spec.writes:
+        if write.role != "step" or not write.from_step or write.from_step in seen:
+            continue
+        seen.add(write.from_step)
+        step = by_id.get(write.from_step)
+        if step is not None:
+            out.extend(step.effects)
+    return out
+
+
 def folded_checks_digest(steps: Any) -> str:
     """SHA-256 over the complete definition of the steps an API step replaces.
 
@@ -418,6 +509,10 @@ class Transport(Protocol):
 
     def post_form(self, path: str, body: str, *, referer: str) -> Response: ...
 
+    # Optional: ``evaluate_form(form_path, action_path, fields) -> FormEvaluation``
+    # runs the form's own script on the run's values (form_eval). A transport
+    # without it can't run a form that has script; that save stays on the GUI.
+
 
 class PlaywrightSessionTransport:
     """The browser context's own request API: same cookies, same session."""
@@ -425,8 +520,35 @@ class PlaywrightSessionTransport:
     def __init__(self, page: Any, *, timeout_s: float = 30.0) -> None:
         parts = up.urlsplit(page.url)
         self.base_url = f"{parts.scheme}://{parts.netloc}"
+        self._page = page
         self._request = page.context.request
         self._timeout_ms = timeout_s * 1000.0
+
+    def evaluate_form(
+        self,
+        form_path: str,
+        action_path: str,
+        fields: list[tuple[str, str]],
+        *,
+        submitter: Optional[str] = None,
+        submitter_requests: tuple[str, ...] = (),
+        confirm: Optional[str] = None,
+        step_writes: tuple[str, ...] = (),
+    ) -> Any:
+        from openadapt_flow.runtime.actuators.form_eval import evaluate_form
+
+        return evaluate_form(
+            self._page,
+            self.base_url,
+            form_path,
+            action_path,
+            fields,
+            submitter=submitter,
+            submitter_requests=submitter_requests,
+            confirm=confirm,
+            step_writes=step_writes,
+            timeout_s=self._timeout_ms / 1000.0,
+        )
 
     def _wrap(self, resp: Any) -> Response:
         return _Resp(
@@ -479,20 +601,43 @@ class PreparedSave:
     #: Fields whose value the server issued to this session (CSRF tokens).
     #: In the digest; never shown to the person.
     session_fields: frozenset[str] = frozenset()
+    #: The span's ``step`` writes, sent in this order before the save.
+    writes: tuple["PreparedWrite", ...] = ()
 
     def encoded(self) -> str:
         return up.urlencode(list(self.body))
 
     def payload_sha256(self) -> str:
-        payload = {
+        payload: dict[str, Any] = {
             "method": self.method.upper(),
             "path": self.path,
             "content_type": "application/x-www-form-urlencoded",
             "body": self.encoded(),
             "referer": self.referer,
         }
+        if self.writes:
+            # Every request the API step sends, in order. A save without step
+            # writes keeps the digest it always had.
+            payload["writes_before_save"] = [
+                {"method": w.method.upper(), "path": w.path, "body": w.encoded()}
+                for w in self.writes
+            ]
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class PreparedWrite:
+    """One ``step`` write of the span, built and checked, not yet sent."""
+
+    method: str
+    path: str
+    body: tuple[tuple[str, str], ...]
+    expected_status: tuple[int, ...]
+    from_step: str
+
+    def encoded(self) -> str:
+        return up.urlencode(list(self.body))
 
 
 def operation_digest(
@@ -548,6 +693,13 @@ def operation_rows(
             defaults += 1
     for name, value in record:
         rows.append((f"Record check: {name}", value))
+    for i, write in enumerate(prepared.writes, 1):
+        rows.append(
+            (
+                f"Write {i} before the save",
+                f"{write.method.upper()} {write.path} ({len(write.body)} field(s), from {write.from_step})",
+            )
+        )
     rows.append(
         (
             "Request",
@@ -649,25 +801,53 @@ class WebFormActuator:
                 return unavailable(
                     "the form's validation rules changed since the recording"
                 )
-            unsupported = unsupported_client_rules(spec.client_rules)
-            if unsupported:
-                return unavailable(
-                    "the form validates with rules the API step can't evaluate "
-                    f"({', '.join(unsupported)})"
-                )
-            scripts = form_scripts(
+            action_path = up.urlsplit(save_path).path
+            scripts = page_scripts(
                 page.text,
-                up.urlsplit(save_path).path,
+                action_path,
                 [f.name for f in spec.fields],
+                spec.client_rules,
             )
-            if scripts:
-                return unavailable(
-                    "the form runs script the API step can't run "
-                    f"({', '.join(scripts[:5])})"
-                )
+            if scripts != sorted(set(spec.client_scripts)):
+                if not spec.client_scripts:
+                    return unavailable(
+                        "the form runs script the API step wasn't proposed to run "
+                        f"({', '.join(scripts[:5])})"
+                    )
+                return unavailable("the form's script changed since the recording")
             body, problem = self.build_body(spec, params, controls)
             if problem:
                 return unavailable(problem)
+            writes: list[PreparedWrite] = []
+            for write in spec.writes:
+                if write.role != "step":
+                    continue  # the page's own request: not the API step's to send
+                sub = spec.model_copy(update={"fields": write.fields})
+                wbody, problem = self.build_body(
+                    sub, params, controls, enforce_rules=False
+                )
+                if problem:
+                    return unavailable(f"{write.method} {write.path}: {problem}")
+                writes.append(
+                    PreparedWrite(
+                        method=write.method,
+                        path=fill_url(write.path, params),
+                        body=tuple(wbody),
+                        expected_status=tuple(write.expected_status),
+                        from_step=write.from_step or "",
+                    )
+                )
+            if writes and not scripts:
+                return unavailable(
+                    "the API step would send writes the page's script sends, but "
+                    "the page has no script to check them against"
+                )
+            if scripts:
+                problem = self._run_page_script(
+                    spec, form_path, action_path, body, writes
+                )
+                if problem:
+                    return unavailable(problem)
             for check in spec.prechecks:
                 query = [(k, _fill(v, params)) for k, v in check.query]
                 qs = "&".join(
@@ -700,13 +880,131 @@ class WebFormActuator:
             session_fields=frozenset(
                 f.name for f in spec.fields if f.source == "session"
             ),
+            writes=tuple(writes),
         )
+
+    def _run_page_script(
+        self,
+        spec: Any,
+        form_path: str,
+        action_path: str,
+        body: list[tuple[str, str]],
+        writes: list["PreparedWrite"] = (),  # type: ignore[assignment]
+    ) -> Optional[str]:
+        """Run the form's own script on the run's values; why not to send, or None.
+
+        The fields the person typed or picked are typed into a scratch copy
+        of the form, and the recorded controls are clicked (form_eval). The
+        save is sent only when the page submits, once, and the body it
+        submits is exactly ``body`` apart from the session values the scratch
+        page was issued for itself. Any difference keeps the save on the GUI.
+        """
+
+        evaluate = getattr(self.transport, "evaluate_form", None)
+        if evaluate is None:
+            return "the form runs script and this session can't run it"
+        typed = {f.name for f in spec.fields if f.source in ("param", "select_label")}
+        result = evaluate(
+            form_path,
+            action_path,
+            [(k, v) for k, v in body if k in typed],
+            submitter=spec.submitter,
+            submitter_requests=tuple(spec.submitter_requests),
+            confirm=spec.confirm,
+            step_writes=tuple(f"{w.method} {up.urlsplit(w.path).path}" for w in writes),
+        )
+        self.log.append(
+            {
+                "stage": "page_script",
+                "status": result.status,
+                "via": result.via,
+                "seconds": result.seconds,
+                "blocked": result.blocked,
+            }
+        )
+        if not result.valid:
+            return f"{result.reason}; the page's own script decided"
+        session = {f.name for f in spec.fields if f.source == "session"}
+        want = sorted((k, v) for k, v in body if k not in session)
+        got = sorted((k, v) for k, v in result.serialized or [] if k not in session)
+        if want != got:
+            changed = sorted({k for k, _ in set(want) ^ set(got)})
+            return (
+                "the page would send other values than the API step built "
+                f"({', '.join(changed[:5])}); its script changes them"
+            )
+        # Each write the API step sends before the save must be one the
+        # page's own script sent in the scratch run, with the same body.
+        sent = list(getattr(result, "writes", None) or [])
+        for write in writes:
+            what = f"{write.method} {up.urlsplit(write.path).path}"
+            want_w = sorted((k, v) for k, v in write.body if k not in session)
+            match = next(
+                (
+                    i
+                    for i, (w, b) in enumerate(sent)
+                    if w == what
+                    and b is not None
+                    and sorted((k, v) for k, v in b if k not in session) == want_w
+                ),
+                None,
+            )
+            if match is not None:
+                sent.pop(match)  # each request the page sent matches one write
+            if match is None:
+                return (
+                    f"the page's script didn't send {what} with the body the API step "
+                    "built when it ran on these values"
+                )
+        if sent:
+            return (
+                "the page's script sent more step writes than the API step would "
+                f"({', '.join(w for w, _ in sent[:3])})"
+            )
+        return None
 
     def send(self, binding: Any, prepared: "PreparedSave") -> ApiActuationResult:
         """Send exactly ``prepared``, once. Never retried."""
 
         spec = binding.web_form
         summary = f"{binding.method} {binding.url_template}"
+        total = len(prepared.writes) + 1
+        for i, write in enumerate(prepared.writes, 1):
+            what = f"{write.method} {write.path}"
+            done = f"; the {i - 1} write(s) before it were accepted" if i > 1 else ""
+            try:
+                wresp = self.transport.post_form(
+                    write.path, write.encoded(), referer=prepared.referer
+                )
+            except Exception as exc:  # noqa: BLE001 - after dispatch began
+                self.log.append({"stage": "write", "n": i, "error": type(exc).__name__})
+                return ApiActuationResult(
+                    status=ActuationStatus.HALT,
+                    substrate=self.substrate,
+                    halt_kind=ApiHaltKind.DELIVERY_UNCERTAIN,
+                    reason=(
+                        f"write {i} of {total} ({what}) failed after it was sent "
+                        f"({type(exc).__name__}){done}; it may have written, nothing "
+                        "after it was sent and nothing is retried"
+                    ),
+                    request_summary=summary,
+                )
+            accepted = wresp.status in (write.expected_status or tuple(range(200, 400)))
+            self.log.append(
+                {"stage": "write", "n": i, "status": wresp.status, "accepted": accepted}
+            )
+            if not accepted:
+                return ApiActuationResult(
+                    status=ActuationStatus.HALT,
+                    substrate=self.substrate,
+                    halt_kind=ApiHaltKind.RESPONSE_REJECTED,
+                    reason=(
+                        f"write {i} of {total} ({what}) -> {wresp.status}, outside its "
+                        f"recorded response{done}; the save was not sent and nothing is retried"
+                    ),
+                    http_status=wresp.status,
+                    request_summary=summary,
+                )
         try:
             resp = self.transport.post_form(
                 prepared.path, prepared.encoded(), referer=prepared.referer
