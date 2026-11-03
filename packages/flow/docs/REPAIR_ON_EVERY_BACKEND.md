@@ -185,18 +185,21 @@ In this change:
 
 ## Qualified so far
 
-On a native Cocoa app with a SQLite database, through `MacOSBackend`:
+On a native Cocoa test app with a SQLite database, through `MacOSBackend`
+(scripted repair agent and approver; live AX, screen, input and database):
 the run stops at the new notice before any save; the "Later" click's AX
-identity is read (button, inside `AXSheet "Update available"`, in the pinned
-window), found unique and admitted on `element_and_record_check`; the
-patched bundle passes `clinical-write`; with a `demo` profile the same click
-is refused and nobody is asked; with no verifier the run gate refuses.
-Nothing wrong was written in any run.
+identity is read, found unique and admitted on `element_and_record_check`;
+the probe, the replay campaign and the fault campaign (another patient's
+chart) pass; one person approves through the decision portal; and the
+resumed run is `VERIFIED` against SQLite with exactly one new row. That run
+holds the app's caret steady: with a blinking caret the save click is
+refused and nothing is written
+([#1713](https://github.com/OpenAdaptAI/OpenAdapt/issues/1713)). Under
+`demo`, and with no verifier, the click is refused and nothing is written.
 
-Not yet: the probe, campaigns, approval and resumed run end to end. A durable
-run on `MacOSBackend` refuses its first structural click before any repair is
-involved, and the pixel-only path classes a remote click whose next screen
-differs as "delivery uncertain". The benchmark README lists these findings.
+The pixel-only path doesn't reach repair yet: a remote click whose next
+screen differs counts as an uncertain delivery
+([#1712](https://github.com/OpenAdaptAI/OpenAdapt/issues/1712)).
 
 ## Not built yet
 

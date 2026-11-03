@@ -2977,9 +2977,21 @@ def _pre_save_checks(
     if expected:
         values = _form_values(backend)
         if values is None:
-            words = _screen_words(vision, frame)
+            # No form to read (a native or pixel-only backend): the screen's
+            # words. OCR may glue a field's words together ("FOLLOWUPIN"), so a
+            # value also counts when its words appear joined on one line.
+            lines = _screen_lines(vision, frame)
+            words = (
+                {w for line in lines for w in _words(line)}
+                if lines is not None
+                else None
+            )
+            joined = ["".join(_words(line)) for line in lines or []]
             missing = [
-                v for v in expected if words is None or not set(_words(v)) <= words
+                v
+                for v in expected
+                if words is None
+                or not (set(_words(v)) <= words or _glued_on_a_line(v, joined))
             ]
         else:
             pool = list(values)
@@ -3014,6 +3026,32 @@ def _words(text: str) -> list[str]:
     import re
 
     return [w.casefold() for w in re.findall(r"[0-9A-Za-zÀ-ɏ]+", text)]
+
+
+def _glued_on_a_line(value: str, joined_lines: Sequence[str]) -> bool:
+    """Whether a value of several words shows on one line with its words glued.
+
+    Only for a value of two or more words and six or more letters, so a short
+    value can't match inside unrelated text.
+    """
+
+    words = _words(value)
+    glued = "".join(words)
+    if len(words) < 2 or len(glued) < 6:
+        return False
+    return any(glued in line for line in joined_lines)
+
+
+def _screen_lines(vision: Any, frame: Optional[bytes]) -> Optional[list[str]]:
+    """The OCR text of each line on ``frame``, or None when unreadable."""
+
+    if not frame:
+        return None
+    try:
+        lines = vision.ocr(frame)
+    except Exception:  # noqa: BLE001
+        return None
+    return [str(getattr(line, "text", "")) for line in lines or []]
 
 
 def _screen_words(vision: Any, frame: Optional[bytes]) -> Optional[set[str]]:

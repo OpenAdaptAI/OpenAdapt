@@ -574,3 +574,16 @@ def test_backend_locator_must_name_the_identified_element(locator, reason) -> No
         locator = StructuralLocator(role="button", name="Cancel", window_name="x")
     with pytest.raises(ClickRefused, match=reason):
         _admit(UIABackend(locator))
+
+
+# -- same_fields on a screen with no form to read ------------------------------
+
+
+def test_glued_ocr_counts_for_a_long_multiword_value_only() -> None:
+    from openadapt_flow.repair.self_repair import _glued_on_a_line, _words
+
+    lines = ["".join(_words("REPAIREDRUNFOLLOWUPINTHREEWEEKS")), "mrn rc79284 5"]
+    assert _glued_on_a_line("Repaired run follow up in three weeks", lines)
+    assert not _glued_on_a_line("follow up in four weeks", lines)
+    assert not _glued_on_a_line("5", lines)  # one word: the word rule applies
+    assert not _glued_on_a_line("a b", lines)  # too short to glue-match
