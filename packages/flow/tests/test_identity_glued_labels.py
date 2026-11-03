@@ -90,3 +90,32 @@ def test_rejoin_window_reaches_eight_tokens() -> None:
     recorded = "Ashford Jane RC79284 one two three four five six seven eight"
     observed = "Ashford Jane RC79284 onetwothreefourfivesixseveneight"
     assert _both(recorded, observed) == ("verified", "verified")
+
+
+@pytest.mark.parametrize(
+    "recorded,observed",
+    [
+        # Review blocker 1: a point or comma OCR split off a number is part of
+        # its value; dropping it would read a different id or amount.
+        ("1. 23456 Smith John 01/02/1980", "123456 Smith John 01/02/1980"),
+        ("Smith John MRN 12. 345 01/02/1980", "Smith John MRN 12345 01/02/1980"),
+        (
+            "Balance 12. 50 Ashford Jane 02/23/1975 RC79284",
+            "Balance 1250 Ashford Jane 02/23/1975 RC79284",
+        ),
+        (
+            "Smith John Acct 3, 1250 DOB 01/02/1980",
+            "Smith John Acct 31250 DOB 01/02/1980",
+        ),
+    ],
+)
+def test_punctuation_beside_a_digit_is_never_dropped(recorded, observed) -> None:
+    plain, hashed = _both(recorded, observed)
+    assert plain != "verified"
+    assert hashed != "verified"
+
+
+def test_glued_forms_keep_marks_beside_digits() -> None:
+    assert I.glued_forms(["1.", "23456"]) == ["1.23456"]
+    assert I.glued_forms(["name:", "15"]) == ["name:15"]
+    assert I.glued_forms(["hint:", "enter"]) == ["hint:enter", "hintenter"]

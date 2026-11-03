@@ -139,14 +139,22 @@ MIN_BLOCK = 3
 SPLIT_SIZES = tuple(range(2, 9))
 # Gluing words also drops the punctuation between them ("Hint:" + "enter"
 # -> "Hintenter"), so a split also tries each fragment but the last without
-# its trailing punctuation. Punctuation inside a token ("1.25") is kept.
+# its trailing punctuation -- only between two digit-free fragments. Beside
+# a digit the mark carries identity: "1." "23456" is a row number and MRN
+# 23456, not MRN 123456; "12." "50" is 12.50, not 1250.
 _GLUE_PUNCT = ":;,."
 
 
 def glued_forms(tokens: list[str]) -> list[str]:
     """The forms OCR may read ``tokens`` as once it glues them into one."""
     plain = "".join(tokens)
-    bare = "".join(t.rstrip(_GLUE_PUNCT) for t in tokens[:-1]) + tokens[-1]
+    parts = []
+    for index, token in enumerate(tokens):
+        nxt = tokens[index + 1] if index + 1 < len(tokens) else None
+        if nxt is not None and not _has_digit(token) and not _has_digit(nxt):
+            token = token.rstrip(_GLUE_PUNCT)
+        parts.append(token)
+    bare = "".join(parts)
     return [plain] if bare == plain else [plain, bare]
 
 
