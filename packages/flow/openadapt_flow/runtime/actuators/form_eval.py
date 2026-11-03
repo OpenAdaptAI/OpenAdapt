@@ -310,9 +310,12 @@ def evaluate_form(
         # Every page of the scratch context goes through the route, and no
         # socket leaves it.
         context.route("**/*", route)
-        context.route_web_socket(
-            "**", lambda ws: (stray.append(f"WebSocket {ws.url}"), ws.close())
-        )
+
+        def on_web_socket(ws: Any) -> None:
+            stray.append(f"WebSocket {ws.url}")
+            ws.close()
+
+        context.route_web_socket("**", on_web_socket)
         context.add_init_script(_INSTRUMENT_JS)
         scratch = context.new_page()
 

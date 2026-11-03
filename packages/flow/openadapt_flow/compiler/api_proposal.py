@@ -258,7 +258,7 @@ def _in_page(selector: str, html: str) -> bool:
     if attr is None:
         m = re.fullmatch(r"""\[name=["']?([^"'\]]+)["']?\]""", selector)
         attr, value = ("name", m.group(1)) if m else (None, None)
-    if attr is None:
+    if attr is None or value is None:
         return False
     tag = re.search(
         r"""<(button|input)\b[^>]*\b%s\s*=\s*["']%s["'][^>]*>"""
@@ -271,7 +271,7 @@ def _in_page(selector: str, html: str) -> bool:
     if tag.group(1).lower() == "button":
         return True
     kind = re.search(r"""\btype\s*=\s*["']?(\w+)""", tag.group(0), re.I)
-    return bool(kind) and kind.group(1).lower() in ("submit", "button", "image")
+    return kind is not None and kind.group(1).lower() in ("submit", "button", "image")
 
 
 def _selector(step: Step, events: list[dict[str, Any]]) -> Optional[str]:
