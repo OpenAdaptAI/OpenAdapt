@@ -125,36 +125,14 @@ def _crop(png: bytes, region: Region) -> bytes:
     return out.getvalue()
 
 
-def field_rows(
-    ys: Sequence[int], frame_size: tuple[int, int], row_px: int
-) -> Optional[list[Region]]:
-    """Full-width rows of ``row_px`` centred on each ``y``, merged; None if none."""
-
-    width, height = frame_size
-    half = row_px // 2
-    bands = sorted(
-        (max(0, y - half), min(height, y + half))
-        for y in ys
-        if min(height, y + half) > max(0, y - half)
-    )
-    if not bands:
-        return None
-    merged = [bands[0]]
-    for top, bottom in bands[1:]:
-        if top <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], bottom))
-        else:
-            merged.append((top, bottom))
-    return [(0, top, width, bottom - top) for top, bottom in merged]
-
-
 def screen_text_state(
     vision: Any, frame_png: bytes, regions: Optional[Sequence[Region]] = None
 ) -> Optional[FormState]:
     """Sorted words on the screen, or ``None`` when OCR found nothing.
 
-    With ``regions``, only those parts of the frame are read, each kept
-    apart so a value cannot move from one field's row to another unseen.
+    With ``regions`` (the app's window), only those parts of the frame are
+    read, and the words keep their reading order, so swapped values change
+    the digest. The regions are part of the digest.
     """
 
     try:
@@ -164,7 +142,7 @@ def screen_text_state(
                 return None
             return _digest("screen_text", sorted(words))
         rows = [
-            [list(region), sorted(_words(vision, _crop(frame_png, region)))]
+            [list(region), _words(vision, _crop(frame_png, region))]
             for region in regions
         ]
     except Exception:  # noqa: BLE001 - unreadable is not "unchanged"
@@ -207,6 +185,5 @@ __all__ = [
     "FormState",
     "capture_form_state",
     "dom_form_state",
-    "field_rows",
     "screen_text_state",
 ]
