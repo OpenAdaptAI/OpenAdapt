@@ -823,6 +823,63 @@ def _text_carries_phi(text: str) -> bool:
     return bool(scrubbed) and scrubbed != text
 
 
+_VALUE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9./-]*")
+
+
+def _value_tokens(text: str) -> set[str]:
+    """Data-like words of a line: names, numbers and dates, not labels.
+
+    A token counts when it carries a digit (four or more characters: an id,
+    a date) or is a capitalized word of three or more letters that is not a
+    label (followed by a colon). ``"Patient: Neil Sorenson (1984-03-12)"``
+    gives ``{"neil", "sorenson", "1984-03-12"}``.
+    """
+    tokens: set[str] = set()
+    for match in _VALUE_TOKEN.finditer(text):
+        word = match.group(0).rstrip(".")
+        after = text[match.end() : match.end() + 1]
+        if after == ":":
+            continue
+        if any(c.isdigit() for c in word):
+            if len(word) >= 4:
+                tokens.add(word.casefold())
+        elif len(word) >= 3 and word[0].isupper():
+            tokens.add(word.casefold())
+    return tokens
+
+
+def _echoes_screen_rows(
+    line: OcrLine,
+    after_lines: list[OcrLine],
+    click_point: Optional[Point] = None,
+) -> bool:
+    """Whether ``line`` repeats data shown elsewhere on the same screen.
+
+    A detail header or status line that restates a list row ("Patient: Neil
+    Sorenson (1984-03-12)" over a grid whose first row reads Neil, Sorenson,
+    1984-03-12) describes whatever row the app has selected, often one it
+    selected by itself. Asserting it compiles the app's choice into the
+    check: with another row first, the header names that row and the step
+    stops though nothing went wrong. Two or more of the line's data words
+    found in other lines of the frame mark it as such an echo. Lines on the
+    row the demonstrator clicked are not "elsewhere": a header restating the
+    row a person chose describes their click and stays a valid check.
+    """
+    tokens = _value_tokens(line.text)
+    if len(tokens) < 2:
+        return False
+    elsewhere: set[str] = set()
+    for other in after_lines:
+        if other is line:
+            continue
+        if click_point is not None:
+            top, height = other.region[1], other.region[3]
+            if top <= click_point[1] < top + height:
+                continue  # the clicked row itself
+        elsewhere |= _value_tokens(other.text)
+    return len(tokens & elsewhere) >= 2
+
+
 def _new_text_postcondition(
     before_lines: list[OcrLine],
     after_lines: list[OcrLine],
@@ -840,7 +897,9 @@ def _new_text_postcondition(
     docs/validation/VALIDATION.md):
 
     1. Candidates must be new (not in the before frame), confidently read,
-       not a parameterized value, and not a click-target label.
+       not a parameterized value, not a click-target label, and not a
+       restatement of rows shown elsewhere on the screen (the selected-row
+       header a list fills in for whatever row it selected).
     2. Volatile candidates are rejected (clock times, dates near the
        recording date, digit-dominated fragments, low-entropy noise); a
        date FAR from the recording date — a DOB in an identity banner — is
@@ -906,6 +965,10 @@ def _new_text_postcondition(
         if _contains_excluded(text, exclude_texts):
             continue
         if _matches_label(text, avoid_labels):
+            continue
+        if _echoes_screen_rows(line, after_lines, click_point):
+            # A restatement of a row selected elsewhere (often by the app,
+            # not the demonstrator): never a check of this step's effect.
             continue
         if _text_carries_phi(text):
             # PHI scrub on the compile path (audit REM-2 / GAP-3): when the
