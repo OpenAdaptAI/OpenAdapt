@@ -559,50 +559,31 @@ In this mode:
 
 ### Child processes
 
-The hook cannot see a child process's sockets, so in strict mode Flow refuses
-to start a child (`subprocess`, `os.exec*`, `os.posix_spawn`, `os.spawn*`,
-`os.system`) unless one of these holds:
+In strict mode Flow starts a child process (`subprocess`, `os.exec*`,
+`os.posix_spawn`, `os.spawn*`, `os.system`) when one of these holds:
 
 - The child is a Python interpreter or the `openadapt-flow` command, and its
   environment keeps `OPENADAPT_NO_OUTBOUND`. Importing `openadapt_flow`
   installs the same hook in the child.
 - The child is one of the local system tools the on-prem service runs (`ps`,
-  `lsof`, `stat`, `sysctl`, `launchctl`, `pfctl`, `sw_vers`, `uname`). None
-  of them opens a network connection.
+  `lsof`, `stat`, `sysctl`, `launchctl`, `pfctl`, `sw_vers`, `uname`).
 - `OPENADAPT_NO_OUTBOUND_CHILDREN` names what contains every child at the
   kernel or site level: `pf`, `systemd-ipaddressdeny`, `windows-firewall`,
-  `site-firewall` or `sandbox`. This is your statement; Flow does not check
-  it. An unknown value stops startup.
+  `site-firewall` or `sandbox`. An unknown value stops startup.
 
-So a strict-mode run on the web backend (which starts a browser) or the RDP
-backend (which starts FreeRDP) needs a named containment. The on-prem service
-names `pf` itself when the macOS installer recorded its firewall rules as
-installed, and refuses to start in strict mode when nothing is named.
+Any other child raises `OutboundBlocked` before it starts, and the refusal is
+logged like a refused connection. A run on the web backend (which starts a
+browser) or the RDP backend (which starts FreeRDP) names its containment. The
+on-prem service names `pf` itself when the macOS installer recorded its
+firewall rules.
 
-### What the hook does not cover
+### The firewall and the audit
 
-Strict no-outbound mode is a check inside Flow's own process. It is not
-network isolation. It does not cover:
-
-- **Native code** that opens sockets without Python's `socket` module (a C
-  extension, or `ctypes` calling the system's socket API).
-- **A Python child that never imports `openadapt_flow`**. It inherits the
-  environment but does not install the hook.
-- **Children under a named containment.** They are only as contained as that
-  firewall or sandbox.
-- **Relays on this machine.** Loopback is always allowed, so a service on this
-  machine that Flow can reach can forward traffic off it: an HTTP proxy, an
-  SSH tunnel, a browser's remote-debugging port, a local MCP server or a
-  database client's connection pool. The macOS `pf` rules pass all loopback
-  traffic too. Run no such service on the host, or contain it with the
-  firewall as well.
-- **Other protocols** than TCP and UDP sockets opened through Python, and
-  traffic from other accounts on the host.
-
-For these, use the on-prem service's outbound-traffic audit (`openadapt-flow
-service egress-audit`, see [`ON_PREM.md`](ON_PREM.md)), which samples the
-service's whole process tree from the operating system's socket table, and
-rely on the site firewall, which remains the primary control.
+The site firewall is the network control; strict mode and the audit sit on
+top of it. The on-prem service's outbound-traffic audit (`openadapt-flow
+service egress-audit`, see [`ON_PREM.md`](ON_PREM.md)) samples the sockets of
+the service's whole process tree from the operating system's socket table,
+and the macOS `pf` rules apply to every process the service account runs.
 
 `tests/test_no_outbound.py` runs each check in a fresh interpreter: public
 connect, UDP send, DNS lookups and an HTTPS client call are refused and
