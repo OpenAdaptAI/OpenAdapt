@@ -1,6 +1,6 @@
 """Guarded save: a fake agent writes a referral to MockMed through the guard.
 
-The agent here is test code (``openadapt_flow.guard_demo.FakeAgent``) that
+The agent here is test code (``benchmark.harness.guard_demo.FakeAgent``) that
 opens MockMed's server-rendered chart page and posts to its encounter API,
 the way a computer-use agent's click on Save would. The guard judges the
 write from ``GET /api/db`` alone. No model calls, nothing beyond localhost.
@@ -14,15 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_flow.agent.guard_tools import GuardBridge
-from openadapt_flow.guard import (
-    GUARD_TASK_SCHEMA,
-    GuardedSave,
-    GuardRefused,
-    GuardVerdict,
-    check_identity,
-)
-from openadapt_flow.guard_demo import (
+from benchmark.harness.guard_demo import (
     NOTE,
     FakeAgent,
     person_approves,
@@ -30,6 +22,14 @@ from openadapt_flow.guard_demo import (
     run_case,
     tiny_png,
     verify_yaml,
+)
+from openadapt_flow.agent.guard_tools import GuardBridge
+from openadapt_flow.guard import (
+    GUARD_TASK_SCHEMA,
+    GuardedSave,
+    GuardRefused,
+    GuardVerdict,
+    check_identity,
 )
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.verify_run import (

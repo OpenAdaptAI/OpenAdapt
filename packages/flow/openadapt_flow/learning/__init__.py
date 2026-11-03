@@ -17,8 +17,9 @@ verified versions" -- assembled as ORCHESTRATION over parts that already exist:
 
 Multi-trace INDUCTION (turning traces into a revised graph) is a sibling PR,
 depended on only through the :class:`~openadapt_flow.learning.loop.Inducer`
-Protocol; :mod:`openadapt_flow.learning.synth_stream` provides a synthetic
-drift-stream harness and a deterministic reference inducer to exercise the loop.
+Protocol; :mod:`openadapt_flow.learning.induce` provides a deterministic
+reference inducer. The synthetic drift stream that exercises the loop is a
+fixture in the source checkout (``benchmark/harness/synth_stream.py``).
 
 No model calls anywhere on the runtime path.
 """

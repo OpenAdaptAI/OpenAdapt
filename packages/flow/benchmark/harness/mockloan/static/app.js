@@ -29,7 +29,7 @@ var LABEL_OPEN = DRIFT.has('rename') ? 'View' : 'Open';
 
 // Transactional fault-injection hook (flag-gated, exactly like ?drift=).
 // When the page is loaded with ?fault=<mode> the Authorize handler routes the
-// write through a REAL backend API (openadapt_flow/mockloan/fault_server.py)
+// write through a REAL backend API (benchmark/harness/mockloan/fault_server.py)
 // so the fault-model study can judge a replay against DB ground truth rather
 // than the on-screen banner. With no ?fault query this is inert and Authorize
 // behaves byte-for-byte as before (the normal benchmark is unaffected).

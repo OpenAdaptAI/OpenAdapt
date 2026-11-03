@@ -24,8 +24,8 @@ from harness2.core import tree as h2_tree
 from harness2.core.proposer import Proposer
 from harness2.core.spec import RunView
 
-from openadapt_flow.integrations.harness2 import traces
-from openadapt_flow.integrations.harness2.adapter import OpenAdaptGuiAdapter
+from benchmark.harness.harness2 import traces
+from benchmark.harness.harness2.adapter import OpenAdaptGuiAdapter
 
 #: Where an unscored candidate ranks: below a safe stop, above any penalty.
 _UNSCORED_RANK = -0.01

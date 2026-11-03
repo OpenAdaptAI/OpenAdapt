@@ -29,6 +29,10 @@ from typing import Optional
 
 import pytest
 
+from benchmark.harness.synth_stream import (
+    INTENT_OPEN,
+    mockmed_base_program,
+)
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -51,11 +55,7 @@ from openadapt_flow.learning import (
     promoted_workflow,
     resolution_demonstration,
 )
-from openadapt_flow.learning.synth_stream import (
-    INTENT_OPEN,
-    StructuralDiffInducer,
-    mockmed_base_program,
-)
+from openadapt_flow.learning.induce import StructuralDiffInducer
 from openadapt_flow.runtime.replayer import Replayer
 from openadapt_flow.vision.ocr import OcrLine
 from tests.test_replayer import FakeBackend, FakeVision, Match, make_png

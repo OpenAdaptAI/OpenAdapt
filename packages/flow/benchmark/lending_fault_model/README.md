@@ -6,7 +6,7 @@ All prior transactional evidence (`benchmark/fault_model`,
 `benchmark/effect_readback`, `benchmark/silent_wrong_action`) ran against
 **MockMed**, a clinical fixture. This study replicates the same rigorous method
 on a **second, non-healthcare system of record with a distinct UI**: **MockLoan**
-(`openadapt_flow/mockloan/`), a loan-origination console whose consequential
+(`benchmark/harness/mockloan/`), a loan-origination console whose consequential
 write **authorizes a disbursement of funds to a borrower** - an irreversible
 money-movement write.
 
@@ -16,11 +16,11 @@ judged by an independent ledger read, with zero model calls.
 
 ## The fixture
 
-- `openadapt_flow/mockloan/` - a self-contained, deterministic static SPA
+- `benchmark/harness/mockloan/` - a self-contained, deterministic static SPA
   (login -> funding pipeline -> loan -> new disbursement -> **Authorize
   Disbursement**), a distinct finance UI from MockMed. All data is fake/synthetic
   (no real PII).
-- `openadapt_flow/mockloan/fault_server.py` - adds a real persistence boundary
+- `benchmark/harness/mockloan/fault_server.py` - adds a real persistence boundary
   (an in-process **ledger**) and a flag-gated `?fault=<mode>` hook that mirrors
   MockMed's. **With no `?fault` query the app never calls the API** and the
   normal benchmark is byte-for-byte unaffected (pinned by a test). The ledger is

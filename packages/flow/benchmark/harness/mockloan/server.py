@@ -1,6 +1,6 @@
 """Threaded static-file server for the MockLoan demo app.
 
-Serves ``openadapt_flow/mockloan/static`` on localhost. No external resources
+Serves ``benchmark/harness/mockloan/static`` on localhost. No external resources
 are referenced by the app, so tests never touch the network beyond localhost.
 """
 

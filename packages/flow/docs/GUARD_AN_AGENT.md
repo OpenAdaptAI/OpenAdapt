@@ -44,7 +44,7 @@ Nothing leaves your computer, and the guard makes no model calls.
      - {method: POST, path: /chart/signin}
    approval: not_gated                      # each_item: a person approves each save
    allow_origins: []                        # optional: other origins the tab may reach
-   write_adapter: openadapt_flow.mockmed.teach_scope:EncounterWrites  # optional
+   write_adapter: myapp.writes:EncounterWrites  # optional: module:Class on your path
    allow_text: [Triage]                     # optional: values a save may carry besides the task's
    teach:                                   # optional: make run 2 a program
      dir: .openadapt-teach

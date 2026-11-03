@@ -1,9 +1,9 @@
 """Guarded-save demo: a fake agent saves a referral to MockMed through the guard.
 
-Run it with ``python -m openadapt_flow.guard_demo``. It starts the MockMed
-fault server on localhost, and for each case a fake agent opens a chart page,
-asks the guard, and posts the referral to MockMed's API the way a
-computer-use agent's click on Save would. The guard reads ``GET /api/db``
+Run it from ``packages/flow`` with ``python -m benchmark.harness.guard_demo``.
+It starts the MockMed fault server on localhost, and for each case a fake
+agent opens a chart page, asks the guard, and posts the referral to MockMed's
+API the way a computer-use agent's click on Save would. The guard reads ``GET /api/db``
 (the system of record) to judge the write. All data is synthetic, nothing
 leaves localhost, and no model is called.
 

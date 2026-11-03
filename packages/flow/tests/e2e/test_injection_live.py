@@ -42,9 +42,9 @@ import pytest
 from openadapt_flow.jit import TaskSignature, WebApp, compile_agent
 from openadapt_flow.jit.adapters import CaptureComputer, UnsupportedAction
 from openadapt_flow.mockmed.fault_server import serve
-from openadapt_flow.mockmed.teach_scope import encounter_scope
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.tutorial import _http_json, _records
+from tests._teach_scope import encounter_scope
 
 LIVE = os.environ.get("OPENADAPT_INJECTION_LIVE") == "1"
 APPROVED_BY = os.environ.get("OPENADAPT_INJECTION_LIVE_APPROVED_BY", "").strip()

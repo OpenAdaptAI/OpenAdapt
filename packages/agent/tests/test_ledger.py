@@ -7,6 +7,8 @@ import json
 import anyio
 import pytest
 
+# The scripted 30-referral simulation is test data; it lives beside this file.
+from ledger_demo import WORKFLOW, SyntheticReferralApp, measure
 from openadapt_flow.agent.bridge import AgentBridge, BridgeError
 from openadapt_flow.agent.cli import main
 from openadapt_flow.agent.ledger import (
@@ -14,7 +16,6 @@ from openadapt_flow.agent.ledger import (
     LEDGER_TOOLS,
     TaskLedger,
 )
-from openadapt_flow.agent.ledger_demo import WORKFLOW, SyntheticReferralApp, measure
 from openadapt_flow.agent.mcp import build_server
 from openadapt_flow.agent.runner import RunnerConfig
 from openadapt_flow.approval_mode.demo_approver import demo_approver, demo_root

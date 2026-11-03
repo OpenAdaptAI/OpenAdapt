@@ -225,7 +225,7 @@ def _note_provenance(sha: str, value: str) -> ProvenanceFile:
 def test_verify_run_refutes_a_faithfully_saved_misread(sor, tmp_path: Path) -> None:
     import requests
 
-    from openadapt_flow.guard_demo import verify_yaml
+    from benchmark.harness.guard_demo import verify_yaml
     from openadapt_flow.provenance import read_sources
     from openadapt_flow.verify_run import (
         capture_baseline,
@@ -288,8 +288,8 @@ def _task_file(tmp_path: Path, note: str) -> Path:
 
 
 def test_the_guard_sends_a_disagreement_to_a_person(sor, tmp_path: Path) -> None:
+    from benchmark.harness.guard_demo import FakeAgent, verify_yaml
     from openadapt_flow.guard import GuardedSave, GuardRefused, load_task
-    from openadapt_flow.guard_demo import FakeAgent, verify_yaml
     from openadapt_flow.verify_run import parse_verify_config
 
     base, _db = sor

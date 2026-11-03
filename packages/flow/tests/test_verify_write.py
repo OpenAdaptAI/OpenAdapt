@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_flow.guard_demo import FakeAgent, verify_yaml
+from benchmark.harness.guard_demo import FakeAgent, verify_yaml
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.verify import (
     BaselineUnreadable,

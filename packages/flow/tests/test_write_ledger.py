@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_flow.guard_demo import FakeAgent, verify_yaml
+from benchmark.harness.guard_demo import FakeAgent, verify_yaml
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.verifier import (
     Actor,
@@ -73,7 +73,7 @@ WORKER = textwrap.dedent(
     """
     import json, os, signal, sys, time
     from pathlib import Path
-    from openadapt_flow.guard_demo import FakeAgent, verify_yaml
+    from benchmark.harness.guard_demo import FakeAgent, verify_yaml
     from openadapt_flow.verifier import (
         Actor, AlreadyWritten, Contract, WriteHeld, begin_write, verify_write,
     )

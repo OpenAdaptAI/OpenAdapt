@@ -44,12 +44,12 @@ from typing import Optional
 
 import requests
 
+from benchmark.harness.mockloan.demo import record_disbursement_demo
+from benchmark.harness.mockloan.fault_server import serve as fault_serve
 from benchmark.lending_fault_model import faults as F
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.compiler import compile_recording
-from openadapt_flow.demo_driver import record_disbursement_demo
 from openadapt_flow.ir import RunReport, Workflow
-from openadapt_flow.mockloan.fault_server import serve as fault_serve
 from openadapt_flow.runtime import Replayer
 
 HERE = Path(__file__).resolve().parent
@@ -261,7 +261,7 @@ def render_markdown(results: list[ClassResult], meta: dict) -> str:
         "The bundled MockLoan app is a client-side SPA with no backend, so an "
         '"authorize" only mutates in-page state - the UI *is* the source of '
         "truth. This study adds a real persistence boundary "
-        "(`openadapt_flow/mockloan/fault_server.py`): a flag-gated `?fault=` "
+        "(`benchmark/harness/mockloan/fault_server.py`): a flag-gated `?fault=` "
         "hook in the app (mirroring the `?drift=` hooks) routes the Authorize "
         "write through a backend API with an isolated SQLite ledger. **With no "
         "`?fault` query the app never calls the API and the normal benchmark "

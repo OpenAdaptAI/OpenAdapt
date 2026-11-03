@@ -83,7 +83,7 @@ from benchmark.harness.effectbench import (
     score_episode,
     summarize,
 )
-from openadapt_flow.mockloan.fault_server import LedgerDB, serve
+from benchmark.harness.mockloan.fault_server import LedgerDB, serve
 
 from .ground_truth import SQLiteGroundTruthVerifier
 

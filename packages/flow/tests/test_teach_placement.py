@@ -45,8 +45,8 @@ from openadapt_flow.ir import (
     Workflow,
 )
 from openadapt_flow.learning.gate import program_regression_gate
+from openadapt_flow.learning.induce import StructuralDiffInducer
 from openadapt_flow.learning.interpreter import program_reproduces
-from openadapt_flow.learning.synth_stream import StructuralDiffInducer
 from openadapt_flow.learning.teach import _choose_guard_fact
 from openadapt_flow.learning.trace import ExecutionTrace, TraceStep
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind

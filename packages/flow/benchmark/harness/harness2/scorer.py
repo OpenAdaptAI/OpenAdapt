@@ -32,8 +32,8 @@ from typing import Any, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from openadapt_flow.integrations.harness2.tasks import GuiTask
-from openadapt_flow.reward.seed import write_bundle
+from benchmark.harness.harness2.tasks import GuiTask
+from openadapt_flow.reward.bundle import write_bundle
 from openadapt_flow.reward.worker import RewardWorker
 
 #: Runtime signals an agent's final report can map to.

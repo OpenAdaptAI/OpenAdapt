@@ -26,6 +26,11 @@ from typing import Callable
 
 import pytest
 
+from benchmark.harness.synth_stream import (
+    Drift,
+    generate_stream,
+    mockmed_base_program,
+)
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -43,12 +48,7 @@ from openadapt_flow.learning import (
     learn_from_traces,
     program_regression_gate,
 )
-from openadapt_flow.learning.synth_stream import (
-    Drift,
-    StructuralDiffInducer,
-    generate_stream,
-    mockmed_base_program,
-)
+from openadapt_flow.learning.induce import StructuralDiffInducer
 
 # -- program builders ---------------------------------------------------------
 

@@ -72,14 +72,14 @@ motivating application.
 | --- | --- | --- | --- |
 | `benchmark/` (27 Python files: `run_benchmark`, `openemr_benchmark`, `openemr_local`, `frappe_lending`, `hybrid_benchmark`, `dom_arm`, `silent_wrong_action`, `desktop_benchmark`, `verify`, `agent_baseline`, `reliability`, `chart_fonts`, `effectbench/`) | Benchmark harnesses shipped in the wheel | Moved to `packages/flow/benchmark/harness/` (import `benchmark.harness.*`). `openadapt-flow benchmark` loads it from a source checkout and says so from a wheel | done |
 | `instrument/` | Competitor-drift harness; imported the benchmark at module load, so it was already broken in a wheel | Moved to `packages/flow/benchmark/harness/instrument/` | done |
-| `integrations/harness2/` | Harness2 research harness on MockMed | Move to `packages/flow/benchmark/harness/harness2/` | planned |
-| `mockloan/`, `demo_driver.record_disbursement_demo` | Lending demo app no product command uses | Move to the benchmark tree | planned |
-| `guard_demo.py`, `agent/ledger_demo.py` | `python -m` demos, no CLI command | Move to the benchmark tree | planned |
-| `mockmed/teach_scope.py` | Used only by tests | Move to `tests/fixtures` | planned |
-| `learning/synth_stream.py:1-245` | MockMed note stream | Split out the generic `StructuralDiffInducer`, then move the stream | planned |
-| `reward/seed.py:1-236` | MockMed reward seed | Split out the generic bundle helpers (`:238-410`), then move the seed behind the demo flag | planned |
+| `integrations/harness2/` | Harness2 research harness on MockMed | Moved to `packages/flow/benchmark/harness/harness2/`; the `harness2` extra is gone (install `[browser]`) | done |
+| `mockloan/`, `demo_driver.record_disbursement_demo` | Lending demo app no product command uses | Moved to `packages/flow/benchmark/harness/mockloan/` (recorder in `mockloan/demo.py`) | done |
+| `guard_demo.py`, `agent/ledger_demo.py` | `python -m` demos, no CLI command | Moved to `packages/flow/benchmark/harness/guard_demo.py` and `packages/agent/tests/ledger_demo.py` | done |
+| `mockmed/teach_scope.py` | Used only by tests | Moved to `packages/flow/tests/_teach_scope.py` | done |
+| `learning/synth_stream.py:1-245` | MockMed note stream | `StructuralDiffInducer` moved to `openadapt_flow/learning/induce.py`; the stream moved to `packages/flow/benchmark/harness/synth_stream.py` | done |
+| `reward/seed.py:1-236` | MockMed reward seed | Bundle helpers split out to `openadapt_flow/reward/bundle.py`. The seed stays: `serve-reward --seed-mockmed` needs it from a wheel | done |
 | `record_check_proof.py:60-124` | `MOCKMED` fixture and `if name == "mockmed"` | Fixtures registered by name from the demo app's own module | planned |
-| `validation/dense_surface.py` | Study harness rendering a MockMed table | Move to `benchmark/dense_surface` | planned |
+| `validation/dense_surface.py` | Study harness rendering a MockMed table | Move to the benchmark tree together with the identity studies that import it (`identity_ladder`, `identity_looks_dense`, `pixel_identity_probe`, `known_ids_dense`) | planned |
 | `__main__.py:5246-5275` (`bench`) | Always replays against MockMed | Accept `--url`, or load from a checkout like `benchmark` | planned |
 | `execute/registry.py`, `execute/service.py`, `execute/app.py`, `execute/dispatch.py:60-108`, `--seed-mockmed` | Demo seeding inside the Execute service | Generic `seed_admissions`; the CLI passes the demo seed | planned |
 | `eligibility/payer_routes.yaml`, `fleet/simulator.py`, `repair/dialog_fixture.py` | Synthetic test data and simulators in the package | Move to the benchmark tree or `tests/fixtures` | planned |

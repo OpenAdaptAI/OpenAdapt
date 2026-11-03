@@ -70,10 +70,10 @@ from openadapt_flow.learning.halt_loop import (
     execution_trace_from_halt,
     promoted_workflow,
 )
+from openadapt_flow.learning.induce import StructuralDiffInducer
 from openadapt_flow.learning.interpreter import program_reproduces
 from openadapt_flow.learning.library import SkillLibrary
 from openadapt_flow.learning.loop import LearnOutcome, RegressionGate, learn_from_traces
-from openadapt_flow.learning.synth_stream import StructuralDiffInducer
 from openadapt_flow.learning.teach import (
     CorrectionSpec,
     TeachError,

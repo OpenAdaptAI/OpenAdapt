@@ -6,7 +6,7 @@ the single source of truth shared by the lending runner
 (``tests/e2e/test_lending_fault_model.py``). It defines:
 
 - the transactional fault classes injected at the persistence boundary
-  (realized by ``openadapt_flow/mockloan/fault_server.py`` + the flag-gated
+  (realized by ``benchmark/harness/mockloan/fault_server.py`` + the flag-gated
   ``?fault=`` hook in ``mockloan/static/app.js``), and
 - ``classify()``, which assigns each replay an outcome judged ONLY by the
   backend ledger (ground truth) and whether the replay halted - never by the

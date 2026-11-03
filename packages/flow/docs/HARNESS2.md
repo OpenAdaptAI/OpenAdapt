@@ -9,7 +9,7 @@ is another model's judgement.
 
 GUI tasks on a system of record do have a scorer. After the agent stops, the
 store either holds the requested record on the requested patient, exactly
-once, or it does not. `openadapt_flow.integrations.harness2` connects the two:
+once, or it does not. `benchmark.harness.harness2` connects the two:
 Harness² supplies the search, and OpenAdapt supplies the task environment,
 the score, and the safety envelope.
 
@@ -100,7 +100,7 @@ read-back of the chosen run.
 Meta-Harness ([arXiv:2603.28052](https://arxiv.org/abs/2603.28052)) gives
 its proposer a filesystem with every earlier candidate's harness, full
 execution traces and scores. In its ablation, full traces beat summaries,
-56.7 to 38.7. `openadapt_flow.integrations.harness2.traces` writes that
+56.7 to 38.7. `benchmark.harness.harness2.traces` writes that
 filesystem for GUI work. `run_task` writes one for every task under
 `<work_dir>/traces`.
 
@@ -143,12 +143,14 @@ rollout. The raw data is committed beside it.
 
 ## Install
 
-Harness² needs Python 3.12 and is not on PyPI. Install it from its
-repository at the commit this integration is written against, beside the
-extra:
+Harness² needs Python 3.12 and is not on PyPI. The integration lives in the
+source checkout, in `packages/flow/benchmark/harness/harness2/`, and is not in
+the `openadapt-flow` wheel. From `packages/flow`, install Flow with the browser
+extra, then Harness² from its repository at the commit this integration is
+written against:
 
 ```bash
-pip install 'openadapt-flow[harness2]'
+pip install -e '.[browser]'
 ```
 
 ```bash
@@ -170,11 +172,11 @@ commit is pinned.
 from pathlib import Path
 
 from harness2.core.spec import ChannelSpec
-from openadapt_flow.integrations.harness2.adapter import OpenAdaptGuiAdapter
-from openadapt_flow.integrations.harness2.agent import ScriptedGuiAgent
-from openadapt_flow.integrations.harness2.proposers import ScriptedProposer
-from openadapt_flow.integrations.harness2.selection import run_task
-from openadapt_flow.integrations.harness2.tasks import mockmed_tasks
+from benchmark.harness.harness2.adapter import OpenAdaptGuiAdapter
+from benchmark.harness.harness2.agent import ScriptedGuiAgent
+from benchmark.harness.harness2.proposers import ScriptedProposer
+from benchmark.harness.harness2.selection import run_task
+from benchmark.harness.harness2.tasks import mockmed_tasks
 
 adapter = OpenAdaptGuiAdapter(
     mockmed_tasks(("lookalike",)), ScriptedGuiAgent(), Path("runs"), evidence="readback"

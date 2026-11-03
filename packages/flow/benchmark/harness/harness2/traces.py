@@ -39,14 +39,14 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 
-from openadapt_flow import privacy
-from openadapt_flow.integrations.harness2.rollout import (
+from benchmark.harness.harness2.rollout import (
     load_run,
     load_score,
     load_steps,
 )
-from openadapt_flow.integrations.harness2.scorer import EpisodeScore
-from openadapt_flow.integrations.harness2.tasks import GuiTask
+from benchmark.harness.harness2.scorer import EpisodeScore
+from benchmark.harness.harness2.tasks import GuiTask
+from openadapt_flow import privacy
 
 SCHEMA = "openadapt.trace-export/v1"
 

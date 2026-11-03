@@ -6,12 +6,12 @@ import json
 
 import pytest
 
+from benchmark.harness.harness2 import traces
+from benchmark.harness.harness2.agent import RULE_IDENTITY, ScriptedGuiAgent
+from benchmark.harness.harness2.apps import MockMedTarget
+from benchmark.harness.harness2.rollout import run_rollout
+from benchmark.harness.harness2.tasks import mockmed_tasks
 from openadapt_flow import privacy
-from openadapt_flow.integrations.harness2 import traces
-from openadapt_flow.integrations.harness2.agent import RULE_IDENTITY, ScriptedGuiAgent
-from openadapt_flow.integrations.harness2.apps import MockMedTarget
-from openadapt_flow.integrations.harness2.rollout import run_rollout
-from openadapt_flow.integrations.harness2.tasks import mockmed_tasks
 
 
 @pytest.fixture(autouse=True)

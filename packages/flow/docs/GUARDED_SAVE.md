@@ -208,8 +208,10 @@ second commit.
 
 ## Try it
 
+From `packages/flow` in a source checkout:
+
 ```bash
-python -m openadapt_flow.guard_demo
+python -m benchmark.harness.guard_demo
 ```
 
 The demo starts MockMed on localhost. A fake agent signs in to the chart

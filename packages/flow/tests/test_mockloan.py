@@ -14,8 +14,8 @@ import pytest
 import requests
 from playwright.sync_api import Browser, Page, sync_playwright
 
-from openadapt_flow.mockloan.fault_server import serve as fault_serve
-from openadapt_flow.mockloan.server import serve
+from benchmark.harness.mockloan.fault_server import serve as fault_serve
+from benchmark.harness.mockloan.server import serve
 
 MEMO = "Funding released per approval, first advance"
 

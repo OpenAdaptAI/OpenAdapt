@@ -8,6 +8,6 @@ animations/transitions) and supports UI-drift modes via ``?drift=`` and
 transactional fault injection via ``?fault=`` (see ``fault_server``).
 """
 
-from openadapt_flow.mockloan.server import serve  # noqa: F401
+from benchmark.harness.mockloan.server import serve  # noqa: F401
 
 __all__ = ["serve"]
