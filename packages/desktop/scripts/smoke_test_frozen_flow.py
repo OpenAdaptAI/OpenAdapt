@@ -668,6 +668,7 @@ def main() -> int:
                 *flow,
                 "replay",
                 str(root / "bundle"),
+                "--demo-app",
                 "--run-dir",
                 str(root / "run"),
             ],

@@ -125,8 +125,8 @@ openadapt-flow compile rec --out bundle --name my-task   # compile it
 openadapt-flow lint bundle                               # expected: finds demo gaps
 openadapt-flow certify bundle --policy permissive        # smoke-policy pass
 openadapt-flow certify bundle --policy clinical-write    # expected: strict refusal
-openadapt-flow replay bundle                             # replay: local, $0
-openadapt-flow replay bundle --drift theme \
+openadapt-flow replay bundle --demo-app                  # replay: local, $0
+openadapt-flow replay bundle --demo-app --drift theme \
   --save-healed-to healed                                # deterministic repair
 openadapt-flow visualize bundle -o graph.html            # see what compiled
 ```

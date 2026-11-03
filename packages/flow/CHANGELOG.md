@@ -25,6 +25,8 @@
 
 ### Fixes
 
+- No command falls back to the demo app on its own. `replay` needs a target: `--url`, `backend.url` in `--config`, or `--demo-app` to serve the bundled MockMed (the tutorial and quickstart commands pass it; `--drift` needs it). The variant router's first-screen probe captures nothing without a URL. `qualify accept`'s break-it check no longer runs every workflow's oracle against MockMed: it builds the lie from the workflow itself (a store that did not change, and a screen showing the workflow's own success text and every value the run typed). The reference Execute worker refuses, before running anything, an admission whose `target_url` it cannot drive, instead of resetting and reading that app as if it were the demo.
+
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
 - Self-repair can take a stop where the app's own dialog covers the next step's identity band: when the backend proves the covering window belongs to the window the last verified step was in, and the part of the band read still matches the record, the dialog is dismissed after the previous click and the step re-checks its identity in full. Another record behind the dialog stays an identity halt. The runtime lets a backend remember a verified record's window (`record_verified_window`); macOS answers `owned_window_over` from the window's proved sheet ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).

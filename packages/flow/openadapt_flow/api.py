@@ -78,16 +78,20 @@ def replay(
     *,
     params: Optional[Mapping[str, str]] = None,
     run_dir: str | Path = "run",
+    demo_app: bool = False,
 ) -> RunReport:
     """Rehearse ``bundle`` against ``url`` and return the run report.
 
-    Without ``url`` it serves the bundled MockMed demo app, as the CLI does.
+    ``demo_app=True`` (and no ``url``) serves the bundled demo app instead, as
+    ``--demo-app`` does on the CLI. With neither, the replay is refused.
 
     A halted run is not an exception: check ``report.transaction_outcome``.
     """
     argv = ["replay", str(bundle), "--run-dir", str(run_dir)]
     if url:
         argv += ["--url", url]
+    if demo_app:
+        argv.append("--demo-app")
     for key, value in (params or {}).items():
         argv += ["--param", f"{key}={value}"]
     from openadapt_flow.__main__ import main

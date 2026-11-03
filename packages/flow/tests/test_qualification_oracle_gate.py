@@ -255,3 +255,56 @@ def test_proposer_sketches_are_flagged_and_still_gated(tmp_path: Path) -> None:
     assert accepted.status == "accepted"
     # The sketch is not the pin. The structural SoR effect still is.
     assert accepted.pin("effect")["payload"]["effects"][0]["kind"] == "field_equals"
+
+
+def _loan_workflow(effects: list[Effect]) -> Workflow:
+    """A Frappe-Lending-shaped write: nothing in it is MockMed's."""
+    return Workflow(
+        name="loan-application",
+        params={"applicant": "Synthetic Applicant", "loan_amount": "125000"},
+        steps=[_step(effects)],
+    )
+
+
+def test_break_it_on_another_apps_record_read_refutes() -> None:
+    """A record read for another app's write catches the unchanged store."""
+    gate = evaluate_oracle_gate(
+        _loan_workflow(
+            [
+                Effect(
+                    kind=EffectKind.RECORD_WRITTEN,
+                    match={
+                        "applicant": ValueExpr(param="applicant"),
+                        "loan_amount": ValueExpr(param="loan_amount"),
+                    },
+                    expected_count=1,
+                    risk="irreversible",
+                )
+            ]
+        )
+    )
+    assert gate.fixture == "unchanged_store"
+    assert gate.break_it_executed and gate.store_unchanged
+    assert gate.break_it_verdicts[0]["verdict"] == "refuted"
+    assert BROKEN_CASE_ACCEPTED not in (gate.halt_reason or "")
+
+
+def test_break_it_fools_another_apps_screen_read() -> None:
+    """A screen read for another app's success text is accepted by the lie."""
+    gate = evaluate_oracle_gate(
+        _loan_workflow(
+            [
+                Effect(
+                    kind=EffectKind.FIELD_EQUALS,
+                    value="Loan Application saved",
+                    readback=ReadbackSpec(
+                        region=(10, 10, 40, 20), different_path=False
+                    ),
+                    risk="irreversible",
+                )
+            ]
+        )
+    )
+    assert gate.break_it_verdicts[0]["verdict"] == "confirmed"
+    assert BROKEN_CASE_ACCEPTED in (gate.halt_reason or "")
+    assert not gate.passed

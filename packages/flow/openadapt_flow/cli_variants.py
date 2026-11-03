@@ -128,8 +128,8 @@ def first_screen_probe(
     ``--first-screen PNG`` wins. Otherwise the probe reads one frame through
     the same backend selection ``run`` uses: the attached signed-in browser
     tab, the native or remote-display window, or a freshly launched browser
-    at ``--url`` (the bundled MockMed app when no URL is given). It only
-    reads; it never clicks or types.
+    at ``--url``. With no target it captures nothing. It only reads; it
+    never clicks or types.
     """
 
     def capture() -> Optional[bytes]:
@@ -148,7 +148,6 @@ def first_screen_probe(
             _attached_web_page,
             _deployment_sections,
             _resolve_backend_config,
-            _with_drift,
         )
         from openadapt_flow.admitted_composition import resolve_pointer
         from openadapt_flow.backends.factory import _normalize_kind, build_backend
@@ -172,15 +171,7 @@ def first_screen_probe(
             with _attached_web_page(backend_cfg, url=url, workflow=workflow) as page:
                 return build_backend(backend_cfg, page=page).screenshot()
         if url is None:
-            from openadapt_flow.mockmed.server import serve
-
-            served, stop = serve(port=0)
-            try:
-                return _launched_web_screen(
-                    _with_drift(served, getattr(args, "drift", None))
-                )
-            finally:
-                stop()
+            return None
         return _launched_web_screen(url)
 
     return capture
