@@ -19,6 +19,7 @@ from collections.abc import Iterator
 import pytest
 import requests
 
+from openadapt_flow.backend import StructuralResolutionRefused
 from openadapt_flow.backends.win_agent import AgentConfig, create_server
 from openadapt_flow.backends.win_agent.server import (
     AgentRequestError,
@@ -586,6 +587,67 @@ def test_agent_hashes_the_executable_file_and_notices_a_change(tmp_path) -> None
     second = server._image_file_digest(str(image))
     assert second == "sha256:" + hashlib.sha256(b"second build, longer").hexdigest()
     assert server._image_file_digest(str(tmp_path / "missing.exe")) is None
+
+
+def test_agent_rehashes_a_same_size_file_replaced_with_the_old_times(tmp_path) -> None:
+    import os
+
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"build-A")
+    first = server._image_file_digest(str(image))
+    stat = image.stat()
+    staged = tmp_path / "staged.exe"
+    staged.write_bytes(b"build-B")
+    os.replace(staged, image)
+    os.utime(image, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    second = server._image_file_digest(str(image))
+    assert second == "sha256:" + hashlib.sha256(b"build-B").hexdigest()
+    assert second != first
+
+
+def test_agent_refuses_a_file_changed_after_the_process_started(
+    tmp_path, monkeypatch
+) -> None:
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"running build")
+    changed = max(image.stat().st_mtime_ns, image.stat().st_ctime_ns)
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: changed + 1)
+    assert server._running_image_digest(42, str(image)) is not None
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: changed - 1)
+    assert server._running_image_digest(42, str(image)) is None
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: None)
+    assert server._running_image_digest(42, str(image)) is None
+
+
+def test_guarded_input_binds_the_executable_digest_and_environment() -> None:
+    from openadapt_flow.backends import WindowsBackend
+
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0),
+        context_fn=lambda: {"status": "ok", **state, "workflow_state": None},
+    )
+    try:
+        backend = WindowsBackend(agent.url)
+        context = backend._guard_context()
+        assert context["application_version"] == "sha256:" + "c" * 64
+        assert context["environment"] == "e" * 64
+        state["application_version"] = "not-a-digest"
+        with pytest.raises(StructuralResolutionRefused):
+            backend._guard_context()
+        del state["application_version"], state["environment"]
+        assert "application_version" not in backend._guard_context()
+    finally:
+        agent.close()
 
 
 def test_agent_advertises_the_environment_context() -> None:

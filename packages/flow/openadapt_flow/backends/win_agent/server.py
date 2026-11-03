@@ -1979,6 +1979,51 @@ def _active_console_session() -> int:
         return -1
 
 
+def _session_is_active(session_id: int) -> bool:
+    """True when this Windows session has a live display and input.
+
+    That is the console session, or a remote (RDP, Citrix) session that is
+    connected. A disconnected session draws nothing and takes no input.
+    """
+
+    if session_id == _active_console_session():
+        return True
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return False
+        wtsapi32 = win_dll("wtsapi32", use_last_error=True)
+        wtsapi32.WTSQuerySessionInformationW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        wtsapi32.WTSQuerySessionInformationW.restype = wintypes.BOOL
+        wtsapi32.WTSFreeMemory.argtypes = [ctypes.c_void_p]
+        wtsapi32.WTSFreeMemory.restype = None
+        buffer = ctypes.c_void_p()
+        size = wintypes.DWORD()
+        # WTSConnectState (8) of this server's (0) session.
+        if not wtsapi32.WTSQuerySessionInformationW(
+            None, session_id, 8, ctypes.byref(buffer), ctypes.byref(size)
+        ):
+            return False
+        try:
+            if size.value < ctypes.sizeof(ctypes.c_int) or not buffer.value:
+                return False
+            state = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_int)).contents.value
+        finally:
+            wtsapi32.WTSFreeMemory(buffer)
+        return int(state) == 0  # WTSActive
+    except Exception:  # noqa: BLE001 - unavailable means not active
+        return False
+
+
 def _bounded_application_identifier(name: str) -> Optional[str]:
     """Canonicalize one executable basename into the public context-id syntax."""
 
@@ -2051,37 +2096,106 @@ def _process_image_identifier(pid: int) -> Optional[str]:
     return _bounded_application_identifier(path) if path else None
 
 
-#: (path, size, mtime_ns) -> sha256 of the executable's bytes. An executable
-#: rarely changes while the agent runs, and hashing a large one on every
-#: observation would sit between resolution and input.
-_IMAGE_DIGESTS: dict[tuple[str, int, int], str] = {}
+#: File identity -> sha256 of the executable's bytes. The key holds the path,
+#: size, modification and change times and the NTFS file id, so a file
+#: replaced in place or by rename is hashed again. An executable rarely
+#: changes while the agent runs, and hashing a large one on every observation
+#: would sit between resolution and input.
+_IMAGE_DIGESTS: dict[tuple[str, int, int, int, int], str] = {}
+_IMAGE_DIGEST_CACHE_SIZE = 8
 _IMAGE_DIGEST_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+
+def _file_key(path: str) -> tuple[str, int, int, int, int]:
+    stat = os.stat(path)
+    return (
+        os.path.normcase(path),
+        int(stat.st_size),
+        int(stat.st_mtime_ns),
+        int(stat.st_ctime_ns),
+        int(stat.st_ino),
+    )
 
 
 def _image_file_digest(path: str) -> Optional[str]:
     """``sha256:<hex>`` of one executable file's bytes, or None."""
 
     try:
-        stat = os.stat(path)
-        key = (os.path.normcase(path), int(stat.st_size), int(stat.st_mtime_ns))
-        cached = _IMAGE_DIGESTS.get(key)
-        if cached is not None:
-            return cached
-        if stat.st_size > _IMAGE_DIGEST_MAX_BYTES:
-            return None
-        digest = hashlib.sha256()
-        with open(path, "rb") as image:
-            for chunk in iter(lambda: image.read(1024 * 1024), b""):
-                digest.update(chunk)
-        after = os.stat(path)
-        if (int(after.st_size), int(after.st_mtime_ns)) != key[1:]:
-            return None
-        value = f"sha256:{digest.hexdigest()}"
-        _IMAGE_DIGESTS.clear()
-        _IMAGE_DIGESTS[key] = value
-        return value
+        key = _file_key(path)
+        cached = _IMAGE_DIGESTS.pop(key, None)
+        if cached is None:
+            if key[1] > _IMAGE_DIGEST_MAX_BYTES:
+                return None
+            digest = hashlib.sha256()
+            with open(path, "rb") as image:
+                for chunk in iter(lambda: image.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if _file_key(path) != key:
+                return None
+            cached = f"sha256:{digest.hexdigest()}"
+        _IMAGE_DIGESTS[key] = cached
+        while len(_IMAGE_DIGESTS) > _IMAGE_DIGEST_CACHE_SIZE:
+            del _IMAGE_DIGESTS[next(iter(_IMAGE_DIGESTS))]
+        return cached
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
+
+
+def _process_start_ns(pid: int) -> Optional[int]:
+    """When one live process started, in Unix nanoseconds, or None."""
+
+    if os.name != "nt" or pid <= 0:
+        return None
+    try:
+        import ctypes  # noqa: PLC0415
+        from ctypes import wintypes  # noqa: PLC0415
+
+        win_dll = getattr(ctypes, "WinDLL", None)
+        if win_dll is None:
+            return None
+        kernel32 = win_dll("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [
+            ctypes.POINTER(wintypes.FILETIME)
+        ] * 4
+        kernel32.GetProcessTimes.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        process = kernel32.OpenProcess(0x1000, False, pid)
+        if not process:
+            return None
+        try:
+            times = [wintypes.FILETIME() for _ in range(4)]
+            if not kernel32.GetProcessTimes(process, *(ctypes.byref(t) for t in times)):
+                return None
+        finally:
+            kernel32.CloseHandle(process)
+        created = (int(times[0].dwHighDateTime) << 32) | int(times[0].dwLowDateTime)
+        # FILETIME counts 100 ns ticks from 1601-01-01.
+        return (created - 116444736000000000) * 100
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _running_image_digest(pid: int, path: str) -> Optional[str]:
+    """The digest of ``path`` only if it is still the file the process loaded.
+
+    An updater that replaces an executable while it runs leaves the old code
+    in memory and a new file on disk. A file changed after the process
+    started is therefore not evidence for the running code, and yields None.
+    """
+
+    started = _process_start_ns(pid)
+    if started is None:
+        return None
+    try:
+        key = _file_key(path)
+    except OSError:
+        return None
+    if max(key[2], key[3]) > started:
+        return None
+    return _image_file_digest(path)
 
 
 def _foreground_process_id() -> Optional[int]:
@@ -2129,7 +2243,10 @@ def _foreground_application_image() -> tuple[Optional[str], Optional[str]]:
     """The foreground executable's basename identity and its file digest.
 
     Both come from the same process image path, so the version can never
-    describe a different program than the identity.
+    describe a different program than the identity. The digest covers that
+    executable file only: for an app run by a shared host (a script
+    interpreter, a browser, a runtime that loads the app's own libraries) it
+    pins the host, not the app's code.
     """
 
     pid = _foreground_process_id()
@@ -2139,7 +2256,8 @@ def _foreground_application_image() -> tuple[Optional[str], Optional[str]]:
     identity = _bounded_application_identifier(path)
     if identity is None:
         return None, None
-    return identity, _image_file_digest(path)
+    assert pid is not None
+    return identity, _running_image_digest(pid, path)
 
 
 def _native_session_digest() -> Optional[str]:
@@ -2203,7 +2321,7 @@ def _native_session_digest() -> Optional[str]:
         session_id = wintypes.DWORD()
         if not kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session_id)):
             return None
-        if int(session_id.value) != _active_console_session():
+        if not _session_is_active(int(session_id.value)):
             return None
 
         token = wintypes.HANDLE()

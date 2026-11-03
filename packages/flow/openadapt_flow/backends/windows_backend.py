@@ -588,11 +588,27 @@ class WindowsBackend:
             raise StructuralResolutionRefused(
                 "Windows workflow-state context is invalid for guarded input"
             )
-        return {
+        context = {
             "application": application,
             "session": session,
             "workflow_state": workflow_state,
         }
+        # An agent with ``context_environment_v1`` also binds the executable's
+        # digest and the environment, so a same-named program from another
+        # path cannot take the foreground between the check and the input.
+        for key, pattern in (
+            ("application_version", _IMAGE_DIGEST_RE),
+            ("environment", _SESSION_ID_RE),
+        ):
+            value = payload.get(key)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not pattern.fullmatch(value):
+                raise StructuralResolutionRefused(
+                    f"Windows {key} context is invalid for guarded input"
+                )
+            context[key] = value
+        return context
 
     def application_identity(self) -> Optional[str]:
         """Return the live foreground process id, never its window title."""
@@ -619,8 +635,10 @@ class WindowsBackend:
 
         The agent reads all four in one ``/context/identity`` call: the
         foreground executable's basename, the SHA-256 of that same
-        executable file, the live logon-session digest, and a digest of the
-        machine id and OS build. Any missing or malformed value (an older
+        executable file (the host executable: for a script, browser or
+        runtime-hosted app it does not cover the app's own code), the live
+        logon-session digest, and a digest of the machine id and exact OS
+        build, so an OS update requires a new qualification. Any missing or malformed value (an older
         agent without ``context_environment_v1``, a desktop with no
         foreground window) returns None, and a qualification case refuses.
         """
