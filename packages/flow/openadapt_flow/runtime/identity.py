@@ -1091,12 +1091,21 @@ def _match_tokens(
         elif _suspicious_pair(expected_raw, observed_raw):
             suspect_evidence[i] = True
 
-    # single-token equivalence (mark every equivalent observed copy)
+    # single-token equivalence (mark every equivalent observed copy). A
+    # digit-bearing recorded token takes ONE observed copy of its own: a
+    # second copy of the recorded value elsewhere in the band ("15 patients
+    # found") must not stand in for a sibling's differing id.
+    digit_used: set[int] = set()
     for i, ec in enumerate(exp_c):
+        digit = _has_digit(exp[i])
         for j, oc in enumerate(obs_c):
-            if ec == oc:
-                mark(i, exp[i], obs[j])
-                explained[j] = True
+            if ec != oc or (digit and j in digit_used):
+                continue
+            mark(i, exp[i], obs[j])
+            explained[j] = True
+            if digit:
+                digit_used.add(j)
+                break
 
     # split: consecutive recorded tokens -> one observed token
     for i in range(len(exp)):
@@ -1104,6 +1113,8 @@ def _match_tokens(
             if i + size > len(exp):
                 break
             if all(matched[i : i + size]):
+                continue
+            if _glues_digits(exp[i : i + size]):
                 continue
             concat_raw = "".join(exp[i : i + size])
             concat_c = ocr_canonical(concat_raw)
@@ -1139,6 +1150,8 @@ def _match_tokens(
             for size in (2, 3, 4):
                 if j + size > len(obs):
                     break
+                if _glues_digits(obs[j : j + size]):
+                    continue
                 concat_raw = "".join(obs[j : j + size])
                 if ocr_canonical(concat_raw) == exp_c[i]:
                     mark(i, token, concat_raw)
@@ -1268,6 +1281,15 @@ def _contradicted(
             if not matched[i]:
                 contradicted[i] = True
     return contradicted
+
+
+def _glues_digits(fragments: list[str]) -> bool:
+    """Whether joining ``fragments`` would glue two digit-bearing tokens:
+    "15" + "47" is not OCR's reading of "1547" but two values, and a record
+    whose id is 1547 must not match them (nor the reverse)."""
+    return any(
+        _has_digit(a) and _has_digit(b) for a, b in zip(fragments, fragments[1:])
+    )
 
 
 def _digit_token_absent(exp: list[str], matched: list[bool]) -> bool:
@@ -1450,7 +1472,11 @@ def _token_belongs_to(token: str, value_squashed: str) -> bool:
     """Whether a band token is (part of) a parameter's demonstrated value."""
     if not token or not value_squashed:
         return False
-    if token in value_squashed or value_squashed in token:
+    if value_squashed in token:
+        return True
+    if token in value_squashed and not _has_digit(token):
+        # A digit token is never dropped for being INSIDE the value: "15"
+        # (a PatNum) sits inside "20150101" (a date) and is its own field.
         return True
     ratio = difflib.SequenceMatcher(None, token, value_squashed, autojunk=False).ratio()
     # Same-token-with-OCR-jitter question ("Phi1" ~ "Phil"): the token

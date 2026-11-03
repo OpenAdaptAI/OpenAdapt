@@ -67,6 +67,15 @@ WRONG_RECORDS = [
     ),
     # The recorded id dropped and another digit token in its place.
     (f"Smith John 15 {LABEL}", f"Smith John {LABEL} 16"),
+    # Review blocker 1: a second copy of the recorded value elsewhere in the
+    # band must not stand in for the sibling's differing id.
+    ("Smith John 15 47 15 patients found", "Smith John 16 47 15 patients found"),
+    ("Smith John 15 47 Page 1 of 15", "Smith John 16 47 Page 1 of 15"),
+    ("Smith John 3 47 Select 1 of 3 boxes", "Smith John 4 47 Select 1 of 3 boxes"),
+    (f"Smith John 15 15 {LABEL}", f"Smith John 16 15 {LABEL}"),
+    # Review should-fix: two values read glued are not one id.
+    ("Smith John 15 47 Active", "Smith John 1547 Active"),
+    ("Smith John 1547 Active", "Smith John 15 47 Active"),
 ]
 
 
@@ -111,3 +120,22 @@ def test_the_digit_contradiction_is_charged_not_the_run_cap() -> None:
 )
 def test_the_true_row_still_verifies(recorded: str, observed: str) -> None:
     assert _statuses(recorded, observed) == ("verified", "verified")
+
+
+def test_param_mode_keeps_a_short_id_inside_the_example_value() -> None:
+    # Review blocker 2: "15" sits inside the date example "20150101"; the
+    # substring test dropped it from the band before matching.
+    recorded = "Smith John 15 47 2015-0l-01 Hint"
+    observed = "Smith John 16 47 2016-01-01 Hint"
+    kwargs = {"params": {"dob": "2016-01-01"}, "param_examples": {"dob": "2015-01-01"}}
+    plain = I.verify_target_identity(recorded, observed, **kwargs)
+    tmpl = build_identity_template(recorded, param_examples=kwargs["param_examples"])
+    assert tmpl is not None
+    hashed = verify_template_identity(tmpl, observed, **kwargs)
+    assert plain.status != "verified"
+    assert hashed.status != "verified"
+
+
+def test_a_repeated_value_still_verifies_the_true_row() -> None:
+    band = f"Smith John 25 25 {LABEL} 25 patients found"
+    assert _statuses(band, band) == ("verified", "verified")

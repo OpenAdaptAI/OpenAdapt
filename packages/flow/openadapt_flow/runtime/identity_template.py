@@ -298,6 +298,8 @@ def build_identity_template(
             for size in (2, 3, 4):
                 if i + size > len(squashed_tokens):
                     break
+                if _id._glues_digits(squashed_tokens[i : i + size]):
+                    continue
                 concat_raw = "".join(squashed_tokens[i : i + size])
                 concat_c = _id.ocr_canonical(concat_raw)
                 if len(concat_c) < _id.MIN_BLOCK:
@@ -438,12 +440,18 @@ def _match_tokens_template(
         ):
             suspect_evidence[i] = True
 
-    # single-token equivalence
+    # single-token equivalence; a digit-bearing recorded token takes one
+    # observed copy of its own (parity with identity._match_tokens).
+    digit_used: set[int] = set()
     for i, t in enumerate(toks):
         for j in range(no):
-            if t.c == obs_c[j]:
-                mark(i, obs_r[j], obs[j])
-                explained[j] = True
+            if t.c != obs_c[j] or (t.digit and j in digit_used):
+                continue
+            mark(i, obs_r[j], obs[j])
+            explained[j] = True
+            if t.digit:
+                digit_used.add(j)
+                break
 
     # split: consecutive recorded tokens -> one observed token
     for ct in tmpl.concats:
@@ -469,6 +477,8 @@ def _match_tokens_template(
             for size in (2, 3, 4):
                 if j + size > no:
                     break
+                if _id._glues_digits(obs[j : j + size]):
+                    continue
                 concat_raw = "".join(obs[j : j + size])
                 if canon(concat_raw) == t.c:
                     mark(i, raw(concat_raw), concat_raw)
