@@ -6,8 +6,8 @@ Audited 2026-11-03 on `main` at `213f3d9fe`. Scope: everything under
 The rule: the engine has no code written for one application. What one
 application needs lives in data (`app_profiles/*.yaml`, generated contracts,
 deployment configs) or in test fixtures and benchmark harnesses outside the
-shipped package. `scripts/check_engine_generality.py` enforces it in CI; see
-[CONTRIBUTING.md](../CONTRIBUTING.md#app-knowledge-lives-in-data).
+shipped package. A CI check (`scripts/check_engine_generality.py`) keeps it
+that way; [CONTRIBUTING.md](../CONTRIBUTING.md) states the rule.
 
 ## Method
 
