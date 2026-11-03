@@ -19,6 +19,8 @@
 
 ### Features
 
+- A teach authorization's forbidden controls are read from Chromium's accessibility tree, not by a script in the page, and every key (Enter, Space, any key, typing) is checked against the control that has focus when it arrives, so a forbidden control reached by Tab is refused like a click.
+
 - Browser teach writes again, bound to a person's signed teach authorization (`serve --teach-browser --teach-authorization`). Run 1 of a write starts only when the statement covers it: the app's origin, the contract as its record kind, a write adapter, run 1's inputs, and exactly the record fields the contract checks, with run 1's values. During run 1 the write adapter reads every write before it is sent. A taught tool keeps the statement and is signed with the local admission key; every call checks the statement again (signature, roster, purpose, task, expiry). The example app ships its write adapter (`openadapt_flow.agent.example_app:OrderWrites`). Docs: `docs/TEACH_AUTHORIZATION.md`, `docs/VERIFY_WRITES.md`.
 
 - Teach authorizations (`openadapt.teach-authorization/v1`). A person signs, with an approver key on the signed approver roster, what an agent may do when it teaches or repairs a program: the task, origins, inputs, the one write and forbidden actions and controls. `openadapt-flow teach-authorization create|sign|verify`; `--teach-authorization` on `compile-agent` and `openadapt-agent serve --teach`. Design and the upgrade notes: `docs/TEACH_AUTHORIZATION.md`.
@@ -121,7 +123,7 @@ A person's approval counts only when a registered approver key signed it, and th
 - Under `problems_only`, problems with an item's own input leave the switch on and send that item to a person; program and environment problems turn it off, and a person re-arms it with one signed tap ([#1517](https://github.com/OpenAdaptAI/OpenAdapt/pull/1517)).
 - Look-alike rows are counted on Windows, macOS, Linux and pixel-only surfaces, so a step that picks a row halts when it cannot tell the target from its twin ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504), [#1518](https://github.com/OpenAdaptAI/OpenAdapt/pull/1518), [#1557](https://github.com/OpenAdaptAI/OpenAdapt/pull/1557)).
 - `openadapt-agent serve --teach-browser` lets a coding agent turn a read-only browser task into a named tool it calls again with new values; `openadapt setup` registers it with Claude Code, Cursor, Codex and Gemini CLI ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)).
-- `induce --held-out` scores each held-out item by running it and checking the record independently ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
+- `openadapt_flow.validation.behavioral_generalization` scores each held-out item by running it and checking the record independently. `induce --held-out` prints structural trace coverage ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
 
 ### Fixes
 

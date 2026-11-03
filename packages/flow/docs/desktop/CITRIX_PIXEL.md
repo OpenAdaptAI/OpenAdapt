@@ -48,8 +48,8 @@ counted real Workspace multi-monitor result.
 (Quartz), and `openadapt_flow/backends/win32_window_client.py` provides the
 Windows-host client for the same backend (PrintWindow/BitBlt client-area
 capture, SendInput injection, per-monitor-v2 DPI, UIPI refusal). The win32
-client is mock-contract-tested only — no counted batch on a real Windows host
-exists yet (`claims/win32-window-replay-roadmap.yaml`). The backend
+client drove the stock Remote Desktop client on a real Windows Server 2022
+host in [`benchmark/rdp_avc_real`](../../benchmark/rdp_avc_real/README.md). The backend
 deliberately remains small: target uniqueness, identity, policy,
 postconditions, independent effects, retries, repair, and audit belong to the
 OpenAdapt runtime rather than the display driver.

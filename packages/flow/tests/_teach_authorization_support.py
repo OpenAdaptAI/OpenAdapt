@@ -214,6 +214,7 @@ def order_spec(
     identity: Sequence[str] = ("customer",),
     record_kind: str = "order",
     write_adapter: Optional[str] = ORDER_ADAPTER,
+    expected_rows: int = 1,
 ) -> dict[str, Any]:
     """What a person signs to let an agent teach the order write ``name``."""
 
@@ -224,6 +225,7 @@ def order_spec(
         "identity": {k: {"value": values[k]} for k in identity},
         "fields": {k: {"value": v} for k, v in values.items() if k not in identity},
         "allowed_write_paths": ["/login"],
+        "expected_rows": expected_rows,
     }
     if write_adapter is not None:
         writes["write_adapter"] = write_adapter
@@ -248,5 +250,14 @@ def order_authority(
 
     folder = Path(folder)
     person = signer or LocalAuthorizer(folder / "approvers", "clinic-lead")
+    admission_key(person.key_dir)
     statement = person.issue(folder / "statement", order_spec(base_url, values, **kw))
     return person.authority(statement)
+
+
+def admission_key(key_dir: Path) -> None:
+    """The local admission key an operator sets up in the key directory."""
+
+    from openadapt_flow.execute.keys import load_or_create_private_key
+
+    load_or_create_private_key(Path(key_dir))

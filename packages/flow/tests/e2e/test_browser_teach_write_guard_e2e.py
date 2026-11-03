@@ -67,6 +67,12 @@ class _App:
                       .addEventListener('submit', (e) => { const h = document.createElement('input');
                       h.type='hidden'; h.name='discount'; h.value='100'; e.target.appendChild(h); });
                       </script>"""
+                if app.mode == "rewrite":
+                    # Page script swaps the customer as the form is sent.
+                    extra = """<script>document.querySelector('form[action="/orders"]')
+                      .addEventListener('submit', (e) => {
+                      e.target.querySelector('[name=customer]').value = 'Mallory'; });
+                      </script>"""
                 if app.mode == "second_write":
                     extra = """<script>document.querySelector('form[action="/orders"]')
                       .addEventListener('submit', () => { fetch('/orders', {method: 'POST',
@@ -296,3 +302,30 @@ def test_a_taught_write_sends_only_what_it_was_taught(
     if mode == "extra_field":
         assert "Cedar" not in customers  # the changed save was stopped
     _assert_no_password(seen)
+
+
+def test_run_1_sends_no_write_the_authorization_does_not_cover(
+    bridge: BrowserTeachBridge, app: _App
+) -> None:
+    """The authorization's write adapter reads run 1's save in the browser."""
+
+    app.mode = "rewrite"
+    page, seen = _start(bridge, app)
+    page = bridge.dispatch(
+        "teach_act",
+        {"action": "type", "ref": _ref(page, "Customer"), "input": "customer"},
+    )["page"]
+    with pytest.raises(BridgeError, match="outside the signed teach authorization"):
+        bridge.dispatch(
+            "teach_act", {"action": "click", "ref": _ref(page, "Save order")}
+        )
+    assert app.orders == []  # Mallory's order never left the browser
+    _assert_no_password(seen)
+
+
+def test_run_1_presses_no_character_keys(bridge: BrowserTeachBridge, app: _App) -> None:
+    page, _seen = _start(bridge, app)
+    with pytest.raises(BridgeError, match="press takes only"):
+        bridge.dispatch(
+            "teach_act", {"action": "press", "ref": _ref(page, "Customer"), "key": "M"}
+        )

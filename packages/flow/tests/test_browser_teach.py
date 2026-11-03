@@ -490,9 +490,10 @@ def _taught_tool(tmp_path: Path, person: Any = None, **issue: Any) -> tuple:
     """A sealed write tool on disk, as teach_finish leaves it."""
 
     from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
-    from tests._teach_authorization_support import order_spec
+    from tests._teach_authorization_support import admission_key, order_spec
 
     person = person or LocalAuthorizer(tmp_path / "approvers", "clinic-lead")
+    admission_key(person.key_dir)
     statement = person.issue(tmp_path / "statement", order_spec(APP, ORDER), **issue)
     authority = person.authority(statement)
     bridge = _bridge(tmp_path, authority)
@@ -565,3 +566,140 @@ def test_a_taught_tool_with_a_swapped_statement_does_not_run(tmp_path: Path) -> 
     for name in (ta.STATEMENT_FILE, ta.SIGNATURE_FILE):
         (kept / name).write_bytes(other.with_name(name).read_bytes())
     assert "teach_auth_digest_mismatch" in bridge._write_refusal(program)
+
+
+def test_the_record_key_is_pinned_even_when_signed_as_a_field() -> None:
+    """A statement may list the record's key under fields; it still binds it."""
+
+    from openadapt_flow.agent.example_app import OrderWrites
+    from openadapt_flow.teach_scope import TeachScope
+
+    scope = TeachScope(
+        task_id="taught.add_order",
+        origins=(APP,),
+        record={"product": "Desk lamp"},
+        fields={"customer": "Acme Ltd", "units": "3"},
+        write_adapter=OrderWrites(),
+    )
+    url = f"{APP}/orders"
+    good = b"customer=Acme+Ltd&product=Desk+lamp&units=3"
+    evil = b"customer=Evil+Corp&product=Desk+lamp&units=3"
+    assert scope.request_refusal("POST", url, good) is None
+    assert scope.request_refusal("POST", url, evil) == "write_wrong_record"
+
+
+def test_a_statement_the_lane_cannot_hold_run_1_to_refuses(tmp_path: Path) -> None:
+    from datetime import timedelta
+
+    from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
+    from tests._teach_authorization_support import order_authority, order_spec
+
+    person = LocalAuthorizer(tmp_path / "approvers", "clinic-lead")
+    long = person.issue(
+        tmp_path / "long", order_spec(APP, ORDER), valid_for=timedelta(days=200)
+    )
+    with pytest.raises(BridgeError, match="more than 90 days"):
+        _teach(_bridge(tmp_path / "b1", person.authority(long)))
+    rows = order_authority(tmp_path / "rows", APP, ORDER, expected_rows=2)
+    with pytest.raises(BridgeError, match="allows 2 rows"):
+        _teach(_bridge(tmp_path / "b2", rows))
+    # A pin whose key directory would come from the environment.
+    from openadapt_flow import teach_authorization as ta
+
+    unpinned = ta.TeachAuthority(rows.statement, approver_root=person.root)
+    _refused(_bridge(tmp_path / "b3", unpinned), "teach_auth_identity_unverified")
+
+
+def test_coverage_maps_literal_matches_and_refuses_other_checks() -> None:
+    from openadapt_flow.agent.example_app import OrderWrites
+    from openadapt_flow.teach_scope import TeachScope
+    from openadapt_flow.verify import WriteContract
+
+    def contract(effect: dict) -> Any:
+        return WriteContract.from_dict(
+            {
+                "schema_version": "openadapt.verify/v1",
+                "writes": ["POST /orders"],
+                "verifier": {
+                    "kind": "rest",
+                    "base_url": APP,
+                    "records_path": "/api/orders",
+                    "records_key": "records",
+                },
+                "effects": [effect],
+            },
+            name="order",
+        )
+
+    scope = TeachScope(
+        task_id="taught.add_order",
+        origins=(APP,),
+        record={"customer": "Acme Ltd"},
+        fields={"product": "Desk lamp"},
+        write_adapter=OrderWrites(),
+    )
+    literal = contract(
+        {
+            "kind": "record_written",
+            "match": {"customer": {"param": "customer"}, "product": "Desk lamp"},
+            "expected_count": 1,
+        }
+    )
+    assert bt._contract_coverage(literal, scope, {"customer": "Acme Ltd"}, {}) is None
+    other = contract(
+        {
+            "kind": "record_written",
+            "match": {"customer": {"param": "customer"}, "product": "Chair"},
+            "expected_count": 1,
+        }
+    )
+    assert "isn't the value" in bt._contract_coverage(
+        other, scope, {"customer": "Acme Ltd"}, {}
+    )
+    narrower = contract(
+        {
+            "kind": "record_written",
+            "match": {"customer": {"param": "customer"}},
+            "expected_count": 1,
+        }
+    )
+    assert "aren't the fields" in bt._contract_coverage(
+        narrower, scope, {"customer": "Acme Ltd"}, {}
+    )
+
+
+def test_teaching_a_tool_again_replaces_its_statement(tmp_path: Path) -> None:
+    from openadapt_flow import teach_authorization as ta
+    from tests._teach_authorization_support import order_spec
+
+    bridge, program, person = _taught_tool(tmp_path)
+    newer = person.issue(tmp_path / "newer", order_spec(APP, ORDER))
+    verification = ta.verify(newer, key_dir=person.key_dir, root=person.root)
+    folder = bridge.tools_dir / "add_order"
+    again = bridge._seal_program(
+        {k: v for k, v in program.items() if k not in ("signature",)},
+        (verification, newer),
+        folder,
+    )
+    kept = folder / ta.KEPT_DIR / ta.STATEMENT_FILE
+    assert kept.read_bytes() == newer.read_bytes()
+    assert bridge._write_refusal(again) is None
+    assert "teach_auth_digest_mismatch" in bridge._write_refusal(program)
+
+
+def test_running_tools_needs_only_the_config_pin(tmp_path: Path) -> None:
+    from openadapt_flow import teach_authorization as ta
+
+    _, program, person = _taught_tool(tmp_path)
+    pin = ta.TeachAuthority(
+        Path("."), key_dir=person.key_dir, approver_root=person.root
+    )
+    bridge = bt.BrowserTeachBridge(
+        tmp_path / "tools",
+        tmp_path / "files",
+        contracts={"order": _order_contract()},
+        approvers=pin,
+    )
+    assert bridge._write_refusal(program) is None
+    # It teaches nothing new without a statement.
+    _refused(bridge, "teach_auth_missing", name="add_invoice")

@@ -332,16 +332,35 @@ def test_statement_rules():
 # -- the guard enforces the forbidden list -----------------------------------------
 
 
-class _Page:
-    """Enough of a Playwright page for the guard's probes."""
+PAGE = """<!doctype html><title>Chart</title><body>
+<input id="note" aria-label="Note">
+<button id="save">Save encounter</button>
+<button id="del"><span>  delete   ENCOUNTER </span></button>
+<button id="icon" aria-label="Delete encounter">X</button>
+<div id="plain">just text</div>
+</body>"""
 
-    url = BASE + "/"
+#: A page that lies to any script asking what a control is called.
+LYING = PAGE.replace(
+    "</body>",
+    "<script>Element.prototype.getAttribute = () => 'Save encounter';"
+    "Element.prototype.closest = function () { return this; };"
+    "Object.defineProperty(HTMLElement.prototype, 'innerText', "
+    "{get() { return 'Save encounter'; }});</script></body>",
+)
 
-    def __init__(self, label: str = "", link: Any = None) -> None:
-        self.label, self.link = label, link
 
-    def evaluate(self, script: str, args: Any) -> Any:
-        return self.label if "aria-label" in script else self.link
+@pytest.fixture
+def chromium():
+    sync_api = pytest.importorskip("playwright.sync_api")
+    with sync_api.sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch()
+        except Exception as exc:  # noqa: BLE001 - no browser installed
+            pytest.skip(f"no Chromium: {exc}")
+        page = browser.new_page()
+        yield page
+        browser.close()
 
 
 def _guard(tmp_path: Path, person: LocalAuthorizer) -> TeachGuard:
@@ -349,34 +368,67 @@ def _guard(tmp_path: Path, person: LocalAuthorizer) -> TeachGuard:
     return TeachGuard(ta.bind(_require(person, statement)))
 
 
-def test_forbidden_controls_and_actions(tmp_path, person):
+def _at(page, selector: str) -> Op:
+    box = page.locator(selector).bounding_box()
+    return Op("click", x=int(box["x"] + box["width"] / 2), y=int(box["y"] + 4))
+
+
+def _violation(fn, *args, **kw) -> str:
+    with pytest.raises(ScopeViolation) as err:
+        fn(*args, **kw)
+    return err.value.code
+
+
+def test_forbidden_controls_are_read_from_the_browser(tmp_path, person, chromium):
     guard = _guard(tmp_path, person)
-    with pytest.raises(ScopeViolation) as err:
-        guard.check_ops([Op("click", x=1, y=1)], page=_Page("  delete   ENCOUNTER "))
-    assert err.value.code == "control_forbidden"
-    guard.check_ops([Op("click", x=1, y=1)], page=_Page("Save encounter"))
-    with pytest.raises(ScopeViolation) as err:
-        guard.check_ops([Op("drag", x=1, y=1, end_x=2, end_y=2)])
-    assert err.value.code == "forbidden_action"
+    for html in (PAGE, LYING):
+        chromium.set_content(html)
+        guard.check_ops([_at(chromium, "#save")], page=chromium)
+        guard.check_ops([_at(chromium, "#plain")], page=chromium)
+        # Its visible text, and an icon button's accessible name.
+        for forbidden in ("#del", "#icon"):
+            code = _violation(
+                guard.check_ops, [_at(chromium, forbidden)], page=chromium
+            )
+            assert code == "control_forbidden", (html is LYING, forbidden)
+    # A click with no position can't be checked.
+    assert (
+        _violation(guard.check_ops, [Op("click")], page=chromium) == "control_forbidden"
+    )
+
+
+def test_a_key_that_reaches_a_forbidden_control_is_refused(tmp_path, person, chromium):
+    guard = _guard(tmp_path, person)
+    for html in (PAGE, LYING):
+        chromium.set_content(html)
+        chromium.focus("#note")
+        guard.check_key(Op("type", text=NOTE), chromium)
+        chromium.keyboard.press("Tab")  # to Save encounter
+        guard.check_key(Op("press", key="Enter"), chromium)
+        chromium.keyboard.press("Tab")  # to the forbidden one
+        for op in (
+            Op("press", key="Enter"),
+            Op("press", key="Space"),
+            Op("press", key="a"),
+            Op("hotkey", key="Enter", modifiers=("Shift",)),
+            Op("type", text=NOTE),
+        ):
+            assert _violation(guard.check_key, op, chromium) == "control_forbidden"
+    # Nothing to read the focus from.
+    assert _violation(guard.check_key, Op("press", key="Enter"), None) == (
+        "control_forbidden"
+    )
+
+
+def test_forbidden_actions(tmp_path, person):
+    guard = _guard(tmp_path, person)
+    assert _violation(guard.check_ops, [Op("drag", x=1, y=1, end_x=2, end_y=2)]) == (
+        "forbidden_action"
+    )
     assert (
         guard.scope.request_refusal("DELETE", BASE + "/api/encounter/1", None)
         == "forbidden_action"
     )
-
-
-def test_a_broken_label_probe_refuses_the_click(tmp_path, person):
-    class _Broken(_Page):
-        def evaluate(self, script: str, args: Any) -> Any:
-            if "aria-label" in script:
-                raise RuntimeError("the page overrode elementFromPoint")
-            return None
-
-    guard = _guard(tmp_path, person)
-    with pytest.raises(ScopeViolation) as err:
-        guard.check_ops([Op("click", x=1, y=1)], page=_Broken())
-    assert err.value.code == "control_forbidden"
-    # A control with no label is not a forbidden one.
-    guard.check_ops([Op("click", x=1, y=1)], page=_Page(""))
 
 
 def test_render_shows_what_is_signed(tmp_path, person):
