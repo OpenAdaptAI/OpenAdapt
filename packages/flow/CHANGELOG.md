@@ -25,6 +25,8 @@
 
 ### Fixes
 
+- A qualification case can run on `--backend windows`. `WindowsBackend` now answers the qualification environment observer: the foreground executable's name, the SHA-256 of that executable file, the live logon-session digest, and a digest of the machine id and OS build, all from one `/context/identity` call. Before, `qualify run-case` on Windows refused with "qualification backend cannot observe the complete environment". An agent without the new `context_environment_v1` fields still refuses ([#1696](https://github.com/OpenAdaptAI/OpenAdapt/issues/1696)).
+
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
 - Self-repair can take a stop where the app's own dialog covers the next step's identity band: when the backend proves the covering window belongs to the window the last verified step was in, and the part of the band read still matches the record, the dialog is dismissed after the previous click and the step re-checks its identity in full. Another record behind the dialog stays an identity halt. The runtime lets a backend remember a verified record's window (`record_verified_window`); macOS answers `owned_window_over` from the window's proved sheet ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).

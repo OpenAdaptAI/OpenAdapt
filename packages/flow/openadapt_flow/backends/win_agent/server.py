@@ -1999,8 +1999,8 @@ def _bounded_application_identifier(name: str) -> Optional[str]:
     return identifier
 
 
-def _process_image_identifier(pid: int) -> Optional[str]:
-    """Canonical executable basename of one live process, or None."""
+def _process_image_path(pid: int) -> Optional[str]:
+    """Full executable path of one live process, or None."""
 
     if os.name != "nt" or not isinstance(pid, int) or pid <= 0:
         return None
@@ -2037,15 +2037,55 @@ def _process_image_identifier(pid: int) -> Optional[str]:
                 process, 0, path, ctypes.byref(size)
             ):
                 return None
-            return _bounded_application_identifier(path.value)
+            return path.value or None
         finally:
             kernel32.CloseHandle(process)
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
 
 
-def _foreground_application_identity() -> Optional[str]:
-    """Observe the foreground executable without reading its window title."""
+def _process_image_identifier(pid: int) -> Optional[str]:
+    """Canonical executable basename of one live process, or None."""
+
+    path = _process_image_path(pid)
+    return _bounded_application_identifier(path) if path else None
+
+
+#: (path, size, mtime_ns) -> sha256 of the executable's bytes. An executable
+#: rarely changes while the agent runs, and hashing a large one on every
+#: observation would sit between resolution and input.
+_IMAGE_DIGESTS: dict[tuple[str, int, int], str] = {}
+_IMAGE_DIGEST_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+
+def _image_file_digest(path: str) -> Optional[str]:
+    """``sha256:<hex>`` of one executable file's bytes, or None."""
+
+    try:
+        stat = os.stat(path)
+        key = (os.path.normcase(path), int(stat.st_size), int(stat.st_mtime_ns))
+        cached = _IMAGE_DIGESTS.get(key)
+        if cached is not None:
+            return cached
+        if stat.st_size > _IMAGE_DIGEST_MAX_BYTES:
+            return None
+        digest = hashlib.sha256()
+        with open(path, "rb") as image:
+            for chunk in iter(lambda: image.read(1024 * 1024), b""):
+                digest.update(chunk)
+        after = os.stat(path)
+        if (int(after.st_size), int(after.st_mtime_ns)) != key[1:]:
+            return None
+        value = f"sha256:{digest.hexdigest()}"
+        _IMAGE_DIGESTS.clear()
+        _IMAGE_DIGESTS[key] = value
+        return value
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _foreground_process_id() -> Optional[int]:
+    """The process that owns the foreground window, without reading its title."""
 
     if os.name != "nt":
         return None
@@ -2075,7 +2115,31 @@ def _foreground_application_identity() -> Optional[str]:
             return None
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
-    return _process_image_identifier(int(pid.value))
+    return int(pid.value)
+
+
+def _foreground_application_identity() -> Optional[str]:
+    """Observe the foreground executable without reading its window title."""
+
+    pid = _foreground_process_id()
+    return _process_image_identifier(pid) if pid is not None else None
+
+
+def _foreground_application_image() -> tuple[Optional[str], Optional[str]]:
+    """The foreground executable's basename identity and its file digest.
+
+    Both come from the same process image path, so the version can never
+    describe a different program than the identity.
+    """
+
+    pid = _foreground_process_id()
+    path = _process_image_path(pid) if pid is not None else None
+    if path is None:
+        return None, None
+    identity = _bounded_application_identifier(path)
+    if identity is None:
+        return None, None
+    return identity, _image_file_digest(path)
 
 
 def _native_session_digest() -> Optional[str]:
@@ -2180,13 +2244,57 @@ def _native_session_digest() -> Optional[str]:
         return None
 
 
-def _execution_context_identity() -> dict[str, Any]:
-    """Return PHI-free identities observed from live Windows OS state."""
+def _environment_digest() -> Optional[str]:
+    """Hash this Windows installation: machine id and exact OS build.
 
+    PHI-free and stable across sign-ins, so a qualification bound to one
+    machine and OS build is refused on another or after an OS update.
+    """
+
+    if os.name != "nt":
+        return None
+    try:
+        import importlib  # noqa: PLC0415
+
+        winreg = importlib.import_module("winreg")
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Cryptography",
+        ) as key:
+            machine_guid = str(winreg.QueryValueEx(key, "MachineGuid")[0])
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+        ) as key:
+            build = str(winreg.QueryValueEx(key, "CurrentBuildNumber")[0])
+            try:
+                revision = str(int(winreg.QueryValueEx(key, "UBR")[0]))
+            except OSError:
+                revision = ""
+        if not machine_guid or not build:
+            return None
+        material = f"windows-environment-v1\0{machine_guid}\0{build}\0{revision}"
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+    except Exception:  # noqa: BLE001 - unavailable means unverifiable
+        return None
+
+
+def _execution_context_identity() -> dict[str, Any]:
+    """Return PHI-free identities observed from live Windows OS state.
+
+    ``application`` and ``application_version`` describe the same foreground
+    executable (its basename and the SHA-256 of its file); ``environment``
+    hashes the machine id and OS build. All four come from this one call so
+    a qualification observer sees one consistent snapshot.
+    """
+
+    application, application_version = _foreground_application_image()
     return {
         "status": "ok",
-        "application": _foreground_application_identity(),
+        "application": application,
+        "application_version": application_version,
         "session": _native_session_digest(),
+        "environment": _environment_digest(),
         "workflow_state": None,
     }
 
@@ -2252,6 +2360,7 @@ def make_handler_class(
                         "capabilities": [
                             "screenshot",
                             "context_identity_v1",
+                            "context_environment_v1",
                             "typed_input_v1",
                             "guarded_input_v1",
                             "uia_v1",

@@ -73,6 +73,7 @@ SCROLL_PIXELS_PER_NOTCH = 100
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _SESSION_ID_RE = re.compile(r"^[a-f0-9]{64}$")
+_IMAGE_DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 @dataclass(frozen=True)
@@ -610,6 +611,39 @@ class WindowsBackend:
         if not isinstance(value, str) or not _SESSION_ID_RE.fullmatch(value):
             return None
         return value
+
+    def qualification_environment_identity(
+        self,
+    ) -> Optional[tuple[str, str, str, str]]:
+        """Application, version, session and environment from one agent snapshot.
+
+        The agent reads all four in one ``/context/identity`` call: the
+        foreground executable's basename, the SHA-256 of that same
+        executable file, the live logon-session digest, and a digest of the
+        machine id and OS build. Any missing or malformed value (an older
+        agent without ``context_environment_v1``, a desktop with no
+        foreground window) returns None, and a qualification case refuses.
+        """
+
+        payload = self._execution_context()
+        if payload is None:
+            return None
+        application = payload.get("application")
+        version = payload.get("application_version")
+        session = payload.get("session")
+        environment = payload.get("environment")
+        if not (
+            isinstance(application, str)
+            and _CONTEXT_ID_RE.fullmatch(application)
+            and isinstance(version, str)
+            and _IMAGE_DIGEST_RE.fullmatch(version)
+            and isinstance(session, str)
+            and _SESSION_ID_RE.fullmatch(session)
+            and isinstance(environment, str)
+            and _SESSION_ID_RE.fullmatch(environment)
+        ):
+            return None
+        return application, version, session, environment
 
     def workflow_state_identity(self) -> Optional[str]:
         """Workflow state requires an explicitly qualified UIA marker."""
