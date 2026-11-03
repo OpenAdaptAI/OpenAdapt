@@ -84,6 +84,12 @@ jobs:
         run: |
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wg" \
             tests/e2e/test_windows_hosted_governed.py --junitxml=runs/windows-governed-junit.xml
+      - name: Windows file-system guards (the attempt ledger, the approval window)
+        # The default temp folder is in the user's profile, where the ledger
+        # must live; the runner's temp drive is not.
+        run: |
+          pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
+            tests/test_approval_form_window.py --junitxml=runs/windows-guards-junit.xml
       - name: The replay ran (no skips)
         run: |
           python - <<'PY'
@@ -91,7 +97,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = [
               case
-              for name in ("windows-replay", "windows-governed")
+              for name in ("windows-replay", "windows-governed", "windows-guards")
               for case in ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase")
           ]
           skipped = [c for c in cases if c.find("skipped") is not None]

@@ -25,6 +25,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -320,10 +321,15 @@ def test_standard_run_with_approval_hold_and_resume(host, tmp_path) -> None:
     try:
         _governed(host, tmp_path, evidence)
     finally:
+        shutil.rmtree(_state_root(tmp_path), ignore_errors=True)
         if os.environ.get(EVIDENCE_ENV):
             Path(os.environ[EVIDENCE_ENV]).write_text(
                 json.dumps(evidence, indent=2, default=str)
             )
+
+
+def _state_root(tmp_path: Path) -> Path:
+    return Path.home() / f".openadapt-ci-{tmp_path.name}"
 
 
 def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
@@ -376,9 +382,12 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
     evidence["certify"] = (lint.stdout + lint.stderr)[-6000:]
 
     key_dir = tmp_path / "approver-keys"
+    state_root = _state_root(tmp_path)
     env = {
         **host.env,
-        "OPENADAPT_HOME": str(tmp_path / "home"),
+        # The attempt ledger must sit in this user's profile, as the default
+        # ~/.openadapt does; the runner's temp folder is on another drive.
+        "OPENADAPT_HOME": str(state_root),
         "OPENADAPT_BUNDLE_KEY": BUNDLE_KEY,
         KEY_DIR_ENV: str(key_dir),
         KEY_PASSPHRASE_ENV: approver_keys.PASSPHRASE,
