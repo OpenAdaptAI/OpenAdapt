@@ -76,12 +76,14 @@ class Engine:
         return [
             f"CREATE TABLE app_user (id {key}, name VARCHAR(50), "
             "email VARCHAR(80), last_login VARCHAR(30))",
-            f"CREATE TABLE api_token (id {key}, user_id INTEGER NOT NULL "
-            "REFERENCES app_user(id), issued_by INTEGER REFERENCES app_user(id), "
-            "label VARCHAR(30), last_seen VARCHAR(30))",
-            "CREATE TABLE user_property (user_id INTEGER NOT NULL REFERENCES "
-            "app_user(id), property VARCHAR(50) NOT NULL, value VARCHAR(50), "
-            "PRIMARY KEY (user_id, property))",
+            f"CREATE TABLE api_token (id {key}, user_id INTEGER NOT NULL, "
+            "issued_by INTEGER, label VARCHAR(30), last_seen VARCHAR(30), "
+            "FOREIGN KEY (user_id) REFERENCES app_user(id), "
+            "FOREIGN KEY (issued_by) REFERENCES app_user(id))",
+            "CREATE TABLE user_property (user_id INTEGER NOT NULL, "
+            "property VARCHAR(50) NOT NULL, value VARCHAR(50), "
+            "PRIMARY KEY (user_id, property), "
+            "FOREIGN KEY (user_id) REFERENCES app_user(id))",
             f"CREATE TABLE note (id {key}, title VARCHAR(80), body VARCHAR(200), "
             "stamp VARCHAR(30))",
             f"CREATE TABLE asset (id {key}, tag VARCHAR(20), name VARCHAR(50), "
@@ -329,6 +331,7 @@ FIRST_LOGIN = {
     "change": "added",
     "relation": "actor_row",
     "actor_columns": ["user_id"],
+    "max_rows": 1,
 }
 STAMP = {
     "table": "note",
@@ -733,6 +736,8 @@ class _Ep:
     kind: str = "sql"
     writes: list[Any] = field(default_factory=list)
     params: dict[str, Any] = field(default_factory=dict)
+    #: What the shadow's body recording gives (``learn.record_bodies``).
+    sent_fields: Optional[set[str]] = None
 
 
 def test_learn_propose_approve_on_real_writes(engine: Engine, tmp_path: Path) -> None:
@@ -752,7 +757,15 @@ def test_learn_propose_approve_on_real_writes(engine: Engine, tmp_path: Path) ->
             lambda: write_note(engine, t),
             tmp_path,
         )
-        collector(_Ep(i + 1, "create_note", Contract.load(path)), result)
+        collector(
+            _Ep(
+                i + 1,
+                "create_note",
+                Contract.load(path),
+                sent_fields={"title", "body"},
+            ),
+            result,
+        )
     # A wrong write (the declared record missing) teaches nothing.
     wrong = check(
         engine,
@@ -761,7 +774,7 @@ def test_learn_propose_approve_on_real_writes(engine: Engine, tmp_path: Path) ->
         lambda: request_bookkeeping(engine),
         tmp_path,
     )
-    collector(_Ep(6, "create_note", Contract.load(path)), wrong)
+    collector(_Ep(6, "create_note", Contract.load(path), sent_fields=set()), wrong)
 
     episodes = learn.read_episodes([collector.path])
     schema = engine.schema() if engine.schema else None
@@ -907,7 +920,238 @@ def test_the_learner_requires_every_user_column_that_holds_the_actor() -> None:
     assert e["actor_columns"] == ["issued_by", "user_id"]
 
 
+def _learn_assets(
+    engine: Engine,
+    tmp_path: Path,
+    act: Callable[[int], None],
+    body: Callable[[int], dict[str, Any]],
+    recorded: bool = True,
+) -> dict[str, Any]:
+    """Five learning writes renaming asset LT-100 through the collector."""
+
+    collector = learn.Collector(tmp_path / f"ep-{secrets.token_hex(3)}.jsonl")
+    for i in range(5):
+        contract = asset_contract(engine)
+        result = check(
+            engine,
+            contract,
+            {"tag": "LT-100", "name": f"Laptop L{i}"},
+            lambda i=i: act(i),
+            tmp_path,
+        )
+        sent = learn.body_fields(body(i)) if recorded else None
+        collector(
+            _Ep(i + 1, "rename", Contract.from_dict(contract), sent_fields=sent),
+            result,
+        )
+    users = learn.users_from(
+        "app_user", "id", None, ["api_token.user_id", "api_token.issued_by"]
+    )
+    users.columns.setdefault("user_property", {})["user_id"] = "person"
+    return learn.propose(learn.read_episodes([collector.path]), users=users)
+
+
+def test_the_agents_own_stray_column_is_never_learned(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The review's attack: every learning write renames the asset (right)
+    and reassigns it (wrong, undeclared). The delta holds, so all five
+    teach. ``assigned_to`` is in the agent's own request body, so it is
+    never proposed, and a later wrong reassignment is refuted."""
+
+    def act(i: int) -> None:
+        request_bookkeeping(engine)
+        engine.run(
+            "UPDATE asset SET name = %s, assigned_to = %s, modified_at = %s "
+            "WHERE tag = 'LT-100'",
+            f"Laptop L{i}",
+            3 if i % 2 == 0 else 1,
+            f"m{i}",
+        )
+
+    proposal = _learn_assets(
+        engine,
+        tmp_path,
+        act,
+        lambda i: {"name": f"Laptop L{i}", "assigned_to": 3 if i % 2 == 0 else 1},
+    )
+    kind = proposal["kinds"]["rename"]
+    assert kind["request_bodies_recorded"] is True
+    assert [e for e in kind["excuses"] if e["table"] == "asset"] == []
+    stops = [s for s in kind["stays_a_stop"] if s["table"] == "asset"]
+    assert stops and "assigned_to" in stops[0]["why"]
+
+    path = tmp_path / "asset.yaml"
+    path.write_text(yaml.safe_dump(asset_contract(engine)))
+    learn.approve(proposal, by="Test Reviewer", contracts={"rename": [path]})
+    approved = yaml.safe_load(path.read_text())
+
+    def wrong() -> None:
+        request_bookkeeping(engine)
+        engine.run(
+            "UPDATE asset SET name = 'Laptop Z', assigned_to = 1, modified_at = 'mz' "
+            "WHERE tag = 'LT-100'"
+        )
+
+    _refuted(
+        check(engine, approved, {"tag": "LT-100", "name": "Laptop Z"}, wrong, tmp_path)
+    )
+
+
+def test_the_apps_own_target_column_is_learned_only_with_bodies(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """``modified_at`` the app sets itself: proposed when the request
+    bodies show the agent never sent it, and not when they weren't
+    recorded."""
+
+    def act(i: int) -> None:
+        request_bookkeeping(engine)
+        engine.run(
+            "UPDATE asset SET name = %s, modified_at = %s WHERE tag = 'LT-100'",
+            f"Laptop L{i}",
+            f"m{i}",
+        )
+
+    with_bodies = _learn_assets(
+        engine, tmp_path, act, lambda i: {"name": f"Laptop L{i}"}
+    )["kinds"]["rename"]
+    asset = [e for e in with_bodies["excuses"] if e["table"] == "asset"]
+    assert [(e["columns"], e["relation"]) for e in asset] == [
+        (["modified_at"], "target")
+    ]
+    without = _learn_assets(engine, tmp_path, act, lambda i: {}, recorded=False)
+    kind = without["kinds"]["rename"]
+    assert kind["request_bodies_recorded"] is False
+    assert [e for e in kind["excuses"] if e["table"] == "asset"] == []
+    out, md = learn.write_proposal(without, tmp_path / "nobodies.yaml")
+    assert "request bodies weren't recorded" in md.read_text()
+
+
+def test_an_added_actor_row_excuse_never_covers_more_rows_than_learned(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Learned: one first-login row per write. Twenty more rows for the
+    actor, with any property, are collateral."""
+
+    t = _title()
+
+    def act() -> None:
+        write_note(engine, t)
+        for n in range(20):
+            engine.run(
+                "INSERT INTO user_property (user_id, property, value) "
+                "VALUES (2, %s, 'off')",
+                f"auth.mfa_required.{n}",
+            )
+
+    _refuted(
+        check(
+            engine,
+            note_contract(engine, ACTOR_EXCUSES),
+            {"title": t, "body": "Body text"},
+            act,
+            tmp_path,
+        )
+    )
+    t = _title()
+
+    def two() -> None:
+        write_note(engine, t)
+        engine.run(
+            "INSERT INTO user_property (user_id, property, value) "
+            "VALUES (2, 'second', 'x')"
+        )
+
+    _refuted(
+        check(
+            engine,
+            note_contract(engine, ACTOR_EXCUSES),
+            {"title": t, "body": "Body text"},
+            two,
+            tmp_path,
+        )
+    )
+
+
+def test_an_excuse_covers_exactly_its_column_set(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Learned: ``last_login`` and ``email`` moving together. A row moving
+    ``last_login`` alone is a set never seen: collateral."""
+
+    both = {**LOGIN, "columns": ["email", "last_login"]}
+    block = learned_block(both, SEEN, FIRST_LOGIN, STAMP)
+    t = _title()
+    _refuted(
+        check(
+            engine,
+            note_contract(engine, block),
+            {"title": t, "body": "Body text"},
+            lambda: write_note(engine, t),
+            tmp_path,
+        )
+    )
+
+
 # -- the learner's rules (no database) -----------------------------------------------
+
+
+def test_a_column_the_contract_or_the_agent_names_is_never_learned() -> None:
+    def eps(**kw: Any) -> list[dict[str, Any]]:
+        return [
+            _ep(
+                "k",
+                [
+                    _move("note", ["stamp"], target=True, change="added"),
+                    _move("app_user", ["last_login"], actor_columns=["id"]),
+                ],
+                **kw,
+            )
+        ] * 5
+
+    base = learn.propose(eps(), users=USERS)["kinds"]["k"]["excuses"]
+    assert {e["table"] for e in base} == {"note", "app_user"}
+    for kw in (
+        {"contract_fields": ["stamp", "last_login"]},
+        {"sent_fields": ["Stamp", "user.last_login"]},
+        {"param_names": ["stamp", "last_login"]},
+    ):
+        k = learn.propose(eps(**kw), users=USERS)["kinds"]["k"]
+        assert k["excuses"] == [], kw
+        assert len(k["stays_a_stop"]) == 2
+
+
+def test_approve_writes_every_file_or_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    e = Engine(
+        "sqlite", {"sqlite_database": str(tmp_path / "x.sqlite")}, lambda *a: None
+    )
+    files = []
+    for name in ("a.yaml", "b.yaml", "c.yaml"):
+        f = tmp_path / name
+        f.write_text(yaml.safe_dump(note_contract(e)))
+        files.append(f)
+    before = [f.read_text() for f in files]
+    eps = [_ep("k", [_move("app_user", ["last_login"], actor_columns=["id"])])] * 5
+    p = learn.propose(eps, users=USERS)
+    real = os.replace
+    calls = []
+
+    def flaky(src: Any, dst: Any) -> None:
+        calls.append(dst)
+        if len(calls) == 2:
+            raise OSError("disk full")
+        real(src, dst)
+
+    monkeypatch.setattr(os, "replace", flaky)
+    with pytest.raises(learn.LearnError, match="nothing was written"):
+        learn.approve(p, by="R", contracts={"k": files})
+    assert [f.read_text() for f in files] == before
+    assert not list(tmp_path.glob(".*.tmp"))
 
 
 def _ep(kind: str, moves: list[dict[str, Any]], **kw: Any) -> dict[str, Any]:
@@ -919,6 +1163,9 @@ def _ep(kind: str, moves: list[dict[str, Any]], **kw: Any) -> dict[str, Any]:
         "delta": kw.get("delta", "held"),
         "frame": kw.get("frame", "refuted"),
         "moves": moves,
+        "sent_fields": kw.get("sent_fields", []),
+        "param_names": kw.get("param_names", []),
+        "contract_fields": kw.get("contract_fields", []),
     }
 
 
@@ -1022,23 +1269,25 @@ def test_k_of_n() -> None:
     assert "app_user" not in tables
 
 
-def test_columns_below_the_threshold_are_left_out() -> None:
+def test_an_excuse_is_one_column_set_seen_together_never_a_union() -> None:
+    """``a`` with ``b`` 3 times, ``a`` alone twice, ``b`` alone twice: each
+    column passes 3 of 5 on its own (and more), but only the set seen
+    together 3 times is proposed, as itself."""
+
+    sets = [["a", "b"]] * 3 + [["a"]] * 2 + [["b"]] * 2
+    eps = [_ep("k", [_move("app_user", cols, actor_columns=["id"])]) for cols in sets]
+    p = learn.propose(eps, users=USERS)["kinds"]["k"]
+    # 7 learnable: 3 of 5 -> 5 needed; no set reaches it.
+    assert p["excuses"] == []
     eps = [
-        _ep(
-            "k",
-            [
-                _move(
-                    "app_user",
-                    ["last_login", "email"] if i == 0 else ["last_login"],
-                    actor_columns=["id"],
-                )
-            ],
-        )
-        for i in range(5)
+        _ep("k", [_move("app_user", ["a"] if i % 2 else ["b"], actor_columns=["id"])])
+        for i in range(6)
     ]
+    # a seen 3 of 6, b 3 of 6: 4 needed, and never together.
+    assert learn.propose(eps, users=USERS)["kinds"]["k"]["excuses"] == []
+    eps = [_ep("k", [_move("app_user", ["a", "b"], actor_columns=["id"])])] * 5
     (e,) = learn.propose(eps, users=USERS)["kinds"]["k"]["excuses"]
-    assert e["columns"] == ["last_login"]
-    assert e["columns_below_threshold"] == ["email"]
+    assert e["columns"] == ["a", "b"]
 
 
 def test_every_other_episode_is_ignored_and_counted() -> None:
@@ -1300,6 +1549,7 @@ def test_collect_through_the_shadow_hook(tmp_path: Path) -> None:
         out=tmp_path / "out",
         quiet_s=60,
     ).start()
+    learn.record_bodies(sh)
     sh.on_checked = collector
     try:
         for i in range(5):
@@ -1317,6 +1567,7 @@ def test_collect_through_the_shadow_hook(tmp_path: Path) -> None:
     eps = learn.read_episodes([collector.path])
     assert len(eps) == 5
     assert all(ep["kind"] == "create_note" and ep["delta"] == "held" for ep in eps)
+    assert all(ep["sent_fields"] == ["body", "title"] for ep in eps)
     users = learn.users_from("app_user", "id", None)
     p = learn.propose(eps, users=users)
     got = sorted(

@@ -51,14 +51,18 @@ class LearnedExcuse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     table: str = Field(min_length=1)
-    #: Exactly the columns seen to move: a changed row may move only these;
-    #: an added row may set only these (any other column stays NULL).
+    #: Exactly the column set seen to move together: a changed row must
+    #: move exactly these; an added row must set exactly these (every other
+    #: column NULL).
     columns: list[str] = Field(min_length=1)
     change: LearnedChange
     relation: Relation
     #: ``actor_row`` only: the columns that must all hold the acting user's
     #: id (the users table's key, or the user columns of another table).
     actor_columns: Optional[list[str]] = None
+    #: ``added`` ``actor_row`` only: the most such rows one check may add (the
+    #: most seen in one learning check). More are collateral.
+    max_rows: Optional[int] = Field(default=None, ge=1)
 
     @field_validator("table")
     @classmethod
@@ -97,6 +101,11 @@ class LearnedExcuse(BaseModel):
                 )
         elif self.actor_columns is not None:
             raise ValueError("actor_columns go with relation actor_row")
+        added_actor = self.change == "added" and self.relation == "actor_row"
+        if added_actor and self.max_rows is None:
+            raise ValueError("an added actor_row excuse names its max_rows")
+        if not added_actor and self.max_rows is not None:
+            raise ValueError("max_rows goes with an added actor_row excuse")
         return self
 
     def label(self) -> str:
@@ -259,7 +268,7 @@ def covers(
             or excuse.relation != relation
         ):
             continue
-        if not set(fields) <= set(excuse.columns):
+        if set(fields) != set(excuse.columns):
             continue
         if relation == "actor_row":
             if actor is None or not excuse.actor_columns:

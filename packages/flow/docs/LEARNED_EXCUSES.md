@@ -56,6 +56,26 @@ id in the app.
 Any other row can't be excused. It stays a stop, even when it moves in
 every check. The proposal lists it under "Stays a stop" so you can see it.
 
+## A column the agent sets is never the app's own
+
+Shadow mode watches the agent's own traffic, so an agent that makes the
+same mistake in every write (it renames the record, and also reassigns it)
+would look like the app's bookkeeping. The learner never proposes an
+excuse, of either kind, for a column that:
+
+- any of the agent's requests sent, by name, at any depth of the body
+  (`learn collect` records the names of every field in each request body);
+- a run parameter names; or
+- the contract names (its effects' selectors and record fields, and the
+  frame's target fields).
+
+Names are compared without case, and a dotted name by its last part.
+Such a move stays a stop, and the proposal says why.
+
+When a kind's request bodies weren't recorded (a transport the shadow
+can't parse, or checks collected some other way), the learner proposes no
+excuse on the write's own row for that kind, and says so.
+
 ## What an excuse says
 
 Each excuse names one table, the exact columns that moved, the kind of
@@ -76,14 +96,17 @@ frame:
         change: added
         relation: actor_row
         actor_columns: [user_id]
+        max_rows: 1
     proposal_sha256: sha256:...
     approved_by: Dana Reviewer
     approved_at: "2026-10-31T12:00:00Z"
 ```
 
-- `changed`: an existing row may move in these columns and no others.
-- `added`: a new row may set these columns and no others (any other column
-  stays NULL).
+- `changed`: an existing row must move exactly these columns, the set
+  seen moving together.
+- `added`: a new row must set exactly these columns (every other column
+  stays NULL). An `added` `actor_row` excuse also says `max_rows`: the most
+  such rows one learning check saw. More rows in one check are collateral.
 - A removal is never excused.
 - Never a whole table, a wildcard, or "any row".
 
@@ -98,8 +121,9 @@ again from this run:
   columns holds this run's actor id before and after the write. Another
   user's row, a row the actor issued for someone else, a row that moved to
   the actor, or a row added for someone else is still collateral.
-- The moved columns must all be in the excuse. Another column of the same
-  row is still collateral.
+- The moved columns must be exactly the excuse's set. Another column of
+  the same row, or a subset never seen alone, is still collateral.
+- An `added` `actor_row` excuse covers at most `max_rows` rows per check.
 
 Anything outside a learned excuse is judged as before. The receipt's frame
 evidence names the excuses used (`learned.used`) and the proposal's
@@ -123,9 +147,9 @@ and counts it by reason:
 
 An excuse is proposed for a kind of write only after at least `N`
 learnable checks of that kind, and only when it was seen in at least `K`
-of every `N` (by default 3 of 5, so 6 of 10, and so on). Each column of an
-excuse must meet the same bar; a column seen less often is left out and
-listed. Set them with `--k` and `--n`.
+of every `N` (by default 3 of 5, so 6 of 10, and so on). The count is per
+exact column set: two columns that each pass on their own but were seen
+together less often never make one excuse. Set them with `--k` and `--n`.
 
 Why 3 of 5: five is the smallest sample in which a majority still allows
 two checks where a throttled column didn't move. Some apps write a token's
@@ -136,10 +160,13 @@ never proposed, however often it moves.
 
 ## Approving
 
-`approve` takes the proposal as written. If anyone edited it, its digest no
-longer matches and approval is refused: propose again. To leave out an
-excuse, name it: `--reject E3`. Approval writes every contract of each
-kind or none. It finds the contracts from the shadow config's routes
+`approve` takes the proposal as written. The proposal's digest catches an
+accidental edit (approval is refused: propose again) and records which
+proposal an approval came from. It is not keyed, so it doesn't stop
+someone who can edit the proposal and recompute the digest; the contracts
+themselves are trusted configuration. To leave out an excuse, name it:
+`--reject E3`. Approval writes every contract of each kind or none: each
+file goes to a temp file first, then all are renamed in. It finds the contracts from the shadow config's routes
 (`--config`), a generator manifest (`--manifest`) or `--contract
 KIND=PATH`. Each needs `frame.database`.
 
@@ -153,7 +180,15 @@ Approving again replaces the earlier `frame.learned` with the new one.
   Read the proposal's actor columns before you approve, and reject an
   excuse whose only actor column is a creator.
 - A learned `added` excuse for the actor's row lets the agent itself add
-  such a row too, with any values in the excused columns.
+  such a row too (up to `max_rows` per check), with any values in the
+  excused columns.
+- The actor's id stands for every session of that app user. On a shared
+  account, another person's session moves the same rows, and the learned
+  columns are excused for them too. Give the agent its own account.
+- The rule against columns the agent sets compares names. A column the app
+  fills from a request field of another name (`assignee` in the body,
+  `assigned_to` in the table) is not caught by it. Read each excuse on the
+  write's own row before you approve.
 - `target` excuses apply to tables the whole-database frame compares. A
   contract that reads the target table through its own surface (and skips
   it in the database frame) already lists what the target may change in

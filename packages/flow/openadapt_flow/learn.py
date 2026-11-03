@@ -113,6 +113,13 @@ def episode_record(episode: Any, result: Any) -> dict[str, Any]:
     if isinstance(checked, Mapping):
         out["delta"] = str(checked.get("delta") or "")
         out["frame"] = str(checked.get("frame") or "")
+    sent = getattr(episode, "sent_fields", None)
+    # None: this transport recorded no request bodies (no target excuse).
+    out["sent_fields"] = None if sent is None else sorted({str(f) for f in sent})
+    out["param_names"] = sorted(
+        str(p) for p in (getattr(episode, "params", None) or {})
+    )
+    out["contract_fields"] = contract_fields(contract)
     evidence = getattr(result, "evidence", None)
     frame = evidence.get("frame") if isinstance(evidence, Mapping) else None
     if isinstance(frame, Mapping):
@@ -121,6 +128,69 @@ def episode_record(episode: Any, result: Any) -> dict[str, Any]:
             out["moves"] = [dict(m) for m in moves if isinstance(m, Mapping)]
         out["has_database"] = isinstance(frame.get("database"), Mapping)
     return out
+
+
+def body_fields(doc: Any) -> set[str]:
+    """Every key in a request body, at any depth (names only)."""
+
+    out: set[str] = set()
+    if isinstance(doc, Mapping):
+        for k, v in doc.items():
+            out.add(str(k))
+            out |= body_fields(v)
+    elif isinstance(doc, list):
+        for v in doc:
+            out |= body_fields(v)
+    return out
+
+
+def contract_fields(contract: Any) -> list[str]:
+    """The columns a contract names: its effects' selectors and record
+    fields, and the frame's target fields (names only)."""
+
+    config = getattr(contract, "config", None)
+    if config is None:
+        return []
+    from openadapt_flow.runtime.effects.frame import declared_fields
+
+    names: set[str] = set(declared_fields(list(config.effects or [])))
+    for effect in config.effects or []:
+        dumped = effect.model_dump(mode="json")
+        names |= set((dumped.get("match") or {}).keys())
+        for rec in dumped.get("new_records") or []:
+            if isinstance(rec, Mapping):
+                names |= set(rec.keys())
+    frame = config.frame
+    if frame is not None:
+        names |= set(frame.target_fields or [])
+        for cols in (frame.target_fields_by_surface or {}).values():
+            names |= set(cols)
+    return sorted(n for n in names if n)
+
+
+def record_bodies(shadow: Any) -> Any:
+    """Make a ``shadow.Shadow`` also record, per episode, the names of every
+    field the agent's requests sent (``episode.sent_fields``), so a column
+    the agent sets is never learned as the app's own. A body the shadow
+    can't parse leaves the episode with no record (no target excuse)."""
+
+    from openadapt_flow.shadow import _body_doc
+
+    observe = shadow._observe
+
+    def _observe(method: str, path: str, headers: Any, body: bytes) -> Any:
+        write, episode = observe(method, path, headers, body)
+        doc = _body_doc(body, headers.get("Content-Type") or "")
+        if body and doc is None:
+            episode.sent_fields = None
+            episode.bodies_unreadable = True
+        elif not getattr(episode, "bodies_unreadable", False):
+            prior = getattr(episode, "sent_fields", None) or set()
+            episode.sent_fields = set(prior) | body_fields(doc)
+        return write, episode
+
+    shadow._observe = _observe
+    return shadow
 
 
 def read_episodes(paths: Iterable[Path]) -> list[dict[str, Any]]:
@@ -270,6 +340,33 @@ def relation_of(move: Mapping[str, Any], users: Optional[Users]) -> tuple[str, s
     return "actor_row", ",".join(usable)
 
 
+def _names(text: str) -> set[str]:
+    """A name and its last dotted segment, lower-cased (``a.b`` -> b)."""
+
+    low = text.lower()
+    return {low, low.rsplit(".", 1)[-1]}
+
+
+def agent_set(eps: Sequence[Mapping[str, Any]]) -> tuple[set[str], bool]:
+    """The column names the agent's own requests or the contract name, over
+    a kind's learnable episodes, and whether every episode recorded its
+    request bodies."""
+
+    names: set[str] = set()
+    recorded = True
+    for ep in eps:
+        sent = ep.get("sent_fields")
+        if sent is None:
+            recorded = False
+        for n in (
+            list(sent or [])
+            + list(ep.get("param_names") or [])
+            + list(ep.get("contract_fields") or [])
+        ):
+            names |= _names(str(n))
+    return names, recorded
+
+
 def propose(
     episodes: Sequence[Mapping[str, Any]],
     *,
@@ -298,42 +395,62 @@ def propose(
         eps = by_kind.get(kind, [])
         total = len(eps)
         need = math.ceil(k * total / n) if total else 0
-        groups: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        sent, recorded = agent_set(eps)
+        groups: dict[tuple[str, str, str, str, tuple[str, ...]], dict[str, Any]] = {}
         stays: dict[tuple[str, str, str], set[int]] = defaultdict(set)
         for i, ep in enumerate(eps):
             for move in ep.get("moves") or []:
                 relation, extra = relation_of(move, users)
                 table, change = str(move.get("table")), str(move.get("change"))
+                columns = tuple(sorted(str(c) for c in move.get("columns") or []))
+                if relation == "target" and not recorded:
+                    relation, extra = (
+                        "",
+                        (
+                            "the write's own row, but this kind's request bodies "
+                            "weren't recorded, so the agent may have set it"
+                        ),
+                    )
+                if relation:
+                    mine = sorted(c for c in columns if _names(c) & sent)
+                    if mine:
+                        relation, extra = (
+                            "",
+                            (
+                                "the agent's own requests or the contract name "
+                                + ", ".join(mine)
+                            ),
+                        )
                 if not relation:
                     stays[(table, change, extra)].add(i)
                     continue
                 g = groups.setdefault(
-                    (table, change, relation, extra),
-                    {"episodes": set(), "columns": defaultdict(set)},
+                    (table, change, relation, extra, columns),
+                    {"episodes": set(), "rows": Counter()},
                 )
                 g["episodes"].add(i)
-                for c in move.get("columns") or []:
-                    g["columns"][c].add(i)
+                g["rows"][i] += 1
         excuses, below = [], []
-        for (table, change, relation, actor_col), g in sorted(groups.items()):
+        for (table, change, relation, actor_col, cols), g in sorted(groups.items()):
             seen = len(g["episodes"])
-            cols = sorted(c for c, s in g["columns"].items() if len(s) >= need)
             entry: dict[str, Any] = {
                 "table": table,
-                "columns": cols,
+                # Exactly this column set, seen together: never a union.
+                "columns": list(cols),
                 "change": change,
                 "relation": relation,
                 **({"actor_columns": actor_col.split(",")} if actor_col else {}),
+                **(
+                    {"max_rows": max(g["rows"].values())}
+                    if change == "added" and relation == "actor_row"
+                    else {}
+                ),
                 "seen": seen,
                 "of": total,
             }
-            dropped = sorted(c for c, s in g["columns"].items() if len(s) < need)
-            if dropped:
-                entry["columns_below_threshold"] = dropped
             ok = (
                 total >= n
                 and seen >= need
-                and cols
                 and (
                     change == "changed"
                     or relation != "actor_row"
@@ -350,10 +467,10 @@ def propose(
                     if total < n
                     else f"seen in {seen} of {total}; at least {need} are needed"
                 )
-                entry["columns"] = sorted(g["columns"])
                 below.append(entry)
         kinds[kind] = {
             "learnable_episodes": total,
+            "request_bodies_recorded": recorded,
             "required": need,
             "ignored": sum(ignored[kind].values()),
             "ignored_by_reason": dict(sorted(ignored[kind].items())),
@@ -431,6 +548,12 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
             + "."
         )
         lines.append("")
+        if not k.get("request_bodies_recorded", False):
+            lines += [
+                "The agent's request bodies weren't recorded for this kind, so no "
+                "excuse on the write's own row is proposed.",
+                "",
+            ]
         if k["excuses"]:
             lines += [
                 "| Id | Table | Columns | Change | Row | Seen |",
@@ -443,6 +566,11 @@ def render_markdown(proposal: Mapping[str, Any]) -> str:
                     else "the acting user's row ("
                     + ", ".join(f"`{c}`" for c in e["actor_columns"])
                     + ")"
+                    + (
+                        f", at most {e['max_rows']} per write"
+                        if e.get("max_rows")
+                        else ""
+                    )
                 )
                 lines.append(
                     f"| {e['id']} | `{e['table']}` | {', '.join(e['columns'])} | "
@@ -564,6 +692,7 @@ def learned_block(
                     if e.get("actor_columns")
                     else {}
                 ),
+                **({"max_rows": int(e["max_rows"])} if e.get("max_rows") else {}),
             }
         )
     if not excuses:
@@ -633,11 +762,43 @@ def approve(
             except VerifierError as exc:
                 raise LearnError(f"{path}: {exc}") from exc
             plan.append((kind, Path(path), new, len(block["excuses"])))
-    for _kind, path, new, _n in plan:
-        path.write_text(
-            yaml.safe_dump(new, sort_keys=False, allow_unicode=True), encoding="utf-8"
-        )
+    _write_all(
+        [
+            (path, yaml.safe_dump(new, sort_keys=False, allow_unicode=True))
+            for _kind, path, new, _n in plan
+        ]
+    )
     return [(kind, path, n) for kind, path, _new, n in plan]
+
+
+def _write_all(files: Sequence[tuple[Path, str]]) -> None:
+    """Write every file or none: each goes to a temp file beside it first,
+    then all are renamed in. If a rename fails, the files already renamed
+    get their old contents back."""
+
+    import os
+
+    staged: list[tuple[Path, Path, bytes]] = []
+    try:
+        for path, text in files:
+            tmp = path.with_name(f".{path.name}.learn-{os.getpid()}.tmp")
+            tmp.write_text(text, encoding="utf-8")
+            staged.append((path, tmp, path.read_bytes()))
+    except OSError as exc:
+        for _path, tmp, _old in staged:
+            tmp.unlink(missing_ok=True)
+        raise LearnError(f"nothing was written: {exc}") from exc
+    done: list[tuple[Path, bytes]] = []
+    try:
+        for path, tmp, old in staged:
+            os.replace(tmp, path)
+            done.append((path, old))
+    except OSError as exc:
+        for path, old in done:
+            path.write_bytes(old)
+        for _path, tmp, _old in staged:
+            tmp.unlink(missing_ok=True)
+        raise LearnError(f"nothing was written: {exc}") from exc
 
 
 def _now() -> str:
@@ -764,6 +925,7 @@ def cmd_collect(args: argparse.Namespace) -> int:
         print(f"learn collect: {exc}", file=sys.stderr)
         return 2
     collector = Collector(out / "episodes.jsonl")
+    shadow = record_bodies(shadow)
     shadow.on_checked = collector
     shadow.start()
     print(f"Shadow is listening at {shadow.url}. Ctrl-C ends the run.", flush=True)

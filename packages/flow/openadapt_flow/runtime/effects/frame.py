@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
@@ -898,6 +899,8 @@ def judge_frame(
     #: column with. None: no row is the actor's.
     actor = actor_of(run_actors)
     learned_used: set[str] = set()
+    #: Rows each ``added`` ``actor_row`` excuse covered in this check.
+    added_seen: dict[str, int] = defaultdict(int)
     #: (table, row key) -> the row before and now, for ``moves``.
     rows_seen: dict[tuple[str, str], tuple[Any, Any]] = {}
     surface_ignore = set(spec.ignore_fields) | {KEY}
@@ -1216,7 +1219,7 @@ def judge_frame(
             if after is None:
                 return None
             fields = added_columns(name, after)
-        return covers(
+        hit = covers(
             learned,
             table=name,
             change=change,
@@ -1227,6 +1230,15 @@ def judge_frame(
             hasher=hashers.get(name),
             actor=actor,
         )
+        if hit and change == "added":
+            # No more added rows than one learning check ever saw.
+            limit = next(
+                (e.max_rows for e in learned.excuses if e.label() == hit), None
+            )
+            if limit is None or added_seen[hit] >= limit:
+                return None
+            added_seen[hit] += 1
+        return hit
 
     # Each other actor's entry explains at most one row: a colleague's one
     # insert can't cover two stray rows.
