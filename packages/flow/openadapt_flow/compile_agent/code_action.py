@@ -60,6 +60,7 @@ from pathlib import Path
 from typing import Any, Callable, ClassVar, Iterable, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
 
+from openadapt_flow.backend import StructuralElementNotActionable
 from openadapt_flow.compile_agent import observe as _observe
 from openadapt_flow.compile_agent.harness import (
     CommitHint,
@@ -571,6 +572,10 @@ class TreeSurface:
             return None
         try:
             handle = locate(StructuralLocator(role=role, name=name))
+        except StructuralElementNotActionable as exc:
+            raise ScriptError(
+                f"{role} {name!r} is covered or off screen: {exc}"
+            ) from exc
         except Exception as exc:  # noqa: BLE001 - ambiguity is the agent's to fix
             raise ScriptError(
                 f"{role} {name!r} is not unique on screen: {exc}"

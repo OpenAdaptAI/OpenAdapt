@@ -271,7 +271,7 @@ the right record is on screen, makes the entry, and reads the record back.
 
 ## What it can do
 
-- **Learns from any successful run**, a person's demonstration or a computer-use agent's verified run, and compiles it into a program that runs with no model calls.
+- **Learns from any successful run**, a person's demonstration or a computer-use agent's verified run, and compiles it into a program that runs with no calls to a hosted AI model.
 - **Uses the most reliable layer the app allows**: page structure (DOM, UI Automation, Accessibility), direct API calls where one is bound, and pixels only for remote desktops.
 - **Builds branching programs** from several demonstrations, repeated halts and background runs, and routes each item to the right verified variant.
 - **Works across surfaces**: web, Windows, macOS, Linux and RDP backends, chained in one workflow.
@@ -280,7 +280,7 @@ the right record is on screen, makes the entry, and reads the record back.
 - **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
 - **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it.
 - **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
-- **Runs locally**: no model calls on healthy runs, patient data redacted, signed receipts.
+- **Runs locally**: no calls to a hosted AI model on healthy runs, patient data redacted, signed receipts.
 
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the evidence and code for each.
 

@@ -26,6 +26,7 @@
 ### Fixes
 
 - A qualification case can run on `--backend windows`. `WindowsBackend` now answers the qualification environment observer from one `/context/identity` call: the foreground executable's name, the SHA-256 of that executable file, the live logon-session digest, and a digest of the machine id and exact OS build. Before, `qualify run-case` on Windows refused with "qualification backend cannot observe the complete environment". The digest is withheld when the file changed after the process started (an updater replacing a running program), and it describes the host executable for an app run by an interpreter, browser or shared runtime. Guarded input now also binds the digest and the environment, so a same-named program from another path cannot take the foreground between the check and the input. The agent's session digest now accepts a connected RDP or Citrix session, not only the console session, so the agent can run inside a remote user session. An agent without the new `context_environment_v1` fields still refuses ([#1696](https://github.com/OpenAdaptAI/OpenAdapt/issues/1696)).
+- A person's approval of a desktop save is no longer voided by text that changes by itself elsewhere on the screen, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen; it now reads only the rows of the steps the item has already resolved, each row kept apart, so an edited field still stops the save ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
 
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
@@ -117,7 +118,7 @@ A person's approval counts only when a registered approver key signed it, and th
 - Under `problems_only`, problems with an item's own input leave the switch on and send that item to a person; program and environment problems turn it off, and a person re-arms it with one signed tap ([#1517](https://github.com/OpenAdaptAI/OpenAdapt/pull/1517)).
 - Look-alike rows are counted on Windows, macOS, Linux and pixel-only surfaces, so a step that picks a row halts when it cannot tell the target from its twin ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504), [#1518](https://github.com/OpenAdaptAI/OpenAdapt/pull/1518), [#1557](https://github.com/OpenAdaptAI/OpenAdapt/pull/1557)).
 - `openadapt-agent serve --teach-browser` lets a coding agent turn a read-only browser task into a named tool it calls again with new values; `openadapt setup` registers it with Claude Code, Cursor, Codex and Gemini CLI ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)).
-- `induce --held-out` scores each held-out item by running it and checking the record independently ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
+- `openadapt_flow.validation.behavioral_generalization` scores each held-out item by running it and checking the record independently. `induce --held-out` prints structural trace coverage ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
 
 ### Fixes
 

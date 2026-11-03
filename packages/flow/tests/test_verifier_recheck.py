@@ -938,3 +938,69 @@ def test_a_wrong_ledger_says_nothing_was_held(tmp_path: Path, due_now: None) -> 
         "re-resolved" in late.reasons[-1]
         and "hold this write by hand" in late.reasons[-1]
     )
+
+
+# -- review #1670, round 2 (reported by yunusarda-sudo in #1690 and #1692) ------
+
+
+def test_a_later_write_whose_frame_was_not_judged_leaves_the_earlier_uncertain(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A later write whose own frame wasn't judged has no window, so its rows
+    # aren't excused. They may be its own change, not the earlier write's
+    # harm: the earlier write is UNCERTAIN for review, never REFUTED by them
+    # and never left at its provisional CONFIRMED.
+    from openadapt_flow import verify_run
+
+    contract, db, first = _first(tmp_path)
+    second = _save(contract, db, 3)
+    assert second.verified and second.recheck is not None
+    assert _recheck(contract, first, excused_by=[second]).outcome == "CONFIRMED"
+    monkeypatch.setattr(verify_run, "_later_window", lambda state: None)
+    late = _recheck(contract, first, excused_by=[second])
+    assert late.outcome == "UNCERTAIN", late.reasons
+    assert "frame was not judged" in late.reasons[0]
+
+
+def test_without_an_unjudged_later_write_a_late_change_still_refutes(
+    tmp_path: Path, due_now: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow import verify_run
+
+    contract, db, first = _first(tmp_path)
+    monkeypatch.setattr(verify_run, "_later_window", lambda state: None)
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert _recheck(contract, first).outcome == "REFUTED"
+
+
+def test_an_unvalidated_saved_state_does_not_re_resolve_a_ledger_attempt(
+    tmp_path: Path, due_now: None
+) -> None:
+    # A saved state that fails validation (here: other params) could name
+    # another write's attempt by its correlation_id; it re-resolves nothing.
+    contract, db, result = _keyed(tmp_path, "k-safe")
+    assert result.recheck is not None and result.recheck.path is not None
+    wrong = {"wrong": "params"}
+    saved = RecheckState.load(result.recheck.path, params=wrong)
+    late = recheck(contract, saved, params=wrong, actor=BOT)
+    assert late.outcome == "UNCERTAIN"
+    assert "the saved recheck state failed validation" in late.reasons[-1]
+    assert "hold this write by hand" in late.reasons[-1]
+    from openadapt_flow.write_ledger import default_ledger
+
+    attempt = default_ledger().latest(result.write_key)
+    assert attempt is not None and attempt.resolved.get("outcome") == "CONFIRMED"
+
+
+def test_a_write_result_with_wrong_params_is_still_held_in_the_ledger(
+    tmp_path: Path, due_now: None
+) -> None:
+    # A WriteResult names its own attempt, so an UNCERTAIN recheck still
+    # re-resolves it: a retry is never handed the earlier CONFIRMED.
+    contract, db, result = _keyed(tmp_path, "k-own")
+    late = recheck(contract, result, params={"wrong": "params"}, actor=BOT)
+    assert late.outcome == "UNCERTAIN"
+    assert not any("re-resolved" in r for r in late.reasons)
+    with pytest.raises(verifier.WriteBlocked) as raised:
+        begin_write(contract, _params(2), actor=BOT, write_key="k-own")
+    assert not isinstance(raised.value, verifier.AlreadyWritten)

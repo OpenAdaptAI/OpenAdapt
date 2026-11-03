@@ -85,6 +85,7 @@ from openadapt_flow.backend import (
     RemoteFrameContractBackend,
     RichPointerActionBackend,
     SelectOptionBackend,
+    StructuralElementNotActionable,
     StructuralResolutionRefused,
     SubmitBindingBackend,
 )
@@ -648,8 +649,19 @@ class EgressNotPermitted(RuntimeError):
 #: scroll counts it as ready.
 SCROLL_POSITION_SLACK_FRACTION = 0.25
 
+
 #: Rungs that show the target itself on screen: what closed-loop scroll
 #: readiness accepts, and all a step accepts after its scroll missed it.
+class _NotActionableError(str):
+    """The error ``_resolve_step`` returns when the structural rung found
+    exactly one candidate but it is covered or off-viewport.
+
+    A ``str`` so it travels as any resolution error; its type marks it. The
+    step polls on it like any miss, and halts with ``target_not_actionable``
+    when it times out or when the fresh re-resolution before input finds it.
+    """
+
+
 _DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
 
 #: Steps that own the halt when the closed-loop scroll before them never found
@@ -1318,6 +1330,7 @@ class Replayer:
                 raise ValueError("approval_gate must be an approval_mode ApprovalGate")
         self.approval_gate = approval_gate
         self._approval_report: Optional[RunReport] = None
+        self._approval_form_step_id: Optional[str] = None
         self._approval_run_dir: Optional[Path] = None
         self._approval_refusal: Optional[str] = None
         self._qualification_fault_mutations: list[FaultMutationReceipt] = []
@@ -8242,6 +8255,22 @@ class Replayer:
                 resolution, matched_region, error = self._resolve_step_target(
                     step, before_png, bundle_dir, workflow, target_missed
                 )
+            if (
+                error is not None
+                and resolution is None
+                and isinstance(error, _NotActionableError)
+            ):
+                # The one candidate stayed covered or off-viewport for the
+                # whole step timeout. No visual rung ran on it.
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.error = error
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="target_resolution",
+                    code="target_not_actionable",
+                    detector_input_sha256=sha256_bytes(last_frame),
+                )
             if resolution is not None and matched_region is not None:
                 assert step.anchor is not None
                 resolution = self._retain_visual_resolution_evidence(
@@ -9160,7 +9189,11 @@ class Replayer:
             )
             result.safety_refusal_evidence = SafetyRefusalEvidence(
                 stage="target_resolution",
-                code="target_ambiguous",
+                code=(
+                    "target_not_actionable"
+                    if isinstance(exc, StructuralElementNotActionable)
+                    else "target_ambiguous"
+                ),
                 detector_input_sha256=sha256_bytes(last_frame),
             )
         except Exception as exc:  # defensive: report, don't crash the run
@@ -11638,6 +11671,15 @@ class Replayer:
                     "Actuation preflight HALTED because the fresh target was "
                     f"ambiguous for step '{step.id}' ({step.intent}): {exc}",
                 )
+            if isinstance(error, _NotActionableError):
+                # Something covered the target between resolution and input.
+                result.safety_halt = True
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="actuation_revalidation",
+                    code="target_not_actionable",
+                    detector_input_sha256=sha256_bytes(fresh_png),
+                )
+                return None, None, fresh_png, error
             if error is not None:
                 if self.governed_authorization is not None:
                     result.safety_halt = True
@@ -11880,7 +11922,11 @@ class Replayer:
         )
         if resolution is not None and resolution.rung in _DIRECT_TARGET_RUNGS:
             return resolution, region, error
-        if resolution is None and step.anchor is None:
+        if resolution is None and (
+            step.anchor is None or isinstance(error, _NotActionableError)
+        ):
+            # A target still covered when the scroll gave up keeps its own
+            # refusal, so the step halts with ``target_not_actionable``.
             return resolution, region, error
         return (
             None,
@@ -11945,17 +11991,28 @@ class Replayer:
             if self.use_structural and hasattr(self.backend, "locate_structural")
             else None
         )
-        resolved = resolve(
-            step.anchor,
-            screen_png,
-            self.vision,
-            self.grounder if allow_grounder else None,
-            step.intent,
-            template_png=template_png,
-            viewport=_frame_viewport(screen_png),
-            structural=structural,
-            allow_target_ocr=allow_target_ocr,
-        )
+        try:
+            resolved = resolve(
+                step.anchor,
+                screen_png,
+                self.vision,
+                self.grounder if allow_grounder else None,
+                step.intent,
+                template_png=template_png,
+                viewport=_frame_viewport(screen_png),
+                structural=structural,
+                allow_target_ocr=allow_target_ocr,
+            )
+        except StructuralElementNotActionable as exc:
+            return (
+                None,
+                None,
+                _NotActionableError(
+                    f"Target for step '{step.id}' ({step.intent}) is not "
+                    f"actionable: its one structural candidate is covered or "
+                    f"off-viewport ({exc})"
+                ),
+            )
         if resolved is None:
             return (
                 None,
@@ -12724,6 +12781,7 @@ class Replayer:
 
         gate = self.approval_gate
         assert gate is not None
+        self._approval_form_step_id = step.id
         report = self._approval_report
         run_dir = self._approval_run_dir
 
@@ -12844,9 +12902,54 @@ class Replayer:
         from openadapt_flow.approval_mode.form_state import capture_form_state
 
         try:
-            return capture_form_state(self.backend, self.vision, frame_png)
+            return capture_form_state(
+                self.backend,
+                self.vision,
+                frame_png,
+                self._approval_form_regions(frame_png),
+            )
         except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
             return None
+
+    #: Height of the row read around each resolved field for a screen form
+    #: state, in frame pixels.
+    _APPROVAL_FORM_ROW_PX = 48
+
+    def _approval_form_regions(
+        self, frame_png: Optional[bytes]
+    ) -> Optional[list[tuple[int, int, int, int]]]:
+        """The rows of this item's fields, for a screen-text form state.
+
+        Every step this run has already resolved before the save is a field
+        the item filled or a control it used; its row, across the frame, is
+        where an edit would show. The save step itself is left out, so the
+        approval request (taken before the save resolves) and the recheck
+        after the answer read the same rows. None, and the whole screen is
+        read, when no step has resolved yet.
+        """
+
+        report = self._approval_report
+        if report is None or frame_png is None:
+            return None
+        try:
+            from PIL import Image
+
+            with Image.open(io.BytesIO(frame_png)) as image:
+                width, height = image.size
+        except Exception:  # noqa: BLE001 - no size means the whole screen
+            return None
+        from openadapt_flow.approval_mode.form_state import field_rows
+
+        save_step = self._approval_form_step_id
+        return field_rows(
+            [
+                int(prior.resolution.point[1])
+                for prior in report.results
+                if prior.step_id != save_step and prior.resolution is not None
+            ],
+            (width, height),
+            self._APPROVAL_FORM_ROW_PX,
+        )
 
     def _is_qualification_fault_step(self, step: Step) -> bool:
         """Whether ``step`` is the fault step of the fault case this run is.
@@ -12881,6 +12984,7 @@ class Replayer:
         """
 
         gate = self.approval_gate
+        self._approval_form_step_id = step.id
         assert gate is not None
         authorization = self.governed_authorization
         drill_fault_step = self._is_qualification_fault_step(step)
@@ -17876,11 +17980,13 @@ class Replayer:
                 viewport=_frame_viewport(frame_png),
                 structural=structural,
             )
-        except OcrResolutionRefused:
+        except (OcrResolutionRefused, StructuralElementNotActionable):
             # Readiness is a bounded, non-actuating probe. An ambiguous OCR
-            # candidate means that the target is not ready yet, so the scroll
-            # loop must continue. The later target action runs the full
-            # resolver again and still halts on the same ambiguity.
+            # candidate, or a unique structural candidate that is still
+            # covered (a sticky header) or off-viewport, means the target is
+            # not ready yet, so the scroll loop must continue. The later
+            # target action runs the full resolver again and still halts on
+            # the same refusal. Structural ambiguity is not caught here.
             return miss("unresolved")
         if resolved is None:
             return miss("unresolved")
