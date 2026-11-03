@@ -1434,7 +1434,7 @@ class _User32:
             fn.argtypes = args
             fn.restype = res
         self._dll = dll
-        self._enum_proc = ctypes.WINFUNCTYPE(
+        self._enum_proc = getattr(ctypes, "WINFUNCTYPE")(
             wintypes.BOOL, wintypes.HWND, wintypes.LPARAM
         )
         dll.EnumWindows.argtypes = [self._enum_proc, wintypes.LPARAM]
