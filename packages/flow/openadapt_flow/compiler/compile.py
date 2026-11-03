@@ -2043,15 +2043,25 @@ def compile_recording(
     set, see :mod:`openadapt_flow.sealed_set`) is read in memory and compiles
     into a sealed bundle: every crop, sidecar and ``workflow.json`` is
     encrypted before it reaches the disk, under ``OPENADAPT_BUNDLE_KEY`` or,
-    when that is unset, the recording's own key. Without a key the compile
-    refuses before reading anything.
+    when that is unset, the recording's own key. A plaintext recording
+    compiles into a sealed bundle too, under the configured or local key
+    (:mod:`openadapt_flow.at_rest`), unless ``OPENADAPT_FLOW_PLAINTEXT_AT_REST``
+    allows plaintext.
     """
     recording = Path(recording_dir)
     bundle = Path(out_bundle_dir)
     sealed_input = _sealed.is_sealed(recording)
     sealed_output = _sealed.is_sealed(bundle)
-    if _sealed.active_writer(bundle) is not None or not (sealed_input or sealed_output):
+    if _sealed.active_writer(bundle) is not None:
         return _compile_recording(recording, bundle, name=name, **kwargs)
+    if not (sealed_input or sealed_output):
+        from openadapt_flow import at_rest
+
+        # A plaintext recording (one made before encryption was the default,
+        # or under the opt-out) still compiles to a sealed bundle unless
+        # plaintext is explicitly allowed.
+        if at_rest.plaintext_allowed("a compiled bundle"):
+            return _compile_recording(recording, bundle, name=name, **kwargs)
     if sealed_input:
         # Opening the recording verifies its whole file set before compiling.
         _sealed.open_set(recording)
@@ -2060,9 +2070,8 @@ def compile_recording(
         raise _sealed.SealedSetKeyError(_sealed.missing_key_message(bundle, "bundle"))
     if not sealed_output and bundle.exists() and any(bundle.iterdir()):
         raise _sealed.SealedSetError(
-            f"{bundle} already holds an unencrypted bundle; compile an "
-            "encrypted recording into a new directory so no plaintext is mixed "
-            "into the sealed output"
+            f"{bundle} already holds an unencrypted bundle; compile into a new "
+            "directory so no plaintext is mixed into the sealed output"
         )
     with _sealed.writing(bundle, "bundle", passphrase, resume=sealed_output):
         return _compile_recording(recording, bundle, name=name, **kwargs)

@@ -2865,6 +2865,7 @@ class TestMisc:
             "shadow_turn_off",
             "shadow_pause",
             "shadow_unpause",
+            "at_rest_status",
         }
         assert expected.issubset(set(disp.commands))
 

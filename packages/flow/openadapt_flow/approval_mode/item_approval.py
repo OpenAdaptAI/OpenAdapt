@@ -1030,6 +1030,11 @@ class ItemApprovalStore:
                 else None
             ),
         )
+        from openadapt_flow import at_rest
+
+        # The approval frame and request can't be encrypted yet: named on
+        # stderr and in the ledger, or refused under strict mode.
+        at_rest.unsealed_write("approval requests and frames", self.dir)
         _write_exclusive(self.dir / f"{request_id}.png", frame_png)
         _write_exclusive(
             self.dir / f"request-{request_id}.json",

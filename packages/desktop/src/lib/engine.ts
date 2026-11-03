@@ -104,6 +104,7 @@ export const CMD = {
   AUTHORING_ALLOW: "authoring_allow",
   AUTHORING_DENY: "authoring_deny",
   AUTHORING_STATUS: "authoring_status",
+  AT_REST_STATUS: "at_rest_status",
   AUTHORING_PIN_TARGET: "authoring_pin_target",
   // config / settings (lane, phi_mode, hosted host)
   GET_CONFIG: "get_config",

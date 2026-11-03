@@ -1,0 +1,277 @@
+"""Encryption at rest by default, the recorded opt-out, and strict mode.
+
+The rest of the suite runs under the plaintext opt-out (tests/conftest.py).
+These tests remove it to check the default and ``OPENADAPT_FLOW_AT_REST=strict``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import stat
+from pathlib import Path
+
+import pytest
+
+from openadapt_flow import at_rest, crypto, sealed_set
+from openadapt_flow.__main__ import _recording_encryption_key, main
+from openadapt_flow.ir import Workflow
+from tests.test_sealed_at_rest import (
+    PNG_SIGNATURE,
+    _assert_ciphertext_only,
+    _recording,
+    watching_disk,
+)
+
+
+@pytest.fixture
+def default_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    for name in (
+        at_rest.OPT_OUT_ENV,
+        at_rest.MODE_ENV,
+        crypto.ENV_KEY,
+        sealed_set.RECORDING_ENV_KEY,
+    ):
+        monkeypatch.delenv(name, raising=False)
+    home = tmp_path / "at-rest-home"
+    monkeypatch.setenv(at_rest.HOME_ENV, str(home))
+    at_rest._reset_for_tests()
+    yield home
+    at_rest._reset_for_tests()
+
+
+def _ledger(home: Path) -> list[dict]:
+    path = home / at_rest.LEDGER_NAME
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+# -- the local key -------------------------------------------------------------
+
+
+def test_local_key_is_created_private_and_reused(default_mode: Path) -> None:
+    first = crypto.resolve_key(None)
+    path = default_mode / "keys" / at_rest.KEY_NAME
+    assert first and path.read_text().strip() == first
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+    assert crypto.resolve_key(None) == first
+    assert not [p for p in path.parent.iterdir() if p.name != at_rest.KEY_NAME]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permissions")
+def test_a_key_others_can_read_is_refused(default_mode: Path) -> None:
+    crypto.resolve_key(None)
+    path = default_mode / "keys" / at_rest.KEY_NAME
+    path.chmod(0o644)
+    with pytest.raises(at_rest.LocalKeyError, match="chmod 600"):
+        crypto.resolve_key(None)
+
+
+def test_a_malformed_key_is_refused(default_mode: Path) -> None:
+    path = default_mode / "keys" / at_rest.KEY_NAME
+    path.parent.mkdir(parents=True, mode=0o700)
+    path.write_text("short\n")
+    path.chmod(0o600)
+    with pytest.raises(at_rest.LocalKeyError):
+        crypto.resolve_key(None)
+
+
+def test_a_configured_key_wins(default_mode: Path, monkeypatch) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, "deployment-key")
+    assert crypto.resolve_key(None) == "deployment-key"
+    assert not (default_mode / "keys").exists()
+
+
+# -- the opt-out and strict mode -----------------------------------------------
+
+
+def test_opt_out_restores_plaintext_loudly_and_records_it(
+    default_mode: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "de-identified fixtures")
+    assert crypto.resolve_key(None) is None
+    assert at_rest.plaintext_allowed("a compiled bundle")
+    assert at_rest.plaintext_allowed("a compiled bundle")  # warns once
+    err = capsys.readouterr().err
+    assert err.count("WARNING: writing a compiled bundle in plaintext") == 1
+    [line] = _ledger(default_mode)
+    assert line["purpose"] == "a compiled bundle"
+    assert line["reason"] == "de-identified fixtures"
+
+
+def test_strict_mode_ignores_the_opt_out(
+    default_mode: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "dev")
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    assert crypto.resolve_key(None)
+    assert not at_rest.plaintext_allowed("a compiled bundle")
+    assert "ignored" in capsys.readouterr().err
+
+
+def test_an_unknown_mode_stops_the_cli(
+    default_mode: Path, monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv(at_rest.MODE_ENV, "stricter")
+    with pytest.raises(ValueError):
+        at_rest.strict()
+    assert main(["explain", str(tmp_path / "missing")]) == 2
+
+
+def test_unsealed_write_names_the_path_or_refuses(
+    default_mode: Path, monkeypatch, capsys
+) -> None:
+    at_rest.unsealed_write("a run directory", "/data/run-7")
+    assert "/data/run-7" in capsys.readouterr().err
+    assert _ledger(default_mode)[0]["path"] == "/data/run-7"
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    with pytest.raises(at_rest.AtRestRefused, match="strict"):
+        at_rest.unsealed_write("a run directory", "/data/run-8")
+    assert len(_ledger(default_mode)) == 1
+
+
+# -- what is sealed by default ---------------------------------------------------
+
+
+def test_a_plaintext_recording_compiles_to_a_sealed_bundle(
+    default_mode: Path, tmp_path: Path
+) -> None:
+    rec = _recording(tmp_path / "rec", key=None)  # made before the default
+    assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
+    _assert_ciphertext_only(tmp_path / "b")
+    assert Workflow.load(tmp_path / "b").encrypted
+    assert sealed_set.SealedSet.open(tmp_path / "b", crypto.resolve_key(None))
+
+
+def test_compile_under_the_opt_out_stays_plaintext(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "fixtures")
+    rec = _recording(tmp_path / "rec", key=None)
+    assert main(["compile", str(rec), "--out", str(tmp_path / "b"), "--name", "x"]) == 0
+    assert (tmp_path / "b" / "workflow.json").is_file()
+    assert _ledger(default_mode)[0]["purpose"] == "a compiled bundle"
+
+
+def test_induce_seals_by_default_and_refuses_a_plaintext_report(
+    default_mode: Path, tmp_path: Path
+) -> None:
+    first = _recording(tmp_path / "rec1", key=None)
+    second = _recording(tmp_path / "rec2", key=None)
+    report = tmp_path / "induce.json"
+    refused = main(
+        [
+            "induce",
+            str(first),
+            str(second),
+            "--out",
+            str(tmp_path / "x"),
+            "--report",
+            str(report),
+        ]
+    )
+    assert refused == 2 and not report.exists()
+    assert main(["induce", str(first), str(second), "--out", str(tmp_path / "i")]) == 0
+    _assert_ciphertext_only(tmp_path / "i")
+
+
+def _record_args(out: Path, *, no_encrypt: bool = False) -> argparse.Namespace:
+    return argparse.Namespace(out=str(out), no_encrypt=no_encrypt)
+
+
+def test_web_recordings_get_the_local_key(default_mode: Path, tmp_path: Path) -> None:
+    assert _recording_encryption_key(_record_args(tmp_path / "r"), "web") == (
+        crypto.resolve_key(None)
+    )
+
+
+def test_no_encrypt_is_recorded_and_strict_refuses_it(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    assert (
+        _recording_encryption_key(_record_args(tmp_path / "r", no_encrypt=True), "web")
+        is None
+    )
+    assert "record --no-encrypt" in _ledger(default_mode)[0]["reason"]
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    with pytest.raises(SystemExit, match="strict"):
+        _recording_encryption_key(_record_args(tmp_path / "r2", no_encrypt=True), "web")
+
+
+def test_desktop_recorders_work_by_default_and_refuse_in_strict_mode(
+    default_mode: Path, tmp_path: Path, monkeypatch, capsys
+) -> None:
+    out = tmp_path / "desk"
+    assert _recording_encryption_key(_record_args(out), "windows") is None
+    assert str(out) in capsys.readouterr().err
+    assert _ledger(default_mode)[0]["path"] == str(out)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    with pytest.raises(SystemExit, match="strict"):
+        _recording_encryption_key(_record_args(tmp_path / "desk2"), "windows")
+
+
+def test_commands_that_cannot_seal_their_output_refuse_in_strict_mode(
+    default_mode: Path, tmp_path: Path, monkeypatch, capsys
+) -> None:
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    assert main(["explain", str(tmp_path / "missing")]) == 2
+    assert "strict" in capsys.readouterr().err
+
+
+# -- run directories -----------------------------------------------------------
+
+
+def _mockmed_run(tmp_path: Path, bundle: Path, run_dir: Path):
+    from openadapt_flow.mockmed.fault_server import serve
+    from openadapt_flow.runtime.effects import RestRecordVerifier
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_after_stop_mockmed import MockMedBackend, _vision
+
+    url, _db, stop = serve()
+    url = url.rstrip("/")
+    try:
+        return Replayer(
+            MockMedBackend(url),
+            vision=_vision(),
+            effect_verifier=RestRecordVerifier(url),
+            poll_interval_s=0.01,
+        ).run(Workflow.load(bundle), bundle_dir=bundle, run_dir=run_dir)
+    finally:
+        stop()
+
+
+def test_a_run_directory_is_plaintext_by_default_and_named(
+    default_mode: Path, tmp_path: Path, capsys
+) -> None:
+    from tests.test_after_stop_mockmed import _workflow
+
+    bundle = tmp_path / "bundle"
+    _workflow().save(bundle)
+    run_dir = tmp_path / "run"
+    _mockmed_run(tmp_path, bundle, run_dir)
+    assert (run_dir / "report.json").is_file()
+    assert str(run_dir) in capsys.readouterr().err
+    assert any(e.get("path") == str(run_dir) for e in _ledger(default_mode))
+
+
+def test_strict_mode_seals_the_run_directory_of_a_plaintext_bundle(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from tests.test_after_stop_mockmed import _workflow
+
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    bundle = tmp_path / "bundle"
+    with monkeypatch.context() as m:
+        m.setenv(at_rest.OPT_OUT_ENV, "")
+        _workflow().save(bundle)
+    run_dir = tmp_path / "run"
+    with watching_disk() as watch:
+        _mockmed_run(tmp_path, bundle, run_dir)
+    assert sealed_set.is_sealed(run_dir)
+    _assert_ciphertext_only(run_dir)
+    assert watch.leaks([b'"execution_outcome"', PNG_SIGNATURE]) == []
+    assert _ledger(default_mode) == []

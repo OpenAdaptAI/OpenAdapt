@@ -585,6 +585,9 @@ class PoolReport:
 
     def save(self, run_dir: Path) -> Path:
         run_dir.mkdir(parents=True, exist_ok=True)
+        from openadapt_flow import at_rest as _at_rest
+
+        _at_rest.unsealed_write("a worklist report", run_dir, refuse=False)
         path = run_dir / POOL_REPORT_FILENAME
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.to_json(), indent=1, default=str))

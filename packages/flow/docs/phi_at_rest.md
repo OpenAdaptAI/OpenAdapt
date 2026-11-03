@@ -11,6 +11,49 @@ See also [PRIVACY.md](PRIVACY.md) (what is scrubbed before anything leaves the
 machine), [phi_in_transit.md](phi_in_transit.md) (PHI on the wire) and
 `openadapt_flow.sealed_set` (the implementation).
 
+## Default, opt-out and strict mode
+
+Encryption at rest is the default. When no key is configured, Flow creates
+one on first use at `~/.openadapt/keys/at-rest.key` (`$OPENADAPT_HOME`, or
+`$OPENADAPT_FLOW_AT_REST_HOME`, moves it), mode 0600 in a 0700 directory, and
+refuses it if anyone else can read it. Back it up: what it encrypts can't be
+read without it. A configured `OPENADAPT_BUNDLE_KEY` or
+`OPENADAPT_RECORDING_KEY` always wins.
+
+| | Default | `OPENADAPT_FLOW_PLAINTEXT_AT_REST='<reason>'` | `OPENADAPT_FLOW_AT_REST=strict` |
+| --- | --- | --- | --- |
+| Web recordings | Encrypted | Plaintext | Encrypted |
+| Bundles from `compile`, `induce`, `admit` | Encrypted, also from a plaintext recording | Plaintext | Encrypted |
+| Durable checkpoints | Encrypted | Plaintext | Encrypted |
+| Run directories | Plaintext, named | Plaintext | Encrypted, also for a plaintext bundle |
+| Desktop recordings | Plaintext, named | Plaintext | Refused |
+| Approval requests and frames, attended drafts, business decisions | Plaintext, named | Plaintext | Refused |
+| `visualize`, `explain`, `teach`, `emit-skill`, `push`, `compose`, `process`, `variants`, `route`, `--save-healed-to`, `induce --report` | Plaintext, named | Plaintext | Refused before they run |
+
+**Named** means stderr names the path and one line goes to
+`~/.openadapt/plaintext-at-rest.jsonl` (the ledger). OpenAdapt Desktop shows
+a notice in its window from the same ledger.
+
+Run directories stay plaintext by default because the offline Seal, `undo`,
+`attach-seal` and Desktop don't read encrypted runs yet. With a configured
+key, a sealed bundle's run directory is encrypted as before. Issue
+[#1751](https://github.com/OpenAdaptAI/OpenAdapt/issues/1751) tracks every
+artifact that can't be encrypted yet. When the last one can, strict becomes
+the default.
+
+The opt-out is for development and already de-identified data. Each process
+that uses it prints a warning and adds a ledger line with the reason;
+`record --no-encrypt` does the same for one web recording. Strict mode
+ignores the opt-out, and an unknown value of `OPENADAPT_FLOW_AT_REST` stops
+the command.
+
+**Healthcare and other regulated deployments:** set
+`OPENADAPT_FLOW_AT_REST=strict` and a key from your secret manager.
+
+OpenAdapt Desktop runs Flow under the opt-out, recorded with its own reason:
+it encrypts certified workflows with per-workflow keys in the system
+keychain, and its other files follow the table's opt-out column.
+
 ## Summary
 
 With a key configured, these are ciphertext on disk:
@@ -139,13 +182,13 @@ complete ciphertext. The recording is finalized (indexed) when it finishes.
 `record --with-check` says it cannot mark a check in an encrypted recording
 yet and marks nothing.
 
-Encryption is on by default where it is safe: when `OPENADAPT_BUNDLE_KEY` is
-set, a deployment that seals its bundles also encrypts its web recordings.
-`--no-encrypt` opts out. The desktop recorders (`--backend
+Web recordings are encrypted by default, under the configured key or the
+local one. `--no-encrypt` opts out for one recording, with a warning and a
+ledger line; strict mode refuses it. The desktop recorders (`--backend
 windows/macos/linux/rdp/citrix`) write a raw capture session (a SQLite
 database and video) through openadapt-capture, which Flow cannot encrypt yet.
-With `OPENADAPT_RECORDING_KEY` set they refuse to record; with only the bundle
-key set they record in plaintext as before.
+By default they record in plaintext and name the directory; with
+`OPENADAPT_RECORDING_KEY` set, or in strict mode, they refuse.
 
 ### Cost
 
@@ -196,6 +239,9 @@ that lists the commands above, rather than decrypt to disk. A bare
 `Workflow.save()` into a sealed bundle keeps it sealed.
 
 ## What is not encrypted
+
+Everything in the [default table](#default-opt-out-and-strict-mode) marked
+"Plaintext, named", outside strict mode. Also:
 
 - Data in memory. Decrypted frames, crops and the workflow live in process
   memory while a command runs, and can reach swap or a crash dump. Use

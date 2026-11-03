@@ -1617,14 +1617,28 @@ class Replayer:
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
+        from openadapt_flow import at_rest
+
         bundle_path = Path(bundle_dir)
-        if (
-            not (
-                _sealed.is_sealed(bundle_path)
-                or _sealed.active_writer(bundle_path) is not None
-            )
-            or _sealed.active_writer(Path(run_dir)) is not None
-        ):
+        bundle_sealed = (
+            _sealed.is_sealed(bundle_path)
+            or _sealed.active_writer(bundle_path) is not None
+        )
+        # A run directory is sealed under strict mode, or when the deployment
+        # configured a key and the bundle is sealed. Otherwise it is one of the
+        # artifacts that can't be sealed yet by default (the offline Seal and
+        # other readers don't read sealed runs): it is written in plaintext,
+        # named on stderr and in the ledger (docs/phi_at_rest.md).
+        seal_run = at_rest.strict() or (bundle_sealed and at_rest.explicit_key())
+        if not seal_run or _sealed.active_writer(Path(run_dir)) is not None:
+            if _sealed.active_writer(Path(run_dir)) is None:
+                if not at_rest.plaintext_allowed("a run directory"):
+                    at_rest.unsealed_write("a run directory", run_dir)
+                if self.checkpoint_key is None:
+                    # Durable checkpoints can still be encrypted here.
+                    from openadapt_flow import crypto as _crypto
+
+                    self.checkpoint_key = _crypto.resolve_key(None)
             return self._run_unsealed(
                 workflow,
                 params=params,
@@ -1655,9 +1669,11 @@ class Replayer:
             # Refuse before anything is actuated or written: these stores
             # keep their own plaintext state files in the run directory.
             raise _sealed.SealedSetError(
-                f"a sealed bundle cannot run with {unsupported} yet, because "
-                "that state is written to the run directory in plaintext. "
-                "Nothing was executed."
+                f"a sealed run cannot use {unsupported} yet, because that "
+                "state is written to the run directory in plaintext. Nothing "
+                "was executed. Outside OPENADAPT_FLOW_AT_REST=strict, and "
+                "without a configured key, the run directory is written in "
+                "plaintext (recorded) and this works."
             )
         if self.checkpoint_key is None:
             # A sealed bundle's run keeps its durable state under the same key.

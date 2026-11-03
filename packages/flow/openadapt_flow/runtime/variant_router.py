@@ -348,6 +348,9 @@ def _now() -> str:
 
 def _write(run_dir: Path, report: VariantRunReport) -> VariantRunReport:
     run_dir.mkdir(parents=True, exist_ok=True)
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.unsealed_write("a variant report", run_dir, refuse=False)
     (run_dir / VARIANT_REPORT_FILENAME).write_text(
         report.model_dump_json(indent=2, exclude_none=True), encoding="utf-8"
     )

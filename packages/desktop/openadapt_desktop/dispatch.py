@@ -427,6 +427,8 @@ class EngineDispatcher:
             "shadow_set_work_domains": self.shadow_set_work_domains,
             "shadow_decide": self.shadow_decide,
             "shadow_scan": self.shadow_scan,
+            # Unencrypted patient data on this computer (Flow's ledger).
+            "at_rest_status": self.at_rest_status,
         }
 
     # ------------------------------------------------------- shadow mode
@@ -6234,6 +6236,12 @@ class EngineDispatcher:
 
             self.services.runner = RunnerService(self.config, self.services, emit=self.emit)
         return self.services.runner
+
+    def at_rest_status(self, **params: Any) -> dict:
+        """How many writes Flow recorded as unencrypted, for the notice."""
+        from openadapt_desktop.at_rest_notice import status
+
+        return status()
 
     def runner_status(self, **params: Any) -> dict:
         """Return the ``RunnerStatus``-shaped dict for the Runner screen."""
