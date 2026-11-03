@@ -222,8 +222,8 @@ class OracleRecipeV1(_Strict):
     records_key: Optional[StrictStr] = "records"
     #: ``rest`` / ``fhir``: base URL of the read endpoint.
     base_url: Optional[StrictStr] = None
-    #: ``rest``: path of the records document.
-    records_path: StrictStr = "/api/db"
+    #: ``rest``: path of the records document. Required there.
+    records_path: Optional[StrictStr] = None
     #: ``rest``: environment variable holding a JSON object of headers.
     headers_env: Optional[StrictStr] = None
     #: ``sqlite``: database file. ``query``: one read-only SELECT.
@@ -245,6 +245,8 @@ class OracleRecipeV1(_Strict):
             raise ValueError(f"oracle recipe {self.kind} requires path")
         if self.kind in {"rest", "fhir"} and not self.base_url:
             raise ValueError(f"oracle recipe {self.kind} requires base_url")
+        if self.kind == "rest" and not self.records_path:
+            raise ValueError("oracle recipe rest requires records_path")
         if self.kind == "sqlite" and not self.query:
             raise ValueError("oracle recipe sqlite requires query")
         return self

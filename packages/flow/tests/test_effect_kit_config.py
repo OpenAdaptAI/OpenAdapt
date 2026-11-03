@@ -114,7 +114,11 @@ class TestRestKitConfig:
 
         with_auth = _Session()
         RestRecordVerifier(
-            "http://x", session=with_auth, headers={"Authorization": "Bearer t"}
+            "http://x",
+            records_path="/api/db",
+            records_key="records",
+            session=with_auth,
+            headers={"Authorization": "Bearer t"},
         ).capture_pre_state()
         assert with_auth.calls == [{"Authorization": "Bearer t"}]
 
@@ -125,7 +129,9 @@ class TestRestKitConfig:
                 return _Session.get(self, url, timeout=timeout)
 
         narrow = _NarrowSession()
-        state = RestRecordVerifier("http://x", session=narrow).capture_pre_state()
+        state = RestRecordVerifier(
+            "http://x", records_path="/api/db", records_key="records", session=narrow
+        ).capture_pre_state()
         assert state.reachable
         assert "narrow" in narrow.calls
 
@@ -370,3 +376,28 @@ class TestOnScreenKitConfig:
     def test_onscreen_listed_in_unknown_kind_message(self):
         with pytest.raises(ValueError, match="onscreen"):
             build_effect_verifier(EffectsConfig(kind="bogus"))
+
+
+def test_rest_needs_the_apps_records_path():
+    """No app's records path is assumed: kind rest names its own."""
+    cfg = EffectsConfig(kind="rest", base_url="http://app.local")
+    with pytest.raises(ValueError, match="records_path"):
+        build_effect_verifier(cfg)
+    # A config without a rest read does not carry the field at all.
+    assert "records_path" not in EffectsConfig(kind="none").model_dump()
+
+    # MockMed's shape and Frappe's both work once named.
+    for path, key in (
+        ("/api/db", "records"),
+        ("/api/resource/Loan Application", "data"),
+    ):
+        v = build_effect_verifier(
+            EffectsConfig(
+                kind="rest",
+                base_url="http://app.local",
+                records_path=path,
+                records_key=key,
+            )
+        )
+        assert isinstance(v, RestRecordVerifier)
+        assert (v.records_path, v.records_key) == (path, key)

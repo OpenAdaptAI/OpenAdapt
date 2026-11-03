@@ -208,7 +208,9 @@ def _mockmed_replayer(url: str) -> Replayer:
     return Replayer(
         MockMedBackend(url),
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(url),
+        effect_verifier=RestRecordVerifier(
+            url, records_path="/api/db", records_key="records"
+        ),
         api_actuator=ApiActuator(url),
         poll_interval_s=0.01,
     )
@@ -220,7 +222,7 @@ def _run_with_rollback(
     bundle = tmp_path / "bundle"
     workflow.save(bundle)
     workflow = Workflow.load(bundle)
-    verifier = RestRecordVerifier(url)
+    verifier = RestRecordVerifier(url, records_path="/api/db", records_key="records")
     from openadapt_flow.after_stop import records_reader
 
     plan = RollbackPlan(

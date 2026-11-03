@@ -163,7 +163,9 @@ def _run(tmp_path, person: Person, *, transport_setup=None):
         report = Replayer(
             backend,
             vision=FakeVision(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             web_form_actuator=WebFormActuator(transport),
             approval_gate=gate,
             poll_interval_s=0.01,

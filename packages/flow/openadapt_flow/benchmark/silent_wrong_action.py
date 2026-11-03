@@ -322,7 +322,7 @@ def run_one(base: str, db: Any, scenario: Scenario) -> dict[str, Any]:
     db.reset(seed_concurrent=scenario.seed_concurrent)
     before_snapshot = db.snapshot()["records"]
 
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before_state = verifier.capture_pre_state()
 
     statuses = _drive(base, scenario)

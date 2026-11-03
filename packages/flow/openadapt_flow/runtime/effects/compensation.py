@@ -352,7 +352,7 @@ class RestCompensator:
     Args:
         base_url: Base URL of the system of record.
         delete_path_template: Path template with ``{id}`` for the per-record
-            DELETE (e.g. ``/api/encounter/{id}``).
+            DELETE (e.g. ``/records/{id}``). Required.
         session: Optional ``requests``-style session.
         timeout_s: Per-request timeout.
     """
@@ -361,7 +361,7 @@ class RestCompensator:
         self,
         base_url: str,
         *,
-        delete_path_template: str = "/api/encounter/{id}",
+        delete_path_template: str,
         session: Any = None,
         timeout_s: float = 5.0,
     ) -> None:

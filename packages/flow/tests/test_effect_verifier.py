@@ -8,7 +8,6 @@ model calls -- these run in CI.
 
 from __future__ import annotations
 
-
 import pytest
 import requests
 
@@ -59,7 +58,10 @@ def _post_encounter(base, *, note=NOTE, fault="", key=None):
 
 
 def test_all_verifiers_satisfy_protocol(tmp_path):
-    assert isinstance(RestRecordVerifier("http://x"), EffectVerifier)
+    assert isinstance(
+        RestRecordVerifier("http://x", records_path="/api/db", records_key="records"),
+        EffectVerifier,
+    )
     assert isinstance(DocumentHashVerifier(tmp_path), EffectVerifier)
     from openadapt_flow.runtime.effects import FhirEffectVerifier
 
@@ -149,7 +151,7 @@ def test_record_matches_string_coercion():
 
 def test_rest_verifier_confirms_real_write(sor):
     base, _db = sor
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     assert before.reachable and before.records == []
     _post_encounter(base)
@@ -164,7 +166,9 @@ def test_rest_verifier_confirms_real_write(sor):
 
 
 def test_rest_verifier_indeterminate_when_unreachable():
-    verifier = RestRecordVerifier("http://127.0.0.1:1")  # nothing listening
+    verifier = RestRecordVerifier(
+        "http://127.0.0.1:1", records_path="/api/db", records_key="records"
+    )  # nothing listening
     before = verifier.capture_pre_state()
     assert not before.reachable
     eff = Effect(kind=EffectKind.RECORD_WRITTEN, match=TARGET, timeout_s=0.1)
@@ -175,7 +179,7 @@ def test_rest_verifier_indeterminate_when_unreachable():
 
 def test_rest_idempotent_write_is_at_most_once(sor):
     base, _db = sor
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     # Two submissions carrying the SAME idempotency key -> server dedupes.
     _post_encounter(base, fault="idempotent", key="run-42")
@@ -246,7 +250,7 @@ def test_document_hash_indeterminate_when_store_absent(tmp_path):
 
 def test_compensation_reconciles_detected_duplicate(sor):
     base, db = sor
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     _post_encounter(base)  # two non-idempotent submissions -> two rows
     _post_encounter(base)
@@ -260,7 +264,7 @@ def test_compensation_reconciles_detected_duplicate(sor):
     verdict = verifier.verify(eff, before)
     assert verdict.verdict is Verdict.REFUTED and verdict.observed_count == 2
 
-    compensator = RestCompensator(base)
+    compensator = RestCompensator(base, delete_path_template="/api/encounter/{id}")
     result = reconcile_or_escalate(
         eff, verdict, verifier=verifier, before=before, compensator=compensator
     )
@@ -272,7 +276,7 @@ def test_compensation_reconciles_detected_duplicate(sor):
 
 def test_compensation_escalates_partial_save(sor):
     base, _db = sor
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     _post_encounter(base, fault="partial")  # row persists, note dropped
     eff = Effect(
@@ -290,7 +294,7 @@ def test_compensation_escalates_partial_save(sor):
         verdict,
         verifier=verifier,
         before=before,
-        compensator=RestCompensator(base),
+        compensator=RestCompensator(base, delete_path_template="/api/encounter/{id}"),
     )
     assert result.outcome is CompensationOutcome.ESCALATED
     assert not result.proceed
@@ -298,7 +302,9 @@ def test_compensation_escalates_partial_save(sor):
 
 
 def test_compensation_escalates_when_indeterminate():
-    verifier = RestRecordVerifier("http://127.0.0.1:1")
+    verifier = RestRecordVerifier(
+        "http://127.0.0.1:1", records_path="/api/db", records_key="records"
+    )
     before = EffectState(substrate="rest", reachable=False)
     eff = Effect(
         kind=EffectKind.RECORD_WRITTEN,
@@ -313,7 +319,9 @@ def test_compensation_escalates_when_indeterminate():
         verdict,
         verifier=verifier,
         before=before,
-        compensator=RestCompensator("http://127.0.0.1:1"),
+        compensator=RestCompensator(
+            "http://127.0.0.1:1", delete_path_template="/api/encounter/{id}"
+        ),
     )
     assert result.outcome is CompensationOutcome.ESCALATED
     assert not result.proceed

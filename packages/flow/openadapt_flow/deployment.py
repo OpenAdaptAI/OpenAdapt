@@ -384,9 +384,11 @@ class EffectsConfig(BaseModel):
     #: ``runtime/effects/fresh_session.py`` and ``docs/READBACK_LADDER.md``.
     fresh_session: Optional[FreshSessionSpec] = None
 
-    # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
+    # -- rest (JSON REST system of record) -----------------------------------
     base_url: Optional[str] = None
-    records_path: str = "/api/db"
+    #: ``rest`` only, and required there: the path whose GET returns the
+    #: records. Every app keeps them somewhere else, so there is no default.
+    records_path: Optional[str] = None
     records_key: Optional[str] = "records"
     #: ``rest`` only: dotted path in the response body to the next page's URL
     #: (``links.next``). Set, the read follows every page on the same origin
@@ -627,6 +629,7 @@ class EffectsConfig(BaseModel):
             "deferred_report",
             "records_next_path",
             "records_total_path",
+            "records_path",
         ):
             if data.get(added, "") is None:
                 data.pop(added, None)
@@ -2223,6 +2226,11 @@ def _build_effect_verifier_unredacted(
     if kind == "rest":
         if not cfg.base_url:
             raise ValueError("effects.kind 'rest' requires effects.base_url")
+        if not cfg.records_path:
+            raise ValueError(
+                "effects.kind 'rest' requires effects.records_path (the path "
+                "whose GET returns the app's records)"
+            )
         from openadapt_flow.runtime.effects import RestRecordVerifier
 
         headers = cfg.auth.resolve_headers() if cfg.auth is not None else None

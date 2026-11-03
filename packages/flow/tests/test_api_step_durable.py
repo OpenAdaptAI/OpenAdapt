@@ -148,7 +148,10 @@ class Fixture:
         return Replayer(
             self.backend,
             vision=FakeVision(),
-            effect_verifier=verifier or RestRecordVerifier(verifier_url or self.url),
+            effect_verifier=verifier
+            or RestRecordVerifier(
+                verifier_url or self.url, records_path="/api/db", records_key="records"
+            ),
             web_form_actuator=actuator,
             poll_interval_s=0.01,
             durable=True,

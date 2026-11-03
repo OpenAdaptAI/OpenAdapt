@@ -161,6 +161,7 @@ def _candidate_from_record(
     record: dict[str, Any],
     *,
     demonstrated_values: tuple[str, ...],
+    idempotency_key_field: Optional[str] = None,
 ) -> WriteCandidate:
     """Split one observed new record into identity vs payload fields.
 
@@ -169,7 +170,6 @@ def _candidate_from_record(
     exclusion, same selector rules, same demonstrated-value payload split).
     """
     from openadapt_flow.compiler.effect_mining import (
-        IDEMPOTENCY_KEY_FIELD,
         _match_selector,
         _param_value_fields,
     )
@@ -177,13 +177,14 @@ def _candidate_from_record(
     payload = _param_value_fields(record, demonstrated_values)
     selector = _match_selector(record, set(payload))
     idempotency = None
-    raw_key = record.get(IDEMPOTENCY_KEY_FIELD)
-    if raw_key not in (None, ""):
-        idempotency = (IDEMPOTENCY_KEY_FIELD, str(raw_key))
+    # The app's at-most-once key field, when the caller names one.
+    raw_key = record.get(idempotency_key_field) if idempotency_key_field else None
+    if idempotency_key_field and raw_key not in (None, ""):
+        idempotency = (idempotency_key_field, str(raw_key))
         # The at-most-once key is surfaced separately (it must be bound to a
         # per-run param, never the frozen demo literal), so it never doubles
         # as an identity selector.
-        selector.pop(IDEMPOTENCY_KEY_FIELD, None)
+        selector.pop(idempotency_key_field, None)
     return WriteCandidate(
         step_id=step_id,
         action=action,

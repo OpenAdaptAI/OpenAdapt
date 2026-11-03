@@ -74,9 +74,10 @@ class RestRecordVerifier(VerifierAdapterBase):
 
     Args:
         base_url: Base URL of the system of record (trailing slash optional).
-        records_path: Path whose GET returns the records document.
+        records_path: Path whose GET returns the records document. Required:
+            every app keeps its records somewhere else.
         records_key: Key in the JSON body holding the records list; when the
-            body is itself a JSON list, pass ``None``.
+            body is itself a JSON list, pass ``None``. Required.
         session: Optional ``requests``-style session (injectable for tests /
             auth headers); a module-level default is used when omitted.
         headers: Optional headers sent with every read (the kit's
@@ -111,8 +112,8 @@ class RestRecordVerifier(VerifierAdapterBase):
         self,
         base_url: str,
         *,
-        records_path: str = "/api/db",
-        records_key: Optional[str] = "records",
+        records_path: str,
+        records_key: Optional[str],
         session: Any = None,
         headers: Optional[dict[str, str]] = None,
         timeout_s: float = 5.0,

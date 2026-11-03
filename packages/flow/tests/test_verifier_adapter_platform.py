@@ -104,7 +104,9 @@ def reachable_state(records=(), substrate="test"):
 class TestAdapterInterface:
     def test_builtin_adapters_conform_to_protocol(self, tmp_path):
         adapters = [
-            RestRecordVerifier("http://sor"),
+            RestRecordVerifier(
+                "http://sor", records_path="/api/db", records_key="records"
+            ),
             GraphQLRecordVerifier("http://sor/graphql", query="query { r { id } }"),
             FhirEffectVerifier("http://sor/fhir"),
             SqlRecordVerifier(lambda: None, "SELECT id FROM t"),
@@ -127,7 +129,12 @@ class TestAdapterInterface:
         assert onscreen.verification_tier is VerificationTier.IMMEDIATE_SCREEN
         assert confidence_label(onscreen.verification_tier) == "screen-consistency"
         # Every system-of-record adapter IS independent proof.
-        assert RestRecordVerifier("http://sor").independent_system_of_record is True
+        assert (
+            RestRecordVerifier(
+                "http://sor", records_path="/api/db", records_key="records"
+            ).independent_system_of_record
+            is True
+        )
 
     def test_confidence_labels_cover_every_tier(self):
         labels = {confidence_label(tier) for tier in VerificationTier}
@@ -140,7 +147,9 @@ class TestAdapterInterface:
 
     def test_test_connection_ok(self):
         session = FakeSession([FakeResponse(200, {"records": []})])
-        verifier = RestRecordVerifier("http://sor", session=session)
+        verifier = RestRecordVerifier(
+            "http://sor", records_path="/api/db", records_key="records", session=session
+        )
         probe = verifier.test_connection()
         assert isinstance(probe, ConnectionProbe)
         assert probe.ok is True
@@ -148,7 +157,9 @@ class TestAdapterInterface:
 
     def test_test_connection_credential_failure_not_ok(self):
         session = FakeSession([FakeResponse(401, {"error": "bad token"})])
-        probe = RestRecordVerifier("http://sor", session=session).test_connection()
+        probe = RestRecordVerifier(
+            "http://sor", records_path="/api/db", records_key="records", session=session
+        ).test_connection()
         assert probe.ok is False
 
     def test_test_connection_never_raises(self):
@@ -169,7 +180,9 @@ class TestAdapterInterface:
                 FakeResponse(200, {"records": [{"id": 1}]}),
             ]
         )
-        verifier = RestRecordVerifier("http://sor", session=session)
+        verifier = RestRecordVerifier(
+            "http://sor", records_path="/api/db", records_key="records", session=session
+        )
         before = verifier.capture_pre_state()
         after = verifier.capture_post_state()
         assert before.records == []
@@ -244,7 +257,9 @@ class TestResultClassification:
 
     def test_unreachable_sor_classifies_unavailable(self):
         session = FakeSession([FakeResponse(500)])
-        verifier = RestRecordVerifier("http://sor", session=session)
+        verifier = RestRecordVerifier(
+            "http://sor", records_path="/api/db", records_key="records", session=session
+        )
         before = verifier.capture_pre_state()
         verdict = verifier.verify(make_effect(), before)
         assert verdict.unavailable is True

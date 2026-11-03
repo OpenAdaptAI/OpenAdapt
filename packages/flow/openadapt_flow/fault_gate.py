@@ -719,8 +719,8 @@ class MemoryRestCopy:
         seed: Sequence[Mapping[str, Any]],
         target: Mapping[str, Any],
         *,
-        records_path: str = "/api/db",
-        records_key: Optional[str] = "records",
+        records_path: str,
+        records_key: Optional[str],
         key_field: str = "id",
     ) -> None:
         self.key_field = key_field

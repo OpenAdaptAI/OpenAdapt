@@ -231,7 +231,7 @@ def _replay(
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(url.rstrip("/")),
+            effect_verifier=RestRecordVerifier(url.rstrip("/"), records_path="/api/db", records_key="records"),
             poll_interval_s=0.01,
         )
         report = replayer.run(

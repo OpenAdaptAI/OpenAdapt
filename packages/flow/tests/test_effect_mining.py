@@ -196,7 +196,9 @@ def test_dom_field_delta_mines_flagged_field_equals():
 def test_mined_effects_confirmed_by_verifier_on_real_sor():
     base, db, stop = _fault_server()
     try:
-        verifier = RestRecordVerifier(base)
+        verifier = RestRecordVerifier(
+            base, records_path="/api/db", records_key="records"
+        )
         before = db.snapshot()["records"]
         requests.post(
             f"{base}/api/encounter",
@@ -220,7 +222,9 @@ def test_mined_effects_confirmed_by_verifier_on_real_sor():
 def test_mined_record_written_refutes_a_duplicate_on_the_real_sor():
     base, db, stop = _fault_server()
     try:
-        verifier = RestRecordVerifier(base)
+        verifier = RestRecordVerifier(
+            base, records_path="/api/db", records_key="records"
+        )
         before = db.snapshot()["records"]
         requests.post(
             f"{base}/api/encounter",
@@ -266,7 +270,9 @@ def test_placeholder_effect_halts_the_run(tmp_path):
         replayer = Replayer(
             backend,
             vision=vision,
-            effect_verifier=RestRecordVerifier(base),
+            effect_verifier=RestRecordVerifier(
+                base, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)

@@ -186,7 +186,9 @@ def _halted_run(tmp_path, url, *, with_undo=True):
     replayer = Replayer(
         backend,
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(url),
+        effect_verifier=RestRecordVerifier(
+            url, records_path="/api/db", records_key="records"
+        ),
         poll_interval_s=0.01,
     )
     run_dir = tmp_path / "run"
@@ -199,7 +201,9 @@ def _undo_replayer(url):
     replayer = Replayer(
         backend,
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(url),
+        effect_verifier=RestRecordVerifier(
+            url, records_path="/api/db", records_key="records"
+        ),
         poll_interval_s=0.01,
     )
     return replayer, backend
@@ -317,7 +321,9 @@ def test_undo_that_does_not_land_is_not_verified(tmp_path, mockmed):
     replayer = Replayer(
         DeleteIgnored(mockmed),
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(mockmed),
+        effect_verifier=RestRecordVerifier(
+            mockmed, records_path="/api/db", records_key="records"
+        ),
         poll_interval_s=0.01,
     )
     result = run_undo(
@@ -607,7 +613,9 @@ def test_compiler_probe_text_never_reaches_the_ledger(tmp_path, mockmed):
     replayer = Replayer(
         MockMedBackend(mockmed),
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(mockmed),
+        effect_verifier=RestRecordVerifier(
+            mockmed, records_path="/api/db", records_key="records"
+        ),
         poll_interval_s=0.01,
     )
     report = replayer.run(
@@ -731,7 +739,9 @@ def test_a_second_undo_declared_after_the_stop_still_matches(tmp_path, mockmed):
     replayer = Replayer(
         MockMedBackend(mockmed),
         vision=_vision(),
-        effect_verifier=RestRecordVerifier(mockmed),
+        effect_verifier=RestRecordVerifier(
+            mockmed, records_path="/api/db", records_key="records"
+        ),
         poll_interval_s=0.01,
     )
     run_dir = tmp_path / "run"

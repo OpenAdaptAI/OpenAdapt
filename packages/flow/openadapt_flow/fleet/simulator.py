@@ -621,7 +621,11 @@ class SimulatedTenant:
         )
         workflow = Workflow.load(bundle_dir)
         verifier = RestRecordVerifier(
-            "http://sor.sim", session=_RecordSession(sor), poll_interval_s=0.01
+            "http://sor.sim",
+            records_path="/records",
+            records_key="records",
+            session=_RecordSession(sor),
+            poll_interval_s=0.01,
         )
         gate = evaluate_run_gate(
             workflow,

@@ -230,7 +230,9 @@ def test_two_child_fixture_second_is_local_backend(tmp_path: Path):
                 report = Replayer(
                     backend,
                     vision=_vision_confirms_saved(),
-                    effect_verifier=RestRecordVerifier(url),
+                    effect_verifier=RestRecordVerifier(
+                        url, records_path="/api/db", records_key="records"
+                    ),
                     poll_interval_s=0.01,
                 ).run(
                     workflow,

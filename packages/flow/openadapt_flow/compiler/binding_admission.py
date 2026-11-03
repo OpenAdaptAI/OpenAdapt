@@ -16,8 +16,8 @@ Two phases, never skipped:
    is REST only. A placeholder effect is not a proposal: there is no real
    endpoint in the recording, and we will not invent one
    (:mod:`compiler.effect_mining`).
-2. **Admit.** Execute the proposal against a *held-out* fixture (MockMed's
-   in-process REST store is the built-in one) with the same
+2. **Admit.** Execute the proposal against a *held-out* fixture (a REST
+   store whose read and write paths the caller names) with the same
    :class:`~openadapt_flow.runtime.effects.EffectVerifier` that gates replay.
    The binding is copied onto the step only when every proposed
    :class:`~openadapt_flow.runtime.effects.Effect` CONFIRMs. Anything else
@@ -68,9 +68,9 @@ logger = logging.getLogger(__name__)
 #: Event key for an observed REST write (method / url_template / body_template).
 API_WRITE_KEY = "api_write"
 
-#: Record fields assigned by MockMed (and typical REST stores) at write time,
-#: never sent in the POST body and never used as a proposal identity.
-_BODY_SKIP_FIELDS = SURROGATE_ID_FIELDS | frozenset({"source"})
+#: Record fields every REST store assigns at write time: never sent in the
+#: POST body. An app's own server-assigned fields come from the fixture.
+_BODY_SKIP_FIELDS = SURROGATE_ID_FIELDS
 
 #: The only ``ApiBinding.kind`` this module will propose or admit.
 _REST_KIND: Literal["rest"] = "rest"
@@ -111,26 +111,38 @@ class AdmissionDecision:
 class AdmissionFixture:
     """Held-out REST system of record used to certify a proposed binding.
 
-    MockMed (``openadapt_flow.mockmed.fault_server``) is the built-in fixture:
-    ``POST /api/encounter`` writes, ``GET /api/db`` is the verifier read.
+    Every app keeps its records at its own paths, so the caller names them:
+    ``records_path`` / ``records_key`` are the verifier read, ``write_path``
+    the write a proposal makes when the recording captured no ``api_write``
+    (unset: such a step gets no proposal). ``server_fields`` are record fields
+    the app assigns itself, never sent in a proposed body;
+    ``idempotency_key_field`` is the field carrying its at-most-once key.
     """
 
     base_url: str
-    write_path: str = "/api/encounter"
+    records_path: str
+    records_key: Optional[str]
+    write_path: Optional[str] = None
     write_method: str = "POST"
+    server_fields: frozenset[str] = frozenset()
+    idempotency_key_field: Optional[str] = None
     params: dict[str, str] = field(default_factory=dict)
     timeout_s: float = 2.0
     session: Any = None
 
 
 def _param_placeholders(
-    record: dict[str, Any], params: dict[str, str]
+    record: dict[str, Any],
+    params: dict[str, str],
+    skip: frozenset[str] = frozenset(),
 ) -> dict[str, str]:
     """Map observed record fields to ``{param}`` leaves or literal strings."""
     inverse = {str(value): name for name, value in params.items() if value}
     body: dict[str, str] = {}
     for key, value in record.items():
-        if key in _BODY_SKIP_FIELDS or value is None or str(value) == "":
+        if key in _BODY_SKIP_FIELDS or key in skip:
+            continue
+        if value is None or str(value) == "":
             continue
         text = str(value)
         if text in inverse:
@@ -180,7 +192,12 @@ def propose_rest_binding(
     effects = list(step.effects)
     source = "step.effects"
     if not effects or any(eff.needs_operator_confirmation for eff in effects):
-        mined = mine_step_effects(event, step, exclude_texts=exclude_texts)
+        mined = mine_step_effects(
+            event,
+            step,
+            exclude_texts=exclude_texts,
+            idempotency_key_field=fixture.idempotency_key_field,
+        )
         if not mined.derived:
             logger.debug(
                 "binding-propose %s: no derived SoR effect (%s)",
@@ -199,11 +216,12 @@ def propose_rest_binding(
         return None
 
     method = fixture.write_method
-    url_template = fixture.write_path
+    url_template: Optional[str] = fixture.write_path
     body: dict[str, Any] = {}
     if captured is not None:
         method = str(captured.get("method") or method).upper()
-        url_template = str(captured.get("url_template") or url_template)
+        captured_url = captured.get("url_template")
+        url_template = str(captured_url) if captured_url else url_template
         raw_body = captured.get("body_template", captured.get("body"))
         if isinstance(raw_body, dict):
             body = dict(raw_body)
@@ -216,7 +234,7 @@ def propose_rest_binding(
         new_records = _new_records(before, after)
         if len(new_records) != 1:
             return None
-        body = _param_placeholders(new_records[0], params)
+        body = _param_placeholders(new_records[0], params, fixture.server_fields)
         source = "sor_delta"
 
     if not url_template or not body:
@@ -269,7 +287,12 @@ def admit_rest_binding(
             proposal=proposal,
         )
 
-    verifier = RestRecordVerifier(fixture.base_url, timeout_s=fixture.timeout_s)
+    verifier = RestRecordVerifier(
+        fixture.base_url,
+        records_path=fixture.records_path,
+        records_key=fixture.records_key,
+        timeout_s=fixture.timeout_s,
+    )
     actuator = ApiActuator(
         fixture.base_url,
         session=fixture.session,

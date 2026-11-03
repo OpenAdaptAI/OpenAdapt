@@ -1014,6 +1014,8 @@ Two kit-wide conventions:
   ```yaml
   effects:
     kind: rest
+    base_url: https://app.example
+    records_path: /api/records            # required: the app's own records read
     auth:
       bearer_env: SOR_BEARER_TOKEN        # or header+value_env, or basic_env
   ```

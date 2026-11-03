@@ -218,7 +218,7 @@ def _adapter_for(recipe: OracleRecipeV1, base_dir: Path) -> OracleAdapter:
         return VerifierOracle(
             RestRecordVerifier(
                 str(recipe.base_url),
-                records_path=recipe.records_path,
+                records_path=str(recipe.records_path),
                 records_key=recipe.records_key,
                 headers=recipe.headers(),
                 timeout_s=recipe.timeout_s,

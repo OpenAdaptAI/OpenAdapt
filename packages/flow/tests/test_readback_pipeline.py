@@ -134,8 +134,13 @@ def test_screen_bound_or_wrapped_verifiers_are_never_deferred(dirs, kind) -> Non
         if kind == "screen_attr":
             return ScreenVerifier(url)
         if kind == "candidate":
-            return CandidateEffectVerifier([RestRecordVerifier(url)])
-        return RedactingVerifier(RestRecordVerifier(url), policy=None)
+            return CandidateEffectVerifier(
+                [RestRecordVerifier(url, records_path="/api/db", records_key="records")]
+            )
+        return RedactingVerifier(
+            RestRecordVerifier(url, records_path="/api/db", records_key="records"),
+            policy=None,
+        )
 
     pipeline = ReadbackPipeline()
     report, settled, backend, _ = _run(

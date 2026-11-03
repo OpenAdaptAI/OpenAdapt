@@ -96,11 +96,6 @@ DOM_FIELDS_AFTER_KEY = "dom_fields_after"
 # prune, rather than guess which app fields are "incidental".
 SURROGATE_ID_FIELDS = frozenset({"id"})
 
-# Field that commonly carries an at-most-once / idempotency key in a JSON
-# system of record (the MockMed fault server uses ``key``). Only mined when the
-# observed record actually carries a non-null value there — never invented.
-IDEMPOTENCY_KEY_FIELD = "key"
-
 # Sentinel selector for a PLACEHOLDER effect: a value no real record can carry,
 # so even if a misconfigured run tried to verify it (it must not — the replayer
 # HALTs on needs_operator_confirmation first), it could never falsely CONFIRM.
@@ -288,6 +283,7 @@ def _mine_from_sor_delta(
     after: list[dict],
     exclude_texts: tuple[str, ...],
     param_bindings: Optional[Mapping[str, str]] = None,
+    idempotency_key_field: Optional[str] = None,
 ) -> Optional[StepEffectMining]:
     """Mine real effects from an OBSERVED before/after system-of-record delta.
 
@@ -342,12 +338,12 @@ def _mine_from_sor_delta(
             "system-of-record delta)"
         ),
     )
-    # Idempotency key: derivable ONLY when the observed record actually carries
-    # one. Never invented — §7 names the idempotency key as app-specific.
-    key_val = record.get(IDEMPOTENCY_KEY_FIELD)
-    if key_val is not None and str(key_val) != "":
+    # Idempotency key: only from the field the caller names for this app (§7:
+    # the key is app-specific), and only when the observed record carries it.
+    key_val = record.get(idempotency_key_field) if idempotency_key_field else None
+    if idempotency_key_field and key_val is not None and str(key_val) != "":
         written.idempotency_key = _ve(str(key_val))
-        written.key_field = IDEMPOTENCY_KEY_FIELD
+        written.key_field = idempotency_key_field
     effects.append(written)
 
     # field_equals per payload field: the typed value actually persisted (the
@@ -380,7 +376,7 @@ def _mine_from_sor_delta(
         f"derived {len(effects)} effect(s) from an observed system-of-record "
         f"delta (1 new record; selector {selector}"
         + (
-            f"; idempotency key from field {IDEMPOTENCY_KEY_FIELD!r}"
+            f"; idempotency key from field {idempotency_key_field!r}"
             if written.idempotency_key is not None
             else "; no idempotency key observed"
         )
@@ -900,6 +896,7 @@ def mine_step_effects(
     param_bindings: Optional[Mapping[str, str]] = None,
     store_unchanged: Optional[bool] = None,
     write_requests: Optional[bool] = None,
+    idempotency_key_field: Optional[str] = None,
 ) -> StepEffectMining:
     """Derive candidate system-of-record effects for one compiled step.
 
@@ -944,6 +941,10 @@ def mine_step_effects(
             ``None`` when the recording had no network capture, ``False``
             when the capture showed no write request. Only used to word the
             reason.
+        idempotency_key_field: The record field that carries this app's
+            at-most-once key, from the contract or deployment config. Set,
+            and present on the observed record, the mined ``record_written``
+            counts records bearing it. ``None``: no key is mined.
 
     Returns:
         A :class:`StepEffectMining` describing the decision. ``effects`` is
@@ -952,7 +953,14 @@ def mine_step_effects(
     before = _as_records(event.get(SOR_BEFORE_KEY))
     after = _as_records(event.get(SOR_AFTER_KEY))
     if before is not None and after is not None:
-        mined = _mine_from_sor_delta(step, before, after, exclude_texts, param_bindings)
+        mined = _mine_from_sor_delta(
+            step,
+            before,
+            after,
+            exclude_texts,
+            param_bindings,
+            idempotency_key_field=idempotency_key_field,
+        )
         if mined is not None:
             return mined
         # A snapshot existed but showed no single-record write. When the

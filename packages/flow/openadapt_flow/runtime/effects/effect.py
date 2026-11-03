@@ -896,8 +896,10 @@ class Effect(BaseModel):
     #: identity) so the key is PER-RUN, not the frozen demonstration literal
     #: that would collide across unrelated runs (P0-3).
     idempotency_key: Optional[ValueExpr] = None
-    #: Which record field carries the idempotency key (substrate-specific;
-    #: the MockMed system-of-record uses ``"key"``).
+    #: Which record field carries the idempotency key. App-specific: the
+    #: contract names it beside ``idempotency_key`` (the effect miner sets it
+    #: only from the field its caller names). The default is kept so effects
+    #: dumped before this note hash the same.
     key_field: str = "key"
     #: ``record_written`` only: a duplicate (idempotency) key made of several
     #: fields, such as OpenEMR's ``{lname, fname, DOB}``. Field -> value, each
