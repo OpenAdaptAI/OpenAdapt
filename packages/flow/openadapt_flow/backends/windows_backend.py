@@ -859,11 +859,13 @@ class WindowsBackend:
         ``region`` is ``(x, y, w, h)`` in click pixels; ``pinned_step_id`` is
         the last step whose identity check verified (its window recorded by
         :meth:`record_verified_window`). Returns ``{"title", "hwnd",
-        "owner_hwnd", "pid"}`` only when the first visible window above the
+        "owner_hwnd", "pid", "region"}`` only when the first visible window above the
         recorded one, of the same process and with an owner chain reaching it
         (an owned dialog, a message box), meets the region, and no window of
         another process, or unowned, meets the region above it. The topmost
-        owned window that meets it is returned. Returns None with no record for that step, when the
+        owned window that meets it is returned; ``region`` is its visible
+        frame (DWM bounds, no shadow) as ``[x, y, w, h]`` in the same click
+        pixels. A 1x1 ``region`` asks about one point. Returns None with no record for that step, when the
         recorded window is gone or now another process's, for any other
         process's window or an unowned one, and on any failure. Never raises.
         """
@@ -884,15 +886,22 @@ class WindowsBackend:
             "hwnd",
             "owner_hwnd",
             "pid",
+            "region",
         }:
             return None
         title = window["title"]
         ints = [window[k] for k in ("hwnd", "owner_hwnd", "pid")]
+        frame = window["region"]
         if (
             (title is not None and (not isinstance(title, str) or len(title) > 512))
             or any(
                 isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in ints
             )
+            or not isinstance(frame, list)
+            or len(frame) != 4
+            or any(isinstance(v, bool) or not isinstance(v, int) for v in frame)
+            or frame[2] <= 0
+            or frame[3] <= 0
             or window["pid"] != pinned[1]
             or window["hwnd"] == pinned[0]
         ):
