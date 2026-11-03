@@ -1,0 +1,91 @@
+name: Windows replay
+
+# Records, compiles and replays the in-tree WinForms Patient Notes app through
+# WindowsBackend and the real win_agent on a GitHub-hosted Windows runner, and
+# judges every replay from the app's SQLite record
+# (packages/flow/tests/e2e/test_windows_hosted_replay.py). It runs on pull
+# requests that touch the Windows path and on the nightly run. It is not a
+# required check.
+
+on:
+  pull_request:
+    paths:
+      - packages/flow/openadapt_flow/backends/**
+      - packages/flow/openadapt_flow/runtime/**
+      - packages/flow/openadapt_flow/compiler/**
+      - packages/flow/openadapt_flow/adapters/desktop_recorder.py
+      - packages/flow/openadapt_flow/recorder.py
+      - packages/flow/scripts/desktop/pn_db.py
+      - packages/flow/scripts/desktop/patient_notes.ps1
+      - packages/flow/tests/e2e/test_windows_hosted_replay.py
+      - .github/workflows/windows-replay.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-replay-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  replay:
+    name: windows replay (Patient Notes, WindowsBackend)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packages/flow
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+          cache-suffix: windows-replay
+      - name: Install from the lock
+        # The dev extra carries uiautomation on Windows.
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev]'
+          --editable packages/types --editable packages/flow
+      - name: Install the agent's screen and input modules
+        # win_agent imports these lazily on the Windows host; no lock pins them.
+        run: python -m pip install mss==10.2.0 pyautogui==0.9.54
+      - name: Record, compile and replay, judged from the record
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_WINDOWS_HOSTED_EVIDENCE: ${{ runner.temp }}/windows-replay-evidence.json
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wr" \
+            tests/e2e/test_windows_hosted_replay.py --junitxml=runs/windows-replay-junit.xml
+      - name: The replay ran (no skips)
+        run: |
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          suite = ET.parse("runs/windows-replay-junit.xml").getroot()
+          cases = list(suite.iter("testcase"))
+          skipped = [c for c in cases if c.find("skipped") is not None]
+          if not cases or skipped:
+              sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")
+          PY
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-replay-evidence
+          path: |
+            ${{ runner.temp }}/windows-replay-evidence.json
+            ${{ runner.temp }}/wr/**/*.png
+            ${{ runner.temp }}/wr/**/agent.log
+            ${{ runner.temp }}/wr/**/report.json
+          if-no-files-found: ignore
+          retention-days: 14
