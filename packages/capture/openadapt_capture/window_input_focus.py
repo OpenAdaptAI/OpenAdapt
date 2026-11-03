@@ -67,6 +67,8 @@ def _point_in_bounds(x: float, y: float, bounds: tuple[float, float, float, floa
 # system overlays, which never take an app's keyboard focus.
 _MACOS_NORMAL_LAYER = 0
 _MACOS_STATUS_LAYER = 25
+# kCGModalPanelWindowLevel: an NSAlert or a password prompt.
+_MACOS_MODAL_PANEL_LAYER = 8
 # Accessibility subroles of a focused window that is a dialog, not a
 # document window. Typing there never counts as typing into the target.
 _MACOS_DIALOG_SUBROLES = frozenset({"AXDialog", "AXSystemDialog"})
@@ -266,9 +268,17 @@ class MacOSInputFocusProbe:
             ax_window_id, dialog = focused
             if dialog:
                 return FocusOwner(window_id=ax_window_id or window_id, pid=pid, dialog=True)
-            if ax_window_id is not None:
+            modal = (
+                raised is not None
+                and raised["layer"] >= _MACOS_MODAL_PANEL_LAYER
+                and raised["window_id"] != ax_window_id
+            )
+            if ax_window_id is not None and not modal:
                 # The key window: a modal panel that took the keys would be
-                # named here itself, so popups in front of it don't matter.
+                # named here itself, so popups and floating panels in front
+                # of it don't matter. A modal-level panel Accessibility did
+                # not name still wins below: some toolkits report the main
+                # window while their password prompt has the keys.
                 return FocusOwner(window_id=ax_window_id, pid=pid)
         if raised is not None:
             # A modal or floating panel of the app sits over its document

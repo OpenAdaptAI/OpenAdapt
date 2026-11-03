@@ -703,6 +703,10 @@ def test_macos_probe_names_the_front_window_and_checks_accessibility(fake_macos)
     # So does a raised popup of the app when Accessibility names the target.
     fake_macos.windows.insert(0, _quartz_window(9, 1234, (300, 180, 400, 300), layer=3))
     assert probe.keyboard_focus() == FocusOwner(window_id=42, pid=1234)
+    # A modal-level panel Accessibility did not name still takes the keys.
+    fake_macos.windows[0] = _quartz_window(9, 1234, (300, 180, 400, 300), layer=8)
+    assert probe.keyboard_focus() == FocusOwner(window_id=9, pid=1234, dialog=True)
+    fake_macos.windows.pop(0)
     # Another app's non-activating panel (a launcher) has the keys, though
     # NSWorkspace still names the target's app as frontmost.
     fake_macos.focused_app_pid = 777
