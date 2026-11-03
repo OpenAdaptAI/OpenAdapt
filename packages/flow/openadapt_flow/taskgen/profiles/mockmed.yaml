@@ -1,0 +1,121 @@
+# MockMed on the task-generation workbench: a synthetic clinic.
+#
+# Everything about the app lives here, not in the engine: the tables, the
+# fields the screens show, the operations each record allows, the value
+# pools tasks draw from, and the kinds of task. All data is made up.
+schema_version: openadapt.taskgen-profile/v1
+app: mockmed
+version: 1
+title: MockMed
+users:
+  agent: {user: clinician, password: synthetic}
+  other: {user: nurse.lee}
+entities:
+  patient:
+    table: patients
+    label: Patient
+    key: mrn
+    title: "{first_name} {last_name}"
+    list: true
+    search: [mrn, first_name, last_name, dob]
+    ops: [create, update, merge]
+    # Fields an update task changes.
+    changes: [phone, email]
+    merge: {status_field: status, status_value: merged, into_field: merged_into}
+    fields:
+      mrn: {type: text, label: MRN, readonly: true}
+      first_name: {type: text, label: First name}
+      last_name: {type: text, label: Last name}
+      dob: {type: date, label: Date of birth}
+      phone: {type: text, label: Phone, format: phone}
+      email: {type: text, label: Email, format: email}
+      status: {type: choice, label: Status, choices: [active, merged], readonly: true, default: active}
+      merged_into: {type: ref, label: Merged into, entity: patient, readonly: true}
+  encounter:
+    table: encounters
+    label: Encounter
+    title: "{type} encounter"
+    parent: {entity: patient, field: patient_id}
+    ops: [create, update, cancel]
+    changes: [type, note]
+    # The field that tells one of a person's records from another.
+    identify_by: note
+    cancel: {status_field: status, status_value: cancelled, reason_field: cancel_reason}
+    fields:
+      patient_id: {type: ref, label: Patient, entity: patient, readonly: true}
+      type: {type: choice, label: Type, choices: [Triage, Consult, Follow-up, Procedure]}
+      note: {type: text, label: Note}
+      status: {type: choice, label: Status, choices: [open, cancelled], readonly: true, default: open}
+      cancel_reason: {type: text, label: Cancel reason, readonly: true}
+  referral:
+    table: referrals
+    label: Referral
+    title: "Referral {ref_no}"
+    parent: {entity: patient, field: patient_id}
+    ops: []
+    fields:
+      patient_id: {type: ref, label: Patient, entity: patient, readonly: true}
+      ref_no: {type: text, label: Referral number, readonly: true}
+      requested_type: {type: choice, label: Requested encounter, choices: [Triage, Consult, Follow-up, Procedure], readonly: true}
+      callback_phone: {type: text, label: Callback phone, format: phone, readonly: true}
+      reason: {type: text, label: Reason, readonly: true}
+
+# The record a task is about, and the records it can be confused with.
+person: patient
+child: encounter
+lookup: referral
+
+# Lookup fields: where a value the task needs is found on another screen
+# (hidden state), and the field it ends up in.
+lookup_fields:
+  callback_phone: {entity: patient, field: phone}
+  requested_type: {entity: encounter, field: type}
+
+# Answers to the contract generator's questions for this app.
+answers:
+  # updated_by and version are the app's own bookkeeping on the saved row,
+  # and every save adds one audit_log row.
+  bookkeeping: accept
+  # The workbench's delayed writes land within a few seconds.
+  recheck_after_s: 15
+
+# The app's audit log: who wrote which row. Used to attribute another
+# user's concurrent write to them.
+audit:
+  table: audit_log
+  record_key: id
+  query: SELECT id, actor, table_name, record_id, event FROM audit_log
+  actor: actor
+  record: record_id
+  event: event
+  table_field: table_name
+  write_events: [insert, update]
+  insert_events: [insert]
+
+pools:
+  first_name: [Jane, Alex, Sam, Priya, Tomas, Wen, Amara, Diego, Ines, Kofi, Mei, Oskar, Lena, Ravi, Nadia, Yusuf, Clara, Mateo, Hana, Felix]
+  last_name: [Sample, Testcase, Specimen, Okafor, Lindqvist, Moreau, Tanaka, Haddad, Novak, Brennan, Ferreira, Kowalski, Achebe, Duval, Santos, Ibarra]
+  note:
+    - Left knee swelling, ice and rest, review in 1 week
+    - Cardiology follow-up, ECG normal, continue current dose
+    - New rash on forearm, photo taken, dermatology to review
+    - Palpitations overnight, vitals stable, Holter ordered
+    - Lipid panel reviewed, statin dose unchanged
+    - Itching improved, continue emollient twice daily
+    - BP 128/82 at triage, no chest pain today
+    - Skin biopsy site healing well, sutures out Friday
+    - Knee MRI reviewed with patient, physio referral sent
+    - Asthma review, inhaler technique checked, no changes
+    - Wound dressing changed, no signs of infection
+    - Migraine diary reviewed, start preventive trial
+  cancel_reason:
+    - Patient rescheduled by phone
+    - Booked in error
+    - Duplicate booking
+    - Patient declined the visit
+  lookup_text:
+    - Ongoing knee pain after a fall
+    - Abnormal ECG at pharmacy screening
+    - Persistent rash for three weeks
+    - Recurrent headaches
+  email_domain: [example.org, example.com, example.net]

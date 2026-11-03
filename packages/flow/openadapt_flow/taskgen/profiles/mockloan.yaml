@@ -1,0 +1,114 @@
+# MockLoan on the task-generation workbench: a synthetic lender.
+# All data is made up.
+schema_version: openadapt.taskgen-profile/v1
+app: mockloan
+version: 1
+title: MockLoan
+users:
+  agent: {user: officer, password: synthetic}
+  other: {user: underwriter.diaz}
+entities:
+  borrower:
+    table: borrowers
+    label: Borrower
+    key: customer_no
+    title: "{first_name} {last_name}"
+    list: true
+    search: [customer_no, first_name, last_name, dob]
+    ops: [create, update, merge]
+    # Fields an update task changes.
+    changes: [phone, email]
+    merge: {status_field: status, status_value: merged, into_field: merged_into}
+    fields:
+      customer_no: {type: text, label: Customer number, readonly: true}
+      first_name: {type: text, label: First name}
+      last_name: {type: text, label: Last name}
+      dob: {type: date, label: Date of birth}
+      phone: {type: text, label: Phone, format: phone}
+      email: {type: text, label: Email, format: email}
+      status: {type: choice, label: Status, choices: [active, merged], readonly: true, default: active}
+      merged_into: {type: ref, label: Merged into, entity: borrower, readonly: true}
+  disbursement:
+    table: disbursements
+    label: Disbursement
+    title: "{product} disbursement"
+    parent: {entity: borrower, field: borrower_id}
+    ops: [create, update, cancel]
+    changes: [amount, memo]
+    # The field that tells one of a person's records from another.
+    identify_by: memo
+    cancel: {status_field: status, status_value: voided, reason_field: void_reason}
+    fields:
+      borrower_id: {type: ref, label: Borrower, entity: borrower, readonly: true}
+      product: {type: choice, label: Product, choices: [Personal, Auto, Home improvement, Medical]}
+      amount: {type: number, label: Amount}
+      memo: {type: text, label: Memo}
+      status: {type: choice, label: Status, choices: [posted, voided], readonly: true, default: posted}
+      void_reason: {type: text, label: Void reason, readonly: true}
+  statement:
+    table: statement_lines
+    label: Statement line
+    title: "Statement line {line_ref}"
+    parent: {entity: borrower, field: borrower_id}
+    ops: []
+    fields:
+      borrower_id: {type: ref, label: Borrower, entity: borrower, readonly: true}
+      line_ref: {type: text, label: Line reference, readonly: true}
+      product: {type: choice, label: Product, choices: [Personal, Auto, Home improvement, Medical], readonly: true}
+      amount: {type: number, label: Amount, readonly: true}
+      payee_phone: {type: text, label: Payee phone, format: phone, readonly: true}
+      description: {type: text, label: Description, readonly: true}
+
+person: borrower
+child: disbursement
+lookup: statement
+
+# Lookup fields: where a value the task needs is found on another screen
+# (hidden state), and the field it ends up in.
+lookup_fields:
+  payee_phone: {entity: borrower, field: phone}
+  amount: {entity: disbursement, field: amount}
+
+# Answers to the contract generator's questions for this app.
+answers:
+  # updated_by and version are the app's own bookkeeping on the saved row,
+  # and every save adds one audit_log row.
+  bookkeeping: accept
+  # The workbench's delayed writes land within a few seconds.
+  recheck_after_s: 15
+
+# The app's audit log: who wrote which row. Used to attribute another
+# user's concurrent write to them.
+audit:
+  table: audit_log
+  record_key: id
+  query: SELECT id, actor, table_name, record_id, event FROM audit_log
+  actor: actor
+  record: record_id
+  event: event
+  table_field: table_name
+  write_events: [insert, update]
+  insert_events: [insert]
+
+pools:
+  first_name: [Jordan, Casey, Riley, Morgan, Avery, Quinn, Rowan, Sasha, Emeka, Lucia, Bjorn, Aiko, Farah, Teodor, Zara, Malik, Elif, Joaquin, Signe, Kenji]
+  last_name: [Avery, Monroe, Chen, Abara, Holm, Laurent, Sato, Nasser, Horvat, Quinlan, Pereira, Wozniak, Eze, Marchand, Silva, Ortega]
+  memo:
+    - Consolidation payoff to three card accounts
+    - Dealer payout for vehicle purchase, VIN on file
+    - Contractor deposit for kitchen renovation
+    - Roof repair funds released to borrower
+    - Dental implant procedure, clinic invoice attached
+    - Home improvement draw one, permit on file
+    - Used car purchase, private seller, title checked
+    - Physiotherapy course, twelve sessions prepaid
+  void_reason:
+    - Sent to the wrong account
+    - Borrower withdrew the request
+    - Duplicate posting
+    - Amount keyed in error
+  lookup_text:
+    - Funds cleared at the payee bank
+    - Payee confirmed receipt by phone
+    - Wire returned, resent next day
+  email_domain: [example.org, example.com, example.net]
