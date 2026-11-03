@@ -2986,12 +2986,11 @@ def _pre_save_checks(
                 if lines is not None
                 else None
             )
-            joined = ["".join(_words(line)) for line in lines or []]
             missing = [
                 v
                 for v in expected
                 if words is None
-                or not (set(_words(v)) <= words or _glued_on_a_line(v, joined))
+                or not (set(_words(v)) <= words or _glued_on_a_line(v, lines or []))
             ]
         else:
             pool = list(values)
@@ -3028,18 +3027,30 @@ def _words(text: str) -> list[str]:
     return [w.casefold() for w in re.findall(r"[0-9A-Za-zÀ-ɏ]+", text)]
 
 
-def _glued_on_a_line(value: str, joined_lines: Sequence[str]) -> bool:
+def _glued_on_a_line(value: str, lines: Sequence[str]) -> bool:
     """Whether a value of several words shows on one line with its words glued.
 
-    Only for a value of two or more words and six or more letters, so a short
-    value can't match inside unrelated text.
+    The joined value must equal a run of whole, consecutive OCR words on the
+    line (one glued word counts as a run), never a part of a word: "5 mg"
+    doesn't match "25mg", nor "John Smith" "JOHNSMITHSON". Only for a value
+    of two or more words and six or more letters.
     """
 
     words = _words(value)
     glued = "".join(words)
     if len(words) < 2 or len(glued) < 6:
         return False
-    return any(glued in line for line in joined_lines)
+    for line in lines:
+        tokens = _words(line)
+        for start in range(len(tokens)):
+            run = ""
+            for token in tokens[start:]:
+                run += token
+                if run == glued:
+                    return True
+                if not glued.startswith(run):
+                    break
+    return False
 
 
 def _screen_lines(vision: Any, frame: Optional[bytes]) -> Optional[list[str]]:

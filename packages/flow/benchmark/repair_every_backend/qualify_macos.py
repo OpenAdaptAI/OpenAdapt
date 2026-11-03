@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -81,8 +82,15 @@ class App:
     """One launched chart process; killed by exact PID."""
 
     def __init__(self, binary: Path, db: Path, patient: tuple[str, str], mode: str):
+        # The app gets none of the throwaway approver roster's settings.
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(("OPENADAPT_", "OAFLOW_"))
+        }
         self.proc = subprocess.Popen(
-            [str(binary), str(db), TITLE, patient[0], patient[1], mode, *STEADY_CARET]
+            [str(binary), str(db), TITLE, patient[0], patient[1], mode, *STEADY_CARET],
+            env=env,
         )
 
     def close(self) -> None:
@@ -393,7 +401,6 @@ def _approver_roster(root: Path) -> None:
     roster; this provisions one the same way the test fixture does. No real
     approver key is used or touched.
     """
-    import os
     import secrets
 
     from openadapt_flow.approval_mode.approver_roster import ROOT_ENV
@@ -461,6 +468,18 @@ def qualify(kind: str, root: Path) -> dict[str, Any]:
         "git_sha": subprocess.run(
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=FLOW
         ).stdout.strip(),
+        # Uncommitted changes under packages/flow other than the results this
+        # script writes. Evidence counts only from a clean tree.
+        "git_dirty": [
+            line
+            for line in subprocess.run(
+                ["git", "status", "--porcelain", "--", "."],
+                capture_output=True,
+                text=True,
+                cwd=FLOW,
+            ).stdout.splitlines()
+            if "repair_every_backend/results/" not in line
+        ],
         "compiled": compiled,
         "repair_with_record_check": checked,
         "repair_without_verifier": no_verifier,
@@ -493,14 +512,18 @@ def main() -> int:
     failed = False
     for kind in args.kind or ["ax", "pixel"]:
         root = Path(tempfile.mkdtemp(prefix=f"oa-repair-{kind}-"))
+        saved_env = dict(os.environ)
         try:
             report = qualify(kind, root)
         finally:
+            os.environ.clear()
+            os.environ.update(saved_env)
             if not args.keep:
                 shutil.rmtree(root, ignore_errors=True)
             else:
                 print(f"work folder: {root}")
-        out = RESULTS / f"macos-{kind}-{datetime.now(timezone.utc):%Y%m%d}.json"
+        mode = f"{kind}-steady-caret" if STEADY_CARET else kind
+        out = RESULTS / f"macos-{mode}-{datetime.now(timezone.utc):%Y%m%d}.json"
         out.write_text(json.dumps(report, indent=2) + "\n")
         print(f"{kind}: {'PASSED' if report['passed'] else 'FAILED'} -> {out}")
         for name, ok in report["checks"].items():

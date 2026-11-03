@@ -190,7 +190,8 @@ On a native Cocoa test app with a SQLite database, through `MacOSBackend`
 the run stops at the new notice before any save; the "Later" click's AX
 identity is read, found unique and admitted on `element_and_record_check`;
 the probe, the replay campaign and the fault campaign (another patient's
-chart) pass; one person approves through the decision portal; and the
+chart) pass; the scripted approver's answer is signed through the
+decision portal's own code; and the
 resumed run is `VERIFIED` against SQLite with exactly one new row. That run
 holds the app's caret steady: with a blinking caret the save click is
 refused and nothing is written

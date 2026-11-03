@@ -580,10 +580,30 @@ def test_backend_locator_must_name_the_identified_element(locator, reason) -> No
 
 
 def test_glued_ocr_counts_for_a_long_multiword_value_only() -> None:
-    from openadapt_flow.repair.self_repair import _glued_on_a_line, _words
+    from openadapt_flow.repair.self_repair import _glued_on_a_line
 
-    lines = ["".join(_words("REPAIREDRUNFOLLOWUPINTHREEWEEKS")), "mrn rc79284 5"]
+    lines = ["REPAIREDRUNFOLLOWUPINTHREEWEEKS", "MRN RC79284 5"]
     assert _glued_on_a_line("Repaired run follow up in three weeks", lines)
+    # A run of whole words may also be partly glued.
+    assert _glued_on_a_line(
+        "follow up in three weeks", ["note: FOLLOWUP in threeweeks"]
+    )
     assert not _glued_on_a_line("follow up in four weeks", lines)
     assert not _glued_on_a_line("5", lines)  # one word: the word rule applies
     assert not _glued_on_a_line("a b", lines)  # too short to glue-match
+
+
+@pytest.mark.parametrize(
+    "typed, shown",
+    [
+        ("John Smith", "JOHNSMITHSON"),
+        ("Ann Lee", "Dr Joann Leeds"),
+        ("follow up", "NOFOLLOWUPNEEDED"),
+        ("5 mg bid", "25 mg bid"),
+        ("5 mg bid", "25mgbid"),
+    ],
+)
+def test_glued_match_never_takes_part_of_a_word(typed, shown) -> None:
+    from openadapt_flow.repair.self_repair import _glued_on_a_line
+
+    assert not _glued_on_a_line(typed, [shown])

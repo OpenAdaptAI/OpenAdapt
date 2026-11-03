@@ -26,7 +26,7 @@ doesn't pass yet. No run wrote a wrong row.
 | The new "Later" click is read and admitted | Yes: `element_and_record_check (button 'Later')`, ancestry `AXSheet "Update available"`, then `AXGroup`, then `AXWindow "Chart"` | Not reached |
 | Probe up to the save: nothing written, target found, same record, same fields | Yes | Not reached |
 | Replay campaign and fault campaign (another patient's chart stops before the save) | Yes, 1/1 each | Not reached |
-| One person's approval, through the decision portal | Yes | Not reached |
+| One approval, by the scripted approver, signed through the decision portal's own code with a throwaway roster key | Yes | Not reached |
 | Resumed run, checked against SQLite | `VERIFIED`, exactly one new row for the patient (steady caret); refused at the save with a blinking caret, nothing written | Not reached |
 | With a `demo` profile the click is refused, nobody is asked, nothing is written | Yes | Not reached |
 | With no verifier the run gate refuses, nothing is written | Yes | Yes |
@@ -34,8 +34,10 @@ doesn't pass yet. No run wrote a wrong row.
 The AX run needs [#1710](https://github.com/OpenAdaptAI/OpenAdapt/issues/1710)'s
 fix (`MacOSBackend.act_structural`) and the glued-words `same_fields` check.
 
-Evidence: [`results/macos-ax-20261102.json`](results/macos-ax-20261102.json)
-(steady caret), [`results/macos-pixel-20261102.json`](results/macos-pixel-20261102.json).
+Evidence, each from a clean tree (the JSON records `git_sha` and
+`git_dirty`): [`results/macos-ax-steady-caret-20261102.json`](results/macos-ax-steady-caret-20261102.json),
+[`results/macos-ax-20261102.json`](results/macos-ax-20261102.json) (blinking
+caret), [`results/macos-pixel-20261102.json`](results/macos-pixel-20261102.json).
 
 ## Findings
 
@@ -78,8 +80,9 @@ Each is a fail-closed refusal, not a wrong action.
    the caret stays on; that run is the `VERIFIED` one above.
 6. OCR glues a field's words together (`REPAIREDRUNFOLLOWUPINTHREEWEEKS`), so
    the probe's `same_fields` check on a screen with no form to read now also
-   accepts a value of two or more words found on one line with its words
-   joined.
+   accepts a value of two or more words that equals a run of whole OCR words
+   on one line, glued or not. It never matches part of a word (`5 mg` is
+   not in `25mg`). The check is word presence on screen, not per field.
 
 Not covered here: Windows UI Automation and RDP to the Windows lab. They wait
 on `WindowsBackend.element_identity_at` and the lab.
