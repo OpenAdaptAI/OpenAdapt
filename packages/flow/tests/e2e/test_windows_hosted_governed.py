@@ -179,7 +179,10 @@ def _build_bundle(backend, recording: Path, work: Path, agent_url: str) -> Path:
     save.effects = [
         Effect(
             kind=EffectKind.FIELD_EQUALS,
-            match={"id": ValueExpr(literal=TARGET_ID)},
+            match={
+                "first": ValueExpr(literal="Neil"),
+                "last": ValueExpr(literal="Sorenson"),
+            },
             field="note",
             value=ValueExpr(param="note"),
             risk="irreversible",
