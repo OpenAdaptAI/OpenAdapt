@@ -1,0 +1,16 @@
+# SignPath pipeline policy for the OpenAdapt project's test-signing
+# policy. SignPath reads it from .signpath/policies/<project>/<signing-policy>.yml,
+# so SIGNPATH_PROJECT_SLUG must be "OpenAdapt" and
+# SIGNPATH_SIGNING_POLICY_SLUG must be "test-signing".
+#
+# Only GitHub-hosted runners may produce what SignPath signs, and a re-run
+# cannot re-sign an old build. The branch restriction lives in the workflow and
+# its environment: .github/workflows/signpath-test-sign.yml runs only on a
+# dispatch from refs/heads/main, in the signpath-test environment, which
+# deploys only from main. Releases never submit to this policy: the release
+# preflight (native_signing.py) refuses any policy but release-signing.
+github-build-policies:
+  version: '1.0'
+  disallow_reruns: true
+  runners:
+    require_github_hosted: true

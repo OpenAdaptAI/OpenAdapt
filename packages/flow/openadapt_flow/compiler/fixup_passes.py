@@ -166,6 +166,7 @@ def _has_identity_evidence(step: Step) -> bool:
             or anchor.structured_identity
             or anchor.identity_template
             or anchor.identifier_crop
+            or anchor.form_identity
         )
     )
 
@@ -350,7 +351,10 @@ def write_compile_notes(bundle_dir: Path, notes: list[dict[str, Any]]) -> None:
                 "note": (
                     "Changes the default compiler passes made to demonstrated "
                     "gestures. Each replaces a gesture that asserted nothing "
-                    "with an equivalent one that carries its own check."
+                    "with an equivalent one that carries its own check, or "
+                    "adds a check the demonstration showed (empty_result_guard). "
+                    "An entry with a warning is a check the compiler could not "
+                    "add."
                 ),
                 "changes": notes,
             },

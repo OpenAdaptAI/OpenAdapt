@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from openadapt_flow.ir import StructuralLocator
@@ -83,43 +85,59 @@ def test_offscreen_probe(form) -> None:
     assert backend.structural_offscreen(StructuralLocator(selector="input")) is None
 
 
-def test_step_timer_spans_are_exclusive_and_add_up() -> None:
-    import time
+def test_step_timer_spans_are_exclusive_and_add_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A fake clock: each span "spends" exact milliseconds, so the bounds are
+    # exact instead of depending on how long sleep() takes on a loaded host.
+    now = [0.0]
+    monkeypatch.setattr(
+        step_timing, "time", SimpleNamespace(perf_counter=lambda: now[0])
+    )
+
+    def spend(ms: float) -> None:
+        now[0] += ms / 1000.0
 
     @step_timing.timed_span("resolve")
     def resolve():
-        time.sleep(0.02)
+        spend(20)
         identity()
 
     @step_timing.timed_span("identity")
     def identity():
-        time.sleep(0.03)
+        spend(30)
 
     @step_timing.timed_span("actuate")
     def act():
+        spend(5)
         settle()
 
     @step_timing.timed_span("settle")
     def settle():
-        time.sleep(0.01)
+        spend(10)
 
     settle()  # untimed: no step running
     timer, prev = step_timing.start_step()
     settle()
     resolve()
     act()
+    spend(7)  # step time outside every span
     step_timing.end_step(prev)
     out = timer.result_ms()
-    assert set(out) >= {
-        "settle_before",
-        "resolve",
-        "identity",
-        "actuate",
-        "settle_after",
-    }
-    assert 15 <= out["resolve"] < 30 and out["identity"] >= 25
-    total = sum(out.values())
-    assert abs(total - (time.perf_counter() - timer._t0) * 1000) < 15
+    # Exclusive: resolve does not include the identity call nested in it, and
+    # actuate does not include its settle.
+    assert out == pytest.approx(
+        {
+            "settle_before": 10.0,
+            "resolve": 20.0,
+            "identity": 30.0,
+            "actuate": 5.0,
+            "settle_after": 10.0,
+            "other": 7.0,
+        }
+    )
+    # The spans add up to the step's elapsed time.
+    assert sum(out.values()) == pytest.approx((now[0] - timer._t0) * 1000)
     assert step_timing.current() is prev
 
 

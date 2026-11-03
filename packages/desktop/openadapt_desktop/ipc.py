@@ -30,10 +30,21 @@ from openadapt_desktop.config import EngineConfig
 from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
 
 #: Commands served while another command runs. A run can stop before a save
-#: and wait for a person; these two read and answer that wait, so they never
-#: queue behind the run and never take the dispatch lock. They touch only the
-#: dispatcher's approval watches and Flow's approval files.
-CONCURRENT_COMMANDS = frozenset({"get_item_approval", "answer_item_approval"})
+#: and wait for a person; these read and answer that wait, and set up the
+#: approver key the answer needs, so they never queue behind the run and never
+#: take the dispatch lock. They touch only the dispatcher's approval watches,
+#: Flow's approval files and the approver key (which has its own lock).
+CONCURRENT_COMMANDS = frozenset(
+    {
+        "get_item_approval",
+        "answer_item_approval",
+        "get_approver_key",
+        "set_up_approver_key",
+        "remove_approver_key",
+        "list_stop_cards",
+        "answer_stop_approval",
+    }
+)
 
 #: Sent by the Tauri shell when the app quits. Handled on the reader thread,
 #: ahead of queued commands, because the shell kills the engine shortly after.
@@ -63,6 +74,9 @@ class IPCHandler:
         self.config = config
         self.dispatcher = EngineDispatcher(config, services=services, emit=self.send_event)
         self.dispatch_lock = threading.RLock()
+        # The paired phone's answers to stops take the same lock, so an
+        # answer that runs an item again waits its turn like a command.
+        self.dispatcher.serial_lock = self.dispatch_lock
         self._write_lock = threading.Lock()
         self._handlers: dict[str, Any] = {}
         self._register_handlers()

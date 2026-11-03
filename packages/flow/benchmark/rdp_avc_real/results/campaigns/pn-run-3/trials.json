@@ -1,0 +1,5431 @@
+[
+  {
+    "trial": 1,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3000heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 22.41,
+    "first_frame_sha256": "af672ce15e7db963d2caff403e9342ae4dc89907c3c85a4b257457dceccc11bc",
+    "frame_sha256": [
+      "da78d7594e0506bdf07dd66263dfa0a53f510ac151e0f5135c9782747187df29",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "9c45a059b76e5ac1dd44216a13e73df46499c5493372e5d4a264fbb1bdf36813",
+      "af672ce15e7db963d2caff403e9342ae4dc89907c3c85a4b257457dceccc11bc",
+      "71c5735b7f41b99d3f4506664bcd2777a6eb565c5d81941dbe356a152a8c159e",
+      "9c45a059b76e5ac1dd44216a13e73df46499c5493372e5d4a264fbb1bdf36813",
+      "06a545908a0b3ff5567c8fd42e615d0abefca565ad2c8ba24d53c74bf07295cb",
+      "71c5735b7f41b99d3f4506664bcd2777a6eb565c5d81941dbe356a152a8c159e",
+      "153b495024d85f6339cb4eeb327f87bed3dbd77c5193b82d9814506b0f1cf8db",
+      "06a545908a0b3ff5567c8fd42e615d0abefca565ad2c8ba24d53c74bf07295cb",
+      "89c90b4d90adc4feaa9fb8d7bd372e77e7189077638747eeafa4a5ce6158a49b",
+      "153b495024d85f6339cb4eeb327f87bed3dbd77c5193b82d9814506b0f1cf8db",
+      "e06ed027528b26fa16b9a1b3f0788eaf07d3fcc20be32f27520c8cb1b741293e",
+      "89c90b4d90adc4feaa9fb8d7bd372e77e7189077638747eeafa4a5ce6158a49b",
+      "d69fb0b4789b96bf75d1d644cad4f3311124a5ec34b5a4943b2014e2d946ee1e",
+      "da78d7594e0506bdf07dd66263dfa0a53f510ac151e0f5135c9782747187df29"
+    ],
+    "first_frame": {
+      "file": "pn_healthy_first.png",
+      "sha256": "af672ce15e7db963d2caff403e9342ae4dc89907c3c85a4b257457dceccc11bc",
+      "size": [
+        1280,
+        800
+      ]
+    }
+  },
+  {
+    "trial": 2,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3001heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 16.0,
+    "first_frame_sha256": "fc0259785a3961c91f9aadc8fb6bc01d6a5829d8c875a3d968e41ef39b5877c5",
+    "frame_sha256": [
+      "b5cf9a2443d36f1b3695cc3669dcce5747a47052b2ff603385d9abe46c3221a5",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "abc4150f7027d4795e9a5ee8919848ef327e14857c5e2d21b46bca9158bd8c47",
+      "fc0259785a3961c91f9aadc8fb6bc01d6a5829d8c875a3d968e41ef39b5877c5",
+      "b442cd0dfdabeb2d247945484c2e2724cc80a64b0e70ab3bbc61f2c9092e1dea",
+      "abc4150f7027d4795e9a5ee8919848ef327e14857c5e2d21b46bca9158bd8c47",
+      "06a545908a0b3ff5567c8fd42e615d0abefca565ad2c8ba24d53c74bf07295cb",
+      "b442cd0dfdabeb2d247945484c2e2724cc80a64b0e70ab3bbc61f2c9092e1dea",
+      "153b495024d85f6339cb4eeb327f87bed3dbd77c5193b82d9814506b0f1cf8db",
+      "06a545908a0b3ff5567c8fd42e615d0abefca565ad2c8ba24d53c74bf07295cb",
+      "89c90b4d90adc4feaa9fb8d7bd372e77e7189077638747eeafa4a5ce6158a49b",
+      "153b495024d85f6339cb4eeb327f87bed3dbd77c5193b82d9814506b0f1cf8db",
+      "a319f447b14453b54c08c0456e61e006717de07eb6c4649d4bfd7df3f51ac770",
+      "89c90b4d90adc4feaa9fb8d7bd372e77e7189077638747eeafa4a5ce6158a49b",
+      "77775d94de8c671b4819a643a1707ef5b8b0b09ab4eaa641ef14956011ac674d",
+      "b5cf9a2443d36f1b3695cc3669dcce5747a47052b2ff603385d9abe46c3221a5"
+    ]
+  },
+  {
+    "trial": 3,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3002heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.5,
+    "first_frame_sha256": "86cc95229f1c0b4ac294e8497ca3b8863dd02ec839480344d57e76030c0b4f76",
+    "frame_sha256": [
+      "cd53a08fe5f352a3abf3a665355c9cd22bd4b4b4ea1ec765c29ee0b20f6fa448",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "e83929200d8ae8186e36ed28c09a1d329bd47c95ec259b68032bf5b5411b2bfe",
+      "86cc95229f1c0b4ac294e8497ca3b8863dd02ec839480344d57e76030c0b4f76",
+      "d234ebed55b1170bfbd32328aaf62ddf50292a7f064d7ddff1c120dddf2aef28",
+      "e83929200d8ae8186e36ed28c09a1d329bd47c95ec259b68032bf5b5411b2bfe",
+      "fe12947b5e89241e057c813fca2a4590292acd429285f2a7336f5cf3b2c0dc11",
+      "d234ebed55b1170bfbd32328aaf62ddf50292a7f064d7ddff1c120dddf2aef28",
+      "743dfb8b93732ec4d6ac402d673e54db3743b7cc187092bce57a7e70d60dd562",
+      "fe12947b5e89241e057c813fca2a4590292acd429285f2a7336f5cf3b2c0dc11",
+      "73181201854e49416e029e298ece160ed2a64cc8162c07273412488a1429ac23",
+      "743dfb8b93732ec4d6ac402d673e54db3743b7cc187092bce57a7e70d60dd562",
+      "c3d901eb520dc6ca75cb103419d4bd05d198124b8af05f8a86ff61fbd65882be",
+      "73181201854e49416e029e298ece160ed2a64cc8162c07273412488a1429ac23",
+      "bdd55e8469c860fb6b954847c47e1a566f05597f95466a9ae4bb951fad634022",
+      "cd53a08fe5f352a3abf3a665355c9cd22bd4b4b4ea1ec765c29ee0b20f6fa448"
+    ]
+  },
+  {
+    "trial": 4,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3003heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.48,
+    "first_frame_sha256": "36cd732ff395edf205d600b3298bc1c0aa0a2d686e55235ef4e33709b0ed131e",
+    "frame_sha256": [
+      "5f703bb57b6c966e8687ebad52b156b7b1f5b55905a2875a869fff8e4d473c03",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "9cbc40d7d4fe78b5599ae8edc6a6655545ea13c59d60af68b50cbd4c65daed6b",
+      "36cd732ff395edf205d600b3298bc1c0aa0a2d686e55235ef4e33709b0ed131e",
+      "a47bb11ff22563d4cb2f0ea2bcee8ea37f995b98bb588e7f99c4da2a218d3b81",
+      "9cbc40d7d4fe78b5599ae8edc6a6655545ea13c59d60af68b50cbd4c65daed6b",
+      "ed4c67169839dc8e5d27c401de89461282dbce3511914a54a35f71d338b04f4a",
+      "a47bb11ff22563d4cb2f0ea2bcee8ea37f995b98bb588e7f99c4da2a218d3b81",
+      "23ceac974da8e781d33e3e060aeb51db9171c21f090649e291432094f604d156",
+      "ed4c67169839dc8e5d27c401de89461282dbce3511914a54a35f71d338b04f4a",
+      "53319747fb45ddf76c5d0bed1a19222dbd2ac8da241413ec188ee4826e83fa5e",
+      "23ceac974da8e781d33e3e060aeb51db9171c21f090649e291432094f604d156",
+      "751e5a28efc8a9eb0150afa95fd8c29b49b878ac40c7e2e774dfb676bdf81218",
+      "53319747fb45ddf76c5d0bed1a19222dbd2ac8da241413ec188ee4826e83fa5e",
+      "3ac6e100c9fa054f0bd4ecf5ca40e4824e2eb2fa7221169fb94673871c5a1ab3",
+      "5f703bb57b6c966e8687ebad52b156b7b1f5b55905a2875a869fff8e4d473c03"
+    ]
+  },
+  {
+    "trial": 5,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3004heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.28,
+    "first_frame_sha256": "cf5d86772d9fc91a9aede8d2fb2a64d2fc7167d4fc18b01aa2add2931aa8e378",
+    "frame_sha256": [
+      "7fd4e2a5f8463e9efd4ed2775d9502acdb0470efda84651207f81f6fb1a7ef05",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "516847b2e39fb75845328cc119b6adf00fc2ad279660c7bb3ad4d479bdcc57cf",
+      "cf5d86772d9fc91a9aede8d2fb2a64d2fc7167d4fc18b01aa2add2931aa8e378",
+      "46c1ebcbaaf3ea42b201d90ea815410fc3804c79ca805abecc08e2684759c72d",
+      "516847b2e39fb75845328cc119b6adf00fc2ad279660c7bb3ad4d479bdcc57cf",
+      "bfbfdfddaaff29fcbfa1f1f3d8859ec80ce878a0f389ed15e39b7b2be00880a4",
+      "46c1ebcbaaf3ea42b201d90ea815410fc3804c79ca805abecc08e2684759c72d",
+      "e8e48e1db8cec337e8791cc2e68f9b1fbddc9de6ce93a96418c7eddac5668986",
+      "bfbfdfddaaff29fcbfa1f1f3d8859ec80ce878a0f389ed15e39b7b2be00880a4",
+      "cb219a421ac01eeca07a540f39c30cc0b96b4728468967732a20302a8e36adfd",
+      "e8e48e1db8cec337e8791cc2e68f9b1fbddc9de6ce93a96418c7eddac5668986",
+      "693dd0be13a93b9d0213e9d63fed6813df44f9868fe5bd3e99ab54774c938171",
+      "cb219a421ac01eeca07a540f39c30cc0b96b4728468967732a20302a8e36adfd",
+      "aebb9e0d4bfea43629026e435786d09af3f02137b89234e834484a07915761bf",
+      "7fd4e2a5f8463e9efd4ed2775d9502acdb0470efda84651207f81f6fb1a7ef05"
+    ]
+  },
+  {
+    "trial": 6,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3005heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 14.94,
+    "first_frame_sha256": "cf5d86772d9fc91a9aede8d2fb2a64d2fc7167d4fc18b01aa2add2931aa8e378",
+    "frame_sha256": [
+      "c950e869bb8a35b41ef1ddd0cef4e6db0f671c19188a25e7de32b6d36f0c6c8d",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "516847b2e39fb75845328cc119b6adf00fc2ad279660c7bb3ad4d479bdcc57cf",
+      "cf5d86772d9fc91a9aede8d2fb2a64d2fc7167d4fc18b01aa2add2931aa8e378",
+      "46c1ebcbaaf3ea42b201d90ea815410fc3804c79ca805abecc08e2684759c72d",
+      "516847b2e39fb75845328cc119b6adf00fc2ad279660c7bb3ad4d479bdcc57cf",
+      "bfbfdfddaaff29fcbfa1f1f3d8859ec80ce878a0f389ed15e39b7b2be00880a4",
+      "46c1ebcbaaf3ea42b201d90ea815410fc3804c79ca805abecc08e2684759c72d",
+      "e8e48e1db8cec337e8791cc2e68f9b1fbddc9de6ce93a96418c7eddac5668986",
+      "bfbfdfddaaff29fcbfa1f1f3d8859ec80ce878a0f389ed15e39b7b2be00880a4",
+      "cb219a421ac01eeca07a540f39c30cc0b96b4728468967732a20302a8e36adfd",
+      "e8e48e1db8cec337e8791cc2e68f9b1fbddc9de6ce93a96418c7eddac5668986",
+      "4c693376594f51065b3646cc1f959db5aa94748caebce89722cd1a029d6b833c",
+      "cb219a421ac01eeca07a540f39c30cc0b96b4728468967732a20302a8e36adfd",
+      "031a387bd85a1134c44f8ec08559def796e77b5babf0ea5a19b32037df55c201",
+      "c950e869bb8a35b41ef1ddd0cef4e6db0f671c19188a25e7de32b6d36f0c6c8d"
+    ]
+  },
+  {
+    "trial": 7,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3006heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.33,
+    "first_frame_sha256": "4afbd46b4faa0d0a2577eadd00c5da8c019d5e2e9cfed59239c73c247e6bb949",
+    "frame_sha256": [
+      "312a637c500796729d2cf5df2c171f2a09ce2c43edc577b412fa0299162902bd",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "8327481a04458f071727de6d7f6b982663d46b926e8dd0dd51952ba98e94d5da",
+      "4afbd46b4faa0d0a2577eadd00c5da8c019d5e2e9cfed59239c73c247e6bb949",
+      "abb6700ad3f0cbf4252459887066762cc8d0b95e99f7203f5c148c231ff614a2",
+      "8327481a04458f071727de6d7f6b982663d46b926e8dd0dd51952ba98e94d5da",
+      "3c378da29d8c1e289cad7df71a552cc0009b81becd122788b30b3fa3e52d02b3",
+      "abb6700ad3f0cbf4252459887066762cc8d0b95e99f7203f5c148c231ff614a2",
+      "bb1753c97aaf733cce1f2002937bf4296fac907dd20dea1546bf627a4bd6e5a8",
+      "3c378da29d8c1e289cad7df71a552cc0009b81becd122788b30b3fa3e52d02b3",
+      "c30a5b4cee1b0a96b7472467bd3b6c8f633d13055755f45097e2b344b05f0c4c",
+      "bb1753c97aaf733cce1f2002937bf4296fac907dd20dea1546bf627a4bd6e5a8",
+      "d44a52b74b98da7c24a9170d064947fe0673a1c4f0d28cc915426a1e6148e541",
+      "c30a5b4cee1b0a96b7472467bd3b6c8f633d13055755f45097e2b344b05f0c4c",
+      "b55f3ced3a88906592ba776724eea6643b48779a79d16ed93716edb99739a6ac",
+      "312a637c500796729d2cf5df2c171f2a09ce2c43edc577b412fa0299162902bd"
+    ]
+  },
+  {
+    "trial": 8,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3007heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.42,
+    "first_frame_sha256": "ad6b35236712e6e0edd2d2166a3c5a78cc74d652f373c7a18f56c35fbbd63e4c",
+    "frame_sha256": [
+      "6a9cdde9fe821d040f805683d81d43bc61f612d1edd11e7dbb114427b9be05d0",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "a8b31e1dacc51b7940c9d2a1c5868da58bb9107c22b7e67b6ca22ee2d7101ad7",
+      "ad6b35236712e6e0edd2d2166a3c5a78cc74d652f373c7a18f56c35fbbd63e4c",
+      "ef68bc3d3b9662ba1a30f95e250c27fe64344876b96e79e522c259ba1d18782f",
+      "a8b31e1dacc51b7940c9d2a1c5868da58bb9107c22b7e67b6ca22ee2d7101ad7",
+      "a65c8dfb10a0d64832ae5cdfc8d8954e910a05349983a5b628a288aa2868bcbb",
+      "ef68bc3d3b9662ba1a30f95e250c27fe64344876b96e79e522c259ba1d18782f",
+      "770625a3ee6a70a45fca5af3078800c98052394f3eb42a647951bc0e43aa6a63",
+      "a65c8dfb10a0d64832ae5cdfc8d8954e910a05349983a5b628a288aa2868bcbb",
+      "4d50524c35e8a4d3f42ba48438501acb791a01da347a497b359f9a871c8112c6",
+      "770625a3ee6a70a45fca5af3078800c98052394f3eb42a647951bc0e43aa6a63",
+      "db78070346f898185846d66370fea41940aea065f173f57c87df4851ed7c0202",
+      "4d50524c35e8a4d3f42ba48438501acb791a01da347a497b359f9a871c8112c6",
+      "0c70dbd26ec5b5878c7775d0cb92d665ebb764e10e97a3df8df663711082b521",
+      "6a9cdde9fe821d040f805683d81d43bc61f612d1edd11e7dbb114427b9be05d0"
+    ]
+  },
+  {
+    "trial": 9,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3008heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.3,
+    "first_frame_sha256": "dde3daa0d44dc940125cac7a9209aca4795d50d2250c81ed010184907ba2a9ec",
+    "frame_sha256": [
+      "49ae39356945c3a67f5f77a866cb7c91c356ff58591daf90caa9702d6041ecde",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "37712eafe472ffdefb85855b1f3f218149da067155cadbd46a0241fa671fc457",
+      "dde3daa0d44dc940125cac7a9209aca4795d50d2250c81ed010184907ba2a9ec",
+      "0851e99ed2130fd5e3fcf07908b7d539f1a960c263075f31142682d9544ff5e3",
+      "37712eafe472ffdefb85855b1f3f218149da067155cadbd46a0241fa671fc457",
+      "4df9b77c135fd58287f2c29b905a1348f430cf212294a907bf3317d7889d8ff9",
+      "0851e99ed2130fd5e3fcf07908b7d539f1a960c263075f31142682d9544ff5e3",
+      "4a659d260cf4078e004d7aaa2d9636c219eb63caef9642b1e82e273ab26c07d0",
+      "4df9b77c135fd58287f2c29b905a1348f430cf212294a907bf3317d7889d8ff9",
+      "4fdaa866e5922e5d85ab2af97773bf44371dd2ed8fff4354fac0241e0fdd25a9",
+      "4a659d260cf4078e004d7aaa2d9636c219eb63caef9642b1e82e273ab26c07d0",
+      "b22f6d26792cb8d4d58cef46c24354d9287b0b48c15bbcdf38147610c7f1b5c3",
+      "4fdaa866e5922e5d85ab2af97773bf44371dd2ed8fff4354fac0241e0fdd25a9",
+      "9035e56c0ddbfe3410c1d3808834af3cdebe0dd055f91e28fd460bea07d77089",
+      "49ae39356945c3a67f5f77a866cb7c91c356ff58591daf90caa9702d6041ecde"
+    ]
+  },
+  {
+    "trial": 10,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3009heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.73,
+    "first_frame_sha256": "011b4ab8bf41413ded5f82d2840c32a0cae3c60c9fcfd1c3dbea0c38165db4a3",
+    "frame_sha256": [
+      "37d9e27777c9860accded8af58fccfa43356b180dda3515243b0ab934944ebba",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "d832c3663ba3ab07747742a404f26a7824f0cf12fb393869487b2e719a0ee377",
+      "011b4ab8bf41413ded5f82d2840c32a0cae3c60c9fcfd1c3dbea0c38165db4a3",
+      "2950d33d93a0d020c40fb39e58f4aea3d4b9b3b6bd7028a6d6415cdf6d0149a9",
+      "d832c3663ba3ab07747742a404f26a7824f0cf12fb393869487b2e719a0ee377",
+      "9a752501907d94cc7ac625c5dd055e1de913e836a791034abde920e368f0ddfc",
+      "2950d33d93a0d020c40fb39e58f4aea3d4b9b3b6bd7028a6d6415cdf6d0149a9",
+      "3639be36d3bc33656c14203257b64102b297e2b25ed1e59054598a4188aab275",
+      "9a752501907d94cc7ac625c5dd055e1de913e836a791034abde920e368f0ddfc",
+      "39223360b035c53ce2c71898a45c0b9ccf3ea5eb18a676afebda1b86e4a5fbdf",
+      "3639be36d3bc33656c14203257b64102b297e2b25ed1e59054598a4188aab275",
+      "376c26c36004266ced84e9c0dadd81d7cc7c7a8e0eb7d544363ab2bbd9e00d5d",
+      "39223360b035c53ce2c71898a45c0b9ccf3ea5eb18a676afebda1b86e4a5fbdf",
+      "1a24bfbc1a18bd183fb5964ae81612f2828c4451fed63f5dbb011500a5519629",
+      "37d9e27777c9860accded8af58fccfa43356b180dda3515243b0ab934944ebba"
+    ]
+  },
+  {
+    "trial": 11,
+    "condition": "reorder",
+    "drift": "reorder",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3010reor",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.48,
+    "first_frame_sha256": "dfaf1553df01474439d5e2fef5a996085784aafa1452914d4661f736032efcd4",
+    "frame_sha256": [
+      "ecf3b4d0f8c6174a91325473332f67becc95d586bdcfd2fbc2947e1ee2df694e",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "9ff160fc9ee118f63b641214695e6a1c05d0d8ab37a38c133685716755046329",
+      "dfaf1553df01474439d5e2fef5a996085784aafa1452914d4661f736032efcd4",
+      "3192ed75de8c89c4b0f6a2a0286ec35ca765f8165d0de5c925bf1001066cf29f",
+      "9ff160fc9ee118f63b641214695e6a1c05d0d8ab37a38c133685716755046329",
+      "79628e652a16acdc0d5901fc2071e03a0876e33d1ed699d1aa4291dc441b1b34",
+      "3192ed75de8c89c4b0f6a2a0286ec35ca765f8165d0de5c925bf1001066cf29f",
+      "96327d2f4d890935f1988b0653e79e383adb1c87c22a24e21f6706e849f94087",
+      "79628e652a16acdc0d5901fc2071e03a0876e33d1ed699d1aa4291dc441b1b34",
+      "1c7535bdf359fa43b07afe45e4aaa2e145e018d416e41da78013f2731e41a0d6",
+      "96327d2f4d890935f1988b0653e79e383adb1c87c22a24e21f6706e849f94087",
+      "21bb2a47d7431bfb6b0840d7095ae712ea8af2c5841d1f27017958dac80da056",
+      "1c7535bdf359fa43b07afe45e4aaa2e145e018d416e41da78013f2731e41a0d6",
+      "f8c558947d9124dde00d00b93e662f396c6cadd9709a5c7137315d365d35636d",
+      "ecf3b4d0f8c6174a91325473332f67becc95d586bdcfd2fbc2947e1ee2df694e"
+    ],
+    "first_frame": {
+      "file": "pn_reorder_first.png",
+      "sha256": "dfaf1553df01474439d5e2fef5a996085784aafa1452914d4661f736032efcd4",
+      "size": [
+        1280,
+        800
+      ]
+    }
+  },
+  {
+    "trial": 12,
+    "condition": "reorder",
+    "drift": "reorder",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3011reor",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.5,
+    "first_frame_sha256": "225c17a95e4b427c3a90b0a99a4fc2db4f854035ea9bd7f0c3836360144e3cdf",
+    "frame_sha256": [
+      "26cdbd7bf2d215a020d0b638f378cec15e7ed46e2c7952dbc7037f97c7fd10b3",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "59f92b41e4a2435948a69827f2ccd1f2e7f4dd9177ab28d8c964dc7fdf0ba752",
+      "225c17a95e4b427c3a90b0a99a4fc2db4f854035ea9bd7f0c3836360144e3cdf",
+      "33143ee653f0bb404ec0adbb230db5af005af2ad4a2fc339582957b4f1f816be",
+      "59f92b41e4a2435948a69827f2ccd1f2e7f4dd9177ab28d8c964dc7fdf0ba752",
+      "3e4e6340bc2c6dd4f26349c212c4c22bbf828dbd18005e422dec067a6111c248",
+      "33143ee653f0bb404ec0adbb230db5af005af2ad4a2fc339582957b4f1f816be",
+      "20c5ca3db093066cb451a64e940e7d6fafae3c0b24baef9e0b0129358cdd26ca",
+      "3e4e6340bc2c6dd4f26349c212c4c22bbf828dbd18005e422dec067a6111c248",
+      "c664e891e971ae076d6fc1c2f31d0845540ca32cc3030904fe716595d79cf264",
+      "20c5ca3db093066cb451a64e940e7d6fafae3c0b24baef9e0b0129358cdd26ca",
+      "cc3596a9e35abe68af8786ef3f19e3bbf8c3d9844a6adfd5423dea9b1c765118",
+      "c664e891e971ae076d6fc1c2f31d0845540ca32cc3030904fe716595d79cf264",
+      "b7d302a936c7859522fda7c9aca9a0f84b38c805b333fbcee92b12d7dcf18ca7",
+      "26cdbd7bf2d215a020d0b638f378cec15e7ed46e2c7952dbc7037f97c7fd10b3"
+    ]
+  },
+  {
+    "trial": 13,
+    "condition": "reorder",
+    "drift": "reorder",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3012reor",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.53,
+    "first_frame_sha256": "94520bb2a92123ab2998abd0f4b26956a6a28f4905890576e78f21b02361c6b6",
+    "frame_sha256": [
+      "467a151031c7c2fb2feed3b8fd8728965f2b8ff289b5a587f5b3995827fbae6c",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "5f3c8c87934373877926ae76c8ca90972d0276d6a1c1f8558c61e1b8ee3549b5",
+      "94520bb2a92123ab2998abd0f4b26956a6a28f4905890576e78f21b02361c6b6",
+      "c36ce01ef188862bce18c680c4f39a50311010775fb05de946f66d990098cc6a",
+      "5f3c8c87934373877926ae76c8ca90972d0276d6a1c1f8558c61e1b8ee3549b5",
+      "cb2984ce92ce7c172bb9aa7bfc4516e7a2761c8356d1d8388c795b618f14e374",
+      "c36ce01ef188862bce18c680c4f39a50311010775fb05de946f66d990098cc6a",
+      "e921e64d1a436c2f59a943309803c3704087d4788dd3a5e810195da0cf118c7f",
+      "cb2984ce92ce7c172bb9aa7bfc4516e7a2761c8356d1d8388c795b618f14e374",
+      "3197ffcfbcd9326201532804b4813fc49d98fed296c543d5c7deafce5f327937",
+      "e921e64d1a436c2f59a943309803c3704087d4788dd3a5e810195da0cf118c7f",
+      "a3fe396d1c6b6b23f935f1fc3f96d291b50763bdb082f57128a05b1308b96b59",
+      "3197ffcfbcd9326201532804b4813fc49d98fed296c543d5c7deafce5f327937",
+      "4a0c40e3a78ad1daf2bbb5e350b880d908414e2429ca40c0a7c97c0daabd8d1c",
+      "467a151031c7c2fb2feed3b8fd8728965f2b8ff289b5a587f5b3995827fbae6c"
+    ]
+  },
+  {
+    "trial": 14,
+    "condition": "reorder",
+    "drift": "reorder",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3013reor",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.41,
+    "first_frame_sha256": "0b61061a0fc056abc2df87b46a7adfc1411244bb0d8c8cf4bdacd735bbf80223",
+    "frame_sha256": [
+      "f84688a0e44ca7907eb331f327bac85c86ac8943b2601d32f3256a1c45d629be",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "0e966e1b290c26a2a0ead3179bb7a483679243faeeffc751f55b2c718aad4b8c",
+      "0b61061a0fc056abc2df87b46a7adfc1411244bb0d8c8cf4bdacd735bbf80223",
+      "e7b29ed8faf7b692512403d85a8fcc571fb1b57f9960db0c186cf195bbe7796d",
+      "0e966e1b290c26a2a0ead3179bb7a483679243faeeffc751f55b2c718aad4b8c",
+      "5ef8cffc908b5e11805c3c221d50c5e74f2370148d1dfa7394431b3f84195d22",
+      "e7b29ed8faf7b692512403d85a8fcc571fb1b57f9960db0c186cf195bbe7796d",
+      "6418dbbd8d607757445e18131d0d5421238c444c2a7f41292d8318f864aa0bc5",
+      "5ef8cffc908b5e11805c3c221d50c5e74f2370148d1dfa7394431b3f84195d22",
+      "708838256d3f0d28393214a7418aa5aaa3d20e03570d3b05fc4e6b3711e23772",
+      "6418dbbd8d607757445e18131d0d5421238c444c2a7f41292d8318f864aa0bc5",
+      "5f19e5f99b839a6f87a239b27f621087b4a79b6121d32be5cb29ae2ea58c767c",
+      "708838256d3f0d28393214a7418aa5aaa3d20e03570d3b05fc4e6b3711e23772",
+      "32aa162b1c5255666d876ee44aa8a527afabdfcf08bda61c1c01bee0b91210fe",
+      "f84688a0e44ca7907eb331f327bac85c86ac8943b2601d32f3256a1c45d629be"
+    ]
+  },
+  {
+    "trial": 15,
+    "condition": "reorder",
+    "drift": "reorder",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3014reor",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.06,
+    "first_frame_sha256": "218bd1d6f8cc63b9e32009e02b63c6c26f4186d2712eafbb2fcf575e79aa1b1c",
+    "frame_sha256": [
+      "b21173b4328adbde5e80ee92a5c09290a5b5491600a2c676a1b4831f2cf3f5c6",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "6156fedd8e8869ad16dacbc1ea801bb9f348facfd3094e390daf8013429f1e4a",
+      "218bd1d6f8cc63b9e32009e02b63c6c26f4186d2712eafbb2fcf575e79aa1b1c",
+      "5f9b4a6e0eac6c2483ca6e85a6264d5eeb722d612a8e8711c5956079bdc96333",
+      "6156fedd8e8869ad16dacbc1ea801bb9f348facfd3094e390daf8013429f1e4a",
+      "75c5fffc14b31dd0f2893c75a83841a8c8d07ff05187e528bed11731e640a711",
+      "5f9b4a6e0eac6c2483ca6e85a6264d5eeb722d612a8e8711c5956079bdc96333",
+      "1b0457183ae9161cdc04c638310a1e6fd98911bf498f77066ffc19ac9c5da2af",
+      "75c5fffc14b31dd0f2893c75a83841a8c8d07ff05187e528bed11731e640a711",
+      "70ff95359b732da1a0b53019942c4965d469e0b88ea1548f4548ab8d6fab1178",
+      "1b0457183ae9161cdc04c638310a1e6fd98911bf498f77066ffc19ac9c5da2af",
+      "d1d3d220b2ac73f24e1b4252cd273796a743fde577127720942c986f96038161",
+      "70ff95359b732da1a0b53019942c4965d469e0b88ea1548f4548ab8d6fab1178",
+      "b637b4878426b8e42f30835a61943b7c0ecdb68bec95be10dac452a99274ae36",
+      "b21173b4328adbde5e80ee92a5c09290a5b5491600a2c676a1b4831f2cf3f5c6"
+    ]
+  },
+  {
+    "trial": 16,
+    "condition": "decoy",
+    "drift": "decoy",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3015deco",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_002",
+      "intent": "click 'Search'",
+      "reason": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Anderson",
+        "1972-10-04",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Anderson (1972-10-04)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:46 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 11.38,
+    "first_frame_sha256": "0a1e9bbaf4278c6aec136213aee26267321ba3349481464e3dbe3d29c57fc2b0",
+    "frame_sha256": [
+      "a2355b05b3f48010cb8c0f11559259d03d22f90e1071b1bb10c0af8b6136b6ba",
+      "0a1e9bbaf4278c6aec136213aee26267321ba3349481464e3dbe3d29c57fc2b0",
+      "1a19e569834f4be9c33fe6be9fe8f2b49ac32cfd2edb140dc2595bf923facdc6",
+      "a2355b05b3f48010cb8c0f11559259d03d22f90e1071b1bb10c0af8b6136b6ba",
+      "fe84539126729df28fa8be75977cf0dfd88d6e3ec38d45521546af7fd851eeae",
+      "1a19e569834f4be9c33fe6be9fe8f2b49ac32cfd2edb140dc2595bf923facdc6"
+    ],
+    "first_frame": {
+      "file": "pn_decoy_first.png",
+      "sha256": "0a1e9bbaf4278c6aec136213aee26267321ba3349481464e3dbe3d29c57fc2b0",
+      "size": [
+        1280,
+        800
+      ]
+    }
+  },
+  {
+    "trial": 17,
+    "condition": "decoy",
+    "drift": "decoy",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3016deco",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_002",
+      "intent": "click 'Search'",
+      "reason": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Anderson",
+        "1972-10-04",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Anderson (1972-10-04)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:47 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 9.7,
+    "first_frame_sha256": "7c7fef04960f3f5bb676026eeb2a92a0ddd97ab80b9e9ec540586de351ac7dd3",
+    "frame_sha256": [
+      "e3cd56569c0a9938576d68d126956eadc28698aed3507a98fe57ca0c051664fe",
+      "7c7fef04960f3f5bb676026eeb2a92a0ddd97ab80b9e9ec540586de351ac7dd3",
+      "10a76fca5b079f65491aac900073c09592473f82dfccc628cecaa66c46be9886",
+      "e3cd56569c0a9938576d68d126956eadc28698aed3507a98fe57ca0c051664fe",
+      "1109ac2023f3738db205696427469bcd0b2c8f9b87c6a68b91c111df04041d9f",
+      "10a76fca5b079f65491aac900073c09592473f82dfccc628cecaa66c46be9886"
+    ]
+  },
+  {
+    "trial": 18,
+    "condition": "decoy",
+    "drift": "decoy",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3017deco",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_002",
+      "intent": "click 'Search'",
+      "reason": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Anderson",
+        "1972-10-04",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Anderson (1972-10-04)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:47 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 9.47,
+    "first_frame_sha256": "a88631688e4beb989411d43b4a98d446e07d93ac5c31e15ebbcbcd54ef9b4128",
+    "frame_sha256": [
+      "4f52277a6f7b8389ccc850bb8755af7c8791c0db020034336f3771d0c8ac2857",
+      "a88631688e4beb989411d43b4a98d446e07d93ac5c31e15ebbcbcd54ef9b4128",
+      "c4d554baf0c8e2b9bcb7cae724049f988aca0c2651268fe079dd11582d03f2ec",
+      "4f52277a6f7b8389ccc850bb8755af7c8791c0db020034336f3771d0c8ac2857",
+      "95c68078c49873e4de880a1d6e749bd45e654948f28ce1667d2d9cb199949d57",
+      "c4d554baf0c8e2b9bcb7cae724049f988aca0c2651268fe079dd11582d03f2ec"
+    ]
+  },
+  {
+    "trial": 19,
+    "condition": "decoy",
+    "drift": "decoy",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3018deco",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_002",
+      "intent": "click 'Search'",
+      "reason": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Anderson",
+        "1972-10-04",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Anderson (1972-10-04)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:47 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 9.47,
+    "first_frame_sha256": "e752bbff7798066d57f66be75c38d2019ae492f96f4090be1386cefa0d45b2ee",
+    "frame_sha256": [
+      "afebbe0f6736231f6485fbf853e384fc95f507a4b97d099d3ceffc223eb1b5d6",
+      "e752bbff7798066d57f66be75c38d2019ae492f96f4090be1386cefa0d45b2ee",
+      "0b4b41dc99a6ada392e21c569006ba584b878938d1935e6923f6330490b2797f",
+      "afebbe0f6736231f6485fbf853e384fc95f507a4b97d099d3ceffc223eb1b5d6",
+      "36d8032f0ea73d3ce5afd7ce85287f2d649512aac66f753975c8a48a3042fc5e",
+      "0b4b41dc99a6ada392e21c569006ba584b878938d1935e6923f6330490b2797f"
+    ]
+  },
+  {
+    "trial": 20,
+    "condition": "decoy",
+    "drift": "decoy",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3019deco",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_002",
+      "intent": "click 'Search'",
+      "reason": "Postconditions failed for step 'step_002' (click 'Search'): expected screen state not reached (semantic drift) \u2014 failed: text_present 'Patient: Neil Sorenson (1984-03-12)' \u2014 run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Anderson",
+        "1972-10-04",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Anderson (1972-10-04)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:48 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 9.42,
+    "first_frame_sha256": "3402c1b2a3a095ef0c8f22dcc1552715bb24aeab492311319413517c140c7faa",
+    "frame_sha256": [
+      "6221c121ce09a011045b63a61040f87f59bf5d8e7096d82463cd555f28a33999",
+      "3402c1b2a3a095ef0c8f22dcc1552715bb24aeab492311319413517c140c7faa",
+      "04224f4328ff8f62a4af42f94b94d499195208d3dc77b5bfdcffaac462251b5c",
+      "6221c121ce09a011045b63a61040f87f59bf5d8e7096d82463cd555f28a33999",
+      "6eea7629ed6c03b24abe70e6ff59bd16f46c8978d9250e3c10cb05e66c583432",
+      "04224f4328ff8f62a4af42f94b94d499195208d3dc77b5bfdcffaac462251b5c"
+    ]
+  },
+  {
+    "trial": 21,
+    "condition": "siblings",
+    "drift": "siblings",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3020sibl",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 2
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": false,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_003",
+      "intent": "click 'eil'",
+      "reason": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Sorensen",
+        "1983-01-19",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorensen (1983-01-19)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:48 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "stop_on_lookalike",
+    "must_save": false,
+    "elapsed_s": 6.59,
+    "first_frame_sha256": "7593772fbbf016e5fff1f0c2a3e77ee72a80966672aaecf40c8999e92c358395",
+    "frame_sha256": [
+      "d7c5155659854e04505c1f398e5370bd8c9becf6917aae78bdb4fc516b7cfb93",
+      "7593772fbbf016e5fff1f0c2a3e77ee72a80966672aaecf40c8999e92c358395",
+      "28efba5cf0b3e68b620272c33fda82bad4a063b8f5bbacf1643380aab9fa9dc5",
+      "d7c5155659854e04505c1f398e5370bd8c9becf6917aae78bdb4fc516b7cfb93",
+      "988f855324771175c4f7d0ffa7ca610511b7c21340f0e156e46f29bef71d21ef",
+      "28efba5cf0b3e68b620272c33fda82bad4a063b8f5bbacf1643380aab9fa9dc5",
+      "988f855324771175c4f7d0ffa7ca610511b7c21340f0e156e46f29bef71d21ef",
+      "988f855324771175c4f7d0ffa7ca610511b7c21340f0e156e46f29bef71d21ef"
+    ],
+    "first_frame": {
+      "file": "pn_siblings_first.png",
+      "sha256": "7593772fbbf016e5fff1f0c2a3e77ee72a80966672aaecf40c8999e92c358395",
+      "size": [
+        1280,
+        800
+      ]
+    }
+  },
+  {
+    "trial": 22,
+    "condition": "siblings",
+    "drift": "siblings",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3021sibl",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 2
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": false,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_003",
+      "intent": "click 'eil'",
+      "reason": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Sorensen",
+        "1983-01-19",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorensen (1983-01-19)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:49 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "stop_on_lookalike",
+    "must_save": false,
+    "elapsed_s": 5.67,
+    "first_frame_sha256": "e1ad26d9a539c859a0cc07969eef664daf79c59fb52396970d2c2aa6f99ee99c",
+    "frame_sha256": [
+      "1f87d5592e05d86305665749b5cadcc9c47562ea08370a8437cfd51dcf5051c6",
+      "e1ad26d9a539c859a0cc07969eef664daf79c59fb52396970d2c2aa6f99ee99c",
+      "cda10a72be70ca10c91025fe1a2a53257c69b9182f2f61db67aa6f7db6a9fa07",
+      "1f87d5592e05d86305665749b5cadcc9c47562ea08370a8437cfd51dcf5051c6",
+      "a52317ca8eaf0f8c42da50002a60f53728fc014a7b9ce65518f24b5497218f01",
+      "cda10a72be70ca10c91025fe1a2a53257c69b9182f2f61db67aa6f7db6a9fa07",
+      "a52317ca8eaf0f8c42da50002a60f53728fc014a7b9ce65518f24b5497218f01",
+      "a52317ca8eaf0f8c42da50002a60f53728fc014a7b9ce65518f24b5497218f01"
+    ]
+  },
+  {
+    "trial": 23,
+    "condition": "siblings",
+    "drift": "siblings",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3022sibl",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 2
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": false,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_003",
+      "intent": "click 'eil'",
+      "reason": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Sorensen",
+        "1983-01-19",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorensen (1983-01-19)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:49 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "stop_on_lookalike",
+    "must_save": false,
+    "elapsed_s": 5.69,
+    "first_frame_sha256": "2a7021f6f2c92400942623e009aed919097c64fd2efbcba85b4f5553d2abf090",
+    "frame_sha256": [
+      "7cd6076c4670754172e90085ae296fa3d4ed4a230b5f3bf6898d5a760d5182f9",
+      "2a7021f6f2c92400942623e009aed919097c64fd2efbcba85b4f5553d2abf090",
+      "b3b6ad72ae268827d00606adfce3fb53d3e2f06698f2f72702d35eebe760554f",
+      "7cd6076c4670754172e90085ae296fa3d4ed4a230b5f3bf6898d5a760d5182f9",
+      "0a61541e5596293f994cbb9d6fb0b6e7d0fd2949e71ff94de5867d66e3235760",
+      "b3b6ad72ae268827d00606adfce3fb53d3e2f06698f2f72702d35eebe760554f",
+      "0a61541e5596293f994cbb9d6fb0b6e7d0fd2949e71ff94de5867d66e3235760",
+      "0a61541e5596293f994cbb9d6fb0b6e7d0fd2949e71ff94de5867d66e3235760"
+    ]
+  },
+  {
+    "trial": 24,
+    "condition": "siblings",
+    "drift": "siblings",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3023sibl",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 2
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": false,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_003",
+      "intent": "click 'eil'",
+      "reason": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Sorensen",
+        "1983-01-19",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorensen (1983-01-19)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:49 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "stop_on_lookalike",
+    "must_save": false,
+    "elapsed_s": 2.75,
+    "first_frame_sha256": "2d957576210e3c7a32b95b7a5528d8c5bcb9311f63f240f498416f6fe87473c4",
+    "frame_sha256": [
+      "7cd6076c4670754172e90085ae296fa3d4ed4a230b5f3bf6898d5a760d5182f9",
+      "2d957576210e3c7a32b95b7a5528d8c5bcb9311f63f240f498416f6fe87473c4",
+      "b3b6ad72ae268827d00606adfce3fb53d3e2f06698f2f72702d35eebe760554f",
+      "7cd6076c4670754172e90085ae296fa3d4ed4a230b5f3bf6898d5a760d5182f9",
+      "0a61541e5596293f994cbb9d6fb0b6e7d0fd2949e71ff94de5867d66e3235760",
+      "b3b6ad72ae268827d00606adfce3fb53d3e2f06698f2f72702d35eebe760554f",
+      "0a61541e5596293f994cbb9d6fb0b6e7d0fd2949e71ff94de5867d66e3235760",
+      "0a61541e5596293f994cbb9d6fb0b6e7d0fd2949e71ff94de5867d66e3235760"
+    ]
+  },
+  {
+    "trial": 25,
+    "condition": "siblings",
+    "drift": "siblings",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3024sibl",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 2
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": false,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_003",
+      "intent": "click 'eil'",
+      "reason": "OCR safety refusal for step 'step_003' (click 'eil'): OCR landmark evidence did not uniquely establish a target \u2014 no action was admitted",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes - Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "15e1",
+        "qop",
+        "Sorensen",
+        "1983-01-19",
+        "IN",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorensen (1983-01-19)",
+        "Loaded 2 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "3:50 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "stop_on_lookalike",
+    "must_save": false,
+    "elapsed_s": 5.77,
+    "first_frame_sha256": "f12c8a04ac92a5dbc49bf59cb49d983475b6f2d3b46e5200b24e3bb6e6ecc5d8",
+    "frame_sha256": [
+      "6fd54a04e66425f7d244cf095df25fa7f8f0571c90f466bfb6d1bd86e7367b0d",
+      "f12c8a04ac92a5dbc49bf59cb49d983475b6f2d3b46e5200b24e3bb6e6ecc5d8",
+      "0087687620414170b1b16dd31d20336da8d02cce5b926c9d3cb97c6c382b9c35",
+      "6fd54a04e66425f7d244cf095df25fa7f8f0571c90f466bfb6d1bd86e7367b0d",
+      "52819c97fd19641efa0d0e6b25419e7fb96cf76f5833559d312966d06668d804",
+      "0087687620414170b1b16dd31d20336da8d02cce5b926c9d3cb97c6c382b9c35",
+      "52819c97fd19641efa0d0e6b25419e7fb96cf76f5833559d312966d06668d804",
+      "52819c97fd19641efa0d0e6b25419e7fb96cf76f5833559d312966d06668d804"
+    ]
+  },
+  {
+    "trial": 26,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3025bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 19.95,
+    "first_frame_sha256": "7cbfbd57904b947f3ff915ec4463dc9f064fe04788afbe260c365a9e0b2b389f",
+    "frame_sha256": [
+      "0a3dd2b5e543bca543c000c013521174f51ba603904337d0983c3111c54b1377",
+      "bd8794e9250645d923ed2eea990c31ef2b420e82a49ec132cbf0758f4a243051",
+      "174accb255642a84cdb7d8416a2128a3ec161921fbcf26667afdc968a427d827",
+      "7cbfbd57904b947f3ff915ec4463dc9f064fe04788afbe260c365a9e0b2b389f",
+      "03d91c85ed658452e2f4575960a69e93cee3cf512be07c94734285c22f0e3e93",
+      "174accb255642a84cdb7d8416a2128a3ec161921fbcf26667afdc968a427d827",
+      "31d2cdb3960ca8cdbcbc00350ceb7458e419e5307ab1b23c7a0232ad4f37c1ed",
+      "03d91c85ed658452e2f4575960a69e93cee3cf512be07c94734285c22f0e3e93",
+      "d229877fb532d4edd03284c5ab216c63f89fae508b3ca25c67c1c7352bd4d550",
+      "31d2cdb3960ca8cdbcbc00350ceb7458e419e5307ab1b23c7a0232ad4f37c1ed",
+      "58ed188eaa5c1a8bd3331792e0fb6b5ffdf932216c53cebfd3e905b6d0c3167d",
+      "d229877fb532d4edd03284c5ab216c63f89fae508b3ca25c67c1c7352bd4d550",
+      "19a05a6cb69064e8b36e7fdf9003730f0d1c30b3578191b7fcd7b957ce011f41",
+      "58ed188eaa5c1a8bd3331792e0fb6b5ffdf932216c53cebfd3e905b6d0c3167d",
+      "238b2af45a6613aa4a0f43002c1903e2edb0dbd0fc6ee56a14e108e691c4eebb",
+      "0a3dd2b5e543bca543c000c013521174f51ba603904337d0983c3111c54b1377"
+    ],
+    "first_frame": {
+      "file": "pn_bpp16_first.png",
+      "sha256": "7cbfbd57904b947f3ff915ec4463dc9f064fe04788afbe260c365a9e0b2b389f",
+      "size": [
+        1280,
+        800
+      ]
+    }
+  },
+  {
+    "trial": 27,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3026bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 19.5,
+    "first_frame_sha256": "0090c28e77930a4e0885d5fd24fed6c047821f02fe8f4ccf625a8e74db7ca3a8",
+    "frame_sha256": [
+      "6f4401a53a79672716d83420f1db8cd84352bf377ad6a31084ae16385d4eee73",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "876c3e61a4fdf585699f71a643ef8081b80d7f9a5f460d41613844a7e42768f7",
+      "0090c28e77930a4e0885d5fd24fed6c047821f02fe8f4ccf625a8e74db7ca3a8",
+      "70b90db1de701aa30d455238d311cf1974b9f758f80d0fbd9df855c1bdb8985d",
+      "876c3e61a4fdf585699f71a643ef8081b80d7f9a5f460d41613844a7e42768f7",
+      "14136852cb19991124c65a8efe4d7f4141d37c16de5cae8dfcac6f97cb1aa475",
+      "70b90db1de701aa30d455238d311cf1974b9f758f80d0fbd9df855c1bdb8985d",
+      "76016b9ea783d5e12bf11c06150a0308704cde1bd5546994db16fe477844a815",
+      "14136852cb19991124c65a8efe4d7f4141d37c16de5cae8dfcac6f97cb1aa475",
+      "ac1c60ce87b6cea802b218ac6eee9f4140b56ddbe055036e92468d479c3a0011",
+      "76016b9ea783d5e12bf11c06150a0308704cde1bd5546994db16fe477844a815",
+      "03fc80e3275a49e8ac3d4766a54182d80563f8a4631d5ad280346761340c3a81",
+      "ac1c60ce87b6cea802b218ac6eee9f4140b56ddbe055036e92468d479c3a0011",
+      "60b6b6c0dba24f00d0162a75ae68939bfd5c62b88e60446a9fef365ca2b6a80e",
+      "6f4401a53a79672716d83420f1db8cd84352bf377ad6a31084ae16385d4eee73"
+    ]
+  },
+  {
+    "trial": 28,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3027bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.72,
+    "first_frame_sha256": "928bf1bc6e5cdf0fa7955503ff9514b77cac095b09f51a70e0e07d84dda1ad1e",
+    "frame_sha256": [
+      "0fa6782c80393c29b372d126110381d9cfdfe32d2188c0c58fccd77f7a5d7d91",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "1bde6c36d0c43bb6092a8ab24dd731c3d42b74ee7b2481c24552bca4f079e9cf",
+      "928bf1bc6e5cdf0fa7955503ff9514b77cac095b09f51a70e0e07d84dda1ad1e",
+      "fcebabdaeddc432bb7d1005952e4ce3ae8ef5b8648e36799dca696e78d30b122",
+      "1bde6c36d0c43bb6092a8ab24dd731c3d42b74ee7b2481c24552bca4f079e9cf",
+      "c6cbab40b10596e350fd35127a1dde92dd96121c6cbdd3b9d874e5d44a00e570",
+      "fcebabdaeddc432bb7d1005952e4ce3ae8ef5b8648e36799dca696e78d30b122",
+      "0cb290ace61e0e793843f8685b4ee7e56155bfbc95e8e1df535ee8d5bc171021",
+      "c6cbab40b10596e350fd35127a1dde92dd96121c6cbdd3b9d874e5d44a00e570",
+      "0b8a7268bdfba87f120ac8b9db640a63a91fa13189e6274bb9240d260e3d0b90",
+      "0cb290ace61e0e793843f8685b4ee7e56155bfbc95e8e1df535ee8d5bc171021",
+      "10368bda15abf5abc7a53493a98c2eda1505fda499d125b4007368863c8cc608",
+      "0b8a7268bdfba87f120ac8b9db640a63a91fa13189e6274bb9240d260e3d0b90",
+      "bab20ebaa201aac4d0a1023d42671b7b1d183668b6ebac6886c2d9f725430879",
+      "0fa6782c80393c29b372d126110381d9cfdfe32d2188c0c58fccd77f7a5d7d91"
+    ]
+  },
+  {
+    "trial": 29,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3028bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 17.19,
+    "first_frame_sha256": "928bf1bc6e5cdf0fa7955503ff9514b77cac095b09f51a70e0e07d84dda1ad1e",
+    "frame_sha256": [
+      "549c712503f6775c9b9a7bb8215234eff37de2457be5835d216c6f250bc5cc19",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "1bde6c36d0c43bb6092a8ab24dd731c3d42b74ee7b2481c24552bca4f079e9cf",
+      "928bf1bc6e5cdf0fa7955503ff9514b77cac095b09f51a70e0e07d84dda1ad1e",
+      "fcebabdaeddc432bb7d1005952e4ce3ae8ef5b8648e36799dca696e78d30b122",
+      "1bde6c36d0c43bb6092a8ab24dd731c3d42b74ee7b2481c24552bca4f079e9cf",
+      "9858e1c9183200de8533b37a33728e6a31440edbe186ad52670437ed3d388399",
+      "fcebabdaeddc432bb7d1005952e4ce3ae8ef5b8648e36799dca696e78d30b122",
+      "e59ed9ee47b0e00f925f8bd446c86531a705e0429719f243de75fbd8e1701716",
+      "9858e1c9183200de8533b37a33728e6a31440edbe186ad52670437ed3d388399",
+      "355eb7e4df26a40427db59e1ee20bb4ce1724354a66de2437f62417f2c31ab68",
+      "e59ed9ee47b0e00f925f8bd446c86531a705e0429719f243de75fbd8e1701716",
+      "c3298175d9b153fcdc2be0edebbae225dea4d1f7ebf628a877d8358343670c4c",
+      "355eb7e4df26a40427db59e1ee20bb4ce1724354a66de2437f62417f2c31ab68",
+      "bdfa07d651f6fcb62a4274f4ed7a7684c36b124eafbe8a458c3cd81fb010be2f",
+      "549c712503f6775c9b9a7bb8215234eff37de2457be5835d216c6f250bc5cc19"
+    ]
+  },
+  {
+    "trial": 30,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3029bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4,
+      "ocr": 1
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          145
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": true,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          560,
+          489
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 1,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "note_holders": [
+        1
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 18.74,
+    "first_frame_sha256": "d8addcd0d401d118757d776a13af59ff61dc4beaec0d0d2fc6f56541174a9dd7",
+    "frame_sha256": [
+      "6c68d59410bc11c46b33c6e69b043b030ee66aaca6569954fef2622fac190250",
+      "7e5e410555d0a5c75be257607d70881b29eb2ad93614feaff34a386f25d3e0b7",
+      "9e84ca637875910a411ab91e204e97cc7f183e62a19104db578b192e7d09c897",
+      "d8addcd0d401d118757d776a13af59ff61dc4beaec0d0d2fc6f56541174a9dd7",
+      "9669942df966d3a287d10d0442e804870f922eda833231d53b031d64315393c5",
+      "9e84ca637875910a411ab91e204e97cc7f183e62a19104db578b192e7d09c897",
+      "dda8b0ff662c2fffafa12c8d8370cdf1d790ff31a183267cff852939878cfe3e",
+      "9669942df966d3a287d10d0442e804870f922eda833231d53b031d64315393c5",
+      "293241694753d10b4a0205c22f2375d8a0b9f90b5f0de96d2de8bcc04fd7a88a",
+      "dda8b0ff662c2fffafa12c8d8370cdf1d790ff31a183267cff852939878cfe3e",
+      "7b1373901f676383baeeb3186dbee096a3a3d36bd51a2d60d5d5b0600761bfd6",
+      "293241694753d10b4a0205c22f2375d8a0b9f90b5f0de96d2de8bcc04fd7a88a",
+      "6066cda91352aeb7e32f80d8449b5cd79def7cf1fc03ab21a3215b31d4781e62",
+      "7b1373901f676383baeeb3186dbee096a3a3d36bd51a2d60d5d5b0600761bfd6",
+      "8452e3ab2a7cf16340b090b4e10247d4794cc09f8a4241c3c5723deef9fb0660",
+      "6c68d59410bc11c46b33c6e69b043b030ee66aaca6569954fef2622fac190250"
+    ]
+  },
+  {
+    "trial": 31,
+    "condition": "desktop1440",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1440,
+      900
+    ],
+    "token": "Oaun3030desk",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          144
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": false,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          561,
+          490
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_006",
+      "intent": "click 'Save Note'",
+      "reason": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation",
+      "outcome": "halt",
+      "observed_texts": [
+        "\u54c1",
+        "Patient Notes-Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "first",
+        "last",
+        "qop",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorenson (1984-03-12)",
+        "Loaded 1 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "3:53 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'",
+        "click 'eil'",
+        "click recorded visual target",
+        "type <note>"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 21.81,
+    "first_frame_sha256": "4179509b305ce041d84e1c97bde962d3ac862fe782aa9b0ca8c151c2bd5e8cdd",
+    "frame_sha256": [
+      "15b3a00073c6ff19bfd9c611d54817eff6164cf1df09a61ea053f14a7e09fa62",
+      "4179509b305ce041d84e1c97bde962d3ac862fe782aa9b0ca8c151c2bd5e8cdd",
+      "2ebb5d971b9b10dbd9d8fcb0ce1207a16d77f4581c61ecb8f476f16537dca0d8",
+      "15b3a00073c6ff19bfd9c611d54817eff6164cf1df09a61ea053f14a7e09fa62",
+      "9bfc5f74c611b5e818fceaf386fa31c9c409e811dc1a7fcee5e83493542991be",
+      "2ebb5d971b9b10dbd9d8fcb0ce1207a16d77f4581c61ecb8f476f16537dca0d8",
+      "17239bbe9cf84ed0d75a70804c274ceefae45c7f4150211c9e9fa56f04445a3c",
+      "ee034dcbac09bb46186cf20b870ad0eec884198e3e2b8e462157198bb6e1e892",
+      "cea91bb33132978073a9adbb4828cbe0d26faa3de0fcd5b07035d1d244738603",
+      "17239bbe9cf84ed0d75a70804c274ceefae45c7f4150211c9e9fa56f04445a3c",
+      "4f160b330cffbd40fa5504860b26ff7e7ef4590fb18285e6d85aaa137d0b0a45",
+      "cea91bb33132978073a9adbb4828cbe0d26faa3de0fcd5b07035d1d244738603",
+      "c1aa1fc772fb84cddff19ed9c7d4abcd4ec1d7a7d9715d577fac9c49e583bccb",
+      "c1aa1fc772fb84cddff19ed9c7d4abcd4ec1d7a7d9715d577fac9c49e583bccb"
+    ],
+    "first_frame": {
+      "file": "pn_desktop1440_first.png",
+      "sha256": "4179509b305ce041d84e1c97bde962d3ac862fe782aa9b0ca8c151c2bd5e8cdd",
+      "size": [
+        1440,
+        900
+      ]
+    }
+  },
+  {
+    "trial": 32,
+    "condition": "desktop1440",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1440,
+      900
+    ],
+    "token": "Oaun3031desk",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          144
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": false,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          561,
+          490
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_006",
+      "intent": "click 'Save Note'",
+      "reason": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes -Benchmark Harness",
+        "Neil",
+        "Search",
+        "first",
+        "last",
+        "qop",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorenson (1984-03-12)",
+        "Loaded 1 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "3:53 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'",
+        "click 'eil'",
+        "click recorded visual target",
+        "type <note>"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 19.97,
+    "first_frame_sha256": "f3e5150e635c31556143c41d78e457dfe69e96dc78e679ccdc4b4ede5e552120",
+    "frame_sha256": [
+      "441608141dec9da1f4e592d9207923ae9097c9c8a4ff72fd3805b867915a9018",
+      "f3e5150e635c31556143c41d78e457dfe69e96dc78e679ccdc4b4ede5e552120",
+      "9540ea964a6f0c6dff34a4027d1ece019a868cabb6ce16493c191f0902437b38",
+      "441608141dec9da1f4e592d9207923ae9097c9c8a4ff72fd3805b867915a9018",
+      "6fd67797733a75ead9f3ce13fef3ca99f1b0c43bfe410f7660ee48e75d9fffe2",
+      "9540ea964a6f0c6dff34a4027d1ece019a868cabb6ce16493c191f0902437b38",
+      "4ab67722bf6baee27326a47ea3a91e863b14f751864b354a15e6baf125b2ffbe",
+      "f53b1f114165c03ad2686f6aca7436bbf2e2cb95f7fc4ceab591c266d72b1d93",
+      "627ae7ad470144e702d85a16114cc86514e85247628e0c8500749773639ec69f",
+      "4ab67722bf6baee27326a47ea3a91e863b14f751864b354a15e6baf125b2ffbe",
+      "0c5cdf4d5e74fad2b9932d817b8fcbcb8fa26edf5b0b7c10c4d5d9d9a8732bc0",
+      "627ae7ad470144e702d85a16114cc86514e85247628e0c8500749773639ec69f",
+      "89143c9f816ddc8f1e4c1602f0576cbc8061ac121cadef74fb0ed1f8792afdcd",
+      "89143c9f816ddc8f1e4c1602f0576cbc8061ac121cadef74fb0ed1f8792afdcd"
+    ]
+  },
+  {
+    "trial": 33,
+    "condition": "desktop1440",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1440,
+      900
+    ],
+    "token": "Oaun3032desk",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          144
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": false,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          561,
+          490
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_006",
+      "intent": "click 'Save Note'",
+      "reason": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes -Benchmark Harness",
+        "Neil",
+        "Search",
+        "first",
+        "last",
+        "qop",
+        "N!",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorenson (1984-03-12)",
+        "Loaded 1 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "3:54 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'",
+        "click 'eil'",
+        "click recorded visual target",
+        "type <note>"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 18.58,
+    "first_frame_sha256": "ef1ce280bab0735ce9636b039a3653144e233afd294ce28b04ed338b48dc7e49",
+    "frame_sha256": [
+      "7cfbb7fc6c9af7bd21fea91e8b2ceb73b7535f248eb0b6292fd59d81bc5cb7f1",
+      "ef1ce280bab0735ce9636b039a3653144e233afd294ce28b04ed338b48dc7e49",
+      "0c9bb331a54a6612ca70e2ef49815bf2d0135b3d5b3e6507583255bde5b8300b",
+      "7cfbb7fc6c9af7bd21fea91e8b2ceb73b7535f248eb0b6292fd59d81bc5cb7f1",
+      "e314742087fc18f95c424dc351d9b68c0ac9ec026f3843c78718a7e1cbe0f1fc",
+      "0c9bb331a54a6612ca70e2ef49815bf2d0135b3d5b3e6507583255bde5b8300b",
+      "a1baac8f7a169c512b33a583acd029d13c5149ccc9eb9c486d23ce677dded04c",
+      "d08d1b7898a6e476295297ed77023164c19b7d82daef49abdf3a68f41f5e27dc",
+      "94cf738a095395fecb0234d565a14ee648bc21672d49477b84a77fb27f5025d6",
+      "a1baac8f7a169c512b33a583acd029d13c5149ccc9eb9c486d23ce677dded04c",
+      "dda74b257418c56b5897b49f97fbf0f52ae2f1ac45654da7a57eade40d3dbc2b",
+      "94cf738a095395fecb0234d565a14ee648bc21672d49477b84a77fb27f5025d6",
+      "df72a8f773406db5e631c5e939bda7ee58d3f02ba34245b914f7c8a2058662cc",
+      "df72a8f773406db5e631c5e939bda7ee58d3f02ba34245b914f7c8a2058662cc"
+    ]
+  },
+  {
+    "trial": 34,
+    "condition": "desktop1440",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1440,
+      900
+    ],
+    "token": "Oaun3033desk",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          144
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": false,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          561,
+          490
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_006",
+      "intent": "click 'Save Note'",
+      "reason": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation",
+      "outcome": "halt",
+      "observed_texts": [
+        "Patient Notes -Benchmark Harness",
+        "Neil",
+        "Search",
+        "first",
+        "last",
+        "qop",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorenson (1984-03-12)",
+        "Loaded 1 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "3:55 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'",
+        "click 'eil'",
+        "click recorded visual target",
+        "type <note>"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 20.33,
+    "first_frame_sha256": "80cdb560cc6757ff759871ba711fa7d40a3998dc6a6ead46bbb584ab5e2b7491",
+    "frame_sha256": [
+      "6ae825dfb1b6d21ab2f1a903c4383c9e13ba62148472f43d067faabfc4d2d986",
+      "80cdb560cc6757ff759871ba711fa7d40a3998dc6a6ead46bbb584ab5e2b7491",
+      "0e8605919b1f7f2479a35f70d789035834edcd7f3cb89ae8999c16659c44cd09",
+      "6ae825dfb1b6d21ab2f1a903c4383c9e13ba62148472f43d067faabfc4d2d986",
+      "4cc4a29032d8c48c140819c230a828c85fc46948bb1c7c0db0554c941f53d34e",
+      "0e8605919b1f7f2479a35f70d789035834edcd7f3cb89ae8999c16659c44cd09",
+      "953ab17fa8b4aba58088bd11f01816cc65f25015473c51bc8a7ef45a483ebbec",
+      "4cc4a29032d8c48c140819c230a828c85fc46948bb1c7c0db0554c941f53d34e",
+      "b8604087f5096d49c06d9a264e0ed71966e44f6d7e53505c95dba82c7eac4d4c",
+      "953ab17fa8b4aba58088bd11f01816cc65f25015473c51bc8a7ef45a483ebbec",
+      "0fedccdd928a5d8f8e27e29ec64ea12fad8330d92e00f58ad7613425cc416031",
+      "b8604087f5096d49c06d9a264e0ed71966e44f6d7e53505c95dba82c7eac4d4c",
+      "67292adaf18c72876e85a34140e8bec259f9257395cc0eee7ffe853072c3232d",
+      "67292adaf18c72876e85a34140e8bec259f9257395cc0eee7ffe853072c3232d"
+    ]
+  },
+  {
+    "trial": 35,
+    "condition": "desktop1440",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1440,
+      900
+    ],
+    "token": "Oaun3034desk",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 4
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          260,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type 'Neil'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click 'Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          559,
+          55
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "click 'eil'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          115,
+          144
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          311,
+          400
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "type <note>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'Save Note'",
+        "ok": false,
+        "skipped": false,
+        "rung": "ocr",
+        "confidence": 1.0,
+        "point": [
+          561,
+          490
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_006",
+      "intent": "click 'Save Note'",
+      "reason": "Step 'step_006' (click 'Save Note') resolved to (561, 490) after remote pointer hover, not the prepared point (560, 489); refusing a click whose target moved before actuation",
+      "outcome": "halt",
+      "observed_texts": [
+        "\u54c1",
+        "Patient Notes-Benchmark Harness",
+        "X",
+        "Neil",
+        "Search",
+        "first",
+        "last",
+        "qop",
+        "N!",
+        "Sorenson",
+        "1984-03-12",
+        "Clinical note:",
+        "Patient: Neil Sorenson (1984-03-12)",
+        "Loaded 1 patients",
+        "Save Note",
+        "ActivateWindows",
+        "Go to Settings to activate Windows.",
+        "8",
+        "O Type here to search",
+        "3:55 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click recorded visual target",
+        "type 'Neil'",
+        "click 'Search'",
+        "click 'eil'",
+        "click recorded visual target",
+        "type <note>"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "note_holders": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "reconciliation_required",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 20.34,
+    "first_frame_sha256": "dbc363f9e8fdc476591bcbc34177bc540644f5e1de6ba3558b39e181b4d6aa9c",
+    "frame_sha256": [
+      "640f0dd684fcc99423771553e161185a0fd890b5d517e6f1ed8df3b5bd42ace7",
+      "dbc363f9e8fdc476591bcbc34177bc540644f5e1de6ba3558b39e181b4d6aa9c",
+      "74454937fee0d4668a64919485a87def0290243e611283df5a38260ddc0eb472",
+      "640f0dd684fcc99423771553e161185a0fd890b5d517e6f1ed8df3b5bd42ace7",
+      "7ad4051206d1301c9627e58adce1da61db80e8fc34c96efc2d903a7d5c4c1036",
+      "74454937fee0d4668a64919485a87def0290243e611283df5a38260ddc0eb472",
+      "646e23c0d91708484e186c81b57cf4c8be0c5278a7994500a65bc5270bd9afd2",
+      "fe653f24d8fae3838b419aefe40d41cb3a61a2159e34c708e0310f737556ef82",
+      "1405c0b4dadca4d9863a6f794091c2502193ae20fe240ca74172f1ceb418e989",
+      "646e23c0d91708484e186c81b57cf4c8be0c5278a7994500a65bc5270bd9afd2",
+      "004453c317ea1dd310db64627983e02eaba50298f789cf07c71abd351beb0cd7",
+      "1405c0b4dadca4d9863a6f794091c2502193ae20fe240ca74172f1ceb418e989",
+      "cb20c3def35b281bb6cc89413adabc8d68c0aadd313be6c59a7b8eb31a28b6c1",
+      "cb20c3def35b281bb6cc89413adabc8d68c0aadd313be6c59a7b8eb31a28b6c1"
+    ]
+  }
+]

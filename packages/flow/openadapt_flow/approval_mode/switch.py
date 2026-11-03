@@ -32,7 +32,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from openadapt_flow.approval_mode.model import (
     CODE_PATTERN,
@@ -58,6 +66,12 @@ LOG_EVENT_SCHEMA: Literal["openadapt.approval-mode-log-event/v1"] = (
 _STATUS_DOMAIN = b"openadapt.approval-mode-status/v1\n"
 _RECORD_DOMAIN = b"openadapt.approval-mode-switch/v1\n"
 _LOG_DOMAIN = b"openadapt.approval-mode-log/v1\n"
+_REARM_DOMAIN = b"openadapt.approval-mode-rearm/v1\n"
+#: Consecutive verified items since the switch went off before a person may
+#: re-arm it. Never automatic.
+REARM_CLEAN_ITEMS = 10
+#: Item decisions that count as a verified item toward a re-arm.
+_CLEAN_DECISIONS = frozenset({"no_person", "approved"})
 GENESIS_SHA256 = "sha256:" + "0" * 64
 
 #: Resolution rungs from strongest to weakest (``ir.Rung``).
@@ -297,7 +311,39 @@ LogEventKind = Literal[
     "switched_off",
     "status_unconfirmed",
     "status_restored",
+    "rearmed",
 ]
+
+
+class RearmEvidence(BaseModel):
+    """A person's signed re-arm of a switched-off switch (one tap).
+
+    Signed with the person's approver key over everything they were shown:
+    the switch, the off event and its reason, the recorded cause, and the run
+    refs of the consecutive verified items since the switch went off.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    off_seq: int = Field(ge=1)
+    off_sha256: str = Field(pattern=PREFIXED_SHA256_PATTERN)
+    off_reason: str = Field(pattern=CODE_PATTERN)
+    #: What the person was told caused the switch-off, in a sentence.
+    cause: str = Field(min_length=1, max_length=500)
+    clean_run_refs: tuple[str, ...] = Field(min_length=REARM_CLEAN_ITEMS)
+    approver_id: str = Field(pattern=OPAQUE_ID_PATTERN)
+    key_id: str = Field(min_length=1, max_length=128)
+    signed_at: str = Field(min_length=1, max_length=64)
+    signature: str = Field(min_length=1, max_length=256)
+
+    @field_validator("clean_run_refs")
+    @classmethod
+    def _refs(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        import re as _re
+
+        if any(not _re.fullmatch(HEX_SHA256_PATTERN, ref) for ref in value):
+            raise ValueError("a clean run ref is a hex SHA-256")
+        return value
 
 
 class SwitchLogEvent(BaseModel):
@@ -319,8 +365,20 @@ class SwitchLogEvent(BaseModel):
     decision: Optional[ItemDecisionKind] = None
     reason: Optional[str] = Field(default=None, pattern=CODE_PATTERN)
     counts_toward_problems: Optional[bool] = None
+    #: ``rearmed`` only: the person's signed re-arm.
+    rearm: Optional[RearmEvidence] = None
     prev_sha256: str = Field(pattern=PREFIXED_SHA256_PATTERN)
     sha256: str = Field(pattern=PREFIXED_SHA256_PATTERN)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Leave ``rearm`` out when unset, so every other event (and every
+        existing log line and hash) serializes exactly as before."""
+
+        data: dict[str, Any] = handler(self)
+        if self.rearm is None:
+            data.pop("rearm", None)
+        return data
 
     @model_validator(mode="after")
     def _shape_per_kind(self) -> "SwitchLogEvent":
@@ -338,6 +396,8 @@ class SwitchLogEvent(BaseModel):
         if kind == "switched_off":
             if self.reason is None or self.reason not in {r.value for r in OffReason}:
                 raise ValueError("a 'switched_off' event names a closed reason")
+        if (kind == "rearmed") != (self.rearm is not None):
+            raise ValueError("only a 'rearmed' event carries a signed re-arm")
         return self
 
 
@@ -368,8 +428,18 @@ class SwitchLogState:
         return self.off_reason is not None
 
 
-def summarize_events(events: list[SwitchLogEvent]) -> SwitchLogState:
-    """Fold a verified event list into its state."""
+def summarize_events(
+    events: list[SwitchLogEvent],
+    *,
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> SwitchLogState:
+    """Fold a verified event list into its state.
+
+    A ``rearmed`` event turns the switch back on only when ``approver_keys``
+    (key id to base64 raw Ed25519 public key, pinned for this runner) verify
+    it and it meets the re-arm rule against the log before it
+    (:func:`rearm_refusal`). Otherwise it is ignored and the switch stays off.
+    """
 
     if not events or events[0].kind != "opened":
         raise SwitchLogError("the switch log does not start with 'opened'")
@@ -383,12 +453,18 @@ def summarize_events(events: list[SwitchLogEvent]) -> SwitchLogState:
     )
     started: dict[str, bool] = {}
     latest_finished: dict[str, SwitchLogEvent] = {}
-    for event in events[1:]:
+    for index, event in enumerate(events[1:], start=1):
         if event.kind == "opened":
             raise SwitchLogError("the switch log was opened twice")
         if event.kind == "switched_off" and state.off_reason is None:
             assert event.reason is not None
             state.off_reason = OffReason(event.reason)
+        elif event.kind == "rearmed" and state.off_reason is not None:
+            assert event.rearm is not None
+            if approver_keys and (
+                rearm_refusal(events[:index], event.rearm, approver_keys) is None
+            ):
+                state.off_reason = None
         elif event.kind == "status_unconfirmed":
             state.status_unconfirmed = True
         elif event.kind == "status_restored":
@@ -492,8 +568,10 @@ class SwitchLog:
             raise SwitchLogError("the switch log is empty")
         return events
 
-    def state(self) -> SwitchLogState:
-        return summarize_events(self.read())
+    def state(
+        self, *, approver_keys: Optional[Mapping[str, str]] = None
+    ) -> SwitchLogState:
+        return summarize_events(self.read(), approver_keys=approver_keys)
 
     # -- appending -----------------------------------------------------------
     def append(
@@ -505,6 +583,7 @@ class SwitchLog:
         decision: Optional[ItemDecisionKind] = None,
         reason: Optional[str] = None,
         counts_toward_problems: Optional[bool] = None,
+        rearm: Optional[RearmEvidence] = None,
     ) -> SwitchLogEvent:
         if kind == "opened":
             raise SwitchLogError("use SwitchLog.open_new to open a log")
@@ -524,6 +603,8 @@ class SwitchLog:
                 "counts_toward_problems": counts_toward_problems,
                 "prev_sha256": last.sha256,
             }
+            if rearm is not None:
+                fields["rearm"] = rearm.model_dump(mode="json")
             return self._write_event(fields)
 
     def _write_event(self, fields: dict[str, Any]) -> SwitchLogEvent:
@@ -596,3 +677,276 @@ def turn_off(
     """
 
     return log.append("switched_off", reason=reason.value, at=at)
+
+
+# -- re-arming a switched-off switch -------------------------------------------
+
+
+def _last_off(
+    events: list[SwitchLogEvent],
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> Optional[SwitchLogEvent]:
+    """The ``switched_off`` event that holds the switch off now, if any.
+
+    Only a re-arm that verifies against the log before it (with
+    ``approver_keys``) ends an off period; a forged or early one doesn't.
+    """
+
+    off: Optional[SwitchLogEvent] = None
+    for index, event in enumerate(events):
+        if event.kind == "switched_off" and off is None:
+            off = event
+        elif (
+            event.kind == "rearmed"
+            and off is not None
+            and event.rearm is not None
+            and approver_keys
+            and rearm_refusal(events[:index], event.rearm, approver_keys) is None
+        ):
+            off = None
+    return off
+
+
+def clean_streak(
+    events: list[SwitchLogEvent],
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> tuple[str, ...]:
+    """Run refs of the consecutive verified items since the switch went off.
+
+    The trailing run of ``item_finished`` events after the off event whose
+    decision is a verified item (``no_person`` or ``approved``). Any other
+    finished item resets it; an item still open after the last one does too.
+    """
+
+    off = _last_off(events, approver_keys)
+    if off is None:
+        return ()
+    streak: list[str] = []
+    started: set[str] = set()
+    for event in events[off.seq :]:
+        if event.kind == "item_started" and event.run_ref:
+            started.add(event.run_ref)
+        elif event.kind == "item_finished" and event.run_ref:
+            started.discard(event.run_ref)
+            if event.decision is not None and event.decision.value in _CLEAN_DECISIONS:
+                streak.append(event.run_ref)
+            else:
+                streak = []
+    return () if started else tuple(streak)
+
+
+def _public_key_bytes(encoded: str) -> bytes:
+    """A raw Ed25519 public key, given as hex (the principal registry's form)
+    or base64 (the pinned-key form status keys use)."""
+
+    import re as _re
+
+    if _re.fullmatch(r"[0-9a-f]{64}", encoded):
+        return bytes.fromhex(encoded)
+    return base64.b64decode(encoded, validate=True)
+
+
+def registry_approver_keys(key_dir: Optional[Path] = None) -> dict[str, str]:
+    """The approver keys a run trusts: the signed approver roster's entries
+    that the run's pinned root vouches for.
+
+    The roster (``approval_mode.approver_roster``, #1486) lists each person's
+    approver key, signed down from a root approver; the run pins that root
+    (the deployment config, ``--approver-root`` or ``OPENADAPT_APPROVER_ROOT``).
+    Returns ``{name: base64 public key}``, and nothing when no root is pinned,
+    the roster doesn't verify, or this Flow has no roster yet. Then no re-arm
+    counts.
+    """
+
+    import importlib
+
+    try:
+        # Imported by name: the roster arrives with #1486.
+        approver_roster: Any = importlib.import_module(
+            "openadapt_flow.approval_mode.approver_roster"
+        )
+        from openadapt_flow.jit.lifecycle import default_key_dir
+    except ImportError:
+        return {}
+    try:
+        keys = approver_roster.approver_keys_b64(
+            key_dir or default_key_dir(), approver_roster.pinned_root(None)
+        )
+    except Exception:  # noqa: BLE001 - an unverifiable roster trusts no one
+        return {}
+    return {str(name): str(key) for name, key in dict(keys).items()}
+
+
+def rearm_signing_payload(
+    switch_id: str, switch_record_sha256: str, fields: Mapping[str, Any]
+) -> bytes:
+    """The bytes a person's approver key signs to re-arm a switch."""
+
+    unsigned = {k: v for k, v in fields.items() if k != "signature"}
+    return _REARM_DOMAIN + canonical_json(
+        {
+            "switch_id": switch_id,
+            "switch_record_sha256": switch_record_sha256,
+            **unsigned,
+        }
+    )
+
+
+def rearm_request(
+    log: SwitchLog,
+    *,
+    cause: str,
+    approver_keys: Optional[Mapping[str, str]] = None,
+) -> dict[str, Any]:
+    """What a person is shown before re-arming, or raise when it isn't offered.
+
+    Offered only while the switch is off and after
+    :data:`REARM_CLEAN_ITEMS` consecutive verified items since it went off.
+    ``approver_keys`` are the keys the gate trusts (by default the registered
+    approvers, :func:`registry_approver_keys`): a re-arm already in the log
+    counts only if it verifies with them. Returns the unsigned fields the
+    person's key signs (without ``approver_id``, ``key_id``, ``signed_at``).
+    """
+
+    keys = registry_approver_keys() if approver_keys is None else approver_keys
+    events = log.read()
+    off = _last_off(events, keys)
+    if off is None:
+        raise SwitchLogError("the switch is on; there is nothing to re-arm")
+    streak = clean_streak(events, keys)
+    if len(streak) < REARM_CLEAN_ITEMS:
+        raise SwitchLogError(
+            f"{len(streak)} consecutive verified items since the switch went "
+            f"off; a re-arm needs {REARM_CLEAN_ITEMS}"
+        )
+    return {
+        "off_seq": off.seq,
+        "off_sha256": off.sha256,
+        "off_reason": off.reason,
+        "cause": cause,
+        "clean_run_refs": list(streak[-REARM_CLEAN_ITEMS:]),
+    }
+
+
+def rearm_to_sign(
+    log: SwitchLog,
+    request: Mapping[str, Any],
+    *,
+    approver_id: str,
+    key_id: str,
+    signed_at: Optional[str] = None,
+) -> tuple[dict[str, Any], bytes]:
+    """The fields to sign and their exact bytes, for a key held elsewhere.
+
+    For a key that never leaves a keychain: sign the returned bytes there,
+    then pass the fields and the base64 signature to :func:`rearm_evidence`.
+    """
+
+    first = log.read()[0]
+    assert first.switch_record_sha256 is not None
+    fields = {
+        **dict(request),
+        "approver_id": approver_id,
+        "key_id": key_id,
+        "signed_at": signed_at or _utc_now(),
+    }
+    return fields, rearm_signing_payload(
+        first.switch_id, first.switch_record_sha256, fields
+    )
+
+
+def rearm_evidence(fields: Mapping[str, Any], signature_b64: str) -> RearmEvidence:
+    """The re-arm from :func:`rearm_to_sign`'s fields and a signature made
+    elsewhere. :func:`rearm` verifies it; nothing is trusted here."""
+
+    return RearmEvidence.model_validate({**dict(fields), "signature": signature_b64})
+
+
+def sign_rearm(
+    log: SwitchLog,
+    request: Mapping[str, Any],
+    *,
+    approver_id: str,
+    key_id: str,
+    private_key: Any,
+    signed_at: Optional[str] = None,
+) -> RearmEvidence:
+    """A person's approver key signs the re-arm they were shown."""
+
+    fields, payload = rearm_to_sign(
+        log, request, approver_id=approver_id, key_id=key_id, signed_at=signed_at
+    )
+    signature = private_key.sign(payload)
+    return rearm_evidence(fields, base64.b64encode(signature).decode("ascii"))
+
+
+def rearm_refusal(
+    events: list[SwitchLogEvent],
+    rearm: RearmEvidence,
+    approver_keys: Mapping[str, str],
+) -> Optional[str]:
+    """Why ``rearm`` may not turn the switch on after ``events``, or None."""
+
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    if not events or events[0].switch_record_sha256 is None:
+        return "the switch log is not readable"
+    if rearm.approver_id != rearm.key_id:
+        # The key is registered under the approver's own name; a re-arm that
+        # names one person and is signed with another's key proves nothing.
+        return "the re-arm's approver is not the key's registered approver"
+    off = _last_off(events, approver_keys)
+    if off is None:
+        return "the switch is on; there is nothing to re-arm"
+    if rearm.off_seq != off.seq or rearm.off_sha256 != off.sha256:
+        return "the re-arm names another switch-off"
+    if rearm.off_reason != off.reason:
+        return "the re-arm names another off reason"
+    streak = clean_streak(events, approver_keys)
+    if len(streak) < REARM_CLEAN_ITEMS:
+        return (
+            f"{len(streak)} consecutive verified items since the switch went off; "
+            f"a re-arm needs {REARM_CLEAN_ITEMS}"
+        )
+    if tuple(rearm.clean_run_refs) != tuple(streak[-REARM_CLEAN_ITEMS:]):
+        return "the re-arm names other verified items than the log"
+    encoded = approver_keys.get(rearm.key_id)
+    if not encoded:
+        return "the re-arm is not signed by a registered approver key"
+    try:
+        public_key = Ed25519PublicKey.from_public_bytes(_public_key_bytes(encoded))
+        public_key.verify(
+            base64.b64decode(rearm.signature, validate=True),
+            rearm_signing_payload(
+                events[0].switch_id,
+                events[0].switch_record_sha256,
+                rearm.model_dump(mode="json"),
+            ),
+        )
+    except (InvalidSignature, ValueError, TypeError, binascii.Error):
+        return "the re-arm signature does not verify"
+    return None
+
+
+def rearm(
+    log: SwitchLog,
+    evidence: RearmEvidence,
+    *,
+    approver_keys: Mapping[str, str],
+    at: Optional[str] = None,
+) -> SwitchLogEvent:
+    """Record a person's signed re-arm, or raise :class:`SwitchLogError`.
+
+    Never automatic: it needs a signature by a pinned approver key over the
+    switch-off, its cause and the :data:`REARM_CLEAN_ITEMS` consecutive
+    verified items since. The event records who signed and what they saw.
+    """
+
+    refusal = rearm_refusal(log.read(), evidence, approver_keys)
+    if refusal is not None:
+        raise SwitchLogError(refusal)
+    # Every reader checks the re-arm again against the log before it, so an
+    # event that lands between this check and the append can only make the
+    # re-arm count for nothing, never turn the switch on early.
+    return log.append("rearmed", rearm=evidence, at=at)

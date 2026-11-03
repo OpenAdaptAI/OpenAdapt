@@ -1,0 +1,16 @@
+c1136bfffb634f71a51e3cbfd080fca12e0bef0fa8a7549d9a3919e8560d5939  OpenAdapt-Desktop-Candidate-v0.24.1-linux-x86_64-github-attested-metadata.json
+daa967d02559ad3624bda0ae923b291442485ab06a1e555c31d3f49bb814cea0  OpenAdapt-Desktop-Candidate-v0.24.1-linux-x86_64-github-attested.AppImage
+75b942cabf04f7e6216ef73273f92a021232ff7ed7ead4301fd940220e87df16  OpenAdapt-Desktop-Candidate-v0.24.1-linux-x86_64-github-attested.deb
+6132fdab542f7907275906ac8c0d4be8b8b01daf8f9d1f188af058b74e350a85  OpenAdapt-Desktop-Candidate-v0.24.1-macos-arm64-adhoc-metadata.json
+6f8a4f05df5ca5cb495ebe3e7deede5190d1da6fed6476284c689952d08e32f7  OpenAdapt-Desktop-Candidate-v0.24.1-macos-arm64-adhoc.dmg
+9725459d89b241340fa59c43b3885015f89db17423819882089d480a5af4345d  OpenAdapt-Desktop-Candidate-v0.24.1-macos-x86_64-adhoc-metadata.json
+48ba58909b9a736abd109c38310ce9bb03b48a46bd1f7ae19221626c50f3a7f8  OpenAdapt-Desktop-Candidate-v0.24.1-macos-x86_64-adhoc.dmg
+ed86395490fe7151ec5338d38a29640145e23dcdfad3d8f9f20919436b61667b  OpenAdapt-Desktop-Candidate-v0.24.1-windows-x86_64-unsigned-metadata.json
+89937222c1591907caf91c3409d979a4b3f304a413ca870aad98eb82de9a3faa  OpenAdapt-Desktop-Candidate-v0.24.1-windows-x86_64-unsigned-nsis-setup.exe
+ae3990223ec7a41233fffc76027391d15423080ff238a52e717a2cf7460b458e  OpenAdapt-Desktop-Candidate-v0.24.1-windows-x86_64-unsigned.msi
+7d3ac8cc13364ab79fc0c5eb001b5b8524f2fdf567aaf8aacb65eddf1047158e  OpenAdapt-Desktop-v0.24.1.cyclonedx.json
+55a2424c4c2488a1d9a1da8da47fe108c29a903fe9acda5e8fa62533e1198724  openadapt-desktop-native-release-provenance.json
+41f59b25834151a9e62263f01e18ddb3fbd0b0abd1d6758e9b22b786078247c3  openadapt-desktop-release-manifest.json
+aedbb04dbbad4ad683dbe9dc2f517762aa2c1df3f63d5dd2c0819c50d7502e01  openadapt_desktop-0.24.1-py3-none-any.whl
+c91f576980201853574d8166faa5bb7f91b78b30a25097a95807bd020b0cba4c  openadapt_desktop-0.24.1.tar.gz
+e476f72e7f01bac3e553269af4ebdd9dc73207da84e6ce5ca050cbd76c75cb44  verify-openadapt-native-release.py

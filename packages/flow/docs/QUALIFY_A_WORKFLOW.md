@@ -59,11 +59,15 @@ app:
   reset:
     python: benchmark.openemr_local.qualify_hooks:reset
 
-# Where the write is read back from. Not the screen.
+# Where the write is read back from. Not the screen. The read is filtered
+# by a duplicate-key field only, so it holds every chart that could be a
+# duplicate (see duplicate_key below).
 verifier:
   kind: rest
   base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
-  records_path: /apis/default/api/patient?_limit=1000
+  records_path: /apis/default/api/patient?lname={lname}
+  path_params:
+    lname: {param: lname}
   records_key: data
   session: benchmark.openemr_local.qualify_hooks:oracle_session
 
@@ -72,7 +76,7 @@ verifier:
 record:
   name: patient
   match: [email, lname]     # how to find the new record
-  duplicate_key: email      # an existing record with this value means "already done"
+  duplicate_key: [lname, fname, DOB]  # another chart with these means a duplicate
   fields:
     email: email            # field: input parameter name
     lname: lname
@@ -129,7 +133,21 @@ What each part does:
 
 - **record**: a shorter way to write the same list. `match` finds the record,
   `fields` says which input each field must equal, and `duplicate_key` is the
-  field that makes a second write a duplicate. It expands to one
+  field that makes a second write a duplicate. A list, such as
+  `duplicate_key: [lname, fname, DOB]`, names fields that are a duplicate only
+  together; the check then fails when more than one record carries all of
+  them, counting records that were already there. Those other records are
+  compared ignoring case and extra spaces (`SMITH` and `Smith ` agree), and a
+  date read back as a midnight datetime counts as its date; the saved record
+  itself is compared exactly. A list of one field works the same way, unlike
+  the plain string, which counts only new records when the check does. Because
+  existing records count, the read must hold all of them: filter
+  `records_path` or `sql_query` by key fields only, and do not cap it (a REST
+  `_limit` needs `records_total_path` or `records_next_path`; SQL takes no
+  `LIMIT`). `qualify` and `verify-run` refuse a read that breaks either rule.
+  A list key needs `expected_count: 1`. If your database driver returns a
+  DATE column as a datetime, the saved record's exact comparison on that
+  field fails and the check stops the run rather than confirming it. It expands to one
   `record_written` plus a `field_equals` per other field. Give `effects` or
   `record`, not both; leave both out when the compiler already bound the
   save's checks from the demonstration.
@@ -150,6 +168,51 @@ What each part does:
   not reset do not collide.
 - **campaign**: the id written into the report, trials per case, the cases
   (all six by default) and the policy `--certify` uses when given no name.
+- **business_rules** (optional): rules the application itself enforces, which
+  the workflow must not click through. The six cases inject faults; a
+  business-rule case injects nothing. After the reset, `seed` (one of
+  `command`, `http` or `python`, like `reset`) creates the record the rule
+  protects, and the run uses `params` that trigger the rule (they replace the
+  matching inputs). The run must stop before the save (`expect:
+  HALTED_BEFORE_EFFECT`, the only value), at the place the rule names
+  (`halt_at`), and the read-back must show no new or changed record
+  (`readback: no_mutation`, the only value). Each rule is case `rule-<id>`:
+
+  ```yaml
+  business_rules:
+    - id: existing-duplicate
+      description: An existing chart for the same person; the app's duplicate
+        check lists it, and the workflow stops before saving.
+      seed:
+        python: my_app.hooks:seed_existing_patient
+      params: {fname: Rosa, lname: Delgado, DOB: "1958-03-22"}
+      expect: HALTED_BEFORE_EFFECT
+      readback: no_mutation
+      halt_at: empty_result_guard
+      halt_reason: No matches were found.
+  ```
+
+  `halt_at` is `empty_result_guard` (the default: a step that checks the
+  empty search result the compiler mined from a confirmation dialog, see
+  `compile_notes.json`), `before_save` (any step up to the save, before its
+  action; needs `halt_reason`), or a step id. `halt_reason`, when given, must
+  be in the halt's reason. A halt anywhere else fails the trial: the run did
+  not stop for the application's rule.
+
+  Each trial reads the records before and after the seed and fails unless
+  the seed created at least one; a verifier that cannot read the records
+  cannot run a rule. Inputs a rule names that the workflow does not take,
+  and a `halt_at` that names no step, are refused before any run.
+
+  The rules run only with `--certify`, after the six cases pass, `trials`
+  times each, on a certified copy of the bundle through the ordinary run gate.
+  The bundle itself is saved certified only after every rule passes; a failed
+  trial, or anything that raises (a seed or reset error, a run-gate refusal,
+  a crash, Ctrl-C), withdraws the certification and fails `qualify`. With
+  `--certify`, name all the `rule-*` cases or none. Their trials are in
+  `result.json` `cases` (`fault_class: business_rule`), which the admission
+  envelope binds. They are not signed case results in the qualification
+  project: a certification made outside `qualify` does not run them.
 
 `${NAME}` and `${NAME:-default}` read environment variables. A missing
 variable without a default is an error.

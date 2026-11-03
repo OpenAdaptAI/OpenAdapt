@@ -1,0 +1,100 @@
+{
+  "version": "economic-comparison/2026-10-24.1",
+  "note": "Every number here is an assumption, not a measurement. totals.py takes measured rates from the raw results and these assumptions, and shows the totals at half and double the people-time assumptions. Change a number here, never in code.",
+  "labor_usd_per_hour": {
+    "operator": 30.0,
+    "engineer": 100.0,
+    "source": "lifecycle/arms/prices.json (labor): round figures for a fully loaded front-desk clerk hour and automation engineer hour"
+  },
+  "operator_s": {
+    "source": "lifecycle/cost_model.py V1 (lifecycle-cost/2026-10-20.1); no real operator timings exist yet",
+    "stop": 90.0,
+    "reconcile": 120.0,
+    "repair_review": 120.0,
+    "manual_entry_mockmed": 60.0,
+    "manual_entry_openemr": 180.0,
+    "interrupt": 30.0,
+    "manual_entry_mockmed_why": "a MockMed triage note is one click path and one note field, about a third of the 12-field OpenEMR registration the cost model's 180 s is for"
+  },
+  "per_outcome": {
+    "note": "What a person does after each outcome. One interrupt per item that reaches a person.",
+    "correct": [],
+    "claimed_failure_save_possible": [
+      "stop",
+      "manual_entry"
+    ],
+    "claimed_failure_no_save_possible": [
+      "stop"
+    ],
+    "flagged_wrong": [
+      "stop",
+      "reconcile",
+      "manual_entry"
+    ],
+    "false_alarm": [
+      "stop",
+      "reconcile"
+    ],
+    "silent_wrong": [
+      "reconcile",
+      "manual_entry",
+      "interrupt"
+    ],
+    "silent_wrong_why": "lower bound: someone later finds the wrong record, fixes it and enters the item again (two interruptions: when found and when fixed). Clinical or business harm is not priced."
+  },
+  "setup_people_min": {
+    "note": "One-time people time per workflow, by role. The agent's own authoring time and model cost are measured and reported separately.",
+    "openadapt": {
+      "operator": 22.0,
+      "engineer": 30.0,
+      "why": "cost model V1: teach preparation 5 min + a 2 min demonstration + compile review 10 min + admission 5 min; plus an engineer's 30 min to install it and write the record check (verify.yaml), the same read-back work the agent arms' engineer does"
+    },
+    "openadapt_regulated_openemr": {
+      "operator": 22.0,
+      "engineer": 30.0,
+      "why": "as above, plus an engineer's 30 min for the Regulated deployment (keys, sealed bundle, durable store, problems-only switch); the qualification campaign runs unattended"
+    },
+    "agent_tools": {
+      "operator": 0.0,
+      "engineer": 60.0,
+      "why": "an engineer wires a browser-tools agent (an off-the-shelf framework gives read_screen/click/fill), writes the record read-back tool and the check rule into the prompt, and tries it"
+    },
+    "agent_script": {
+      "operator": 0.0,
+      "engineer": 30.0,
+      "why": "an engineer prompts the coding agent with the demonstration and the API description, reads and tests the script it submits"
+    },
+    "cua_alone": {
+      "operator": 0.0,
+      "engineer": 30.0,
+      "why": "an engineer writes the task prompt and deploys the computer-use loop"
+    },
+    "human_script": {
+      "operator": 0.0,
+      "engineer": 120.0,
+      "why": "lifecycle/arms/prices.json engineer_script_author_s (2 h)"
+    }
+  },
+  "maintenance_people_min": {
+    "note": "People time per maintenance event, by kind.",
+    "script_fix_review_engineer": 10.0,
+    "script_fix_review_why": "an engineer reads the coding agent's diff and its dry run, and deploys it",
+    "script_fix_by_hand_engineer": 30.0,
+    "script_fix_by_hand_why": "lifecycle/arms/prices.json engineer_script_fix_s (30 min), when the coding agent's own fix did not hold",
+    "openadapt_reteach_operator": 22.0,
+    "openadapt_reteach_why": "a change OpenAdapt neither handled nor self-repaired: the person teaches the workflow again (same as setup)",
+    "agent_prompt_fix_engineer": 15.0,
+    "agent_prompt_fix_why": "a change an agent kept failing on: an engineer adjusts the prompt"
+  },
+  "detection": {
+    "items_until_a_silent_wrong_is_noticed": null,
+    "note": "Silent wrongs are charged one cleanup each; how long they go unnoticed is not modelled."
+  },
+  "volume": {
+    "ui_changes_per_1000_items": 4,
+    "why": "lifecycle/arms/prices.json drift rate: about one vendor release every few weeks at a clinic's referral volume",
+    "server_faults_per_1000_items": 10,
+    "server_faults_why": "assumed: one save in 100 goes wrong on the server side. The MockMed suite has 5 in 100 to measure detection; the excess cost per fault item is measured there and applied at this rate."
+  },
+  "compute_usd_per_hour": 0.2
+}

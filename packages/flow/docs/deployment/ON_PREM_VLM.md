@@ -156,13 +156,16 @@ Runner side (GPU-less):
 
 ```python
 from openadapt_flow.runtime.remote_vlm import (
-    RemoteVLMClient, RemoteGrounder, RemoteIdentityVLM, RemoteStateVerifier,
+    RemoteVLMClient,
+    RemoteGrounder,
+    RemoteIdentityVLM,
+    RemoteStateVerifier,
 )
 
 client = RemoteVLMClient("https://gpu-box.lan:8077", token=TOKEN, timeout=2.0)
-grounder = RemoteGrounder(client)          # Grounder protocol, drop-in
-identity = RemoteIdentityVLM(client)       # verify / mismatch / abstain
-state    = RemoteStateVerifier(client)     # yes / no / uncertain
+grounder = RemoteGrounder(client)  # Grounder protocol, drop-in
+identity = RemoteIdentityVLM(client)  # verify / mismatch / abstain
+state = RemoteStateVerifier(client)  # yes / no / uncertain
 ```
 
 ## Integration

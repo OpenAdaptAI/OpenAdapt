@@ -297,6 +297,12 @@ class TestProofPage:
         assert "What a person sees when a run stops" not in page
         assert "Stopped and asked a person" not in page
 
+    def test_every_reconcile_option_has_plain_wording(self) -> None:
+        from openadapt_flow.runtime.durable.controller import _RECONCILE_OPTIONS
+
+        for text in _RECONCILE_OPTIONS:
+            assert demo_proof.plain_choice(text) != text
+
     def test_unknown_engine_option_is_shown_verbatim(self) -> None:
         text = "Do something the table doesn't know"
         assert demo_proof.plain_choice(text) == text

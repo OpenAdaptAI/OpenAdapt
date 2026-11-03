@@ -81,10 +81,12 @@ from openadapt_flow.compiler import compile_recording
 
 backend = WindowsBackend("http://<guest-ip>:5000", auth_token="<secret>")
 
+
 def driver(rec):
-    rec.click(x0, y0)                 # a UIA AutomationId is armed at each click
+    rec.click(x0, y0)  # a UIA AutomationId is armed at each click
     rec.type_text("value", param="p")
     rec.press("Enter")
+
 
 recording = record_desktop_demo(backend, "out/recording", driver)
 bundle = compile_recording(recording, "out/bundle", name="my-desktop-task")
@@ -95,6 +97,7 @@ Check parity of the compiled bundle:
 ```python
 from openadapt_flow.adapters.desktop_recorder import structural_armed_coverage
 from openadapt_flow.ir import Workflow
+
 print(structural_armed_coverage(Workflow.load("out/bundle")))  # armed_coverage == 1.0
 ```
 
@@ -113,10 +116,12 @@ from openadapt_flow.ir import Workflow
 from openadapt_flow.runtime import Replayer
 
 report = Replayer(backend, use_structural=True).run(
-    Workflow.load("out/bundle"), params={"p": "value"},
-    bundle_dir="out/bundle", run_dir="out/run",
+    Workflow.load("out/bundle"),
+    params={"p": "value"},
+    bundle_dir="out/bundle",
+    run_dir="out/run",
 )
-print(report.rung_counts)   # {'structural': N} when the UIA rung drives it
+print(report.rung_counts)  # {'structural': N} when the UIA rung drives it
 assert report.success
 ```
 
