@@ -70,6 +70,10 @@ def _app_env(lab: winrm_lab.WinRMLab, **knobs: Any) -> None:
 
 def _fresh_app(lab: winrm_lab.WinRMLab, *, settle_s: float = 8.0, **knobs) -> None:
     lab.stop_interactive("OAFlowApp")
+    lab.stop_interactive("OAFlowForeign")
+    lab.run_ps(
+        "Stop-Process -Name notepad -Force -ErrorAction SilentlyContinue", check=False
+    )
     lab.run_ps(
         "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
         "Where-Object { $_.CommandLine -like '*patient_notes.ps1*' } | "
@@ -151,7 +155,7 @@ def run_trial(trial: int, out: Path, row: dict[str, Any]) -> dict[str, Any]:
         "typed_contract": sorted(c for c in caps if c.endswith("_v1")),
         "legacy_exec_exposed": "legacy_exec" in caps,
     }
-    for name in ("pn_db.py", "patient_notes.ps1"):
+    for name in ("pn_db.py", "patient_notes.ps1", "foreign_window.ps1"):
         lab.push_file(HERE / name, rf"{GUEST}\{name}")
 
     # Record, with the owned "Confirm save" dialog in the flow.
@@ -263,22 +267,19 @@ def run_trial(trial: int, out: Path, row: dict[str, Any]) -> dict[str, Any]:
     _ready(backend)
     before = _db_rows(lab)
     search_point = _ready(backend)
-    lab.launch_interactive("notepad.exe", name="OAFlowForeign")
-    time.sleep(4)
-    lab.run_ps(
-        "Add-Type -Namespace W -Name U -MemberDefinition "
-        "'[DllImport(\"user32.dll\")] public static extern bool ShowWindow(System.IntPtr h, int c);'; "
-        "Get-Process notepad | ForEach-Object { [W.U]::ShowWindow($_.MainWindowHandle, 3) } | Out-Null",
-        check=False,
+    lab.launch_interactive(
+        "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden "
+        f"-File {GUEST}\\foreign_window.ps1",
+        name="OAFlowForeign",
     )
-    time.sleep(2)
+    time.sleep(6)
     _save_png(backend, out / "screens" / "04-foreign-window.png")
+    # The search box must no longer be what is under its own point. Notepad's
+    # text area has no name or AutomationId, so it has no identity (None).
     cover = backend.element_identity_at(*search_point)
-    if not cover or cover.get("process") != "notepad":
-        raise AssertionError(
-            "foreign-window setup did not cover the app: "
-            f"{(cover or {}).get('process')!r} at the search box"
-        )
+    if cover is not None and cover.get("automation_id") == "searchBox":
+        raise AssertionError("foreign-window setup did not cover the app")
+    steps["foreign_window_cover"] = (cover or {}).get("process")
     report = Replayer(backend, use_structural=True).run(
         Workflow.load(bundle),
         params={},
