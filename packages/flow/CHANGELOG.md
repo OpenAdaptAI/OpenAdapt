@@ -25,6 +25,8 @@
 
 ### Fixes
 
+- Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and a dialog whose text could discard, end, overwrite or commit something is refused ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
+
 - Self-repair can take a stop where the app's own dialog covers the next step's identity band: when the backend proves the covering window belongs to the window the last verified step was in, and the part of the band read still matches the record, the dialog is dismissed after the previous click and the step re-checks its identity in full. Another record behind the dialog stays an identity halt. The runtime lets a backend remember a verified record's window (`record_verified_window`); macOS answers `owned_window_over` from the window's proved sheet ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
 - macOS: a run can now act in the pinned window's own AppKit sheet (an `NSAlert` attached to it), which is a separate window. `MacOSBackend` accepts it only when AX lists exactly one `AXSheet` on the window and exactly one window of the same process has its bounds inside it; the capture composites exactly that sheet over the window, and focus, pointer and click-target checks accept it only inside its bounds. Any other window is still refused ([#1711](https://github.com/OpenAdaptAI/OpenAdapt/issues/1711)).

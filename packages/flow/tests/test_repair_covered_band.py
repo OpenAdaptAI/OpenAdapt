@@ -128,9 +128,20 @@ def _report(
     )
 
 
+def _cover_for(observed: str = READ_BESIDE_DIALOG, band=BAND) -> list[int]:
+    """A dialog whose left edge is where ``observed`` stops, over the band's
+    right part at full height (the shape the session notice has)."""
+    from openadapt_flow.runtime.identity import ocr_canonical, squash
+
+    share = len(ocr_canonical(squash(observed))) / len(ocr_canonical(squash(RECORDED)))
+    left = band[0] + round(band[2] * share)
+    return [left, band[1] - 40, band[0] + band[2] - left + 60, band[3] + 120]
+
+
 class Backend:
-    def __init__(self, covered: Any = True) -> None:
+    def __init__(self, covered: Any = True, region: Any = "default") -> None:
         self.covered = covered
+        self.region = _cover_for() if region == "default" else region
         self.regions: list[tuple] = []
         self.pinned: list[str] = []
 
@@ -139,7 +150,12 @@ class Backend:
         self.pinned.append(pinned_step_id)
         if isinstance(self.covered, Exception):
             raise self.covered
-        return {"kind": "dialog", "title": "Session notice"} if self.covered else None
+        if not self.covered:
+            return None
+        cover = {"title": "Session notice", "hwnd": 7, "owner_hwnd": 3, "pid": 42}
+        if self.region is not None:
+            cover["region"] = list(self.region)
+        return cover
 
 
 def test_a_covered_band_is_repaired_after_the_previous_click() -> None:
@@ -321,8 +337,220 @@ def test_a_hidden_birth_date_is_reclassified_only_for_the_probe_to_recheck() -> 
     # same-name patient could be behind it. Reclassifying only routes the
     # stop to an ``after`` repair: the probe replays this step with its own
     # identity check on the uncovered band, which refuses another birth date.
+    observed = "Patient: Neil Sorenson (19"
     found = _halt(
-        _report(observed="Patient: Neil Sorenson (19"), _workflow(), Backend()
+        _report(observed=observed), _workflow(), Backend(region=_cover_for(observed))
     )
     assert found is not None and found[1] == "after"
     assert found[0].id == "search"  # the note step itself is replayed unchanged
+
+
+# -- the cover must be what cut the band (review of #1735) ---------------------
+
+
+def test_the_found_halt_carries_the_proved_cover() -> None:
+    found = _halt(_report(), _workflow(), Backend())
+    assert found.pinned == "search"
+    assert found.cover["hwnd"] == 7 and found.cover["region"] == _cover_for()
+
+
+@pytest.mark.parametrize(
+    "region",
+    [
+        None,  # no rect reported: doubt
+        [0, 0, 0, 0],
+        "garbage",
+        # a tooltip over the band's right end, far right of where the read stops
+        [BAND[0] + BAND[2] - 8, BAND[1] - 2, 60, BAND[3] + 4],
+        # starts where the read stops but is shorter than the band
+        [_cover_for()[0], BAND[1] + 5, 200, BAND[3] - 10],
+        # starts where the read stops but ends before the band's right edge
+        [_cover_for()[0], BAND[1] - 10, 20, BAND[3] + 20],
+        # covers the band from its left edge: nothing could be read beside it
+        [BAND[0] - 5, BAND[1] - 10, 400, BAND[3] + 20],
+        # its left edge well left of where the read stops
+        [BAND[0] + 40, BAND[1] - 10, 400, BAND[3] + 20],
+    ],
+)
+def test_a_window_that_did_not_cut_the_band_is_not_the_cause(region) -> None:
+    assert _halt(_report(), _workflow(), Backend(region=region)) is None
+
+
+def test_a_recorded_band_that_raises_is_doubt() -> None:
+    def broken(step):
+        raise OSError("crop unreadable")
+
+    assert (
+        _covered_band_halt(_report(), _workflow(), Backend(), recorded_band=broken)
+        is None
+    )
+
+
+# -- the dismiss click: only in the proved dialog, only on a notice -------------
+
+
+class _Line:
+    def __init__(self, text: str, region: tuple[int, int, int, int]) -> None:
+        self.text, self.region = text, region
+
+
+def _guard(
+    *, at: Any, message: str, cover: Optional[dict] = None, lines_in: bool = True
+):
+    """Run ``SelfRepair._dismisses_the_cover`` on a stand-in self."""
+    from types import SimpleNamespace
+
+    from openadapt_flow.repair.self_repair import SelfRepair, _CoveredHalt
+
+    cover = cover or {"hwnd": 7, "pid": 42, "region": [380, 300, 270, 160]}
+    found = _CoveredHalt(("s", "after", None), cover=cover, pinned="search")
+    lines = [
+        _Line("Session notice", (395, 318, 80, 14)),
+        _Line(message, (450, 374, 170, 14)),
+        _Line("OK", (590, 433, 20, 14)),
+        _Line("Patient: Neil Sorenson (1984-", (230, 320, 150, 14)),  # outside
+    ]
+    if not lines_in:
+        lines = lines[-1:]
+    vision = SimpleNamespace(ocr=lambda png: lines)
+    queried: list[tuple] = []
+
+    class Here:
+        def owned_window_over(self, region, *, pinned_step_id):
+            queried.append((tuple(region), pinned_step_id))
+            if isinstance(at, Exception):
+                raise at
+            return at
+
+    me = SimpleNamespace(_covered=found, vision=vision)
+    session = SimpleNamespace(backend=Here())
+    SelfRepair._dismisses_the_cover(me, session, (598, 440), b"png")
+    return queried
+
+
+def test_a_notice_in_the_proved_dialog_may_be_dismissed() -> None:
+    queried = _guard(
+        at={"hwnd": 7, "pid": 42}, message="Your session expires in 5 minutes."
+    )
+    assert queried == [((598, 440, 1, 1), "search")]
+
+
+@pytest.mark.parametrize(
+    "at",
+    [
+        None,  # nothing owned at the point
+        {"hwnd": 8, "pid": 42},  # another of the app's windows
+        {"hwnd": 7, "pid": 43},
+        {"title": "x"},  # no id
+        RuntimeError("agent"),
+    ],
+)
+def test_a_click_outside_the_proved_dialog_is_refused(at) -> None:
+    from openadapt_flow.repair.self_repair import SelfRepairRefused
+
+    with pytest.raises(SelfRepairRefused, match="not in the dialog"):
+        _guard(at=at, message="Your session expires in 5 minutes.")
+
+
+def test_a_cover_without_an_id_never_matches_a_click_without_one() -> None:
+    from openadapt_flow.repair.self_repair import SelfRepairRefused
+
+    with pytest.raises(SelfRepairRefused, match="not in the dialog"):
+        _guard(
+            at={"title": "x"},
+            message="Your session expires in 5 minutes.",
+            cover={"region": [380, 300, 270, 160]},
+        )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Discard unsaved changes?",
+        "End the other session and continue?",
+        "Overwrite the existing note?",
+        "Save changes before closing?",
+        "Delete this draft?",
+        "Submit the order now?",
+        "Your changes will be lost.",
+    ],
+)
+def test_a_dialog_whose_message_can_lose_or_commit_data_is_refused(message) -> None:
+    from openadapt_flow.repair.self_repair import SelfRepairRefused
+
+    with pytest.raises(SelfRepairRefused, match="dialog's message"):
+        _guard(at={"hwnd": 7, "pid": 42}, message=message)
+
+
+# -- what protects a hidden difference above the floor: the full recheck -------
+
+
+@pytest.mark.parametrize(
+    "after_dismiss",
+    [
+        "Patient: Neil Sorenson (1991-07-02)",  # same name, another birth date
+        "Patient: Neil Sorensen (1984-03-12)",  # the surname differs past the cut
+        "Patient: Neil Sorenson (1984-",  # the dialog is still there
+    ],
+)
+def test_the_probes_full_identity_check_refuses_what_the_dialog_hid(
+    after_dismiss,
+) -> None:
+    # The note step's identity is checked again, unchanged, when the probe
+    # replays the repaired bundle. Whatever the dialog hid must match then.
+    from openadapt_flow.runtime.identity_template import verify_template_identity
+
+    hidden = "Patient: Neil Sorenson (19"
+    assert _halt(
+        _report(observed=hidden), _workflow(), Backend(region=_cover_for(hidden))
+    )
+    step = _workflow().steps[1]
+    assert step.anchor.identity_template == TEMPLATE  # not relaxed by the repair
+    check = verify_template_identity(TEMPLATE, after_dismiss)
+    assert check.status != "verified"
+    assert verify_template_identity(TEMPLATE, RECORDED).status == "verified"
+
+
+def test_a_dialog_with_nothing_readable_in_it_is_refused() -> None:
+    from openadapt_flow.repair.self_repair import SelfRepairRefused
+
+    with pytest.raises(SelfRepairRefused, match="can't be read"):
+        _guard(at={"hwnd": 7, "pid": 42}, message="", lines_in=False)
+
+
+@pytest.mark.parametrize(
+    "kinds", [["type"], ["click", "click"], ["double_click"], ["click", "type"]]
+)
+def test_a_covered_band_bridge_is_exactly_one_click(kinds) -> None:
+    from types import SimpleNamespace
+
+    from openadapt_flow.repair.self_repair import (
+        SelfRepair,
+        SelfRepairRefused,
+        _CoveredHalt,
+    )
+
+    ops = iter(SimpleNamespace(kind=kind) for kind in kinds)
+    me = SimpleNamespace(
+        _covered=_CoveredHalt(("s", "after", None), cover={}, pinned="search"),
+        max_bridge=4,
+        _one_op=lambda native: next(ops),
+    )
+    proposal = SimpleNamespace(bridge=lambda: [{}] * len(kinds))
+    workflow = _workflow()
+    with pytest.raises(SelfRepairRefused, match="one click that dismisses"):
+        SelfRepair._patch(
+            me,
+            workflow,
+            None,
+            workflow.steps[0],
+            "after",
+            proposal,
+            None,
+            b"",
+            1,
+            None,
+            None,
+            [False],
+            None,
+        )

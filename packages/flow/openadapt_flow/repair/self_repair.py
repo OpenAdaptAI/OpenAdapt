@@ -722,6 +722,8 @@ class SelfRepair:
         self._sleep = sleep
         self._monotonic = monotonic
         self._token = secrets.token_urlsafe(32)
+        #: The proved cover when this run's halt is a covered band (#1724).
+        self._covered: Optional[_CoveredHalt] = None
 
     # -- public entry point --------------------------------------------------
 
@@ -743,6 +745,7 @@ class SelfRepair:
             agent_dialect=self.agent.dialect,
             prior_bundle_digest=_digest_of(workflow),
         )
+        self._covered = None
         session = self.target.open()
         try:
             report = self.target.execute(workflow, bundle_dir, session, run_dir)
@@ -778,6 +781,7 @@ class SelfRepair:
                     work,
                 )
             evidence.halted_run_dir = str(run_dir)
+            self._covered = covered
             found = covered if covered is not None else _repairable(report, workflow)
             if isinstance(found, str):
                 evidence.steps.append(
@@ -1175,6 +1179,13 @@ class SelfRepair:
                 raise SelfRepairRefused(
                     "a bridge can only be added to a linear workflow for now"
                 )
+        if self._covered is not None and [op.kind for op in ops] != ["click"]:
+            # A covered band is repaired by dismissing the one proved dialog:
+            # a single click in it (checked in _new_click), nothing typed.
+            raise SelfRepairRefused(
+                "a covered identity band is repaired by one click that dismisses "
+                "the covering dialog, and nothing else"
+            )
         if mode == "replace" and ops[-1].kind != _POINTER_KINDS[step.action]:
             raise SelfRepairRefused(
                 f"{step.id} is a {_POINTER_KINDS[step.action]}; the bridge's last "
@@ -1527,6 +1538,8 @@ class SelfRepair:
                 f"the bridge clicks {label!r}, which reads as a save; a bridge may "
                 "only lead to the recorded save"
             )
+        if self._covered is not None:
+            self._dismisses_the_cover(session, point, screen)
         try:
             admission = admit_new_click(
                 session.backend,
@@ -1567,6 +1580,58 @@ class SelfRepair:
             risk="reversible",
         )
         return step, _crop_png(screen, region), label, admission, files
+
+    def _dismisses_the_cover(
+        self, session: AppSession, point: tuple[int, int], screen: bytes
+    ) -> None:
+        """Refuse a covered-band bridge click outside the proved dialog.
+
+        The click must land in the very window ``owned_window_over`` reported
+        over the band (asked again at the point, against the same verified
+        window), and that dialog's text must read as a notice only
+        (:func:`_dialog_message_refusal`).
+        """
+
+        covered = self._covered
+        assert covered is not None
+        probe = getattr(session.backend, "owned_window_over", None)
+        try:
+            here = (
+                probe(
+                    (int(point[0]), int(point[1]), 1, 1), pinned_step_id=covered.pinned
+                )
+                if callable(probe)
+                else None
+            )
+        except Exception:  # noqa: BLE001 - no proof is a refusal
+            here = None
+        reported = _window_key(covered.cover)
+        if (
+            reported is None
+            or not isinstance(here, dict)
+            or _window_key(here) != reported
+        ):
+            raise SelfRepairRefused(
+                "the bridge click is not in the dialog that covers the identity "
+                "band; only that dialog may be dismissed"
+            )
+        rect = _cover_region(covered.cover)
+        text = ""
+        if rect is not None:
+            x, y, w, h = rect
+            try:
+                lines = self.vision.ocr(screen)
+            except Exception:  # noqa: BLE001 - unreadable is a refusal below
+                lines = []
+            text = " ".join(
+                str(line.text)
+                for line in lines
+                if x <= line.region[0] + line.region[2] / 2 < x + w
+                and y <= line.region[1] + line.region[3] / 2 < y + h
+            )
+        refusal = _dialog_message_refusal(text)
+        if refusal is not None:
+            raise SelfRepairRefused(refusal)
 
     def _landmarks(
         self,
@@ -2664,7 +2729,7 @@ def _covered_band_halt(
     backend: Any,
     *,
     recorded_band: Callable[[Step], Optional[str]] = lambda step: None,
-) -> "Optional[tuple[Step, str, Any]]":
+) -> "Optional[_CoveredHalt]":
     """An identity halt caused by the app's own window over the band (#1724).
 
     A dialog the app opens after a step (a session notice, an update prompt)
@@ -2680,7 +2745,9 @@ def _covered_band_halt(
     - the backend proves that a window of the app itself covers the step's
       identity band on the halted screen (``owned_window_over``): a window of
       the same process, owned by the top-level window the backend captured
-      when the last identity-verified step passed (``pinned_step_id``);
+      when the last identity-verified step passed (``pinned_step_id``). Its
+      reported ``region`` must span the band from where the read stops to the
+      band's right edge, at full height (:func:`_cover_explains_cut`);
     - the identity was read from the screen (``context``), its band has no
       run parameter, and the text read is the recorded band word for word up
       to where the dialog cuts it (only the last word read may be cut short),
@@ -2748,7 +2815,8 @@ def _covered_band_halt(
         or report.halt.state_id != step.id
     ):
         return None
-    region = tuple(int(v) for v in step.anchor.identifier_region)
+    rx, ry, rw, rh = (int(v) for v in step.anchor.identifier_region)
+    region = (rx, ry, rw, rh)
     if halted.resolution is not None:
         dx = int(halted.resolution.point[0]) - int(step.anchor.click_point[0])
         dy = int(halted.resolution.point[1]) - int(step.anchor.click_point[1])
@@ -2769,9 +2837,15 @@ def _covered_band_halt(
         cover = probe(region, pinned_step_id=pinned)
     except Exception:  # noqa: BLE001 - no proof means no reclassification
         return None
-    if not cover or not _uncovered_band_matches(
-        step, halted.identity.observed, recorded_band(step)
-    ):
+    if not isinstance(cover, dict) or not cover:
+        return None
+    try:
+        recorded = recorded_band(step)
+    except Exception:  # noqa: BLE001 - an unreadable record is doubt
+        return None
+    if not _uncovered_band_matches(
+        step, halted.identity.observed, recorded
+    ) or not _cover_explains_cut(cover, region, halted.identity.observed, recorded):
         return None
     previous = workflow.steps[index - 1]
     acted = next((r for r in report.results if r.step_id == previous.id), None)
@@ -2786,7 +2860,154 @@ def _covered_band_halt(
         or is_consequential(previous, workflow)
     ):
         return None
-    return previous, "after", acted
+    return _CoveredHalt((previous, "after", acted), cover=dict(cover), pinned=pinned)
+
+
+def _window_key(window: Mapping[str, Any]) -> Optional[tuple[int, int]]:
+    """A reported window's ``(id, pid)``: ``hwnd`` on Windows, ``window_id`` on
+    macOS. None when either is missing or not a positive integer."""
+
+    ident = window.get("hwnd", window.get("window_id"))
+    pid = window.get("pid")
+    if any(
+        isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in (ident, pid)
+    ):
+        return None
+    return int(ident), int(pid)  # type: ignore[arg-type]
+
+
+class _CoveredHalt(tuple):
+    """``(previous step, "after", its result)``, with the proved cover.
+
+    ``cover`` is what ``owned_window_over`` returned for the band and
+    ``pinned`` the step whose verified window it was checked against; the
+    dismiss click is held to that same window (:meth:`SelfRepair._new_click`).
+    """
+
+    cover: dict
+    pinned: str
+
+    def __new__(cls, items: tuple, *, cover: dict, pinned: str) -> "_CoveredHalt":
+        found = super().__new__(cls, items)
+        found.cover = cover
+        found.pinned = pinned
+        return found
+
+
+#: How far the share of the band left uncovered may be from the share of the
+#: recorded text read: the dialog's left edge must be where the read stops.
+#: On the lab's Patient Notes notice the two are 0.79 and 0.81.
+_CUT_TOLERANCE = 0.1
+
+
+def _cover_region(cover: Mapping[str, Any]) -> Optional[tuple[int, int, int, int]]:
+    """The covering window's ``region`` as ``(x, y, w, h)``, or None."""
+
+    value = cover.get("region")
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    if any(isinstance(v, bool) or not isinstance(v, int) for v in value):
+        return None
+    x, y, w, h = value
+    if w <= 0 or h <= 0:
+        return None
+    return x, y, w, h
+
+
+def _cover_explains_cut(
+    cover: Mapping[str, Any],
+    band: tuple[int, int, int, int],
+    observed: str,
+    recorded: Optional[str],
+) -> bool:
+    """Whether the covering window is what cut the band where the read stops.
+
+    The window must span the band from a point inside it to its right edge,
+    at the band's full height, and its left edge must sit where the text
+    read ends: the share of the band's width left uncovered is within
+    ``_CUT_TOLERANCE`` of the share of the recorded text read. A popup that
+    only touches the band (a tooltip over a column's ellipsis) fails. A
+    cover with no ``region`` is doubt.
+    """
+
+    from openadapt_flow.runtime.identity import ocr_canonical, squash
+
+    rect = _cover_region(cover)
+    if rect is None or not (recorded or "").strip():
+        return False
+    bx, by, bw, bh = band
+    cx, cy, cw, ch = rect
+    if not (
+        bx < cx < bx + bw and cy <= by and cy + ch >= by + bh and cx + cw >= bx + bw
+    ):
+        return False
+    read = len(ocr_canonical(squash(observed or "")))
+    whole = len(ocr_canonical(squash(str(recorded))))
+    if whole <= 0 or read <= 0:
+        return False
+    return abs((cx - bx) / bw - read / whole) <= _CUT_TOLERANCE
+
+
+#: Words in a dialog's message that make dismissing it more than an
+#: acknowledgement: its buttons may discard, end, overwrite or commit.
+_CONSEQUENTIAL_DIALOG_WORDS = frozenset(
+    {
+        "apply",
+        "approve",
+        "cancel",
+        "clear",
+        "close",
+        "commit",
+        "confirm",
+        "delete",
+        "discard",
+        "end",
+        "erase",
+        "logout",
+        "lose",
+        "lost",
+        "overwrite",
+        "post",
+        "purge",
+        "remove",
+        "replace",
+        "reset",
+        "revert",
+        "save",
+        "send",
+        "sign",
+        "submit",
+        "terminate",
+        "undo",
+        "unsaved",
+        "void",
+    }
+)
+
+
+def _dialog_message_refusal(text: str) -> Optional[str]:
+    """Why a covering dialog's text forbids dismissing it, or None.
+
+    Only a dialog whose words carry no destructive or committing meaning may
+    be dismissed by a bridge: "Discard unsaved changes?" or "End the other
+    session?" answered with "OK" loses data. Unreadable text is a refusal.
+    """
+
+    from openadapt_flow.risk import is_write_shaped
+
+    words = {
+        w for w in "".join(c if c.isalnum() else " " for c in text.casefold()).split()
+    }
+    if not words:
+        return "the covering dialog's message can't be read"
+    hits = sorted(words & _CONSEQUENTIAL_DIALOG_WORDS)
+    if hits or is_write_shaped(text):
+        return (
+            "the covering dialog's message reads as more than a notice "
+            f"({', '.join(hits) or 'a save'}); dismissing it may discard, end or "
+            "commit something"
+        )
+    return None
 
 
 #: The least share of the recorded band the uncovered part must match.
