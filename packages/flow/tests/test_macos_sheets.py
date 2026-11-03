@@ -203,7 +203,12 @@ def test_owned_window_over_needs_the_verified_window_and_an_overlap() -> None:
     # The sheet's screen rect (110, 60, 200, 150) is window pixels
     # ((110-10)*2, (60-20)*2, 400, 300) = (200, 80, 400, 300).
     hit = target.owned_window_over((300, 100, 50, 20), pinned_step_id="s1")
-    assert hit == {"kind": "sheet", "window_id": SHEET_ID, "pid": TARGET_WINDOW.pid}
+    assert hit == {
+        "kind": "sheet",
+        "window_id": SHEET_ID,
+        "pid": TARGET_WINDOW.pid,
+        "region": [200, 80, 400, 300],
+    }
     assert target.owned_window_over((0, 0, 50, 20), pinned_step_id="s1") is None
     assert target.owned_window_over((300, 100, 50, 20), pinned_step_id="s2") is None
 
