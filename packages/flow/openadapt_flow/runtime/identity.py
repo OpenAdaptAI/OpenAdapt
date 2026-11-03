@@ -133,6 +133,23 @@ UNCOVERED_RUN_CAP = 4
 # patterns, and only those are accepted.
 MIN_BLOCK = 3
 
+# Split matching rejoins up to this many consecutive recorded tokens: OCR
+# reads a whole static label ("Hint: enter values in multiple boxes.", six
+# words) as one token as readily as two words.
+SPLIT_SIZES = tuple(range(2, 9))
+# Gluing words also drops the punctuation between them ("Hint:" + "enter"
+# -> "Hintenter"), so a split also tries each fragment but the last without
+# its trailing punctuation. Punctuation inside a token ("1.25") is kept.
+_GLUE_PUNCT = ":;,."
+
+
+def glued_forms(tokens: list[str]) -> list[str]:
+    """The forms OCR may read ``tokens`` as once it glues them into one."""
+    plain = "".join(tokens)
+    bare = "".join(t.rstrip(_GLUE_PUNCT) for t in tokens[:-1]) + tokens[-1]
+    return [plain] if bare == plain else [plain, bare]
+
+
 # Whole-token similarity used ONLY by substitute_param's token-ownership
 # test (which band tokens belong to a parameter's demo value), not by
 # band matching.
@@ -1100,12 +1117,14 @@ def _match_tokens(
 
     # split: consecutive recorded tokens -> one observed token
     for i in range(len(exp)):
-        for size in (2, 3, 4):
-            if i + size > len(exp):
-                break
+        for size, concat_raw in (
+            (size, form)
+            for size in SPLIT_SIZES
+            if i + size <= len(exp)
+            for form in glued_forms(exp[i : i + size])
+        ):
             if all(matched[i : i + size]):
                 continue
-            concat_raw = "".join(exp[i : i + size])
             concat_c = ocr_canonical(concat_raw)
             if len(concat_c) < MIN_BLOCK:
                 continue
