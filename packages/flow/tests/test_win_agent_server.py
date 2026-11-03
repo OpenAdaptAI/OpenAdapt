@@ -515,6 +515,88 @@ def test_windows_context_identity_is_live_bounded_and_authenticated() -> None:
         agent.close()
 
 
+def test_windows_qualification_environment_is_one_agent_snapshot() -> None:
+    """A qualification case on Windows observes all four signals in one call."""
+
+    from openadapt_flow.backends import WindowsBackend
+    from openadapt_flow.qualification_environment import (
+        BackendQualificationEnvironmentObserver,
+    )
+
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    calls = []
+
+    def context_fn():
+        calls.append(1)
+        return {"status": "ok", **state, "workflow_state": None}
+
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, token="secret"),
+        context_fn=context_fn,
+    )
+    try:
+        backend = WindowsBackend(agent.url, auth_token="secret")
+        assert backend.qualification_environment_identity() == (
+            "patient-notes",
+            "sha256:" + "c" * 64,
+            "a" * 64,
+            "e" * 64,
+        )
+        assert len(calls) == 1
+        observed = BackendQualificationEnvironmentObserver(backend).observe(
+            backend, "windows"
+        )
+        assert observed.application_version == "sha256:" + "c" * 64
+        assert observed.environment_digest == "e" * 64
+
+        # Every signal must be present and well formed, or the case refuses.
+        for key, bad in (
+            ("environment", None),
+            ("application_version", "1.2.3"),
+            ("application_version", None),
+            ("session", "NOT-A-DIGEST"),
+            ("application", "Patient Alice Example"),
+        ):
+            saved = state[key]
+            state[key] = bad
+            assert backend.qualification_environment_identity() is None, key
+            state[key] = saved
+
+        # An older agent without the environment fields cannot qualify.
+        del state["environment"], state["application_version"]
+        assert backend.qualification_environment_identity() is None
+        assert WindowsBackend(agent.url).qualification_environment_identity() is None
+    finally:
+        agent.close()
+
+
+def test_agent_hashes_the_executable_file_and_notices_a_change(tmp_path) -> None:
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"first build")
+    first = server._image_file_digest(str(image))
+    assert first == "sha256:" + hashlib.sha256(b"first build").hexdigest()
+    image.write_bytes(b"second build, longer")
+    second = server._image_file_digest(str(image))
+    assert second == "sha256:" + hashlib.sha256(b"second build, longer").hexdigest()
+    assert server._image_file_digest(str(tmp_path / "missing.exe")) is None
+
+
+def test_agent_advertises_the_environment_context() -> None:
+    agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0))
+    try:
+        health = requests.get(f"{agent.url}/health", timeout=5).json()
+    finally:
+        agent.close()
+    assert "context_environment_v1" in health["capabilities"]
+
+
 # -- screenshot ---------------------------------------------------------------
 
 
