@@ -51,6 +51,8 @@ legs:
       service_date: {param: ehr.service_date}
     duplicate_key: *same
     # An acknowledgement and a later status share a trace: judge the latest.
-    group_by: trace
+    group_by: [trace]
     latest_by: sent_at
+    # Two payer claim numbers under one trace are two claims, not a history.
+    distinct_by: [payer_claim_number]
     due: {after: ehr.submitted_at, within_s: 259200}

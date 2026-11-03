@@ -119,8 +119,10 @@ legs:
       service_code: {param: ehr.service_code}
       service_date: {param: ehr.service_date}
     # A pended review and its final review share a trace: judge the latest.
-    group_by: trace
+    group_by: [trace, purpose]
     latest_by: sent_at
+    # Two auth numbers under one trace are two decisions, not a history.
+    distinct_by: [auth_number]
     due: {after: ehr.submitted_at, within_s: 259200}
 
   writeback:

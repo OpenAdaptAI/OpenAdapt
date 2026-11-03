@@ -28,7 +28,6 @@ partial set. Nothing here writes or calls the network.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -141,7 +140,7 @@ def _check_envelopes(
                 raise X12Error("an ST or SE is short")
             if se[1] != str(len(body)) or se[2] != st[2]:
                 raise X12Error("an SE does not count or name its transaction set")
-            out.append((gs[6], st[2], f"{gs[4]}{gs[5][:4]}", body))
+            out.append((gs[6], st[2], f"{gs[4]}{gs[5]}", body))
             sets += 1
             i += 1
         if i >= len(segs) or segs[i][0] != "GE":
@@ -321,7 +320,7 @@ def parse(text: str, name: str = "file") -> list[dict[str, Any]]:
             continue
         # A person finds the file by its control numbers; file names can
         # carry member ids, so they stay out of the reference.
-        ref = f"x12:{control}.{group}.{st}"
+        ref = f"x12:{name}:{control}.{group}.{st}"
         for record in _records(body, component, ref):
             record["sent_at"] = sent
             out.append(record)
@@ -356,16 +355,16 @@ class X12Verifier(VerifierAdapterBase):
             self.read_problem = f"more than {MAX_FILES} X12 files"
             return None
         out: list[dict[str, Any]] = []
-        for path in files:
+        for index, path in enumerate(files, start=1):
             try:
                 if path.stat().st_size > MAX_BYTES:
                     raise X12Error("the file is larger than the read limit")
                 text = path.read_bytes().decode("utf-8")
-                records = parse(text, path.name)
+                records = parse(text, f"f{index}")
             except (OSError, UnicodeDecodeError, X12Error) as exc:
-                digest = hashlib.sha256(str(path.name).encode()).hexdigest()[:12]
+                # The file's place in the sorted listing, never its name.
                 detail = exc if isinstance(exc, X12Error) else type(exc).__name__
-                self.read_problem = f"X12 file name-sha256 {digest}: {detail}"
+                self.read_problem = f"X12 file {index} of {len(files)}: {detail}"
                 return None
             out.extend(
                 r

@@ -141,17 +141,22 @@ class Leg(BaseModel):
     due: Optional[Due] = None
     required_when: Optional[RequiredWhen] = None
     #: A store that keeps every status of a unit (a 277 acknowledgement,
-    #: then the 277 that it was paid): records that share ``group_by`` are
-    #: one unit's history, and only those with the greatest ``latest_by``
-    #: are judged. Records tied at the latest stay, so a redelivery still
-    #: counts twice.
-    group_by: Optional[str] = None
+    #: then the 277 that it was paid): records that share every
+    #: ``group_by`` field are one unit's history, and only those with the
+    #: greatest ``latest_by`` are judged. Records tied at the latest stay, so
+    #: a redelivery still counts twice. A group whose records carry two
+    #: different non-empty values of a ``distinct_by`` field (two payer claim
+    #: numbers under one trace) is two submissions, and is kept whole.
+    group_by: list[str] = Field(default_factory=list)
     latest_by: Optional[str] = None
+    distinct_by: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _history(self) -> "Leg":
-        if (self.group_by is None) != (self.latest_by is None):
+        if bool(self.group_by) != (self.latest_by is not None):
             raise ValueError("group_by and latest_by go together")
+        if self.distinct_by and not self.group_by:
+            raise ValueError("distinct_by needs group_by")
         return self
 
     @model_validator(mode="before")
@@ -452,14 +457,20 @@ def _scope_of(
 
 
 #: A URL's query (it can carry a member id) and a quoted value, in a reason.
-_QUERY = re.compile(r"\?[^\s)]*")
-_QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
+_URL = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+|/[^\s,;)]*/[^\s,;)]*")
+_QUOTED = re.compile(r"'[^'\s][^']*'|\"[^\"]*\"")
+#: A word that may be a value: it holds a digit and isn't a plain count or
+#: an HTTP status.
+_VALUE_WORD = re.compile(r"\b(?=\w*\d)(?!\d{1,3}\b)\w+\b")
 
 
 def _clean(reason: str) -> str:
-    """A store's reason without the values it may quote: closed text only."""
+    """A store's reason without the values it may quote: URLs and paths,
+    quoted text and words that hold digits become ``…``."""
 
-    return _QUOTED.sub("'…'", _QUERY.sub("?…", reason))
+    reason = _URL.sub("<url>", reason)
+    reason = _QUOTED.sub("'…'", reason)
+    return _VALUE_WORD.sub("…", reason)
 
 
 def _effect_params(effect: Any) -> set[str]:
@@ -484,19 +495,23 @@ def _latest(records: list[dict[str, Any]], leg: Leg) -> list[dict[str, Any]]:
     """Each ``group_by`` group's records at its greatest ``latest_by``. A
     group whose ``latest_by`` is missing on any record is kept whole."""
 
-    if leg.group_by is None or leg.latest_by is None:
+    if not leg.group_by or leg.latest_by is None:
         return records
     groups: dict[Any, list[dict[str, Any]]] = {}
     out: list[dict[str, Any]] = []
     for r in records:
-        key = r.get(leg.group_by)
-        if key is None:
+        key = tuple(r.get(f) for f in leg.group_by)
+        if any(k is None for k in key):
             out.append(r)
         else:
-            groups.setdefault(str(key), []).append(r)
+            groups.setdefault(tuple(str(k) for k in key), []).append(r)
     for members in groups.values():
         marks = [m.get(leg.latest_by) for m in members]
-        if any(m is None for m in marks):
+        split = any(
+            len({str(m[f]) for m in members if m.get(f) is not None}) > 1
+            for f in leg.distinct_by
+        )
+        if split or any(m is None for m in marks):
             out.extend(members)
             continue
         top = max(str(m) for m in marks)

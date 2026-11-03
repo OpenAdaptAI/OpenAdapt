@@ -84,6 +84,13 @@ def world(tmp_path: Path):
             if reviews is not None
             else [fx.Review("PA-1", "M1", "97110", "2026-11-20", auth_number="AUTH9")]
         )
+
+        def action(auth, outcome):
+            return "A1" if auth else "A4" if outcome == "queued" else "A3"
+
+        # The review action (X12 HCR01) the payer decided, unless given.
+        payer = [r if len(r) == 8 else (*r, action(r[5], r[4])) for r in payer]
+        writeback = [r if len(r) == 4 else (*r, action(r[1], r[2])) for r in writeback]
         e = _db(
             tmp_path / "ehr.db",
             "CREATE TABLE t (submission_id, member_id, service_code, "
@@ -93,12 +100,12 @@ def world(tmp_path: Path):
         p = _db(
             tmp_path / "payer.db",
             "CREATE TABLE t (identifier, member_id, service_code, service_date, "
-            "outcome, auth_number, decided_at)",
+            "outcome, auth_number, decided_at, review_action)",
             payer,
         )
         w = _db(
             tmp_path / "wb.db",
-            "CREATE TABLE t (submission_id, auth_number, outcome)",
+            "CREATE TABLE t (submission_id, auth_number, outcome, review_action)",
             writeback,
         )
         inbox = tmp_path / "inbox"
@@ -144,6 +151,7 @@ def world(tmp_path: Path):
                             "outcome": "outcome",
                             "auth_number": "auth_number",
                             "decided_at": "decided_at",
+                            "review_action": "review_action",
                         },
                         "due": {"after": anchor["param"], "within_s": 259200},
                     },
@@ -157,11 +165,18 @@ def world(tmp_path: Path):
                                 "transaction": "278",
                             },
                         },
-                        "identity": {"trace": {"param": "submission_id"}},
+                        "identity": {
+                            "trace": {"param": "submission_id"},
+                            "purpose": "11",
+                        },
                         "compare": {
                             **same,
                             "auth_number": {"param": "payer.auth_number"},
+                            "decision": {"param": "payer.review_action"},
                         },
+                        "group_by": ["trace", "purpose"],
+                        "latest_by": "sent_at",
+                        "distinct_by": ["auth_number"],
                         "duplicate_key": same,
                         "due": {"after": anchor["param"], "within_s": 3600},
                     },
@@ -172,6 +187,7 @@ def world(tmp_path: Path):
                         "compare": {
                             "auth_number": {"param": "payer.auth_number"},
                             "outcome": {"param": "payer.outcome"},
+                            "review_action": {"param": "payer.review_action"},
                         },
                         "required_when": {
                             "param": "payer.outcome",
@@ -289,11 +305,8 @@ def test_clearinghouse_decision_must_match_the_payer(world) -> None:
     )
     result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
     b = next(b for b in result.breaks if b.leg == "clearinghouse")
-    assert (b.kind, b.fields, b.outcome) == (
-        "mismatch",
-        ("auth_number",),
-        Outcome.REFUTED,
-    )
+    assert b.kind == "mismatch" and b.outcome is Outcome.REFUTED
+    assert set(b.fields) == {"auth_number", "decision"}
 
 
 def test_denial_without_auth_number_reconciles(world) -> None:
@@ -444,7 +457,7 @@ def _claim_spec(inbox: Path, ehr_db: str) -> ReconcileSpec:
                     "identity": {"trace": {"param": "submission_id"}},
                     "compare": same,
                     "duplicate_key": same,
-                    "group_by": "trace",
+                    "group_by": ["trace"],
                     "latest_by": "sent_at",
                 },
             },
@@ -527,3 +540,76 @@ def test_isa_must_be_exactly_106_characters() -> None:
     )
     with pytest.raises(x12.X12Error):
         x12.parse(text.replace("*:~GS", "*::~GS", 1))
+
+
+def test_denial_and_pend_are_told_apart(world) -> None:
+    # Round 2, finding 2: no auth number on either side, but the 278 denies
+    # while the payer pends.
+    spec = world(
+        payer=[("PA-1", "M1", "97110", "2026-11-20", "queued", None, None)],
+        reviews=[fx.Review("PA-1", "M1", "97110", "2026-11-20", decision="A3")],
+        writeback=[],
+    )
+    result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
+    b = next(b for b in result.breaks if b.leg == "clearinghouse")
+    assert (b.kind, b.fields) == ("mismatch", ("decision",))
+    # A denial written back as an approval-shaped copy with no auth number.
+    payer = [
+        ("PA-1", "M1", "97110", "2026-11-20", "complete", None, "2026-11-01T10:00:00Z")
+    ]
+    spec = world(
+        payer=payer,
+        writeback=[("PA-1", None, "complete", "A4")],
+        reviews=[fx.Review("PA-1", "M1", "97110", "2026-11-20", decision="A3")],
+    )
+    result = reconcile(spec, {"submission_id": "PA-1"}, now=NOW)
+    assert ("not_written_back", "writeback", "REFUTED") in _kinds(result)
+
+
+def test_two_payer_claims_under_one_trace_are_a_duplicate(tmp_path: Path) -> None:
+    # Round 2, finding 1: the history rule must not hide a resubmission.
+    db = _db(
+        tmp_path / "e.db",
+        "CREATE TABLE t (submission_id, member_id, service_code)",
+        [("C1", "M1", "99213")],
+    )
+    inbox = tmp_path / "in"
+    inbox.mkdir()
+    for i, pcn in enumerate(("PCN-A", "PCN-B"), start=1):
+        status = fx.ClaimStatus(
+            "C1", "M1", "99213", "2026-10-01", payer_claim_number=pcn
+        )
+        (inbox / f"{i}.x12").write_text(
+            fx.interchange(
+                "277", [fx.status_set([status])], control=str(i), time=f"{9 + i:02d}00"
+            )
+        )
+    spec = _claim_spec(inbox, db)
+    spec.legs["clearinghouse"].distinct_by = ["payer_claim_number"]
+    result = reconcile(spec, {"submission_id": "C1"}, now=NOW)
+    assert ("duplicate", "clearinghouse", "REFUTED") in _kinds(result)
+
+
+def test_a_later_278_request_does_not_hide_the_response(world) -> None:
+    # Round 2, finding 3: the history is kept per trace and purpose.
+    request = fx.interchange(
+        "278",
+        [fx.review_set(fx.Review("PA-1", "M1", "97110", "2026-11-20"))],
+        control="40",
+        time="2359",
+    )
+    request = request.replace("BHT*0007*11*", "BHT*0007*13*")
+    result = reconcile(world(x12_text=request), {"submission_id": "PA-1"}, now=NOW)
+    assert result.outcome is Outcome.CONFIRMED, result.reasons
+
+
+def test_clean_removes_values_from_store_reasons() -> None:
+    from openadapt_flow.reconcile import _clean
+
+    text = _clean(
+        "can't read 'M1234' isn't at http://h/fhir/Claim?patient.identifier=M9 "
+        "or /fhir/Claim/M5678/_history; member SYNM00042 returned HTTP 503"
+    )
+    for value in ("M1234", "M9", "M5678", "SYNM00042"):
+        assert value not in text
+    assert "503" in text
