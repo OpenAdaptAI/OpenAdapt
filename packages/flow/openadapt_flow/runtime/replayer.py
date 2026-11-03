@@ -1330,6 +1330,7 @@ class Replayer:
                 raise ValueError("approval_gate must be an approval_mode ApprovalGate")
         self.approval_gate = approval_gate
         self._approval_report: Optional[RunReport] = None
+        self._approval_form_step_id: Optional[str] = None
         self._approval_run_dir: Optional[Path] = None
         self._approval_refusal: Optional[str] = None
         self._qualification_fault_mutations: list[FaultMutationReceipt] = []
@@ -12780,6 +12781,7 @@ class Replayer:
 
         gate = self.approval_gate
         assert gate is not None
+        self._approval_form_step_id = step.id
         report = self._approval_report
         run_dir = self._approval_run_dir
 
@@ -12900,9 +12902,54 @@ class Replayer:
         from openadapt_flow.approval_mode.form_state import capture_form_state
 
         try:
-            return capture_form_state(self.backend, self.vision, frame_png)
+            return capture_form_state(
+                self.backend,
+                self.vision,
+                frame_png,
+                self._approval_form_regions(frame_png),
+            )
         except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
             return None
+
+    #: Height of the row read around each resolved field for a screen form
+    #: state, in frame pixels.
+    _APPROVAL_FORM_ROW_PX = 48
+
+    def _approval_form_regions(
+        self, frame_png: Optional[bytes]
+    ) -> Optional[list[tuple[int, int, int, int]]]:
+        """The rows of this item's fields, for a screen-text form state.
+
+        Every step this run has already resolved before the save is a field
+        the item filled or a control it used; its row, across the frame, is
+        where an edit would show. The save step itself is left out, so the
+        approval request (taken before the save resolves) and the recheck
+        after the answer read the same rows. None, and the whole screen is
+        read, when no step has resolved yet.
+        """
+
+        report = self._approval_report
+        if report is None or frame_png is None:
+            return None
+        try:
+            from PIL import Image
+
+            with Image.open(io.BytesIO(frame_png)) as image:
+                width, height = image.size
+        except Exception:  # noqa: BLE001 - no size means the whole screen
+            return None
+        from openadapt_flow.approval_mode.form_state import field_rows
+
+        save_step = self._approval_form_step_id
+        return field_rows(
+            [
+                int(prior.resolution.point[1])
+                for prior in report.results
+                if prior.step_id != save_step and prior.resolution is not None
+            ],
+            (width, height),
+            self._APPROVAL_FORM_ROW_PX,
+        )
 
     def _is_qualification_fault_step(self, step: Step) -> bool:
         """Whether ``step`` is the fault step of the fault case this run is.
@@ -12937,6 +12984,7 @@ class Replayer:
         """
 
         gate = self.approval_gate
+        self._approval_form_step_id = step.id
         assert gate is not None
         authorization = self.governed_authorization
         drill_fault_step = self._is_qualification_fault_step(step)

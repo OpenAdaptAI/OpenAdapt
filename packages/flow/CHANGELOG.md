@@ -25,6 +25,8 @@
 
 ### Fixes
 
+- A person's approval of a desktop save is no longer voided by text that changes by itself elsewhere on the screen, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen; it now reads only the rows of the steps the item has already resolved, each row kept apart, so an edited field still stops the save ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
+
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
 - Self-repair can take a stop where the app's own dialog covers the next step's identity band: when the backend proves the covering window belongs to the window the last verified step was in, and the part of the band read still matches the record, the dialog is dismissed after the previous click and the step re-checks its identity in full. Another record behind the dialog stays an identity halt. The runtime lets a backend remember a verified record's window (`record_verified_window`); macOS answers `owned_window_over` from the window's proved sheet ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
