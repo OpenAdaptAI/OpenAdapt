@@ -1481,9 +1481,13 @@ def _token_belongs_to(token: str, value_squashed: str) -> bool:
         return False
     if value_squashed in token:
         return True
-    if token in value_squashed and not _has_digit(token):
-        # A digit token is never dropped for being INSIDE the value: "15"
-        # (a PatNum) sits inside "20150101" (a date) and is its own field.
+    if _has_digit(token):
+        # A digit token is never dropped for being inside the value or merely
+        # similar to it: "15" (a PatNum) sits inside "20150101" (a date) and
+        # "547" is near "15470"; each is its own field. Only the value itself,
+        # read with OCR's confusions ("l5470"), belongs to it.
+        return ocr_canonical(token) == ocr_canonical(value_squashed)
+    if token in value_squashed:
         return True
     ratio = difflib.SequenceMatcher(None, token, value_squashed, autojunk=False).ratio()
     # Same-token-with-OCR-jitter question ("Phi1" ~ "Phil"): the token

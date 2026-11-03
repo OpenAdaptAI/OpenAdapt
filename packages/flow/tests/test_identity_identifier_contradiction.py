@@ -139,3 +139,22 @@ def test_param_mode_keeps_a_short_id_inside_the_example_value() -> None:
 def test_a_repeated_value_still_verifies_the_true_row() -> None:
     band = f"Smith John 25 25 {LABEL} 25 patients found"
     assert _statuses(band, band) == ("verified", "verified")
+
+
+@pytest.mark.parametrize(
+    "recorded,observed",
+    [
+        # Review blocker 3: a PatNum merely similar to the example account
+        # number was dropped from the band by the similarity fallback.
+        ("Price Mark 547 l5470", "Price Mark 548 99999"),
+        ("Price Mark 1547 l5470", "Price Mark 1548 99999"),
+    ],
+)
+def test_param_mode_keeps_a_digit_token_similar_to_the_example(recorded, observed):
+    kwargs = {"params": {"acct": "99999"}, "param_examples": {"acct": "15470"}}
+    plain = I.verify_target_identity(recorded, observed, **kwargs)
+    tmpl = build_identity_template(recorded, param_examples=kwargs["param_examples"])
+    assert tmpl is not None
+    hashed = verify_template_identity(tmpl, observed, **kwargs)
+    assert plain.status != "verified"
+    assert hashed.status != "verified"
