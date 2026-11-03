@@ -920,7 +920,7 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
-    _refuse_rollback_durable(rollback_plan, durable)
+    sealed = _rollback_seal(rollback_plan, durable, Path(run_dir))
     if rollback_plan is not None:
         _require_undo_or_person(
             workflow, rollback_plan, approval_gate, api_only=fresh_session is None
@@ -934,6 +934,15 @@ def _build_and_run_replayer(
             "its audit log, or the run's own user for attribution couldn't be "
             "read before the run, so a stop couldn't be rolled back. Nothing ran."
         )
+    if sealed is not None and before is not None:
+        try:
+            rollback_plan.seal(sealed, before, dict(params))
+        except Exception as exc:  # noqa: BLE001 - unkept state can't be rolled back later
+            raise SystemExit(
+                "REFUSED before the run: rollback is on, but the read from before "
+                f"the run couldn't be kept encrypted ({type(exc).__name__}). "
+                "Nothing ran."
+            )
     report = replayer.run(
         workflow,
         params=params,
@@ -952,6 +961,18 @@ def _build_and_run_replayer(
             else run_id
         ),
     )
+    if sealed is not None and report.success:
+        sealed.clear()
+    if rollback_plan is not None and not report.success and durable:
+        if _paused_for_a_person(Path(run_dir)):
+            # A person resumes the paused run or rolls it back; the read from
+            # before the run waits for either, sealed.
+            print(
+                "Rollback is armed for this paused run. Resume it, or roll it "
+                f"back: openadapt-flow resume {run_dir} --roll-back",
+                file=sys.stderr,
+            )
+            return report
     if rollback_plan is not None and not report.success:
         from openadapt_flow.rollback import ReplayerRunner
 
@@ -989,20 +1010,50 @@ def _build_and_run_replayer(
             run_dir=Path(run_dir),
             bundle_dir=Path(bundle),
             runner=ReplayerRunner(make_compensation_replayer, fresh_session),
+            journal=sealed,
         )
     return report
 
 
-def _refuse_rollback_durable(rollback_plan, durable: bool) -> None:
-    """A resumed run has no first read to roll back to, and a rollback at a
-    pause would leave a resumable run half undone: refuse the pair. (The
-    Standard and Regulated profiles require durable runs.)"""
-    if rollback_plan is not None and durable:
-        raise SystemExit(
-            "REFUSED before the run: rollback is on, and it doesn't run on a "
-            "durable (pausable) run yet, which the Standard and Regulated "
-            "profiles require. Turn one of them off. Nothing ran."
-        )
+def _rollback_seal(rollback_plan, durable: bool, run_dir: Path):
+    """Where the rollback keeps its state for a later process: the read from
+    before the run, encrypted with the deployment's key
+    (``rollback_durable.SealedRollback``). A durable run needs it: the run can
+    pause and be resumed or rolled back later. Without a key, a durable run
+    with rollback is refused; another run keeps its state in memory."""
+    if rollback_plan is None:
+        return None
+    from openadapt_flow import crypto
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    key = crypto.resolve_key(None)
+    if key is None or not hasattr(rollback_plan.reader, "key"):
+        if durable:
+            raise SystemExit(
+                "REFUSED before the run: rollback on a durable (pausable) run "
+                "keeps the read from before the run encrypted until the run is "
+                "resumed or rolled back, and no key is set (OPENADAPT_BUNDLE_KEY). "
+                "Nothing ran."
+            )
+        return None
+    return SealedRollback(run_dir, key)
+
+
+def _paused_for_a_person(run_dir: Path) -> bool:
+    """The durable run paused, and a person can still resume it."""
+    from openadapt_flow import crypto
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+    try:
+        pending = CheckpointStore(run_dir, key=crypto.resolve_key(None)).read_pending()
+    except Exception:  # noqa: BLE001 - an unreadable pause isn't resumable
+        return False
+    if pending is None:
+        return False
+    return not (
+        pending.category == "item_declined"
+        or (pending.category == "item_approval" and pending.status == "rejected")
+    )
 
 
 def _refuse_rollback_unwired(cfg, where: str) -> None:
@@ -4413,6 +4464,8 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     # unset => None => plaintext, unchanged.
     ckpt_key = crypto.resolve_key(None)
     store = CheckpointStore(run_dir, key=ckpt_key)
+    if getattr(args, "roll_back", False):
+        return _cmd_resume_roll_back(args, run_dir, store, ckpt_key)
     pending = store.read_pending()
     if pending is None:
         print(
@@ -4806,6 +4859,11 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         print(f"Resume REFUSED: {refused}")
         return 3
 
+    if report.success and ckpt_key:
+        from openadapt_flow.rollback_durable import SealedRollback
+
+        # The run finished: its sealed rollback state has nothing left to do.
+        SealedRollback(run_dir, ckpt_key).clear()
     report_md = render_run_report(run_dir)
     execution_outcome = getattr(report, "execution_outcome", None)
     outcome = execution_outcome or ("success" if report.success else "FAILED")
@@ -4821,6 +4879,155 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
+
+
+def _cmd_resume_roll_back(
+    args: argparse.Namespace, run_dir: Path, store, ckpt_key: Optional[str]
+) -> int:
+    """Roll back a paused durable run, or a rollback a crash interrupted, from
+    the sealed state (docs/ROLLBACK.md, Durable runs). Afterwards the run is
+    never resumed."""
+    from openadapt_flow.after_stop import UndoNotOffered, _load_report
+    from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.rollback import (
+        ReplayerRunner,
+        plan_from_deployment,
+        rollback_lines,
+        screen_fresh_session,
+        web_fresh_session,
+    )
+    from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+    if ckpt_key is None:
+        print(
+            "Roll back REFUSED: the rollback state is encrypted with the "
+            "deployment's key (OPENADAPT_BUNDLE_KEY), which isn't set. Nothing ran."
+        )
+        return 3
+    sealed = SealedRollback(run_dir, ckpt_key)
+    try:
+        armed = sealed.load_armed()
+        after_stop = sealed.load_stop()
+        restarted = sealed.started_steps()
+        report, _digest = _load_report(run_dir)
+    except (SealedStateError, UndoNotOffered) as exc:
+        print(f"Roll back REFUSED: {exc}. Nothing ran.")
+        return 3
+    if armed is None:
+        print(
+            f"Roll back REFUSED: {run_dir} holds no rollback state (rollback "
+            "wasn't on for this run, or it finished). Nothing ran."
+        )
+        return 3
+    if report.success:
+        print("Nothing to roll back: the run finished.")
+        return 0
+    manifest = store.read_manifest()
+    bundle = Path(manifest.bundle_dir) if manifest is not None else None
+    if bundle is None:
+        print("Roll back REFUSED: the run's manifest names no bundle. Nothing ran.")
+        return 3
+    try:
+        workflow = Workflow.load(bundle, key=ckpt_key)
+    except Exception:  # noqa: BLE001 - never echo a bundle's contents
+        print(
+            "Roll back REFUSED: the run's workflow bundle could not be loaded "
+            f"safely. {_SAFE_BUNDLE_LOAD_GUIDANCE} Nothing ran."
+        )
+        return 3
+    cfg, effect_verifier, api_actuator, _durable, allow_egress = _deployment_runtime(
+        args, params=dict(armed["params"])
+    )
+    plan = plan_from_deployment(cfg, effect_verifier)
+    if plan is None:
+        print("Roll back REFUSED: rollback is off in this deployment. Nothing ran.")
+        return 3
+    before = plan.restore(armed)
+    if before is None:
+        print(
+            "Roll back REFUSED: the run's own user or its audit log as it was "
+            "before the run can't be rebuilt from the sealed state. Nothing ran."
+        )
+        return 3
+    backend_cfg = _resolve_backend_config(args, cfg, workflow)
+
+    def roll_back_on(backend, fresh_session) -> "RunReport":
+        def make_replayer():
+            return _configured_replayer(
+                backend,
+                workflow=workflow,
+                allow_egress=allow_egress,
+                effect_verifier=effect_verifier,
+                api_actuator=api_actuator,
+                durable=False,
+                use_structural=True,
+                pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+                runtime_config=cfg.runtime,
+            )
+
+        return plan.finish(
+            report,
+            workflow,
+            before=before,
+            run_dir=run_dir,
+            bundle_dir=bundle,
+            runner=ReplayerRunner(make_replayer, fresh_session),
+            journal=sealed,
+            after_stop=after_stop,
+            restarted=restarted,
+        )
+
+    if _normalize_kind(backend_cfg.kind) == "web":
+        url = args.url or cfg.backend.url
+        if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
+            # The operator's own signed-in browser is never reset: only an
+            # API-only compensation runs there.
+            with _attached_web_page(backend_cfg, url=url, workflow=workflow) as page:
+                report = roll_back_on(build_backend(backend_cfg, page=page), None)
+        else:
+            from playwright.sync_api import sync_playwright
+
+            from openadapt_flow._browser_setup import launch_chromium
+
+            if url is None:
+                raise SystemExit(
+                    "roll back needs the target app URL — pass --url or set "
+                    "backend.url in --config."
+                )
+            with sync_playwright() as p:
+                browser = launch_chromium(
+                    p.chromium, headless=not (args.headed or cfg.backend.headed)
+                )
+                page = browser.new_page(viewport=_VIEWPORT)
+                page.goto(url)
+                try:
+                    report = roll_back_on(
+                        build_backend(backend_cfg, page=page),
+                        web_fresh_session(page, url),
+                    )
+                finally:
+                    browser.close()
+    else:
+        try:
+            backend = build_backend(backend_cfg)
+        except ValueError as e:
+            raise SystemExit(str(e))
+        try:
+            report = roll_back_on(
+                backend,
+                screen_fresh_session(
+                    backend, workflow, bundle_dir=bundle, run_dir=run_dir
+                ),
+            )
+        finally:
+            close = getattr(backend, "close", None)
+            if callable(close):
+                close()
+    for line in rollback_lines(report):
+        print(line)
+    status = report.rollback.status if report.rollback is not None else None
+    return 0 if status in ("rolled_back", "nothing_landed") else 1
 
 
 def _approver_signer(args: argparse.Namespace, *, method: str) -> Any:
@@ -9810,6 +10017,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target app URL to rebuild a live backend (default: backend.url)",
     )
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
+    p.add_argument(
+        "--roll-back",
+        action="store_true",
+        help=(
+            "Instead of resuming, roll the run back with its approved "
+            "compensations and prove the store matches the read from before "
+            "the run; also continues a rollback a crash interrupted"
+        ),
+    )
     p.add_argument(
         "--require-approval",
         action="store_true",

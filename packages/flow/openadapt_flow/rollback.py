@@ -466,6 +466,9 @@ def roll_back(
     attributor: Optional[Attributor] = None,
     allow_delete: bool = False,
     exclusive: bool = False,
+    journal: Any = None,
+    after_stop: Optional[Snapshot] = None,
+    restarted: frozenset[str] = frozenset(),
 ) -> Optional[RollbackRecord]:
     """Undo what a stopped run left, then prove the run's changes are gone.
 
@@ -492,6 +495,14 @@ def roll_back(
     compensation; those end as ``not_rolled_back`` with the reason.
     ``assume_stopped`` treats a finished run as stopped there (``rollback
     qualify`` stops runs on purpose).
+
+    ``journal`` (``rollback_durable.SealedRollback``) keeps the read after
+    the stop and which compensations started, so a rollback a crash
+    interrupted can run again. That later attempt passes the first attempt's
+    stop read as ``after_stop`` and the steps it started as ``restarted``:
+    the run's changes are judged by that read, the store must since have
+    changed only in the run's own rows, and each restarted step is
+    compensated only when a fresh read shows its effect still there.
     """
     if report.success and not assume_stopped:
         return None
@@ -532,10 +543,21 @@ def roll_back(
             "is compared and no compensation runs",
         )
     record.before_sha256 = snapshot_sha256(before)
-    try:
-        after_stop = reader.read(before=before)
-    except StateUnreadable as exc:
-        return finish("not_rolled_back", f"after the stop, {exc}; nothing ran")
+    resumed = after_stop is not None
+    if after_stop is None:
+        try:
+            after_stop = reader.read(before=before)
+        except StateUnreadable as exc:
+            return finish("not_rolled_back", f"after the stop, {exc}; nothing ran")
+        if journal is not None:
+            try:
+                journal.stop_read(after_stop)
+            except Exception as exc:  # noqa: BLE001 - no record, no compensation
+                return finish(
+                    "not_rolled_back",
+                    f"the read after the stop couldn't be kept ({type(exc).__name__}); "
+                    "nothing ran",
+                )
     record.after_stop_sha256 = snapshot_sha256(after_stop)
     landed = diff_states(before, after_stop, excuse=_excuser(reader, after_stop))
     params = dict(report.params)
@@ -682,6 +704,34 @@ def roll_back(
     at_stop = {c[:2]: c[3] for c in run_changes}
     #: The latest read: after the stop, then after each compensation.
     last = after_stop
+    if resumed:
+        # An earlier attempt may have undone some of the run's rows since its
+        # read after the stop: nothing else may have changed since.
+        try:
+            last = reader.read(before=before)
+        except StateUnreadable as exc:
+            return finish(
+                "not_rolled_back",
+                f"the read before continuing the rollback failed ({exc}); nothing ran",
+                landed,
+            )
+        since_stop = [
+            c
+            for c in changes(
+                diff_states(after_stop, last, excuse=_excuser(reader, last))
+            )
+            if c[:2] not in run_keys
+        ]
+        others = not_own(diff_states(before, last, excuse=_excuser(reader, last)), last)
+        if since_stop or others:
+            record.conflicts = len(since_stop) + len(others)
+            return finish(
+                "not_rolled_back",
+                f"since the stop, {record.conflicts} row(s) changed that the run "
+                "didn't write or that aren't positively its own; nothing more was "
+                "compensated. Different now: " + landed.describe(),
+                landed,
+            )
 
     #: Rows a compensation took that the run didn't write: born and gone
     #: between two reads, so the final read can't show them.
@@ -738,7 +788,11 @@ def roll_back(
             stop_reason = f"step {entry.step_id}: {step_record.reason}"
             break
         step_record.undo_id = undo.id
-        if entry.attempt_state == "delivery_uncertain" or entry.status != "confirmed":
+        if (
+            entry.attempt_state == "delivery_uncertain"
+            or entry.status != "confirmed"
+            or entry.step_id in restarted
+        ):
             presence, why = fresh_presence(
                 entry,
                 undo,
@@ -791,6 +845,15 @@ def roll_back(
         # From here the store may change: the run can't be resumed.
         (run_dir / COMPENSATED_MARKER).touch()
         try:
+            if journal is not None:
+                journal.step(entry.step_id, "started")
+        except Exception as exc:  # noqa: BLE001 - no record, no compensation
+            step_record.reason = (
+                f"the rollback journal couldn't be written ({type(exc).__name__})"
+            )
+            stop_reason = f"step {entry.step_id}: {step_record.reason}"
+            break
+        try:
             undo_report = runner.run(
                 undo_workflow(workflow, undo),
                 bundle_dir=bundle_dir,
@@ -815,6 +878,11 @@ def roll_back(
             break
         step_record.decision = "compensated"
         step_record.reason = judged
+        if journal is not None:
+            try:
+                journal.step(entry.step_id, "compensated")
+            except Exception:  # noqa: BLE001 - "started" already makes a rerun re-read
+                pass
         if kind == "void" and undo.locate is not None:
             located = str(undo_params.get(undo.locate.param, ""))
             retained |= {(table, undo.locate.field, located) for table in undo.retains}
@@ -1257,6 +1325,35 @@ class RollbackPlan:
         except StateUnreadable:
             return None
 
+    def seal(self, sealed: Any, before: Snapshot, params: dict[str, Any]) -> None:
+        """Keep the read from before the run, encrypted, for a rollback in a
+        later process (``rollback_durable.SealedRollback``)."""
+        sealed.save_armed(
+            before=before,
+            reader_key=self.reader.key,  # type: ignore[attr-defined]
+            audit_before=(
+                self.attributor._before if self.attributor is not None else None
+            ),
+            params=dict(params),
+        )
+
+    def restore(self, armed: dict[str, Any]) -> Optional[Snapshot]:
+        """The read from before the run, from sealed state (``seal``), with the
+        reader's row digests and the audit log as they were then; None when
+        attribution can't be rebuilt from it."""
+        self.reader.key = armed["reader_key"]  # type: ignore[attr-defined]
+        if self.attribution is not None:
+            self.attributor = Attributor.from_spec(
+                self.attribution, armed["params"], self.audit_read
+            )
+            if self.attributor is None:
+                return None
+            self.attributor._before = armed["audit_before"]
+            if self.attribution.kind == "audit_read" and armed["audit_before"] is None:
+                return None
+        before: Snapshot = armed["before"]
+        return before
+
     def finish(
         self,
         report: RunReport,
@@ -1266,6 +1363,9 @@ class RollbackPlan:
         run_dir: Path,
         bundle_dir: Path,
         runner: CompensationRunner,
+        journal: Any = None,
+        after_stop: Optional[Snapshot] = None,
+        restarted: frozenset[str] = frozenset(),
     ) -> RunReport:
         record = roll_back(
             report,
@@ -1279,6 +1379,9 @@ class RollbackPlan:
             attributor=self.attributor,
             allow_delete=self.allow_delete,
             exclusive=self.exclusive,
+            journal=journal,
+            after_stop=after_stop,
+            restarted=restarted,
         )
         return apply_rollback(report, workflow, record, run_dir)
 

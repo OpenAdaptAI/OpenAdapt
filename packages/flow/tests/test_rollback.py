@@ -1662,13 +1662,21 @@ def test_one_logged_insert_never_vouches_for_two_rows(tmp_path):
     ).fetchone() == (1,)
 
 
-def test_rollback_refuses_a_durable_run():
-    from openadapt_flow.__main__ import _refuse_rollback_durable
+def test_a_durable_run_with_rollback_needs_a_key_to_seal_its_state(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow.__main__ import _rollback_seal
+    from openadapt_flow.rollback_durable import SealedRollback
 
-    with pytest.raises(SystemExit, match="durable"):
-        _refuse_rollback_durable(object(), True)
-    _refuse_rollback_durable(None, True)
-    _refuse_rollback_durable(object(), False)
+    plan = RollbackPlan(DatabaseReader(dialect="sqlite"))
+    monkeypatch.delenv("OPENADAPT_BUNDLE_KEY", raising=False)
+    with pytest.raises(SystemExit, match="OPENADAPT_BUNDLE_KEY"):
+        _rollback_seal(plan, True, tmp_path)
+    # Another run keeps its state in memory.
+    assert _rollback_seal(plan, False, tmp_path) is None
+    assert _rollback_seal(None, True, tmp_path) is None
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", "rollback-test-passphrase")
+    assert isinstance(_rollback_seal(plan, True, tmp_path), SealedRollback)
 
 
 def test_a_step_with_no_declared_effect_is_judged_by_the_reads_and_the_log(tmp_path):
@@ -2109,3 +2117,207 @@ def test_a_compensation_the_app_reports_done_but_never_wrote_is_not_a_rollback(
     assert conn.execute(
         "SELECT COUNT(*) FROM patients WHERE name = 'Ada Synthetic'"
     ).fetchone() == (1,)
+
+
+# ---------------------------------------------------------------------------
+# Durable runs and a rollback a crash interrupted (#1699)
+# ---------------------------------------------------------------------------
+
+_SEAL_KEY = "rollback-test-passphrase"
+
+
+def test_sealed_state_round_trips_only_with_its_key(tmp_path):
+    import stat
+
+    from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    reader = DatabaseReader(dialect="sqlite", read_config={"sqlite_database": str(db)})
+    before = reader.read()
+    sealed = SealedRollback(tmp_path / "run", _SEAL_KEY)
+    assert sealed.load_armed() is None and sealed.load_stop() is None
+    sealed.save_armed(
+        before=before,
+        reader_key=reader.key,
+        audit_before=[{"actor": "bot"}],
+        params={"name": "Ada Synthetic"},
+    )
+    armed_file = tmp_path / "run" / "rollback" / "armed.json.enc"
+    assert stat.S_IMODE(armed_file.stat().st_mode) == 0o600
+    # Nothing readable on disk: no names, no row digests in the clear.
+    assert b"Ada" not in armed_file.read_bytes()
+    armed = sealed.load_armed()
+    assert armed["reader_key"] == reader.key
+    assert armed["params"] == {"name": "Ada Synthetic"}
+    # The same key reads the store the same way: no change.
+    again = DatabaseReader(
+        dialect="sqlite", read_config={"sqlite_database": str(db)}, key=reader.key
+    )
+    assert diff_states(armed["before"], again.read()).empty
+    with pytest.raises(SealedStateError):
+        SealedRollback(tmp_path / "run", "another key").load_armed()
+    sealed.step("create_patient", "started")
+    sealed.step("create_patient", "compensated")
+    assert sealed.started_steps() == {"create_patient"}
+    sealed.clear()
+    assert sealed.load_armed() is None and sealed.started_steps() == frozenset()
+
+
+class _Crash(BaseException):
+    """The process dies: nothing in roll_back catches it."""
+
+
+def test_a_rollback_a_crash_interrupted_continues_from_the_sealed_state(tmp_path):
+    from openadapt_flow.after_stop import records_reader
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    bundle = tmp_path / "bundle"
+    _clinic_workflow().save(bundle)
+    workflow = Workflow.load(bundle)
+    params = {"name": "Ada Synthetic"}
+
+    def replayer() -> Replayer:
+        return Replayer(
+            ClinicBackend(db, thorough=True, mode="delete"),
+            vision=_vision(),
+            effect_verifier=_sql_verifier(db),
+            poll_interval_s=0.01,
+        )
+
+    def plan() -> RollbackPlan:
+        return RollbackPlan(
+            DatabaseReader(
+                dialect="sqlite",
+                read_config={"sqlite_database": str(db)},
+                allow_tables=["log"],
+            ),
+            read_records=records_reader(_sql_verifier(db)),
+            allow_delete=True,
+            exclusive=True,
+        )
+
+    run_dir = tmp_path / "run"
+    sealed = SealedRollback(run_dir, _SEAL_KEY)
+    first = plan()
+    before = first.arm(params)
+    first.seal(sealed, before, params)
+    report = replayer().run(workflow, bundle_dir=bundle, run_dir=run_dir, params=params)
+    assert not report.success
+
+    class CrashAfterCompensating(ReplayerRunner):
+        def run(self, *args, **kwargs):
+            super().run(*args, **kwargs)
+            raise _Crash()
+
+    with pytest.raises(_Crash):
+        first.finish(
+            report,
+            workflow,
+            before=before,
+            run_dir=run_dir,
+            bundle_dir=bundle,
+            runner=CrashAfterCompensating(replayer, fresh_session=lambda: None),
+            journal=sealed,
+        )
+    assert sealed.started_steps() == {"create_patient"}
+    # A new process: everything comes from the sealed state.
+    later = plan()
+    state = SealedRollback(run_dir, _SEAL_KEY)
+    restored = later.restore(state.load_armed())
+    runner = RecordingRunner()
+    final = later.finish(
+        report,
+        workflow,
+        before=restored,
+        run_dir=run_dir,
+        bundle_dir=bundle,
+        runner=runner,
+        journal=state,
+        after_stop=state.load_stop(),
+        restarted=state.started_steps(),
+    )
+    rollback = final.rollback
+    assert rollback.status == "rolled_back", rollback.reason
+    # The fresh read showed the patient gone: nothing was compensated twice.
+    assert runner.runs == []
+    [step] = rollback.steps
+    assert step.decision == "not_needed" and step.fresh_read == "absent"
+    assert final.transaction_outcome == "ROLLED_BACK"
+
+
+def test_a_continued_rollback_stops_when_someone_else_wrote_since_the_stop(
+    tmp_path,
+):
+    from openadapt_flow.after_stop import records_reader
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    bundle = tmp_path / "bundle"
+    _clinic_workflow().save(bundle)
+    workflow = Workflow.load(bundle)
+    params = {"name": "Ada Synthetic"}
+    reader = DatabaseReader(
+        dialect="sqlite",
+        read_config={"sqlite_database": str(db)},
+        allow_tables=["log"],
+    )
+    plan = RollbackPlan(
+        reader,
+        read_records=records_reader(_sql_verifier(db)),
+        allow_delete=True,
+        exclusive=True,
+    )
+    run_dir = tmp_path / "run"
+    sealed = SealedRollback(run_dir, _SEAL_KEY)
+    before = plan.arm(params)
+    report = Replayer(
+        ClinicBackend(db, thorough=True, mode="delete"),
+        vision=_vision(),
+        effect_verifier=_sql_verifier(db),
+        poll_interval_s=0.01,
+    ).run(workflow, bundle_dir=bundle, run_dir=run_dir, params=params)
+    sealed.stop_read(reader.read(before=before))
+    conn = sqlite3.connect(db)
+    conn.execute("INSERT INTO notes (patient_id, body) VALUES (1, 'a new note')")
+    conn.commit()
+    conn.close()
+    runner = RecordingRunner()
+    final = plan.finish(
+        report,
+        workflow,
+        before=before,
+        run_dir=run_dir,
+        bundle_dir=bundle,
+        runner=runner,
+        journal=sealed,
+        after_stop=sealed.load_stop(),
+    )
+    assert final.rollback.status == "not_rolled_back"
+    assert "since the stop" in final.rollback.reason
+    assert runner.runs == []
+    assert final.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_durable_pause_waits_for_a_person(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.runtime.durable import checkpoint
+
+    seen: list[Any] = []
+
+    def read_pending(self):
+        return seen[0] if seen else None
+
+    monkeypatch.setattr(checkpoint.CheckpointStore, "read_pending", read_pending)
+    assert not cli._paused_for_a_person(tmp_path)
+    seen.append(SimpleNamespace(category="effect_unverified", status="pending"))
+    assert cli._paused_for_a_person(tmp_path)
+    seen[0] = SimpleNamespace(category="item_declined", status="pending")
+    assert not cli._paused_for_a_person(tmp_path)
+    seen[0] = SimpleNamespace(category="item_approval", status="rejected")
+    assert not cli._paused_for_a_person(tmp_path)
