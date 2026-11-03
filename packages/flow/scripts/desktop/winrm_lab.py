@@ -203,13 +203,17 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         self,
         *,
         token: str,
-        python: str = r"C:\Program Files\Python312-arm64\python.exe",
+        python: str = r"C:\Program Files\Python312-arm64\pythonw.exe",
         guest_dir: str = r"C:\oa",
         port: int = 5000,
         wait_s: float = 40.0,
         server_path: Optional[Path] = None,
     ):
         """Deploy and start ``win_agent`` on the desktop with a pinned TLS cert.
+
+        The default interpreter is ``pythonw.exe``: a console window would
+        open over the app under test, take the recorded clicks, and its Quick
+        Edit selection would stall the agent's writes.
 
         Mirrors :meth:`ParallelsVM.launch_agent`: a fresh self-signed cert for
         the guest address is minted here, copied in, and the host copies are
