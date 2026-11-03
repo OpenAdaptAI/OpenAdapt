@@ -2,17 +2,22 @@
 
 The in-tree Patient Notes WinForms app (SQLite ground truth) on the WinRM lab:
 
-1. record the task (search a patient, type a note, Save) and its undo (the
-   same patient, clear the note, Save), through the transport under test;
-2. compile both; the undo becomes the save's approved ``restore``
-   compensation, and a later step that can't run stops the run after the save;
-3. **after the save**: the run stops, then the rollback reads the whole
-   database, starts the compensation from the run's start screen
-   (``rollback.screen_fresh_session``), runs it on the same backend, and
-   proves the database matches the read from before the run;
+1. record the task (search a patient, type over the note, Save) and its
+   undo (the same patient, type the old note back, Save) through the
+   transport under test;
+2. compile both. The undo becomes the save's approved ``restore``
+   compensation (``UndoRestore``): before the save the run keeps the note's
+   value, and the undo types that value back. A later step that can't run
+   stops the run after the save;
+3. **after the save**: the rollback reads the whole database, starts the
+   compensation from the run's start screen (``rollback.screen_fresh_session``),
+   runs it on the same backend, and proves the database matches the read
+   from before the run;
 4. **screen covered**: the same stop, but Notepad covers the app before the
-   compensation: the start check must refuse, nothing is undone, and the run
-   ends ``RECONCILIATION_REQUIRED`` with the note still there.
+   compensation: the run ends ``RECONCILIATION_REQUIRED`` with the note there;
+5. **empty before**: the note was empty before the run. The app reports
+   "Saved" for an empty note but writes nothing, so the restore can't be
+   proven: the run must end ``RECONCILIATION_REQUIRED``, never rolled back.
 
 Every verdict is checked again against the guest's SQLite file. The lab
 database is a test copy only these runs write (``exclusive``).
@@ -51,6 +56,8 @@ APP = rf"{GUEST}\patient_notes.ps1"
 DB = rf"{GUEST}\patients.db"
 SEARCH = "Neil"
 NOTE = "BP 128/82; follow-up in 2 weeks"
+#: The note patient 1 holds before every run; the undo writes it back.
+ORIGINAL = "Allergies reviewed; none known"
 CONTROLS = ("searchBox", "searchButton", "noteBox", "saveButton")
 WIDTH, HEIGHT = 1280, 800
 
@@ -85,7 +92,11 @@ class GuestDatabase:
             conn.close()
 
 
-def _fresh_app(lab: winrm_lab.WinRMLab, *, settle_s: float = 8.0) -> None:
+def _fresh_app(
+    lab: winrm_lab.WinRMLab, *, settle_s: float = 8.0, note: str = ORIGINAL
+) -> None:
+    """A new app process on a reseeded database (with ``note``: patient 1
+    already holds it)."""
     lab.stop_interactive("OAFlowApp")
     lab.stop_interactive("OAFlowForeign")
     lab.run_ps(
@@ -98,6 +109,9 @@ def _fresh_app(lab: winrm_lab.WinRMLab, *, settle_s: float = 8.0) -> None:
         check=False,
     )
     lab.run_ps(f"& '{PY}' '{GUEST}\\pn_db.py' seed --drift none")
+    if note:
+        b64 = base64.b64encode(note.encode("utf-8")).decode("ascii")
+        lab.run_ps(f"& '{PY}' '{GUEST}\\pn_db.py' save 1 {b64}")
     lab.run_ps(
         f"Set-Content -Encoding ascii -Path '{GUEST}\\pn_env.json' "
         '-Value \'{"window": "maximized"}\''
@@ -132,14 +146,17 @@ def _points(agent) -> dict[str, tuple[int, int]]:
 
     points = {}
     for aid in CONTROLS:
-        handle = _locate(agent, StructuralLocator(automation_id=aid))
+        handle = _locate(agent, StructuralLocator(automation_id=aid), timeout_s=120)
         assert handle is not None, f"UIA did not find {aid}"
         points[aid] = (int(handle.point[0]), int(handle.point[1]))
     return points
 
 
 def _open_patient(rec, points) -> None:
+    # Replace whatever the search box holds: a stop leaves the run's search.
     rec.click(*points["searchBox"])
+    rec.press("End")
+    rec.hotkey(["shift"], "Home")
     rec.type_text(SEARCH)
     rec.press("Enter")
     time.sleep(0.8)
@@ -148,12 +165,23 @@ def _open_patient(rec, points) -> None:
     rec.click(*points["noteBox"])
 
 
-def _note_is(value: str, *, timeout_s: float = 20.0):
+def _replace_note(rec, text: str) -> None:
+    """Select the whole note and type over it."""
+    rec.hotkey(["ctrl"], "End")
+    rec.hotkey(["ctrl", "shift"], "Home")
+    rec.type_text(text)
+
+
+def _note_is(value: Any, *, timeout_s: float = 20.0):
     from openadapt_flow.runtime.effects import Effect, EffectKind
+    from openadapt_flow.runtime.effects.effect import ValueExpr
 
     return Effect(
         kind=EffectKind.FIELD_EQUALS,
-        match={"id": 1},
+        match={
+            "first": ValueExpr(literal="Neil"),
+            "last": ValueExpr(literal="Sorenson"),
+        },
         field="note",
         value=value,
         risk="irreversible",
@@ -170,9 +198,11 @@ def build_bundle(run_rec: Path, undo_rec: Path, bundle: Path):
         Postcondition,
         PostconditionKind,
         Step,
+        UndoRestore,
         UndoStep,
         Workflow,
     )
+    from openadapt_flow.runtime.effects.effect import ValueExpr
 
     task = compile_recording(run_rec, bundle / "task", name="patient-notes-rollback")
     undo = compile_recording(undo_rec, bundle / "undo", name="patient-notes-undo")
@@ -180,8 +210,17 @@ def build_bundle(run_rec: Path, undo_rec: Path, bundle: Path):
     save.risk = "irreversible"
     save.effects = [_note_is(NOTE)]
     undo_steps = [s.model_copy(deep=True) for s in undo.steps]
+    # The demonstrated old note becomes the value the run keeps before its save.
+    typed = [
+        s
+        for s in undo_steps
+        if s.action == ActionKind.TYPE
+        and (s.text == ORIGINAL or undo.params.get(s.param or "") == ORIGINAL)
+    ]
+    assert len(typed) == 1, "the undo recording didn't type the old note once"
+    typed[0].text, typed[0].param = None, "undo_note"
     undo_steps[-1].risk = "irreversible"
-    undo_steps[-1].effects = [_note_is("")]
+    undo_steps[-1].effects = [_note_is(ValueExpr(param="undo_note"))]
     # A later step that never shows its result: the run stops after its save.
     stop = Step(
         id="sign_chart",
@@ -201,9 +240,13 @@ def build_bundle(run_rec: Path, undo_rec: Path, bundle: Path):
                 UndoStep(
                     id="undo-note",
                     undoes=save.id,
-                    intent="clear the note the run saved",
+                    intent="write back the note the run replaced",
                     source="demonstration",
                     kind="restore",
+                    restore=UndoRestore(
+                        match={"first": "Neil", "last": "Sorenson"},
+                        fields={"note": "undo_note"},
+                    ),
                     steps=undo_steps,
                 )
             ],
@@ -339,29 +382,37 @@ def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
 
         def task(rec) -> None:
             _open_patient(rec, points)
-            rec.type_text(NOTE)
+            _replace_note(rec, NOTE)
             rec.click(*points["saveButton"])
             time.sleep(1.5)
 
         def undo(rec) -> None:
             _open_patient(rec, points)
-            rec.hotkey(["ctrl"], "End")
-            rec.hotkey(["ctrl", "shift"], "Home")
-            rec.press("Delete")
+            _replace_note(rec, ORIGINAL)
             rec.click(*points["saveButton"])
             time.sleep(1.5)
 
         task_rec = record_desktop_demo(backend, out / "recording-task", task)
-        undo_rec = record_desktop_demo(backend, out / "recording-undo", undo)
         row["recorded"] = {
-            "undo_cleared_note": next(r for r in guest.rows() if r["id"] == 1)["note"]
-            == ""
+            "task_saved_note": next(r for r in guest.rows() if r["id"] == 1)["note"]
+            == NOTE
         }
+        _fresh_app(lab, note=NOTE)
+        points = _points(agent)
+        undo_rec = record_desktop_demo(backend, out / "recording-undo", undo)
+        row["recorded"]["undo_restored_note"] = (
+            next(r for r in guest.rows() if r["id"] == 1)["note"] == ORIGINAL
+        )
+        assert all(row["recorded"].values()), f"a demonstration failed: {row}"
         bundle = out / "bundle"
         workflow = build_bundle(task_rec, undo_rec, bundle)
         cases = {}
-        for name, cover in (("after-save", False), ("screen-covered", True)):
-            _fresh_app(lab)
+        for name, cover, before_note in (
+            ("after-save", False, ORIGINAL),
+            ("screen-covered", True, ORIGINAL),
+            ("empty-before", False, ""),
+        ):
+            _fresh_app(lab, note=before_note)
             _points(agent)
             cases[name] = run_case(
                 name,
@@ -379,6 +430,7 @@ def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
             rdp.close()
         lab.stop_interactive("OAFlowForeign")
     good, covered = cases["after-save"], cases["screen-covered"]
+    empty = cases["empty-before"]
     row["accepted"] = bool(
         good["run_stopped_after_save"]
         and good["rollback_status"] == "rolled_back"
@@ -388,6 +440,10 @@ def run_trial(transport: str, out: Path, row: dict[str, Any]) -> None:
         and covered["rollback_status"] == "not_rolled_back"
         and covered["transaction_outcome"] == "RECONCILIATION_REQUIRED"
         and covered["note_left"]
+        and empty["run_stopped_after_save"]
+        and empty["rollback_status"] == "not_rolled_back"
+        and empty["transaction_outcome"] == "RECONCILIATION_REQUIRED"
+        and empty["note_left"]
     )
     # A rollback that claims success with the note still there.
     row["false_rolled_back"] = any(

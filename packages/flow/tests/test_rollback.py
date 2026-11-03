@@ -330,7 +330,8 @@ def _make_db(path: Path, *, autoinc: bool = False) -> None:
 class ClinicBackend(FakeBackend):
     """Enter creates a patient (and, with ``history``, its history row) and a
     log row, as the bot. Delete undoes it: ``delete`` removes the patient
-    (and its history row when ``thorough``); ``void`` marks it void. F2 is a
+    (and its history row when ``thorough``); ``void`` marks it void; ``noop``
+    reports it done and writes nothing. F2 is a
     later step that fails on screen; with ``colleague`` another user writes
     at that moment: ``note`` adds an unrelated note, ``edit`` changes the
     patient the run just created."""
@@ -504,7 +505,10 @@ class ClinicBackend(FakeBackend):
             if self.during_undo == "wipe_notes":
                 # The app's delete takes a colleague's unrelated note with it.
                 conn.execute("DELETE FROM notes WHERE modified_by = 'nurse'")
-            if row and row[0] is not None:
+            if row and row[0] is not None and self.mode == "noop":
+                # The screen says "Deleted" and nothing was written.
+                pass
+            elif row and row[0] is not None:
                 if self.mode == "void":
                     conn.execute(
                         "UPDATE patients SET status = 'void', modified_by = 'bot' "
@@ -1988,7 +1992,7 @@ def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
     tmp_path, monkeypatch
 ):
     from openadapt_flow import halt_cleanup
-    from openadapt_flow.ir import HaltCleanup
+    from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
     from openadapt_flow.rollback import screen_fresh_session
 
     workflow = _clinic_workflow()
@@ -2002,7 +2006,7 @@ def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
     )
     start = HaltCleanup(
         steps=[],
-        start_state=Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Home"),
+        start_state=Predicate(kind=PredicateKind.TEXT_PRESENT, text="Home"),
         source="declared",
     )
     monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: start)
@@ -2087,3 +2091,21 @@ def test_a_desktop_run_is_armed_with_the_screen_fresh_session(tmp_path, monkeypa
     seen.clear()
     cli._replay_desktop(args, backend_cfg, **common)
     assert seen["rollback_plan"] is None and seen["fresh_session"] is None
+
+
+def test_a_compensation_the_app_reports_done_but_never_wrote_is_not_a_rollback(
+    tmp_path,
+):
+    # The screen shows its success text, but the store is unchanged: the
+    # compensation's own check and the whole-database read both say so.
+    report = _run_clinic(tmp_path, mode="noop")
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back"
+    [step] = rollback.steps
+    assert step.decision == "failed"
+    assert "patients: 1 added" in rollback.reason
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+    conn = sqlite3.connect(tmp_path / "clinic.db")
+    assert conn.execute(
+        "SELECT COUNT(*) FROM patients WHERE name = 'Ada Synthetic'"
+    ).fetchone() == (1,)
