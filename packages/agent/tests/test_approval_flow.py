@@ -91,6 +91,8 @@ def _bridge(
             "web",
             "--effects-kind",
             "rest",
+            "--effects-records-path",
+            "/api/db",
             "--effects-base-url",
             mockmed["base_url"],
         ),

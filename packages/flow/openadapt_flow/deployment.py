@@ -26,7 +26,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping, Optional
+from typing import Any, Callable, Final, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
@@ -2049,6 +2049,40 @@ def build_effect_verifier(
 _PLUGIN_ONLY_FIELDS = ("options", "option_params", "secret_env")
 
 
+#: What these fields held when they still had defaults. Verifier identities
+#: and check digests issued before then hashed these values, so for hashing
+#: only, an unset field still reads as its old value. Never used to read a
+#: store: a read without its own records_path or resource_type is refused.
+LEGACY_HASHED_DEFAULTS: Final[dict[str, str]] = {
+    "records_path": "/api/db",
+    "resource_type": "Observation",
+}
+
+
+def legacy_hash_dump(dumped: dict[str, Any], *, defaults_excluded: bool) -> None:
+    """Make a config dump hash as it did when those fields had defaults.
+
+    ``defaults_excluded``: the dump left defaults out (``exclude_defaults``),
+    so a field holding its old default is dropped; otherwise an unset field
+    takes its old default.
+    """
+
+    for name, legacy in LEGACY_HASHED_DEFAULTS.items():
+        if defaults_excluded:
+            if dumped.get(name) == legacy:
+                dumped.pop(name)
+        elif dumped.get(name) is None:
+            dumped[name] = legacy
+    if defaults_excluded:
+        # Nested reads (the identity path prunes its own nesting).
+        for item in dumped.get("candidates") or []:
+            if isinstance(item, dict):
+                legacy_hash_dump(item, defaults_excluded=True)
+        for item in (dumped.get("surfaces") or {}).values():
+            if isinstance(item, dict):
+                legacy_hash_dump(item, defaults_excluded=True)
+
+
 def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """Serialize ``cfg`` for the verifier identity.
 
@@ -2057,6 +2091,7 @@ def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
     """
 
     def prune(dumped: dict[str, Any]) -> dict[str, Any]:
+        legacy_hash_dump(dumped, defaults_excluded=False)
         for name in _PLUGIN_ONLY_FIELDS:
             if not dumped.get(name):
                 dumped.pop(name, None)

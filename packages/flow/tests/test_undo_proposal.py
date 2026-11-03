@@ -905,7 +905,7 @@ def test_deployment_test_copy_resets_and_reads_every_record(tmp_path, mockmed):
     write_bundle(
         tmp_path / "contract",
         contract_id="undo_copy",
-        oracle={"kind": "rest", "base_url": mockmed},
+        oracle={"kind": "rest", "records_path": "/api/db", "base_url": mockmed},
         channel="api",
         key=Ed25519PrivateKey.generate(),
         issuer_key_id="self_signed:test",

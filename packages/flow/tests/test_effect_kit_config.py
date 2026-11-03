@@ -343,6 +343,7 @@ class TestVerifierCandidates:
             candidates=[
                 EffectsConfig(
                     kind="rest",
+                    records_path="/api/db",
                     base_url="https://oracle.invalid",
                     auth={"bearer_env": "MISSING_ORACLE_TOKEN"},
                 ),

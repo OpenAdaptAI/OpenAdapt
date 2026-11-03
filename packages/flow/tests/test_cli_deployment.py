@@ -109,7 +109,7 @@ def test_build_verifier_none_kind_is_none() -> None:
 
 def test_rest_requires_base_url() -> None:
     with pytest.raises(ValueError, match="base_url"):
-        build_effect_verifier(EffectsConfig(kind="rest"))
+        build_effect_verifier(EffectsConfig(kind="rest", records_path="/api/db"))
 
 
 def test_document_hash_requires_root() -> None:

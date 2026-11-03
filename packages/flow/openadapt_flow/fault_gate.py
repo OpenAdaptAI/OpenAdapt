@@ -374,7 +374,10 @@ def check_digest(cfg: Any) -> str:
     check as production.
     """
 
+    from openadapt_flow.deployment import legacy_hash_dump
+
     verifier = cfg.verifier.model_dump(mode="json", exclude_defaults=True)
+    legacy_hash_dump(verifier, defaults_excluded=True)
     frame = cfg.frame.model_dump(mode="json", by_alias=True) if cfg.frame else None
     payload = {
         "effects": [e.model_dump(mode="json") for e in cfg.effects],

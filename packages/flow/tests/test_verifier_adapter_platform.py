@@ -555,6 +555,6 @@ class TestPluginSeam:
         # first inside build_effect_verifier.
         register_verifier_factory("rest", build_csv_ledger_verifier)
         verifier = build_effect_verifier(
-            EffectsConfig(kind="rest", base_url="http://sor")
+            EffectsConfig(kind="rest", records_path="/api/db", base_url="http://sor")
         )
         assert isinstance(verifier, RestRecordVerifier)

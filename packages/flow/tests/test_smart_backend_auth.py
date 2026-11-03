@@ -545,7 +545,12 @@ def test_bad_smart_config_is_refused(overrides, message):
 def test_smart_backend_needs_fhir_and_no_static_token():
     with pytest.raises(ValueError, match="only to kind fhir"):
         EffectsConfig.model_validate(
-            {"kind": "rest", "base_url": "https://x.test", "smart_backend": _smart()}
+            {
+                "kind": "rest",
+                "records_path": "/api/db",
+                "base_url": "https://x.test",
+                "smart_backend": _smart(),
+            }
         )
     with pytest.raises(ValueError, match="mutually exclusive"):
         EffectsConfig.model_validate(

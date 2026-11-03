@@ -287,6 +287,8 @@ def _drill_run_case_argv(bundle, inputs_path, tmp_path, case_id, *extra):
         str(tmp_path / f"{case_id}-run"),
         "--effects-kind",
         "rest",
+        "--effects-records-path",
+        "/api/db",
         "--effects-base-url",
         "http://sor.local",
         "--backend",

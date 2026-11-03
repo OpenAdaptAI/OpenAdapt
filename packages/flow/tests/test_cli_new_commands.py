@@ -460,6 +460,8 @@ def test_replay_injects_effects_actuator_durable_and_worklist(
             "http://app.example",
             "--effects-kind",
             "rest",
+            "--effects-records-path",
+            "/api/db",
             "--effects-base-url",
             "http://sor",
             "--api-base-url",

@@ -186,6 +186,8 @@ def _run_case_argv(
         str(tmp_path / "case-run"),
         "--effects-kind",
         "rest",
+        "--effects-records-path",
+        "/api/db",
         "--effects-base-url",
         "http://sor.local",
         "--backend",
