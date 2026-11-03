@@ -217,7 +217,8 @@ link to a row the write added, the year, month, week or day of a date the
 task gives, and a generated token (a UUID) are recognized as such. A link
 and a column that holds the row's own key need two demonstrations; the own
 key must sit in the same text in every row (`INV-{key}`), never as a mere
-substring, and the contract checks that text exactly. A date part must differ between the demonstrations: a constant
+substring. Such a column is listed in the question, never checked or
+left open on its own. A date part must differ between the demonstrations: a constant
 that happens to equal the month of every demonstration's date is a
 constant. A copy is taken only through a declared key or a column named
 after its table, and only when the source differs between demonstrations:

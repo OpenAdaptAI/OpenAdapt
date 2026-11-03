@@ -53,8 +53,13 @@ CREATE TABLE bills (id serial PRIMARY KEY, customer_id integer NOT NULL,
   ref text NOT NULL, status integer NOT NULL);
 INSERT INTO customers (name, status) VALUES ('Acme', 5), ('Globex', 5),
   ('Initech', 6), ('Umbrella', 6);
-CREATE TABLE notes (id serial PRIMARY KEY, title text NOT NULL, code text NOT NULL);
-SELECT setval('notes_id_seq', 30);
+CREATE TABLE products (id serial PRIMARY KEY, name text NOT NULL, price integer NOT NULL);
+INSERT INTO products (name, price) VALUES ('Widget', 15), ('Gadget', 25), ('Doohickey', 40);
+CREATE TABLE sales (id serial PRIMARY KEY, product_id integer NOT NULL,
+  ref text NOT NULL, price integer NOT NULL);
+CREATE TABLE jobs (id serial PRIMARY KEY, title text NOT NULL);
+CREATE TABLE job_audit (id serial PRIMARY KEY, job_id integer NOT NULL, ref text NOT NULL);
+SELECT setval('jobs_id_seq', 50);
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO oa_reader;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO oa_reader;
 """
@@ -66,12 +71,21 @@ class Shop(App):
         self.q("INSERT INTO bills (customer_id, ref, status) VALUES (%s,%s,%s)",
                (cid, v["ref"], status))  # fmt: skip
 
-    def note(self, v: dict[str, Any], code: Any = None) -> None:
-        nid = self.one(
-            "INSERT INTO notes (title, code) VALUES (%s, '') RETURNING id",
-            (v["title"],),
+    def sale(self, v: dict[str, Any], price: Any = None) -> None:
+        pid, cost = self.q(
+            "SELECT id, price FROM products WHERE name=%s", (v["product"],)
+        )[0]
+        self.q("INSERT INTO sales (product_id, ref, price) VALUES (%s,%s,%s)",
+               (pid, v["ref"], cost if price is None else price))  # fmt: skip
+
+    def job(self, v: dict[str, Any]) -> None:
+        jid = self.one(
+            "INSERT INTO jobs (title) VALUES (%s) RETURNING id", (v["title"],)
         )
-        self.q("UPDATE notes SET code=%s WHERE id=%s", (code or f"NT-{nid}", nid))
+        aid = self.one(
+            "INSERT INTO job_audit (job_id, ref) VALUES (%s, '') RETURNING id", (jid,)
+        )
+        self.q("UPDATE job_audit SET ref=%s WHERE id=%s", (f"AUD-{aid}", aid))
 
     def po(self, v: dict[str, Any]) -> None:
         oid = self.one(
@@ -119,7 +133,8 @@ INVOICE = [
     {"customer": "Globex", "note": None, "tag": "q4", "due": "2026-11-20"},  # id 4
 ]
 BILL = [{"customer": "Acme", "ref": "B-1"}, {"customer": "Globex", "ref": "B-2"}]
-NOTE = [{"title": "Kickoff"}, {"title": "Review"}]
+SALE = [{"product": "Widget", "ref": "S-1"}, {"product": "Gadget", "ref": "S-2"}]
+JOB = [{"title": "Kickoff"}, {"title": "Review"}]
 TASK = [
     {"project": "Apollo", "title": "Kickoff"},
     {"project": "Gemini", "title": "Review"},
@@ -134,8 +149,10 @@ KINDS = {
          "examples": [{"values": v} for v in INVOICE]},
         {"kind": "create_bill", "parameters": ["customer", "ref"],
          "examples": [{"values": v} for v in BILL]},
-        {"kind": "create_note", "parameters": ["title"],
-         "examples": [{"values": v} for v in NOTE]},
+        {"kind": "create_sale", "parameters": ["product", "ref"],
+         "examples": [{"values": v} for v in SALE]},
+        {"kind": "create_job", "parameters": ["title"],
+         "examples": [{"values": v} for v in JOB]},
         {"kind": "create_task", "parameters": ["project", "title"],
          "examples": [{"values": v} for v in TASK]},
     ]
@@ -182,8 +199,10 @@ def shop(pg: Any) -> dict[str, Any]:
         demo("create_invoice", v, lambda v=v: app.invoice(v))
     for v in BILL:
         demo("create_bill", v, lambda v=v: app.bill(v))
-    for v in NOTE:
-        demo("create_note", v, lambda v=v: app.note(v))
+    for v in SALE:
+        demo("create_sale", v, lambda v=v: app.sale(v))
+    for v in JOB:
+        demo("create_job", v, lambda v=v: app.job(v))
     for v in TASK:
         demo("create_task", v, lambda v=v: app.task(v))
     argv = ["propose", *common, "--kinds", str(work / "kinds.yaml"), "--demos", str(work / "demos"),
@@ -192,10 +211,20 @@ def shop(pg: Any) -> dict[str, Any]:
     first = json.loads((work / "out" / "report.json").read_text())
     questions = (work / "out" / "QUESTIONS.md").read_text()
     answers = {q["key"]: q["proposal"] for q in first["questions"]}
+    # The person names the two columns that hold a row's own key, or what
+    # reads like one (a sale's price, an audit row's reference).
+    bk = answers["bookkeeping"]
+    bk = json.loads(json.dumps(bk)) if isinstance(bk, dict) else {"accept": True}
+    named = bk.setdefault("unchecked", {})
+    for table, col in (("sales", "price"), ("job_audit", "ref")):
+        if col not in named.setdefault(table, []):
+            named[table].append(col)
+    answers["bookkeeping"] = bk
     (work / "answers.yaml").write_text(yaml.safe_dump(answers))
     assert gen.main([*argv, "--answers", str(work / "answers.yaml")]) == 0
     report = json.loads((work / "out" / "report.json").read_text())
-    return {"app": app, "out": work / "out", "report": report, "questions": questions}
+    return {"app": app, "out": work / "out", "report": report, "first": first,
+            "questions": questions}  # fmt: skip
 
 
 def _run(
@@ -288,16 +317,29 @@ def test_a_constant_equal_to_its_source_in_every_demo_is_asked(
     assert not out.startswith("CONFIRMED"), out
 
 
-def test_the_own_key_template_is_checked(shop: dict[str, Any]) -> None:
-    """``code`` holds the row's own key as ``NT-{key}`` in both
-    demonstrations: the contract checks that text exactly."""
+# -- review round 3 ------------------------------------------------------------
 
-    v = {"title": "Retro"}
-    out = _run(shop, "create_note", v, lambda: shop["app"].note(v))
+
+def test_a_value_that_reads_as_the_own_key_is_asked_never_templated(
+    shop: dict[str, Any],
+) -> None:
+    """Sales 1 and 2 copied prices 15 and 25, which read as ``{key}5``. The
+    column is listed in the question; nothing checks that template, so the
+    app's real price for sale 3 (40) passes once the person names it."""
+
+    assert "sales: " in shop["questions"] and "price" in shop["questions"]
+    refused_first = shop["first"]["kinds"]["create_sale"]["refused"]
+    assert any("sales.price" in r for r in refused_first), refused_first
+    v = {"product": "Doohickey", "ref": "S-3"}
+    out = _run(shop, "create_sale", v, lambda: shop["app"].sale(v))
     assert out.startswith("CONFIRMED"), out
-    v = {"title": "Plan"}
-    wrong = _run(shop, "create_note", v, lambda: shop["app"].note(v, code="NT-999"))
-    assert not wrong.startswith("CONFIRMED"), wrong
-    v = {"title": "Plan B"}
-    case = _run(shop, "create_note", v, lambda: shop["app"].note(v, code="nt-0"))
-    assert not case.startswith("CONFIRMED"), case
+
+
+def test_an_audit_row_holding_its_own_key_can_be_named(shop: dict[str, Any]) -> None:
+    """The app adds an audit row ``AUD-{id}`` beside each job. The question
+    lists it, the answer names it, and a correct job is CONFIRMED."""
+
+    assert "job_audit" in shop["questions"]
+    v = {"title": "Retro"}
+    out = _run(shop, "create_job", v, lambda: shop["app"].job(v))
+    assert out.startswith("CONFIRMED"), out
