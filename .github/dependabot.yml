@@ -105,7 +105,11 @@ updates:
       - dependency-name: "tauri"
       - dependency-name: "tauri-*"
   - package-ecosystem: "github-actions"
-    directory: "/"
+    # The workflows, and the local composite actions they call (one group,
+    # so a pin moves in both places in the same PR).
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5

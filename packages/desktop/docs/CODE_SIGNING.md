@@ -39,9 +39,10 @@ fails the build.
   The installed-app smoke executes bundled Flow after Tauri's final
   signing pass; a bundle that is signed but cannot load its engine fails.
 
-All secrets below live in the protected **`native-release`** GitHub Actions
-environment (Settings → Environments → `native-release` → *Environment secrets*),
-or via the CLI:
+Release secrets live in the protected **`native-release`** GitHub Actions
+environment (Settings → Environments → `native-release` → *Environment secrets*);
+the SignPath test-signing set lives in **`signpath-test`** instead (section 2).
+Set them in the UI or with the CLI:
 
 ```bash
 gh secret set SIGNPATH_API_TOKEN --env native-release --repo OpenAdaptAI/OpenAdapt
@@ -109,52 +110,54 @@ In SignPath:
    `release-signing` (production certificate, issued after SignPath reviews a
    test-signed build). Their pipeline policies are
    `.signpath/policies/OpenAdapt/test-signing.yml` and `release-signing.yml` at
-   the monorepo root: GitHub-hosted runners only, no re-runs. The workflow itself runs only
-   from `main`, and the `native-release` environment deploys only from `main`.
-4. Create an API token for a user with submitter rights on that policy.
+   the monorepo root: GitHub-hosted runners only, no re-runs. Both workflows
+   that submit requests run only from `main`, and their environments deploy
+   only from `main`.
+4. Create an API token for a user with submitter rights on the policy.
 
-Then add these four secrets to the `native-release` environment of
-OpenAdaptAI/OpenAdapt (all four, or none):
+Each policy has its own GitHub environment. Every set below is all four
+secrets, or none:
 
-| Secret | Value |
-| --- | --- |
-| `SIGNPATH_API_TOKEN` | the submitter's API token |
-| `SIGNPATH_ORGANIZATION_ID` | the SignPath organization ID |
-| `SIGNPATH_PROJECT_SLUG` | `OpenAdapt` |
-| `SIGNPATH_SIGNING_POLICY_SLUG` | `test-signing` first; `release-signing` once the production certificate is issued |
-
-With `release-signing`, the release's Windows job builds the installers,
-uploads them, submits one signing request with
-`signpath/github-action-submit-signing-request` (pinned by commit), waits for
-it, checks that each returned installer carries a valid Authenticode signature,
-and smoke-tests the signed files: the MSI install must yield a signed
-`openadapt-desktop.exe`, and the NSIS setup must be signed itself. It publishes
-them as `authenticode`. Without the secrets it publishes the same installers as
-`unsigned`.
-
-With `test-signing`, releases do not use SignPath at all: they publish Windows
-as `unsigned`, exactly as with no secrets. A test certificate is not trusted, so
-its signature never ships and is never labelled `authenticode`. Any other
-policy slug fails the release.
+| Secret | `signpath-test` | `native-release` |
+| --- | --- | --- |
+| `SIGNPATH_API_TOKEN` | the submitter's API token | the submitter's API token |
+| `SIGNPATH_ORGANIZATION_ID` | the SignPath organization ID | the SignPath organization ID |
+| `SIGNPATH_PROJECT_SLUG` | `OpenAdapt` | `OpenAdapt` |
+| `SIGNPATH_SIGNING_POLICY_SLUG` | `test-signing` | `release-signing`, once the production certificate is issued |
 
 ### Test-sign a build for SignPath's review
 
 SignPath issues the production certificate after it reviews a test-signed
 build. To make one, run **Actions → SignPath test-sign → Run workflow** on
 `main` (`gh workflow run signpath-test-sign.yml --ref main`). The workflow
-(`.github/workflows/signpath-test-sign.yml`) builds the installers the same way
-the release does, refuses to run unless the policy secret is `test-signing`,
-submits one signing request, and checks that every returned file, including the
-program files inside the MSI, carries an Authenticode signature. The test
-certificate is not trusted, so the status is `NotTrusted` or `UnknownError`
-rather than `Valid`. The run summary lists the signing request and each file's
-status and signer. The signed files are kept as a workflow artifact for seven
-days. The workflow publishes nothing. SignPath refuses re-runs, so dispatch a
-new run instead of re-running one.
+(`.github/workflows/signpath-test-sign.yml`) runs in the `signpath-test`
+environment and refuses unless the policy secret is exactly `test-signing`. It
+builds the installers with the same action as the release
+(`.github/actions/build-desktop-windows-installers`), submits one signing
+request, and checks that every returned file, including the program files
+inside the MSI, carries an Authenticode signature. The test certificate is not
+trusted, so the status is `NotTrusted` or `UnknownError` rather than `Valid`.
+The run summary links the signing request and lists each file's status and
+signer. The signed files are kept as a workflow artifact for seven days. The
+workflow publishes nothing. SignPath refuses re-runs, so dispatch a new run
+instead of re-running one.
 
-Once SignPath imports the production certificate, set
-`SIGNPATH_SIGNING_POLICY_SLUG` to `release-signing`. The next Desktop release
-then signs Windows through SignPath and publishes it as `authenticode`.
+### Release signing
+
+After SignPath imports the production certificate, add all four secrets to
+the `native-release` environment with `release-signing`. The release's Windows
+job then builds the installers, uploads them, submits one signing request with
+`signpath/github-action-submit-signing-request` (pinned by commit), waits for
+it, checks that each returned installer carries a valid Authenticode signature,
+and smoke-tests the signed files: the MSI install must yield a signed
+`openadapt-desktop.exe`, and the NSIS setup must be signed itself. It publishes
+them as `authenticode`.
+
+With no SignPath secrets in `native-release`, the release publishes the same
+installers as `unsigned`. A partial set, or a complete set with any other
+policy (`test-signing` included), fails the release before it builds: a test
+certificate is not trusted, so its signature must never ship or be labelled
+`authenticode`.
 
 SignPath cannot open an NSIS archive, so the program files the NSIS setup
 installs and its uninstaller are not signed. The MSI is the fully signed

@@ -6,9 +6,9 @@
 # Only GitHub-hosted runners may produce what SignPath signs, and a re-run
 # cannot re-sign an old build. The branch restriction lives in the workflow and
 # its environment: .github/workflows/signpath-test-sign.yml runs only on a
-# dispatch from refs/heads/main, and the native-release environment deploys
-# only from main. Releases never submit to this policy: desktop-release.yml
-# ships Windows unsigned while the policy secret is test-signing.
+# dispatch from refs/heads/main, in the signpath-test environment, which
+# deploys only from main. Releases never submit to this policy: the release
+# preflight (native_signing.py) refuses any policy but release-signing.
 github-build-policies:
   version: '1.0'
   disallow_reruns: true

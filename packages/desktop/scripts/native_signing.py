@@ -14,13 +14,13 @@ The release workflow reads two facts from this script:
 Every credential set is complete-or-absent: a partial set fails the build
 instead of silently falling back to an unsigned artifact.
 
-A SignPath ``test-signing`` policy signs with a self-signed test certificate.
-Such a signature must never ship and must never be labelled ``authenticode``,
-so a release with that policy builds Windows exactly as with no credentials:
-``unsigned``. Only the ``release-signing`` policy enables SignPath in a
-release; any other policy fails the build. Test-signed builds come from
-``.github/workflows/signpath-test-sign.yml``, which publishes nothing and
-checks its policy with ``test-sign-preflight``. With no set, the
+A complete SignPath set enables signing in a release only when its policy is
+exactly ``release-signing``; any other policy, ``test-signing`` included,
+fails the build. A test certificate is not trusted, so its signature must never
+ship or be labelled ``authenticode``. Test-signed builds come from
+``.github/workflows/signpath-test-sign.yml`` in the ``signpath-test``
+environment, which publishes nothing; ``test-sign-preflight`` refuses there
+unless the policy is exactly ``test-signing``. With no set, the
 release ships ``adhoc`` (macOS) or ``unsigned`` (Windows) artifacts, labelled
 as such in every file name, the website manifest, and the release notes.
 ``--require-mode`` still refuses a plan below a required trust mode.
@@ -36,7 +36,8 @@ from pathlib import Path
 
 # SignPath: an API token for a submitter, the organization, and the project and
 # signing policy the request is submitted to. The four are configured together
-# in the ``native-release`` environment, or not at all.
+# in an environment, or not at all: ``native-release`` with release-signing,
+# ``signpath-test`` with test-signing.
 WINDOWS_SIGNPATH_CREDENTIALS = (
     "SIGNPATH_API_TOKEN",
     "SIGNPATH_ORGANIZATION_ID",
@@ -82,19 +83,14 @@ def _complete_or_partial(
         raise ValueError(f"partial {label} signing credentials; missing: {', '.join(missing)}")
 
 
-def _is_test_policy(policy: str) -> bool:
-    """True for the test-signing policy, however it is cased or padded."""
-
-    return policy.strip().lower() == SIGNPATH_TEST_POLICY
-
-
 def windows_plan(environ: Mapping[str, str] | None = None) -> tuple[str, str]:
     """Return ``(mode, method)`` for a Windows release from complete-or-absent secrets.
 
-    A complete set with the test-signing policy plans an ``unsigned`` release,
-    the same as no set: a test certificate never ships. Only the
-    release-signing policy plans ``authenticode`` through SignPath; any other
-    policy is refused rather than guessed at.
+    No set plans ``unsigned``; a partial set fails. A complete set signs
+    through SignPath only when its policy is exactly ``release-signing``. Any
+    other policy, ``test-signing`` included, fails the build: a test
+    certificate must never ship or be labelled ``authenticode``, and a release
+    must not quietly fall back to unsigned when signing was configured.
     """
 
     environment = os.environ if environ is None else environ
@@ -102,12 +98,13 @@ def windows_plan(environ: Mapping[str, str] | None = None) -> tuple[str, str]:
         return "unsigned", "unsigned"
     _complete_or_partial(WINDOWS_SIGNPATH_CREDENTIALS, environment, label="SignPath")
     policy = environment["SIGNPATH_SIGNING_POLICY_SLUG"]
-    if _is_test_policy(policy):
-        return "unsigned", "unsigned"
     if policy != SIGNPATH_RELEASE_POLICY:
         raise ValueError(
-            f"unknown SignPath signing policy {policy!r}; a release signs only with "
-            f"{SIGNPATH_RELEASE_POLICY!r} and ships unsigned with {SIGNPATH_TEST_POLICY!r}"
+            f"SignPath signing policy {policy!r} is not allowed in a release; the "
+            f"native-release environment must name {SIGNPATH_RELEASE_POLICY!r}, or hold no "
+            f"SignPath secrets to ship Windows unsigned. Test-sign with "
+            f"{SIGNPATH_TEST_POLICY!r} through signpath-test-sign.yml in the signpath-test "
+            f"environment."
         )
     return "authenticode", "signpath"
 

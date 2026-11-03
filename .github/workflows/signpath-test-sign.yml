@@ -2,17 +2,18 @@
 #
 # SignPath orders the production certificate after it reviews a test-signed
 # build. This workflow makes that build. It builds the MSI and NSIS installers
-# exactly as desktop-release.yml's build-windows job does (a test keeps the
-# steps identical), submits one signing request with the test-signing policy,
-# checks that every returned file carries an Authenticode signature, and keeps
-# the signed files as a short-lived workflow artifact.
+# with the same local action as desktop-release.yml's build-windows job
+# (.github/actions/build-desktop-windows-installers), submits one signing
+# request with the test-signing policy, checks that every returned file carries
+# an Authenticode signature, and keeps the signed files as a short-lived
+# workflow artifact.
 #
 # It publishes nothing: no release, tag, channel or PyPI upload. A test
-# certificate is not trusted and must never ship; desktop-release.yml ships
-# Windows unsigned while the policy secret is test-signing
-# (scripts/native_signing.py). It runs only on a manual dispatch from main, on
-# a GitHub-hosted runner, in the native-release environment that holds the
-# SignPath secrets. The pipeline policy
+# certificate is not trusted and must never ship; desktop-release.yml refuses
+# any policy but release-signing (scripts/native_signing.py). This workflow
+# runs only on a manual dispatch from main, on a GitHub-hosted runner, in the
+# signpath-test environment, whose SignPath secrets name the test-signing
+# policy; it refuses any other policy. The pipeline policy
 # .signpath/policies/OpenAdapt/test-signing.yml also requires a GitHub-hosted
 # runner and refuses re-runs, so dispatch a new run instead of re-running one.
 #
@@ -39,7 +40,7 @@ jobs:
     name: Test-sign Windows x86_64
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: windows-2022
-    environment: native-release
+    environment: signpath-test
     timeout-minutes: 120
     permissions:
       actions: read
@@ -56,26 +57,14 @@ jobs:
             throw "SignPath test-signing runs only on a dispatch from refs/heads/main (got $env:EVENT on $env:REF)"
           }
 
-      # The steps from here to "Build MSI and NSIS installers" match
-      # build-windows in desktop-release.yml, except that the signing preflight
-      # requires the test-signing policy. tests/test_native_signing.py keeps
-      # them identical.
+      # Checkout and Python match build-windows in desktop-release.yml; the
+      # build itself is the same local action. tests/test_native_signing.py
+      # keeps them identical.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "22"
-          # Release builds restore no cache; see the note at the top.
-          package-manager-cache: false
-
-      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
-        with:
-          toolchain: "1.97.0"
-          targets: x86_64-pc-windows-msvc
 
       - name: Require the complete SignPath set with the test-signing policy
         id: signing
@@ -87,27 +76,8 @@ jobs:
         shell: pwsh
         run: python scripts/native_signing.py test-sign-preflight
 
-      - name: Install locked Tauri CLI
-        run: npm ci --ignore-scripts
-
-      - name: Build engine sidecar for Tauri externalBin
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check uv==0.11.29
-          python scripts/sync_frozen_dependencies.py
-          uv run --locked python scripts/build_frozen_engine.py
-          uv run --locked python scripts/verify_build_artifact.py sidecar
-          uv run --locked python scripts/smoke_test_frozen_flow.py
-          mkdir -p src-tauri/binaries
-          cp dist/openadapt-engine.exe \
-            src-tauri/binaries/openadapt-engine-x86_64-pc-windows-msvc.exe
-
       - name: Build MSI and NSIS installers
-        run: >-
-          npm run tauri build --
-          --bundles msi,nsis
-          --target x86_64-pc-windows-msvc
+        uses: ./.github/actions/build-desktop-windows-installers
 
       - name: Collect the installers for signing
         shell: pwsh
