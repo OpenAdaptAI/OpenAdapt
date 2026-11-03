@@ -173,7 +173,7 @@ def draft_fields(
 def repair_authorization(
     store_root: Path,
     key_dir: Path,
-    task_id: str = "repair.workflow",
+    task_id: str = "dialog-fixture-save",
     monkeypatch: Any = None,
     *,
     purposes: Sequence[str] = ("repair",),

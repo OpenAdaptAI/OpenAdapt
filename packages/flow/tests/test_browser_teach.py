@@ -309,3 +309,37 @@ def test_controls_in_a_named_frame_are_listed_and_found(
         assert page.evaluate("window.hit") == 1
 
     _on(browser, check)
+
+
+def test_taught_writes_are_refused(tmp_path: Path) -> None:
+    """No person's teach authorization binds a write taught in this lane."""
+
+    bridge = bt.BrowserTeachBridge(tmp_path, tmp_path / "files")
+    with pytest.raises(BridgeError, match="taught writes are refused"):
+        bridge.dispatch(
+            "teach_start",
+            {
+                "name": "file_order",
+                "task": "File the order",
+                "url": "http://127.0.0.1:1/",
+                "inputs": {"item": "Widget"},
+                "contract": "order",
+            },
+        )
+    folder = tmp_path / "file_order"
+    folder.mkdir()
+    (folder / bt.PROGRAM_FILE).write_text(
+        json.dumps(
+            {
+                "schema": bt.PROGRAM_SCHEMA,
+                "name": "file_order",
+                "task": "File the order",
+                "inputs": ["item"],
+                "result": {"kind": "write", "contract": "order"},
+            }
+        )
+    )
+    bridge = bt.BrowserTeachBridge(tmp_path, tmp_path / "files")
+    result = bridge.dispatch("taught_file_order", {"inputs": {"item": "Widget"}})
+    assert result["outcome"] == "did_not_run"
+    assert "nothing was written" in result["what_happened"]

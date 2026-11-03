@@ -5240,7 +5240,6 @@ def _cmd_teach_authorization(args: argparse.Namespace) -> int:
     from openadapt_flow.approval_mode.human_attestation import (
         AttestationRefused,
         load_signer,
-        stdio_signer,
     )
 
     def refuse(code: str, message: str) -> int:
@@ -5250,10 +5249,12 @@ def _cmd_teach_authorization(args: argparse.Namespace) -> int:
     if args.teach_auth_cmd == "create":
         try:
             spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
-            expires = (
-                datetime.now(timezone.utc) + timedelta(hours=args.expires_in_hours)
-                if args.expires_in_hours
-                else None
+            if not 0 < args.expires_in_hours <= 24 * 90:
+                return refuse(
+                    "teach_auth_malformed", "--expires-in-hours is from 0 to 2160"
+                )
+            expires = datetime.now(timezone.utc) + timedelta(
+                hours=args.expires_in_hours
             )
             path = ta.create(
                 Path(args.out),
@@ -5279,41 +5280,26 @@ def _cmd_teach_authorization(args: argparse.Namespace) -> int:
         record = ta.record(result)
         print(json.dumps({"ok": True, **record}))
         return 0
-    # sign: the person whose approver key it is.
+    # sign: the person whose approver key file it is, at a terminal.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return refuse(
+            "teach_auth_unsigned",
+            "teach-authorization sign needs a person at an interactive terminal",
+        )
     try:
-        if args.approver_signer == "stdio":
-            signer = stdio_signer(
-                args.approver_public_key or "",
-                key_dir,
-                method="desktop_key",
-                root=root,
-            )
-        else:
-            if not args.approver_key:
-                return refuse(
-                    "teach_auth_unsigned",
-                    "pass --approver-key KEY.pem, or --approver-signer stdio",
-                )
-            if not (sys.stdin.isatty() and sys.stdout.isatty()):
-                return refuse(
-                    "teach_auth_unsigned",
-                    "signing with a key file needs a person at an interactive "
-                    "terminal; Desktop signs with --approver-signer stdio",
-                )
-            signer = load_signer(
-                Path(args.approver_key), key_dir, method="person_key", root=root
-            )
+        signer = load_signer(
+            Path(args.approver_key), key_dir, method="person_key", root=root
+        )
     except AttestationRefused as exc:
         return refuse(exc.code, str(exc))
     preview = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
     if preview.statement is None:
         return refuse(str(preview.reason), preview.detail)
-    if args.approver_signer != "stdio":
-        print(ta.render(preview), file=sys.stderr)
-        reply = input("Sign this teach authorization? Type yes to sign: ")
-        if reply.strip().lower() != "yes":
-            print("Not signed.", file=sys.stderr)
-            return 1
+    print(ta.render(preview))
+    reply = input("Sign this teach authorization? Type yes to sign: ")
+    if reply.strip().lower() != "yes":
+        print("Not signed.")
+        return 1
     try:
         ta.sign(Path(args.statement), signer)
     except (ta.TeachAuthorizationError, AttestationRefused) as exc:
@@ -5321,7 +5307,7 @@ def _cmd_teach_authorization(args: argparse.Namespace) -> int:
     result = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
     if not result.ok:
         return refuse(str(result.reason), result.detail)
-    print(json.dumps({"ok": True, **ta.record(result)}), file=sys.stderr)
+    print(json.dumps({"ok": True, **ta.record(result)}))
     return 0
 
 
@@ -10115,7 +10101,12 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument(
         "--authorizer-public-key", required=True, help="Your approver key (64 hex)"
     )
-    q.add_argument("--expires-in-hours", type=float, default=None)
+    q.add_argument(
+        "--expires-in-hours",
+        type=float,
+        default=24.0,
+        help="How long it may be used to teach (default 24, at most 2160)",
+    )
     q.set_defaults(func=_cmd_teach_authorization)
     for verb, text in (
         ("sign", "Show what the statement allows, then sign it with your approver key"),
@@ -10132,18 +10123,10 @@ def build_parser() -> argparse.ArgumentParser:
         if verb == "sign":
             q.add_argument(
                 "--approver-key",
-                default=None,
+                required=True,
                 help="Your encrypted approver key file (passphrase from "
                 "OPENADAPT_JIT_KEY_PASSPHRASE)",
             )
-            q.add_argument(
-                "--approver-signer",
-                choices=["stdio"],
-                default=None,
-                help="stdio: the process that started this one holds the key "
-                "(Desktop, behind Touch ID) and signs over stdin/stdout",
-            )
-            q.add_argument("--approver-public-key", default=None)
         q.set_defaults(func=_cmd_teach_authorization)
 
     p = sub.add_parser(

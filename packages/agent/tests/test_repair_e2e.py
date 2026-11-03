@@ -96,7 +96,7 @@ class ReplayEngine:
 
 
 def _teach_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """A person on a real approver roster signs that an agent may repair WORKFLOW."""
+    """A person on a real approver roster signs that an agent may repair it."""
 
     from openadapt_flow.teach_authorization_fixture import LocalAuthorizer
 
@@ -105,7 +105,8 @@ def _teach_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     statement = person.issue(
         tmp_path / "teach-authorization",
         {
-            "task": {"task_id": WORKFLOW, "summary": "Repair the save step"},
+            # The program's own workflow name, which approval checks.
+            "task": {"task_id": fx.WORKFLOW_NAME, "summary": "Repair the save step"},
             "purposes": ["repair"],
             "origins": ["http://127.0.0.1:9"],
             "writes": {

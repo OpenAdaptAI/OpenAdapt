@@ -521,13 +521,17 @@ _CONTROL_LABEL = """([x, y]) => {
 
 
 def control_label_at(page: Any, x: int, y: int) -> Optional[str]:
-    """The accessible label of the control under ``(x, y)``, or ``None``."""
+    """The accessible label of the control under ``(x, y)``.
+
+    ``""`` when there is no control or it has no label; ``None`` when the
+    probe failed (the page broke or overrode it), which the guard refuses.
+    """
 
     try:
         label = page.evaluate(_CONTROL_LABEL, [int(x), int(y)])
-    except Exception:  # noqa: BLE001 - no page script, no label
+    except Exception:  # noqa: BLE001 - the probe failed: the label is unknown
         return None
-    return str(label) if label else None
+    return str(label) if label is not None else ""
 
 
 def link_target_at(page: Any, x: int, y: int) -> Optional[dict[str, str]]:
@@ -654,10 +658,17 @@ class TeachGuard:
                 and self.scope.forbidden_controls
             ):
                 at = (op.x, op.y) if op.x is not None and op.y is not None else pointer
-                label = control_label_at(page, at[0], at[1]) if at else None
-                if (
-                    label is not None
-                    and normalize_structured(label) in self.scope.forbidden_controls
+                label = control_label_at(page, at[0], at[1]) if at else ""
+                if label is None:
+                    # Fail closed: a page that breaks the probe could hide a
+                    # forbidden control behind it.
+                    self._raise(
+                        "control_forbidden",
+                        "the clicked control's label could not be read, and the "
+                        "authorization forbids some controls",
+                    )
+                if label and (
+                    normalize_structured(label) in self.scope.forbidden_controls
                 ):
                     self._raise(
                         "control_forbidden",

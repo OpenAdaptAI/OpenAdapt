@@ -660,7 +660,8 @@ class RepairStore:
         """A fix a calling agent demonstrated needs a person's teach authorization.
 
         The provenance names the authorization (purpose ``repair``) the fix
-        was taught under; its statement, kept in this store, must verify
+        was taught under; it must name this workflow as its task, and its
+        statement, kept in this store, must verify
         against the approver roster as it is now (``$OPENADAPT_JIT_KEY_DIR``
         and ``OPENADAPT_APPROVER_ROOT``), and the calling agent may not be the
         signer. Without one the approval is refused.
@@ -686,6 +687,7 @@ class RepairStore:
                 key_dir=key_dir,
                 root=root,
                 purpose="repair",
+                task_id=candidate.workflow_name,
                 not_signed_by=provenance.agent_id,
             )
         except ta.TeachAuthorizationError as exc:

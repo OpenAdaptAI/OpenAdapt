@@ -847,9 +847,12 @@ class TeachBridge:
         task_dir = self.config.cache_dir / task_key
         if not (task_dir / "compile_agent.json").is_file():
             raise BridgeError("unknown task_key")
-        return FirstRunCompiler.load(
+        compiler = FirstRunCompiler.load(
             task_dir, reset=self.config.reset, open_backend=self.config.open_backend
         )
+        # Admission checks the signature under the same roster pin.
+        compiler.teach_authorization = self.config.teach_authorization
+        return compiler
 
     def _status(self, task_key: Any) -> dict[str, Any]:
         compiler = self._load(task_key)

@@ -27,30 +27,31 @@ The signature is an approver attestation over the canonical statement, kept
 beside it as `teach-authorization.json.sig`. Verification uses the approver
 verifier (`approval_mode.human_attestation.refusal`):
 
-- The caller pins the approver root (`--approver-root`, or
-  `OPENADAPT_APPROVER_ROOT`) and the key directory that holds the roster
-  (`--key-dir`, or `OPENADAPT_JIT_KEY_DIR`). Without a pin, nothing verifies.
+- The caller pins the approver root and the key directory that holds the
+  roster. Commands a person runs (`jit admit`, `compile-agent`,
+  `teach-authorization`) take `--approver-root` or `OPENADAPT_APPROVER_ROOT`,
+  and `--key-dir` or `OPENADAPT_JIT_KEY_DIR`; repair approval reads the two
+  environment variables. A
+  server the agent runs (`openadapt-agent serve --teach`, its repair desk)
+  takes them only from the deployment config's `approvers` section
+  (`--config`): its root, key directory and recorded head. Without a pin,
+  nothing verifies.
 - The signer must be on that roster when the check runs, under the
   statement's `authorizer` name, with the statement's `authorizer_public_key`.
   A key that was never added refuses (`teach_auth_unknown_signer`), and so
   does one an approver removed since (`approver remove`). The roster must
   extend every head recorded earlier, so an older roster put back refuses.
-- A changed statement refuses (`teach_auth_bad_signature`). So does a
-  signature from the decision portal's key (`teach_auth_method`): that key
-  signs only answers a person gave on their phone.
+- A changed statement refuses (`teach_auth_bad_signature`). The signature
+  is over its own domain (`openadapt.teach-authorization/v1`), so a signed
+  save approval or roster change never counts as one.
 - The roster never holds an agent: a principal that names an agent or model,
   or a key that holds another role, is not an approver. Admission also
   refuses a statement signed by the agent that recorded the draft.
 
 ## Register a key and sign
 
-On a Mac, Desktop's approver key (behind Touch ID) signs: Desktop runs
-`teach-authorization sign STATEMENT --approver-signer stdio
---approver-public-key HEX` and answers the signing request over stdin, as it
-does for `item-approval`.
-
-Without a Secure Enclave (Windows, Linux, a Mac without Desktop), use an
-encrypted software key file:
+The signer uses an encrypted approver key file, on any operating system;
+no Secure Enclave is needed:
 
 ```bash
 export OPENADAPT_JIT_KEY_PASSPHRASE=...      # never on the command line
@@ -62,32 +63,33 @@ openadapt-flow jit approver add --principal clinic-lead \
 ```
 
 On Windows and Linux, `openadapt-desktop approver-key setup` also creates
-the key file (its passphrase in the OS keychain) and prints the same
-`jit approver` commands.
+such a key file (its passphrase in the OS keychain) and prints the same
+`jit approver` commands. Desktop's Touch ID key on a Mac answers item
+approvals only; it doesn't sign teach authorizations.
 
 Then write and sign the statement:
 
 ```bash
 openadapt-flow teach-authorization create spec.json --out auth/ \
-  --authorizer clinic-lead --authorizer-public-key PUBLIC_KEY_HEX \
-  --expires-in-hours 24
+  --authorizer clinic-lead --authorizer-public-key PUBLIC_KEY_HEX
 openadapt-flow teach-authorization sign auth/ --approver-key clinic-lead.pem \
   --approver-root ROOT_HEX
 openadapt-flow teach-authorization verify auth/ --approver-root ROOT_HEX
 ```
 
-`sign` with a key file shows what the statement allows and needs a person at
-an interactive terminal who types `yes`.
+A statement expires 24 hours after `create` unless `--expires-in-hours`
+says otherwise (at most 90 days). `sign` shows what the statement allows and
+needs a person at an interactive terminal who types `yes`.
 
 ## Where it is required
 
 | Entry point | How it is bound | Without one |
 | --- | --- | --- |
 | JIT capture (`compile_agent(..., teach_authorization=TeachAuthority(...))`) | The capture's scope is bound from the statement; a `teach_scope` may only narrow it. The statement is kept beside the draft, and its digest is in the signed recorder block | Admission refuses (`teach_auth_not_recorded`) |
-| `compile-agent` (`--teach-authorization`, `FirstRunCompiler`, `compile_first_run`, `SkillCache`) | Run 1's scope is the statement's alone; the command's `--expect`, `--on-screen` and `--allow-text` don't widen it | Admission refuses |
+| `compile-agent` (`--teach-authorization`, `FirstRunCompiler`, `compile_first_run`, `SkillCache`) | Run 1's scope is the statement's alone; the command's `--expect`, `--on-screen` and `--allow-text` don't widen it. For `SkillCache`, the statement names `SkillCache.task_id(prompt, params)` | Admission refuses |
 | Teach over MCP (`serve --teach --teach-authorization`; `teach_act`) | Run 1 runs under the statement's scope, under its task id; the agent's declared inputs must be the statement's | Admission (`teach_admit`, `compile-agent admit`) refuses |
-| Browser teach writes (`serve --teach-browser --teach-authorization`) | Run 1 of a write starts only when the statement verifies, names the app's origin and names the write contract as its `record_kind`. The tool keeps a copy, and every run of the tool checks it again | No write tool is taught, and a write tool without one doesn't run. Read-only tasks need none: the lane sends no write |
-| Agent-demonstrated fix (`teach_repair`, `serve --teach-authorization`) | The desk verifies a statement that covers `repair` and names the workflow as its task before the click; the repair store keeps it | The fix is proposed, and `RepairStore.approve` refuses it |
+| Browser teach writes (`serve --teach-browser`, `teach_start` with a contract) | Not bound: this lane has no teach scope guard to bind the statement to | Refused: no write tool is taught, and a write tool taught before doesn't run. The read-only lane sends no write and is unchanged |
+| Agent-demonstrated fix (`teach_repair`, `serve --teach-authorization`) | Before the click, the desk verifies a statement that covers `repair` and names the program's workflow name as its task; the repair store keeps it. Approval checks it again, for that workflow | The fix is proposed, and `RepairStore.approve` refuses it |
 | Self-repair of an agent-taught program (`admit_repair`) | The prior admission's authorization must cover `repair` and verify now; its statement is copied into the repaired bundle | The repair's admission (probe or full) refuses |
 | Airbag handoff (`agent_guard.handoff`) | Not bound: the guarded run 1 runs under the guard's task file, and the handoff can't attach a person's signature to it yet | Admission refuses its draft (`teach_auth_not_recorded`). Teach the task through `compile-agent` or `serve --teach` with an authorization instead |
 
@@ -99,6 +101,20 @@ statement's digest equals the recorded one; the signature verifies against
 the roster now; the task is the draft's; the capture ran under the scope the
 statement binds, and its read-back verified.
 
+## Upgrading
+
+Programs and tools made before teach authorizations carry none, so:
+
+- a JIT draft waiting for admission is refused. Teach it again with an
+  authorization.
+- an admitted JIT program still runs, but a self-repair of it is refused
+  until a person teaches it again with an authorization that covers
+  `repair` and admits it.
+- a write tool taught in browser teach doesn't run.
+- harnesses that teach without one (the benchmarks under
+  `packages/flow/benchmark` that compile an agent's run, and
+  `examples/jit/run_mockmed.py`) end with a draft that admission refuses.
+
 ## Limits
 
 - The approver root comes from the caller: a flag, the environment or a
@@ -107,9 +123,12 @@ statement binds, and its read-back verified.
   approver keys away from the agents they govern, as for approvals.
 - Self-repair of a program a person demonstrated (not a JIT draft) is a
   repair a person reviews; it carries no teach authorization.
-- In the browser-teach lane the statement bounds the origin and the record
-  kind; the writes themselves are bounded by the lane's write contract and
-  its pinned run-1 writes, not by the statement's field values.
+- A statement may be used for any number of teach runs of its task until it
+  expires; its nonce is not spent. Revoking the signer stops new admissions
+  and repairs, not programs already admitted.
+- Forbidden controls are matched by their accessible label, on web pages
+  only; a click whose label can't be read is refused. Keyboard activation of
+  a focused control is not checked against the list.
 - An agent-demonstrated fix is recognized by its provenance, a JSON file in
   the repair store that the store doesn't sign. A process that can write the
   store can strip it, and the approval then asks for no authorization.

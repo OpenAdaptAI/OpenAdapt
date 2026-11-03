@@ -29,6 +29,11 @@ from typing import Any, Iterator, Optional
 import anyio
 import pytest
 
+# Browser teach refuses taught writes: no person's signed teach authorization
+# binds them (docs/TEACH_AUTHORIZATION.md; tests/test_browser_teach.py checks
+# the refusal). These tests return when the lane binds one.
+pytestmark = pytest.mark.skip(reason="browser teach refuses taught writes")
+
 pytest.importorskip("mcp")
 pytest.importorskip("playwright")
 

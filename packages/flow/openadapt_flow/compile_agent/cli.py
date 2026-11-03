@@ -455,6 +455,7 @@ def _cmd_admit(
     if not args.task_dir:
         raise SystemExit("compile-agent admit needs the compiled task directory")
     compiler = FirstRunCompiler.load(args.task_dir)
+    compiler.teach_authorization = _teach_authority(args)
     jit = compiler._jit()
     if jit.admitted:
         _print({"status": "admitted", "detail": "already admitted"}, args.json)

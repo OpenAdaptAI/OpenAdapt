@@ -1236,6 +1236,7 @@ def admit(
     key_dir: Optional[Path] = None,
     require_distinct_reviewer_and_admitter: bool = False,
     approver_root: Optional[str] = None,
+    trust: Any = None,
 ) -> dict[str, Any]:
     """A person admits a DRAFT and the signed admission manifest is written.
 
@@ -1285,7 +1286,7 @@ def admit(
             "principal to admit it"
         )
     canary = _evidence_gates(
-        program, candidate, workflow, digest, key_dir, approver_root
+        program, candidate, workflow, digest, key_dir, approver_root, trust
     )
     assert canary is not None
     return _write_manifest(
@@ -1308,6 +1309,7 @@ def _evidence_gates(
     digest: str,
     key_dir: Optional[Path] = None,
     approver_root: Optional[str] = None,
+    trust: Any = None,
 ) -> Optional[dict[str, Any]]:
     """The checks every admission mode makes: parameters confirmed, a
     passing canary for this digest, independent read-back on every write
@@ -1317,7 +1319,7 @@ def _evidence_gates(
     from openadapt_flow.policy import evaluate_policy, load_policy
 
     teach_authorization_gate(
-        program, candidate, key_dir=key_dir, approver_root=approver_root
+        program, candidate, key_dir=key_dir, approver_root=approver_root, trust=trust
     )
     task_params = _task_params(candidate)
     if task_params and _evidence_at(program / PARAMS_FILE, digest) is None:
@@ -1364,6 +1366,7 @@ def teach_authorization_gate(
     *,
     key_dir: Optional[Path] = None,
     approver_root: Optional[str] = None,
+    trust: Any = None,
 ) -> dict[str, Any]:
     """Every JIT draft needs a person's signed teach authorization.
 
@@ -1378,7 +1381,11 @@ def teach_authorization_gate(
     unpinned root, a changed statement, another task, or the recording agent
     as signer refuses. The capture must also have run under the scope the
     authorization binds, with a verified read-back. Returns the recorded
-    entry.
+    entry. ``trust`` (a
+    :class:`~openadapt_flow.teach_authorization.TeachAuthority`) gives the
+    roster's key directory, root and recorded heads instead, as the process
+    that taught it pinned them (the deployment config's, for a server an
+    agent runs).
 
     Drafts from a path that can't bind an authorization (the airbag
     handoff, ``agent_guard.handoff``) record none, so they are refused here.
@@ -1402,22 +1409,34 @@ def teach_authorization_gate(
             f"(teach_auth_not_recorded).{why}"
         )
     statement = program / TEACH_AUTHORIZATION_DIR / ta.STATEMENT_FILE
+    scope = recorder.get("teach_scope") or {}
     try:
-        trust_dir, root = ta.pinned_trust(keys, approver_root)
+        if trust is not None:
+            trust_dir, root = trust.trust()
+        else:
+            trust_dir, root = ta.pinned_trust(keys, approver_root)
         ta.check_admission(
             recorded,
             statement,
             key_dir=trust_dir,
             root=root,
-            task_id=str((candidate.get("task") or {}).get("task_id") or "") or None,
+            # The task the signed recorder block names.
+            task_id=str((scope.get("scope") or {}).get("task_id") or "") or None,
             not_signed_by=recorder.get("agent_principal_id"),
+            at_least=getattr(trust, "at_least", None),
         )
     except ta.TeachAuthorizationError as exc:
         raise AdmissionError(
             f"an agent-taught draft needs a person's signed teach authorization "
             f"({exc.code}): {exc}"
         ) from exc
-    scope = recorder.get("teach_scope") or {}
+    if (scope.get("scope") or {}).get("task_id") != (candidate.get("task") or {}).get(
+        "task_id"
+    ):
+        raise AdmissionError(
+            "the draft's task is not the one its capture was scoped to "
+            "(teach_auth_task_mismatch)"
+        )
     bound = (scope.get("scope") or {}).get("authorization") or {}
     readback = scope.get("readback") or {}
     if bound.get("sha256") != recorded.get("sha256"):
@@ -1545,6 +1564,7 @@ def admit_with_key(
     key_dir: Optional[Path] = None,
     now: Optional[Any] = None,
     approver_root: Optional[str] = None,
+    trust: Any = None,
 ) -> dict[str, Any]:
     """Admit without a person at a terminal. Returns ``{"outcome": ...}``.
 
@@ -1586,7 +1606,7 @@ def admit_with_key(
     digest = _digest(workflow)
     if principal.kind == "admitter_key":
         canary = _evidence_gates(
-            program, candidate, workflow, digest, keys, approver_root
+            program, candidate, workflow, digest, keys, approver_root, trust
         )
         assert canary is not None
         manifest = _write_manifest(
@@ -1656,7 +1676,9 @@ def admit_with_key(
             f"{len(clean)} clean canaries for this bundle; the policy needs "
             f"{policy.min_clean_canaries}"
         )
-    canary = _evidence_gates(program, candidate, workflow, digest, keys, approver_root)
+    canary = _evidence_gates(
+        program, candidate, workflow, digest, keys, approver_root, trust
+    )
     assert canary is not None
     manifest = _write_manifest(
         program,

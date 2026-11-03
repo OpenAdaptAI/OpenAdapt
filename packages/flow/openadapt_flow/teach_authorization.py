@@ -30,17 +30,19 @@ and the roster must extend every head recorded earlier. So a key that was
 never added, or was removed since (revoked), refuses, and so does a key
 that holds another role or a principal that names an agent or model.
 
-Keys: Desktop's approver key (``desktop_key``; on a Mac it sits behind
-Touch ID and signs over ``--approver-signer stdio``) or a person's encrypted
-software key file (``person_key``; ``openadapt-flow jit keygen``, then an
-approver adds it with ``openadapt-flow jit approver add``). The decision
-portal's key (``portal_key``) signs only phone answers, never this.
+Keys: a person's encrypted approver key file (``openadapt-flow jit keygen``,
+added to the roster with ``openadapt-flow jit approver add``), signed at a
+terminal with ``openadapt-flow teach-authorization sign``. Desktop's Touch ID
+key answers only item approvals, so it doesn't sign these. The attestation's
+``method`` label is not itself signed; what keeps another approval's
+signature from counting here is the separate signing domain (:data:`DOMAIN`).
 
-Every authoring path builds its scope with :func:`bind` from a verified
-authorization, never from the agent's own description. A draft records the
-authorization's digest (:func:`record`) and keeps a copy of the statement;
-admission verifies that copy again against the roster as it is then
-(:func:`check_admission`).
+Each authoring path that can be bound builds its scope with :func:`bind`
+from a verified authorization, never from the agent's own description; the
+paths that can't be bound are refused (docs/TEACH_AUTHORIZATION.md). A
+draft records the authorization's digest (:func:`record`) and keeps a copy
+of the statement; admission verifies that copy again against the roster as
+it is then (:func:`check_admission`).
 """
 
 from __future__ import annotations
@@ -597,6 +599,7 @@ def pinned_trust(
     approver_root: Optional[str] = None,
     *,
     env: Optional[Mapping[str, str]] = None,
+    config_only: bool = False,
 ) -> tuple[Path, Optional[str]]:
     """The key directory and approver root a teach path checks against.
 
@@ -604,13 +607,20 @@ def pinned_trust(
     ``~/.openadapt/jit``). The root is ``approver_root``, else
     ``OPENADAPT_APPROVER_ROOT`` (:func:`approver_roster.pinned_root`); two
     that disagree refuse. ``None`` means unpinned, and verification refuses.
+    ``config_only`` (a process an agent runs, such as ``openadapt-agent
+    serve``): ``approver_root`` must come from the deployment config, and the
+    environment never counts.
     """
 
     from openadapt_flow.approval_mode import approver_roster as roster
     from openadapt_flow.jit.lifecycle import default_key_dir
 
     try:
-        root = roster.pinned_root(approver_root, env=env)
+        root = (
+            roster.pinned_root(config_root=approver_root, config_only=True)
+            if config_only
+            else roster.pinned_root(approver_root, env=env)
+        )
     except roster.RosterError as exc:
         raise TeachAuthorizationError(
             "teach_auth_identity_unverified", exc.code
@@ -784,6 +794,7 @@ def check_admission(
     purpose: Optional[Purpose] = None,
     task_id: Optional[str] = None,
     not_signed_by: Optional[str] = None,
+    at_least: Any = None,
 ) -> Verification:
     """Verify, for admission, the authorization a draft names.
 
@@ -804,7 +815,7 @@ def check_admission(
         )
     if target is None or not Path(target).is_file():
         raise TeachAuthorizationError("teach_auth_missing", "no statement kept with it")
-    result = verify(target, key_dir=key_dir, root=root)
+    result = verify(target, key_dir=key_dir, root=root, at_least=at_least)
     if not result.ok:
         raise TeachAuthorizationError(str(result.reason), result.detail)
     if result.sha256 != recorded.get("sha256"):
@@ -905,12 +916,19 @@ class TeachAuthority:
             ``OPENADAPT_APPROVER_ROOT``; without one, verification refuses.
         write_adapter: An adapter object to use instead of loading the
             statement's ``write_adapter`` reference.
+        config_only: ``approver_root`` came from the deployment config and
+            the environment never counts (a process an agent runs).
+        at_least: Roster heads recorded outside the key directory (the
+            deployment config's ``approvers.head``); the roster must extend
+            them.
     """
 
     statement: Path
     key_dir: Optional[Path] = None
     approver_root: Optional[str] = None
     write_adapter: Any = None
+    config_only: bool = False
+    at_least: Any = None
 
     def kept_in(self, folder: Path) -> "TeachAuthority":
         """Copy the statement into ``folder`` and return an authority over the copy.
@@ -922,14 +940,21 @@ class TeachAuthority:
         return dataclasses.replace(self, statement=copy_into(self.statement, folder))
 
     def trust(self) -> tuple[Path, Optional[str]]:
-        return pinned_trust(self.key_dir, self.approver_root)
+        return pinned_trust(
+            self.key_dir, self.approver_root, config_only=self.config_only
+        )
 
     def verify(
         self, *, purpose: Purpose, task_id: Optional[str] = None
     ) -> Verification:
         key_dir, root = self.trust()
         return require(
-            self.statement, purpose=purpose, key_dir=key_dir, root=root, task_id=task_id
+            self.statement,
+            purpose=purpose,
+            key_dir=key_dir,
+            root=root,
+            task_id=task_id,
+            at_least=self.at_least,
         )
 
     def scope(
@@ -961,7 +986,10 @@ def narrowed(scope: Any, authorized: Any) -> Any:
     check_within(scope, authorized)
     return dataclasses.replace(
         scope,
-        write_adapter=scope.write_adapter or authorized.write_adapter,
+        # The adapter the person signed for wins; a caller's may only add one.
+        write_adapter=authorized.write_adapter
+        if authorized.write_adapter is not None
+        else scope.write_adapter,
         forbidden_actions=frozenset(scope.forbidden_actions)
         | frozenset(authorized.forbidden_actions),
         forbidden_controls=tuple(

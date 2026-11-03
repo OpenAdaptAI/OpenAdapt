@@ -1162,6 +1162,7 @@ class CompiledAgent:
             require_distinct_reviewer_and_admitter=(
                 self.require_distinct_reviewer_and_admitter
             ),
+            trust=self.teach_authorization,
         )
 
     def admit_with_key(self, principal: Any) -> dict[str, Any]:
@@ -1170,7 +1171,11 @@ class CompiledAgent:
         See :func:`openadapt_flow.jit.lifecycle.admit_with_key`."""
 
         return lifecycle.admit_with_key(
-            self.program_dir, principal=principal, key_dir=self.key_dir
+            self.program_dir,
+            principal=principal,
+            key_dir=self.key_dir,
+            # The roster pin the teach authorization was checked under.
+            trust=self.teach_authorization,
         )
 
     def reject(self, *, principal_id: Any, reason: str = "") -> Path:

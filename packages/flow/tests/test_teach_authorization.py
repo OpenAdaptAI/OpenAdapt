@@ -153,7 +153,7 @@ def test_an_old_roster_put_back_refuses(tmp_path, person):
     assert _code(_require, person, statement) == "teach_auth_identity_unverified"
 
 
-def test_the_portal_key_cannot_sign(tmp_path):
+def test_an_attestation_labelled_for_the_portal_is_refused(tmp_path):
     portal = LocalAuthorizer(tmp_path / "keys", "portal", method="portal_key")
     statement = portal.issue(
         tmp_path / "auth",
@@ -362,6 +362,21 @@ def test_forbidden_controls_and_actions(tmp_path, person):
         guard.scope.request_refusal("DELETE", BASE + "/api/encounter/1", None)
         == "forbidden_action"
     )
+
+
+def test_a_broken_label_probe_refuses_the_click(tmp_path, person):
+    class _Broken(_Page):
+        def evaluate(self, script: str, args: Any) -> Any:
+            if "aria-label" in script:
+                raise RuntimeError("the page overrode elementFromPoint")
+            return None
+
+    guard = _guard(tmp_path, person)
+    with pytest.raises(ScopeViolation) as err:
+        guard.check_ops([Op("click", x=1, y=1)], page=_Broken())
+    assert err.value.code == "control_forbidden"
+    # A control with no label is not a forbidden one.
+    guard.check_ops([Op("click", x=1, y=1)], page=_Page(""))
 
 
 def test_render_shows_what_is_signed(tmp_path, person):

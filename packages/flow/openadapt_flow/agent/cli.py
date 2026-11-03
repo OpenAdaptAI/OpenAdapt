@@ -318,19 +318,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="STATEMENT",
         help=(
-            "With --teach or --teach-browser: a person's signed teach "
-            "authorization (openadapt-flow teach-authorization). Run 1 is scoped "
-            "by it. Without one, --teach drafts are refused at admission and "
-            "--teach-browser adds no write tool."
-        ),
-    )
-    p.add_argument(
-        "--approver-root",
-        default=None,
-        metavar="HEX",
-        help=(
-            "With --teach-authorization: the approver root its signer is checked "
-            "under (default OPENADAPT_APPROVER_ROOT)"
+            "With --teach: a person's signed teach authorization (openadapt-flow "
+            "teach-authorization). Run 1 is scoped by it; without one, drafts "
+            "are refused at admission. With --repair-access: it lets a calling "
+            "agent's fix be approved (it must cover repair). Its signer is checked under the deployment config's approvers section (--config) only."
         ),
     )
     p.add_argument(
@@ -1170,22 +1161,38 @@ def _teach_write_adapter(ref: Optional[str]) -> Any:
     return load_write_adapter(ref)
 
 
-def _teach_authority(args: argparse.Namespace, key_dir: Optional[Path]) -> Any:
-    """``--teach-authorization``, checked now so a bad one stops the server."""
+def _served_authority(args: argparse.Namespace) -> Any:
+    """``--teach-authorization`` for a server the agent runs, or ``None``.
+
+    The roster's root, key directory and head come only from the deployment
+    config's ``approvers`` section (``--config``): the agent starts this
+    server, so the environment and flags it sets never count. Without that
+    pin the statement verifies nowhere.
+    """
 
     path = getattr(args, "teach_authorization", None)
     if not path:
         return None
-    from openadapt_flow.teach_authorization import (
-        TeachAuthority,
-        TeachAuthorizationError,
+    from openadapt_flow.teach_authorization import TeachAuthority
+
+    approvers = _config_approvers(args)
+    return TeachAuthority(
+        Path(path).expanduser().resolve(),
+        key_dir=Path(approvers.key_dir) if approvers and approvers.key_dir else None,
+        approver_root=approvers.root_public_key if approvers else None,
+        config_only=True,
+        at_least=tuple(approvers.head) if approvers and approvers.head else None,
     )
 
-    authority = TeachAuthority(
-        Path(path).expanduser().resolve(),
-        key_dir=key_dir,
-        approver_root=getattr(args, "approver_root", None),
-    )
+
+def _teach_authority(args: argparse.Namespace, key_dir: Optional[Path]) -> Any:
+    """``--teach-authorization``, checked now so a bad one stops the server."""
+
+    from openadapt_flow.teach_authorization import TeachAuthorizationError
+
+    authority = _served_authority(args)
+    if authority is None:
+        return None
     try:
         authority.verify(purpose="teach")
     except TeachAuthorizationError as exc:
@@ -1272,10 +1279,6 @@ def _serve_teach_browser(args: argparse.Namespace, serve) -> int:
             headless=not args.headed,
             contracts=contracts,
             secrets=sign_in,
-            teach_authorization=_teach_authority(
-                args,
-                Path(args.key_dir).expanduser().resolve() if args.key_dir else None,
-            ),
         )
     except ValueError as exc:
         print(f"serve: {exc}", file=sys.stderr)
@@ -1510,19 +1513,7 @@ def _repair_desk(args: argparse.Namespace, runs_dir: Path):
     else:
         policy = RepairAccessPolicy(args.repair_access)
         demonstrator = LazyBackendDemonstrator(url=args.url, headed=args.headed)
-    authority = None
-    if getattr(args, "teach_authorization", None):
-        from openadapt_flow.teach_authorization import TeachAuthority
-
-        authority = TeachAuthority(
-            Path(args.teach_authorization).expanduser().resolve(),
-            key_dir=(
-                Path(args.key_dir).expanduser().resolve()
-                if getattr(args, "key_dir", None)
-                else None
-            ),
-            approver_root=getattr(args, "approver_root", None),
-        )
+    authority = _served_authority(args)
     return RepairDesk(
         Path(args.repair_dir) if args.repair_dir else Path(runs_dir) / ".repair",
         policy,

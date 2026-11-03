@@ -409,7 +409,8 @@ class RepairDesk:
     ) -> None:
         """``teach_authorization`` (a
         :class:`~openadapt_flow.teach_authorization.TeachAuthority` whose
-        statement covers ``repair`` and names the workflow as its task) is
+        statement covers ``repair`` and names the program's workflow name as
+        its task) is
         what lets a calling agent's fix be approved: without one, the fix is
         still proposed, and its approval is refused."""
         self.teach_authorization = teach_authorization
@@ -811,12 +812,15 @@ class RepairDesk:
         from openadapt_flow import teach_authorization as ta
 
         try:
-            verification = authority.verify(
-                purpose="repair", task_id=str(record["workflow"])
-            )
-        except ta.TeachAuthorizationError as exc:
+            from openadapt_flow.ir import Workflow
+
+            # The task is the program's own name, which approval checks too.
+            task_id = Workflow.load(Path(record["bundle_dir"])).name
+            verification = authority.verify(purpose="repair", task_id=task_id)
+        except (ta.TeachAuthorizationError, OSError, ValueError) as exc:
             raise RepairError(
-                f"the teach authorization doesn't allow this repair ({exc.code}); "
+                "the teach authorization doesn't allow this repair "
+                f"({getattr(exc, 'code', type(exc).__name__)}); "
                 "nothing was done"
             ) from None
         return verification, Path(authority.statement)
