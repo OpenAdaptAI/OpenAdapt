@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, Literal, Optional
 from pydantic import BaseModel, Field
 
 from openadapt_flow.ir import (
+    Anchor,
     BundleManifest,
     BundleProvenance,
     Effect,
@@ -274,6 +275,15 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             reason=(
                 "a step that raises no browser dialog is what every earlier "
                 "bundle held; a recorded dialog answer remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Anchor,
+            field_name="form_identity",
+            omitted_values=(None,),
+            reason=(
+                "an anchor with no create-form identity is what every earlier "
+                "bundle held; a recorded form identity is sealed content"
             ),
         ),
         _SealedCanonicalOmission(

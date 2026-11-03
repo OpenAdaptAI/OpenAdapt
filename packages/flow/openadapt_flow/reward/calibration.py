@@ -428,8 +428,8 @@ def _templates(effects: Iterable[Effect]) -> list[dict[str, dict[str, str]]]:
             # An absence claim plants nothing; a clean store satisfies it.
             continue
         template = dict(match)
-        if effect.idempotency_key is not None:
-            template[effect.key_field] = _expr_template(effect.idempotency_key)
+        for name, expr in effect.key_selector().items():
+            template[name] = _expr_template(expr)
         if effect.kind is EffectKind.FIELD_EQUALS:
             if effect.field and effect.value is not None:
                 template[effect.field] = _expr_template(effect.value)

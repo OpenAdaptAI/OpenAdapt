@@ -29,5 +29,8 @@ def test_monorepo_release_workflow_publishes_this_package() -> None:
     if not RELEASE_WORKFLOW.is_file():
         pytest.skip("not running from the OpenAdapt monorepo checkout")
     workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
-    assert '"privacy": "openadapt-privacy"' in workflow
+    # The workflow's plan job decides releases from this package map.
+    plan = (RELEASE_WORKFLOW.parents[2] / "scripts/ci/release_plan.py").read_text(encoding="utf-8")
+    assert '"privacy": "openadapt-privacy"' in plan
+    assert "release_plan.py" in workflow
     assert re.search(r"options: \[[^\]]*\bprivacy\b", workflow)

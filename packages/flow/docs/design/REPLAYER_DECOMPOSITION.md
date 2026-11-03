@@ -2,6 +2,8 @@
 
 Status: PLAN ONLY — no code moves in this document's PR.
 
+Superseded by [DECOMPOSITION.md](DECOMPOSITION.md) (2026-10-24), which re-measures the file and replaces the mixin mechanism below, which mypy rejects.
+
 `openadapt_flow/runtime/replayer.py` is 544 KB / 12,296 lines. This document
 maps its real internal structure, explains why a large "mechanical, verbatim,
 zero-behavior-change" extraction is **not** safely available today, and lays

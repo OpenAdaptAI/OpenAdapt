@@ -114,6 +114,31 @@ at all.
 | Median item time | 227 s | 119 s |
 | Host 1-minute load, median / max | 7.0 / 76.1 | 8.0 / 102.5 |
 
+### If entering an item by hand takes longer than 3 minutes
+
+The cost model charges 3 minutes to enter one referral by hand (the
+12-field form, reading the referral and the duplicate search). A real intake
+desk, with lookups, phone calls and interruptions, may take longer. This
+table recomputes `after` from its own ledger with each by-hand time. The
+run's own hand entries are charged at that time too; every other charge stays
+at x1:
+- approval 20 s;
+- stop 90 s;
+- reconcile 120 s;
+- repair review 120 s;
+- a 30 s interrupt on every request.
+
+| By hand, minutes per item | after: verified items per operator-minute | By hand: items per operator-minute | after ÷ by hand |
+| ---: | ---: | ---: | ---: |
+| 3 (the cost model) | 0.327 | 0.333 | 0.98 |
+| 5 | 0.267 | 0.200 | 1.34 |
+| 8 | 0.210 | 0.125 | 1.68 |
+| 10 | 0.183 | 0.100 | 1.83 |
+
+None of these times is measured from a person. `benchmark/lifecycle/metrics.py`
+(`BY_HAND_MINUTES`) computes the table, and `results.json` holds it under
+`headline.by_hand_sensitivity`.
+
 Where `after`'s 125.5 operator minutes went:
 
 | Kind | Minutes |
@@ -253,13 +278,15 @@ Each of `before/`, `after/` and `recovery-smoke/` holds:
 
 ## Reproduce
 
-Take the fixture lease first (`~/oa/scratch/fixture-lease/README.md`). Then,
+Run one Docker fixture at a time. Set `STATE_DIR` to a directory for the
+fixture's state and `KEYS_DIR` to one for its test keys, both outside the
+repository. Then,
 from `packages/flow`:
 
 ```bash
 export LIFECYCLE_OPENEMR_PROJECT=openadapt-openemr-compose LIFECYCLE_UI_PORT=9401 LIFECYCLE_API_PORT=9400
-export LIFECYCLE_OPENEMR_STATE=~/oa/scratch/compose-proof/openemr-state PYTHONPATH=.:../types
-python -m benchmark.lifecycle_proof.run up --out /tmp/up --keys ~/oa/scratch/compose-proof/keys
+export LIFECYCLE_OPENEMR_STATE=$STATE_DIR PYTHONPATH=.:../types
+python -m benchmark.lifecycle_proof.run up --out runs/up --keys $KEYS_DIR
 python -m benchmark.lifecycle.run --app openemr --seed 7 --items 55 --days 10 --drift relabel_save@26 \
   --arm benchmark.lifecycle.production_arm:make --arm-options '{"recovery":"none"}' --out <dir>
 python -m benchmark.lifecycle.run --app openemr --seed 7 --items 55 --days 10 --drift relabel_save@26 \

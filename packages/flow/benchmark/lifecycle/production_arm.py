@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .arm import Env, ItemResult, OperatorRequest, WorkItem
+from .paths import relative_paths
 
 DEFAULT_KEYS = Path.home() / "oa" / "scratch" / "compose-proof" / "keys"
 APPROVER_ID = "lifecycle-soak-operator"
@@ -54,13 +55,16 @@ APPROVER_ID = "lifecycle-soak-operator"
 class _Ledger:
     """The arm's own detail log (the harness ledger holds the results)."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, root: Optional[Path] = None) -> None:
         self.path = path
+        #: Paths in rows are written relative to the run's root.
+        self.root = root or path.parent
         path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def add(self, kind: str, **fields: Any) -> None:
         row = {"at": round(time.time(), 3), "kind": kind, **fields}
+        row = relative_paths(row, self.root)
         with self._lock, self.path.open("a") as handle:
             handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
 
@@ -81,13 +85,15 @@ class OperatorPerson:
         self.item: Optional[WorkItem] = None
         self.operator: Any = None
         self.kind = "approval"
+        #: The run's fixture approver (benchmark.lifecycle_proof.approver).
+        self.approver: Any = None
 
     def watch(self, store: Any) -> None:
         self.stores.append(store)
 
     def sleep(self, seconds: float) -> None:
         time.sleep(min(seconds, 0.5))
-        from openadapt_flow.approval_mode.item_approval import make_answer
+        from benchmark.lifecycle_proof import run as proof
 
         for store in list(self.stores):
             for request in store.requests():
@@ -111,15 +117,11 @@ class OperatorPerson:
                     )
                 )
                 approve = decision.action in ("approve", "accept_repair")
+                # Signed by the run's fixture approver; an unsigned answer is
+                # refused, and the refusal is logged before it stops the gate.
                 store.write_answer(
-                    make_answer(
-                        request,
-                        decision="approve" if approve else "decline",
-                        decline_reason=None if approve else "wrong_record",
-                        decided_by="human",
-                        route="desktop_run_it",
-                        approver_id=APPROVER_ID,
-                        auth_method="cloud_aal2",
+                    proof.answer_signed(
+                        self.ledger, self.approver, store, request, approve
                     )
                 )
                 self.touches += 1
@@ -152,6 +154,9 @@ class ProductionArm:
         #: Convert each item's date parameters to ISO as intake does before
         #: the run (the referral writes dates however its sender writes them).
         self.intake_dates = bool(options.get("intake_dates", False))
+        #: Offer the operator a signed re-arm of a switched-off
+        #: problems_only switch once the log allows it (10 verified items).
+        self.rearm = bool(options.get("rearm", False))
         self.recovery = str(options.get("recovery", "none"))
         if self.recovery not in ("none", "relabel"):
             raise ValueError(f"unknown recovery {self.recovery!r}")
@@ -184,6 +189,7 @@ class ProductionArm:
             "recovery": self.recovery,
             "typed_dob": self.typed_dob,
             "intake_dates": self.intake_dates,
+            "rearm": "operator signs when offered" if self.rearm else "never",
             "duplicate_check": (
                 "no_duplicate_candidate on step_039 (rows tr.oneresult; a row "
                 "with the item's last name or date of birth stops the item)"
@@ -198,9 +204,10 @@ class ProductionArm:
         from benchmark.lifecycle_proof import run as proof
 
         out = env.workdir
-        ledger = _Ledger(out / "arm-ledger.jsonl")
+        ledger = _Ledger(out / "arm-ledger.jsonl", root=out.parent.parent)
         ctx = proof._context(out, self.keys_dir, ledger)  # type: ignore[arg-type]
         person = OperatorPerson(ledger)
+        person.approver = ctx["approver"]
         person.operator = operator
         ctx["person"] = person
         self.ctx = ctx
@@ -229,6 +236,9 @@ class ProductionArm:
         from openadapt_flow.runtime.readback_pipeline import ReadbackPipeline
 
         self.pipeline = ReadbackPipeline()
+        if self.rearm:
+            self._approver = self._approver_key()
+            ctx["approver_keys"] = self._approver[1]
         return [
             {
                 "phase": "admit",
@@ -427,6 +437,78 @@ class ProductionArm:
             detail["intake_dates"] = notes
         return dataclasses.replace(item, params=params)
 
+    def _approver_key(self) -> tuple[Any, dict[str, str]]:
+        """A throwaway approver key for the scripted operator (outside the repo)."""
+
+        import base64
+
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PrivateKey,
+        )
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding,
+            NoEncryption,
+            PrivateFormat,
+            PublicFormat,
+            load_pem_private_key,
+        )
+
+        pem = self.keys_dir / "soak-approver.pem"
+        if not pem.exists():
+            pem.write_bytes(
+                Ed25519PrivateKey.generate().private_bytes(
+                    Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()
+                )
+            )
+            pem.chmod(0o600)
+        private = load_pem_private_key(pem.read_bytes(), password=None)
+        public = private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)  # type: ignore[union-attr]
+        return private, {"soak-approver": base64.b64encode(public).decode("ascii")}
+
+    def _offer_rearm(self, operator: Any, item: WorkItem) -> Optional[dict[str, Any]]:
+        """After an item: if the switch may be re-armed, the operator signs."""
+
+        from openadapt_flow.approval_mode.switch import (
+            SwitchLogError,
+            rearm,
+            rearm_request,
+            sign_rearm,
+        )
+
+        log = self.ctx.get("switch_log")
+        if log is None:
+            return None
+        keys = self.ctx["approver_keys"]
+        try:
+            if not log.state(approver_keys=keys).is_off:
+                return None
+            request = rearm_request(
+                log, cause="recorded in the arm ledger", approver_keys=keys
+            )
+        except SwitchLogError:
+            return None
+        decision = operator.ask(
+            OperatorRequest(
+                kind="approval",
+                item_id=item.item_id,
+                reason=f"re-arm problems_only after {len(request['clean_run_refs'])} "
+                f"verified items (off: {request['off_reason']})",
+                surface="Desktop: re-arm the switch (one signed tap)",
+                detail={"rearm": True, "off_reason": request["off_reason"]},
+            )
+        )
+        if decision.action != "approve":
+            return {"rearmed": False}
+        evidence = sign_rearm(
+            log,
+            request,
+            approver_id="soak-approver",
+            key_id="soak-approver",
+            private_key=self._approver[0],
+        )
+        event = rearm(log, evidence, approver_keys=keys)
+        return {"rearmed": True, "seq": event.seq, "off_reason": request["off_reason"]}
+
     def _resumable(self, run_dir: Path) -> bool:
         from openadapt_flow.runtime.durable import CheckpointStore
 
@@ -477,14 +559,13 @@ class ProductionArm:
         configuration's ``repair.agent`` does. It re-runs the item itself."""
 
         from benchmark.lifecycle_proof import run as proof
-        from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
         from openadapt_flow.repair.self_repair import ScreenAccess, SelfRepair
 
         person: OperatorPerson = self.ctx["person"]
         run_dir = self._run_dir(item, "repair")
         handle = proof.Item(self.ctx, item.item_id, run_dir, params=item.params)
         person.kind = "repair_review"
-        person.watch(ItemApprovalStore(run_dir))
+        person.watch(self.ctx["approver"].store(run_dir))
         try:
             repair = SelfRepair(
                 proof.LabelAgent(),
@@ -711,6 +792,10 @@ class ProductionArm:
             if x
         )
         detail["final"] = summary
+        if self.rearm:
+            offered = self._offer_rearm(self.ctx["person"].operator, item)
+            if offered is not None:
+                detail["rearm"] = offered
         return ItemResult(
             item_id=item.item_id,
             claimed=claimed,  # type: ignore[arg-type]

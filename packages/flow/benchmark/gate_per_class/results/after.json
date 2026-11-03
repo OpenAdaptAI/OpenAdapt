@@ -1,0 +1,292 @@
+{
+ "framed": {
+  "admission": "coverage_class_missed:other_table",
+  "applicable": 20,
+  "cases": [
+   {
+    "detail": "the save as the app makes it",
+    "fault": "clean",
+    "outcome": "verified",
+    "result": "not applicable"
+   },
+   {
+    "detail": "email changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "lname changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "title changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "fname changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "DOB changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "sex changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "street changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "city changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "state changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "postal_code changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "phone_home changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "country_code changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "the values saved on a look-alike record",
+    "fault": "wrong_record",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "another record in the slice edited",
+    "fault": "unrelated_edit",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "a record in another table edited (clinical_rules_log.date)",
+    "fault": "other_table",
+    "outcome": "verified",
+    "result": "SURVIVED"
+   },
+   {
+    "detail": "a row in another table added for the saved record (no subject_field: which column of the other tables names the saved record is unknown)",
+    "fault": "side_write",
+    "outcome": "",
+    "result": "untestable"
+   },
+   {
+    "detail": "street, city, state, postal_code, phone_home, country_code left blank",
+    "fault": "partial",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "the target saved twice",
+    "fault": "duplicate",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "nothing saved",
+    "fault": "missing",
+    "outcome": "halted_before_effect",
+    "result": "killed"
+   },
+   {
+    "detail": "the target lands after the check's timeout",
+    "fault": "delayed",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   }
+  ],
+  "classes": {
+   "delayed": "killed",
+   "duplicate": "killed",
+   "missing": "killed",
+   "other_table": "missed",
+   "partial": "killed",
+   "side_write": "untestable",
+   "unrelated_edit": "killed",
+   "wrong_record": "killed",
+   "wrong_value": "killed"
+  },
+  "clean_pass": true,
+  "killed": 18
+ },
+ "shipped": {
+  "admission": "coverage_class_missed:other_table",
+  "applicable": 20,
+  "cases": [
+   {
+    "detail": "the save as the app makes it",
+    "fault": "clean",
+    "outcome": "verified",
+    "result": "not applicable"
+   },
+   {
+    "detail": "email changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "lname changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "title changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "fname changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "DOB changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "sex changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "street changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "city changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "state changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "postal_code changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "phone_home changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "country_code changed",
+    "fault": "wrong_value",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "the values saved on a look-alike record",
+    "fault": "wrong_record",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "another record in the slice edited",
+    "fault": "unrelated_edit",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "a record in another table edited (clinical_rules_log.date)",
+    "fault": "other_table",
+    "outcome": "verified",
+    "result": "SURVIVED"
+   },
+   {
+    "detail": "a row in another table added for the saved record (no subject_field: which column of the other tables names the saved record is unknown)",
+    "fault": "side_write",
+    "outcome": "",
+    "result": "untestable"
+   },
+   {
+    "detail": "street, city, state, postal_code, phone_home, country_code left blank",
+    "fault": "partial",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "the target saved twice",
+    "fault": "duplicate",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   },
+   {
+    "detail": "nothing saved",
+    "fault": "missing",
+    "outcome": "halted_before_effect",
+    "result": "killed"
+   },
+   {
+    "detail": "the target lands after the check's timeout",
+    "fault": "delayed",
+    "outcome": "reconciliation_required",
+    "result": "killed"
+   }
+  ],
+  "classes": {
+   "delayed": "killed",
+   "duplicate": "killed",
+   "missing": "killed",
+   "other_table": "missed",
+   "partial": "killed",
+   "side_write": "untestable",
+   "unrelated_edit": "killed",
+   "wrong_record": "killed",
+   "wrong_value": "killed"
+  },
+  "clean_pass": true,
+  "killed": 18
+ }
+}

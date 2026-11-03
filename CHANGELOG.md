@@ -2,6 +2,36 @@
 
 <!-- version list -->
 
+## v1.19.0 (2026-11-02)
+
+### Breaking Changes
+
+- Require openadapt-flow 2.5 (`>=2.5.0,<3.0.0`). `openadapt shadow` forwards
+  to Flow's shadow command, and `openadapt verify serve` offers its recheck;
+  neither is in Flow 2.4 or earlier. `openadapt doctor` and `openadapt deploy`
+  report an older Flow as unsupported.
+
+### Features
+
+- `openadapt shadow` runs beside an agent you already have, as a loopback
+  pass-through proxy. It checks each write the agent makes against the
+  system of record, checks each confirmed write again later, and writes
+  `report.html` and `report.json`. It never blocks, changes or resends a write
+  ([#1678](https://github.com/OpenAdaptAI/OpenAdapt/pull/1678)).
+- `openadapt verify` checks any agent's writes against a contract you own
+  and returns `CONFIRMED`, `REFUTED` or `UNCERTAIN`. `openadapt verify serve`
+  offers the same check to any MCP client, recheck included, and `openadapt
+  verify ledger` lists, reconciles and releases writes whose outcome isn't
+  known yet ([#1589](https://github.com/OpenAdaptAI/OpenAdapt/pull/1589),
+  [#1628](https://github.com/OpenAdaptAI/OpenAdapt/pull/1628),
+  [#1669](https://github.com/OpenAdaptAI/OpenAdapt/pull/1669)).
+- `openadapt bench medplum` runs the public Medplum write benchmark with your
+  own agent ([#1652](https://github.com/OpenAdaptAI/OpenAdapt/pull/1652)).
+- `openadapt setup` adds the OpenAdapt MCP server and a skill to Claude Code,
+  Cursor, Codex and Gemini CLI, so the agent can turn a read-only browser
+  task into a tool it calls again. It prints every change, and `--dry-run`
+  and `--undo` are there.
+
 ## v1.18.0 (2026-10-20)
 
 ### Breaking Changes

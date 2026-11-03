@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._approver_keys import approvers_yaml
+
 from openadapt_flow.__main__ import main
 from openadapt_flow.ir import RunReport
 from openadapt_flow.repair.auto_repair import RepairLedger, summarize
@@ -29,6 +31,10 @@ from tests.test_self_repair import (  # noqa: F401 - the shared MockMed fixture
 
 pytest.importorskip("playwright.sync_api")
 
+# The phone portal records the person's tap signed with its registered
+# approver key (OPENADAPT_PORTAL_APPROVER_KEY); without one it records nothing.
+pytestmark = pytest.mark.usefixtures("approver")
+
 
 def _config(tmp_path: Path, base_url: str, *, auto: bool = True) -> Path:
     store = tmp_path / "repair-store"
@@ -36,6 +42,7 @@ def _config(tmp_path: Path, base_url: str, *, auto: bool = True) -> Path:
     config.write_text(
         f"effects:\n  kind: rest\n  base_url: {base_url}\n"
         "policy:\n  policy: clinical-write\n"
+        f"{approvers_yaml()}"
         "repair:\n"
         "  agent: tests.test_self_repair_cli:CliAgent\n"
         "  screen_access_by: ops-lead\n"

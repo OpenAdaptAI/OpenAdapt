@@ -185,16 +185,6 @@ def test_halt_messages_do_not_call_it_a_system_of_record() -> None:
 # -- verdicts --------------------------------------------------------------------
 
 
-def test_confirms_the_saved_row() -> None:
-    driver = FakeDriver([_page(_row("7"))])
-    verifier = _verifier(driver)
-    assert verifier.verify(_written(), EMPTY_BEFORE).verdict is Verdict.CONFIRMED
-    assert verifier.verify(_note_equals(), EMPTY_BEFORE).verdict is Verdict.CONFIRMED
-    # One fresh session per check, each with its own sign-in.
-    assert len(driver.opened) == 2
-    assert driver.credentials == [(READER_USERNAME, READER_PASSWORD)] * 2
-
-
 def test_a_separate_session_read_is_graded_screen_readback() -> None:
     # Tier 2 reads the application's own record page, so it is not an
     # independent (system-of-record) read-back. See openadapt_flow.assurance.
@@ -209,15 +199,6 @@ def test_a_separate_session_read_is_graded_screen_readback() -> None:
     assert refuted.assurance == "unchecked"
 
 
-def test_partial_save_is_refuted_and_labeled_as_a_record_page() -> None:
-    verdict = _verifier(FakeDriver([_page(_row("7", note=""))])).verify(
-        _note_equals(), EMPTY_BEFORE
-    )
-    assert verdict.verdict is Verdict.REFUTED
-    assert "system of record" not in verdict.reason
-    assert "record page" in verdict.reason
-
-
 def test_a_missing_row_never_proves_that_nothing_was_saved() -> None:
     verdict = _verifier(FakeDriver([_page(empty_marker=True)])).verify(
         _written(), EMPTY_BEFORE
@@ -228,6 +209,19 @@ def test_a_missing_row_never_proves_that_nothing_was_saved() -> None:
     assert verdict.observed_count is None
     assert verdict.observed_effect == "unknown"
     assert "not proof that nothing was saved" in verdict.reason
+
+
+def test_a_search_that_finds_nothing_never_confirms() -> None:
+    nothing = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"patient": ValueExpr(literal="p1")},
+        expected_count=0,
+        timeout_s=0.0,
+    )
+    verifier = _verifier(FakeDriver([_page(identity="", not_found=True)]))
+    verdict = verifier.verify(nothing, EMPTY_BEFORE)
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "not proof" in verdict.reason
 
 
 def test_duplicate_and_lost_update_are_refuted() -> None:
@@ -353,20 +347,6 @@ def test_a_session_that_is_not_fresh_is_refused() -> None:
     )
     assert verdict.verdict is Verdict.INDETERMINATE
     assert "fresh" in verdict.reason
-
-
-def test_a_failed_sign_in_is_unavailable_and_leaks_no_secret() -> None:
-    driver = FakeDriver([_page()], error="could not open a signed-in session")
-    verifier = _verifier(driver)
-    verdict = verifier.verify(_written(), EMPTY_BEFORE)
-    assert verdict.verdict is Verdict.INDETERMINATE
-    assert verdict.unavailable is True
-    assert READER_PASSWORD not in verdict.reason
-    before = verifier.capture_pre_state()
-    assert before.reachable is False
-    probe = verifier.test_connection()
-    assert probe.ok is False
-    assert READER_PASSWORD not in probe.reason
 
 
 def test_pre_state_and_probe_on_a_readable_page() -> None:

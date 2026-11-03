@@ -586,3 +586,7 @@ def test_a_give_up_still_counts_its_model_calls(mockmed, tmp_path) -> None:
     assert result.evidence.model_calls == 1
     assert result.evidence.est_model_cost_usd == 0.02
     assert _records(base_url) == []
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")

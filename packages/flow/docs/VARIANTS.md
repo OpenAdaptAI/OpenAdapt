@@ -134,7 +134,8 @@ openadapt-flow route encounter-intake --param payer=medicare --first-screen firs
 `run` routes, verifies the chosen variant's admission, and runs it:
 
 ```bash
-openadapt-flow run encounter-intake --profile standard \
+openadapt-flow run encounter-intake --profile standard --backend web \
+  --url https://app.example.test \
   --param payer=medicare --param patient_id=... \
   --qualification-trust qualification-trust.json
 ```
@@ -233,23 +234,34 @@ state. Repeat `--when-input NAME=VALUE` to allow several values, and use
 
 ```python
 from openadapt_flow.variants import (
-    VariantInput, VariantWhen, VariantSet, author_variant_set, add_variant,
+    VariantInput,
+    VariantWhen,
+    VariantSet,
+    author_variant_set,
+    add_variant,
 )
 from openadapt_flow.runtime.variant_router import route_variant, execute_variant_set
 
 variant_set = author_variant_set(
-    [VariantInput(name="dark", bundle=..., admission=..., when=VariantWhen(theme="dark")), ...],
+    [
+        VariantInput(
+            name="dark", bundle=..., admission=..., when=VariantWhen(theme="dark")
+        ),
+        ...,
+    ],
     name="encounter-intake",
     out="encounter-intake",
 )
-decision = route_variant(variant_set, inputs={"payer": "medicare"}, first_screen=png_bytes)
+decision = route_variant(
+    variant_set, inputs={"payer": "medicare"}, first_screen=png_bytes
+)
 report = execute_variant_set(
     variant_set,
     parent_dir="encounter-intake",
     run_dir="runs/item-1",
     inputs={"payer": "medicare", "patient_id": "..."},
-    first_screen=capture,          # bytes, None, or a zero-argument callable
-    child_run=child_executor,      # the same executor type a process contract uses
+    first_screen=capture,  # bytes, None, or a zero-argument callable
+    child_run=child_executor,  # the same executor type a process contract uses
     trusted_signers=trust,
 )
 ```

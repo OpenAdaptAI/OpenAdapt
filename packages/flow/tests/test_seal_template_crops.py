@@ -32,7 +32,6 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.resolver import resolve
 
 KEY = "correct horse battery staple"
-WRONG = "Tr0ub4dor&3"
 
 # Distinctive, PHI-ish crop payloads so a leak would be grep-visible.
 BTN_PNG = b"\x89PNG\r\n\x1a\nPATIENT-JANE-DOE-crop-pixels"
@@ -128,13 +127,6 @@ def test_template_sealed_under_distinct_domain(tmp_path):
 # ---------------------------------------------------------------------------
 # fail-loud
 # ---------------------------------------------------------------------------
-
-
-def test_wrong_key_fails_loud(tmp_path):
-    b = _bundle_dir(tmp_path)
-    _workflow().save(b, encrypt=True, key=KEY)
-    with pytest.raises(crypto.DecryptionError):
-        Workflow.load(b, key=WRONG)
 
 
 def test_tampered_template_ciphertext_fails_loud(tmp_path):

@@ -176,3 +176,42 @@ def test_end_to_end_on_the_fake_app(tmp_path: Path) -> None:
     from lifecycle.report import results
 
     assert json.loads(json.dumps(results(out), sort_keys=True)) == res
+
+
+def test_ledger_rows_never_carry_host_paths(tmp_path, monkeypatch):
+    """Committed evidence records run paths relative to the run's root."""
+
+    import json as _json
+
+    from benchmark.lifecycle.paths import OUTSIDE, relative_paths
+    from benchmark.lifecycle.run import Ledger
+
+    root = tmp_path / "runs" / "soak"
+    root.mkdir(parents=True)
+    candidate = root / "arms" / "arm-a" / "items" / "ref-00026-relabel" / "candidate"
+    elsewhere = tmp_path / "runs" / "other" / "arms" / "arm-a"
+    monkeypatch.chdir("/")
+    row = {
+        "candidate": str(candidate),
+        "workdir": elsewhere,
+        "reason": f"wrote {candidate} and stopped",
+        "release_changed_files": ["/var/www/localhost/htdocs/openemr/x.php"],
+        "argv": ["--out", "runs/soak"],
+    }
+    out = relative_paths(row, root)
+    assert out["candidate"] == "arms/arm-a/items/ref-00026-relabel/candidate"
+    assert out["workdir"] == f"{OUTSIDE}/arm-a"
+    assert (
+        out["reason"]
+        == "wrote arms/arm-a/items/ref-00026-relabel/candidate and stopped"
+    )
+    # Paths inside the app are evidence about the app, not the host.
+    assert out["release_changed_files"] == ["/var/www/localhost/htdocs/openemr/x.php"]
+    assert out["argv"] == ["--out", "runs/soak"]
+
+    ledger = Ledger(root / "ledger.jsonl")
+    ledger.write({"type": "phase", "workdir": str(root / "arms" / "arm-a")})
+    ledger.close()
+    written = _json.loads((root / "ledger.jsonl").read_text())
+    assert written["workdir"] == "arms/arm-a"
+    assert str(tmp_path) not in (root / "ledger.jsonl").read_text()

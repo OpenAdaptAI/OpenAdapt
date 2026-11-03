@@ -309,6 +309,70 @@ def find_template(
     )
 
 
+# A crop that matches itself shifted by a quarter of its width or height at or
+# above this correlation (a blank band, a rule, a repeating pattern) matches
+# along that axis anywhere: it cannot tell one place from another. Identifier
+# crops of real records measured at most ~0.65.
+SELF_SIMILAR_SHIFT_SCORE = 0.9
+# Below this grey-level spread a crop is flat.
+FLAT_CROP_STD = 2.0
+
+
+def crop_is_featureless(template_png: bytes) -> bool:
+    """Whether a crop has too little structure to tell one place from another.
+
+    True for a flat crop, and for one that matches itself shifted by a quarter
+    of its width or height (a background band, a ruled line, a repeat), so a
+    template match finds it at every offset along that axis.
+    """
+    crop = _decode_gray(template_png).astype(np.float64)
+    if crop.size == 0 or float(crop.std()) < FLAT_CROP_STD:
+        return True
+    height, width = crop.shape[:2]
+
+    def shifted_score(a: np.ndarray, b: np.ndarray) -> float:
+        a = a - a.mean()
+        b = b - b.mean()
+        energy_a = float((a * a).sum())
+        energy_b = float((b * b).sum())
+        if energy_a == 0 and energy_b == 0:
+            return 1.0  # both windows flat: nothing tells places apart
+        if energy_a == 0 or energy_b == 0:
+            # Content confined to one edge quarter (a short label in a wide
+            # cell): the shifted windows are not alike.
+            return 0.0
+        return float((a * b).sum()) / math.sqrt(energy_a * energy_b)
+
+    dx = max(1, width // 4)
+    dy = max(1, height // 4)
+    horizontal = shifted_score(crop[:, dx:], crop[:, :-dx]) if width > dx else 1.0
+    vertical = shifted_score(crop[dy:, :], crop[:-dy, :]) if height > dy else 1.0
+    return max(horizontal, vertical) >= SELF_SIMILAR_SHIFT_SCORE
+
+
+def template_peaks(
+    screen_png: bytes, template_png: bytes, *, threshold: float = 0.6
+) -> Optional[list[tuple[int, int]]]:
+    """Every spatially distinct place ``template`` matches, at its own scale.
+
+    Returns the top-left ``(x, y)`` of each non-max-suppressed peak at or above
+    ``threshold``, strongest first, for a caller that must know every place a
+    crop could be (the pixel identity census). None when the frame holds at
+    least :data:`MAX_PEAKS` peaks, so the list may be incomplete, or when the
+    template does not fit the frame.
+    """
+    screen = _decode_gray(screen_png)
+    template = _decode_gray(template_png)
+    th, tw = template.shape[:2]
+    if th > screen.shape[0] or tw > screen.shape[1]:
+        return None
+    result = imgops.match_template_ccoeff_normed(screen, template)
+    peaks = _peaks_above(result, threshold, tw, th)
+    if len(peaks) >= MAX_PEAKS:
+        return None
+    return [(x, y) for _score, x, y in peaks]
+
+
 def find_structural_template(
     screen_png: bytes,
     template_png: bytes,

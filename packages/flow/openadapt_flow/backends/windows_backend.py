@@ -40,7 +40,7 @@ import re
 import struct
 import warnings
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -171,6 +171,41 @@ def normalize_chord(key: str) -> list[str]:
     return [_pyautogui_key(p) for p in parts]
 
 
+def _optional_text(value: object) -> bool:
+    return value is None or (isinstance(value, str) and 1 <= len(value) <= 512)
+
+
+def _element_identity_payload(value: object) -> Optional[dict]:
+    """Accept only the exact ``/uia/element-identity-at`` identity shape."""
+    keys = {"source", "role", "name", "automation_id", "ancestry", "window", "process"}
+    if not isinstance(value, dict) or set(value) != keys:
+        return None
+    if value["source"] != "uia":
+        return None
+    if not all(
+        _optional_text(value[key])
+        for key in ("role", "name", "automation_id", "window", "process")
+    ):
+        return None
+    ancestry = value["ancestry"]
+    if not isinstance(ancestry, list) or not 1 <= len(ancestry) <= 24:
+        return None
+    pairs = []
+    for entry in ancestry:
+        if (
+            not isinstance(entry, list)
+            or len(entry) != 2
+            or not all(_optional_text(item) for item in entry)
+        ):
+            return None
+        pairs.append([entry[0], entry[1]])
+    if pairs[-1][1] != value["window"]:
+        return None
+    if not value["automation_id"] and not (value["role"] and value["name"]):
+        return None
+    return {**value, "ancestry": pairs}
+
+
 class WindowsBackend:
     """`Backend` implementation over the WAA HTTP API.
 
@@ -230,6 +265,10 @@ class WindowsBackend:
         self._auth_token = auth_token or None
         self._pin_fingerprint = pin_fingerprint or None
         self._allow_legacy_exec = bool(allow_legacy_exec)
+        # Top-level window (HWND, PID) each verified step was in, by step id;
+        # steps whose captures disagreed have none, for good.
+        self._verified_windows: dict[str, tuple[int, int]] = {}
+        self._conflicted_windows: set[str] = set()
         self._guarded_coordinate: Optional[
             tuple[tuple[int, int], dict[str, Optional[str]]]
         ] = None
@@ -436,7 +475,9 @@ class WindowsBackend:
                     "native_action_failed",
                     "native_action_unavailable",
                     "stale_target",
+                    "target_blocked",
                     "target_not_found",
+                    "target_obscured",
                 }
             ):
                 raise StructuralResolutionRefused(
@@ -687,6 +728,22 @@ class WindowsBackend:
             return None
         return str(value)
 
+    def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Census of the rows that read the same as the row under (x, y).
+
+        See :class:`openadapt_flow.backend.IdentityCandidatesBackend`. Served by
+        the agent's typed ``/uia/identity-candidates-at``; an agent without it,
+        or the legacy exec path, cannot count rows (None), and the runtime
+        halts a row pick before a write.
+        """
+        typed = self._post_typed_read(
+            "/uia/identity-candidates-at", {"x": int(x), "y": int(y)}
+        )
+        if not typed.available or typed.payload is None:
+            return None
+        census = typed.payload.get("census")
+        return census if isinstance(census, dict) else None
+
     def _execute_read(self, command: str) -> Optional[str]:
         """POST bare Python to WAA and return the response body if any.
 
@@ -748,6 +805,131 @@ class WindowsBackend:
             return _json.loads(payload)
         except Exception:
             return None
+
+    def record_verified_window(self, step_id: str, x: int, y: int) -> bool:
+        """Remember the top-level window under (x, y) for ``step_id``.
+
+        Call it when that step's identity check verifies, at the verified
+        target's point, before anything else can open. The agent refuses a
+        window that is not the foreground app's (a topmost window that slid
+        over the point in between). Calling it again for the same step with
+        the same window changes nothing; a different window drops that step's
+        capture for good, so :meth:`owned_window_over` answers None for it: later,
+        :meth:`owned_window_over` compares live window state against this
+        capture instead of hit-testing at a halted step, where a dialog would
+        answer for itself. Returns False (and records nothing) when the agent
+        cannot say which window that is. Never raises.
+        """
+        typed = self._post_typed_read("/window/root-at", {"x": int(x), "y": int(y)})
+        window = typed.payload.get("window") if typed.payload is not None else None
+        if (
+            not isinstance(window, dict)
+            or set(window) != {"hwnd", "pid"}
+            or not all(
+                isinstance(window[k], int)
+                and not isinstance(window[k], bool)
+                and window[k] > 0
+                for k in ("hwnd", "pid")
+            )
+        ):
+            self._verified_windows.pop(step_id, None)
+            return False
+        capture = (window["hwnd"], window["pid"])
+        earlier = self._verified_windows.get(step_id)
+        if step_id in self._conflicted_windows or (
+            earlier is not None and earlier != capture
+        ):
+            # The step was seen in two different windows: neither is trusted.
+            self._verified_windows.pop(step_id, None)
+            self._conflicted_windows.add(step_id)
+            return False
+        self._verified_windows[step_id] = capture
+        return True
+
+    def clear_verified_windows(self) -> None:
+        """Forget every capture (call between runs: step ids repeat)."""
+        self._verified_windows.clear()
+        self._conflicted_windows.clear()
+
+    def owned_window_over(
+        self, region: tuple[int, int, int, int], *, pinned_step_id: str
+    ) -> Optional[dict]:
+        """A window the app itself owns, over ``region``, or None.
+
+        ``region`` is ``(x, y, w, h)`` in click pixels; ``pinned_step_id`` is
+        the last step whose identity check verified (its window recorded by
+        :meth:`record_verified_window`). Returns ``{"title", "hwnd",
+        "owner_hwnd", "pid", "region"}`` only when the first visible window above the
+        recorded one, of the same process and with an owner chain reaching it
+        (an owned dialog, a message box), meets the region, and no window of
+        another process, or unowned, meets the region above it. The topmost
+        owned window that meets it is returned; ``region`` is its visible
+        frame (DWM bounds, no shadow) as ``[x, y, w, h]`` in the same click
+        pixels. A 1x1 ``region`` asks about one point. Returns None with no record for that step, when the
+        recorded window is gone or now another process's, for any other
+        process's window or an unowned one, and on any failure. Never raises.
+        """
+        pinned = self._verified_windows.get(pinned_step_id)
+        try:
+            x, y, w, h = (int(v) for v in region)
+        except Exception:
+            return None
+        if pinned is None or w <= 0 or h <= 0:
+            return None
+        typed = self._post_typed_read(
+            "/window/owned-over",
+            {"hwnd": pinned[0], "pid": pinned[1], "region": [x, y, w, h]},
+        )
+        window = typed.payload.get("window") if typed.payload is not None else None
+        if not isinstance(window, dict) or set(window) != {
+            "title",
+            "hwnd",
+            "owner_hwnd",
+            "pid",
+            "region",
+        }:
+            return None
+        title = window["title"]
+        ints = [window[k] for k in ("hwnd", "owner_hwnd", "pid")]
+        frame = window["region"]
+        if (
+            (title is not None and (not isinstance(title, str) or len(title) > 512))
+            or any(
+                isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in ints
+            )
+            or not isinstance(frame, list)
+            or len(frame) != 4
+            or any(isinstance(v, bool) or not isinstance(v, int) for v in frame)
+            or frame[2] <= 0
+            or frame[3] <= 0
+            or window["pid"] != pinned[1]
+            or window["hwnd"] == pinned[0]
+        ):
+            return None
+        return dict(window)
+
+    def element_identity_at(self, x: int, y: int) -> Optional[dict]:
+        """Return the UIA identity of the element under (x, y), or None.
+
+        Reads ``/uia/element-identity-at``: the nearest actionable element's
+        ARIA-style ``role`` (the ``structural_locator_at`` mapping, null for
+        unmapped control types), ``name``, ``automation_id``, ``ancestry`` as
+        ``[role, name]`` pairs parent-first up to and including the top-level
+        window, the ``window`` name and the ``process`` executable name.
+        ``window`` is the outermost window below the desktop, so an owned
+        dialog's controls name their owner there (the dialog is in
+        ``ancestry``), unlike the innermost ``window_name`` of
+        :meth:`structural_locator_at`. ``process`` may be None when the agent
+        cannot read the executable; never treat two None values as a match.
+        Returns None when the agent is unreachable, lacks the endpoint, finds
+        no element or answers with anything outside that shape. Never raises.
+        """
+        typed = self._post_typed_read(
+            "/uia/element-identity-at", {"x": int(x), "y": int(y)}
+        )
+        if not typed.available or typed.payload is None:
+            return None
+        return _element_identity_payload(typed.payload.get("identity"))
 
     def structural_locator_at(self, x: int, y: int) -> Optional[StructuralLocator]:
         """Return a stable UIA locator for the control under (x, y).
@@ -1016,7 +1198,10 @@ class WindowsBackend:
         if (
             not parsed.native
             or parsed.target_fingerprint != fingerprint
-            or not parsed.operation.startswith("uia_")
+            or not (
+                parsed.operation.startswith("uia_")
+                or parsed.operation == "win32_bm_click"
+            )
             or parsed.outcome_verified is not False
         ):
             raise RuntimeError(

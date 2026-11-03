@@ -94,6 +94,19 @@ def render(res: dict[str, Any]) -> str:
                     f"{d['first_verified_seq']}, "
                     f"{d['seconds_to_running_again']} s after the change."
                 )
+            sens = h.get("by_hand_sensitivity") or []
+            if sens:
+                lines += [
+                    "",
+                    "| By hand, minutes per item | Verified per operator-minute | By hand per operator-minute | Ratio |",
+                    "|---:|---:|---:|---:|",
+                ]
+                lines += [
+                    f"| {r['by_hand_min_per_item']} | {r['verified_per_operator_minute']} | "
+                    f"{r['by_hand_per_operator_minute']} | {r['ratio_to_by_hand']} |"
+                    for r in sens
+                ]
+                lines.append("")
             d = h.get("duplicate_rule_stops")
             if d and d["items"]:
                 lines.append(

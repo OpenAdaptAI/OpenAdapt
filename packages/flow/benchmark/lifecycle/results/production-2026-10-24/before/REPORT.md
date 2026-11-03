@@ -7,6 +7,14 @@ Protocol `lifecycle/2026-10-20.1`, workload `lifecycle-workload/2026-10-24.1`, s
 - **Verified items per operator-minute: 0.033** (4 verified of 27 items over 123.0 operator minutes; 0.031 with the 5.0 setup minutes). By hand: 0.333 an operator-minute.
 - False stops per 100 items: 70.37; all stops per 100 items: 100.0; operator minutes per stop: 4.56.
 - After the app change `relabel_save` (item 26): 1 of 2 items false-stopped, 5.0 operator minutes of maintenance (stops, repair reviews); first verified item after it: None, None s after the change.
+
+| By hand, minutes per item | Verified per operator-minute | By hand per operator-minute | Ratio |
+|---:|---:|---:|---:|
+| 3 | 0.033 | 0.333 | 0.1 |
+| 5 | 0.024 | 0.2 | 0.12 |
+| 8 | 0.017 | 0.125 | 0.13 |
+| 10 | 0.014 | 0.1 | 0.14 |
+
 - Duplicate-check stops: 15; field shared with an existing chart: {"first name only": 9, "lname": 3, "DOB": 1, "none at start": 1, "lname+DOB": 1}; judged {"false_stop": 10, "right_stop": 3, "fault_stop": 1, "data_stop": 1}; exception kinds {"clean": 8, "shared_dob": 1, "concurrent_same": 1, "concurrent_other": 1, "malformed_dob": 1, "dup_resend": 1, "ambiguous_same_person": 1, "common_surname": 1}.
 - Stops judged `data_stop`, by cause: duplicate check listed a chart 1, identity check failed (relabeled control) 1, problems_only switch off; stopped unasked 1.
 - Stops judged `false_stop`, by cause: duplicate check listed a chart 10, problems_only switch off; stopped unasked 9.

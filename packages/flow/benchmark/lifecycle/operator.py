@@ -86,6 +86,10 @@ class ScriptedOperator:
             if self.drift_active() and ok:
                 return "accept_repair", "repair_drift_and_probes_passed", None
             return "reject_repair", "repair_no_drift_or_probe_failed", None
+        if req.kind == "approval" and req.detail.get("rearm"):
+            # The switch was offered for re-arming after its run of verified
+            # items; the operator reads the cause and signs.
+            return "approve", "rearm_after_verified_streak", None
         if t is None:
             return "deny", "no_truth_for_item", None
         if req.kind == "approval":

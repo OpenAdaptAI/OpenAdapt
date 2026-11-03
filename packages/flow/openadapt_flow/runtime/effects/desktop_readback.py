@@ -1227,8 +1227,7 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         named = set(effect.match)
         if effect.kind is EffectKind.FIELD_EQUALS and effect.field:
             named.add(effect.field)
-        if effect.idempotency_key is not None:
-            named.add(effect.key_field)
+        named.update(effect.key_selector())
         for member in effect.new_records:
             named.update(member)
         unknown = sorted(named - readable_fields)
@@ -1246,7 +1245,7 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         counts = (
             effect.kind in (EffectKind.RECORD_WRITTEN, EffectKind.EXACT_NEW_SET)
             or effect.count_new_only
-            or effect.idempotency_key is not None
+            or bool(effect.key_selector())
         )
         if effect.kind is EffectKind.EXACT_NEW_SET or (
             effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count > 1

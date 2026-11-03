@@ -1,0 +1,39 @@
+[
+ {
+  "resourceType": "AllergyIntolerance",
+  "patient": {
+   "reference": "Patient/e1699c51-b2a3-4191-89ba-cba50fc43117"
+  },
+  "code": {
+   "coding": [
+    {
+     "system": "http://snomed.info/sct",
+     "code": "418689008",
+     "display": "Allergy to grass pollen"
+    }
+   ]
+  },
+  "criticality": "low",
+  "clinicalStatus": {
+   "coding": [
+    {
+     "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+     "code": "active"
+    }
+   ]
+  },
+  "verificationStatus": {
+   "coding": [
+    {
+     "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+     "code": "confirmed"
+    }
+   ]
+  },
+  "id": "83dfae3f-02e6-4051-885e-15c660f0a8f2",
+  "meta": {
+   "versionId": "6e651b61-02e7-4f92-bb85-f164e07fd274",
+   "lastUpdated": "2026-10-30T02:11:31.600Z"
+  }
+ }
+]
