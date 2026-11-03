@@ -68,6 +68,12 @@ on the OpenEMR referral program, and the soak admits that version afresh
 instead of reading the on-screen list (`runtime/checks/duplicate_record.py`, a
 check whose source is the record).
 
+**What it is, and what it is not.** It stops on exact matches, and it sends
+close matches to a person. The close-match rules are heuristics: they miss some
+true duplicates (see "Not catchable" below) and flag some different people. It
+does not solve patient identity, and it never decides a close match itself: a
+close match stops the item, and only a person resolves it.
+
 The channels:
 
 | Source | Scope | Used |
