@@ -60,40 +60,76 @@ who wrote it or when.
 
 ## One unit of work
 
-A reconcile spec (`openadapt.reconcile/v1`) names the legs and how the unit's
-identity crosses them:
+A reconcile spec (`openadapt.reconcile/v1`) lists the legs in the order they
+are read. The first is the **anchor**: the EHR's record of the request. The
+shipped example is `benchmark/reconcile/prior_auth.reconcile.yaml`; in
+outline:
 
 ```yaml
 schema_version: openadapt.reconcile/v1
 unit: prior_authorization
-anchor: ehr_request            # the EHR record the others must agree with
+anchor: ehr
 legs:
-  ehr_request:   {role: ehr,           verifier: {kind: fhir, ...}, match: {...}}
-  clearinghouse: {role: clearinghouse, verifier: {kind: x12, ...},  match: {...}}
-  payer:         {role: payer,         verifier: {kind: fhir, ...}, match: {...}}
-  ehr_decision:  {role: writeback,     verifier: {kind: fhir, ...}, match: {...}}
-compare: [service_code, service_date, member_id]
-decision: {from: payer, fields: [auth_number, outcome]}
-expected_within_s: {clearinghouse: 3600, payer: 259200, ehr_decision: 86400}
+  ehr:                       # the request as the clinic made it
+    role: ehr
+    verifier: {kind: fhir, resource_type: Claim, ...}
+    identity: {submission_id: {param: submission_id}, use: preauthorization}
+    provides: {member_id: member_id, service_code: service_code,
+               service_date: service_date, submitted_at: submitted_at}
+  payer:                     # the PAS Claim the payer holds
+    role: payer
+    verifier: {kind: fhir, ...}
+    identity: {submission_id: {param: submission_id}}
+    compare: {service_code: {param: ehr.service_code}, ...}
+    duplicate_key: {service_code: ..., service_date: ..., status: active}
+    provides: {claim_id: id}
+    due: {after: ehr.submitted_at, within_s: 604800}
+  payer_decision: ...        # the ClaimResponse: outcome, auth number, time
+  clearinghouse:             # the 278, which must match the order and the decision
+    role: clearinghouse
+    verifier: {kind: x12, options: {root: ..., transaction: "278"}}
+    identity: {trace: {param: submission_id}}
+    compare: {member_id: ..., service_code: ..., service_date: ...,
+              auth_number: {param: payer_decision.auth_number}}
+    group_by: trace          # a pended review, then the final one
+    latest_by: sent_at
+  writeback:                 # the clinic's copy of the decision
+    role: writeback
+    compare: {outcome: {param: payer_decision.outcome}, auth_number: ...}
+    required_when: {param: payer_decision.outcome, values: [complete, partial]}
+    due: {after: payer_decision.decided_at, within_s: 86400}
 ```
 
-The caller passes only the unit's identity (`params`: the order id, the
-submission id). The reconciler:
+The caller passes only the unit's identity (`submission_id`). For each leg
+in order, the reconciler:
 
-1. Reads the **anchor** leg. Exactly one record must match the identity. Zero
-   is `UNCERTAIN` (nothing to reconcile against), two or more is a
-   `duplicate` in the EHR. The anchor's fields (`service_code`,
-   `service_date`, `member_id`, the submission time) become the expected
-   values for the other legs, so the payer and the clearinghouse are judged
-   against what the clinic ordered, not against what they returned.
-2. Reads each other leg by identity only (`record_written`,
-   `expected_count: 1`). Zero records is `not_received`; two or more is
-   `duplicate`.
-3. On the one matched record, checks each `compare` field (`field_equals`).
-   A differing field is a `mismatch` naming the field.
-4. When the payer shows a decision, binds its `decision.fields` as expected
-   values and checks the write-back leg the same way. A missing or
-   different copy is `not_written_back`.
+1. Reads the store once. A leg whose `identity`, `duplicate_key`, search or
+   due time needs a value an earlier leg didn't give is not read, and is
+   `UNCERTAIN`.
+2. Judges `record_written` (`expected_count: 1`) on the `identity`. On the
+   anchor, zero records is `UNCERTAIN` (nothing to reconcile against). On
+   another leg, zero is `not_received` (`not_written_back` for the
+   write-back) and two or more is `duplicate`.
+3. Judges `record_written` on the `duplicate_key`: more than one is a
+   `duplicate`, even under different identities (the same service for the
+   same member and date, submitted twice).
+4. On the one matched record, judges `field_equals` for each `compare` field.
+   A differing field is a `mismatch` naming the field. A compared value an
+   earlier leg read as empty binds to null, so a denial's missing auth
+   number must be missing on the other side too. A compared value no earlier
+   leg gave leaves that field unchecked and the leg `UNCERTAIN`.
+5. Passes the matched record's `provides` fields to later legs as
+   `<leg>.<name>`.
+
+`required_when` makes a record due only once a value says so: a write-back
+is due once the payer has decided. When it isn't due, its absence is no
+break, but a record that is there is still compared, so a stale "approved"
+copy in the EHR while the payer pends is a `not_written_back` break.
+
+`group_by` and `latest_by` read a store that keeps every status of a unit (a
+277 acknowledgement, then the 277 that it was paid) as one unit's history:
+only the records with the latest `latest_by` in each group are judged. A
+redelivered file ties at the latest and still counts twice.
 
 ## Verdicts and time
 
@@ -102,12 +138,16 @@ Every break carries the outcome of the check behind it:
 - `REFUTED`: the store affirmatively contradicts agreement. A wrong code, a
   second submission, or a record that is absent after its deadline.
 - `UNCERTAIN`: the store couldn't be read, read too weakly, or shows a record
-  absent while it may still arrive. Absence inside `expected_within_s` (counted
-  from the anchor's submission time) is `UNCERTAIN`, not a break: a 278 can
+  absent while it may still arrive. Absence before the leg's `due` time
+  (`within_s` after the time in the `after` value, such as the anchor's
+  submission time) is an `UNCERTAIN` break: a 278 can
   lag the PAS submission, and a payer has up to 72 hours (expedited) or 7
   calendar days (standard) to decide under CMS-0057-F. A missing or
   unreadable submission time makes absence `UNCERTAIN` at any age.
 - `CONFIRMED` checks produce no break.
+
+A write-back copy that differs from the decision is `UNCERTAIN` inside its
+due time (the EHR may still update it) and `REFUTED` after.
 
 The reconciliation's outcome is the worst of its checks: any `REFUTED` makes
 it `REFUTED`, else any `UNCERTAIN` makes it `UNCERTAIN`. Fail closed: a leg
@@ -117,9 +157,11 @@ leg in `scope.unread`.
 ## Evidence
 
 The JSON result holds closed fields only, as `WriteResult.to_dict()` does:
-leg names, break kinds, field names, record references (`Claim/123`, an X12
-file name and its ST control number), counts, read times and reasons. It
-holds no member ids, names or codes. A person follows the record references
+leg names, break kinds, field names, record references (`Claim/123`, or an
+X12 unit's control numbers `x12:ISA13.GS06.ST02.n`), counts, read times and
+reasons. It holds no member ids, names, codes or dates, and no file names.
+Reasons that come from a store have quoted values and URL queries replaced
+with `…`. A person follows the record references
 to the systems themselves.
 
 ## What it doesn't cover
