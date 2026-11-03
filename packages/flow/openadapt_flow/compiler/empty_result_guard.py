@@ -40,8 +40,8 @@ click (an early empty state that a slower result replaces is caught there).
 The vocabulary is English. A statement in any other words is found by
 :func:`dialog_statement` instead, which knows no words at all: it takes the
 one line the dialog added (not its title, not its button row), when that line
-is confidently read, shown once, and carries no run value, PHI, number other
-than 0, or email address. One demonstration cannot tell such a line from
+is confidently read, shown once, not a question, and carries no run value,
+number other than 0, email address, or PHI the optional scrubber finds. One demonstration cannot tell such a line from
 record data, so a compile keeps it only as a candidate in its
 ``no_empty_result_guard`` note. Induction mines it when two or more
 demonstrations whose search inputs differ all show the same line
@@ -261,8 +261,9 @@ def dialog_statement(
     clicked). It must be exactly one line, or one line wrapped over up to
     three, every part read at confidence 0.8 or more; shown once on the
     Confirm screen and at most once after the opener; free of numbers other
-    than 0 and email addresses (:func:`looks_like_data`); and ``reject``
-    (run values, PHI) must not refuse it.
+    than 0 and email addresses (:func:`looks_like_data`); not a question
+    ("Are you sure?"); and ``reject`` (run values, and PHI when the optional
+    privacy scrubber is installed) must not refuse it.
 
     Returns:
         ``(line, "")``, or ``(None, reason)``. A line returned here is only a
@@ -304,6 +305,9 @@ def dialog_statement(
         return None, "the dialog's line is shown more than once"
     if looks_like_data(text) or reject(text):
         return None, "the dialog's line carries a run value, PHI or a number"
+    if text.rstrip().endswith(("?", "\uff1f", "\u061f")):
+        # "Are you sure?" stays on screen whatever the search found.
+        return None, "the dialog's line is a question, not a search result"
     return text, ""
 
 

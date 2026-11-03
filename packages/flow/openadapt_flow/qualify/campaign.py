@@ -1792,34 +1792,74 @@ def qualify(
     return result
 
 
+def _all_steps(workflow: Workflow) -> list[Any]:
+    """The linear steps and every program-graph step."""
+
+    graphs = [
+        *([workflow.program] if workflow.program is not None else []),
+        *workflow.subflows.values(),
+    ]
+    return [
+        *workflow.steps,
+        *(
+            state.step
+            for graph in graphs
+            for state in graph.states.values()
+            if state.step is not None
+        ),
+    ]
+
+
+def _dialog_guard_texts(workflow: Workflow) -> dict[str, str]:
+    """``{confirm step id: text key}`` of each exact halt guard on a Confirm
+    click of a confirmation dialog (the checks ``empty_result_guard`` mines)."""
+
+    from openadapt_flow.ir import PredicateKind
+    from openadapt_flow.risk import is_confirm_click
+    from openadapt_flow.vision.ocr import text_key
+
+    out: dict[str, str] = {}
+    for step in _all_steps(workflow):
+        guard = step.guard
+        if (
+            guard is not None
+            and guard.on_unmet == "halt"
+            and guard.predicate.kind is PredicateKind.TEXT_PRESENT
+            and guard.predicate.exact
+            and guard.predicate.text
+            and is_confirm_click(step)
+        ):
+            out[step.id] = text_key(guard.predicate.text)
+    return out
+
+
 def rule_halt_steps(
     workflow: Workflow, rule: BusinessRuleCase, save_id: str
 ) -> set[str]:
     """The steps a rule's run may halt at (``BusinessRuleCase.halt_at``)."""
 
     from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
-    from openadapt_flow.ir import PostconditionKind, PredicateKind
+    from openadapt_flow.ir import PostconditionKind
+    from openadapt_flow.vision.ocr import text_key
 
     ids = [step.id for step in workflow.steps]
     if rule.halt_at == "empty_result_guard":
-        # The compiler's exact checks (in any language), and an empty-result
-        # text check a bundle compiled before them carries (added by hand
-        # after compiling).
+        # The compiler's exact checks on a confirmation dialog (in any
+        # language), and an empty-result text check a bundle compiled before
+        # them carries (added by hand after compiling).
+        guards = _dialog_guard_texts(workflow)
         return {
             step.id
-            for step in workflow.steps
-            if any(
+            for step in _all_steps(workflow)
+            if step.id in guards
+            or any(
                 pc.kind is PostconditionKind.TEXT_PRESENT
                 and bool(pc.text)
-                and (pc.exact or is_empty_result_statement(pc.text or ""))
+                and (
+                    is_empty_result_statement(pc.text or "")
+                    or (pc.exact and text_key(pc.text or "") in guards.values())
+                )
                 for pc in step.expect
-            )
-            or (
-                step.guard is not None
-                and step.guard.on_unmet == "halt"
-                and step.guard.predicate.kind is PredicateKind.TEXT_PRESENT
-                and step.guard.predicate.exact
-                and bool(step.guard.predicate.text)
             )
         }
     if rule.halt_at == "before_save":
@@ -1842,9 +1882,9 @@ def business_rule_problems(
     # run on a record the search finds must halt at it before it counts.
     unworded = sorted(
         step.id
-        for step in workflow.steps
-        if step.guard is not None
-        and step.guard.predicate.exact
+        for step in _all_steps(workflow)
+        if step.id in _dialog_guard_texts(workflow)
+        and step.guard is not None
         and not is_empty_result_statement(step.guard.predicate.text or "")
     )
     if unworded and not any(

@@ -214,7 +214,7 @@ class Uncertainty(BaseModel):
             "'ambiguous_branch' | 'ambiguous_loop' | 'unconfirmed_branch' | "
             "'unconfirmed_optional' | 'underdetermined_order' | "
             "'ambiguous_selection' | 'alignment_failure' | "
-            "'unconfirmed_loop_branch'"
+            "'unconfirmed_loop_branch' | 'ambiguous_guard'"
         )
     )
     location: str = Field(description="Column / position the ambiguity is at")
@@ -1361,7 +1361,8 @@ def induce_program(
     trace_notes: list[list[dict[str, Any]]] = [[] for _ in traces]
     workflows = [_as_workflow(t, trace_notes[i]) for i, t in enumerate(traces)]
     for i, given in enumerate(compile_notes or ()):
-        if i < len(trace_notes) and given:
+        # A recording directory's notes come from its own bootstrap compile.
+        if i < len(traces) and isinstance(traces[i], Workflow) and given:
             trace_notes[i].extend(given)
     n = len(workflows)
     result = InductionResult(n_traces=n)
@@ -1557,16 +1558,17 @@ def _reconcile_dialog_guards(
 ):
     """Decide each confirmation dialog's empty-result check from every trace.
 
-    A required step is copied from trace 0, and with it the check trace 0's
-    compile mined. That check is kept only when every trace mined the same
-    one. When they differ, it is removed from the opener and the Confirm step
-    and the reason is noted: no trace's dialog is picked over another's.
+    A step is copied from the first trace that has it, and with it the check
+    that trace's compile mined. That check is kept only when every trace
+    mined the same one. When they differ, induction refuses
+    (``ambiguous_guard``): dropping the check would let a run click through a
+    dialog that lists a match, and keeping it would pick one trace's dialog.
 
     When no trace mined one, the candidate line each trace's compile kept
     (``dialog_line``, in any language) becomes the check when every trace has
-    the same line, there are two or more traces, and a value typed before the
-    opener differs between them. Record data changes with the search; the
-    dialog's own statement does not.
+    the same line, there are two or more traces, and the value typed last
+    before the opener differs between them. Record data changes with the
+    search; the dialog's own statement does not.
     """
 
     from openadapt_flow.compiler.empty_result_guard import exact_checks
@@ -1575,6 +1577,8 @@ def _reconcile_dialog_guards(
 
     n = len(workflows)
     pairs = [set(compiled_confirmation_pairs(wf.steps)) for wf in workflows]
+    kinds = {dec.index: dec.kind for dec in decisions}
+    handled: set[int] = set()
     for idx in sorted(singles):
         if idx - 1 not in singles:
             continue
@@ -1583,6 +1587,7 @@ def _reconcile_dialog_guards(
         paired = [(openers[t].id, confirms[t].id) in pairs[t] for t in range(n)]
         if not any(paired):
             continue
+        handled.update((idx - 1, idx))
         opener_sid, confirm_sid = f"s{idx - 1}", f"s{idx}"
         opener = singles[idx - 1].states[opener_sid].step
         confirm = singles[idx].states[confirm_sid].step
@@ -1597,24 +1602,19 @@ def _reconcile_dialog_guards(
                     "empty-result statement",
                 )
                 continue
-            # Copied from trace 0 only: take it off both steps.
-            dropped = texts[0]
-            if dropped and _exact_guard_text(confirm) == dropped:
-                confirm.guard = None
-            if dropped:
-                opener.expect = [
-                    pc
-                    for pc in opener.expect
-                    if not (
-                        pc.exact and pc.text and text_key(pc.text) == text_key(dropped)
-                    )
-                ]
             mined = [t for t in range(n) if texts[t]]
-            note(
-                "no_empty_result_guard",
-                "no check that the dialog found nothing: the demonstrations "
-                f"disagree (recordings {mined} mined a statement, "
-                f"{len({k for k in keys if k})} different; the others none)",
+            why = (
+                f"the demonstrations disagree on the dialog's empty-result "
+                f"check (recordings {mined} mined one, "
+                f"{len({k for k in keys if k})} different; the others none)"
+            )
+            note("no_empty_result_guard", f"induction refused: {why}")
+            _add_uncertainty(
+                result,
+                kind="ambiguous_guard",
+                location=confirm_sid,
+                detail=why,
+                consequential=True,
             )
             continue
         if not all(paired):
@@ -1626,7 +1626,15 @@ def _reconcile_dialog_guards(
             continue
         lines = [_dialog_line(trace_notes[t], openers[t].id) for t in range(n)]
         line_keys = {text_key(line) for line in lines if line}
-        searched = any(dec.kind == "param" and dec.index < idx - 1 for dec in decisions)
+        typed = [
+            j
+            for j in range(idx - 1)
+            if any(
+                getattr(tok, "kind", "") == "single"
+                and tok.step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
+                for tok in columns[j].tokens.values()
+            )
+        ]
         why = ""
         if n < 2:
             why = "one demonstration cannot tell the dialog's line from record data"
@@ -1634,11 +1642,13 @@ def _reconcile_dialog_guards(
             why = "not every demonstration's dialog showed one candidate line"
         elif len(line_keys) != 1:
             why = "the dialog's line differs between demonstrations (record data)"
-        elif not searched:
+        elif not typed or kinds.get(typed[-1]) != "param":
             why = (
-                "no value typed before the dialog differs between the "
-                "demonstrations, so a line that stays the same proves nothing"
+                "the value typed last before the dialog is the same in every "
+                "demonstration, so a line that stays the same proves nothing"
             )
+        elif confirm.guard is not None:
+            why = "the Confirm step already has a guard"
         if why:
             note(
                 "no_empty_result_guard",
@@ -1648,19 +1658,48 @@ def _reconcile_dialog_guards(
         text = lines[0]
         assert text is not None
         postcondition, guard = exact_checks(text)
-        if confirm.guard is not None:
-            note(
-                "no_empty_result_guard",
-                "no check that the dialog found nothing: the Confirm step "
-                "already has a guard",
-            )
-            continue
         opener.expect = [*opener.expect, postcondition]
         confirm.guard = guard
         note(
             "empty_result_guard",
             f"the same dialog line in all {n} demonstrations, whose searches "
             "differed; checked after the opener and before the Confirm click",
+        )
+    _refuse_unreconciled_guards(columns, handled, result)
+
+
+def _refuse_unreconciled_guards(columns, handled, result) -> None:
+    """Refuse a mined dialog check the traces disagree on off the straight path.
+
+    An optional, divergent or loop column copies one trace's step, and with
+    it that trace's check. It is kept only when every step at that place, in
+    every trace and every loop row, has the same check (or none has one).
+    """
+
+    from openadapt_flow.vision.ocr import text_key
+
+    def checks(steps: Sequence[Step]) -> tuple[str, ...]:
+        return tuple(text_key(_exact_guard_text(step) or "") for step in steps)
+
+    for idx, col in enumerate(columns):
+        if idx in handled:
+            continue
+        shapes: set[tuple[str, ...]] = set()
+        for tok in col.tokens.values():
+            rows = [[tok.step]] if tok.kind == "single" else tok.iterations
+            shapes.update(checks(row) for row in rows)
+        if not any(any(shape) for shape in shapes) or len(shapes) == 1:
+            continue
+        _add_uncertainty(
+            result,
+            kind="ambiguous_guard",
+            location=f"s{idx}",
+            detail=(
+                "the demonstrations disagree on a confirmation dialog's "
+                "empty-result check in a step not every trace or row repeats "
+                "the same way"
+            ),
+            consequential=True,
         )
 
 

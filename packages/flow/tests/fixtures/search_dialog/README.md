@@ -9,7 +9,9 @@ parameter:
 - `archive_marsh`, `archive_weber`: "Keine Treffer im Archiv Nord" or "West",
   chosen by the typed name (a line that changes with the data);
 - `names_marsh`: "Keine Treffer für Elena Marsh" (the typed value);
-- `en_weber`: "No results found" (the English vocabulary).
+- `en_weber`: "No results found" (the English vocabulary);
+- `question_marsh`: "Wirklich speichern?" (a question, shown whatever the
+  search found).
 
 The buttons are in English because the confirmation pair is found from the
 Confirm label. The page URL is replaced with `http://records.test/new` in the

@@ -12,6 +12,7 @@ recorder in Chromium (``record.py`` there) and are read with the real OCR.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -85,7 +86,15 @@ def _frames(name: str) -> tuple[list[OcrLine], list[OcrLine], list[OcrLine]]:
     )
 
 
-CONFIRM = (459, 411)  # the recorded Confirm click
+def _confirm_point(name: str) -> tuple[int, int]:
+    """Where the recording clicked Confirm (its last event)."""
+
+    lines = (FIXTURES / name / "events.jsonl").read_text().splitlines()
+    event = json.loads(lines[-1])
+    return int(event["x"]), int(event["y"])
+
+
+CONFIRM = _confirm_point("de_marsh")
 
 
 # -- the candidate line, one screen at a time ------------------------------------
@@ -199,24 +208,69 @@ def test_the_same_search_twice_proves_nothing(compiled: dict) -> None:
     result = _induce(compiled, "de_marsh", "de_marsh_again")
     _opener, confirm = _steps(result)
     assert confirm.guard is None
-    assert "no value typed" in result.guard_notes[0]["warning"]
+    assert (
+        "typed last before the dialog is the same" in result.guard_notes[0]["warning"]
+    )
 
 
-def test_a_guard_the_demonstrations_disagree_on_is_dropped(compiled: dict) -> None:
+def test_a_guard_the_demonstrations_disagree_on_refuses_induction(
+    compiled: dict,
+) -> None:
     """The English recording's compile mined "No results found"; the German
-    one mined nothing. Trace 0's guard is not copied: it comes off both
-    steps and the reason is noted."""
+    one mined nothing. Copying the first one's guard would pick one dialog,
+    dropping it would click through a listed match: induction refuses."""
 
     workflow, _notes = compiled["en_weber"]
     assert workflow.steps[3].guard is not None
     for order in (("en_weber", "de_marsh"), ("de_marsh", "en_weber")):
         result = _induce(compiled, *order)
-        opener, confirm = _steps(result)
-        assert confirm.guard is None
-        assert _exact_texts(opener) == []
+        assert not result.certified and result.workflow is None
+        assert [u.kind for u in result.uncertainties] == ["ambiguous_guard"]
+        assert result.uncertainties[0].consequential
         (note,) = result.guard_notes
         assert note["change"] == "no_empty_result_guard"
         assert "disagree" in note["warning"]
+
+
+def test_a_question_is_not_a_search_result() -> None:
+    line, why = dialog_statement(
+        *_frames("question_marsh"),
+        confirm_point=_confirm_point("question_marsh"),
+        title="Dublettensuche",
+    )
+    assert line is None and "question" in why
+
+
+def test_a_disagreeing_guard_off_the_straight_path_refuses() -> None:
+    """An optional or loop column copies one trace's step: its mined check
+    must be the same at that place in every trace and row."""
+
+    from openadapt_flow.compiler.empty_result_guard import exact_checks
+    from openadapt_flow.compiler.induction import (
+        _Column,
+        _refuse_unreconciled_guards,
+        _SingleTok,
+    )
+    from openadapt_flow.ir import ActionKind
+
+    def confirm(text: str | None) -> Step:
+        step = Step(id="step_003", intent="click 'Confirm'", action=ActionKind.CLICK)
+        if text:
+            step.guard = exact_checks(text)[1]
+        return step
+
+    for texts, refused in (
+        (("Keine Treffer gefunden.", None), True),
+        (("Keine Treffer gefunden.", "No results found"), True),
+        (("Keine Treffer gefunden.", "Keine Treffer gefunden."), False),
+        ((None, None), False),
+    ):
+        col = _Column(("click", "confirm:select:button"), "single")
+        for t, text in enumerate(texts):
+            col.tokens[t] = _SingleTok(confirm(text))
+        result = InductionResult(n_traces=2)
+        _refuse_unreconciled_guards([col], set(), result)
+        assert bool(result.uncertainties) is refused, texts
 
 
 def test_a_guard_every_demonstration_mined_is_kept(compiled: dict) -> None:
@@ -232,19 +286,22 @@ def test_a_guard_every_demonstration_mined_is_kept(compiled: dict) -> None:
 def test_qualification_needs_a_run_that_halts_at_the_mined_line(
     compiled: dict,
 ) -> None:
+    """On the induced program itself (a graph, no linear steps)."""
+
     from openadapt_flow.qualify.campaign import business_rule_problems, rule_halt_steps
     from openadapt_flow.qualify.config import BusinessRuleCase, VerifyConfig
 
     result = _induce(compiled, "de_marsh", "de_weber")
-    _opener, confirm = _steps(result)
-    workflow = Workflow(name="w", steps=[_opener, confirm])
+    workflow = result.workflow
+    assert workflow is not None and workflow.steps == []
+    opener, confirm = _steps(result)
     config = VerifyConfig.model_construct(business_rules=[])
     (problem,) = business_rule_problems(workflow, config, confirm, {})
-    assert "business_rules case" in problem
+    assert "business_rules case" in problem and confirm.id in problem
     rule = BusinessRuleCase.model_construct(
         id="duplicate", params={}, halt_at="empty_result_guard"
     )
-    assert rule_halt_steps(workflow, rule, confirm.id) == {_opener.id, confirm.id}
+    assert rule_halt_steps(workflow, rule, confirm.id) == {opener.id, confirm.id}
     config = VerifyConfig.model_construct(business_rules=[rule])
     assert business_rule_problems(workflow, config, confirm, {}) == []
 

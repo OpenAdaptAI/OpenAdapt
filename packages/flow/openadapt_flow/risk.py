@@ -594,6 +594,16 @@ def confirmation_opener_step_ids(steps: Iterable[Step]) -> tuple[tuple[str, str]
     return tuple(pairs)
 
 
+def is_confirm_click(step: Step) -> bool:
+    """Whether ``step`` is an irreversible click labelled "Confirm" or "Yes"."""
+
+    return (
+        step.action in _POINTER_ACTIONS
+        and step.risk == "irreversible"
+        and _CONFIRMATION_LABEL.search(step_text(step)) is not None
+    )
+
+
 def opener_explanation(confirm_id: str) -> str:
     """The risk explanation the compiler gives a click that opens a dialog."""
 

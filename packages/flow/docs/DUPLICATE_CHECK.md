@@ -10,21 +10,36 @@ exact check on the click that opens the dialog and again before Confirm
 
 The compiler knows an English vocabulary for that statement. A statement in
 other words ("Keine Treffer gefunden.") is mined from two or more
-demonstrations instead: when the dialog is named, adds exactly one line
-besides its title and button row, and that line reads the same in every
-demonstration although the typed search differs, induction checks it the same
-way. A line that changes with the search, carries a typed value, PHI or a
-number other than 0, or comes from one demonstration only, is not mined; the
-compile notes say why. A check the demonstrations disagree on is dropped and
-noted, never copied from the first recording. A check mined this way was
-chosen because the demonstrations agree, not because of its words, so
-qualification needs a `business_rules` case that halts at it.
+demonstrations instead. The dialog must be named, and it must add exactly one
+line besides its title and button row. That line must read the same in every
+demonstration although the value typed last before the dialog differs. Then
+induction checks it the same way. The line is not mined when:
 
-Limits: the dialog's title comes from the browser recorder (its accessible
-name), so desktop recordings use the vocabulary only. Telling the statement
-from an empty table's only header needs a recording where the search found
-rows; there is no such contrast check yet. The confirmation pair itself is
-still found from English button labels ("Confirm", "Yes").
+- it changes with the search;
+- it carries a typed value, a number other than 0, or an email address;
+- it is a question ("Wirklich speichern?");
+- it comes from one demonstration only.
+
+The PHI check on the line runs only when the optional privacy scrubber is
+installed. The compile notes of each recording say why a line was not mined.
+When the demonstrations disagree on a mined check, induction refuses
+(`ambiguous_guard`). It never copies the first recording's check, and it
+never drops the check quietly.
+
+A check mined this way was chosen because the demonstrations agree, not
+because of what its words say. So qualification needs a `business_rules` case
+that halts at it.
+
+Limits:
+
+- The dialog's title comes from the browser recorder (its accessible name),
+  so desktop recordings use the vocabulary only.
+- Agreement alone can't tell the statement from other fixed text that is the
+  dialog's only line, such as an empty table's single header or an
+  instruction. That needs a recording where the search found rows, and there
+  is no such contrast check yet. The business-rule run is what catches it.
+- The confirmation pair itself is still found from English button labels
+  ("Confirm", "Yes").
 
 OpenEMR lists a chart that shares only a first name with the new patient. On
 the lifecycle soak's synthetic worklist, most of those stops were false: the
