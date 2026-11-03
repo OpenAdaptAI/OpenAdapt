@@ -1092,7 +1092,10 @@ class WindowsBackend:
         if (
             not parsed.native
             or parsed.target_fingerprint != fingerprint
-            or not parsed.operation.startswith("uia_")
+            or not (
+                parsed.operation.startswith("uia_")
+                or parsed.operation == "win32_bm_click"
+            )
             or parsed.outcome_verified is not False
         ):
             raise RuntimeError(
