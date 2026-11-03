@@ -180,6 +180,21 @@ class FakeMacAXClient:
         self.calls.append(("structured", element.ax_path))
         return self.text
 
+    #: ax_path -> whether that hit lies under the target with nothing
+    #: pressable in between (the live client walks AXParent for this).
+    parts: dict = {}
+
+    def is_part_of(self, hit, target):
+        self.calls.append(("part-of", hit.ax_path, target.ax_path))
+        if hit == target or (
+            hit.ax_path == "@point"
+            and hit.bounds == target.bounds
+            and hit.role == target.role
+            and hit.name == target.name
+        ):
+            return True
+        return self.parts.get(hit.ax_path, False)
+
 
 def backend(
     client: FakeMacClient | None = None,
@@ -742,11 +757,50 @@ def test_act_structural_accepts_the_targets_own_label() -> None:
         bounds=(215.0, 42.0, 30.0, 16.0),
         supported_operations=(),
     )
-    target = backend(client, FakeMacAXClient(at_point=label))
+    ax = FakeMacAXClient(at_point=replace(label, ax_path="label"))
+    ax.parts = {"label": True}
+    target = backend(client, ax)
     handle = target.locate_structural(SAVE_LOCATOR)
     assert handle is not None
     target.act_structural(SAVE_LOCATOR, handle)
     assert len(_clicks(client)) == 1
+
+
+@pytest.mark.parametrize(
+    "why",
+    ["label of a nested button", "overlay from another subtree", "no is_part_of"],
+)
+def test_act_structural_refuses_what_the_tree_does_not_place_under_it(why) -> None:
+    from dataclasses import replace
+
+    from openadapt_flow.backend import StructuralResolutionRefused
+
+    client = FakeMacClient()
+    # Inert text inside the target's bounds that the tree does NOT put under
+    # the target with nothing pressable between (a nested button's label, an
+    # overlay): bounds alone must not admit it.
+    text = replace(
+        SAVE_ELEMENT,
+        ax_path="text",
+        accessible_id=None,
+        role="text",
+        name="Delete",
+        bounds=(215.0, 42.0, 30.0, 16.0),
+        supported_operations=(),
+    )
+    ax = FakeMacAXClient(at_point=text)
+    if why == "no is_part_of":
+
+        class NoWalk(FakeMacAXClient):
+            is_part_of = None  # type: ignore[assignment]
+
+        ax = NoWalk(at_point=SAVE_ELEMENT)
+    target = backend(client, ax)
+    handle = target.locate_structural(SAVE_LOCATOR)
+    assert handle is not None
+    with pytest.raises(StructuralResolutionRefused, match="not the resolved AX"):
+        target.act_structural(SAVE_LOCATOR, handle)
+    assert _clicks(client) == []
 
 
 def test_act_structural_reproves_the_element_after_the_pointer_moves() -> None:
