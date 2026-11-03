@@ -3,8 +3,8 @@
   "kind": "ax",
   "backend": "MacOSBackend (AX)",
   "app": "tests/native_apps/Chart.swift (native Cocoa, SQLite)",
-  "at": "2026-11-02T23:02:44.374109+00:00",
-  "git_sha": "e3117c14b59207f6a5a24147f48f3166b010eb4d",
+  "at": "2026-11-02T23:46:13.460033+00:00",
+  "git_sha": "5a3bf49a0bf2d662430386295a1c34036c064d58",
   "compiled": {
     "steps": [
       "step_000:click:click 'Newnote'",
@@ -19,15 +19,15 @@
   },
   "repair_with_record_check": {
     "status": "no_fix",
-    "reason": "the probe could not run: run_gate (the run could not start (StateDiverged))",
-    "duration_s": 48.7,
+    "reason": "pre-save check failed: same_fields (0/1 typed value(s) in the form)",
+    "duration_s": 91.2,
     "person_decisions": 0,
     "approver": "qualification:scripted-approver (stands in for a person; approves all)",
     "stages": [
       {
         "stage": "halt",
         "passed": true,
-        "detail": "step_000 halted before any effect (after): Postconditions failed for step 'step_000' (click 'Newnote'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(22, 622, 733, 89); text_present 'New note for MRN 4408 Okafor, Philip DOB 1966-01-17' \u2014 run aborted"
+        "detail": "step_000 halted before any effect (after): Postconditions failed for step 'step_000' (click 'Newnote'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(22, 622, 786, 89); text_present 'New note for MRN RC79284 Okafor, Philip born 1966-02-17' \u2014 run aborted"
       },
       {
         "stage": "propose",
@@ -37,12 +37,12 @@
       {
         "stage": "patch",
         "passed": true,
-        "detail": "after step_000: clicks 'Later' (checked by the record check); bundle cf443bb3ead3aadf; step_000_bridge_1 admitted by element_and_record_check (button 'Later')"
+        "detail": "after step_000: clicks 'Later' (checked by the record check); bundle 64b4a023f0034c93; step_000_bridge_1 admitted by element_and_record_check (button 'Later')"
       },
       {
         "stage": "probe",
         "passed": false,
-        "detail": "the probe could not run: run_gate (the run could not start (StateDiverged))"
+        "detail": "pre-save check failed: same_fields (0/1 typed value(s) in the form)"
       },
       {
         "stage": "propose",
@@ -52,12 +52,12 @@
       {
         "stage": "patch",
         "passed": true,
-        "detail": "after step_000: clicks 'Later' (checked by the record check); bundle cf443bb3ead3aadf; step_000_bridge_1 admitted by element_and_record_check (button 'Later')"
+        "detail": "after step_000: clicks 'Later' (checked by the record check); bundle 64b4a023f0034c93; step_000_bridge_1 admitted by element_and_record_check (button 'Later')"
       },
       {
         "stage": "probe",
         "passed": false,
-        "detail": "the probe could not run: run_gate (the run could not start (StateDiverged))"
+        "detail": "pre-save check failed: same_fields (0/1 typed value(s) in the form)"
       },
       {
         "stage": "propose",
@@ -67,34 +67,34 @@
       {
         "stage": "patch",
         "passed": true,
-        "detail": "after step_000: clicks 'Later' (checked by the record check); bundle cf443bb3ead3aadf; step_000_bridge_1 admitted by element_and_record_check (button 'Later')"
+        "detail": "after step_000: clicks 'Later' (checked by the record check); bundle 64b4a023f0034c93; step_000_bridge_1 admitted by element_and_record_check (button 'Later')"
       },
       {
         "stage": "probe",
         "passed": false,
-        "detail": "the probe could not run: run_gate (the run could not start (StateDiverged))"
+        "detail": "pre-save check failed: same_fields (0/1 typed value(s) in the form)"
       }
     ],
     "rows": []
   },
   "repair_without_verifier": {
     "status": "refused",
-    "reason": "the run gate refused the bundle; nothing was executed:\nREFUSE: workflow 'chart-note-ax' under 'standard' profile vs policy 'clinical-write'\n  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled\n  [PASS] Certification: certified under 'clinical-write' (4 steps, 0 violations)\n  [PASS] Identity coverage: 3/3 entity-sensitive/consequential action(s) identity-armed\n  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts\n  [REFUSE] Approval fallback: 1 consequential write(s) lack a verifier at the evidence tier required by this execution profile; an approval cannot convert unverified completion into VERIFIED\n         steps: step_003\n  [PASS] Interstitial admission: no automatic interstitial actions declared\n  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 10 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse\n         steps: templates/identifiers/step_000.png, templates/identifiers/step_001.png, templates/identifiers/step_003.png, templates/layout_fingerprint.json, templates/step_000.png, templates/step_000_expect.png, templates/step_001.png, templates/step_001_expect.png, ... (+2 more)\n  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest 5314445437f0f21d..., compiler 2.4.1)\n  -> RUN REFUSED (fail-closed): Approval fallback. Nothing was executed.",
+    "reason": "the run gate refused the bundle; nothing was executed:\nREFUSE: workflow 'chart-note-ax' under 'standard' profile vs policy 'clinical-write'\n  [PASS] Execution profile: standard (production); durability required and enabled; settled-state detection required and enabled\n  [PASS] Certification: certified under 'clinical-write' (4 steps, 0 violations)\n  [PASS] Identity coverage: 3/3 entity-sensitive/consequential action(s) identity-armed\n  [PASS] Effect coverage: 1/1 consequential write(s) declare the required postcondition and confirmed system-of-record effect contracts\n  [REFUSE] Approval fallback: 1 consequential write(s) lack a verifier at the evidence tier required by this execution profile; an approval cannot convert unverified completion into VERIFIED\n         steps: step_003\n  [PASS] Interstitial admission: no automatic interstitial actions declared\n  [WARN] Encrypted bundle: workflow.json plaintext (not required); WARNING: 10 template/screenshot asset(s) are unsealed (plaintext at rest) -- protect via disk encryption or run with --strict-templates to refuse\n         steps: templates/identifiers/step_000.png, templates/identifiers/step_001.png, templates/identifiers/step_003.png, templates/layout_fingerprint.json, templates/step_000.png, templates/step_000_expect.png, templates/step_001.png, templates/step_001_expect.png, ... (+2 more)\n  [PASS] Sealed manifest + version pin: integrity-sealed manifest re-verified (digest 4bffad7e37e69618..., compiler 2.5.0)\n  -> RUN REFUSED (fail-closed): Approval fallback. Nothing was executed.",
     "person_decisions": 0,
     "stages": [],
     "rows": []
   },
   "repair_under_demo_profile": {
     "status": "no_fix",
-    "reason": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on a accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated",
-    "duration_s": 7.9,
+    "reason": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on an accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated",
+    "duration_s": 9.6,
     "person_decisions": 0,
     "approver": "qualification:scripted-approver (stands in for a person; approves all)",
     "stages": [
       {
         "stage": "halt",
         "passed": true,
-        "detail": "step_000 halted before any effect (after): Postconditions failed for step 'step_000' (click 'Newnote'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(22, 622, 733, 89); text_present 'New note for MRN 4408 Okafor, Philip DOB 1966-01-17' \u2014 run aborted"
+        "detail": "step_000 halted before any effect (after): Postconditions failed for step 'step_000' (click 'Newnote'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(22, 622, 786, 89); text_present 'New note for MRN RC79284 Okafor, Philip born 1966-02-17' \u2014 run aborted"
       },
       {
         "stage": "propose",
@@ -104,7 +104,7 @@
       {
         "stage": "patch",
         "passed": false,
-        "detail": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on a accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated"
+        "detail": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on an accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated"
       },
       {
         "stage": "propose",
@@ -114,7 +114,7 @@
       {
         "stage": "patch",
         "passed": false,
-        "detail": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on a accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated"
+        "detail": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on an accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated"
       },
       {
         "stage": "propose",
@@ -124,7 +124,7 @@
       {
         "stage": "patch",
         "passed": false,
-        "detail": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on a accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated"
+        "detail": "the control is not inside a record the recording verified; a bridge may only act on the recorded record; on an accessibility backend a new click needs a record check instead, and none covers this workflow: the run's profile is 'demo'; a record check is enforced only under standard or regulated"
       }
     ],
     "rows": []
