@@ -1136,6 +1136,46 @@ def web_fresh_session(
     return reset
 
 
+def screen_fresh_session(
+    backend: Any, workflow: Workflow, *, bundle_dir: Path, run_dir: Path
+) -> Optional[Callable[[], None]]:
+    """Any backend (a desktop app, a remote display) back to the run's start
+    screen, for a GUI compensation.
+
+    It runs the run's halt cleanup (``halt_cleanup.runnable_cleanup``: the
+    bundle's cleanup steps only when their qualification matches, otherwise
+    none), then checks that the start screen shows. A screen that doesn't
+    come back refuses the compensation. Nothing here proves an undo: the
+    whole-store reads before and after each compensation cover whatever the
+    cleanup does too. None when the workflow has no start screen to check.
+    """
+    from openadapt_flow import halt_cleanup
+
+    cleanup = halt_cleanup.runnable_cleanup(workflow)
+    if cleanup is None:
+        return None
+    resets = [0]
+
+    def reset() -> None:
+        from openadapt_flow.runtime import Replayer
+
+        resets[0] += 1
+        result = halt_cleanup.run_cleanup(
+            lambda: Replayer(backend, use_structural=True),
+            workflow,
+            cleanup,
+            bundle_dir=bundle_dir,
+            run_dir=run_dir / ROLLBACK_DIRNAME / f"fresh-session-{resets[0]}",
+        )
+        if not result.clean:
+            raise CompensationRefused(
+                "the screen didn't come back to the run's start screen "
+                f"({result.dirty or result.record_changed})"
+            )
+
+    return reset
+
+
 class RollbackPlan:
     """What a run needs to roll back after a stop: how to read the store,
     how to read the compensations' own collection, who changed a row, and
@@ -1300,5 +1340,6 @@ __all__ = [
     "fresh_presence",
     "roll_back",
     "rollback_lines",
+    "screen_fresh_session",
     "snapshot_sha256",
 ]

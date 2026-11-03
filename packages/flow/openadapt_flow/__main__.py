@@ -1251,15 +1251,20 @@ def _replay_desktop(
     approval_gate=None,
     qualification_fault_driver=None,
     surface_cfgs=None,
+    rollback_plan=None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
     No Playwright browser, no bundled MockMed, no session video — those are
     web-only. ``--drift`` (a MockMed teaching aid) is refused. The backend is
     built from the resolved ``BackendConfig`` and the shared replayer wiring runs
-    exactly as it does for the web path.
+    exactly as it does for the web path. With ``rollback_plan``, a GUI
+    compensation starts from the run's start screen (the halt cleanup and its
+    start check, ``rollback.screen_fresh_session``); the whole-store reads
+    prove it either way.
     """
     from openadapt_flow.backends.factory import build_backend
+    from openadapt_flow.rollback import screen_fresh_session
 
     if args.drift:
         raise SystemExit(
@@ -1304,6 +1309,14 @@ def _replay_desktop(
             qualification_fault_driver=qualification_fault_driver,
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            fresh_session=(
+                screen_fresh_session(
+                    backend, workflow, bundle_dir=bundle, run_dir=run_dir
+                )
+                if rollback_plan is not None
+                else None
+            ),
         )
     finally:
         for owned in (backend, *surface_backends.values()):
@@ -2799,7 +2812,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             surface_cfgs=surface_cfgs,
         )
     if _normalize_kind(backend_cfg.kind) != "web":
-        _refuse_rollback_unwired(cfg, "a desktop or remote-display backend")
+        from openadapt_flow.rollback import plan_from_deployment
+
         return _replay_desktop(
             args,
             backend_cfg,
@@ -2830,6 +2844,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
             surface_cfgs=surface_cfgs,
+            rollback_plan=plan_from_deployment(cfg, effect_verifier),
         )
 
     headed = args.headed or cfg.backend.headed

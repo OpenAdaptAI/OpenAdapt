@@ -626,6 +626,7 @@ def _run_clinic(
     on_read: Optional[dict[int, Any]] = None,
     autoinc: bool = False,
     hidden_log: bool = False,
+    fresh_session: Any = lambda: None,
 ) -> RunReport:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "clinic.db"
@@ -718,7 +719,7 @@ def _run_clinic(
         before=before,
         run_dir=run_dir,
         bundle_dir=bundle,
-        runner=ReplayerRunner(replayer, fresh_session=lambda: None),
+        runner=ReplayerRunner(replayer, fresh_session=fresh_session),
     )
 
 
@@ -1968,3 +1969,121 @@ def test_an_unreadable_audit_log_at_the_end_is_never_rolled_back(tmp_path):
     rollback = report.rollback
     assert rollback.status == "not_rolled_back", rollback.reason
     assert "couldn't be read" in rollback.reason
+
+
+# ---------------------------------------------------------------------------
+# Desktop and remote-display backends (#1699)
+# ---------------------------------------------------------------------------
+
+
+def _cleanup_result(dirty=None, record_changed=None):
+    from openadapt_flow.halt_cleanup import CleanupResult
+
+    result = CleanupResult()
+    result.dirty, result.record_changed = dirty, record_changed
+    return result
+
+
+def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
+    tmp_path, monkeypatch
+):
+    from openadapt_flow import halt_cleanup
+    from openadapt_flow.ir import HaltCleanup
+    from openadapt_flow.rollback import screen_fresh_session
+
+    workflow = _clinic_workflow()
+    monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: None)
+    # No start screen to check: only an API-only compensation runs.
+    assert (
+        screen_fresh_session(
+            FakeBackend(), workflow, bundle_dir=tmp_path, run_dir=tmp_path
+        )
+        is None
+    )
+    start = HaltCleanup(
+        steps=[],
+        start_state=Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Home"),
+        source="declared",
+    )
+    monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: start)
+    seen: list[Path] = []
+    results = [_cleanup_result(), _cleanup_result(dirty="the start screen isn't up")]
+
+    def run_cleanup(factory, wf, cleanup, *, bundle_dir, run_dir):
+        assert cleanup is start
+        seen.append(run_dir)
+        return results.pop(0)
+
+    monkeypatch.setattr(halt_cleanup, "run_cleanup", run_cleanup)
+    reset = screen_fresh_session(
+        FakeBackend(), workflow, bundle_dir=tmp_path, run_dir=tmp_path
+    )
+    assert reset is not None
+    reset()  # back at the start screen
+    with pytest.raises(CompensationRefused, match="start screen"):
+        reset()
+    assert [p.name for p in seen] == ["fresh-session-1", "fresh-session-2"]
+    assert all(p.parent == tmp_path / "rollback" for p in seen)
+
+
+def test_a_screen_that_doesnt_come_back_compensates_nothing(tmp_path):
+    def refuse() -> None:
+        raise CompensationRefused("the screen didn't come back to the start")
+
+    report = _run_clinic(tmp_path, fresh_session=refuse)
+    rollback = report.rollback
+    assert rollback.status == "not_rolled_back"
+    [step] = rollback.steps
+    assert step.decision == "refused"
+    assert "start" in step.reason
+    # The run's record is still there, and a person is told so.
+    assert "patients: 1 added" in rollback.reason
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+
+
+def test_a_desktop_run_is_armed_with_the_screen_fresh_session(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.backends import factory
+
+    backend = FakeBackend()
+    monkeypatch.setattr(factory, "build_backend", lambda cfg: backend)
+    seen: dict[str, Any] = {}
+
+    def build_and_run(b, **kwargs):
+        seen.update(kwargs, backend=b)
+        return "report"
+
+    monkeypatch.setattr(cli, "_build_and_run_replayer", build_and_run)
+    monkeypatch.setattr(cli, "_finish_replay", lambda *a, **k: 0)
+    monkeypatch.setattr(cli, "_build_surface_backends", lambda cfgs, page: {})
+    from openadapt_flow import rollback as rollback_module
+
+    reset = object()
+    monkeypatch.setattr(
+        rollback_module,
+        "screen_fresh_session",
+        lambda b, wf, *, bundle_dir, run_dir: reset if b is backend else None,
+    )
+    plan = object()
+    args = SimpleNamespace(drift=False, save_healed_to=None)
+    backend_cfg = SimpleNamespace(kind="windows", deployment_surface=None)
+    common = dict(
+        workflow=_clinic_workflow(),
+        params={},
+        worklists={},
+        bundle=tmp_path,
+        run_dir=tmp_path,
+        allow_egress=False,
+        effect_verifier=None,
+        api_actuator=None,
+        durable=False,
+    )
+    cli._replay_desktop(args, backend_cfg, **common, rollback_plan=plan)
+    assert seen["rollback_plan"] is plan
+    assert seen["backend"] is backend
+    assert seen["fresh_session"] is reset
+    seen.clear()
+    cli._replay_desktop(args, backend_cfg, **common)
+    assert seen["rollback_plan"] is None and seen["fresh_session"] is None
