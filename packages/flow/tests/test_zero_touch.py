@@ -44,14 +44,18 @@ def _digest(app: App) -> str:
         "SELECT table_name FROM information_schema.tables "
         "WHERE table_schema='public' ORDER BY table_name"
     ):
-        h.update(json.dumps(app.q(f"SELECT * FROM {t} ORDER BY 1"), default=str).encode())
+        h.update(
+            json.dumps(app.q(f"SELECT * FROM {t} ORDER BY 1"), default=str).encode()
+        )
     return h.hexdigest()
 
 
 @pytest.fixture(scope="module")
 def onboarded(pg: Any) -> dict[str, Any]:  # noqa: F811
     root, port = pg["root"], pg["port"]
-    admin = psycopg2.connect(host="127.0.0.1", port=port, user="admin", dbname="postgres")
+    admin = psycopg2.connect(
+        host="127.0.0.1", port=port, user="admin", dbname="postgres"
+    )
     admin.autocommit = True
     admin.cursor().execute("CREATE DATABASE tracker_zt")
     admin.close()
@@ -59,7 +63,11 @@ def onboarded(pg: Any) -> dict[str, Any]:  # noqa: F811
     with app.con() as c, c.cursor() as cur:
         cur.execute(SCHEMA)
         cur.execute("UPDATE issues SET lock_version = 4")
-        for seq in ("journals_id_seq", "journal_details_id_seq", "custom_values_id_seq"):
+        for seq in (
+            "journals_id_seq",
+            "journal_details_id_seq",
+            "custom_values_id_seq",
+        ):
             cur.execute(f"SELECT setval('{seq}', 100)")
     os.environ["OA_ZT_TEST_PW"] = "reader-pw"
     work = root / "zt"
@@ -75,14 +83,21 @@ def onboarded(pg: Any) -> dict[str, Any]:  # noqa: F811
     (work / "kinds.yaml").write_text(yaml.safe_dump(KINDS, allow_unicode=True))
     common = ["--read", str(work / "read.yaml")]
 
-    def demo(folder: str, kind: str, values: dict[str, Any], write: Callable[[], Any]) -> None:
+    def demo(
+        folder: str, kind: str, values: dict[str, Any], write: Callable[[], Any]
+    ) -> None:
         assert gen.main(["snapshot", *common, "--out", str(work / "before.json")]) == 0
         write()
         assert gen.main(["record", *common, "--before", str(work / "before.json"), "--kind", kind,
                          "--values", json.dumps(values), "--demos", str(work / folder)]) == 0  # fmt: skip
 
     for ex in KINDS["kinds"][0]["examples"]:
-        demo("demos", "create_issue", ex["values"], lambda v=ex["values"]: app.create_issue(v))
+        demo(
+            "demos",
+            "create_issue",
+            ex["values"],
+            lambda v=ex["values"]: app.create_issue(v),
+        )
     for ex in KINDS["kinds"][1]["examples"]:
         v = ex["values"]
         demo("demos", "update_issue", v,
@@ -98,8 +113,31 @@ def onboarded(pg: Any) -> dict[str, Any]:  # noqa: F811
         read=read, admin=admin_read, reader="oa_reader", kinds_path=work / "kinds.yaml",
         demo_dir=work / "demos", holdout_dir=work / "holdout", out=work / "out",
         actor_params={"bot_user_id": str(BOT)}, actor_id="ops-bot", log=lines.append,
+        keep_sandbox=True,
     )  # fmt: skip
-    return {"app": app, "result": result, "before": before, "out": work / "out", "log": lines}
+    # The control: the same answers without the time check, in the same
+    # sandbox. The planted time-stamp fault must then pass.
+    sb = zt.Sandbox(admin_read, read)
+    sb.schema = zt.store.read_schema(zt.store.connector(sb.read_config()), "postgresql")
+    try:
+        answers = {**result["answers"], "recheck_after_s": zt.SANDBOX_RECHECK_S}
+        answers.pop("now_checks")
+        gen.propose(read=sb.read_config(), kinds=gen.load_kinds(work / "kinds.yaml"),
+                    demo_dir=work / "demos", out=work / "control",
+                    actor_params={"bot_user_id": str(BOT)}, answers=answers)  # fmt: skip
+        control: list[dict[str, Any]] = []
+        zt.validate(sb, work / "control" / "manifest.yaml",
+                    [d for d in gen.load_demos(work / "holdout") if d.kind == "create_issue"],
+                    "ops-bot", {"bot_user_id": str(BOT)}, record=control)  # fmt: skip
+    finally:
+        sb.drop()
+    if os.environ.get("OA_ZT_TEST_KEEP"):
+        import shutil
+
+        shutil.copytree(work, os.environ["OA_ZT_TEST_KEEP"], dirs_exist_ok=True)
+        (Path(os.environ["OA_ZT_TEST_KEEP"]) / "log.txt").write_text("\n".join(lines))
+    return {"app": app, "result": result, "before": before, "out": work / "out", "log": lines,
+            "control": control}  # fmt: skip
 
 
 def test_no_person_decision_and_a_ledger(onboarded: dict[str, Any]) -> None:
@@ -115,7 +153,12 @@ def test_no_person_decision_and_a_ledger(onboarded: dict[str, Any]) -> None:
 
 def test_the_apps_own_tables_did_not_change(onboarded: dict[str, Any]) -> None:
     assert _digest(onboarded["app"]) == onboarded["before"]
-    schemas = {s for (s,) in onboarded["app"].q("SELECT schema_name FROM information_schema.schemata")}
+    schemas = {
+        s
+        for (s,) in onboarded["app"].q(
+            "SELECT schema_name FROM information_schema.schemata"
+        )
+    }
     assert zt.PG_SANDBOX_SCHEMA not in schemas
 
 
@@ -131,17 +174,23 @@ def test_an_admitted_kind_confirmed_every_held_out_write_and_stopped_every_fault
             assert s["false_stops"] or s["faults_passed"] or s.get("why"), (name, s)
 
 
-def test_create_issue_is_admitted_with_every_fault_class(onboarded: dict[str, Any]) -> None:
+def test_create_issue_is_admitted_with_every_fault_class(
+    onboarded: dict[str, Any],
+) -> None:
     s = onboarded["result"]["kinds"]["create_issue"]
     assert s["admitted"], (s, "\n".join(onboarded["log"][-60:]))
-    for cls in ("lost_write", "wrong_value", "duplicate", "look_alike", "collateral_row",
-                "late_write", "extra_row", "bookkeeping"):  # fmt: skip
+    for cls in ("missing", "wrong_value", "duplicate", "look_alike", "unrelated_edit",
+                "delayed", "other_table", "bookkeeping"):  # fmt: skip
         assert cls in s["by_class"], s["by_class"]
 
 
-def test_a_kind_not_admitted_has_no_production_contract(onboarded: dict[str, Any]) -> None:
+def test_a_kind_not_admitted_has_no_production_contract(
+    onboarded: dict[str, Any],
+) -> None:
     r = onboarded["result"]
-    manifest = yaml.safe_load((onboarded["out"] / "contracts" / "manifest.yaml").read_text())
+    manifest = yaml.safe_load(
+        (onboarded["out"] / "contracts" / "manifest.yaml").read_text()
+    )
     assert sorted(manifest["kinds"]) == r["admitted"]
     for name, s in r["kinds"].items():
         if not s["admitted"]:
@@ -153,8 +202,34 @@ def test_a_kind_not_admitted_has_no_production_contract(onboarded: dict[str, Any
 def test_a_planted_time_stamp_fails_the_now_check() -> None:
     from openadapt_flow.generate.sql_store import Column, Schema, Table
 
-    schema = Schema("mysql", "d", {"t": Table("t", [Column("at", "datetime", True, None)], [])})
+    schema = Schema(
+        "mysql", "d", {"t": Table("t", [Column("at", "datetime", True, None)], [])}
+    )
     b = gen.SqlBuilder(schema)
     sql = b.now("t", "at", 1260)
     assert "NOW() - INTERVAL 1260 SECOND" in sql and "UTC_TIMESTAMP()" in sql
     assert zt.mutate(schema.tables["t"], "at", "2026-11-03 10:00:00") == zt.FAR_TIME
+
+
+def test_the_time_stamp_fault_is_caught_by_the_time_check(
+    onboarded: dict[str, Any],
+) -> None:
+    rows = [
+        json.loads(x)
+        for x in (onboarded["out"] / "VALIDATION.jsonl").read_text().splitlines()
+    ]
+    hit = [r for r in rows if r["case"] == "bookkeeping:issues.created_on"]
+    assert hit and all(not r["correct"] and r["ok"] for r in hit), hit
+    # The main record no longer matches its contract (the time check is one
+    # of its columns); the control below shows the same fault passes
+    # without the time check.
+    assert any("record_written was refuted" in " ".join(r["reasons"]) for r in hit), hit
+
+
+def test_without_the_time_check_the_time_stamp_fault_passes(
+    onboarded: dict[str, Any],
+) -> None:
+    hit = [
+        r for r in onboarded["control"] if r["case"] == "bookkeeping:issues.created_on"
+    ]
+    assert hit and not any(r["ok"] for r in hit), hit

@@ -13,9 +13,11 @@ itself, and admits an answer only when a sandbox shows it works:
 3. **Validation.** Held-out demonstrations (correct writes the generator
    never saw) are replayed in the sandbox, each between ``begin_write`` and
    ``verify_write``: every one must be ``CONFIRMED``, at the recheck too.
-   Then faults are planted from each held-out write: a wrong value, a wrong
-   or look-alike record, a duplicate, a collateral change, a lost write, a
-   late change, a changed bookkeeping cell. Every fault must be stopped.
+   Then faults are planted from each held-out write, named as in
+   :mod:`openadapt_flow.fault_gate` where the class is the same: a wrong
+   value, a wrong or look-alike record, a duplicate, an unrelated edit, a
+   row in another table, a missing write, a delayed change, a changed
+   bookkeeping cell. Every fault must be stopped.
 4. **Admission.** A kind is admitted only when all of its held-out writes
    are confirmed and all of its faults are stopped. Anything else is not
    admitted: its tasks stop (``choose`` finds no contract), and
@@ -24,7 +26,11 @@ itself, and admits an answer only when a sandbox shows it works:
 
 The faults are built from the held-out write's recorded diff, the schema
 and the task's values only, never from the contracts under test, so the
-planter doesn't share the generator's view of what matters.
+planter doesn't share the generator's view of what matters. That is why
+this doesn't call :func:`openadapt_flow.fault_gate.run_gate`: the gate plans
+its faults from the check's declared fields, on one table slice, while a
+whole-database contract must also be shown to catch changes to cells it
+doesn't declare.
 
 The rules for answers:
 
@@ -170,7 +176,9 @@ class Sandbox:
                 cur.execute(f"CREATE DATABASE {self.q(self.name)}")
                 src = self.q(self.source)
                 for name in sorted(schema.tables):
-                    cur.execute(f"CREATE TABLE {self.t(name)} LIKE {src}.{self.q(name)}")
+                    cur.execute(
+                        f"CREATE TABLE {self.t(name)} LIKE {src}.{self.q(name)}"
+                    )
                     cur.execute(
                         f"INSERT INTO {self.t(name)} SELECT * FROM {src}.{self.q(name)}"
                     )
@@ -193,14 +201,18 @@ class Sandbox:
                         f"INSERT INTO {self.t(name)} OVERRIDING SYSTEM VALUE "
                         f"SELECT * FROM {src}.{self.q(name)}"
                     )
-                cur.execute(f"GRANT USAGE ON SCHEMA {self.q(self.name)} TO {self.q(reader)}")
+                cur.execute(
+                    f"GRANT USAGE ON SCHEMA {self.q(self.name)} TO {self.q(reader)}"
+                )
                 cur.execute(
                     f"GRANT SELECT ON ALL TABLES IN SCHEMA {self.q(self.name)} "
                     f"TO {self.q(reader)}"
                 )
         finally:
             conn.close()
-        self.schema = store.read_schema(store.connector(self.read_config()), self.dialect)
+        self.schema = store.read_schema(
+            store.connector(self.read_config()), self.dialect
+        )
 
     def drop(self) -> None:
         self._guard()
@@ -226,9 +238,13 @@ class Sandbox:
         assert self.schema is not None
         return self.schema.tables[name]
 
-    def _where(self, table: Table, row: Mapping[str, Optional[str]]) -> tuple[str, list[Any]]:
+    def _where(
+        self, table: Table, row: Mapping[str, Optional[str]]
+    ) -> tuple[str, list[Any]]:
         if not table.primary_key:
-            raise ZeroTouchError(f"{table.name} has no primary key; rows can't be planted")
+            raise ZeroTouchError(
+                f"{table.name} has no primary key; rows can't be planted"
+            )
         parts, args = [], []
         for c in table.primary_key:
             v = row.get(c)
@@ -238,7 +254,9 @@ class Sandbox:
             args.append(v)
         return " AND ".join(parts), args
 
-    def get(self, table: str, row: Mapping[str, Optional[str]]) -> Optional[dict[str, Optional[str]]]:
+    def get(
+        self, table: str, row: Mapping[str, Optional[str]]
+    ) -> Optional[dict[str, Optional[str]]]:
         t = self._table(table)
         where, args = self._where(t, row)
         cols = t.column_names
@@ -270,7 +288,12 @@ class Sandbox:
         got = self._exec(f"SELECT MAX({self.q(col.name)}) FROM {self.t(table)}")
         return int(got[0][0] or 0)
 
-    def put(self, table: str, row: Optional[Mapping[str, Optional[str]]], key: Mapping[str, Optional[str]]) -> None:
+    def put(
+        self,
+        table: str,
+        row: Optional[Mapping[str, Optional[str]]],
+        key: Mapping[str, Optional[str]],
+    ) -> None:
         """Make the row with ``key``'s primary key be ``row`` (None: absent)."""
 
         self._guard()
@@ -329,7 +352,9 @@ def backward(diff_changes: Sequence[RowChange]) -> list[Op]:
     out = []
     for ch in diff_changes:
         ref = ch.before if ch.before is not None else ch.after
-        out.append(Op(ch.table, dict(ref or {}), dict(ch.before) if ch.before else None))
+        out.append(
+            Op(ch.table, dict(ref or {}), dict(ch.before) if ch.before else None)
+        )
     return out
 
 
@@ -345,7 +370,9 @@ def _parse_time(text: Optional[str]) -> Optional[_dt.datetime]:
     return None
 
 
-def shift_times(schema: Schema, ops: list[Op], demo: Demo, values_text: set[str]) -> list[Op]:
+def shift_times(
+    schema: Schema, ops: list[Op], demo: Demo, values_text: set[str]
+) -> list[Op]:
     """Move the write's own time stamps to now. A date-time cell within a
     day of when the demonstration was made, and not a task's value, moves by
     the time since then, so a replay looks like a write made now (in
@@ -367,7 +394,11 @@ def shift_times(schema: Schema, ops: list[Op], demo: Demo, values_text: set[str]
             if c.kind != "datetime" or c.name in t.primary_key:
                 continue
             when = _parse_time(row.get(c.name))
-            if when is None or not (lo <= when <= hi) or row.get(c.name) in values_text:
+            if (
+                when is None
+                or not (lo <= when <= hi)
+                or _is_value(row.get(c.name), values_text)
+            ):
                 continue
             row[c.name] = (when + delta).isoformat(sep=" ", timespec="seconds")
         out.append(Op(op.table, op.key, row))
@@ -452,7 +483,7 @@ def faults(schema: Schema, sb: Sandbox, demo: Demo, write: list[Op]) -> list[Cas
     task's values. The contracts are never read here."""
 
     values = _text_values(demo.values)
-    out: list[Case] = [Case("lost", "lost_write", [])]
+    out: list[Case] = [Case("missing", "missing", [])]
     touched = {op.table for op in write}
     counts: dict[str, int] = {}
 
@@ -480,7 +511,8 @@ def faults(schema: Schema, sb: Sandbox, demo: Demo, write: list[Op]) -> list[Cas
             new = None
             if c.name in fks:
                 others = [
-                    r for r in sb.rows(fks[c.name].table, 20)
+                    r
+                    for r in sb.rows(fks[c.name].table, 20)
                     if r.get(fks[c.name].ref_column) not in (None, cur)
                 ]
                 new = others[0].get(fks[c.name].ref_column) if others else None
@@ -491,8 +523,13 @@ def faults(schema: Schema, sb: Sandbox, demo: Demo, write: list[Op]) -> list[Cas
             cls = "wrong_value" if _is_value(cur, values) else "bookkeeping"
             row = dict(op.row)
             row[c.name] = new
-            add(Case(f"{cls}:{op.table}.{c.name}", cls,
-                     write[:i] + [Op(op.table, op.key, row)] + write[i + 1:]))
+            add(
+                Case(
+                    f"{cls}:{op.table}.{c.name}",
+                    cls,
+                    write[:i] + [Op(op.table, op.key, row)] + write[i + 1 :],
+                )
+            )
         if not is_new and before is not None:
             # The write's changes landed on another row of the table.
             changed = {c for c in t.column_names if before.get(c) != op.row.get(c)}
@@ -502,8 +539,13 @@ def faults(schema: Schema, sb: Sandbox, demo: Demo, write: list[Op]) -> list[Cas
                 moved = dict(other)
                 for c in changed:
                     moved[c] = op.row.get(c)
-                add(Case(f"wrong_record:{op.table}", "wrong_record",
-                         write[:i] + write[i + 1:] + [Op(op.table, other, moved)]))
+                add(
+                    Case(
+                        f"wrong_record:{op.table}",
+                        "wrong_record",
+                        write[:i] + write[i + 1 :] + [Op(op.table, other, moved)],
+                    )
+                )
                 break
             # A column the write didn't change, changed on the target.
             for c in t.columns:
@@ -514,23 +556,38 @@ def faults(schema: Schema, sb: Sandbox, demo: Demo, write: list[Op]) -> list[Cas
                     continue
                 row = dict(op.row)
                 row[c.name] = new
-                add(Case(f"collateral_target:{op.table}.{c.name}", "collateral_target",
-                         write[:i] + [Op(op.table, op.key, row)] + write[i + 1:]))
+                add(
+                    Case(
+                        f"collateral_target:{op.table}.{c.name}",
+                        "collateral_target",
+                        write[:i] + [Op(op.table, op.key, row)] + write[i + 1 :],
+                    )
+                )
         if is_new:
             top = sb.max_key(op.table)
             if top is not None:
                 pk = t.primary_key[0]
                 dup = dict(op.row)
                 dup[pk] = str(top + 1000)
-                add(Case(f"duplicate:{op.table}", "duplicate",
-                         write + [Op(op.table, {pk: dup[pk]}, dup)]))
+                add(
+                    Case(
+                        f"duplicate:{op.table}",
+                        "duplicate",
+                        write + [Op(op.table, {pk: dup[pk]}, dup)],
+                    )
+                )
             # The values landed on an existing look-alike instead.
             for other in sb.rows(op.table, 20):
                 look = dict(op.row)
                 for c in t.primary_key:
                     look[c] = other.get(c)
-                add(Case(f"look_alike:{op.table}", "look_alike",
-                         write[:i] + write[i + 1:] + [Op(op.table, other, look)]))
+                add(
+                    Case(
+                        f"look_alike:{op.table}",
+                        "look_alike",
+                        write[:i] + write[i + 1 :] + [Op(op.table, other, look)],
+                    )
+                )
                 break
     # Another row of a touched table, and a new row in an untouched one.
     for name in sorted(touched):
@@ -547,10 +604,21 @@ def faults(schema: Schema, sb: Sandbox, demo: Demo, write: list[Op]) -> list[Cas
                     continue
                 row = dict(other)
                 row[c.name] = new
-                add(Case(f"collateral_row:{name}.{c.name}", "collateral_row",
-                         write + [Op(name, other, row)]))
-                add(Case(f"late:{name}.{c.name}", "late_write",
-                         list(write), late=[Op(name, other, row)]))
+                add(
+                    Case(
+                        f"unrelated_edit:{name}.{c.name}",
+                        "unrelated_edit",
+                        write + [Op(name, other, row)],
+                    )
+                )
+                add(
+                    Case(
+                        f"delayed:{name}.{c.name}",
+                        "delayed",
+                        list(write),
+                        late=[Op(name, other, row)],
+                    )
+                )
                 break
             break
     for name in sorted(set(schema.tables) - touched):
@@ -561,8 +629,14 @@ def faults(schema: Schema, sb: Sandbox, demo: Demo, write: list[Op]) -> list[Cas
         row = dict(sample[0])
         pk = schema.tables[name].primary_key[0]
         row[pk] = str(top + 1000)
-        add(Case(f"extra_row:{name}", "extra_row", write + [Op(name, {pk: row[pk]}, row)]))
-        if counts.get("extra_row", 0) >= 2:
+        add(
+            Case(
+                f"other_table:{name}",
+                "other_table",
+                write + [Op(name, {pk: row[pk]}, row)],
+            )
+        )
+        if counts.get("other_table", 0) >= 2:
             break
     return out
 
@@ -598,6 +672,7 @@ def run_case(
     case: Case,
     actor_id: str,
     extra: Mapping[str, Any],
+    workdir: Optional[Path] = None,
 ) -> Outcome:
     """Bring the held-out write's rows back to before it, then run the case
     between ``begin_write`` and ``verify_write`` (and the recheck), then put
@@ -607,7 +682,10 @@ def run_case(
 
     undo = backward(demo.diff.changes)
     all_ops = undo + case.write + case.late
-    saved: dict[tuple[str, str], tuple[dict[str, Optional[str]], Optional[dict[str, Optional[str]]]]] = {}
+    saved: dict[
+        tuple[str, str],
+        tuple[dict[str, Optional[str]], Optional[dict[str, Optional[str]]]],
+    ] = {}
     assert sb.schema is not None
     for op in all_ops:
         k = (op.table, store.row_key(sb.schema.tables[op.table], op.key))
@@ -618,10 +696,12 @@ def run_case(
         try:
             contract, params = gen.choose(manifest, demo.kind, demo.values, extra)
         except gen.GenerateError as exc:
-            return Outcome(case.name, case.cls, case.correct, "NO_CONTRACT", False, [str(exc)])
+            return Outcome(
+                case.name, case.cls, case.correct, "NO_CONTRACT", False, [str(exc)]
+            )
         actor = Actor("agent", actor_id)
         pending = begin_write(contract, params, actor=actor, ledger=None,
-                              write_key=f"zt-{time.time_ns()}")  # fmt: skip
+                              write_key=f"zt-{time.time_ns()}", workdir=workdir)  # fmt: skip
         _put_all(sb, case.write)
         r = verify_write(pending)
         outcome = str(getattr(r.outcome, "value", r.outcome))
@@ -629,21 +709,30 @@ def run_case(
         passed = outcome == "CONFIRMED"
         if passed and getattr(r, "recheck", None) is not None:
             _put_all(sb, case.late)
-            rc = recheck(contract, r, params=params, actor=actor, wait=True, ledger=None)
+            rc = recheck(
+                contract, r, params=params, actor=actor, wait=True, ledger=None
+            )
             rc_out = str(getattr(rc.outcome, "value", rc.outcome))
             if rc_out != "CONFIRMED":
                 passed, outcome = False, f"RECHECK_{rc_out}"
                 reasons += list(rc.reasons)
         elif passed and case.late:
-            passed, outcome = False, "NO_RECHECK"
-            reasons.append("the contract schedules no recheck, so a late write can't be seen")
-            # A contract with no recheck can't stop a late write: count it as
-            # a pass of the fault, which fails validation.
-            passed = True
+            # No recheck is scheduled, so the late change is never read: the
+            # fault passes, which fails validation.
+            outcome = "CONFIRMED_NO_RECHECK"
+            reasons.append(
+                "the contract schedules no recheck, so a late write can't be seen"
+            )
         return Outcome(case.name, case.cls, case.correct, outcome, passed, reasons[:6])
     except Exception as exc:  # noqa: BLE001 - a case that can't run admits nothing
-        return Outcome(case.name, case.cls, case.correct, "ERROR", False,
-                       [f"{type(exc).__name__}: {exc}", traceback.format_exc(limit=3)])
+        return Outcome(
+            case.name,
+            case.cls,
+            case.correct,
+            "ERROR",
+            False,
+            [f"{type(exc).__name__}: {exc}", traceback.format_exc(limit=3)],
+        )
     finally:
         for (table, _), (key, row) in saved.items():
             sb.put(table, row, key)
@@ -652,37 +741,59 @@ def run_case(
 # -- answers ----------------------------------------------------------------------
 
 
-def auto_answers(report: Mapping[str, Any], picks: Mapping[str, Mapping[str, int]] = {}) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def auto_answers(
+    report: Mapping[str, Any], picks: Mapping[str, Mapping[str, int]] = {}
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """The answers this module gives, and a ledger saying by which rule."""
 
     answers: dict[str, Any] = {"now_checks": True}
     ledger: list[dict[str, Any]] = [
-        {"key": "now_checks", "answer": True,
-         "rule": "an unchecked or excused time stamp of the main record must hold a time near the read"},
+        {
+            "key": "now_checks",
+            "answer": True,
+            "rule": "an unchecked or excused time stamp of the main record must hold a time near the read",
+        },
     ]
     for q in report.get("questions") or []:
         key = str(q.get("key"))
         proposed = q.get("proposal")
         if key == "recheck_after_s":
             answers[key] = gen.DEFAULT_RECHECK_S
-            ledger.append({"key": key, "answer": gen.DEFAULT_RECHECK_S, "rule": "policy default"})
+            ledger.append(
+                {"key": key, "answer": gen.DEFAULT_RECHECK_S, "rule": "policy default"}
+            )
         elif key == "phones":
             answers[key] = list(proposed or [])
-            ledger.append({"key": key, "answer": answers[key],
-                           "rule": "every listed parameter; wrong digits are planted faults"})
+            ledger.append(
+                {
+                    "key": key,
+                    "answer": answers[key],
+                    "rule": "every listed parameter; wrong digits are planted faults",
+                }
+            )
         elif key == "bookkeeping":
             prop = dict(proposed or {}) if isinstance(proposed, Mapping) else {}
             ans = {"accept": True}
             if prop.get("unchecked"):
                 ans["unchecked"] = prop["unchecked"]
             answers[key] = ans
-            ledger.append({"key": key, "answer": ans,
-                           "rule": "the generator's own proposal; nothing added (no logs_add, no columns_add)"})
+            ledger.append(
+                {
+                    "key": key,
+                    "answer": ans,
+                    "rule": "the generator's own proposal; nothing added (no logs_add, no columns_add)",
+                }
+            )
         elif key.startswith("locations."):
             if key in picks:
                 answers[key] = dict(picks[key])
-                ledger.append({"key": key, "answer": answers[key],
-                               "rule": "the one candidate whose kind validated"})
+                ledger.append(
+                    {
+                        "key": key,
+                        "answer": answers[key],
+                        "rule": "the one candidate whose kind validated",
+                    }
+                )
     return answers, ledger
 
 
@@ -694,7 +805,9 @@ def location_options(report: Mapping[str, Any]) -> dict[str, dict[str, int]]:
         key = str(q.get("key"))
         if not key.startswith("locations."):
             continue
-        for name, opts in re.findall(r"`([^`]+)` is in several places: (.*?)(?= `|$)", str(q.get("text"))):
+        for name, opts in re.findall(
+            r"`([^`]+)` is in several places: (.*?)(?= `|$)", str(q.get("text"))
+        ):
             out.setdefault(key, {})[name] = len(re.findall(r"\[\d+\]", opts))
     return out
 
@@ -713,6 +826,7 @@ def validate(
     actor_id: str,
     extra: Mapping[str, Any],
     log: Callable[[str], None] = lambda s: None,
+    record: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, list[Outcome]]:
     """Every held-out write, replayed and faulted, by kind."""
 
@@ -732,13 +846,21 @@ def validate(
             for op, row in saved:
                 sb.put(op.table, row, op.key)
         for case in cases:
-            res = run_case(sb, manifest, demo, case, actor_id, extra)
+            res = run_case(
+                sb, manifest, demo, case, actor_id, extra, manifest.parent / "state"
+            )
             log(f"{demo.name} {case.name}: {res.outcome} {'ok' if res.ok else 'FAIL'}")
+            if record is not None:
+                record.append({"demo": demo.name, "kind": demo.kind, "case": res.case,
+                               "class": res.cls, "correct": res.correct, "outcome": res.outcome,
+                               "ok": res.ok, "reasons": [r[:300] for r in res.reasons[:3]]})  # fmt: skip
             by_kind.setdefault(demo.kind, []).append(res)
     return by_kind
 
 
-def summarize(by_kind: Mapping[str, Sequence[Outcome]], kinds: Sequence[str]) -> dict[str, Any]:
+def summarize(
+    by_kind: Mapping[str, Sequence[Outcome]], kinds: Sequence[str]
+) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for k in kinds:
         rs = list(by_kind.get(k) or [])
@@ -747,7 +869,9 @@ def summarize(by_kind: Mapping[str, Sequence[Outcome]], kinds: Sequence[str]) ->
         out[k] = {
             "admitted": bool(correct) and all(r.ok for r in rs),
             "correct_writes": len(correct),
-            "false_stops": [f"{r.outcome}: {'; '.join(r.reasons[:2])}" for r in correct if not r.ok],
+            "false_stops": [
+                f"{r.outcome}: {'; '.join(r.reasons[:2])}" for r in correct if not r.ok
+            ],
             "faults": len(fl),
             "faults_stopped": sum(1 for r in fl if r.ok),
             "faults_passed": [r.case for r in fl if not r.ok],
@@ -762,9 +886,13 @@ def summarize(by_kind: Mapping[str, Sequence[Outcome]], kinds: Sequence[str]) ->
 
 
 def exceptions_md(summary: Mapping[str, Any], report: Mapping[str, Any]) -> str:
-    lines = ["# What setup could not validate", "",
-             "No person decision was asked for. The kinds below are not admitted, so",
-             "their tasks stop (no contract). Each line says why.", ""]
+    lines = [
+        "# What setup could not validate",
+        "",
+        "No person decision was asked for. The kinds below are not admitted, so",
+        "their tasks stop (no contract). Each line says why.",
+        "",
+    ]
     n = 0
     for k, s in summary.items():
         if s["admitted"]:
@@ -823,23 +951,34 @@ def onboard(
         for picks in trials:
             answers, ledger = auto_answers(report, picks)
             sans = {**answers, "recheck_after_s": SANDBOX_RECHECK_S}
-            tag = "base" if not picks else "pick-" + "-".join(
-                f"{k}.{p}.{i}" for k, d in picks.items() for p, i in d.items())
+            tag = (
+                "base"
+                if not picks
+                else "pick-"
+                + "-".join(
+                    f"{k}.{p}.{i}" for k, d in picks.items() for p, i in d.items()
+                )
+            )
             log(f"propose ({tag})")
             rep = gen.propose(read=sread, kinds=kinds, demo_dir=demo_dir, out=work / tag,
                               actor_params=actor_params, answers=sans)  # fmt: skip
+            cases: list[dict[str, Any]] = []
             by_kind = validate(sb, work / tag / "manifest.yaml", holdout, actor_id,
-                               dict(actor_params), log)  # fmt: skip
+                               dict(actor_params), log, cases)  # fmt: skip
             summary = summarize(by_kind, kind_names)
             results.append((picks, answers, summary))
-            best = best or {"answers": answers, "ledger": ledger, "summary": summary, "report": rep}
+            best = best or {"answers": answers, "ledger": ledger, "summary": summary,
+                            "report": rep, "cases": cases}  # fmt: skip
         # A location pick is kept when exactly one candidate admits its kind.
         final_picks: dict[str, dict[str, int]] = {}
         for key, params in options.items():
             kind = key.split(".", 1)[1]
             for name in params:
-                ok = [p[key][name] for p, _, s in results
-                      if key in p and name in p[key] and s[kind]["admitted"]]
+                ok = [
+                    p[key][name]
+                    for p, _, s in results
+                    if key in p and name in p[key] and s[kind]["admitted"]
+                ]
                 if len(ok) == 1:
                     final_picks.setdefault(key, {})[name] = ok[0]
         answers, ledger = auto_answers(report, final_picks)
@@ -847,10 +986,11 @@ def onboard(
             sans = {**answers, "recheck_after_s": SANDBOX_RECHECK_S}
             rep = gen.propose(read=sread, kinds=kinds, demo_dir=demo_dir, out=work / "final",
                               actor_params=actor_params, answers=sans)  # fmt: skip
+            cases = []
             summary = summarize(validate(sb, work / "final" / "manifest.yaml", holdout,
-                                         actor_id, dict(actor_params), log), kind_names)  # fmt: skip
+                                         actor_id, dict(actor_params), log, cases), kind_names)  # fmt: skip
         else:
-            summary, rep = best["summary"], best["report"]
+            summary, rep, cases = best["summary"], best["report"], best["cases"]
     finally:
         if not keep_sandbox:
             sb.drop()
@@ -876,6 +1016,7 @@ def onboard(
     }
     (out / "ONBOARDING.json").write_text(json.dumps(result, indent=2, default=str))
     (out / "EXCEPTIONS.md").write_text(exceptions_md(summary, prod))
+    (out / "VALIDATION.jsonl").write_text("".join(json.dumps(c) + "\n" for c in cases))
     return result
 
 
@@ -886,18 +1027,38 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "generator's questions by rule, validate them in a sandbox copy with "
         "held-out writes and planted faults, and admit only what validates.",
     )
-    ap.add_argument("--read", required=True, type=Path, help="read-only account (read.yaml)")
-    ap.add_argument("--admin", required=True, type=Path,
-                    help="admin account that may create the sandbox beside the app's store")
-    ap.add_argument("--reader", required=True,
-                    help="the read account to grant on the sandbox: MySQL 'user'@'host', PostgreSQL role")
+    ap.add_argument(
+        "--read", required=True, type=Path, help="read-only account (read.yaml)"
+    )
+    ap.add_argument(
+        "--admin",
+        required=True,
+        type=Path,
+        help="admin account that may create the sandbox beside the app's store",
+    )
+    ap.add_argument(
+        "--reader",
+        required=True,
+        help="the read account to grant on the sandbox: MySQL 'user'@'host', PostgreSQL role",
+    )
     ap.add_argument("--kinds", required=True, type=Path)
-    ap.add_argument("--demos", required=True, type=Path, help="demonstrations the generator learns from")
-    ap.add_argument("--holdout", required=True, type=Path,
-                    help="other correct writes, recorded the same way, used only to validate")
+    ap.add_argument(
+        "--demos",
+        required=True,
+        type=Path,
+        help="demonstrations the generator learns from",
+    )
+    ap.add_argument(
+        "--holdout",
+        required=True,
+        type=Path,
+        help="other correct writes, recorded the same way, used only to validate",
+    )
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--actor-param", action="append", default=[], help="NAME=VALUE")
-    ap.add_argument("--actor-id", required=True, help="the agent's user id as the verifier's Actor")
+    ap.add_argument(
+        "--actor-id", required=True, help="the agent's user id as the verifier's Actor"
+    )
     ap.add_argument("--keep-sandbox", action="store_true")
     args = ap.parse_args(argv)
     result = onboard(
@@ -906,7 +1067,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         actor_params=gen._parse_actor(args.actor_param), actor_id=args.actor_id,
         keep_sandbox=args.keep_sandbox,
     )  # fmt: skip
-    print(json.dumps({k: result[k] for k in ("minutes", "person_decisions", "admitted", "exceptions")}))
+    print(
+        json.dumps(
+            {
+                k: result[k]
+                for k in ("minutes", "person_decisions", "admitted", "exceptions")
+            }
+        )
+    )
     return 0
 
 

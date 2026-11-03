@@ -79,18 +79,20 @@ schema + demonstrations ──► generator propose ──► questions
 Built only from the held-out write's recorded diff, the schema and the
 task's values. The planter never reads a contract.
 
+Class names follow `openadapt_flow.fault_gate` where the class is the same.
+
 | Class | What is planted |
 | --- | --- |
-| `lost_write` | Nothing is written |
+| `missing` | Nothing is written |
 | `wrong_value` | A cell holding a task value gets another value of its type (a key gets another existing row's key) |
 | `bookkeeping` | A cell the write changed that holds no task value gets a far value (a time stamp in 2001, a number plus 7, text plus " (x)") |
 | `wrong_record` | An update's changes land on another row of the same table |
 | `look_alike` | A create's values land on an existing row instead |
 | `duplicate` | Every added row is added twice |
 | `collateral_target` | A column of the target the write didn't change is changed |
-| `collateral_row` | Another row of a table the write touched is changed |
-| `extra_row` | A row is added to a table the write didn't touch |
-| `late_write` | The write is correct; a collateral change lands after the check and before the recheck |
+| `unrelated_edit` | Another row of a table the write touched is changed |
+| `other_table` | A row is added to a table the write didn't touch |
+| `delayed` | The write is correct; a change lands after the check and before the recheck |
 
 The `bookkeeping` class is what keeps excuses honest. Every cell the write
 changes is either a task value (checked), a value a rule checks (the acting
@@ -118,6 +120,39 @@ The fault planter and the contract generator must not share blind spots
 
 An LLM fault generator can be added on top later, from a different model
 family and a separate prompt, but only above this floor [C12].
+
+## What this reuses, and what it doesn't
+
+**The fault gate** (`openadapt_flow/fault_gate.py`, #1445) runs a fixed
+suite against a test copy and writes a coverage record that `verify-run`
+reads under an `admission:` policy. Zero-touch uses its class names and its
+two-sided rule (the clean save must pass, every fault must fail). It does
+not call `run_gate`, for two reasons:
+
+- the gate plans its faults from the check's declared fields
+  (`_declared`), so it can't show that a check catches a change to a cell
+  the check doesn't declare. That is the blind spot an over-wide excuse
+  hides in [C5];
+- its test copy addresses one table slice by one key field; a generated
+  contract judges the whole database.
+
+A follow-up can let `run_gate` take a plan derived from a recorded diff and
+write the same coverage record, so one admission format covers both.
+
+**Draft PR #1520 (`generate-parts`)** generated four workflow parts, each
+admitted by its own check, then approved by a person. What carries over:
+
+| #1520 part | Here |
+| --- | --- |
+| The floor (`baseline.py`): generation adds checks, never removes one | Adopted as a rule: zero-touch only answers the generator's questions with its own proposal and adds `now_checks`; it never names a log or an extra column |
+| Read channel from OpenAPI or a CapabilityStatement, admitted by a channel fault test (401, 500, a truncated or non-JSON body, a failed next page all read as unreadable) | The admission rule for read access to an app with no database account (REST, FHIR). Not needed for the SQL development apps; the code stays on the branch for that step. Its pagination fix already landed in #1538 |
+| Record contract from diffs plus the fault gate | Superseded for SQL stores by the contract generator and this sandbox |
+| Input types: a code table learned one entry per demonstrated value, any other value halts, admitted by a round trip | The admission rule for value mappings (`high` stored as 3): an exact table from the demonstrations, an unknown value stops, every held-out write must round-trip |
+| Identity onto a reviewed template, with a perturbation suite where each slot has a case only it can catch | The model for record identity of people (patients, customers): the template is reviewed once per domain, never per app; the mapping is generated and admitted by perturbation |
+| A person's approval bound to the manifest digest | Replaced by the exception report. Nothing is approved |
+
+#1520 itself is closed in favour of this work; its branch stays for the
+channel and identity code when those steps are built.
 
 ## What stays general
 
