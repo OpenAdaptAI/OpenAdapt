@@ -1324,7 +1324,9 @@ def _replay_desktop(
                 if rollback_plan is not None
                 else None
             ),
-            gui_undo_counts=screen_undo_counts(workflow),
+            gui_undo_counts=(
+                screen_undo_counts(workflow) if rollback_plan is not None else None
+            ),
         )
     finally:
         for owned in (backend, *surface_backends.values()):
