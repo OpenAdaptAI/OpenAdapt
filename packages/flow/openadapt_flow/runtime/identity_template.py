@@ -526,10 +526,19 @@ def _contradicted_template(
     obs_suffix_unexplained = any(
         not explained[j] and _id._is_generational_suffix(o) for j, o in enumerate(obs)
     )
+    unexplained_digit = any(
+        not explained[j] and _id._has_digit(o) for j, o in enumerate(obs)
+    )
     for i, t in enumerate(toks):
         if matched[i]:
             continue
         if t.gen:
+            contradicted[i] = True
+            continue
+        if t.digit and unexplained_digit:
+            # Parity with identity._contradicted: an unmatched digit-bearing
+            # recorded token (id, date, age) of any length, with another
+            # digit-bearing token unexplained in the live band.
             contradicted[i] = True
             continue
         if t.n < _id.MIN_BLOCK:
@@ -631,7 +640,7 @@ def _band_match_template(tmpl: IdentityTemplate, observed_text: str) -> _id.Band
         # No plaintext to inspect: every token counts as look-alike, the
         # conservative side of identity_evidence_shortfall's rule.
         [True] * len(toks),
-    )
+    ) or any(not m and t.digit for t, m in zip(toks, matched))
 
     return _id.BandMatch(
         matched_chars / total_chars if total_chars else 0.0,

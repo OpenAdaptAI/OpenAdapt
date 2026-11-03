@@ -1198,7 +1198,11 @@ def _contradicted(
       confusion-equivalent — a changed middle initial ('J' -> 'K'), the
       SEX column ('M' -> 'F'), a 2-char name ('Al' -> 'Bo'). These sat
       below MIN_BLOCK and were invisible to every rule;
-    - generational suffix on either side, unmatched.
+    - generational suffix on either side, unmatched;
+    - an unmatched recorded token carrying a digit (an id, date, age or
+      count), whatever its length, while an unexplained observed token
+      carries one too: a differing value is what tells same-name records
+      apart, never a tolerated uncovered run.
     """
     exp_c = [ocr_canonical(t) for t in exp]
     obs_c = [ocr_canonical(t) for t in obs]
@@ -1210,10 +1214,21 @@ def _contradicted(
     obs_suffix_unexplained = any(
         not explained[j] and _is_generational_suffix(o) for j, o in enumerate(obs)
     )
+    unexplained_digit = any(
+        not explained[j] and _has_digit(o) for j, o in enumerate(obs)
+    )
     for i, token in enumerate(exp):
         if matched[i]:
             continue
         if _is_generational_suffix(token):
+            contradicted[i] = True
+            continue
+        if _has_digit(token) and unexplained_digit:
+            # A recorded id, date, age or count missing while the live band
+            # shows another digit-bearing token is a different record, never
+            # a small gap: same-name siblings differ ONLY in such tokens
+            # (PatNum 15 vs 16, age 47 vs 50), often under MIN_BLOCK. Pure
+            # absence is charged in band_match (absent identifying field).
             contradicted[i] = True
             continue
         if len(token) < MIN_BLOCK:
@@ -1253,6 +1268,14 @@ def _contradicted(
             if not matched[i]:
                 contradicted[i] = True
     return contradicted
+
+
+def _digit_token_absent(exp: list[str], matched: list[bool]) -> bool:
+    """Whether a digit-bearing recorded token (id, date, age, count) is
+    unmatched. Such a token is never a tolerated uncovered run: absent, the
+    band lacks identifying evidence (the OCR tier abstains); replaced by
+    another digit token, it is a contradiction (:func:`_contradicted`)."""
+    return any(not m and _has_digit(t) for t, m in zip(exp, matched))
 
 
 def band_match(
@@ -1410,7 +1433,7 @@ def band_match(
         matched,
         raw_matched,
         [_has_lookalike(t) for t in exp],
-    )
+    ) or _digit_token_absent(exp, matched)
     return BandMatch(
         matched_chars / total_chars,
         max(uncovered_runs, default=0),
