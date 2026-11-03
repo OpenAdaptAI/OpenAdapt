@@ -471,7 +471,9 @@ class WindowsBackend:
                     "native_action_failed",
                     "native_action_unavailable",
                     "stale_target",
+                    "target_blocked",
                     "target_not_found",
+                    "target_obscured",
                 }
             ):
                 raise StructuralResolutionRefused(
