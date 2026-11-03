@@ -126,7 +126,7 @@ build, and an absent set ships the platform's unsigned label instead.
   the SignPath Foundation): `SIGNPATH_API_TOKEN`, `SIGNPATH_ORGANIZATION_ID`,
   `SIGNPATH_PROJECT_SLUG` (`openadapt-desktop`), and
   `SIGNPATH_SIGNING_POLICY_SLUG` (`release-signing`). The pipeline policy is in
-  `.signpath/policies/openadapt-desktop/release-signing.yml` at the monorepo
+  `.signpath/policies/OpenAdapt/release-signing.yml` at the monorepo
   root.
 - macOS Developer ID and notarization, if it is ever configured:
   `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
