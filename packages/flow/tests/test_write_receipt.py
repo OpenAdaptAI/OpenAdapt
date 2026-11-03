@@ -7,7 +7,6 @@ up. See docs/WRITE_RECEIPTS.md.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 import subprocess
@@ -25,6 +24,7 @@ from openadapt_flow.receipt_log import (
     encode_sign1,
     inclusion_path,
     leaf_hash,
+    receipt_id,
     tree_root,
 )
 from openadapt_flow.seal_anchor import root_from_inclusion
@@ -85,7 +85,7 @@ def test_a_receipt_verifies_offline_with_its_evidence(tmp_path: Path) -> None:
         v = _verify(one.path.read_bytes(), evidence=one.evidence_path.read_bytes())
         assert v.payload.verdict == "CONFIRMED" and v.log_index == i
         assert v.evidence_opened is True
-        assert v.sha256 == hashlib.sha256(one.path.read_bytes()).hexdigest()
+        assert v.sha256 == receipt_id(one.path.read_bytes())
     # The evidence (with its salt) is private; the payload holds no values.
     assert issued[0].evidence_path.stat().st_mode & 0o077 == 0
     payload = json.loads(decode_sign1(issued[0].path.read_bytes())[3])
@@ -307,7 +307,7 @@ def test_shadow_mode_signs_each_verdict_and_its_recheck(tmp_path: Path) -> None:
     assert ep.late_verdict == "REFUTED" and len(ep.receipts) == 2
     late = _verify(Path(ep.receipts[1]).read_bytes())
     assert late.payload.verdict == "REFUTED" and not late.payload.provisional
-    first_sha = hashlib.sha256(Path(ep.receipts[0]).read_bytes()).hexdigest()
+    first_sha = receipt_id(Path(ep.receipts[0]).read_bytes())
     assert late.payload.supersedes == first_sha
     # The private evidence file holds the values; the receipt doesn't.
     assert b"Quill" not in Path(ep.receipts[0]).read_bytes()
@@ -517,7 +517,44 @@ def test_a_verifier_recheck_issues_a_superseding_receipt(tmp_path: Path) -> None
     assert late.outcome == "REFUTED" and state == "issued", state
     p = _verify(Path(str(path)).read_bytes()).payload
     first = Path(str(result.write_receipt_path)).read_bytes()
-    assert p.verdict == "REFUTED" and p.supersedes == hashlib.sha256(first).hexdigest()
+    assert p.verdict == "REFUTED" and p.supersedes == receipt_id(first)
     # The window stays the check's; a line says what was read again.
     assert p.scope.window.read_at == result.scope.window.read_at
     assert any("only frame.database was read again" in x for x in p.not_checked)
+
+
+def test_unsigned_bytes_cant_rename_a_receipt(tmp_path: Path) -> None:
+    from openadapt_flow.receipt_log import RECEIPTS, VDP
+
+    data = _issue(tmp_path).path.read_bytes()
+    prot, _, unprot, body, sig = decode_sign1(data)
+    log_msg = cbor2.loads(unprot[RECEIPTS][0])
+    proof = log_msg.value[1][VDP][-1][0]
+    size, index, path = cbor2.loads(proof)
+    for bad in (proof + b"\x00\xff", b"\x83\x18" + bytes([size]) + proof[2:]):
+        log_msg.value[1] = {VDP: {-1: [bad]}}
+        inner = cbor2.dumps(log_msg, canonical=True)
+        forged = cbor2.dumps(
+            cbor2.CBORTag(18, [prot, {RECEIPTS: [inner]}, body, sig]), canonical=True
+        )
+        with pytest.raises(wr.ReceiptError, match="bad_inclusion"):
+            _verify(forged)
+    # Whatever the unsigned header holds, the id covers only signed bytes.
+    bare = cbor2.dumps(cbor2.CBORTag(18, [prot, {}, body, sig]), canonical=True)
+    assert receipt_id(bare) == receipt_id(data)
+
+
+def test_a_recheck_of_another_write_gets_no_receipt(tmp_path: Path) -> None:
+    from openadapt_flow.verifier import RecheckResult, issue_recheck_receipt
+
+    db = api_fx._store(tmp_path)
+    pending = begin_write(
+        api_fx._contract(db), api_fx.PARAMS, actor=api_fx.BOT, ledger=MemoryLedger()
+    )
+    api_fx._write(db, api_fx.SAVE)
+    result = verify_write(pending, write_receipt=True)
+    other = RecheckResult(
+        "CONFIRMED", "held", receipt_sha256="0" * 64, read_at="2099-01-01T00:00:00Z"
+    )
+    state, path = issue_recheck_receipt(result, other)
+    assert state.startswith("not issued: recheck_mismatch") and path is None

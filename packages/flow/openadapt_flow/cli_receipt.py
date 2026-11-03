@@ -150,7 +150,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             json.dumps(
                 {
                     "valid": True,
-                    "sha256": result.sha256,
+                    "receipt_id": result.sha256,
                     "log_index": result.log_index,
                     "evidence_opened": result.evidence_opened,
                     "anchor": result.anchor,

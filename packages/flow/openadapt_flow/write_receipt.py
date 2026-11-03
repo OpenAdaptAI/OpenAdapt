@@ -39,6 +39,7 @@ from openadapt_flow.receipt_log import (
     LocalLog,
     decode_sign1,
     encode_sign1,
+    receipt_id,
     verify_inclusion,
 )
 
@@ -332,6 +333,8 @@ def scope_of_result(result: Any) -> dict[str, Any]:
 
 @dataclass
 class Issued:
+    """``sha256`` is the receipt's id (:func:`receipt_id`), not the file's."""
+
     path: Path
     evidence_path: Path
     sha256: str
@@ -428,7 +431,7 @@ def issue(
         ).encode("utf-8"),
     )
     _write_private(out, final)
-    return Issued(out, evidence_path, hashlib.sha256(final).hexdigest(), payload)
+    return Issued(out, evidence_path, receipt_id(final), payload)
 
 
 # --- verifying --------------------------------------------------------------------
@@ -521,7 +524,7 @@ def verify(
     ):
         raise ReceiptError("malformed", "CWT claims don't match the payload")
     check_claims(payload)
-    out = Verification(payload=payload, sha256=hashlib.sha256(data).hexdigest())
+    out = Verification(payload=payload, sha256=receipt_id(data))
     if payload.recheck_due_at and _parse(payload.recheck_due_at) < datetime.now(
         timezone.utc
     ):
@@ -583,7 +586,7 @@ def anchor(receipt_path: Path, signer: Any = None, **kwargs: Any) -> dict[str, A
     if headers.get(KID) != signer.key_id.encode("ascii"):
         raise ReceiptError("anchor_key_mismatch", "anchor with the key that issued it")
     return anchor_record(
-        {"write_receipt_sha256": hashlib.sha256(data).hexdigest()},
+        {"write_receipt_sha256": receipt_id(data)},
         anchor_path(receipt_path),
         signer,
         **kwargs,
@@ -596,7 +599,7 @@ def verify_anchor(
     from openadapt_flow.seal_anchor import verify_record_anchor
 
     return verify_record_anchor(
-        {"write_receipt_sha256": hashlib.sha256(data).hexdigest()},
+        {"write_receipt_sha256": receipt_id(data)},
         anchor_doc,
         issuer_public,
         **kwargs,
@@ -658,9 +661,14 @@ def issue_for_recheck(
     """A receipt for a verifier ``RecheckResult`` that supersedes the earlier
     CONFIRMED's. Only the frame's database is read again."""
 
+    outcome = getattr(result.outcome, "value", result.outcome)
+    if outcome != "CONFIRMED":
+        raise ReceiptError("recheck_mismatch", "only a CONFIRMED write is rechecked")
+    if not late.receipt_sha256 or late.receipt_sha256 != result.receipt_sha256:
+        raise ReceiptError("recheck_mismatch", "the recheck is of another write")
     verdict = str(late.outcome)
     read_at = str(late.read_at or "") or None
-    if verdict == "CONFIRMED" and not read_at:
+    if verdict == "CONFIRMED" and (not read_at or late.frame != "held"):
         verdict = "UNCERTAIN"
     when = iso(_parse(read_at)) if read_at else None
     return issue(
@@ -678,7 +686,7 @@ def issue_for_recheck(
         source="verifier",
         verdict=verdict,
         scope=recheck_scope(scope_of_result(result), ["frame.database"], when),
-        checked=result.checked,
+        checked={**result.checked, "frame": late.frame},
         write_id=result.write_id,
         verify_run_receipt_sha256=result.receipt_sha256 or None,
         supersedes=supersedes,

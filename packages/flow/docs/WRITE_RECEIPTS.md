@@ -29,7 +29,7 @@ URLs, hostnames or parameters.
 | `subject` | Opaque ids and digests: the write id, the contract's SHA-256, the verify-run receipt's SHA-256. |
 | `evidence_commitment` | A salted SHA-256 over the verifier's evidence. The salt and evidence stay in a private file beside the receipt (mode 0600). The holder can open the commitment to an auditor; nobody else can test a guess against it. |
 | `source` | `verifier`, `shadow.sql` or `shadow.fhir`. |
-| `supersedes` | For a recheck's receipt: the digest of the receipt it replaces. |
+| `supersedes` | For a recheck's receipt: the id of the receipt it replaces (its leaf hash). |
 | `issued_at`, `issuer` | When, and the issuer key's id. |
 
 Every receipt's `not_checked` ends with these lines, whatever the verifier
@@ -78,8 +78,11 @@ We follow the IETF SCITT architecture
   inclusion proof in `vdp` (396). It is placed in the signed statement's
   unprotected header `receipts` (394), which makes the file a SCITT
   Transparent Statement.
-- **Leaf.** `SHA-256(0x00 || signed statement with an empty unprotected header)`,
-  RFC 9162 hashing.
+- **Leaf and identity.** `SHA-256(0x00 || signed statement with an empty
+  unprotected header)`, RFC 9162 hashing. The leaf hash is also the receipt's
+  id: `supersedes` and Rekor anchors name a receipt by it. It covers only
+  signed bytes, so nothing in the unsigned header (the log's proof) can give
+  a receipt another name. The proof itself must be canonical CBOR too.
 
 Signing builds the RFC 9052 `Sig_structure` with `cbor2` and signs through
 the Seal key interface, so a file, keychain or PKCS#11 key works unchanged.
@@ -95,7 +98,7 @@ candidate; its last release was December 2023. The extra is
 ## Rechecks
 
 A provisional `CONFIRMED` is superseded by the recheck's receipt
-(`supersedes` names the first receipt's SHA-256): shadow mode issues it
+(`supersedes` names the first receipt's id): shadow mode issues it
 after the recheck, and `issue_recheck_receipt(result, late)` does it for a
 verifier `RecheckResult`. A recheck reads fewer stores than the check, so its
 receipt keeps the check's window and adds a `not_covered` line naming what
@@ -129,7 +132,7 @@ log, so the operator could rebuild it.
 
 For a party the operator doesn't control, `openadapt-flow receipt anchor FILE` puts the receipt's digest in Sigstore Rekor through the
 same code that anchors Seals (`seal_anchor.anchor_record`). Only a SHA-512
-digest of a domain-separated statement over the receipt's SHA-256 and a
+digest of a domain-separated statement over the receipt's id and a
 random nonce leaves the machine, plus the issuer's public key and a
 signature. It's off by default, and refused in strict no-outbound mode.
 `receipt verify --require-anchor` checks the Rekor inclusion proof and

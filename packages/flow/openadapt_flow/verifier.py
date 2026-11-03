@@ -1374,16 +1374,18 @@ def issue_recheck_receipt(
     CONFIRMED's (``result.write_receipt_path``). Returns ``("issued",
     path)`` or ``("not issued: <why>", None)``; never raises."""
 
-    import hashlib
+    import secrets
 
     from openadapt_flow import write_receipt as wr
+    from openadapt_flow.receipt_log import receipt_id
 
     first = Path(result.write_receipt_path) if result.write_receipt_path else None
     if out is None:
         folder = first.parent if first else Path(result.receipt_path or ".").parent
-        out = folder / f"{result.write_id or 'write'}.recheck.receipt.cbor"
+        tag = secrets.token_hex(4)  # a write may be rechecked more than once
+        out = folder / f"{result.write_id or 'write'}.recheck-{tag}.receipt.cbor"
     try:
-        supersedes = hashlib.sha256(first.read_bytes()).hexdigest() if first else None
+        supersedes = receipt_id(first.read_bytes()) if first else None
         issued = wr.issue_for_recheck(result, late, out, supersedes=supersedes)
     except wr.ReceiptError as exc:
         return f"not issued: {exc}", None

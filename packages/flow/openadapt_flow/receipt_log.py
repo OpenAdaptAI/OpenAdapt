@@ -113,6 +113,14 @@ def decode_sign1(
     return prot, headers, unprot, payload, signature
 
 
+def receipt_id(statement: bytes) -> str:
+    """A receipt's identity: its leaf hash, hex. It covers only the signed
+    bytes (protected header, payload, signature), so nothing in the
+    unsigned header, such as the log's proof, can give a receipt another
+    name. ``supersedes`` and Rekor anchors use it."""
+    return leaf_of(statement).hex()
+
+
 def leaf_of(statement: bytes) -> bytes:
     """The leaf a signed statement is logged under: its bytes with an empty
     unprotected header, RFC 9162 leaf hashing."""
@@ -262,6 +270,8 @@ def verify_inclusion(receipt: bytes, statement: bytes, log_public_raw: bytes) ->
     ):
         raise ValueError("the log receipt carries no single inclusion proof")
     proof = cbor2.loads(proofs[0])
+    if cbor2.dumps(proof, canonical=True) != proofs[0]:
+        raise ValueError("the inclusion proof is not canonical CBOR")
     if not (
         isinstance(proof, list)
         and len(proof) == 3
