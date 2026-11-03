@@ -140,6 +140,32 @@ rollback plan, undo applies as for any run.
   `record_check`) is written into the evidence and the candidate, so a
   reviewer sees which layer carries the click.
 
+## A dialog over the record's identity band
+
+An app's own dialog (a session notice, an update prompt) can open over the
+next step's identity band. That step's identity check then reads part of the
+record and refuses, which looks like a wrong-record halt, and self-repair
+never takes one of those. #1724 tells the two apart, narrowly. The halt is
+repaired in `after` mode on the previous click (dismiss the dialog) only
+when all of these hold:
+
+- nothing reached the halted step, no save received input, no effect was
+  observed;
+- the backend proves that a window of the app itself, owned by the window
+  the last identity-verified step was in, covers the band
+  (`record_verified_window` at that step, then `owned_window_over`). On
+  macOS that is the window's one proved sheet; on Windows an owned window of
+  the same process, first over the band in the live z-order;
+- the part of the band that was read still matches the recorded record: no
+  contradicted, look-alike, glyph-ambiguous or unexplained name token, and at
+  least half the band matched. Another patient's header behind the dialog
+  fails this and stays an identity halt;
+- the previous step is a click that doesn't save, acted on a trusted rung.
+
+Nothing after that is relaxed: the probe replays the halted step with its own
+identity check in full once the dialog is gone, then the record check and a
+person decide as for any repair.
+
 ## One lifecycle on every backend
 
 Every backend uses the same four stages and the same store
