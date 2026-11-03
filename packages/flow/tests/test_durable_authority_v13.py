@@ -792,7 +792,6 @@ def test_synthetic_marker_short_pipe_write_never_changes_a_permitted_delivery(
 
     class PipeStatus:
         st_mode = stat.S_IFIFO
-        st_size = 0
 
     real_fstat = os.fstat
     monkeypatch.setattr(
@@ -827,7 +826,6 @@ def test_synthetic_marker_uses_only_the_fixed_nonblocking_capability(
 ) -> None:
     class PipeStatus:
         st_mode = stat.S_IFIFO
-        st_size = 0
 
     calls: list[tuple[object, ...]] = []
     real_fstat = os.fstat

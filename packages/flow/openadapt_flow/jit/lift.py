@@ -12,8 +12,8 @@ When a mined record check exists, a value is lifted only at a step whose
 field the saved record holds it in, whether it was typed once or more (an
 agent typed it into the wrong field, then the right one). The other steps are
 listed in ``also_typed_in``: they still type the demonstrated text. A short
-value or a bare number ("1") needs more: one record field holds it, or the
-step's field is named like the input. When the record holds the value in no
+value, a number or a flag ("1") needs more: the step's field is named like
+the input. When the record holds the value in no
 typed field, more than one of the steps writes such a field, or a repeated
 value has no record check, nothing is lifted and the reason names the steps.
 
@@ -114,10 +114,11 @@ def _pick_match(
 
     With no mined record check, a value typed in one step is lifted there.
     Otherwise the record must confirm the step: its field holds the value.
-    A short value or a bare number ("1") also sits in fields it was never
-    typed into (quantity and refills), so it needs one holder, or the step's
-    field named like the input. A step with no field name is lifted only for
-    a distinctive value that one record field holds.
+    A short value, number or flag ("1") also sits in fields it was never
+    typed into (quantity and refills), so the step's field must also be
+    named like the input. Among confirmed steps, the one named like the
+    input wins. A step with no field name is lifted only for a distinctive
+    value that one record field holds.
     """
 
     listed = ", ".join(step_ids)
@@ -143,16 +144,23 @@ def _pick_match(
             return len(step_ids) == 1 and distinctive and len(holders) == 1
         if not names & holders:
             return False
-        return distinctive or len(holders) == 1 or field_key(name) in names
+        return distinctive or field_key(name) in names
 
     hits = [sid for sid in step_ids if confirmed(sid)]
+    named = [sid for sid in hits if field_key(name) in _field_names(steps[sid])]
+    if len(named) == 1:
+        hits = named
     if len(hits) == 1:
         return hits[0], ""
-    if not hits and not distinctive and len(holders) > 1:
+    if (
+        not hits
+        and not distinctive
+        and any(_field_names(steps[sid]) & holders for sid in step_ids)
+    ):
         return None, (
-            f"{where}; a short value that record fields "
-            f"{', '.join(sorted(holders))} all hold, and no typed field is "
-            f"named {name!r}"
+            f"{where}; a short value, number or flag is lifted only at a "
+            f"record field named {name!r} that holds it "
+            f"(held by {', '.join(sorted(holders))})"
         )
     if not hits:
         fields = "its field is not" if len(step_ids) == 1 else "none of their fields is"

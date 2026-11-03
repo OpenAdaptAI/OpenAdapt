@@ -371,7 +371,7 @@ def test_lift_never_leaves_an_input_inside_a_lifted_workflow_literal(
 def _detour_bundle(
     tmp_path: Path,
     labels: list[str],
-    record: dict[str, str] | None,
+    record: dict[str, Any] | None,
     text: str = "Female",
 ) -> Path:
     """Two typed steps of one value, then a save whose mined check holds
@@ -394,7 +394,10 @@ def _detour_bundle(
         effects.append(
             Effect(
                 kind=EffectKind.RECORD_WRITTEN,
-                match={k: ValueExpr(literal=v) for k, v in record.items()},
+                match={
+                    k: v if isinstance(v, ValueExpr) else ValueExpr(literal=v)
+                    for k, v in record.items()
+                },
             )
         )
     steps.append(
@@ -523,9 +526,32 @@ def test_lift_needs_a_named_field_for_a_short_value_two_fields_hold(
     report = lift_params(other, {"qty": "1"})
     assert report.lifted == []
     assert report.unlifted["qty"] == (
-        "typed in step_000; a short value that record fields quantity, refills "
-        "all hold, and no typed field is named 'qty'"
+        "typed in step_000; a short value, number or flag is lifted only at a "
+        "record field named 'qty' that holds it (held by quantity, refills)"
     )
+
+    # Typed only into refills, and only refills holds it: still not quantity.
+    wrong = _detour_bundle(
+        tmp_path / "wrong",
+        ["refills"],
+        {"fname": "Testa", "quantity": "30", "refills": "1"},
+        text="1",
+    )
+    report = lift_params(wrong, {"quantity": "1"})
+    assert report.lifted == []
+
+
+def test_lift_never_moves_a_short_value_off_its_param_bound_field(
+    tmp_path: Path,
+) -> None:
+    # The quantity field's check is already a parameter, so only refills
+    # holds "1" as a literal. The value must not be lifted at refills.
+    from openadapt_flow.runtime.effects import ValueExpr
+
+    record = {"quantity": ValueExpr(param="qty"), "refills": "1"}
+    bundle = _detour_bundle(tmp_path, ["quantity", "refills"], record, text="1")
+    report = lift_params(bundle, {"quantity": "1"})
+    assert report.lifted == []
 
 
 # -- the gates (no browser) --------------------------------------------------

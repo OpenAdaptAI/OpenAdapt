@@ -211,7 +211,17 @@ def test_a_numeric_identity_never_binds_to_an_unrelated_parameter():
     [effect] = proposal.effects
     assert effect.match == {"id": ValueExpr(literal="7")}
     assert effect.value == ValueExpr(param="state")
-    assert "it is short or a bare number" in " ".join(proposal.not_proposed)
+    assert "it is short, a number or a flag" in " ".join(proposal.not_proposed)
+
+
+def test_decimals_and_flags_never_bind_by_value_alone():
+    diff = diff_snapshots(
+        [], [{"id": 1, "quantity": "30", "refills": "1.0", "active": True}]
+    )
+    proposal = propose_effects(diff, {"qty": "1.0", "consent": "True"})
+    [effect] = proposal.effects
+    assert effect.match["refills"] == ValueExpr(literal="1.0")
+    assert effect.match["active"] == ValueExpr(literal="True")
 
 
 # -- observer ------------------------------------------------------------------

@@ -286,16 +286,28 @@ def _param_lookup(params: Mapping[str, str]) -> tuple[dict[str, str], list[str]]
     return lookup, shared
 
 
+_FLAG_WORDS = frozenset({"true", "false", "yes", "no", "on", "off"})
+
+
 def distinctive_value(value: Any) -> bool:
     """True when a value is unlikely to equal another field's by chance.
 
-    Short values ("1", "F", "ab") and bare numbers repeat across fields
-    (quantity and refills, a count and an id), so equality alone does not
-    show which parameter a field holds.
+    Short values ("1", "F", "ab"), numbers ("1.50", "$30", "42"), booleans
+    and yes/no words repeat across fields (quantity and refills, a count and
+    an id, two flags), so equality alone does not show which parameter a
+    field holds.
     """
 
+    if isinstance(value, bool):
+        return False
     text = str(value).strip()
-    return len(text) >= 3 and not text.lstrip("-+").isdigit()
+    if len(text) < 3 or text.lower() in _FLAG_WORDS:
+        return False
+    try:
+        float(text.replace(",", "").replace("$", "").replace("%", ""))
+    except ValueError:
+        return True
+    return False
 
 
 def _value_counts(record: Mapping[str, Any]) -> dict[str, int]:
@@ -333,11 +345,12 @@ def _expr(
     why = (
         "it is held by more than one field"
         if counts.get(str(value), 0) > 1
-        else "it is short or a bare number"
+        else "it is short, a number or a flag"
     )
     unbound.append(
         f"field {field!r} equals parameter {name!r}'s value, but {why}; "
-        "the observed value is kept as a literal"
+        "the observed value is kept as a literal (bind it by hand if the "
+        "field holds that parameter)"
     )
     return ValueExpr(literal=str(value))
 
