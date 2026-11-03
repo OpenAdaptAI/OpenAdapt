@@ -23,7 +23,7 @@ row's Open button — the literal reading — and **DOM (name-filtered)**
 clicks the Open button in the row named `Jane Sample` — the
 identity reading, hardcoding the demonstrated patient exactly as the
 compiled arm's recorded identity band does. Every selector choice is
-documented in `openadapt_flow/benchmark/dom_arm.py`.
+documented in `benchmark/harness/dom_arm.py`.
 
 ## Verdict
 
@@ -208,7 +208,7 @@ Unmeasured variants, for completeness:
 ## Reproduce
 
 ```
-.venv/bin/python -m openadapt_flow.benchmark.dom_arm --out benchmark/dom --n-per-perturbation 2
+.venv/bin/python -m benchmark.harness.dom_arm --out benchmark/dom --n-per-perturbation 2
 ```
 
 (`--n-per-perturbation 2` matches the committed results.) No API key

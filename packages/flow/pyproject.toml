@@ -605,7 +605,7 @@ module = [
     "openadapt_flow.__main__",
     "openadapt_flow.backends.playwright_backend",
     "openadapt_flow.backends.rdp_backend",
-    "openadapt_flow.benchmark.desktop_benchmark",
+    "benchmark.harness.desktop_benchmark",
     "openadapt_flow.compiler.disambiguation",
     "openadapt_flow.interactive_recorder",
     "openadapt_flow.learning.synth_stream",

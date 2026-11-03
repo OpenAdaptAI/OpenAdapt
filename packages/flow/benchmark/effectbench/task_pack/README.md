@@ -68,7 +68,7 @@ python -m benchmark.effectbench.task_pack.pack
 
 # Live-run the MockMed anchor through the oracle (prints per-task classification)
 python -c "from benchmark.effectbench.task_pack.driver import run_mockmed_pack; \
-from openadapt_flow.benchmark.effectbench import summarize; \
+from benchmark.harness.effectbench import summarize; \
 eps=run_mockmed_pack(trials=3); \
 print('screen SWER', summarize(eps, arm='screen_only').swer.rate); \
 print('effect SWER', summarize(eps, arm='effect_verify').swer.rate)"

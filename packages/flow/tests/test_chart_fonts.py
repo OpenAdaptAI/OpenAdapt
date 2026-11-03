@@ -2,7 +2,7 @@
 
 The benchmark chart is cosmetic; a font-lookup failure must never fail the
 suite. These tests cover the two guarantees in
-``openadapt_flow.benchmark.chart_fonts``: the bundled DejaVuSans font is
+``benchmark.harness.chart_fonts``: the bundled DejaVuSans font is
 registered so ``findfont`` cannot miss, and ``safe_render`` swallows any
 rendering failure.
 """
@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from openadapt_flow.benchmark.chart_fonts import (
+from benchmark.harness.chart_fonts import (
     BUNDLED_FONT_NAME,
     configure_bundled_font,
     safe_render,

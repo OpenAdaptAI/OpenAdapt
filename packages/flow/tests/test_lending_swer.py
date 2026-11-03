@@ -22,7 +22,7 @@ import sqlite3
 from benchmark.lending_fault_model import faults as F
 from benchmark.lending_fault_model import ground_truth as G
 from benchmark.lending_fault_model import swer as S
-from openadapt_flow.benchmark.effectbench import summarize
+from benchmark.harness.effectbench import summarize
 from openadapt_flow.mockloan.fault_server import LedgerDB
 
 

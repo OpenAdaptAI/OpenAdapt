@@ -18,14 +18,14 @@ The interface (one method):
 
 An arm is handed ONLY the task's natural-language ``goal`` (intent, never a step
 list — the fairness requirement) via ``task``, a
-:class:`~openadapt_flow.benchmark.effectbench.runner.substrate.SubstrateSession`
+:class:`~benchmark.harness.effectbench.runner.substrate.SubstrateSession`
 to drive, and the run's ``params`` (the trial-unique payload it must write). It
 returns an :class:`ArmResult` carrying the untrusted
-:class:`~openadapt_flow.benchmark.effectbench.schema.AgentReport` plus any
-recorded :class:`~openadapt_flow.benchmark.effectbench.schema.ModelCall` rows so
+:class:`~benchmark.harness.effectbench.schema.AgentReport` plus any
+recorded :class:`~benchmark.harness.effectbench.schema.ModelCall` rows so
 cost is auditable. The harness (:mod:`.harness`) adapts ``run`` into the
 ``run_action: Callable[[], AgentReport]`` that
-:func:`~openadapt_flow.benchmark.effectbench.oracle.score_episode` calls, and
+:func:`~benchmark.harness.effectbench.oracle.score_episode` calls, and
 supplies the independent oracle — which the arm can NEVER reach.
 
 Three concrete in-repo arms live here:
@@ -50,11 +50,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional, Protocol, runtime_checkable
 
-from openadapt_flow.benchmark.effectbench.runner.substrate import (
+from benchmark.harness.effectbench.runner.substrate import (
     ScreenObservation,
     SubstrateSession,
 )
-from openadapt_flow.benchmark.effectbench.schema import (
+from benchmark.harness.effectbench.schema import (
     AgentReport,
     ModelCall,
     TaskSpec,

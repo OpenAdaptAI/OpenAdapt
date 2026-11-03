@@ -4,7 +4,7 @@ This is the single entry point over the three task families (MockMed anchor +
 the container-gated OpenEMR and Frappe families). It:
 
 - assembles the unified list of :class:`PackEntry` (one per authored task),
-  each carrying its :class:`~openadapt_flow.benchmark.effectbench.TaskSpec`, the
+  each carrying its :class:`~benchmark.harness.effectbench.TaskSpec`, the
   pinned environment it targets, and whether it runs LIVE here or needs a
   container;
 - validates every task against the ``benchmark.environments`` registry (the
@@ -29,8 +29,8 @@ from typing import Any, Iterable
 from benchmark.effectbench.task_pack.frappe_tasks import FRAPPE_TASKS
 from benchmark.effectbench.task_pack.mockmed_tasks import MOCKMED_TASKS
 from benchmark.effectbench.task_pack.openemr_tasks import OPENEMR_TASKS
-from openadapt_flow.benchmark.effectbench import TaskSpec
-from openadapt_flow.benchmark.effectbench.schema import DivergenceCategory, Substrate
+from benchmark.harness.effectbench import TaskSpec
+from benchmark.harness.effectbench.schema import DivergenceCategory, Substrate
 
 MANIFEST_SCHEMA_VERSION = 1
 

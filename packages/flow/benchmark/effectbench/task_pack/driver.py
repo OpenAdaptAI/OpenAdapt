@@ -8,9 +8,9 @@ persistence boundary, and CLASSIFY correctly through the frozen #178 contract
 mocked verdicts.
 
 It depends ONLY on the public EffectBench surface
-(:func:`~openadapt_flow.benchmark.effectbench.score_episode`,
-:class:`~openadapt_flow.benchmark.effectbench.RestRecordVerifier`,
-:class:`~openadapt_flow.benchmark.effectbench.AgentReport`) and the MockMed
+(:func:`~benchmark.harness.effectbench.score_episode`,
+:class:`~benchmark.harness.effectbench.RestRecordVerifier`,
+:class:`~benchmark.harness.effectbench.AgentReport`) and the MockMed
 fault server. It does not reimplement any real baseline "arm"; the two arms
 here are the two SCORING conditions the benchmark contrasts:
 
@@ -46,7 +46,7 @@ from benchmark.effectbench.task_pack.mockmed_tasks import (
     MockMedDrive,
     MockMedTask,
 )
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     AgentReport,
     EpisodeRecord,
     RestRecordVerifier,

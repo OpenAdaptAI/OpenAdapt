@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_flow.benchmark.verify import verify_note_saved
+from benchmark.harness.verify import verify_note_saved
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_RETAINED_FINALS = os.environ.get("OPENADAPT_OPENEMR_FINALS_DIR")

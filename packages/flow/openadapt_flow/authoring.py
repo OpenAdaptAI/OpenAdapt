@@ -804,7 +804,7 @@ class AuthoringSession:
                 "reason": "unconfirmed_masked_secret",
             }
         if not pause.secret and (text is None or not text):
-            # Non-secret MockMed note: do not persist an empty TYPE/param.
+            # Non-secret field left empty: do not persist an empty TYPE/param.
             return {
                 "recorded": False,
                 "param": pause.param,

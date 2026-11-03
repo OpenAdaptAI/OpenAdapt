@@ -566,7 +566,7 @@ run-to-run disagreement); N proves reproducibility.
 ## Reproduce
 
 ```
-.venv/bin/python -m openadapt_flow.benchmark.silent_wrong_action \\
+.venv/bin/python -m benchmark.harness.silent_wrong_action \\
     --out {DEFAULT_OUT_DIR} --n {results["n_per_scenario"]}
 ```
 
@@ -585,7 +585,7 @@ def render_chart(results: dict[str, Any], out_png: Path) -> Path:
     false-abort rate. The metric a record system cares about — a wrong write
     that reports success — collapses from a large bar to zero.
     """
-    from openadapt_flow.benchmark.chart_fonts import configure_bundled_font
+    from benchmark.harness.chart_fonts import configure_bundled_font
 
     plt = configure_bundled_font()
 
@@ -658,7 +658,7 @@ def write_outputs(results: dict[str, Any], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
     (out_dir / "SILENT_WRONG_ACTION.md").write_text(render_markdown(results))
-    from openadapt_flow.benchmark.chart_fonts import safe_render
+    from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_chart, results, out_dir / "silent_wrong_action.png")
 
@@ -689,7 +689,7 @@ def run_and_write(
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    """CLI: ``python -m openadapt_flow.benchmark.silent_wrong_action``."""
+    """CLI: ``python -m benchmark.harness.silent_wrong_action``."""
     parser = argparse.ArgumentParser(
         description=(
             "Silent-wrong-action-rate benchmark: measure how often "

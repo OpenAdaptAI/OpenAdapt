@@ -34,10 +34,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Protocol, Sequence, runtime_checkable
 
-from openadapt_flow.benchmark.effectbench.runner.compound import (
+from benchmark.harness.effectbench.runner.compound import (
     CompoundEffectVerifier,
 )
-from openadapt_flow.benchmark.effectbench.schema import Substrate
+from benchmark.harness.effectbench.schema import Substrate
 from openadapt_flow.runtime.effects.effect import Effect, EffectVerifier
 
 

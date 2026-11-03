@@ -28,7 +28,7 @@ Raw per-run rows, environment fingerprints, application-specific
 adapter/oracle wiring, and the detailed cost ledger are retained in the private
 `OpenAdaptAI/openadapt-corpus` repository. The public generic cost-capped agent
 mechanism remains in
-`openadapt_flow/benchmark/agent_baseline.py`. See the
+`benchmark/harness/agent_baseline.py`. See the
 [aggregate report](../agent_arm_verticals/README.md).
 
 There is still no full timing matrix and no publication protocol here: a

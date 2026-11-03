@@ -26,7 +26,7 @@ budget without completing the write in every trial.
 ## Method and public/private boundary
 
 The public, generic agent-baseline mechanism remains in
-`openadapt_flow/benchmark/agent_baseline.py`. It provides explicit paid-run
+`benchmark/harness/agent_baseline.py`. It provides explicit paid-run
 opt-in, action and cost caps, usage accounting, and an agent self-report that
 is never trusted for scoring. The public benchmark schemas and aggregate
 failure taxonomy also remain available for independently authored tasks.

@@ -6,7 +6,7 @@ EffectBench ships as a self-contained, pip-installable package under
 dependency). Because the standalone package vendors the effect MECHANISM (the
 typed ``Effect`` contract, the substrate-independent judge, the outcome
 classifier) that is otherwise defined in ``openadapt_flow.runtime.effects`` and
-``openadapt_flow.benchmark.effectbench``, this test guards against the two copies
+``benchmark.harness.effectbench``, this test guards against the two copies
 drifting: it asserts the standalone classifier and judge agree BYTE-FOR-BYTE with
 the engine on the reference inputs, and that the standalone reference reproduces
 the published headline. It also re-runs the standalone source-availability
@@ -62,7 +62,7 @@ def test_classifier_parity_with_engine_over_the_full_truth_table():
     """The standalone classifier equals the engine classifier on every input."""
     import effectbench.oracle as sa
 
-    from openadapt_flow.benchmark.effectbench import oracle as eng
+    from benchmark.harness.effectbench import oracle as eng
 
     scoreable = ["CORRECT", "WRONG_PERSISTED", "ABSENT"]
     for reported, state_name, avail in itertools.product(
@@ -86,7 +86,7 @@ def test_divergence_category_parity_with_engine():
     """The public standalone taxonomy must not lag the engine copy."""
     from effectbench.schema import DivergenceCategory as StandaloneCategory
 
-    from openadapt_flow.benchmark.effectbench.schema import (
+    from benchmark.harness.effectbench.schema import (
         DivergenceCategory as EngineCategory,
     )
 

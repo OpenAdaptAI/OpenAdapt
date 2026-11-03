@@ -745,7 +745,7 @@ def _identity_transfer_verdict(results: dict) -> str:
 
 def render_chart(results: dict, path: Path) -> None:
     """Stacked outcome bars per arm (success / wrong-action / halt)."""
-    from openadapt_flow.benchmark.chart_fonts import configure_bundled_font
+    from benchmark.harness.chart_fonts import configure_bundled_font
 
     plt = configure_bundled_font()
     arms = list(results["arms"])
@@ -776,7 +776,7 @@ def write_outputs(results: dict, out_dir: str | Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
     (out_dir / "BENCHMARK.md").write_text(render_markdown(results))
-    from openadapt_flow.benchmark.chart_fonts import safe_render
+    from benchmark.harness.chart_fonts import safe_render
 
     safe_render(render_chart, results, out_dir / "outcomes.png")
 

@@ -42,8 +42,8 @@ from benchmark.frappe_lending.fixture import (  # noqa: E402
 from openadapt_flow.backends.playwright_backend import (  # noqa: E402
     PlaywrightBackend as _BasePlaywrightBackend,
 )
-from openadapt_flow.benchmark import agent_baseline  # noqa: E402
-from openadapt_flow.benchmark.frappe_lending import (  # noqa: E402
+from benchmark.harness import agent_baseline  # noqa: E402
+from benchmark.harness.frappe_lending import (  # noqa: E402
     CONDITIONS,
     INITIAL_TRIALS_PER_CELL,
     PUBLICATION_TRIALS_PER_CELL,

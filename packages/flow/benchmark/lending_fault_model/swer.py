@@ -5,7 +5,7 @@ The effect-verified companion to ``benchmark/lending_fault_model/run.py``. Where
 screen-only postcondition contract (and measures how often that silently
 mishandles a transactional fault), THIS module measures the same faults through
 the shared EffectBench scoring contract
-(:func:`openadapt_flow.benchmark.effectbench.score_episode`) under a THREE-arm
+(:func:`benchmark.harness.effectbench.score_episode`) under a THREE-arm
 ladder that mirrors the clinical ``effect_e2e`` study (screen / single-surface /
 complete-read-path), so the two domains are directly comparable:
 
@@ -71,7 +71,7 @@ from typing import Callable, Iterator, Optional
 
 import requests
 
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     AgentReport,
     DivergenceCategory,
     Effect,
