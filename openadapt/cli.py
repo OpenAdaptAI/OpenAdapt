@@ -1,7 +1,8 @@
 """Unified CLI for OpenAdapt ecosystem.
 
 Usage:
-    openadapt flow record --url <app> --out rec   # record a workflow
+    openadapt flow record --backend <surface> <target> --out rec   # record a workflow
+                                    # target: --url for a web app, --window for a desktop app
     openadapt flow compile rec --out bundle        # compile it
     openadapt flow replay bundle                    # run it, local, $0
     openadapt flow lint bundle
