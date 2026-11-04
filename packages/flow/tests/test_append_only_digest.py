@@ -10,7 +10,9 @@ from typing import Any
 import pytest
 
 from openadapt_flow.runtime.effects import db_snapshot as snap
-from tests.test_db_snapshot_column_types import COLUMNS, database, live  # noqa: F401
+from tests.test_db_snapshot_column_types import COLUMNS, live
+
+pytest_plugins = ["tests.test_db_snapshot_column_types"]
 
 KEY = b"k" * 32
 
@@ -49,7 +51,9 @@ def test_historical_payloads_stay_on_the_server_and_only_new_bodies_are_read(
                 )
             return rows
 
-    reader = lambda: connect(cursorclass=Cursor)
+    def reader() -> Any:
+        return connect(cursorclass=Cursor)
+
     before = _take(reader)
     assert payload_reads == []
     assert max(digest_cell_sizes) <= 64
@@ -122,7 +126,7 @@ def test_two_old_payload_edits_cannot_cancel_each_other(database: Any) -> None:
     admin, _, connect = database
     before = _take(connect)
     with admin.cursor() as cur:
-        cur.execute("UPDATE t SET c_text = 'changed' WHERE id IN (1, 2)")
+        cur.execute("UPDATE t SET c_tinyint = c_tinyint + 1 WHERE id IN (1, 2)")
     after = _take(connect, before=before)
     a, b = before.tables["t"], after.tables["t"]
     assert sum(a.rows[k][0] != b.rows[k][0] for k in a.rows) == 2
@@ -132,10 +136,10 @@ def test_two_old_payload_edits_cannot_cancel_each_other(database: Any) -> None:
 @live
 def test_explicitly_ignored_columns_keep_their_existing_meaning(database: Any) -> None:
     admin, _, connect = database
-    before = _take(connect, ignore={"t": ["c_text"]})
+    before = _take(connect, ignore={"t": ["c_tinyint"]})
     with admin.cursor() as cur:
-        cur.execute("UPDATE t SET c_text = 'changed' WHERE id = 1")
-    after = _take(connect, before=before, ignore={"t": ["c_text"]})
+        cur.execute("UPDATE t SET c_tinyint = c_tinyint + 1 WHERE id = 1")
+    after = _take(connect, before=before, ignore={"t": ["c_tinyint"]})
     assert snap.same_state(before, after)
 
 
@@ -188,7 +192,10 @@ def test_a_hash_format_mismatch_never_holds_a_frame(tmp_path: Path) -> None:
     with sqlite3.connect(path) as con:
         con.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, body TEXT)")
         con.execute("INSERT INTO t VALUES (1, 'synthetic')")
-    connect = lambda: sqlite3.connect(path)
+
+    def connect() -> sqlite3.Connection:
+        return sqlite3.connect(path)
+
     before = snap.take_snapshot(connect, "sqlite", key=KEY)
     after = copy.deepcopy(before)
     after.tables["t"].row_hash_format = "unknown/future-format"
