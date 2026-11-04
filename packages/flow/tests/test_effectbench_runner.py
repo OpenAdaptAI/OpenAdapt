@@ -20,7 +20,7 @@ from typing import Mapping
 
 import pytest
 
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     Effect,
     EffectKind,
     EpisodeRecord,
@@ -30,7 +30,7 @@ from openadapt_flow.benchmark.effectbench import (
     SwerVariant,
     summarize,
 )
-from openadapt_flow.benchmark.effectbench.runner import (
+from benchmark.harness.effectbench.runner import (
     LIVE_ARMS,
     CompilerArm,
     CompoundEffectVerifier,
@@ -43,19 +43,19 @@ from openadapt_flow.benchmark.effectbench.runner import (
     run_episode,
     run_matrix,
 )
-from openadapt_flow.benchmark.effectbench.runner.arms import AgentArm, ArmResult
-from openadapt_flow.benchmark.effectbench.runner.baselines import (
+from benchmark.harness.effectbench.runner.arms import AgentArm, ArmResult
+from benchmark.harness.effectbench.runner.baselines import (
     SCAFFOLDED_ARMS,
     ClaudeComputerUseArm,
     ScaffoldNotWired,
 )
-from openadapt_flow.benchmark.effectbench.runner.harness import EpisodeEnv
-from openadapt_flow.benchmark.effectbench.runner.reference_tasks import (
+from benchmark.harness.effectbench.runner.harness import EpisodeEnv
+from benchmark.harness.effectbench.runner.reference_tasks import (
     GOAL,
     TARGET,
     make_params,
 )
-from openadapt_flow.benchmark.effectbench.schema import (
+from benchmark.harness.effectbench.schema import (
     DivergenceCategory,
     OracleChannel,
     OracleSpec,
@@ -343,7 +343,7 @@ def test_run_matrix_skips_scaffolded_arms_by_default() -> None:
 
 
 def test_cli_dry_run_runs_green() -> None:
-    from openadapt_flow.benchmark.effectbench.runner.__main__ import run_dry_run
+    from benchmark.harness.effectbench.runner.__main__ import run_dry_run
 
     episodes, summaries = run_dry_run(
         trials=1, arm_names="compiler,screen_only", include_scaffolded=False

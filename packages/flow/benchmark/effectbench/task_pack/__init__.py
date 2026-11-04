@@ -6,9 +6,9 @@ refusal controls, on the pinned system-of-record environments the
 ``benchmark.environments`` registry (PR #173) indexes, authored against the
 frozen EffectBench schema/oracle/metrics contract (PR #178).
 
-Each task is a :class:`~openadapt_flow.benchmark.effectbench.TaskSpec` (goal =
+Each task is a :class:`~benchmark.harness.effectbench.TaskSpec` (goal =
 INTENT only, never a step list) plus an
-:class:`~openadapt_flow.benchmark.effectbench.OracleSpec` bound to the
+:class:`~benchmark.harness.effectbench.OracleSpec` bound to the
 environment's system-of-record READ recipe, DESIGNED so a green screen
 (task-success) diverges from the correct business effect. The oracle reads
 pre/post SoR state independently of the screen; the non-gameability attestations

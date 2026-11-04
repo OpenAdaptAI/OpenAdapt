@@ -53,6 +53,21 @@ def _write_adapter(ref: Optional[str]) -> Any:
         raise SystemExit(f"--write-adapter: {exc}") from None
 
 
+def _teach_authority(args: argparse.Namespace) -> Any:
+    """``--teach-authorization`` as a TeachAuthority, checked now; or None."""
+
+    path = getattr(args, "teach_authorization", None)
+    if not path:
+        return None
+    from openadapt_flow.teach_authorization import TeachAuthority
+
+    return TeachAuthority(
+        Path(path),
+        key_dir=Path(args.key_dir) if args.key_dir else None,
+        approver_root=getattr(args, "approver_root", None),
+    )
+
+
 def _pairs(items: Optional[list[str]], flag: str) -> dict[str, str]:
     out: dict[str, str] = {}
     for item in items or []:
@@ -144,6 +159,23 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         help=(
             "the app's write adapter (openadapt_flow.teach_scope.WriteAdapter): "
             "run 1's writes are read before they are sent"
+        ),
+    )
+    p.add_argument(
+        "--teach-authorization",
+        metavar="STATEMENT",
+        help=(
+            "a person's signed teach authorization (openadapt-flow "
+            "teach-authorization): run 1 is scoped by it, and the flags may only "
+            "narrow it. Without one the draft is refused at admission"
+        ),
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        help=(
+            "the approver root the teach authorization's signer is checked under "
+            "(default OPENADAPT_APPROVER_ROOT)"
         ),
     )
     p.add_argument(
@@ -398,6 +430,7 @@ def cmd_compile_agent(
         allow_origins=args.allow_origin,
         constants=args.allow_text,
         write_adapter=_write_adapter(args.write_adapter),
+        teach_authorization=_teach_authority(args),
     )
     out = result.to_dict()
     if result.status == "draft" and not tty:
@@ -426,6 +459,7 @@ def _cmd_admit(
     if not args.task_dir:
         raise SystemExit("compile-agent admit needs the compiled task directory")
     compiler = FirstRunCompiler.load(args.task_dir)
+    compiler.teach_authorization = _teach_authority(args)
     jit = compiler._jit()
     if jit.admitted:
         _print({"status": "admitted", "detail": "already admitted"}, args.json)
