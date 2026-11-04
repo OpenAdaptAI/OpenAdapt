@@ -6,8 +6,9 @@ Audited 2026-11-03 on `main` at `213f3d9fe`. Scope: everything under
 The rule: the engine has no code written for one application. What one
 application needs lives in data (`app_profiles/*.yaml`, generated contracts,
 deployment configs) or in test fixtures and benchmark harnesses outside the
-shipped package. A CI check (`scripts/check_engine_generality.py`) keeps it
-that way; [CONTRIBUTING.md](../CONTRIBUTING.md) states the rule.
+shipped package. The CI check that keeps it that way,
+`scripts/check_engine_generality.py`, lands in the pull request that follows
+this audit, together with the rule in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Method
 
@@ -37,7 +38,7 @@ that way; [CONTRIBUTING.md](../CONTRIBUTING.md) states the rule.
 | --- | --- | --- |
 | (a) comment or docstring example | 118 | — |
 | (b) data loaded generically | 4 | 2 (`app_profiles/openemr.yaml`, the `clinical-write` policy pack as a default) |
-| (c) fixture, harness or demo in the package | 35 rows, plus 27 files of `benchmark/` | 19 |
+| (c) fixture, harness or demo in the package | 35 rows, plus the 25 Python files of `benchmark/` and 2 of `instrument/` | 19 |
 | (d) special-casing in engine logic | 27 | 15 |
 
 Rows group consecutive lines of one hit. The full table is at the end.
@@ -62,7 +63,7 @@ motivating application.
 | D10 | `__main__.py:2838-2934`, `:9305-9319`; `cli_variants.py:131,173-182` | `replay` and the variant probe fall back to the bundled MockMed when no URL is given; `--drift` turns off structural grounding | MockMed | Target URL required outside the demo commands | planned |
 | D11 | `qualification_oracle_gate.py` | `qualify accept` tests every workflow's oracle against MockMed (banner text, `/api/encounter`, `/api/db`) | MockMed | Build the fault fixture from the bundle's own effect binding | planned |
 | D12 | `execute/dispatch.py:111-188` | The Execute service's live runner always runs the MockMed tutorial workflow | MockMed | Replay through the admission's deployment config; MockMed only for synthetic admissions | planned |
-| D13 | `compiler/compile.py:151`, `runtime/replayer.py:394`, `runtime/identity.py:108` | Thresholds measured on MockMed only | MockMed | Generic logic, one-app numbers. Recalibrate on two or more apps | follow-up issue |
+| D13 | `compiler/compile.py:148`, `runtime/replayer.py:394`, `runtime/identity.py:108` | Thresholds measured on MockMed only | MockMed | Generic logic, one-app numbers. Recalibrate on two or more apps | follow-up issue |
 | D14 | `runtime/identity.py:275-302` | Hand-written list of non-identifying words drawn from EMR list screens | MockMed, EMRs | Derive from the recording (tokens shared by sibling rows) | follow-up issue |
 | D15 | `eligibility/client.py:37-41`, `:1091-1110` | One vendor's eligibility API (URL, key name, body) in the engine | Stedi | Move behind a connector interface | follow-up issue |
 
@@ -70,7 +71,7 @@ motivating application.
 
 | Where | What | Action | Status |
 | --- | --- | --- | --- |
-| `benchmark/` (27 Python files: `run_benchmark`, `openemr_benchmark`, `openemr_local`, `frappe_lending`, `hybrid_benchmark`, `dom_arm`, `silent_wrong_action`, `desktop_benchmark`, `verify`, `agent_baseline`, `reliability`, `chart_fonts`, `effectbench/`) | Benchmark harnesses shipped in the wheel | Moved to `packages/flow/benchmark/harness/` (import `benchmark.harness.*`). `openadapt-flow benchmark` loads it from a source checkout and says so from a wheel | done |
+| `benchmark/` (25 Python files: `run_benchmark`, `openemr_benchmark`, `openemr_local`, `frappe_lending`, `hybrid_benchmark`, `dom_arm`, `silent_wrong_action`, `desktop_benchmark`, `verify`, `agent_baseline`, `reliability`, `chart_fonts`, `effectbench/`) | Benchmark harnesses shipped in the wheel | Moved to `packages/flow/benchmark/harness/` (import `benchmark.harness.*`). `openadapt-flow benchmark` loads it from a source checkout and says so from a wheel | done |
 | `instrument/` | Competitor-drift harness; imported the benchmark at module load, so it was already broken in a wheel | Moved to `packages/flow/benchmark/harness/instrument/` | done |
 | `integrations/harness2/` | Harness2 research harness on MockMed | Moved to `packages/flow/benchmark/harness/harness2/`; the `harness2` extra is gone (install `[browser]`) | done |
 | `mockloan/`, `demo_driver.record_disbursement_demo` | Lending demo app no product command uses | Moved to `packages/flow/benchmark/harness/mockloan/` (recorder in `mockloan/demo.py`) | done |
@@ -175,7 +176,7 @@ Paths are relative to `packages/flow/openadapt_flow/` as of the audited commit.
 | `fleet/simulator.py:1-` | (c) | synthetic payer portal | in-package simulator fixture; move to benchmark/examples |
 | `guard_demo.py:1-296` | (c) | MockMed | `python -m openadapt_flow.guard_demo`: fake agent posts referral to MockMed with chart_pages READER creds; not a CLI subcommand. Move to packages/flow/examples or benchmark; importers: packages/agent/tests (1), packages/flow/tests (6). |
 | `instrument/ (__init__.py, competitor_drift.py)` | (c) | MockMed | MockMed competitor-drift harness. Moved to packages/flow/benchmark/harness/instrument. |
-| `integrations/harness2/ (all: tasks.py, apps.py, agent.py, adapter.py, traces.py, proposers.py, scorer.py, llm.py, pixels.py, rollout.py, selection.py, __init__.py)` | (c) | MockMed | Whole subpackage is a research harness for Harness2 on MockMed: MOCKMED_PATIENT/PATIENTS (tasks.py:71-148), MockMedTarget (apps.py:50-105, /api/db at :70), regex for MockMed task text and 'triage'/'New Encounter'/'encountersaved' (agent.py:221-324), MockMed banner regex Name — MRN — DOB (traces.py:55-57,128-138), clinical prompts (adapter.py:93-120,429-445; proposers.py:50-63). Move to packages/flow/benchmark/harness2; importers: benchmark/harness2_scorer/run.py, tests/test_harness2_{adapter,pixels,traces}.py, pyproject extra 'harness2', .github/workflows/packages.yml:451. |
+| `integrations/harness2/ (all: tasks.py, apps.py, agent.py, adapter.py, traces.py, proposers.py, scorer.py, llm.py, pixels.py, rollout.py, selection.py, __init__.py)` | (c) | MockMed | Whole subpackage is a research harness for Harness2 on MockMed: MOCKMED_PATIENT/PATIENTS (tasks.py:71-148), MockMedTarget (apps.py:50-105, /api/db at :70), regex for MockMed task text and 'triage'/'New Encounter'/'encountersaved' (agent.py:221-324), MockMed banner regex Name — MRN — DOB (traces.py:55-57,128-138), clinical prompts (adapter.py:93-120,429-445; proposers.py:50-63). Move to packages/flow/benchmark/harness/harness2; importers: benchmark/harness2_scorer/run.py, tests/test_harness2_{adapter,pixels,traces}.py, pyproject extra 'harness2', .github/workflows/packages.yml:451. |
 | `learning/synth_stream.py:1-245` | (c) | MockMed | synthetic MockMed add-patient-note stream (intents, 'Consent Required', 'Belford, Phil DOB'). Move to benchmark/ or tests/fixtures. |
 | `learning/synth_stream.py:246-525` | (c) | (generic) | StructuralDiffInducer is generic but lives in the MockMed harness module; imported by learning/teach.py:96, learning/branch_teach.py:76, benchmark/openemr_e2e/harness.py, 4 tests; pyproject mypy list (line 611). Move to learning/induce.py first, then move the stream out. |
 | `mockloan/ (server.py, fault_server.py, static/)` | (c) | MockLoan | Own synthetic lending app shipped in wheel but used by no product command; only demo_driver.record_disbursement_demo, benchmark/lending_fault_model, benchmark/undo_proposal, tests (test_mockloan, test_lending_swer, e2e/test_lending_fault_model), scripts (1). Move to packages/flow/benchmark/apps/mockloan. |
@@ -304,8 +305,8 @@ Paths are relative to `packages/flow/openadapt_flow/` as of the audited commit.
 | `validation/dense_surface.py:1271` | (a) | OpenEMR | comment/docstring example |
 | `validation/dense_surface.py:5` | (a) | OpenEMR | comment/docstring example |
 | `verifier.py:2467` | (a) | OpenEMR | comment/docstring example |
-| `vision/hashing.py:10` | (a) | MockMed | docstring for the MockMed-calibrated phash tolerance (see compile.py:151) |
+| `vision/hashing.py:10` | (a) | MockMed | docstring for the MockMed-calibrated phash tolerance (see compile.py:148) |
 | `volatility.py:100` | (a) | OpenEMR | comment/docstring example |
 | `volatility.py:31` | (a) | OpenEMR | comment/docstring example |
 | `volatility.py:6` | (a) | OpenEMR | comment/docstring example |
-| `benchmark/` (27 files) | (c) | OpenEMR, Frappe, MockMed, Open Dental | Moved to `packages/flow/benchmark/harness/` |
+| `benchmark/` (25 files) | (c) | OpenEMR, Frappe, MockMed, Open Dental | Moved to `packages/flow/benchmark/harness/` |

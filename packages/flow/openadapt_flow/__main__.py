@@ -5458,7 +5458,8 @@ def _checkout_harness_on_path(command: str) -> bool:
         )
         return False
     if str(checkout) not in sys.path:
-        sys.path.insert(0, str(checkout))
+        # Appended, so nothing in the checkout shadows an installed module.
+        sys.path.append(str(checkout))
     return True
 
 
