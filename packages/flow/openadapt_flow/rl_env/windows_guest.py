@@ -110,9 +110,12 @@ def _stop_desktop_processes(user: str) -> str:
         "$sid = [int]$Matches[1]\n"
         "$agent = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "
         "'*win_agent_server.py*' } | ForEach-Object { $_.ProcessId })\n"
-        "Get-Process -IncludeUserName -ErrorAction Stop | Where-Object { $_.SessionId -eq $sid "
-        f"-and $_.UserName -and {owner} -and $keep -notcontains $_.ProcessName.ToLower() "
-        "-and $agent -notcontains $_.Id } | "
+        "$mine = @(Get-Process -IncludeUserName -ErrorAction Stop | Where-Object { "
+        f"$_.SessionId -eq $sid -and $_.UserName -and {owner} }})\n"
+        # At least its shell runs: an account name that matches nothing
+        # (another spelling of it) would otherwise stop nothing and pass.
+        f"if ($mine.Count -eq 0) {{ throw 'no processes of {short} in its session: check the desktop account name' }}\n"
+        "$mine | Where-Object { $keep -notcontains $_.ProcessName.ToLower() -and $agent -notcontains $_.Id } | "
         "ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }\n"
         # A save launched from another session, or still exiting.
         "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
@@ -172,6 +175,11 @@ class GuestResult:
     stderr: str
 
 
+#: Set while a guest is built with an explicit ``host``: its other settings
+#: then come from ``OPENADAPT_WINENV_*`` too, never from a lab profile.
+_EXPLICIT_HOST = False
+
+
 def _setting(key: str, *, required: bool = False) -> Optional[str]:
     """One guest setting, all from one source.
 
@@ -180,7 +188,7 @@ def _setting(key: str, *, required: bool = False) -> Optional[str]:
     names, default ``winlab``). Never a mix: a lab key, password or relay must
     not reach another host.
     """
-    if os.environ.get("OPENADAPT_WINENV_HOST"):
+    if os.environ.get("OPENADAPT_WINENV_HOST") or _EXPLICIT_HOST:
         name = f"OPENADAPT_WINENV_{key}"
     else:
         profile = os.environ.get("OAFLOW_LAB_PROFILE", "winlab").upper()
@@ -232,6 +240,25 @@ class WindowsGuest:
         port: int = 5985,
         python: Optional[str] = None,
         ssh_key: Optional[str] = None,
+    ) -> None:
+        global _EXPLICIT_HOST
+        _EXPLICIT_HOST = host is not None
+        try:
+            self._configure(
+                host, user, password, port=port, python=python, ssh_key=ssh_key
+            )
+        finally:
+            _EXPLICIT_HOST = False
+
+    def _configure(
+        self,
+        host: Optional[str],
+        user: Optional[str],
+        password: Optional[str],
+        *,
+        port: int,
+        python: Optional[str],
+        ssh_key: Optional[str],
     ) -> None:
         self.host = host or _setting("HOST", required=True)
         self.user = user or _setting("USER", required=True)

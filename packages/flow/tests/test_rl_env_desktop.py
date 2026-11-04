@@ -439,6 +439,7 @@ def test_reset_stops_only_the_desktop_accounts_own_processes() -> None:
     assert "-IncludeUserName -ErrorAction Stop" in script
     assert "$_.UserName -eq 'LAB\\desk'" in script
     assert "throw 'no desktop session for desk" in script
+    assert "throw 'no processes of desk in its session" in script
     assert "-eq 'desk'" in wg._stop_desktop_processes("desk")
     assert "win_agent_server.py" in script and "'explorer'" in script
     assert "winlogon" not in script and "csrss" not in script
