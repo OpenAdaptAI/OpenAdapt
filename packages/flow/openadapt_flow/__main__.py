@@ -13205,7 +13205,8 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
 
 
 #: Sealed-ready commands that seal plaintext input themselves under strict
-#: mode (a recording, a compiled, induced or admitted bundle, a run directory).
+#: mode (a recording, a compiled, induced or admitted bundle, a run directory,
+#: the taught bundle and skill library, the sanitized review copy of a push).
 _STRICT_SELF_SEALING: frozenset[str] = frozenset(
     {
         "openadapt_flow.__main__:_cmd_record",
@@ -13215,6 +13216,8 @@ _STRICT_SELF_SEALING: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_run",
         "openadapt_flow.__main__:_cmd_replay",
         "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_teach",
+        "openadapt_flow.__main__:_cmd_push",
     }
 )
 
