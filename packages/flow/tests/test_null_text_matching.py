@@ -44,3 +44,100 @@ def test_reward_db_channel_is_typed() -> None:
         before = EffectState(substrate=substrate, reachable=True, records=after)
         verdict = judge_records(effect, before, after, substrate=substrate)
         assert verdict.verdict is Verdict.CONFIRMED, substrate
+
+
+def _restore_presence(tmp_path, value, params, fresh_note):
+    """fresh_presence for a field edit of ``note`` whose old value was "old"."""
+    from openadapt_flow.after_stop import keep_prior_state
+    from openadapt_flow.ir import (
+        ActionKind,
+        ChangeLedgerEntry,
+        Step,
+        UndoRestore,
+        UndoStep,
+        Workflow,
+    )
+    from openadapt_flow.rollback import fresh_presence
+
+    edit = Step(
+        id="edit_note",
+        intent="edit the note",
+        action=ActionKind.KEY,
+        key="Enter",
+        risk="irreversible",
+        effects=[
+            Effect(
+                kind=EffectKind.FIELD_EQUALS,
+                match={"id": "r1"},
+                field="note",
+                value=value,
+                risk="irreversible",
+            )
+        ],
+    )
+    undo = UndoStep(
+        id="restore_note",
+        undoes="edit_note",
+        intent="put the old note back",
+        source="hand_written",
+        kind="restore",
+        restore=UndoRestore(match={"id": "r1"}, fields={"note": "old_note"}),
+        steps=[
+            Step(
+                id="put_back",
+                intent="type the old note",
+                action=ActionKind.KEY,
+                key="Enter",
+                effects=[
+                    Effect(
+                        kind=EffectKind.FIELD_EQUALS,
+                        match={"id": "r1"},
+                        field="note",
+                        value={"param": "old_note"},
+                    )
+                ],
+            )
+        ],
+    )
+    workflow = Workflow(name="w", steps=[edit], undo_steps=[undo])
+    kept = keep_prior_state(
+        workflow, edit, [{"id": "r1", "note": "old"}], params, tmp_path
+    )
+    assert kept is not None
+    entry = ChangeLedgerEntry(
+        position=1,
+        step_id="edit_note",
+        intent="edit the note",
+        attempt_state="delivery_uncertain",
+        status="unknown",
+        undo_id="restore_note",
+    )
+    return fresh_presence(
+        entry,
+        undo,
+        workflow,
+        run_dir=tmp_path,
+        params=params,
+        read_records=lambda: [{"id": "r1", "note": fresh_note}],
+    )
+
+
+def test_a_value_its_map_does_not_name_is_unknown_not_a_null(tmp_path) -> None:
+    mapped = {"param": "new", "map": {"known": "mapped"}}
+    # The supplied value is outside the map: it resolves to nothing, which
+    # says nothing about whether the write landed.
+    assert _restore_presence(tmp_path / "a", mapped, {"new": "unmapped"}, None)[0] == (
+        "unknown"
+    )
+    # Controls: a parameter passed as None is an explicit null ...
+    assert _restore_presence(tmp_path / "b", {"param": "new"}, {"new": None}, None)[
+        0
+    ] == ("present")
+    # ... an unset one has no value ...
+    assert _restore_presence(tmp_path / "c", {"param": "new"}, {}, None)[0] == (
+        "unknown"
+    )
+    # ... and a mapped value reads back as its code.
+    assert _restore_presence(tmp_path / "d", mapped, {"new": "known"}, "mapped")[0] == (
+        "present"
+    )

@@ -194,8 +194,9 @@ def fresh_presence(
             (s for s in iter_workflow_steps(workflow) if s.id == entry.step_id), None
         )
         effects = list(step.effects) if step is not None else []
-        # A null value counts only when declared or passed as None: an unset
-        # parameter has no value, so the step's new values can't be told.
+        # A null value counts only when declared or passed as None. An unset
+        # parameter has no value, and a supplied value its map doesn't name
+        # resolves to nothing: either way the step's new value can't be told.
         new_values = {
             e.field: e.value.resolve(params)
             for e in effects
@@ -204,7 +205,11 @@ def fresh_presence(
             and (
                 e.value.resolve(params) is not None
                 or e.value.null
-                or (e.value.param is not None and e.value.param in params)
+                or (
+                    e.value.param is not None
+                    and e.value.param in params
+                    and params[e.value.param] is None
+                )
             )
         }
         row = rows[0]
