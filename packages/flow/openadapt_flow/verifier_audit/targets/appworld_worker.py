@@ -59,6 +59,10 @@ def _tables(conn: sqlite3.Connection, schema: str) -> set[str]:
     return {r[0] for r in conn.execute(query)}
 
 
+def _has_primary_key(conn: sqlite3.Connection, schema: str, table: str) -> bool:
+    return any(row[5] for row in conn.execute(f"PRAGMA {schema}.table_info({table})"))
+
+
 def _select(conn: sqlite3.Connection, sql: str) -> list[str]:
     cur = conn.execute(sql)
     cols = [d[0] for d in cur.description]
@@ -69,9 +73,9 @@ def _select(conn: sqlite3.Connection, sql: str) -> list[str]:
 
 def _delta(seed_dir: Path, end_dir: Path) -> list[dict]:
     """Rows added or removed between two full dumps, computed inside SQLite
-    (``EXCEPT``) so a run never serializes the unchanged tables. Every
-    AppWorld table carries a primary key, so set difference is the row
-    multiset difference."""
+    (``EXCEPT``) so a run never serializes the unchanged tables. ``EXCEPT`` is
+    a set difference, so a table without a primary key is compared with its
+    rowid included: two identical inserts stay two rows."""
     rows = []
     names = sorted(
         {p.name for p in seed_dir.glob("*.db")} | {p.name for p in end_dir.glob("*.db")}
@@ -91,19 +95,28 @@ def _delta(seed_dir: Path, end_dir: Path) -> list[dict]:
             stem = name[:-3]
             for table in sorted(seed | end):
                 q = f'"{table}"'
+                cols = "*"
+                if not _has_primary_key(conn, "e" if table in end else "s", q):
+                    cols = "rowid AS _rowid, *"
                 if table in seed and table in end:
                     added = _select(
-                        conn, f"SELECT * FROM e.{q} EXCEPT SELECT * FROM s.{q}"
+                        conn,
+                        f"SELECT {cols} FROM e.{q} EXCEPT SELECT {cols} FROM s.{q}",
                     )
                     removed = _select(
-                        conn, f"SELECT * FROM s.{q} EXCEPT SELECT * FROM e.{q}"
+                        conn,
+                        f"SELECT {cols} FROM s.{q} EXCEPT SELECT {cols} FROM e.{q}",
                     )
                 else:
                     added = (
-                        _select(conn, f"SELECT * FROM e.{q}") if table in end else []
+                        _select(conn, f"SELECT {cols} FROM e.{q}")
+                        if table in end
+                        else []
                     )
                     removed = (
-                        _select(conn, f"SELECT * FROM s.{q}") if table in seed else []
+                        _select(conn, f"SELECT {cols} FROM s.{q}")
+                        if table in seed
+                        else []
                     )
                 rows += [
                     {"table": f"{stem}.{table}", "op": "added", "row": r} for r in added
@@ -128,7 +141,10 @@ class Worker:
         self.n = 0
 
     def _seed_dir(self, world, task: str) -> Path:
-        path = self.cache / task
+        from appworld import __version__
+
+        # Keyed by AppWorld version: another release may ship other seed data.
+        path = self.cache / f"appworld-{__version__}" / task
         if not (path / ".complete").is_file():
             _dump(world, path)
             (path / ".complete").write_text("full seed dump\n")
