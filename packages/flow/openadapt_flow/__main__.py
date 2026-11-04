@@ -13390,20 +13390,65 @@ def _collect_sealed(
         unclassified.append(f"--{name.replace('_', '-')}")
         return
     text = str(value)
-    if not text or "://" in text or "\n" in text or len(text) > 4096:
+    if not text:
         return
-    # NAME=PATH arguments (--child, --admission, --variant) name a path after
-    # the first "="; check both readings.
+    # Every string is checked against the filesystem, whatever it looks
+    # like: a newline, "://" or any length can spell a local path. NAME=PATH
+    # arguments (--child, --admission, --variant) name a path after the
+    # first "="; check both readings.
     candidates = [text]
     if isinstance(value, str) and "=" in text:
         candidates.append(text.split("=", 1)[1])
     for candidate in candidates:
         if not candidate:
             continue
-        path = Path(candidate)
-        root = path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
+        try:
+            root = _sealed_root_named(candidate)
+        except _UnclassifiedArgument:
+            unclassified.append(f"--{name.replace('_', '-')}")
+            continue
+        if root is None:
+            root = sealed_set.sealed_root(candidate)  # an active writer
         if root is not None and root not in found:
             found.append(root)
+
+
+def _sealed_root_named(text: str) -> Optional[Path]:
+    """The sealed set that ``text`` names or lies inside, if any.
+
+    Raises ``_UnclassifiedArgument`` when the filesystem cannot tell (a
+    header that cannot be checked for a reason other than not existing).
+    """
+    import errno
+    import os
+    import stat
+
+    from openadapt_flow import sealed_set
+
+    # The path cannot exist, so nothing sealed can be read through it.
+    no_such_path = (errno.ENOENT, errno.ENOTDIR, errno.ENAMETOOLONG)
+    try:
+        full = os.path.abspath(text)
+    except ValueError:  # an embedded NUL: no such path
+        return None
+    current = full
+    while True:
+        try:
+            st = os.stat(os.path.join(current, sealed_set.HEADER))
+        except ValueError:
+            return None
+        except OSError as exc:
+            if exc.errno not in no_such_path:
+                raise _UnclassifiedArgument(
+                    "a path whose sealed header cannot be checked"
+                ) from exc
+        else:
+            if stat.S_ISREG(st.st_mode):
+                return Path(text) if current == full else Path(current)
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
 
 
 def _refusal_text(args: argparse.Namespace, error: BaseException) -> str:

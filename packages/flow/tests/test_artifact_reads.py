@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -1203,3 +1204,89 @@ def test_sealed_paths_are_found_at_any_depth_and_unknown_values_are_private(
     assert _private_input(argparse.Namespace(example=[[plain, object()]]))
     # Objects the code sets on the namespace do not make the run private.
     assert not _private_input(argparse.Namespace(_handler=object(), out=plain))
+
+
+def _odd_spelling(sealed: Path, tmp_path: Path, spelling: str) -> str:
+    """Move ``sealed`` under a directory whose path is spelled oddly."""
+    import shutil
+
+    if spelling == "newline":
+        parent = tmp_path / "line\nbreak"
+        parent.mkdir()
+        shutil.move(str(sealed), str(parent / "sealed"))
+        return str(parent / "sealed")
+    parent = tmp_path / "url:"
+    parent.mkdir()
+    shutil.move(str(sealed), str(parent / "sealed"))
+    # "url://sealed" is the same local directory with a redundant slash.
+    return f"{tmp_path}/url://sealed"
+
+
+@pytest.mark.parametrize("spelling", ["newline", "url-slash"])
+def test_a_sealed_example_under_any_path_spelling_is_refused(
+    sealed: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd,
+    caplog,
+    spelling: str,
+) -> None:
+    """A newline or "://" in a path is still a local path: the sealed example
+    is found and teach-branch is refused before it reads anything."""
+    from openadapt_flow.learning import branch_teach
+
+    calls: list[object] = []
+
+    def refuse(*args, **kwargs):
+        calls.append(args)
+        raise branch_teach.TeachError(f"workflow {_MARKER!r} did not stop here")
+
+    monkeypatch.setattr(branch_teach, "teach_branch", refuse)
+    example = _odd_spelling(sealed, tmp_path, spelling)
+    base = _plain_bundle(tmp_path / "base")
+    fix = tmp_path / "fix"
+    fix.mkdir()
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    out = tmp_path / "out"
+    args = ["teach-branch", "--example", example, str(fix), "--bundle", str(base)]
+    assert main([*args, "--out", str(out)]) == 2
+    printed = capfd.readouterr()
+    for text in (printed.out, printed.err, caplog.text):
+        assert _MARKER not in text
+    assert "REFUSED" in printed.err and "does not read encrypted input" in printed.err
+    assert not calls
+    assert not out.exists()
+
+
+def test_a_path_spelled_with_a_newline_or_url_slash_is_private(
+    sealed: Path, tmp_path: Path
+) -> None:
+    import argparse
+
+    from openadapt_flow.__main__ import _private_input, _sealed_paths_in
+
+    example = _odd_spelling(sealed, tmp_path, "url-slash")
+    assert _sealed_paths_in(argparse.Namespace(example=[[example, "x"]]))
+    # Text that is no local path stays public, whatever it looks like.
+    public = argparse.Namespace(
+        url="https://example.invalid/a", note="two\nlines", long="x" * 5000
+    )
+    assert not _private_input(public)
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0, reason="root reads any dir"
+)
+def test_a_path_whose_header_cannot_be_checked_is_private(tmp_path: Path) -> None:
+    import argparse
+
+    from openadapt_flow.__main__ import _private_input
+
+    locked = tmp_path / "locked"
+    (locked / "inner").mkdir(parents=True)
+    locked.chmod(0)
+    try:
+        assert _private_input(argparse.Namespace(example=[str(locked / "inner")]))
+    finally:
+        locked.chmod(0o700)
