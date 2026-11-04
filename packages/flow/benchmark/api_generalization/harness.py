@@ -162,7 +162,9 @@ def cmd_compile(a: argparse.Namespace, app: AppBase) -> None:
                               "proposed": step is not None, "reasons": reasons,
                               "compile_s": round(time.time() - t0, 1)} | frozen_check()
     if step is not None:
-        wf, admitted = admit_api_step(wf, admitted_by="benchmark-fixture")
+        wf, admitted = admit_api_step(
+            wf, admitted_by="benchmark-fixture", identity=getattr(app, "api_identity", None)
+        )
         result["admitted"] = admitted
         result["describe"] = describe_api_step(next(s for s in wf.steps if s.id == step.id))
         result["binding"] = step.api_binding.web_form.model_dump(mode="json") if step.api_binding else None
@@ -193,6 +195,11 @@ def run_one(env: dict[str, Any], app: AppBase, case: Case, arm: str, bundle: Pat
                            "arm": arm, "rep": rep, "fault": case.fault, "error": None}
     t0 = time.time()
     ctx = env["browser"].new_context(viewport=VIEWPORT, device_scale_factor=1)
+    # As the CLI does when it opens the browser: the context's guards and
+    # session-header watch start before any page loads.
+    from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+    prepare_ws_guard(ctx)
     restore = False
     try:
         page = ctx.new_page()

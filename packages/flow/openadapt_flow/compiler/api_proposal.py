@@ -1082,6 +1082,24 @@ def _is_json(line: dict[str, Any]) -> bool:
     )
 
 
+def _graphql_read(line: dict[str, Any]) -> bool:
+    """A GraphQL request whose every operation is a query: a read, though POSTed."""
+
+    if not _is_json(line):
+        return False
+    try:
+        doc = json.loads(line["body"])
+    except ValueError:
+        return False
+    ops = doc if isinstance(doc, list) else [doc]
+    return bool(ops) and all(
+        isinstance(op, dict)
+        and isinstance(op.get("query"), str)
+        and re.match(r"\s*(#[^\n]*\n\s*)*(query\b|\{)", op["query"]) is not None
+        for op in ops
+    )
+
+
 def _leaves(
     value: Any, path: tuple[str, ...] = ()
 ) -> list[tuple[tuple[str, ...], Any]]:
@@ -1174,13 +1192,24 @@ def _propose_json(
         and _path(ln["url"]) == _path(sender)
         and float(ln["t"]) < float(post["t"])
     ]
-    if not page_lines:
-        return refuse(
-            "the page that sent the save is not in the capture; start recording before opening it"
-        )
-    page_line = page_lines[-1]
+    if page_lines:
+        page_url, page_t = page_lines[-1]["url"], float(page_lines[-1]["t"])
+    else:
+        # A single-page app opens a form by changing its route, not by
+        # loading a document. Every recorded step must then be on that page:
+        # the API step stands in for all of them.
+        page_url, page_t = up.urldefrag(sender).url, float("-inf")
+        on_page = [
+            _path(str(e.get("url_before") or "")) == _path(sender)
+            and _origin(str(e.get("url_before") or "")) == _origin(sender)
+            for e in events[: (_event_index(save) or 0) + 1]
+        ]
+        if not sender or not on_page or not all(on_page):
+            return refuse(
+                "the page that sent the save is not in the capture; start recording before opening it"
+            )
     api_origin: Optional[str] = None
-    if _origin(page_line["url"]) != _origin(post["url"]):
+    if _origin(page_url) != _origin(post["url"]):
         if not post.get("request_headers"):
             return refuse(
                 "the save goes to another origin than its page, with no header the "
@@ -1188,10 +1217,9 @@ def _propose_json(
             )
         # The app's API has its own host; its script signs each request.
         api_origin = _origin(post["url"])
-    form_path, url_problems = _url_template(page_line["url"], by_value)
+    form_path, url_problems = _url_template(page_url, by_value)
     if url_problems:
         return refuse(url_problems[0])
-    page_t = float(page_line["t"])
     folded = [
         s
         for s in steps
@@ -1216,6 +1244,7 @@ def _propose_json(
         for ln in lines
         if ln["method"] not in ("GET", "HEAD", "OPTIONS")
         and ln is not post
+        and not _graphql_read(ln)
         and page_t < float(ln["t"]) < float(post["t"])
     ]
     if others:
