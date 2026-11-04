@@ -1031,6 +1031,37 @@ def test_a_recheck_owed_is_in_the_ledger_until_a_recheck_confirms_it(
     assert earlier["rechecked_at"]
 
 
+def test_an_owed_recheck_outlives_the_repeat_window_and_a_restart(
+    tmp_path: Path, due_now: None
+) -> None:
+    # No write key: past the repeat window a retry of the same values would
+    # start a new attempt and hide the owed recheck. It is handed the
+    # provisional result instead until the recheck settles it.
+    from openadapt_flow.write_ledger import FileLedger, Ledger
+
+    def ledger() -> Ledger:  # a fresh one each time, as after a restart
+        return Ledger(FileLedger(tmp_path / "ledger"), repeat_s=0)
+
+    db = _db(tmp_path)
+    contract = Contract.from_dict(_doc(db, recheck_after_s=3600))
+    before = begin_write(contract, _params(2), actor=BOT, ledger=ledger())
+    _sql(db, *_save_sql(2))
+    result = verify_write(before)
+    assert result.verified and result.provisional, result.reasons
+    for _ in range(2):
+        with pytest.raises(verifier.AlreadyWritten) as raised:
+            begin_write(contract, _params(2), actor=BOT, ledger=ledger())
+        assert raised.value.result["provisional"] is True
+    [(key, owed)] = ledger().rechecks_owed()
+    assert owed.recheck_owed == result.recheck_due_at
+    assert ledger().find_attempt(owed.attempt_id) == (key, owed)
+
+    assert _recheck(contract, result).outcome == "CONFIRMED"
+    assert ledger().rechecks_owed() == []
+    # Settled: the same values may be written again.
+    begin_write(contract, _params(2), actor=BOT, ledger=ledger())
+
+
 def test_a_confirming_recheck_from_a_saved_state_settles_the_owed_recheck(
     tmp_path: Path, due_now: None
 ) -> None:

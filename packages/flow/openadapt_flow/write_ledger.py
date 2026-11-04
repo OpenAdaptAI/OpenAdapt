@@ -320,9 +320,15 @@ class Attempt:
         if r.get("retry_safe"):
             return "free"
         if r.get("outcome") == "CONFIRMED" or r.get("landed"):
-            if r.get("write_key_bound") or r.get("review") or not self.delivered:
-                # Under review: handed back until a person releases it, so
-                # no later attempt hides it from the list.
+            if (
+                r.get("write_key_bound")
+                or r.get("review")
+                or not self.delivered
+                or self.recheck_owed
+            ):
+                # Under review, or a recheck still owed: handed back until a
+                # person releases it (or the recheck settles it), so no later
+                # attempt hides it from the list.
                 return "undelivered"
             return "free" if _age(r.get("at")) >= repeat_s else "undelivered"
         if r.get("outcome") == "REFUTED":
