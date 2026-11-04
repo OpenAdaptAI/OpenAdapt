@@ -218,6 +218,7 @@ def cmd_jit(
                 # Confirming the parameters recompiles the program, so it
                 # comes first, and the steps shown are those of the result.
                 accept = sorted(args.accept_param or [])
+                keys = list(args.idempotency_key or [])
                 lifecycle.confirm_params(
                     program,
                     principal_id=args.principal,
@@ -225,13 +226,15 @@ def cmd_jit(
                     confirm=confirm(
                         f"Make {accept} the task's parameters"
                         + (
-                            f", with {args.idempotency_key} identifying one record?"
-                            if args.idempotency_key
+                            f", with {' + '.join(keys)} identifying one record?"
+                            if keys
                             else "?"
                         )
                     ),
                     key_dir=_key_dir(args),
-                    idempotency_key=args.idempotency_key,
+                    idempotency_key=(
+                        None if not keys else keys[0] if len(keys) == 1 else keys
+                    ),
                 )
                 status = lifecycle.admission_status(program, key_dir=_key_dir(args))
             for i, step in enumerate(status["steps"], 1):
@@ -264,7 +267,10 @@ def cmd_jit(
                 authority.load_encrypted_key(args.key), _keys(args), policy=policy_doc
             )
             decision = lifecycle.admit_with_key(
-                program, principal=principal, key_dir=_keys(args)
+                program,
+                principal=principal,
+                key_dir=_keys(args),
+                approver_root=getattr(args, "approver_root", None),
             )
             if decision["outcome"] == "needs_person":
                 print(
@@ -290,6 +296,7 @@ def cmd_jit(
                 confirm=confirm(f"Admit as {args.principal}?"),
                 key_dir=_key_dir(args),
                 require_distinct_reviewer_and_admitter=args.require_distinct,
+                approver_root=getattr(args, "approver_root", None),
             )
             print(
                 f"ADMITTED by {manifest['admitted_by_principal_id']} at "
@@ -365,10 +372,12 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--idempotency-key",
         metavar="PARAM",
+        action="append",
         help=(
             "The parameter that identifies one saved record (the app keeps it "
             "unique, such as a claim number). The record check selects by it "
-            "and refuses a duplicate"
+            "and refuses a duplicate. Repeat it for a key made of several "
+            "parameters together, such as last name, first name and birth date"
         ),
     )
     group = p.add_mutually_exclusive_group()
@@ -397,6 +406,12 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         "--require-distinct",
         action="store_true",
         help="Refuse if you also reviewed the draft",
+    )
+    p.add_argument(
+        "--approver-root",
+        default=None,
+        help="The approver root the draft's teach authorization is checked "
+        "under (default OPENADAPT_APPROVER_ROOT)",
     )
     p = verbs.add_parser("reject", help="Set the draft aside")
     common(p)

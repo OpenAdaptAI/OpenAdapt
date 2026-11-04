@@ -19,11 +19,13 @@ OCR text, identity band) enters the record.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel
 
+from openadapt_flow import artifacts, sealed_set
 from openadapt_flow.ir import Workflow
 from openadapt_flow.qualification import EvidenceRef
 from openadapt_flow.repair.candidate import (
@@ -104,10 +106,11 @@ def _evidence_from_run_dir(
     """Collect heal-patch evidence refs + privacy-safe failure fingerprints."""
     evidence: list[EvidenceRef] = []
     fingerprints: list[FailureFingerprint] = []
+    run_dir = Path(os.path.abspath(run_dir))  # list_files names absolute paths
     heals_dir = run_dir / "heals"
-    if heals_dir.is_dir():
-        for patch_path in sorted(heals_dir.glob("*/patch.json")):
-            raw = patch_path.read_bytes()
+    if artifacts.is_dir(heals_dir):
+        for patch_path in artifacts.list_files(heals_dir, "*/patch.json"):
+            raw = artifacts.open_read(patch_path)
             rel = patch_path.relative_to(run_dir).as_posix()
             evidence.append(
                 EvidenceRef(kind="other", sha256=sha256_hex(raw), relative_path=rel)
@@ -126,11 +129,11 @@ def _evidence_from_run_dir(
                 )
             )
     report_path = run_dir / "report.json"
-    if report_path.is_file():
+    if artifacts.is_file(report_path):
         evidence.append(
             EvidenceRef(
                 kind="run_report",
-                sha256=sha256_hex(report_path.read_bytes()),
+                sha256=sha256_hex(artifacts.open_read(report_path)),
                 relative_path="report.json",
             )
         )
@@ -223,17 +226,19 @@ def register_bundle_candidate(
         evidence_run_dir=evidence_run_dir,
     )
     path = detached_candidate_path(proposed_bundle)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(candidate.model_dump_json(indent=2), encoding="utf-8")
+    if not sealed_set.is_sealed_path(proposed_bundle):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    # Encrypted when the proposed bundle is sealed (it names anchor text).
+    sealed_set.write_text(path, candidate.model_dump_json(indent=2))
     return path
 
 
 def load_detached_candidate(proposed_bundle: Path | str) -> RepairCandidate:
     """Load the detached candidate record from a proposed bundle."""
     path = detached_candidate_path(proposed_bundle)
-    if not path.is_file():
+    if not artifacts.is_file(path):
         raise FileNotFoundError(
             f"no detached repair candidate at {path}; register the bundle "
             "pair first (openadapt-flow repair register)"
         )
-    return RepairCandidate.model_validate_json(path.read_text(encoding="utf-8"))
+    return RepairCandidate.model_validate_json(artifacts.read_text(path))

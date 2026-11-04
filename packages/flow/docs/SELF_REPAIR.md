@@ -182,6 +182,47 @@ See [Measured](#measured) for how often it works.
 The re-run is safe because self-repair handles only a halt before any
 effect. The item was never partly saved.
 
+## Outside a browser
+
+On a desktop, RDP or Citrix backend, each probe, each fault probe and the
+resumed run need the app freshly started. `repair.session` says how:
+
+```yaml
+# deploy.yaml
+backend:
+  kind: macos
+  app: Chart
+  window_title: Chart
+repair:
+  agent: mypkg.agents:make_agent
+  screen_access_by: ops-lead
+  session:
+    command: ["/Applications/Chart.app/Contents/MacOS/Chart", "--profile", "test"]
+    fault_commands:
+      other_patient: ["/Applications/Chart.app/Contents/MacOS/Chart", "--patient", "5512"]
+    ready_s: 2
+```
+
+Each command is an argv, run with no shell on the machine Flow runs on. It
+must keep running while the app is up, and the one window `backend:` binds
+to must belong to it or to a process of its group: Flow checks that, so a
+session never binds to the halted session or a copy that was already open.
+When the session ends, Flow ends the command's whole process group, then runs
+`close_command` if there is one; a non-zero exit is refused. An app that
+exits at once handed the launch to a running window and is refused. Fault
+commands are the fault probes, as `fault_urls` are in a browser. Two
+sessions can't run side by side, so self-repair closes the halted session
+before each probe.
+
+Flow has to see which process owns the bound window, so this works where the
+window is on the machine Flow runs on: macOS, and the local client window of
+RDP or Citrix. Windows over its agent, and FreeRDP, are refused for now.
+
+Without `repair.session`, repair is off for a desktop run: the stop waits
+for a person, and `--self-repair` is refused. When it is set, Flow starts the
+app for the run itself, so close any copy already open: two windows refuse
+the run.
+
 ## Approving the fix
 
 The request is a normal per-item approval request, so the existing surfaces
@@ -217,16 +258,22 @@ Four objects make up the API:
 
 ```python
 from openadapt_flow.repair.self_repair import (
-    AppSession, RepairProposal, ReplayTarget, ScreenAccess, SelfRepair,
+    AppSession,
+    RepairProposal,
+    ReplayTarget,
+    ScreenAccess,
+    SelfRepair,
 )
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.runtime.effects import RestRecordVerifier
 
 URL = "http://127.0.0.1:8765/?fault=ok&idempotency=demo&drift=redesign#tasks"
 
+
 def open_session(fault):
     backend, close = PlaywrightBackend.launch(fault or URL)
     return AppSession(backend=backend, close=close)
+
 
 target = ReplayTarget(
     open_session,
@@ -280,15 +327,17 @@ contains:
 
 ```python
 class MyAgent:
-    dialect = "anthropic"        # any name in openadapt_flow.jit.dialects()
-    agent_id = "agent:my-repair" # recorded; can never approve its own fix
-    requires_model_key = True    # False only for an agent that calls no model
+    dialect = "anthropic"  # any name in openadapt_flow.jit.dialects()
+    agent_id = "agent:my-repair"  # recorded; can never approve its own fix
+    requires_model_key = True  # False only for an agent that calls no model
 
     def propose(self, request):
         # request.intent, request.recorded_label, request.recorded_crop_png,
         # request.live_png, request.viewport, request.previous_refusals,
         # request.model_key (the customer's key; never an OpenAdapt key)
-        action = ask_my_model(request)   # e.g. {"action": "left_click", "coordinate": [846, 457]}
+        action = ask_my_model(
+            request
+        )  # e.g. {"action": "left_click", "coordinate": [846, 457]}
         return RepairProposal(action=action, model_calls=1, cost_usd=0.004)
 ```
 
@@ -616,8 +665,9 @@ standard = StandardChanges(
     key_dir=Path("~/.openadapt/jit").expanduser(),
     test_record=test_record,
 )
-repair = SelfRepair(agent, target, store="repair-store",
-                    screen_access=access, standard_changes=standard)
+repair = SelfRepair(
+    agent, target, store="repair-store", screen_access=access, standard_changes=standard
+)
 ```
 
 `test_record_target` is a `ReplayTarget` whose sessions open the test record,
@@ -648,8 +698,12 @@ window. An item that halts for any other reason stays halted for a person.
 ```python
 from openadapt_flow.repair.preflight_queue import QueueItem, WorklistQueue
 
-queue = WorklistQueue("bundles/triage", test_record, "runs/worklist-2026-10-18",
-                      self_repair=lambda target: SelfRepair(agent, target, ...))
+queue = WorklistQueue(
+    "bundles/triage",
+    test_record,
+    "runs/worklist-2026-10-18",
+    self_repair=lambda target: SelfRepair(agent, target, ...),
+)
 result = queue.run([QueueItem(item_id, target_for(item_id)) for item_id in ids])
 print(result.status, [(i.item_id, i.status) for i in result.items])
 ```
@@ -773,14 +827,18 @@ same way.
 - One halted click per run is repaired, by one corrected click or a bridge of
   up to three actions, in a linear workflow with exactly one save. When the
   patched run halts at another step, the probe fails with that reason.
-- A bridge's new clicks need a DOM identity (a browser) and a readable,
-  non-saving label. A bridge acts on the halted page while it is captured;
+- A bridge's new clicks need a readable, non-saving label, and a record
+  identity the page shows under them. Elsewhere than a browser, a click with
+  no record identity is admitted only when a record check covers every save
+  ([REPAIR_ON_EVERY_BACKEND.md](REPAIR_ON_EVERY_BACKEND.md)), and only a
+  person approves that fix. That path is not yet qualified end to end. A bridge acts on the halted page while it is captured;
   each action is checked first, and the page is discarded afterwards.
 - The probe stops before every step the run gate classifies as a save, the
   same fail-closed classifier the approval gate uses. A step that writes but
   that the classifier misses would run during a probe.
-- The CLI supports browser runs that Flow launches. The Python API takes any
-  backend whose sessions you can open, but the DOM-based checks
+- The CLI repairs a browser run that Flow launches, or a desktop, RDP or
+  Citrix run whose `repair.session` says how to start the app (see
+  [Outside a browser](#outside-a-browser)). The DOM-based checks
   (`same_fields`, the structural locator) apply only in a browser. Elsewhere
   `same_fields` falls back to on-screen text.
 - An encrypted bundle is written back encrypted, but this path has no test.

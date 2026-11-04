@@ -70,7 +70,6 @@ from openadapt_flow.ir import (
     MAX_PAGES_OPENED_PER_STEP,
     PRIMARY_SURFACE_ID,
     StructuralLocator,
-    structural_locator_is_locatable,
 )
 
 #: Bound on waiting for a newly opened page's first navigation.
@@ -82,6 +81,24 @@ HOVER_DWELL_MS = 800
 
 # How long a recorded action that raises a browser dialog waits for it.
 _DIALOG_WAIT_S = 5.0
+
+#: Bound on waiting for an action's effect to reach the screen when the
+#: action has visibly started something (the URL or title changed, or the page
+#: is still loading) but the frame still shows the screen from before it. A
+#: slow app (#1378) keeps the old screen up while the server answers; two
+#: identical frames then are not a settled result, they are the wait.
+SETTLE_PENDING_TIMEOUT_S = 8.0
+
+#: Bound on the extension when only page activity (no URL change) says the
+#: action started something. Shorter than the route bound: a busy page with no
+#: route change may simply be doing its own work, and a longer wait could
+#: adopt an unrelated later screen (a toast fading, a rotating banner) as this
+#: action's result.
+SETTLE_PENDING_PROBE_ONLY_S = 3.0
+
+#: Quiet window for the browser's DOM + network probe (``page_quiescent``)
+#: while a change is pending. Mirrors the runtime's standard page-quiet window.
+_PENDING_QUIET_WINDOW_S = 0.1
 
 
 def _has_window_opener(page: Any) -> bool:
@@ -110,6 +127,41 @@ def _phash(png: bytes) -> str:
     """Perceptual hash of a PNG frame."""
     with Image.open(io.BytesIO(png)) as img:
         return perceptual_hash(img)
+
+
+def _pixels(png: bytes) -> bytes:
+    """A digest of the decoded pixels: exact "same screen" test.
+
+    The perceptual hash is too coarse for "nothing changed yet": two pages
+    with the same chrome and different rows can share it.
+    """
+    import hashlib
+
+    with Image.open(io.BytesIO(png)) as image:
+        rgb = image.convert("RGB")
+        return hashlib.sha256(
+            f"{rgb.width}x{rgb.height}".encode() + rgb.tobytes()
+        ).digest()
+
+
+def _route(url: str) -> str:
+    """``url`` without an empty fragment (``href="#"`` adds a bare ``#``)."""
+    return url[:-1] if url.endswith("#") else url
+
+
+def _census_has_twin(census: dict[str, Any]) -> bool:
+    """Whether a teach-time census saw a look-alike no record id separates."""
+
+    candidates = census.get("candidates")
+    if not isinstance(candidates, list) or len(candidates) < 2:
+        return False
+    own = census.get("record_key")
+    if not isinstance(own, str) or not own:
+        return True
+    return any(
+        isinstance(c, dict) and not c.get("self") and c.get("record_key") == own
+        for c in candidates
+    )
 
 
 class Recorder:
@@ -142,6 +194,7 @@ class Recorder:
         settle_interval_s: float = 0.1,
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
+        settle_pending_timeout_s: float = SETTLE_PENDING_TIMEOUT_S,
         network_capture: Optional[Any] = None,
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
@@ -201,9 +254,12 @@ class Recorder:
         # backend must never advertise an authoritative business-effect oracle
         # merely because the recorder can query a separate read-only source.
         self._system_of_record_reader = system_of_record_reader
+        #: Set by :meth:`expect_write` for the next event only.
+        self._write_wait_s = 0.0
         self._settle_interval_s = settle_interval_s
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
+        self._settle_pending_timeout_s = settle_pending_timeout_s
         self._params: dict[str, str] = {}
         # Names of parameters declared secret (never their values).
         self._withheld_param_names: set[str] = set()
@@ -655,12 +711,23 @@ class Recorder:
 
         return self._i
 
+    def expect_write(self, wait_s: float = 3.0) -> None:
+        """The next action may write to the system of record: its after-read
+        waits up to ``wait_s`` for the records to change (see :meth:`_commit`).
+        Changes nothing else about the event."""
+
+        self._write_wait_s = max(float(wait_s), 0.0)
+
     # -- internals -----------------------------------------------------------
 
     def _record(self, event: dict[str, Any], act: Callable[[], None]) -> None:
         """Capture before frame, act, wait settle, capture after, log event."""
         before = self._backend.screenshot()
         structural_before = self._structural_state()
+        # Who has the focus before and after a key press, for a key that moves
+        # the focus and changes nothing visible (the ``focus_on``
+        # postcondition). Key events only.
+        focus_before = self._focus_identity(event)
         # Structured identity of the clicked target (DOM / a11y text), when
         # the backend exposes it: captured on the BEFORE frame, before the
         # action, so the compiler can store it on the anchor and the replayer
@@ -696,23 +763,30 @@ class Recorder:
                     key = census.get("record_key")
                     if isinstance(key, str) and key:
                         event = {**event, "record_key": key}
+                    if _census_has_twin(census):
+                        # Another row read the same when the person clicked,
+                        # and no record id told them apart. If the twin later
+                        # scrolls out of a virtualized list, the text check
+                        # alone would pass on it: replay halts before a write.
+                        event = {**event, "structured_ambiguous": True}
             # The part of the form the target sits in (a legend, an accordion
             # or tab header, a heading), for the program's named sections.
             # Display only: the compiler never puts it on a step.
             section = self._section_context_at(int(event["x"]), int(event["y"]))
             if section:
                 event = {**event, "section": section}
-            # An unlabeled control has no structural locator. Observe how it
-            # relates to the fields typed into so far (form ownership, submit
-            # role, position, uniqueness) so the compiler can bind it to the
-            # form it submits. Before the action: the click may submit it.
-            if not structural_locator_is_locatable(locator) and event.get("kind") in (
-                "click",
-                "double_click",
-            ):
+            # Observe how the control relates to the fields typed into so far
+            # (form ownership, submit role, position, uniqueness) so the
+            # compiler can bind an unlabeled control to the form it submits,
+            # or give a labelled save on a create-new form its form identity.
+            # Before the action: the click may submit it.
+            if event.get("kind") in ("click", "double_click"):
                 binding = self._submit_binding_at(int(event["x"]), int(event["y"]))
                 if binding:
                     event = {**event, "submit_binding": binding}
+                    values = self._form_values_at(int(event["x"]), int(event["y"]))
+                    if values:
+                        event = {**event, "form_values": values}
         dialog_response, self._expected_dialog = self._expected_dialog, None
         if dialog_response is not None:
             arm = getattr(self._backend, "arm_dialog", None)
@@ -735,6 +809,9 @@ class Recorder:
         if page_backend is not None:
             page_backend.expect_page_close()
         hover_png = self._hover_frame(event)
+        # Was the page already busy before the action? Only a page that was
+        # quiet before can show activity this action started (_change_pending).
+        quiet_before = self._page_quiet()
         if hover_png is not None:
             event = {**event, "hover_dwell_ms": HOVER_DWELL_MS}
         try:
@@ -756,7 +833,19 @@ class Recorder:
                     "message": str(seen[0]["message"]),
                 },
             }
-        after = self._wait_settled()
+        after = self._wait_settled(
+            before=before,
+            structural_before=structural_before,
+            quiet_before=quiet_before,
+        )
+        if focus_before is not None:
+            focus_after = self._focus_identity(event)
+            if focus_after is not None:
+                event = {
+                    **event,
+                    "focus_before": focus_before,
+                    "focus_after": focus_after,
+                }
         opened = self._claim_new_pages(self._i)
         if opened:
             event = {**event, "opens": opened}
@@ -915,6 +1004,19 @@ class Recorder:
             line[f"{key}_before"] = value
         if structural_after is None:
             structural_after = self._structural_state()
+            wait_s, self._write_wait_s = self._write_wait_s, 0.0
+            if wait_s > 0 and "sor" in structural_before:
+                # The caller said this action may write (a save the gate let
+                # through). A system of record can show the write a moment
+                # after the screen settles; read again until it changes, so
+                # the write is bound to this event.
+                deadline = time.monotonic() + wait_s
+                while (
+                    structural_after.get("sor") == structural_before.get("sor")
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.25)
+                    structural_after = self._structural_state()
         for key, value in structural_after.items():
             line[f"{key}_after"] = value
         line["t"] = round(time.monotonic() - self._t0, 3)
@@ -956,6 +1058,18 @@ class Recorder:
         except Exception:
             return None
         return observation if isinstance(observation, dict) else None
+
+    def _form_values_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """A create-new form's untouched field values at (x, y), if any (the
+        backend's ``form_values_at``). The compiler keeps salted digests."""
+        getter = getattr(self._backend, "form_values_at", None)
+        if getter is None:
+            return None
+        try:
+            values = getter(int(x), int(y))
+        except Exception:
+            return None
+        return values if isinstance(values, dict) else None
 
     @staticmethod
     def _redact(png: bytes, region: tuple[int, int, int, int]) -> bytes:
@@ -1046,6 +1160,20 @@ class Recorder:
             return None
         return census if isinstance(census, dict) else None
 
+    def _focus_identity(self, event: dict[str, Any]) -> Optional[dict[str, Any]]:
+        """The focused element's identity around a key event, if readable."""
+
+        if event.get("kind") not in ("key", "hotkey"):
+            return None
+        reader = getattr(self._backend, "focus_identity", None)
+        if not callable(reader):
+            return None
+        try:
+            value = reader()
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
     def _structural_state(self) -> dict[str, Any]:
         """Structural observations the backend can provide right now.
 
@@ -1075,19 +1203,63 @@ class Recorder:
                 records = None
             if records is not None:
                 state["sor"] = records
+                # When the snapshot was read (seconds since the recording
+                # started): the compiler's "store unchanged until the next
+                # action" proof needs a real gap between two snapshots.
+                state["sor_t"] = round(time.monotonic() - self._t0, 3)
         return state
 
-    def _wait_settled(self) -> bytes:
+    def _wait_settled(
+        self,
+        *,
+        before: Optional[bytes] = None,
+        structural_before: Optional[dict[str, Any]] = None,
+        quiet_before: Optional[bool] = None,
+    ) -> bytes:
         """Poll screenshots until N consecutive identical hashes or timeout.
+
+        With ``before`` (the frame from before the action), stable frames whose
+        pixels still equal it exactly do not count as settled while a change
+        is pending (see :meth:`_change_pending`): a slow app keeps the old
+        screen up while it loads the next one. The wait then extends, up to
+        ``settle_pending_timeout_s`` when the URL changed and up to
+        ``SETTLE_PENDING_PROBE_ONLY_S`` when only page activity supports it.
+        On timeout the last frame is returned, exactly as without the
+        extension.
+
+        ``quiet_before`` is the page probe's verdict from just before the
+        action. Page activity counts as a change the action started only when
+        the page was quiet before it (keepalive polling, spinners and widgets
+        on an already busy page say nothing about this action).
 
         Returns:
             The last PNG frame captured (settled if achieved before timeout).
         """
-        deadline = time.monotonic() + self._settle_timeout_s
+        start = time.monotonic()
+        limit = start + self._settle_timeout_s
+        before_pixels = _pixels(before) if before is not None else None
         png = self._backend.screenshot()
         prev = _phash(png)
         consecutive = 1
-        while consecutive < self._settle_stable_frames and time.monotonic() < deadline:
+        while True:
+            if consecutive >= self._settle_stable_frames:
+                if before_pixels is None:
+                    return png
+                pending = self._change_pending(
+                    png, before_pixels, structural_before or {}, quiet_before
+                )
+                if pending is None:
+                    return png
+                bound = (
+                    self._settle_pending_timeout_s
+                    if pending == "route"
+                    else min(
+                        SETTLE_PENDING_PROBE_ONLY_S, self._settle_pending_timeout_s
+                    )
+                )
+                limit = max(limit, start + bound)
+            if time.monotonic() >= limit:
+                return png
             time.sleep(self._settle_interval_s)
             png = self._backend.screenshot()
             cur = _phash(png)
@@ -1096,4 +1268,69 @@ class Recorder:
             else:
                 consecutive = 1
             prev = cur
-        return png
+
+    def _page_quiet(self) -> Optional[bool]:
+        """The browser page's DOM + network probe, or None when it has none."""
+        probe = getattr(self._backend, "page_quiescent", None)
+        if not callable(probe):
+            return None
+        try:
+            # Playwright's sync API has no per-call timeout for the probe's
+            # evaluate; a blocked page main thread delays it like a screenshot.
+            quiet = probe(_PENDING_QUIET_WINDOW_S)
+        except Exception:
+            return None
+        return quiet if isinstance(quiet, bool) else None
+
+    def _change_pending(
+        self,
+        frame: bytes,
+        before_pixels: bytes,
+        structural_before: dict[str, Any],
+        quiet_before: Optional[bool],
+    ) -> Optional[str]:
+        """The action started a change the screen does not show yet, or None.
+
+        Only while the frame's pixels still equal, exactly, the frame from
+        before the action. Returns ``"route"`` when the URL changed to a
+        different page or client-side route (a bare ``#`` added by an
+        ``href="#"`` link does not count), and ``"activity"`` when the page
+        was quiet before the action and reports DOM or network activity now.
+        A click that changed nothing, on a quiet page, is settled at once, as
+        before.
+
+        The page title is not read here: it needs a browser round trip with
+        no timeout, and the URL (kept client-side) carries the route.
+        """
+        if _pixels(frame) != before_pixels:
+            return None
+        was = structural_before.get("url")
+        if isinstance(was, str):
+            try:
+                now = getattr(self._backend, "url", None)
+            except Exception:
+                now = None
+            if isinstance(now, str) and _route(now) != _route(was):
+                return "route"
+        if quiet_before is True and self._page_quiet() is False:
+            return "activity"
+        return None
+        for attr, key in (("url", "url"), ("page_title", "title")):
+            was = structural_before.get(key)
+            if was is None:
+                continue
+            try:
+                now = getattr(self._backend, attr, None)
+            except Exception:
+                now = None
+            if now is not None and now != was:
+                return True
+        probe = getattr(self._backend, "page_quiescent", None)
+        if callable(probe):
+            try:
+                quiet = probe(_PENDING_QUIET_WINDOW_S)
+            except Exception:
+                quiet = None
+            if quiet is False:
+                return True
+        return False

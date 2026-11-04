@@ -39,7 +39,7 @@ class _FakePage:
 
 
 class _FakeBrowser:
-    def new_page(self, viewport=None):
+    def new_page(self, viewport=None, **_options):
         return _FakePage()
 
     def close(self):

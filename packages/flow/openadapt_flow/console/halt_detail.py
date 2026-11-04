@@ -394,10 +394,16 @@ def _paused_step(
     bundle directory is used for reads only and is never projected -- a
     filesystem path is protected content on this boundary.
     """
+    from openadapt_flow import at_rest, crypto
+
     try:
-        store = CheckpointStore(run_dir)
+        store = CheckpointStore(run_dir, key=crypto.resolve_read_key(None))
         pending = store.read_pending()
         manifest = store.read_manifest()
+    except (crypto.CryptoError, at_rest.LocalKeyError):
+        # An encrypted pause that this key can't open is an error to show,
+        # never "no pending halt".
+        raise
     except Exception:  # noqa: BLE001 - a locked or corrupt run stays answerable
         return None, None, None, 0
     if pending is None or manifest is None or not manifest.bundle_dir:

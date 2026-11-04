@@ -434,6 +434,14 @@ def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[s
             abort,
         ]
 
+    if "is not actionable" in lower:
+        return "resolution", [
+            "The target is on the page but covered or off screen; close what "
+            "covers it (a dialog, banner or toast), then resume",
+            resume,
+            abort,
+        ]
+
     if "could not resolve" in lower or "all resolution rungs failed" in lower:
         return "resolution", [
             "The target could not be located on screen; confirm the app view "
@@ -1011,6 +1019,29 @@ class DurableRun:
                 # unusable. Preserve the safe halt if a damaged old capability
                 # cannot be archived for display cleanup.
                 pass
+        self._sync_authority()
+
+    def pause_digest(self) -> str:
+        """Digest of the pause on disk now (of None when there is none)."""
+
+        return self.store.model_digest(self.store.read_pending())
+
+    def consume_pause(self, digest: str) -> None:
+        """Remove the pause on disk only if it is exactly ``digest``.
+
+        A durable API span writes a delivery-uncertain pause before its first
+        request (its write-ahead). Once the save's checkpoint is persisted, that
+        pause has done its job. Any other pause (a deferred record check, a
+        person's decision, another leg's) is left alone.
+        """
+
+        current = self.store.read_pending()
+        if current is None or self.store.model_digest(current) != digest:
+            return
+        if self._active_pause_digest != digest:
+            return
+        self.store.cas_pending(digest, None)
+        self._active_pause_digest = self.store.model_digest(None)
         self._sync_authority()
 
     def complete(self) -> None:

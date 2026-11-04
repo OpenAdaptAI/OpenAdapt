@@ -420,6 +420,8 @@ def _deployment_sections(args: argparse.Namespace):
         effects = effects.model_copy(update={"kind": args.effects_kind})
     if getattr(args, "effects_base_url", None):
         effects = effects.model_copy(update={"base_url": args.effects_base_url})
+    if getattr(args, "effects_records_path", None):
+        effects = effects.model_copy(update={"records_path": args.effects_records_path})
     if getattr(args, "effects_root", None):
         effects = effects.model_copy(update={"root": args.effects_root})
 
@@ -476,6 +478,8 @@ def _deployment_runtime(
         cfg.runtime.allow_model_grounding
         or getattr(args, "allow_model_grounding", False)
     )
+    if getattr(args, "local_grounding", False):
+        cfg.runtime = cfg.runtime.model_copy(update={"local_grounding": True})
     return cfg, effect_verifier, api_actuator, durable, allow_egress
 
 
@@ -642,33 +646,50 @@ def _enforce_surface_binding(
 def _recording_encryption_key(args: argparse.Namespace, backend: str) -> Optional[str]:
     """The passphrase that encrypts this recording, or ``None`` for plaintext.
 
-    An explicit ``OPENADAPT_RECORDING_KEY`` turns encryption on. Where the
-    recorder can encrypt every file from the first frame (the web recorder),
-    a configured ``OPENADAPT_BUNDLE_KEY`` turns it on by default too, so a
-    deployment that seals its bundles does not leave the recordings they come
-    from in plaintext. ``--no-encrypt`` opts out. The desktop recorders write
-    a raw capture session through openadapt-capture that Flow cannot encrypt
-    yet, so an explicit recording key refuses them rather than write
-    plaintext.
+    The web recorder encrypts every file from the first frame under
+    ``OPENADAPT_RECORDING_KEY`` or ``OPENADAPT_BUNDLE_KEY``, and under the
+    local key in strict mode (:mod:`openadapt_flow.at_rest`); otherwise the
+    plaintext recording is logged. ``--no-encrypt`` and
+    ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` opt out, with a warning and a ledger
+    line. The desktop recorders write a raw capture session through
+    openadapt-capture that Flow cannot encrypt yet: by default they record in
+    plaintext and name the directory on stderr and in the ledger;
+    ``OPENADAPT_FLOW_AT_REST=strict`` and a configured recording key refuse.
     """
     import os
 
-    from openadapt_flow import crypto, sealed_set
+    from openadapt_flow import at_rest, crypto, sealed_set
 
-    if getattr(args, "no_encrypt", False):
-        return None
-    explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
-    if backend != "web":
-        if explicit:
-            raise SystemExit(
-                f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
-                f"{backend} recorder writes its raw capture session (database, "
-                "video) through openadapt-capture, which Flow cannot encrypt "
-                "yet. Nothing was recorded. Record on an encrypted volume and "
-                "pass --no-encrypt, or use --backend web."
-            )
-        return None
-    return explicit or crypto.resolve_key(None)
+    out = getattr(args, "out", None) or "the recording directory"
+    try:
+        if getattr(args, "no_encrypt", False):
+            if at_rest.strict():
+                at_rest.unsealed_write("a recording (--no-encrypt)", out)
+            at_rest.record_plaintext(f"a recording at {out}", "record --no-encrypt")
+            return None
+        explicit = os.environ.get(sealed_set.RECORDING_ENV_KEY) or None
+        if backend != "web":
+            if explicit:
+                raise SystemExit(
+                    f"record: {sealed_set.RECORDING_ENV_KEY} is set, but the "
+                    f"{backend} recorder writes its raw capture session "
+                    "(database, video) through openadapt-capture, which Flow "
+                    "cannot encrypt yet. Nothing was recorded. Record on an "
+                    "encrypted volume and pass --no-encrypt, or use --backend web."
+                )
+            if not at_rest.plaintext_allowed(f"a desktop recording at {out}"):
+                at_rest.unsealed_write(f"a {backend} recording", out)
+            return None
+    except at_rest.AtRestRefused as exc:
+        raise SystemExit(f"record: {exc}") from exc
+    if explicit or os.environ.get(crypto.ENV_KEY):
+        return explicit or crypto.resolve_key(None)
+    try:
+        return (
+            crypto.resolve_key(None) if at_rest.seal_new("a recording", out) else None
+        )
+    except at_rest.AtRestRefused as exc:
+        raise SystemExit(f"record: {exc}") from exc
 
 
 def _stamp_recording_surface(recording_dir: Path, surface: str) -> None:
@@ -879,10 +900,20 @@ def _build_and_run_replayer(
     readback_pipeline=None,
     secret_env_overrides: Optional[Mapping[str, str]] = None,
     api_steps_off_reason: Optional[str] = None,
+    rollback_plan=None,
+    fresh_session=None,
+    gui_undo_counts: Optional[bool] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow.
 
     ``api_steps_off_reason`` turns API steps off for this run and says why.
+    ``rollback_plan`` (``openadapt_flow.rollback``) reads the system of
+    record before the run and, after a stop, runs the approved
+    compensations and proves the store is back; ``fresh_session`` returns
+    the backend to a start for a GUI compensation. ``gui_undo_counts``
+    False: a GUI compensation runs after a stop, but doesn't count as an
+    undo for the undo-or-person rule (a desktop screen with no qualified
+    cleanup), so each save goes to a person first.
     """
     replayer = _configured_replayer(
         backend,
@@ -912,7 +943,39 @@ def _build_and_run_replayer(
     if api_steps_off_reason is not None:
         replayer.api_steps = False
         replayer.api_steps_off_reason = api_steps_off_reason
-    return replayer.run(
+    sealed = _rollback_seal(rollback_plan, durable, Path(run_dir))
+    if rollback_plan is not None:
+        _require_undo_or_person(
+            workflow,
+            rollback_plan,
+            approval_gate,
+            api_only=fresh_session is None or gui_undo_counts is False,
+        )
+    before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
+    if rollback_plan is not None and before is None:
+        # Without the first read nothing after a stop can be proven, and the
+        # undo-or-person rule let undoable saves run without a person.
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, but the system of record, "
+            "its audit log, or the run's own user for attribution couldn't be "
+            "read before the run, so a stop couldn't be rolled back. Nothing ran."
+        )
+    if sealed is not None and before is not None:
+        try:
+            from openadapt_flow.runtime.durable.program_checkpoint import (
+                bundle_version,
+            )
+
+            rollback_plan.seal(
+                sealed, before, dict(params), bundle_version=bundle_version(bundle)
+            )
+        except Exception as exc:  # noqa: BLE001 - unkept state can't be rolled back later
+            raise SystemExit(
+                "REFUSED before the run: rollback is on, but the read from before "
+                f"the run couldn't be kept encrypted ({type(exc).__name__}). "
+                "Nothing ran."
+            )
+    report = replayer.run(
         workflow,
         params=params,
         worklists=worklists,
@@ -930,6 +993,174 @@ def _build_and_run_replayer(
             else run_id
         ),
     )
+    if sealed is not None and report.success:
+        sealed.clear()
+    if rollback_plan is not None and not report.success and durable:
+        if _paused_for_a_person(Path(run_dir)):
+            # A person resumes the paused run or rolls it back; the read from
+            # before the run waits for either, sealed and bound to this run.
+            _bind_sealed_run(sealed, Path(run_dir))
+            from openadapt_flow.cli_hints import command
+
+            print(
+                "Rollback is armed for this paused run. Resume it, or roll it "
+                f"back: {command(f'resume {run_dir} --roll-back')}",
+                file=sys.stderr,
+            )
+            return report
+    if rollback_plan is not None and not report.success:
+        from openadapt_flow.rollback import ReplayerRunner
+
+        run_item = getattr(approval_gate, "_item", None)
+        if approval_gate is not None:
+            # A compensation is the undo a person approved: it doesn't need
+            # an undo of its own.
+            approval_gate.undo_or_person = False
+
+        def make_compensation_replayer():
+            if approval_gate is not None and run_item is not None:
+                # It acts on the run's own item, so the save gate checks the
+                # same record the run's save did.
+                approval_gate.next_item(run_item)
+            # The run's backend, verifier, API actuator and approval gate. No
+            # governed authorization or qualification guard: those bind the
+            # run's own workflow, and a compensation is its own approved undo.
+            return _configured_replayer(
+                backend,
+                workflow=workflow,
+                allow_egress=allow_egress,
+                effect_verifier=effect_verifier,
+                api_actuator=api_actuator,
+                durable=False,
+                use_structural=use_structural,
+                pixel_verify_enabled=pixel_verify_enabled,
+                runtime_config=runtime_config,
+                approval_gate=approval_gate,
+            )
+
+        import contextlib
+
+        if sealed is not None:
+            # A crash during this rollback is continued by --roll-back, which
+            # needs the state bound to the run.
+            _bind_sealed_run(sealed, Path(run_dir))
+        with sealed.lock() if sealed is not None else contextlib.nullcontext():
+            report = rollback_plan.finish(
+                report,
+                workflow,
+                before=before,
+                run_dir=Path(run_dir),
+                bundle_dir=Path(bundle),
+                runner=ReplayerRunner(make_compensation_replayer, fresh_session),
+                journal=sealed,
+            )
+    return report
+
+
+def _bind_sealed_run(sealed, run_dir: Path) -> None:
+    """Bind the sealed rollback state to the run id the durable manifest
+    names; a roll back of the pause checks it. Unbound state is refused."""
+    from openadapt_flow import crypto
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+    try:
+        manifest = CheckpointStore(
+            run_dir, key=crypto.resolve_key(None)
+        ).read_manifest()
+        if manifest is not None:
+            sealed.bind_run(manifest.run_id)
+    except Exception:  # noqa: BLE001 - unbound state is refused by --roll-back
+        pass
+
+
+def _rollback_seal(rollback_plan, durable: bool, run_dir: Path):
+    """Where the rollback keeps its state for a later process: the read from
+    before the run, encrypted with the deployment's key
+    (``rollback_durable.SealedRollback``). Only a durable run keeps it: the
+    run can pause and be resumed or rolled back later. Without a key, a
+    durable run with rollback is refused; another run keeps its state in
+    memory."""
+    if rollback_plan is None or not durable:
+        return None
+    from openadapt_flow import crypto
+    from openadapt_flow.rollback_durable import SealedRollback
+
+    if not hasattr(rollback_plan.reader, "key"):
+        raise SystemExit(
+            "REFUSED before the run: rollback on a durable (pausable) run keeps "
+            "the read from before the run for later, and this deployment's read "
+            "of the system of record can't be kept. Nothing ran."
+        )
+    key = crypto.resolve_key(None)
+    if key is None:
+        raise SystemExit(
+            "REFUSED before the run: rollback on a durable (pausable) run keeps "
+            "the read from before the run encrypted until the run is resumed or "
+            "rolled back, and no key is set (OPENADAPT_BUNDLE_KEY). Nothing ran."
+        )
+    return SealedRollback(run_dir, key)
+
+
+def _paused_for_a_person(run_dir: Path) -> bool:
+    """The durable run paused, and a person can still resume it."""
+    from openadapt_flow import crypto
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+    try:
+        pending = CheckpointStore(run_dir, key=crypto.resolve_key(None)).read_pending()
+    except Exception:  # noqa: BLE001 - an unreadable pause isn't resumable
+        return False
+    if pending is None:
+        return False
+    return not (
+        pending.category == "item_declined"
+        or (pending.category == "item_approval" and pending.status == "rejected")
+    )
+
+
+def _refuse_rollback_unwired(cfg, where: str) -> None:
+    """Rollback runs only on a single web run; refuse rather than run without it."""
+    section = getattr(cfg, "rollback", None)
+    if section is not None and section.enabled:
+        raise SystemExit(
+            f"REFUSED before the run: rollback is on, and it doesn't run on {where} "
+            "yet. Turn rollback off for this deployment, or run a single web "
+            "item. Nothing ran."
+        )
+
+
+def _require_undo_or_person(
+    workflow, rollback_plan, approval_gate, *, api_only: bool = False
+) -> None:
+    """With rollback on, every save is either undoable or approved by a person
+    before it runs (docs/ROLLBACK.md).
+
+    A gate that can ask a person checks each save (``undo_or_person``); with
+    no such gate, a run that holds a save no approved compensation can undo
+    is refused before it starts.
+    """
+    from openadapt_flow.approval_mode.model import ApprovalMode
+    from openadapt_flow.rollback import saves_without_undo
+
+    if approval_gate is not None:
+        approval_gate.undo_or_person = True
+        approval_gate.undo_allows_delete = bool(rollback_plan.allow_delete)
+        approval_gate.undo_api_only = api_only
+        if getattr(approval_gate, "mode", None) is not ApprovalMode.NOT_GATED:
+            return
+    missing = saves_without_undo(
+        workflow, allow_delete=rollback_plan.allow_delete, api_only=api_only
+    )
+    if missing:
+        raise SystemExit(
+            "REFUSED before the run: rollback is on, and these saves have no "
+            "compensation a person approved (or only a delete this deployment "
+            "doesn't allow): "
+            + ", ".join(missing)
+            + ". A write that can't be undone needs a person's approval first: "
+            "qualify and approve a compensation (rollback qualify, undo accept), "
+            "or run with an approval mode that asks a person. Nothing ran."
+        )
 
 
 def _replay_outcome_epilogue(
@@ -1087,6 +1318,11 @@ def _finish_replay(
         ledger = _change_ledger_epilogue(report, run_dir, args)
         if ledger:
             print(f"\n{ledger}")
+        from openadapt_flow.rollback import rollback_lines
+
+        rolled = rollback_lines(report)
+        if rolled:
+            print("\n" + "\n".join(rolled))
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
     _maybe_attest_run(run_dir, report, args)
@@ -1128,15 +1364,20 @@ def _replay_desktop(
     approval_gate=None,
     qualification_fault_driver=None,
     surface_cfgs=None,
+    rollback_plan=None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
     No Playwright browser, no bundled MockMed, no session video — those are
     web-only. ``--drift`` (a MockMed teaching aid) is refused. The backend is
     built from the resolved ``BackendConfig`` and the shared replayer wiring runs
-    exactly as it does for the web path.
+    exactly as it does for the web path. With ``rollback_plan``, a GUI
+    compensation starts from the run's start screen (the halt cleanup and its
+    start check, ``rollback.screen_fresh_session``); the whole-store reads
+    prove it either way.
     """
     from openadapt_flow.backends.factory import build_backend
+    from openadapt_flow.rollback import screen_fresh_session, screen_undo_counts
 
     if args.drift:
         raise SystemExit(
@@ -1181,6 +1422,17 @@ def _replay_desktop(
             qualification_fault_driver=qualification_fault_driver,
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            fresh_session=(
+                screen_fresh_session(
+                    backend, workflow, bundle_dir=bundle, run_dir=run_dir
+                )
+                if rollback_plan is not None
+                else None
+            ),
+            gui_undo_counts=(
+                screen_undo_counts(workflow) if rollback_plan is not None else None
+            ),
         )
     finally:
         for owned in (backend, *surface_backends.values()):
@@ -1255,17 +1507,12 @@ def _cmd_record(args: argparse.Namespace) -> int:
     if code == 0 and (Path(args.out) / "events.jsonl").is_file():
         _propose_lookup_check(args, from_lookup=from_lookup)
     if code == 0 and with_check:
-        from openadapt_flow import sealed_set
+        from openadapt_flow import artifacts
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
 
         recording = Path(args.out)
-        if sealed_set.is_sealed(recording):
-            print(
-                "record --with-check: marking a check in an encrypted recording "
-                "is not available yet; nothing was marked."
-            )
-        elif not (recording / "events.jsonl").is_file():
+        if not artifacts.is_file(recording / "events.jsonl"):
             print("record: no events.jsonl to mark a check in; skipped")
         elif not sys.stdin.isatty():
             mark = command(
@@ -2030,24 +2277,35 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     # bundle case CLI-side keeps induce usable on artifacts the operator
     # already has, without touching the library API.
     from openadapt_flow import sealed_set
+    from openadapt_flow.compiler.fixup_passes import read_compile_notes
     from openadapt_flow.compiler.induction import induce_program, validate_held_out
     from openadapt_flow.ir import Workflow
 
     traces: list = []
+    notes: list = []
     sealed_inputs = False
     for d in args.recording:
         path = Path(d)
         sealed_inputs = sealed_inputs or sealed_set.is_sealed(path)
         if (path / "workflow.json").is_file() or (path / "workflow.json.enc").is_file():
             traces.append(Workflow.load(path))
+            notes.append(read_compile_notes(path))
         else:
             traces.append(path)
-    if sealed_inputs and (args.report or args.probe_on):
+            notes.append(None)
+    from openadapt_flow import at_rest
+
+    # Encrypted demonstrations induce an encrypted program, and so do
+    # plaintext ones unless plaintext at rest is explicitly allowed.
+    seal_output = sealed_inputs or at_rest.seal_new("an induced program", args.out)
+    if seal_output and (args.report or args.probe_on):
         # Both write the induced program (or probe bundles) outside any
         # sealed set; refuse rather than write plaintext.
         print(
-            "induce REFUSED: --report and --probe-on are not available for "
-            "encrypted inputs yet. Nothing was written."
+            "induce REFUSED: --report and --probe-on write outside an "
+            "encrypted bundle, so they are not available while Flow encrypts "
+            f"at rest. Set {at_rest.OPT_OUT_ENV}='<reason>' to allow plaintext. "
+            "Nothing was written."
         )
         return 2
 
@@ -2060,7 +2318,7 @@ def _cmd_induce(args: argparse.Namespace) -> int:
             return probed
         result = probed
     else:
-        result = induce_program(traces, **spoken)
+        result = induce_program(traces, compile_notes=notes, **spoken)
     print(result.render())
     if args.report:
         report_path = Path(args.report)
@@ -2086,10 +2344,9 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     if args.name:
         workflow = workflow.model_copy(update={"name": args.name})
     out = Path(args.out)
-    if sealed_inputs:
-        # Encrypted demonstrations induce an encrypted program.
-        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
-        assert passphrase is not None  # the CLI guard refused a missing key
+    if seal_output:
+        passphrase = sealed_set.output_bundle_key()
+        assert passphrase is not None  # resolves to the local key by default
         with sealed_set.writing(out, "bundle", passphrase):
             workflow.save(out)
     else:
@@ -2261,8 +2518,9 @@ def _cmd_narration_show(args: argparse.Namespace) -> int:
 
 
 def _cmd_for_each(args: argparse.Namespace) -> int:
-    import shutil
+    import os
 
+    from openadapt_flow import artifacts, sealed_set
     from openadapt_flow.compiler.loop_authoring import (
         LoopAuthoringError,
         author_data_driven_loop,
@@ -2270,9 +2528,8 @@ def _cmd_for_each(args: argparse.Namespace) -> int:
     from openadapt_flow.ir import Workflow
 
     src = Path(args.bundle)
-    if (
-        not (src / "workflow.json").is_file()
-        and not (src / "workflow.json.enc").is_file()
+    if not artifacts.is_file(src / "workflow.json") and not artifacts.is_file(
+        src / "workflow.json.enc"
     ):
         raise SystemExit(f"{src} is not a workflow bundle (no workflow.json)")
     body = Workflow.load(src)
@@ -2308,23 +2565,38 @@ def _cmd_for_each(args: argparse.Namespace) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    # Copy the demonstrated body's templates so the looped bundle is a complete,
-    # self-verifying artifact (the loop body reuses the body's anchors/crops).
-    src_templates = src / "templates"
-    if src_templates.is_dir():
-        shutil.copytree(src_templates, out / "templates", dirs_exist_ok=True)
-    looped.save(out)
-    # The body's named sections (display metadata) follow it into the loop:
-    # its recorded form structure and review edits apply to the same steps.
     from openadapt_flow import sections as program_sections
 
     body_sections = program_sections.load(src, body)
-    program_sections.write(
-        out,
-        program_sections.build(
-            looped, context=body_sections.context, edits=body_sections.edits
-        ),
-    )
+
+    def write_looped() -> None:
+        # Copy the demonstrated body's templates so the looped bundle is a
+        # complete, self-verifying artifact (the loop body reuses its crops).
+        templates = Path(os.path.abspath(src / "templates"))
+        for template in artifacts.list_files(templates):
+            target = out / "templates" / template.relative_to(templates)
+            if not sealed_set.is_sealed_path(out):
+                target.parent.mkdir(parents=True, exist_ok=True)
+            sealed_set.write_bytes(target, artifacts.open_read(template))
+        looped.save(out)
+        # The body's named sections (display metadata) follow it into the
+        # loop: its recorded form structure and review edits apply to the
+        # same steps.
+        program_sections.write(
+            out,
+            program_sections.build(
+                looped, context=body_sections.context, edits=body_sections.edits
+            ),
+        )
+
+    if artifacts.is_sealed(src):
+        # A sealed body makes a sealed loop: nothing it holds lands in plaintext.
+        passphrase = sealed_set.output_bundle_key()
+        assert passphrase is not None  # resolves to the local key by default
+        with sealed_set.writing(out, "bundle", passphrase):
+            write_looped()
+    else:
+        write_looped()
 
     relation = args.relation
     rel = looped.data_sources[relation]
@@ -2378,6 +2650,11 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
     task's first screen before starting it; any other screen fails step 1's
     checks before input. Leaving the context only drops the DevTools
     connection. Every refusal raises :class:`SystemExit` before any input.
+
+    The tab was opened before this run attached, so its page loaded before
+    the WebSocket guard (:func:`~openadapt_flow.backends.playwright_backend.prepare_ws_guard`)
+    and a create-form save on it refuses to hold. The guard is installed on
+    attach: a document the tab loads after that (reload it) can hold one.
     """
 
     from openadapt_flow.interactive_recorder import (
@@ -2421,6 +2698,10 @@ def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
             )
         except BrowserAttachError as exc:
             raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+        # Documents the tab loads from now on are guarded from their start.
+        prepare_ws_guard(page)
         recorded = getattr(workflow, "viewport", None)
         if recorded:
             try:
@@ -2547,6 +2828,10 @@ def _build_surface_backends(surface_cfgs, *, page) -> dict:
                 if browser is None:
                     raise
                 opened = browser.new_page(viewport=page.viewport_size)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(opened)
             opened.goto(url)
             try:
                 opened.wait_for_load_state("load")
@@ -2569,6 +2854,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow.ir import Workflow
 
     bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle, target_url=getattr(args, "url", None))
     refuse_replay_composition(bundle)
     refuse_replay_process(bundle)
     from openadapt_flow.cli_variants import refuse_replay_variants
@@ -2645,6 +2933,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 
     pool_policy = requested_pool(args, cfg)
     if pool_policy is not None:
+        _refuse_rollback_unwired(cfg, "a worklist pool")
         return _replay_worklist_pool(
             args,
             cfg,
@@ -2661,6 +2950,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             surface_cfgs=surface_cfgs,
         )
     if _normalize_kind(backend_cfg.kind) != "web":
+        from openadapt_flow.rollback import plan_from_deployment
+
         return _replay_desktop(
             args,
             backend_cfg,
@@ -2691,10 +2982,12 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
             surface_cfgs=surface_cfgs,
+            rollback_plan=plan_from_deployment(cfg, effect_verifier),
         )
 
     headed = args.headed or cfg.backend.headed
     url = args.url or cfg.backend.url
+    refuse_unqualified_skill(bundle, target_url=url)
     if url and args.drift:
         raise SystemExit(
             "--drift only applies to the bundled MockMed demo app; "
@@ -2714,6 +3007,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         backend = build_backend(backend_cfg, page=page)
         held_backend.append(backend)
         surface_backends = _build_surface_backends(surface_cfgs, page=page)
+        from openadapt_flow.rollback import plan_from_deployment, web_fresh_session
+
+        rollback_plan = plan_from_deployment(cfg, effect_verifier)
         return _build_and_run_replayer(
             backend,
             workflow=workflow,
@@ -2752,6 +3048,17 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             qualification_fault_driver=fault_driver,
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            # Never reset the operator's own attached browser: that would
+            # sign them out. Only API-only compensations run there.
+            fresh_session=(
+                web_fresh_session(page, entry_url or page.url)
+                if rollback_plan is not None
+                and not (
+                    backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url
+                )
+                else None
+            ),
         )
 
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
@@ -2796,10 +3103,15 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                     viewport=_VIEWPORT,
                     record_video_dir=video_dir,
                     record_video_size=_VIEWPORT,
+                    service_workers="block",
                 )
                 page = context.new_page()
             else:
-                page = browser.new_page(viewport=_VIEWPORT)
+                page = browser.new_page(viewport=_VIEWPORT, service_workers="block")
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(url)
             try:
                 report = run_on_page(page, entry_url=url)
@@ -2991,6 +3303,60 @@ def _replay_worklist_pool(
     wirings = [_deployment_runtime(args, params=params) for _ in accounts]
     salt = getattr(getattr(workflow, "manifest", None), "content_digest", "") or ""
 
+    # After an item that halted before any write, when the session takes the
+    # next one, clean the screen, confirm the start screen and read the
+    # records back (docs/HALT_CLEANUP.md). Without a qualified halt_cleanup,
+    # the default only re-enters and checks.
+    from openadapt_flow import halt_cleanup as _hc
+    from openadapt_flow.after_stop import records_reader as _records_reader
+    from openadapt_flow.runtime import Replayer as _Replayer
+
+    item_cleanup = _hc.runnable_cleanup(workflow)
+
+    def _reenter(source, open_entry):
+        def reenter() -> None:
+            if open_entry is not None:
+                open_entry(source)
+            else:
+                source.goto(entry_url)
+
+        return reenter
+
+    def clean_session(source, cleanup_dir, *, wiring, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        read_records = _records_reader(wiring[1])
+        if read_records is None:
+            # Without a read-back, a cleanup that saves (autosave on leave)
+            # would go unseen and the item would count as unwritten.
+            return _hc.CleanupResult(
+                dirty="the deployment's effect verifier can't read the records "
+                "back, so a cleanup can't be shown to save nothing"
+            )
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.run_cleanup(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=cleanup_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+            read_records=read_records,
+        )
+
+    def start_check(source, check_dir, *, page_mode: bool, open_entry=None):
+        if item_cleanup is None:
+            return None
+        backend = build_backend(backend_cfg, page=source) if page_mode else source
+        return _hc.check_start(
+            lambda: _Replayer(backend),
+            workflow,
+            item_cleanup,
+            bundle_dir=bundle,
+            run_dir=check_dir,
+            reenter=_reenter(source, open_entry) if page_mode else None,
+        )
+
     if kind == "web":
         workers = []
         for i, account in enumerate(accounts):
@@ -3024,6 +3390,15 @@ def _replay_worklist_pool(
                     run_item_on_page=partial(run_item, wirings[i], page_mode=True),
                     sign_in=sign_in,
                     open_entry=open_entry,
+                    clean=partial(
+                        clean_session,
+                        wiring=wirings[i],
+                        page_mode=True,
+                        open_entry=open_entry,
+                    ),
+                    start_check=partial(
+                        start_check, page_mode=True, open_entry=open_entry
+                    ),
                     cdp_endpoint=account.browser_cdp_endpoint if account else None,
                     headed=bool(args.headed or cfg.backend.headed),
                     readback_window=policy.readback_window,
@@ -3058,6 +3433,8 @@ def _replay_worklist_pool(
                     backend_cfg, rdp_transport=session, rdp_connect=False
                 ),
                 run_item_on_backend=partial(run_item, wirings[i], page_mode=False),
+                clean=partial(clean_session, wiring=wirings[i], page_mode=False),
+                start_check=partial(start_check, page_mode=False),
                 fingerprint=hashlib.sha256(
                     f"{backend_cfg.rdp_host}|{account.rdp_username}".encode()
                 ).hexdigest(),
@@ -3621,6 +3998,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from openadapt_flow.runtime.authorization import runtime_inputs_digest
 
     bundle = Path(args.bundle)
+    from openadapt_flow.skills import refuse_unqualified_skill
+
+    refuse_unqualified_skill(bundle)
     if is_composition_artifact(bundle):
         from openadapt_flow.cli_compose import cmd_run_composition
 
@@ -3720,6 +4100,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 2
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
+    # A pulled skill runs only on the instance it was qualified on: the
+    # deployment's app address, not only an explicit --url.
+    refuse_unqualified_skill(
+        bundle,
+        target_url=getattr(args, "url", None) or getattr(backend_cfg, "url", None),
+    )
     will_actuate = not bool(getattr(args, "dry_run", False))
     authority_file = getattr(args, "qualification_authority_file", None)
     dispatch_file = getattr(args, "managed_dispatch_file", None)
@@ -4148,6 +4534,13 @@ def _resume_approval_gate(
     )
 
 
+def _was_rolled_back(run_dir: Path) -> bool:
+    """Did a compensating rollback start undoing this run?"""
+    from openadapt_flow.runtime.durable.resume import was_compensated
+
+    return was_compensated(run_dir)
+
+
 def _cmd_resume(args: argparse.Namespace) -> int:
     from openadapt_flow import crypto
     from openadapt_flow.runtime.durable import resume, resume_point
@@ -4158,6 +4551,8 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     # unset => None => plaintext, unchanged.
     ckpt_key = crypto.resolve_key(None)
     store = CheckpointStore(run_dir, key=ckpt_key)
+    if getattr(args, "roll_back", False):
+        return _cmd_resume_roll_back(args, run_dir, store, ckpt_key)
     pending = store.read_pending()
     if pending is None:
         print(
@@ -4172,6 +4567,13 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         print(
             "Resume REFUSED: a person declined this save; the item is over. "
             "Nothing was executed."
+        )
+        return 3
+    if _was_rolled_back(run_dir):
+        print(
+            "Resume REFUSED: this run was rolled back after it stopped, so its "
+            "earlier writes are undone and resuming would carry them as done. "
+            "Start a new run. Nothing was executed."
         )
         return 3
     # A governed run's resume takes its approver pin only from the deployment
@@ -4512,6 +4914,12 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 with sync_playwright() as p:
                     browser = launch_chromium(p.chromium, headless=not headed)
                     page = browser.new_page(viewport=_VIEWPORT)
+                    from openadapt_flow.backends.playwright_backend import (
+                        prepare_ws_guard,
+                    )
+
+                    # Guard the page's WebSockets from its first document (wire check).
+                    prepare_ws_guard(page)
                     page.goto(url)
                     try:
                         report = _resume_with(build_backend(backend_cfg, page=page))
@@ -4538,6 +4946,27 @@ def _cmd_resume(args: argparse.Namespace) -> int:
         print(f"Resume REFUSED: {refused}")
         return 3
 
+    if ckpt_key:
+        from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+        sealed = SealedRollback(run_dir, ckpt_key)
+        if report.success:
+            # The run finished: its sealed rollback state has nothing left to do.
+            sealed.clear()
+        else:
+            try:
+                armed = sealed.load_armed() is not None
+            except SealedStateError:
+                armed = True
+            if armed:
+                _bind_sealed_run(sealed, run_dir)
+            if armed:
+                from openadapt_flow.cli_hints import command
+
+                print(
+                    "Rollback is armed for this run. Resume it again, or roll it "
+                    f"back: {command(f'resume {run_dir} --roll-back')}"
+                )
     report_md = render_run_report(run_dir)
     execution_outcome = getattr(report, "execution_outcome", None)
     outcome = execution_outcome or ("success" if report.success else "FAILED")
@@ -4553,6 +4982,203 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
     return 0 if report.success else 1
+
+
+def _cmd_resume_roll_back(
+    args: argparse.Namespace, run_dir: Path, store, ckpt_key: Optional[str]
+) -> int:
+    """Roll back a paused durable run, or a rollback a crash interrupted, from
+    the sealed state (docs/ROLLBACK.md, Durable runs). Afterwards the run is
+    never resumed."""
+    from openadapt_flow.rollback_durable import SealedRollback, SealedStateError
+
+    if ckpt_key is None:
+        print(
+            "Roll back REFUSED: the rollback state is encrypted with the "
+            "deployment's key (OPENADAPT_BUNDLE_KEY), which isn't set. Nothing ran."
+        )
+        return 3
+    sealed = SealedRollback(run_dir, ckpt_key)
+    try:
+        with sealed.lock():
+            return _roll_back_sealed(args, run_dir, store, ckpt_key, sealed)
+    except SealedStateError as exc:
+        print(f"Roll back REFUSED: {exc}. Nothing ran.")
+        return 3
+
+
+def _roll_back_sealed(
+    args: argparse.Namespace, run_dir: Path, store, ckpt_key: str, sealed
+) -> int:
+    """``resume --roll-back`` while it holds the run's rollback lock."""
+    from openadapt_flow.after_stop import UndoNotOffered, _load_report
+    from openadapt_flow.backends.factory import _normalize_kind, build_backend
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.rollback import (
+        ReplayerRunner,
+        plan_from_deployment,
+        rollback_lines,
+        screen_fresh_session,
+        web_fresh_session,
+    )
+    from openadapt_flow.rollback_durable import SealedStateError
+    from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
+
+    done = sealed.finished()
+    if done is not None:
+        print(
+            f"Roll back REFUSED: this run's rollback already ended ({done}); "
+            "nothing runs twice. Nothing ran."
+        )
+        return 3
+    try:
+        armed = sealed.load_armed()
+        after_stop = sealed.load_stop() if armed is not None else None
+        restarted = sealed.started_steps() if armed is not None else frozenset()
+        compensated = sealed.compensated_steps() if armed is not None else frozenset()
+        report, _digest = _load_report(run_dir)
+    except (SealedStateError, UndoNotOffered) as exc:
+        print(f"Roll back REFUSED: {exc}. Nothing ran.")
+        return 3
+    if armed is None:
+        print(
+            f"Roll back REFUSED: {run_dir} holds no rollback state (rollback "
+            "wasn't on for this run, or it finished). Nothing ran."
+        )
+        return 3
+    if report.success:
+        print("Nothing to roll back: the run finished.")
+        return 0
+    manifest = store.read_manifest()
+    if manifest is None or armed["run_id"] != manifest.run_id:
+        print(
+            "Roll back REFUSED: the sealed rollback state isn't bound to this "
+            "run's durable manifest. Nothing ran."
+        )
+        return 3
+    governed = manifest.governed_authorization
+    if manifest.delivery_authority_kind == "cloud_runner" or (
+        governed is not None
+        and (
+            governed.production_qualification_admission_id is not None
+            or governed.qualification_campaign_permit_id is not None
+        )
+    ):
+        print(
+            "Roll back REFUSED: this run carries a managed dispatch or a "
+            "qualification authority, which a roll back doesn't re-check. "
+            "Nothing ran."
+        )
+        return 3
+    bundle = Path(manifest.bundle_dir)
+    if not armed["bundle_version"] or bundle_version(bundle) != armed["bundle_version"]:
+        print(
+            "Roll back REFUSED: the run's bundle changed since the run (its "
+            "compensations may not be the ones approved for it). Nothing ran."
+        )
+        return 3
+    try:
+        workflow = Workflow.load(bundle, key=ckpt_key)
+    except Exception:  # noqa: BLE001 - never echo a bundle's contents
+        print(
+            "Roll back REFUSED: the run's workflow bundle could not be loaded "
+            f"safely. {_SAFE_BUNDLE_LOAD_GUIDANCE} Nothing ran."
+        )
+        return 3
+    cfg, effect_verifier, api_actuator, _durable, allow_egress = _deployment_runtime(
+        args, params=dict(armed["params"])
+    )
+    plan = plan_from_deployment(cfg, effect_verifier)
+    if plan is None:
+        print("Roll back REFUSED: rollback is off in this deployment. Nothing ran.")
+        return 3
+    before = plan.restore(armed)
+    if before is None:
+        print(
+            "Roll back REFUSED: the deployment's rollback settings changed since "
+            "the run, or the run's own user or its audit log as it was before "
+            "the run can't be rebuilt from the sealed state. Nothing ran."
+        )
+        return 3
+    backend_cfg = _resolve_backend_config(args, cfg, workflow)
+
+    def roll_back_on(backend, fresh_session) -> "RunReport":
+        def make_replayer():
+            return _configured_replayer(
+                backend,
+                workflow=workflow,
+                allow_egress=allow_egress,
+                effect_verifier=effect_verifier,
+                api_actuator=api_actuator,
+                durable=False,
+                use_structural=True,
+                pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+                runtime_config=cfg.runtime,
+            )
+
+        return plan.finish(
+            report,
+            workflow,
+            before=before,
+            run_dir=run_dir,
+            bundle_dir=bundle,
+            runner=ReplayerRunner(make_replayer, fresh_session),
+            journal=sealed,
+            after_stop=after_stop,
+            restarted=restarted,
+            compensated=compensated,
+        )
+
+    if _normalize_kind(backend_cfg.kind) == "web":
+        url = args.url or cfg.backend.url
+        if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
+            # The operator's own signed-in browser is never reset: only an
+            # API-only compensation runs there.
+            with _attached_web_page(backend_cfg, url=url, workflow=workflow) as page:
+                report = roll_back_on(build_backend(backend_cfg, page=page), None)
+        else:
+            from playwright.sync_api import sync_playwright
+
+            from openadapt_flow._browser_setup import launch_chromium
+
+            if url is None:
+                raise SystemExit(
+                    "roll back needs the target app URL — pass --url or set "
+                    "backend.url in --config."
+                )
+            with sync_playwright() as p:
+                browser = launch_chromium(
+                    p.chromium, headless=not (args.headed or cfg.backend.headed)
+                )
+                page = browser.new_page(viewport=_VIEWPORT)
+                page.goto(url)
+                try:
+                    report = roll_back_on(
+                        build_backend(backend_cfg, page=page),
+                        web_fresh_session(page, url),
+                    )
+                finally:
+                    browser.close()
+    else:
+        try:
+            backend = build_backend(backend_cfg)
+        except ValueError as e:
+            raise SystemExit(str(e))
+        try:
+            report = roll_back_on(
+                backend,
+                screen_fresh_session(
+                    backend, workflow, bundle_dir=bundle, run_dir=run_dir
+                ),
+            )
+        finally:
+            close = getattr(backend, "close", None)
+            if callable(close):
+                close()
+    for line in rollback_lines(report):
+        print(line)
+    status = report.rollback.status if report.rollback is not None else None
+    return 0 if status in ("rolled_back", "nothing_landed") else 1
 
 
 def _approver_signer(args: argparse.Namespace, *, method: str) -> Any:
@@ -4977,6 +5603,87 @@ def _cmd_approver_grant(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_teach_authorization(args: argparse.Namespace) -> int:
+    """Create, sign or check a teach authorization (what a teaching agent may do)."""
+    import json
+    import sys
+    from datetime import datetime, timedelta, timezone
+
+    from openadapt_flow import teach_authorization as ta
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        load_signer,
+    )
+
+    def refuse(code: str, message: str) -> int:
+        print(json.dumps({"ok": False, "code": code, "message": message}))
+        return 2
+
+    if args.teach_auth_cmd == "create":
+        try:
+            spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
+            if not 0 < args.expires_in_hours <= 24 * 90:
+                return refuse(
+                    "teach_auth_malformed", "--expires-in-hours is from 0 to 2160"
+                )
+            expires = datetime.now(timezone.utc) + timedelta(
+                hours=args.expires_in_hours
+            )
+            path = ta.create(
+                Path(args.out),
+                spec,
+                authorizer=args.authorizer,
+                authorizer_public_key=args.authorizer_public_key,
+                expires_at=expires,
+            )
+        except (OSError, ValueError, ta.TeachAuthorizationError) as exc:
+            return refuse(getattr(exc, "code", "teach_auth_malformed"), str(exc))
+        print(json.dumps({"ok": True, "statement": str(path)}))
+        return 0
+    try:
+        key_dir, root = ta.pinned_trust(
+            Path(args.key_dir) if args.key_dir else None, args.approver_root
+        )
+    except ta.TeachAuthorizationError as exc:
+        return refuse(exc.code, str(exc))
+    if args.teach_auth_cmd == "verify":
+        result = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+        if not result.ok:
+            return refuse(str(result.reason), result.detail)
+        record = ta.record(result)
+        print(json.dumps({"ok": True, **record}))
+        return 0
+    # sign: the person whose approver key file it is, at a terminal.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return refuse(
+            "teach_auth_unsigned",
+            "teach-authorization sign needs a person at an interactive terminal",
+        )
+    try:
+        signer = load_signer(
+            Path(args.approver_key), key_dir, method="person_key", root=root
+        )
+    except AttestationRefused as exc:
+        return refuse(exc.code, str(exc))
+    preview = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+    if preview.statement is None:
+        return refuse(str(preview.reason), preview.detail)
+    print(ta.render(preview))
+    reply = input("Sign this teach authorization? Type yes to sign: ")
+    if reply.strip().lower() != "yes":
+        print("Not signed.")
+        return 1
+    try:
+        ta.sign(Path(args.statement), signer)
+    except (ta.TeachAuthorizationError, AttestationRefused) as exc:
+        return refuse(getattr(exc, "code", "teach_auth_unsigned"), str(exc))
+    result = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+    if not result.ok:
+        return refuse(str(result.reason), result.detail)
+    print(json.dumps({"ok": True, **ta.record(result)}))
+    return 0
+
+
 def _answer_durable_item_pause(run_dir: Path, request, answer) -> bool:
     """Carry an answer to a durable pause the run left after waiting.
 
@@ -5028,6 +5735,10 @@ def _cmd_bench(args: argparse.Namespace) -> int:
         with sync_playwright() as p:
             browser = launch_chromium(p.chromium, headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
+            from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+            # Guard the page's WebSockets from its first document (wire check).
+            prepare_ws_guard(page)
             page.goto(target_url)
             try:
                 yield PlaywrightBackend(page)
@@ -5080,8 +5791,32 @@ def _cmd_silent_saves(args: argparse.Namespace) -> int:
     return int(silent_saves_main(list(args.silent_saves_argv)))
 
 
+def _checkout_harness_on_path(command: str) -> bool:
+    """Put the checkout's ``benchmark`` harness on ``sys.path``.
+
+    The harness lives in ``packages/flow/benchmark/harness``, outside the
+    package, so a wheel install has none and the command says so.
+    """
+    checkout = Path(__file__).resolve().parents[1]
+    if not (checkout / "benchmark" / "harness" / "__init__.py").is_file():
+        print(
+            f"{command} runs from a source checkout of OpenAdapt "
+            "(packages/flow/benchmark/harness); the wheel does not ship it.",
+            file=sys.stderr,
+        )
+        return False
+    if str(checkout) not in sys.path:
+        # Appended, so nothing in the checkout shadows an installed module.
+        sys.path.append(str(checkout))
+    return True
+
+
 def _cmd_benchmark(args: argparse.Namespace) -> int:
-    from openadapt_flow.benchmark.run_benchmark import run_benchmark
+    if not _checkout_harness_on_path("benchmark"):
+        return 2
+    from benchmark.harness.run_benchmark import (  # type: ignore[import-not-found]
+        run_benchmark,
+    )
 
     results = run_benchmark(
         Path(args.out),
@@ -5528,6 +6263,23 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
     import os
     import stat
 
+    def _recheck_ledger_identity(path: Path, initial: os.stat_result) -> None:
+        try:
+            final = os.lstat(path)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger could not be inspected"
+            ) from exc
+        if (
+            stat.S_ISLNK(final.st_mode)
+            or not stat.S_ISDIR(final.st_mode)
+            or final.st_dev != initial.st_dev
+            or final.st_ino != initial.st_ino
+        ):
+            raise ValueError(
+                "qualification attempt ledger changed while it was inspected"
+            )
+
     def private_directory(path: Path, *, migrate_owned_root: bool = False) -> Path:
         """Open a private directory without trusting a pathname after inspection."""
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -5539,6 +6291,16 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
             ) from exc
         if stat.S_ISLNK(initial.st_mode) or not stat.S_ISDIR(initial.st_mode):
             raise ValueError("qualification attempt ledger is not a private directory")
+        if os.name == "nt":
+            # Windows cannot open a directory as a file descriptor. Hold a
+            # handle that refuses a reparse point, blocks a rename or a
+            # junction swap until the marker is written, and proves the
+            # directory sits in this user's profile.
+            from openadapt_flow._windows_directory import hold_private_directory
+
+            held_directories.append(hold_private_directory(path))
+            _recheck_ledger_identity(path, initial)
+            return path
         flags = os.O_RDONLY
         if hasattr(os, "O_DIRECTORY"):
             flags |= os.O_DIRECTORY
@@ -5574,21 +6336,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
                     )
         finally:
             os.close(descriptor)
-        try:
-            final = os.lstat(path)
-        except OSError as exc:
-            raise ValueError(
-                "qualification attempt ledger could not be inspected"
-            ) from exc
-        if (
-            stat.S_ISLNK(final.st_mode)
-            or not stat.S_ISDIR(final.st_mode)
-            or final.st_dev != initial.st_dev
-            or final.st_ino != initial.st_ino
-        ):
-            raise ValueError(
-                "qualification attempt ledger changed while it was inspected"
-            )
+        _recheck_ledger_identity(path, initial)
         return path
 
     case = args._qualification_case_execution["case"]
@@ -5622,60 +6370,77 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     state_root = Path(os.environ.get("OPENADAPT_HOME", Path.home() / ".openadapt"))
+    held_directories: list = []
     try:
-        ledger_dir = private_directory(
-            private_directory(state_root, migrate_owned_root=True)
-            / "qualification-attempts"
-        )
-    except ValueError:
-        print(
-            "run REFUSED: qualification attempt ledger is not available safely. "
-            "Nothing was executed."
-        )
-        return False
-    marker = ledger_dir / f"{attempt_key}.json"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(marker, flags, 0o600)
-    except FileExistsError:
-        print(
-            "run REFUSED: this qualification case attempt already started in this "
-            "local qualification ledger; "
-            "reconcile its retained run evidence before another attempt. "
-            "Nothing was executed."
-        )
-        return False
-    except OSError:
-        print(
-            "run REFUSED: qualification case attempt could not be claimed safely. "
-            "Nothing was executed."
-        )
-        return False
-    try:
-        os.write(descriptor, canonical)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    try:
-        directory_flags = os.O_RDONLY
-        if hasattr(os, "O_DIRECTORY"):
-            directory_flags |= os.O_DIRECTORY
-        if hasattr(os, "O_NOFOLLOW"):
-            directory_flags |= os.O_NOFOLLOW
-        directory = os.open(ledger_dir, directory_flags)
         try:
-            os.fsync(directory)
+            root = private_directory(state_root, migrate_owned_root=True)
+            if held_directories:
+                # Open the ledger under the held root's resolved path, so a
+                # junction above the root swapped now cannot move it.
+                root = Path(held_directories[-1].final_path)
+            ledger_dir = private_directory(root / "qualification-attempts")
+        except ValueError:
+            print(
+                "run REFUSED: qualification attempt ledger is not available safely. "
+                "Nothing was executed."
+            )
+            return False
+        # On Windows the marker goes under the held ledger's resolved path,
+        # so a junction higher up that is swapped after the check cannot
+        # redirect it.
+        marker = (
+            Path(held_directories[-1].final_path) if held_directories else ledger_dir
+        ) / f"{attempt_key}.json"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(marker, flags, 0o600)
+        except FileExistsError:
+            print(
+                "run REFUSED: this qualification case attempt already started in this "
+                "local qualification ledger; "
+                "reconcile its retained run evidence before another attempt. "
+                "Nothing was executed."
+            )
+            return False
+        except OSError:
+            print(
+                "run REFUSED: qualification case attempt could not be claimed safely. "
+                "Nothing was executed."
+            )
+            return False
+        try:
+            os.write(descriptor, canonical)
+            os.fsync(descriptor)
         finally:
-            os.close(directory)
-    except OSError:
-        print(
-            "run REFUSED: qualification attempt ledger could not be persisted safely. "
-            "Nothing was executed."
-        )
-        return False
-    return True
+            os.close(descriptor)
+        try:
+            # Windows cannot open a directory to flush it; the marker's own
+            # bytes were flushed above, and NTFS journals the new entry.
+            if os.name != "nt":
+                directory_flags = os.O_RDONLY
+                if hasattr(os, "O_DIRECTORY"):
+                    directory_flags |= os.O_DIRECTORY
+                if hasattr(os, "O_NOFOLLOW"):
+                    directory_flags |= os.O_NOFOLLOW
+                directory = os.open(ledger_dir, directory_flags)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+        except OSError:
+            print(
+                "run REFUSED: qualification attempt ledger could not be persisted safely. "
+                "Nothing was executed."
+            )
+            return False
+        return True
+
+    finally:
+        # Close the Windows directory handles only after the marker exists.
+        for held in reversed(held_directories):
+            held.close()
 
 
 def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
@@ -6518,7 +7283,9 @@ def _cmd_disambiguate(args: argparse.Namespace) -> int:
 
 def _cmd_emit_skill(args: argparse.Namespace) -> int:
     from openadapt_flow.emit.skill import emit_skill
+    from openadapt_flow.skills import refuse_unqualified_skill
 
+    refuse_unqualified_skill(args.bundle)
     skill_dir = emit_skill(Path(args.bundle), Path(args.out))
     print(f"Skill written to {skill_dir}")
     return 0
@@ -6526,7 +7293,9 @@ def _cmd_emit_skill(args: argparse.Namespace) -> int:
 
 def _cmd_emit_mcp(args: argparse.Namespace) -> int:
     from openadapt_flow.emit.mcp_tool import emit_mcp_server
+    from openadapt_flow.skills import refuse_unqualified_skill
 
+    refuse_unqualified_skill(args.bundle)
     server_path = emit_mcp_server(Path(args.bundle), Path(args.out))
     print(f"MCP server written to {server_path}")
     return 0
@@ -7100,7 +7869,7 @@ def _cmd_push(args: argparse.Namespace) -> int:
         if args.json:
             _print_push_json(_push_json_failure())
             return 1
-        print(f"push failed: {e}")
+        print(f"push failed: {_refusal_text(args, e)}")
         return 1
     if args.json:
         try:
@@ -7129,9 +7898,12 @@ def _cmd_push(args: argparse.Namespace) -> int:
     if result.get("workflow_id"):
         version = result.get("version")
         version_number = version.get("version") if isinstance(version, dict) else None
-        detail = (
-            f"name={result.get('workflow_name')!r}, kind={kind}, status={server_status}"
+        from openadapt_flow import safe_errors
+
+        name = safe_errors.label(
+            result.get("workflow_name"), private=_private_input(args)
         )
+        detail = f"name={name}, kind={kind}, status={server_status}"
         if version_number is not None:
             detail += f", version={version_number}"
         print(f"Pushed. workflow_id={result['workflow_id']} ({detail}).")
@@ -7566,7 +8338,7 @@ def _cmd_teach(args: argparse.Namespace) -> int:
             library_dir=Path(args.library) if args.library else None,
         )
     except TeachError as e:
-        print(f"teach cannot run: {e}")
+        print(f"teach cannot run: {_refusal_text(args, e)}")
         return 2
 
     print(result.summary())
@@ -7601,7 +8373,7 @@ def _cmd_teach_branch(args: argparse.Namespace) -> int:
             library_dir=Path(args.library) if args.library else None,
         )
     except TeachError as e:
-        print(f"teach-branch cannot run: {e}")
+        print(f"teach-branch cannot run: {_refusal_text(args, e)}")
         return 2
     print(result.summary())
     return 0 if result.promoted else 1
@@ -7971,15 +8743,21 @@ def _add_deployment_flags(
         default=None,
         help=(
             "System-of-record EffectVerifier to wire so consequential writes "
-            "are verified against the real record (not the screen). The sql/"
-            "file kinds need their config fields (sql_query, root, ...) from "
-            "a --config deployment YAML"
+            "are verified against the real record (not the screen). rest "
+            "needs --effects-records-path; the fhir/sql/file kinds need their "
+            "config fields (resource_type and field_paths, sql_query, root, "
+            "...) from a --config deployment YAML"
         ),
     )
     p.add_argument(
         "--effects-base-url",
         default=None,
         help="Base URL for the rest / fhir effect verifier",
+    )
+    p.add_argument(
+        "--effects-records-path",
+        default=None,
+        help="Path whose GET returns the app's records (rest effect verifier)",
     )
     p.add_argument(
         "--effects-root",
@@ -8442,9 +9220,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-encrypt",
         action="store_true",
         help=(
-            "Write the recording in plaintext even when OPENADAPT_BUNDLE_KEY "
-            "or OPENADAPT_RECORDING_KEY is set (web recordings are encrypted "
-            "by default when a key is configured)"
+            "Write a web recording in plaintext (recorded in "
+            "~/.openadapt/plaintext-at-rest.jsonl). Web recordings are "
+            "encrypted by default, under the configured key or a local one; "
+            "refused under OPENADAPT_FLOW_AT_REST=strict"
         ),
     )
     p.add_argument(
@@ -9060,6 +9839,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
         "--allow-model-grounding",
         action="store_true",
         help=(
@@ -9146,6 +9935,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "JSON object of parameter bindings; keeps values out of process "
             "arguments for managed execution"
+        ),
+    )
+    p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
         ),
     )
     p.add_argument(
@@ -9515,6 +10314,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
     p.add_argument(
+        "--roll-back",
+        action="store_true",
+        help=(
+            "Instead of resuming, roll the run back with its approved "
+            "compensations and prove the store matches the read from before "
+            "the run; also continues a rollback a crash interrupted"
+        ),
+    )
+    p.add_argument(
         "--require-approval",
         action="store_true",
         help=(
@@ -9723,6 +10531,51 @@ def build_parser() -> argparse.ArgumentParser:
     q.set_defaults(func=_cmd_approver_grant)
 
     p = sub.add_parser(
+        "teach-authorization",
+        help=(
+            "Create, sign or check a teach authorization: what a teaching agent "
+            "may do, signed by a person with their approver key"
+        ),
+    )
+    ta_sub = p.add_subparsers(dest="teach_auth_cmd", required=True)
+    q = ta_sub.add_parser("create", help="Write the unsigned statement for a spec")
+    q.add_argument(
+        "spec", help="JSON: task, purposes, origins, inputs, writes, forbidden"
+    )
+    q.add_argument("--out", required=True, help="Folder for teach-authorization.json")
+    q.add_argument("--authorizer", required=True, help="Your principal on the roster")
+    q.add_argument(
+        "--authorizer-public-key", required=True, help="Your approver key (64 hex)"
+    )
+    q.add_argument(
+        "--expires-in-hours",
+        type=float,
+        default=24.0,
+        help="How long it may be used to teach (default 24, at most 2160)",
+    )
+    q.set_defaults(func=_cmd_teach_authorization)
+    for verb, text in (
+        ("sign", "Show what the statement allows, then sign it with your approver key"),
+        ("verify", "Check a signed statement against the approver roster"),
+    ):
+        q = ta_sub.add_parser(verb, help=text)
+        q.add_argument("statement", help="teach-authorization.json or its folder")
+        q.add_argument("--key-dir", default=None, help="Holds the approver roster")
+        q.add_argument(
+            "--approver-root",
+            default=None,
+            help="The approver root to pin (default OPENADAPT_APPROVER_ROOT)",
+        )
+        if verb == "sign":
+            q.add_argument(
+                "--approver-key",
+                required=True,
+                help="Your encrypted approver key file (passphrase from "
+                "OPENADAPT_JIT_KEY_PASSPHRASE)",
+            )
+        q.set_defaults(func=_cmd_teach_authorization)
+
+    p = sub.add_parser(
         "bench", help="Replay a bundle N times against MockMed and aggregate"
     )
     p.add_argument("bundle", help="Workflow bundle directory")
@@ -9786,8 +10639,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_silent_saves)
 
     from openadapt_flow.registry import add_parser as _add_pull_parser
+    from openadapt_flow.skills import add_parser as _add_skill_parser
 
     _add_pull_parser(sub)
+    _add_skill_parser(sub)
 
     from openadapt_flow.intake.cli import add_parser as _add_intake_parser
 
@@ -11558,6 +12413,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--local-grounding",
+        action="store_true",
+        help=(
+            "Pixel surfaces (Citrix, RDP, VNC): find icons and unlabeled "
+            "controls again after a display-scale, zoom, font or theme change "
+            "with a local model. Look-alikes halt the step. In process, no "
+            "outbound calls; the pinned 24 MB weights are fetched once."
+        ),
+    )
+    p.add_argument(
         "--allow-model-grounding",
         action="store_true",
         help=(
@@ -11791,6 +12656,26 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    from openadapt_flow.cli_rollback import register as _register_rollback
+
+    _register_rollback(sub)
+
+    from openadapt_flow.cli_shadow import register as _register_shadow
+
+    _register_shadow(sub)
+
+    from openadapt_flow.cli_receipt import register as _register_receipt
+
+    _register_receipt(sub)
+
+    from openadapt_flow.learn import register as _register_learn
+
+    _register_learn(sub)
+
+    from openadapt_flow.cli_cleanup import register as _register_cleanup
+
+    _register_cleanup(sub)
+
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 
     _add_jit_parser(sub)
@@ -11863,7 +12748,13 @@ def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
             "effects": effects_cfg,
             "actuation": actuation_cfg,
             "runtime": cfg.runtime.model_copy(
-                update={"allow_model_grounding": allow_egress}
+                update={
+                    "allow_model_grounding": allow_egress,
+                    "local_grounding": bool(
+                        cfg.runtime.local_grounding
+                        or getattr(args, "local_grounding", False)
+                    ),
+                }
             ),
         }
     )
@@ -12241,6 +13132,23 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
         "openadapt_flow.__main__:_cmd_resume",
         "openadapt_flow.__main__:_cmd_approve",
         "openadapt_flow.__main__:_cmd_qualify",
+        # Read through openadapt_flow.artifacts (tests/test_artifact_reads.py).
+        "openadapt_flow.__main__:_cmd_visualize",
+        "openadapt_flow.__main__:_cmd_explain",
+        "openadapt_flow.__main__:_cmd_emit_skill",
+        "openadapt_flow.__main__:_cmd_for_each",
+        "openadapt_flow.__main__:_cmd_visualize_process",
+        "openadapt_flow.__main__:_cmd_compose",
+        "openadapt_flow.__main__:_cmd_process",
+        "openadapt_flow.__main__:_cmd_variants",
+        "openadapt_flow.__main__:_cmd_route",
+        "openadapt_flow.__main__:_cmd_teach",
+        "openadapt_flow.__main__:_cmd_push",
+        "openadapt_flow.__main__:_cmd_sanitize",
+        "openadapt_flow.__main__:_cmd_review_sanitized",
+        "openadapt_flow.__main__:_cmd_approve_sanitized",
+        "openadapt_flow.cli_sections:cmd_sections",
+        "openadapt_flow.cli_check:cmd_check_mark",
         "openadapt_flow.cli_admit:cmd_admit_run",
         "openadapt_flow.cli_admit:cmd_admit_decide",
         "openadapt_flow.cli_admit:cmd_admit_status",
@@ -12252,25 +13160,335 @@ _SEALED_READY_COMMANDS: frozenset[str] = frozenset(
 )
 
 
-def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
+#: Commands whose output can't be encrypted yet (docs/phi_at_rest.md): by
+#: default they write it in plaintext and name it on stderr and in the ledger;
+#: OPENADAPT_FLOW_AT_REST=strict refuses them before they run.
+_UNSEALED_OUTPUT_COMMANDS: dict[str, str] = {
+    "openadapt_flow.__main__:_cmd_visualize": "the visualize page",
+    "openadapt_flow.__main__:_cmd_visualize_process": "the visualize page",
+    "openadapt_flow.__main__:_cmd_explain": "the explain output",
+    "openadapt_flow.__main__:_cmd_teach": "the teach output",
+    "openadapt_flow.__main__:_cmd_emit_skill": "the emitted skill",
+    "openadapt_flow.__main__:_cmd_push": "the push upload copy",
+    # Their parent reports (composition, variant, process) can't be sealed
+    # yet and are written after records change, so strict refuses up front.
+    "openadapt_flow.__main__:_cmd_compose": "the composition report",
+    "openadapt_flow.__main__:_cmd_process": "the process report",
+    "openadapt_flow.__main__:_cmd_variants": "the variant report",
+    "openadapt_flow.__main__:_cmd_route": "the variant report",
+    "openadapt_flow.__main__:_cmd_for_each": "the looped bundle",
+    "openadapt_flow.__main__:_cmd_bench": "the bench report",
+    "openadapt_flow.__main__:_cmd_sanitize": "the sanitized copy",
+    "openadapt_flow.cli_redact_report:_cmd_redact_report": "the redacted report",
+    "openadapt_flow.cli_shadow:cmd_shadow": "the shadow snapshots and report",
+    "openadapt_flow.compile_agent.cli:cmd_compile_agent": (
+        "the compile-agent screenshots and traces"
+    ),
+    "openadapt_flow.agent_guard.cli:cmd_guard": "the guard's run record",
+    "openadapt_flow.jit.cli:cmd_jit": "the compiled agent run",
+}
+
+#: Commands that write no recorded screen, record or report data (service
+#: health and control, the no-outbound allow list, key and Seal verification).
+#: Under OPENADAPT_FLOW_AT_REST=strict only these and the sealed-ready commands
+#: run; every other command is held back before it starts.
+_STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.cli_service:_cmd_boot_check",
+        "openadapt_flow.cli_service:_cmd_egress_audit",
+        "openadapt_flow.cli_service:_cmd_health",
+        "openadapt_flow.cli_service:_cmd_notices",
+        "openadapt_flow.cli_service:_cmd_pf_check",
+        "openadapt_flow.cli_service:_cmd_pf_render",
+        "openadapt_flow.cli_service:_cmd_restart",
+        "openadapt_flow.cli_service:_cmd_run",
+        "openadapt_flow.cli_no_outbound:_cmd_add",
+        "openadapt_flow.cli_no_outbound:_cmd_derive",
+        "openadapt_flow.cli_no_outbound:_cmd_list",
+        "openadapt_flow.cli_no_outbound:_cmd_remove",
+        "openadapt_flow.cli_local_seal:_guarded",
+        "openadapt_flow.cli_receipt:cmd_anchor",
+        "openadapt_flow.cli_receipt:cmd_keys_export",
+        "openadapt_flow.cli_receipt:cmd_verify",
+        "openadapt_flow.agent.seal_cli:cmd_keys_pin",
+        "openadapt_flow.agent.seal_cli:cmd_keys_show",
+        "openadapt_flow.agent.seal_cli:cmd_verify",
+    }
+)
+
+
+#: Sealed-ready commands that seal plaintext input themselves under strict
+#: mode (a recording, a compiled, induced or admitted bundle, a run directory,
+#: the taught bundle and skill library, the sanitized review copy of a push).
+_STRICT_SELF_SEALING: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_record",
+        "openadapt_flow.__main__:_cmd_compile",
+        "openadapt_flow.__main__:_cmd_induce",
+        "openadapt_flow.cli_admit:cmd_admit_run",
+        "openadapt_flow.__main__:_cmd_run",
+        "openadapt_flow.__main__:_cmd_replay",
+        "openadapt_flow.__main__:_cmd_resume",
+        "openadapt_flow.__main__:_cmd_teach",
+        "openadapt_flow.__main__:_cmd_push",
+    }
+)
+
+
+def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
+    """Existing directories among the arguments that are not inside a sealed
+    set. Files a person passes (a config, a results JSON) are not artifacts
+    and are not checked."""
     from openadapt_flow import sealed_set
 
     found: list[Path] = []
     for name, value in vars(args).items():
         if name == "func":
             continue
-        values = value if isinstance(value, (list, tuple)) else [value]
-        for item in values:
+        for item in value if isinstance(value, (list, tuple)) else [value]:
             if not isinstance(item, (str, Path)) or not str(item):
                 continue
             text = str(item)
             if "://" in text or "\n" in text or len(text) > 4096:
                 continue
-            path = Path(text)
-            root = path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
-            if root is not None and root not in found:
-                found.append(root)
+            candidates = [text]
+            if isinstance(item, str) and "=" in text:
+                candidates.append(text.split("=", 1)[1])
+            for candidate in candidates:
+                path = Path(candidate)
+                if not path.is_dir():
+                    continue
+                if sealed_set.is_sealed(path) or sealed_set.sealed_root(path):
+                    continue
+                if path not in found:
+                    found.append(path)
     return found
+
+
+#: Commands that write their output sealed when an input is sealed, by the
+#: arguments that name those inputs.
+_SEALED_OUTPUT_FROM_SEALED_INPUT: dict[str, tuple[str, ...]] = {
+    "openadapt_flow.__main__:_cmd_for_each": ("bundle",),
+    "openadapt_flow.__main__:_cmd_teach": ("run_dir", "fix", "bundle"),
+    "openadapt_flow.__main__:_cmd_push": ("path",),
+}
+
+#: Commands that write their output sealed in strict mode.
+_SEALED_OUTPUT_IN_STRICT: frozenset[str] = frozenset(
+    {"openadapt_flow.__main__:_cmd_teach", "openadapt_flow.__main__:_cmd_push"}
+)
+
+
+def _unsealed_output_check(args: argparse.Namespace) -> None:
+    """Warn and record, or refuse in strict mode, a command whose output
+    can't be encrypted yet. Strict mode runs only the sealed-ready and
+    strict-safe commands. Also rejects a mistyped OPENADAPT_FLOW_AT_REST."""
+    from openadapt_flow import at_rest
+
+    func = getattr(args, "func", None)
+    command = f"{getattr(func, '__module__', '')}:{getattr(func, '__name__', '')}"
+    video = getattr(args, "record_video", None)
+    if at_rest.strict():  # raises on an unknown mode before anything runs
+        if command not in _SEALED_READY_COMMANDS | _STRICT_SAFE_COMMANDS:
+            raise at_rest.AtRestRefused(
+                f"{at_rest.MODE_ENV}=strict runs only the commands that keep "
+                "patient data encrypted, and this one writes files outside an "
+                "encrypted set. Nothing was run."
+            )
+        if command in _SEALED_READY_COMMANDS and command not in _STRICT_SELF_SEALING:
+            # These keep sealed input sealed; given plaintext input they
+            # re-save or write beside it in plaintext. So every directory
+            # they are given must already be encrypted.
+            plain = _plaintext_directories_in(args)
+            if plain:
+                raise at_rest.AtRestRefused(
+                    f"{at_rest.MODE_ENV}=strict runs this command on encrypted "
+                    f"input only, and {plain[0]} is not encrypted. Seal it first "
+                    "(openadapt-flow seal, or compile/run under strict mode). "
+                    "Nothing was run."
+                )
+        if command == "openadapt_flow.__main__:_cmd_qualify" and getattr(
+            args, "qualify_cmd", None
+        ) in {"run-case", "drills"}:
+            raise at_rest.AtRestRefused(
+                f"{at_rest.MODE_ENV}=strict holds back qualification trials: "
+                "their case inputs and fault files are written beside the "
+                "sealed run. Nothing was run."
+            )
+        # Written after records change, so refused before the run starts.
+        healed = getattr(args, "save_healed_to", None)
+        if healed:
+            at_rest.unsealed_write("a healed bundle (--save-healed-to)", healed)
+        workers = getattr(args, "workers", None)
+        if isinstance(workers, int) and workers > 0:
+            at_rest.unsealed_write(
+                "the worker pool report (--workers)", "the run directory"
+            )
+    if video:
+        at_rest.unsealed_write("a screen video (--record-video)", video)
+    artifact = _UNSEALED_OUTPUT_COMMANDS.get(command)
+    if artifact is None:
+        return
+    if command in _SEALED_OUTPUT_IN_STRICT and at_rest.strict():
+        return  # strict mode makes a sealed output
+    if command in _SEALED_OUTPUT_FROM_SEALED_INPUT:
+        from openadapt_flow import sealed_set
+
+        for name in _SEALED_OUTPUT_FROM_SEALED_INPUT[command]:
+            source = getattr(args, name, None)
+            if source and sealed_set.is_sealed_path(source):
+                return  # a sealed input makes a sealed output
+    target = next(
+        (
+            getattr(args, name)
+            for name in ("out", "output", "out_dir", "dest")
+            if isinstance(getattr(args, name, None), (str, Path))
+        ),
+        "its output",
+    )
+    at_rest.unsealed_write(artifact, target)
+
+
+class _UnclassifiedArgument(ValueError):
+    """An argument value that is neither a path, a scalar nor a container."""
+
+
+def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
+    """The sealed roots named anywhere in the command's arguments.
+
+    Values are walked at any depth (lists, tuples, sets, mappings, nested
+    pairs such as teach-branch's ``--example RUN FIX``). A value that is not
+    a path, a known scalar or a container raises ``_UnclassifiedArgument``;
+    ``_private_input`` treats that as private.
+    """
+    found: list[Path] = []
+    unclassified: list[str] = []
+    for name, value in vars(args).items():
+        if name == "func":
+            continue
+        # Attributes named "_..." are set by the code (handlers, run state),
+        # not typed by the user: their paths are still read, but an object
+        # among them does not make the run private.
+        internal = name.startswith("_")
+        _collect_sealed(value, name, found, [] if internal else unclassified)
+    if unclassified:
+        raise _UnclassifiedArgument(
+            f"cannot tell whether {unclassified[0]} names sealed input"
+        )
+    return found
+
+
+def _collect_sealed(
+    value: object, name: str, found: list[Path], unclassified: list[str]
+) -> None:
+    import enum
+
+    from openadapt_flow import sealed_set
+
+    if value is None or isinstance(value, (bool, int, float, enum.Enum)):
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _collect_sealed(key, name, found, unclassified)
+            _collect_sealed(item, name, found, unclassified)
+        return
+    if isinstance(value, (list, tuple, set, frozenset)):
+        for item in value:
+            _collect_sealed(item, name, found, unclassified)
+        return
+    if not isinstance(value, (str, Path)):
+        unclassified.append(f"--{name.replace('_', '-')}")
+        return
+    text = str(value)
+    if not text:
+        return
+    # Every string is checked against the filesystem, whatever it looks
+    # like: a newline, "://" or any length can spell a local path. NAME=PATH
+    # arguments (--child, --admission, --variant) name a path after the
+    # first "="; check both readings.
+    candidates = [text]
+    if isinstance(value, str) and "=" in text:
+        candidates.append(text.split("=", 1)[1])
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            root = _sealed_root_named(candidate)
+        except _UnclassifiedArgument:
+            unclassified.append(f"--{name.replace('_', '-')}")
+            continue
+        if root is None:
+            root = sealed_set.sealed_root(candidate)  # an active writer
+        if root is not None and root not in found:
+            found.append(root)
+
+
+def _sealed_root_named(text: str) -> Optional[Path]:
+    """The sealed set that ``text`` names or lies inside, if any.
+
+    Raises ``_UnclassifiedArgument`` when the filesystem cannot tell (a
+    header that cannot be checked for a reason other than not existing).
+    """
+    import errno
+    import os
+    import stat
+
+    from openadapt_flow import sealed_set
+
+    # The path cannot exist, so nothing sealed can be read through it.
+    no_such_path = (errno.ENOENT, errno.ENOTDIR, errno.ENAMETOOLONG)
+    # Windows rejects a name it cannot hold, such as "http:" with a colon
+    # (ERROR_INVALID_NAME, ERROR_BAD_PATHNAME): no such path can exist either.
+    invalid_name = (123, 161)
+    try:
+        full = os.path.abspath(text)
+    except ValueError:  # an embedded NUL: no such path
+        return None
+    current = full
+    while True:
+        try:
+            st = os.stat(os.path.join(current, sealed_set.HEADER))
+        except ValueError:
+            return None
+        except OSError as exc:
+            invalid = getattr(exc, "winerror", None) in invalid_name
+            if exc.errno not in no_such_path and not invalid:
+                raise _UnclassifiedArgument(
+                    "a path whose sealed header cannot be checked"
+                ) from exc
+        else:
+            if stat.S_ISREG(st.st_mode):
+                return Path(text) if current == full else Path(current)
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
+def _refusal_text(args: argparse.Namespace, error: BaseException) -> str:
+    """What a command prints when it refuses ``error``.
+
+    When the command read sealed input or strict mode is on, any part of the
+    message may quote decrypted content (a skill id, a workflow name, a
+    path inside the artifact), so only the kind of error is printed, unless
+    the error is marked ``public`` (built only from the command line).
+    Otherwise the message prints without quoted input values.
+    """
+    from openadapt_flow import safe_errors
+
+    if _private_input(args) and getattr(error, "public", False) is not True:
+        return safe_errors.withheld(error)
+    return safe_errors.message(error)
+
+
+def _private_input(args: argparse.Namespace) -> bool:
+    """Whether the command read sealed input or runs in strict mode."""
+    from openadapt_flow import at_rest, sealed_set
+
+    try:
+        return at_rest.strict() or bool(_sealed_paths_in(args))
+    except (sealed_set.SealedSetError, ValueError, OSError):
+        return True  # cannot tell: treat it as private
 
 
 def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
@@ -12291,12 +13509,21 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
             "encrypted input yet. Flow will not decrypt it to disk for this "
             "command. Commands that read sealed input: record, compile, "
             "induce, scaffold-verifier, seal, certify, qualify, admit, run, "
-            "replay, approve, resume and undo."
+            "replay, approve, resume, undo, visualize, explain, emit-skill, "
+            "for-each, sections, check mark, compose, process, variants, "
+            "route, teach, push, sanitize, review-sanitized and "
+            "approve-sanitized."
         )
     for root in sealed:
         kind = sealed_set.header_kind(root)
         if not sealed_set.passphrase_for(kind):
             return sealed_set.missing_key_message(root, kind)
+        try:
+            # With no key configured the local key resolves; opening the set
+            # tells "sealed with a key that isn't set" apart before any work.
+            sealed_set.open_set(root)
+        except sealed_set.SealedSetKeyError as exc:
+            return str(exc)
     return None
 
 
@@ -12318,7 +13545,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv = admit_default_form(argv)
     # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
-    # any command runs, so no code path can open a connection off the machine.
+    # any command runs, so no Python socket in this process, and no child it
+    # starts uncontained, can open a connection off the machine. Native code and
+    # loopback relays are outside it (docs/OFFLINE_SEALS.md).
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
@@ -12342,14 +13571,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"REFUSED (deployment_config_changed): {exc}", file=sys.stderr)
             return 2
-    from openadapt_flow import sealed_set
+    from openadapt_flow import safe_errors, sealed_set
 
     try:
         refusal = _sealed_input_refusal(args)
-    except sealed_set.SealedSetError as exc:
+    except (sealed_set.SealedSetError, _UnclassifiedArgument) as exc:
         refusal = str(exc)
     if refusal is not None:
-        print(f"REFUSED: {refusal}", file=sys.stderr)
+        print(f"REFUSED: {safe_errors.message(refusal)}", file=sys.stderr)
+        return 2
+    from openadapt_flow import at_rest
+
+    try:
+        _unsealed_output_check(args)
+    except (at_rest.AtRestRefused, ValueError) as exc:
+        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     try:
         code = args.func(args)
@@ -12363,10 +13599,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if note:
                 print(note, file=sys.stderr)
         return code
-    except sealed_set.SealedSetError as exc:
+    except (sealed_set.SealedSetError, at_rest.AtRestRefused) as exc:
         # A sealed bundle or encrypted recording that is missing its key,
-        # was changed after sealing, or holds an unknown file: fail closed.
-        print(f"REFUSED: {exc}", file=sys.stderr)
+        # was changed after sealing, or holds an unknown file, or a write
+        # strict mode refuses: fail closed.
+        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     except BrowserSupportMissing as exc:
         # Missing optional browser support is a setup decision, not a crash.
@@ -12376,6 +13613,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
 
         if not isinstance(exc, KnownIdAdmissionHalt):
+            if _private_input(args):
+                # A traceback would quote what the command read from sealed
+                # input: name the kind of error only.
+                print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
+                return 1
             raise
         # The configured known-ID list may not be used: halt before any step
         # runs, with the named reason.

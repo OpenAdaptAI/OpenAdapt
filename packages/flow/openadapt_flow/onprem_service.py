@@ -131,7 +131,19 @@ def child_env(cfg: ServiceConfig, base: Mapping[str, str]) -> dict[str, str]:
         env["OPENADAPT_NO_OUTBOUND_LOG"] = str(p["blocked_log"])
         if p["allow_file"].is_file():
             env.setdefault(no_outbound.ENV_ALLOW_FILE, str(p["allow_file"]))
+        if _pf_installed(p["firewall"]):
+            # The installer's pf rules block every child the service account
+            # runs (the queue, FreeRDP, the browser), so children may start.
+            env.setdefault(no_outbound.ENV_CHILDREN, "pf")
     return env
+
+
+def _pf_installed(record: Path) -> bool:
+    try:
+        fw = json.loads(record.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(fw, dict) and fw.get("pf") == "installed"
 
 
 def audit_allow(root: Path, env: Mapping[str, str]) -> tuple[Any, ...]:
@@ -191,6 +203,20 @@ def run_service(
     for key in ("inbox", "processing", "failed", "runs", "audit"):
         p[key].mkdir(parents=True, exist_ok=True)
     cenv = child_env(cfg, base)
+    if (
+        not cfg.allow_outbound
+        and not str(cenv.get(no_outbound.ENV_CHILDREN, "")).strip()
+    ):
+        print(
+            "service: refusing to start: strict no-outbound mode cannot see the "
+            "sockets of the queue and the programs it starts (bash, FreeRDP, "
+            "the browser), and nothing is named to contain them. Install the pf "
+            "rules (macOS installer default) or set "
+            f"{no_outbound.ENV_CHILDREN} to what contains them "
+            f"({', '.join(sorted(no_outbound.CONTAINMENTS))}).",
+            file=sys.stderr,
+        )
+        return 2
     if not cfg.allow_outbound:
         enforce(cenv)  # this process too, not just its children
     seal_home = Path(cenv["OPENADAPT_SEAL_HOME"])

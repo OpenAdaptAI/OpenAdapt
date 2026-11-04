@@ -99,6 +99,9 @@ frame:
   identity_field: pid        # default: id, else the whole record
   ignore_fields: [date]      # fields that change on their own
   target_fields: [phone_home]  # default: the fields the effects name
+  # target_fields_by_surface:  # optional: per surface, replaces target_fields
+  #   record: [phone_home]     # a declared row of `record` may change these
+  #   raw_account: [updated_at]  # a table counts as the surface `views` maps it to
   attribution:               # optional
     kind: audit_read         # or record_field, with server_set: [...]
     actor_field: user
@@ -135,6 +138,102 @@ Only evidence the bot can't write counts:
   `reconciliation_required` (`evidence.frame.target_changed_by_other`). Only
   changes outside the declared delta can be concurrent edits.
 
+Some rows belong to a user rather than a record, such as a user's own UI
+settings, so no log entry names them by record. With `frame.database` and
+an audit log that names the table each entry wrote (`table_field`), such a
+change is another user's when their own write entry in the window names the
+table and the row is theirs. The tables are the app profile's `own_rows`
+tables (OpenEMR's `user_settings` and `recent_patients`), each with its
+`owner` (`{column, by}`). `by: username` compares the entry's actor with the
+column; `by: user_id` looks the actor's id up in the profile's `users`
+table. Table names compare lower-cased and without a schema, so an entry
+naming `USER_SETTINGS` or `openemr.user_settings` names `user_settings`.
+
+Some apps write a global default row beside a user's row. The first time
+anyone saves a label, OpenEMR's `setUserSetting` also inserts the label's
+default, a `user_settings` row with `setting_user = 0` and the same label
+and value. The profile declares it on the owner
+(`default: {value: "0", same: [setting_label, setting_value]}`), so a
+default row with a value nobody saved is never explained. A default
+row added in the window is explained only beside one explained row of the
+same table with equal `same` columns: another user's row (then the default
+is theirs too) or the bot's own row (then it is the bot's bookkeeping). Each
+explained row explains one default row. A default row changed or removed,
+added beside a row of another label, or added beside a row nothing
+explains, stays unexplained.
+
+`attribution.owners` can restate a profile table's owner in a contract, in
+the same shape. It can't add one: a table outside the profile's reviewed
+bookkeeping tables, or one that an append-only or column rule names (such
+as `users_secure`, whose owner is only for the acting user's sign-in
+counters), is refused, and so is a different owner for a profile table.
+Credentials never get an owner here.
+
+Fail closed:
+
+- Only a row that names no record is judged by its owner: a row whose
+  `record_key` (or `record_keys`) value is empty, or a table without that
+  column. A row that names a chart is judged by its chart, and another
+  entry by the same user doesn't explain it. Without `record_key`, every
+  row names itself, and no row is judged by its owner.
+- Each entry explains one row, of the kind it wrote (insert, update or
+  delete), owned by that entry's actor. A row of another user, or a row whose
+  owner changed, is collateral.
+- If the bot's own entry names the table in the window, every changed row of
+  that table is collateral: the entry names no row, so any of them may be the
+  bot's change.
+- The bot's own per-user rows stay the profile's bookkeeping when its entry
+  names the table, and that entry is not counted as a write the contract
+  doesn't cover, because the whole-database diff judged the table row by row. A bot
+  entry for such a table with none of its own rows excused still refutes, and
+  so does one that names the table in a schema the frame doesn't read. An
+  entry's table matches a snapshot table only by its exact name (case
+  aside), or by its unqualified name when the entry names no schema.
+- That leaves a limit: in such a table, a change the bot makes and reverts
+  within the window, such as setting another user's row and setting it
+  back, leaves the same table before and after. Its entry is passed over,
+  so nothing refutes it, as with any comparison of two snapshots.
+- A table with no declared owner, an actor the users table doesn't know, a
+  row with no owner, or an audit log that can't be read leaves the change
+  unexplained.
+- What the log can't show stays a limit: a change the app writes without
+  logging it can't be told from another user's.
+
+OpenEMR's `log` table has no table column, so the audit read takes the table
+from the statement OpenEMR logs in `comments`, and the write kind from the
+end of `event` (`patient-record-update`, `other-insert`). OpenEMR logs a
+`user_settings` or `recent_patients` write as an `other` event, which it
+records only when the `audit_events_other` global is on; with it off, such a
+change has no entry and stays unexplained. An encrypted comment
+(`log_comment_encrypt.encrypt = 'Yes'`) yields no table, so its entry
+explains nothing. On MariaDB:
+
+```yaml
+  attribution:
+    kind: audit_read
+    actor_field: user
+    self: [{param: bot_user}]
+    record_field: patient_id
+    record_key: pid
+    event_field: kind
+    write_events: [insert, update, delete, replace]
+    insert_events: [insert, replace]
+    delete_events: [delete]
+    table_field: tbl
+    read:
+      kind: sql
+      sql_driver: pymysql
+      sql_query: >-
+        SELECT l.id, l.user, l.patient_id,
+          SUBSTRING_INDEX(l.event, '-', -1) AS kind,
+          CASE WHEN IFNULL(e.encrypt, 'No') = 'Yes' THEN NULL ELSE
+            LOWER(REPLACE(REGEXP_SUBSTR(l.comments,
+              '(?i)(?<=insert into |update |delete from |replace into )[`a-z0-9_.]+'),
+              '`', ''))
+          END AS tbl
+        FROM log l LEFT JOIN log_comment_encrypt e ON e.log_id = l.id
+```
+
 Without `attribution`, every change outside the delta is collateral. A
 change is not proof that the executor made it: another user may have edited
 the record during the run. A person checks the record before anything is
@@ -147,6 +246,298 @@ When the frame is judged, the per-effect collateral rules
 file sets them explicitly; the frame covers the rest. Without a baseline,
 `forbid_collateral_change` is turned on as before, though it can't refute
 without a baseline either.
+
+## The whole database
+
+A frame over the read set can't see a record outside it. If the save also
+schedules a call nobody asked for, or posts a note on the account, and the
+contract reads only opportunities, the frame holds. `frame.database` closes
+that gap: it reads every table and column before and after the save, and a
+row added, changed or removed anywhere is collateral unless a declared
+effect, a declared side record, an attributed concurrent write or an
+allow-listed bookkeeping table explains it.
+
+An app that writes on every request (the acting user's `last_login`, a
+token's `last_seen`) moves rows in every window. `frame.learned` excuses
+exactly those moves on the acting user's own rows (never the written row),
+once a person approves them: see [LEARNED_EXCUSES.md](LEARNED_EXCUSES.md).
+
+This is the frame of an EspoCRM "create opportunity" contract on MariaDB:
+
+```yaml
+frame:
+  identity_field: id
+  database:
+    dialect: mysql              # or postgresql, sqlite
+    read:                       # read-only: SELECT, TRIGGER and SHOW VIEW
+      sql_driver: pymysql
+      sql_connect_args: {host: 127.0.0.1, port: 3306, user: frame_ro, database: espocrm}
+      sql_password_env: ESPOCRM_FRAME_RO_PASSWORD
+    allow_tables:               # the app's own logs: rows may only be added
+    - action_history_record
+    - auth_log_record
+    new_row_fields:             # columns a declared or side row may set
+      opportunity: [name, amount, amount_currency, stage, last_stage, probability,
+        close_date, account_id, assigned_user_id, created_at, created_by_id,
+        modified_at, modified_by_id, stream_updated_at, version_number]
+      note: [id, type, data, number, parent_type, super_parent_id,
+        super_parent_type, created_at, created_by_id, modified_at, modified_by_id]
+    ignore_columns:             # columns the app moves on its own
+      account: [stream_updated_at]
+  side_records:                 # rows the save adds beside the new record
+  - surface: opportunity        # a table, when no surface has that name
+    link_field: id
+    of_surface: ""              # the contract's single read
+    of_field: row_id            # the read's column that holds the table key
+  - surface: note               # EspoCRM's own "Create" stream note
+    link_field: parent_id
+    of_surface: ""
+    of_field: row_id
+```
+
+A table row that is the declared record seen from the database (the
+`opportunity` row of a new opportunity) is declared as a side record, linked
+to the new record in the read set. Rows the app adds on its own beside it
+(a stream note for the new record) are side records too, each with its
+`count` (default 1; a second one refutes). Every other new row, such as a
+planned call or a note on the account, is unexplained, and the frame is
+refuted. The read account needs `TRIGGER` and `SHOW VIEW` besides `SELECT`:
+without them a trigger planted in the window can't be seen, and the frame is
+not checked.
+
+`judged_by` names a table whose rows one of the contract's own reads
+declares, such as an update's read of its main record's table:
+
+```yaml
+    judged_by:
+      assets: record            # the table, and the surface that declares its rows
+```
+
+The surface only says which rows are declared: its records, before or after
+the save, that an effect routed to it selects, matched to the table by
+primary key. The table judges every row itself, every column exactly as
+stored, so a lossy read (`substr`, `COALESCE`, a cast) can't hide a change.
+A declared row may change only the surface's fields in
+`target_fields_by_surface`, and a declared new row may set only the columns
+the effects name or `new_row_fields` lists; every other column must hold its
+default. Every other row of the table must not move, and the app profile's
+bookkeeping rules apply as on any table. A recheck reads no surface, so
+there nothing is declared and any change since the post-save read refutes
+the write.
+
+A `judged_by` table is compared, not allow-listed, so it can't also appear
+in `allow_tables` or `views`. One surface declares rows of one table only,
+and the surface may not ignore a field (`frame.ignore_fields`, or a
+`record_field` attribution's `server_set`) that the table doesn't ignore
+(`ignore_columns`). When a declared record's key can't be read, nothing is
+declared, and the change stops the write. The database is read before the
+surfaces, so a change can't land between the surface's read and the read a
+recheck compares with.
+
+Every column type is read, and none is dropped. On MySQL and MariaDB each
+row is read as `JSON_OBJECT`. A type whose value it can't carry as exact text
+is read another way: binary strings, blobs, `BIT`, geometries and vectors as
+the hex of their bytes, `FLOAT` widened to `DOUBLE` (the server prints a
+`FLOAT` with six digits), and `JSON` and `LONGTEXT` as their stored text.
+Numbers parse as `Decimal`, so a `DECIMAL(30,10)` keeps every digit. The read pins its session to UTC, so a `TIMESTAMP` in the hour a daylight-saving zone repeats still shows a change. A number's plain value, which selectors and parameters compare with, is the shortest text that reads back as the same stored value: `1.1` for a `FLOAT` 1.1, `1.5` for a `DECIMAL(24,8)` 1.50000000, `0.3` for a SQLite `REAL` 0.3. SQLite `REAL` values are read with 17 digits. Before SQLite 3.53, 17-digit output isn't exact for some very large or very small doubles (beyond about 1e120 or 1e-90), so two adjacent ones there can read the same. One SQLite limit stays: a value that changes storage class but not its text reads the same. In a column with no declared type that covers `1` to `'1'`, `1` to `1.0` and `x'AB'` to `'AB'`. A blob is never converted on insert, so in a `TEXT`, `REAL`, `NUMERIC` or `BLOB` column a blob to the same text (`x'4142'` to `'4142'`, `x'31'` to `'31'`) reads the same too. A value
+that still can't be read exactly makes the database unreadable, and the run
+stops; the error names the table. When the database can't be read at the
+baseline, `begin_write` says why.
+
+### PostgreSQL
+
+With `dialect: postgresql` (driver `psycopg2` or `psycopg`), the snapshot is
+one `REPEATABLE READ, READ ONLY` transaction. The read refuses to go on if the
+server reports any other isolation level.
+
+- **Schemas.** The read covers every schema except `pg_catalog`,
+  `information_schema` and PostgreSQL's internal ones. A schema the read
+  account can't see is refused, not left out. `frame.database.schemas`
+  means what it means on MySQL: each named schema must be visible, and every
+  other visible schema is still read. Only an `allow_tables` entry
+  `<schema>.*` with `mode: skip` and a reason leaves a schema out; the
+  receipt lists it under `evidence.frame.database.schemas_skipped`. Leaving
+  a schema out also leaves out its code, such as a trigger function there
+  that runs on a table the frame reads. A table in the default schema
+  (`public`) is named without it (`issues`); a table in another schema is
+  named with it (`billing.invoice`).
+- **The session.** The read pins its session so that each stored value has
+  one text: `TimeZone` UTC, ISO dates, ISO 8601 intervals,
+  `extra_float_digits = 3`, bytes as hex, and `lc_monetary` C. A reader
+  whose own settings differ reads the same thing.
+- **Types.** Each column is read as text by a declared rule for its type:
+  - integers as integers;
+  - `numeric` at full precision (`NaN` and infinities too). A `numeric`
+    declared without a scale keeps the scale it was stored with: `1.5`
+    changed to `1.50` shows, but both still equal the number 1.5;
+  - `real` and `double precision` exactly, with the shortest text that
+    reads back as the same float as the plain value;
+  - `money` as a number;
+  - `bytea` as the hex of its bytes;
+  - `json` as its stored text, and `jsonb` as its canonical text;
+  - as their own text: strings, `uuid`, network addresses, dates, times,
+    timestamps (in UTC), `interval` (months, days and seconds kept apart, so
+    `1 day` to `24 hours` shows), bit strings, `xml`, `tsvector`, `tsquery`
+    and the geometric types;
+  - arrays, ranges, multiranges, enums and domains by their element,
+    subtype or base type's rule.
+
+  A composite type, an extension's type, a `reg*` type, and an array of
+  `money` have no rule. A table with such a column is refused, and the error
+  names the column.
+- **Refusals.** The read also refuses a table the account has no `SELECT`
+  on, a table whose row-level security hides rows from it, a foreign table,
+  and a sequence it can't read. A refused table can only be left out by an
+  `allow_tables` entry with `mode: skip` and a reason.
+- **Tables without a primary key.** Their rows are keyed by the whole row,
+  and identical rows are counted, so a second copy of a row shows as added.
+- **Partitions.** A partitioned table is read through its partitions, and
+  only once.
+- **Sequences.** A sequence that a column owns (`serial`, `identity`) is
+  that table's counter, read just before the snapshot. A row written and
+  removed in the window moves it, which shows. So does an insert that
+  failed, because it draws a value too, and a counter set back with
+  `setval`, after which inserts would reuse numbers. Any other sequence is read as
+  a one-row table of its own. A value drawn from it is a change. Only an
+  `allow_tables` entry with `mode: skip` and a reason, which documents it as
+  the app's bookkeeping, leaves it out.
+- **Large objects.** They live in `pg_catalog`, and a column that holds
+  an object's oid keeps it when the content changes. The read keeps each
+  object's oid, owner, privileges and the SHA-256 of its content as rows of
+  a table named `pg_largeobject`, so a changed, added or removed object
+  shows. An object the account can't read is refused unless `pg_largeobject`
+  is skipped with a reason.
+- **Database code.** The read digests triggers (and whether each is
+  enabled), views, materialized views, functions, rules, row-level security
+  policies, event triggers and installed extensions. A change to any of them
+  in the window shows as `(database code)`.
+
+The read account needs `USAGE` on each schema and `SELECT` on its tables and
+sequences, for example:
+
+```sql
+GRANT USAGE ON SCHEMA public TO frame_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO frame_ro;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO frame_ro;
+ALTER ROLE frame_ro SET default_transaction_read_only = on;
+```
+
+## Lost updates
+
+Two snapshots can't see a lost update. The agent reads a record, another
+user saves a change to it, and the agent then saves its stale copy over
+theirs. After the save the record looks like "the agent changed the phone,
+the address is unchanged", which is also what a correct update looks like.
+Only the record's versions show the second save.
+
+`frame.versions` names a read that returns one row per version of a record,
+and the fields of a row that name the record, the version and, where the app
+records it, the author:
+
+```yaml
+frame:
+  identity_field: id
+  versions:
+    read:                     # read-only, the same shape as `verifier:`
+      kind: sql
+      sql_driver: psycopg2
+      sql_connect_args: {host: 127.0.0.1, port: 5432, user: reader, dbname: hapi}
+      sql_password_env: HAPI_DB_PASSWORD
+      sql_query: >-
+        SELECT r.res_type || '/' || r.fhir_id AS id, v.res_ver::text AS ver
+        FROM hfj_res_ver v JOIN hfj_resource r ON r.res_id = v.res_id
+    record_field: id          # the version row's record
+    target_field: id          # the target's field in the read set (default: identity_field)
+    # target_surface: record  # only records matched on this surface are targets
+    version_field: ver
+    # author_field: user_id   # when the app records who saved each version
+    # self: [{param: bot_user_id}]
+```
+
+An app that logs each save with its user can name the author instead. EspoCRM's
+`action_history_record` logs every API save; a lead has no version column:
+
+```yaml
+  versions:
+    read:
+      kind: sql
+      sql_driver: pymysql
+      sql_connect_args: {host: 127.0.0.1, port: 3306, user: reader, database: espocrm}
+      sql_password_env: ESPOCRM_DB_RO_PASSWORD
+      sql_query: >-
+        SELECT CAST(CONCAT(LOWER(target_type), ':', target_id) AS CHAR) AS id,
+          CAST(number AS CHAR) AS ver, CAST(user_id AS CHAR) AS author
+        FROM action_history_record WHERE action <> 'read' AND deleted = 0
+    record_field: id            # equals the read set's id (lead:<id>)
+    version_field: ver
+    author_field: author
+    self: [{param: bot_user_id}]
+```
+
+The versions are read before the write and after it. Every record that a
+confirmed write effect names and that existed before the write is a target.
+The versions of a target that are new in the window must be the agent's:
+
+- With `author_field`, every new version's author must be one of `self`. A
+  version by anyone else is refuted as a lost update. A version with no
+  author is not checked. The read must be a history that only grows: every
+  version read before the write must still be there after it, or the check
+  is not checked. A read of only the current version and its last author
+  would hide the other user's save.
+- Without it, versions must be whole numbers that step by one per save of
+  that record (HAPI's `res_ver`, a `version_number` column). At most one
+  step may happen. Two or more steps are refuted: step mode assumes the
+  agent saves each record once per run, so a second step is someone else's.
+  An agent that saves the same record twice (correcting its own write) needs
+  `author_field`. A version that went back is refuted. A version
+  that isn't a whole number (an opaque ETag) is not checked: without authors
+  the saves can't be counted. Prefer a history read, one row per version. A
+  read of only the current version counts steps as the difference, which
+  trusts the app's numbering: an app that numbers a save from the client's
+  copy (two saves from version 1 both write version 2) hides a lost update
+  there, while a history read shows the two rows as `duplicate_version`.
+  The numbers must be per record and
+  contiguous: a global sequence, such as an audit table's row id, also moves
+  for other records' saves, so a correct update would be refuted. Use
+  `author_field` with such a sequence.
+
+Anything else stops the run, never a pass:
+
+- a versions read that fails before or after the write;
+- a target that existed but has no version, or a target record without the
+  field that names it;
+- a version that reads as null, before or after (`null_version`);
+- two rows of one record with the same version (`duplicate_version`): a
+  save could hide behind another;
+- a target whose record changed in the window with no new version
+  (`no_new_version`): the app saved without a version row, so who saved
+  can't be told. A target that didn't change (already right, nothing
+  written) needs no new version; this relies on the read recording every
+  save, since a change reverted by a save the read misses looks unchanged.
+
+A record created in the window has no earlier version to overwrite and isn't
+judged. Whether a target existed is told by `frame.identity_field` (default
+`id`), never by `target_field`'s value after the write: a target that existed
+with no version under its current `target_field` value is `missing`. A target
+is new only when the read before the write shows it wasn't there: the
+effect's own surface read for a `surfaces` verifier, else the verifier's
+records. With no such read, or no identity, it is treated as existing. Only targets are judged: another user's save to an unrelated record
+leaves this check as it was (the frame and its attribution judge that
+record, as before). The versions are read before the records at the
+baseline, so a save between the two reads shows in the record baseline. The
+window starts at the baseline: a copy the agent read before `begin_write` is
+not covered.
+
+The baseline keeps versions as keyed MACs of the record and the version;
+only a whole-number version's value is kept, to count steps. The receipt's
+`evidence.frame.versions` holds counts and a problem code (`another_author`,
+`extra_steps`, `went_back`, `no_author`, `not_a_number`, `null_version`,
+`duplicate_version`, `no_new_version`, `history_changed`, `missing`,
+`no_target_id`, `unreadable`, `self_unresolved`, `unknown_surface`), never
+ids or values. A refuted check refutes the frame (`checked.frame: refuted`);
+one that can't be judged leaves the frame `not_checked`. A `target_surface`
+that no write effect reads is `unknown_surface`: with no target there is
+nothing to hold.
 
 ## What the receipt says was checked
 
@@ -180,11 +571,12 @@ existed has neither and still checks.
 
 A record check proves little until it has been seen to fail. The fault gate
 (`openadapt_flow/fault_gate.py`, [`VERIFICATION_COVERAGE.md`](VERIFICATION_COVERAGE.md))
-runs the check against a test copy of the system of record. It writes seven
+runs the check against a test copy of the system of record. It writes nine
 kinds of bad save to the copy's store, and the check reads each one through
 its own read: a wrong value in each declared field, the values on a
-look-alike record, an edit to another record, a partial write, a duplicate,
-no write, and a write that lands after the check's timeout. A read whose
+look-alike record, an edit to another record, an edit in another table, a
+row in another table for the saved record, a partial write, a duplicate, no
+write, and a write that lands after the check's timeout. A read whose
 scope can't see a fault fails the gate, not only a judge that misses it.
 
 The gate writes `check_coverage.json` (`openadapt.check-coverage/v1`): faults
@@ -198,11 +590,16 @@ admission:
   min_coverage: 1.0               # default: every applicable fault caught
   require_classes: [unrelated_edit]
   refuse_test_copies: [recorded_states]   # the default
+  refuse_not_applicable: false    # true for an EMR: refuse a trimmed copy
+  min_store_tables: 0             # the fewest tables the test copy must hold
 ```
 
-Under a policy, `checked.coverage` in the receipt holds the totals, the
-record's digest and `policy` (`met`, or why not, such as
-`coverage_for_another_check`). `verified` requires `met`. A changed check
+A check is admitted only when every fault class of every part it claims was
+tested and fully killed: one missed class refuses it, whatever
+`min_coverage` says. Under a policy, `checked.coverage` in the receipt holds
+the totals, the record's digest, `policy` (`met`, or why not, such as
+`coverage_for_another_check` or `coverage_class_missed:other_table`) and
+`classes`, each claimed class's result. `verified` requires `met`. A changed check
 needs a new coverage record. Without `admission:` nothing about coverage is
 required or stated.
 
@@ -211,6 +608,194 @@ on a copy of the database and keeps the check a draft when a fault survives.
 Without `--fault-gate` it writes the coverage of its recorded-state test,
 which can't test a wrong value written over the right record or a late
 write, so that record is incomplete and refused by default.
+
+## Writes that land later
+
+With `frame.database`, the database is read twice after the save,
+`frame.database.settle_s` seconds apart (default 1). When the two reads
+differ, the frame is not checked. A write the app makes later than the
+second read, such as a background job, a trigger-driven integration or a
+delayed duplicate side record, lands after the verdict, and that check
+doesn't see it.
+
+A live app moves on its own: a screen that polls, a scheduler tick. Set
+`frame.database.settle_attempts` (default 1) to take up to that many more
+reads, each `settle_s` after the last, until two in a row match. Two reads
+also match when they differ only by rows added to append-only tables, which
+the frame excuses anyway. Any other difference, including an edited row of
+an append-only table, keeps it waiting. The earlier read of the matching
+pair is judged. The budget is `settle_attempts * settle_s` seconds; when no
+pair matches within it, the frame is not checked.
+`evidence.frame.database.settle_attempts` says how many reads it took. The
+same budget applies after the save and at a recheck.
+
+Set `frame.database.recheck_after_s` to read the database once more after a
+verified save:
+
+```yaml
+frame:
+  database:
+    dialect: mysql
+    read: {...}
+    settle_s: 1
+    recheck_after_s: 300   # pick it for the app's own jobs; there is no default
+```
+
+When it is set and the run is verified:
+
+- The receipt has `recheck_due_at` (whole-second UTC): `recheck_after_s`
+  after the second read, never early (the read time is truncated to the
+  second, so one second is added before rounding up). A caller can schedule
+  the recheck without waiting on it.
+- A verified receipt that carries `recheck_due_at` is provisional until the
+  recheck runs: a write that lands in the window can still refute it.
+  `WriteResult.provisional` is true, and so is `provisional` in
+  `to_dict()` and in the MCP `verify_check` reply. Don't treat the write as
+  final until the recheck confirms it.
+- `evidence.frame.recheck` says what the recheck compares
+  (`database_since_post_save`), when the post-save read was taken, and a
+  salted digest of the state it compares with.
+- The caller keeps that state privately (`WriteResult.recheck`). Through
+  `begin_write` and `verify_write`, it is saved as `recheck.json` in the
+  write's folder, beside `baseline.json` (mode 0600); `RecheckState.save`
+  writes it elsewhere. It holds the run's baseline and its
+  post-save snapshot as keyed MACs (no values, as the baseline does), the
+  audit entries seen then as keyed hashes, what the run's frame reported as
+  collateral (row key MACs and entry hashes), and the run's salt.
+- `verify_write` records each state it issues under the verifier's state
+  directory (`OPENADAPT_VERIFIER_STATE_DIR`, in `rechecks/`, named by the
+  state's digest). A state's salt and digests can be recomputed by whoever
+  can write the file, so a state without that record is never used: as the
+  write being rechecked it gives `UNCERTAIN`, and as an excuse it is
+  refused. As with snapshots, the writer being judged must not be able to
+  write the state directory.
+
+`openadapt_flow.verifier.recheck` reads the whole database at or after the
+due time (twice, `settle_s` apart) and judges every change since the
+post-save read with the frame's own rules: the profile's bookkeeping, and a
+write that the audit log attributes to another actor.
+
+Later writes under the same contract by the same actor can be passed as
+`excused_by`, with any outcome, so the caller can keep working on the next
+item while the window runs. A later write accounts only for its own window,
+the time between its baseline and its post-save read, where its own frame
+judged every change:
+
+- A row that changed in that window, and still holds what that write's
+  post-save read saw, is the later write's. A row that matches its
+  selector but lands after its window (a delayed duplicate, or a save that
+  landed late), or a row changed again since, is judged like any other.
+- A removal counts when that window recorded it, matched by the row's link
+  MAC: a per-host keyed hash of the row key, kept only when
+  `recheck_after_s` is set.
+- An audit entry logged in that window is the later write's.
+- When the later write was not verified and the change is one its frame
+  reported as collateral, or its delta failed, the change may be what
+  refuted it, and the harm may be the earlier write's. It doesn't refute
+  the earlier write, but the recheck gives `UNCERTAIN`: reconcile both.
+
+| Since the post-save read | Recheck `outcome` |
+|---|---|
+| Nothing moved that these rules don't explain | `CONFIRMED`: the verdict stands |
+| A row moved that nothing explains | `REFUTED`: the earlier `verified` no longer stands (late) |
+| A change lies in a later write's window and may be what refuted it | `UNCERTAIN` |
+| The database couldn't be read or was still moving, or the state wasn't issued here or doesn't match its receipt, the contract, the actor or the params | `UNCERTAIN`: never a pass |
+
+A recheck before the due time raises `RecheckNotDue`; `wait=True` sleeps
+until then instead. Limits:
+
+- A row of a table without a primary key (its rows are keyed by a content
+  fingerprint) is never excused by a later write's window.
+- A later write under another contract doesn't excuse anything.
+- A later write whose database never settled after its save has no state,
+  so it can't be passed as `excused_by`. Reconcile it first.
+
+### Running the recheck
+
+In Python, call it at or after `recheck_due_at`, or let it sleep until then:
+
+```python
+from openadapt_flow.verifier import recheck
+
+late = recheck(contract, result, params=values, actor=actor, wait=True)
+late.outcome        # CONFIRMED, REFUTED or UNCERTAIN
+late.read_at        # the recheck's own read; nothing after it is seen
+```
+
+A process that restarts in the window can load the saved state with
+`RecheckState.load(path, params=values)` and pass it as `write`.
+
+Over MCP (`openadapt verify serve`), call `verify_recheck` with the
+`write_id` of a `verify_check` reply that says `provisional: true`. Before the
+due time it returns `due: false`, `recheck_due_at` and `wait_s`. The server
+passes the agent's own later writes as `excused_by`: those under the same
+contract, by the same agent, begun after this write's post-save read and
+already checked with `verify_check`. While such a write is begun but not yet
+checked, `verify_recheck` refuses and asks for that check first. Writes under
+different contracts can't excuse each other: an agent that creates a contact
+and then an opportunity inside the window gets the first write `REFUTED`.
+The server holds the state in memory, so after a restart run the recheck
+from Python. There is no CLI command for it.
+
+A recheck that gives `REFUTED` or `UNCERTAIN` also resolves the write's
+ledger attempt again, for review. `REFUTED` holds it, and `UNCERTAIN` keeps it
+uncertain, so a retry under the same key is never handed the earlier
+`CONFIRMED`; `openadapt verify ledger list` shows it until a person releases
+it. The ledger is the one the `WriteResult` carries from `begin_write`, or
+the default ledger; `ledger=` overrides it. A `RecheckState` loaded from disk
+finds its attempt by the receipt's `correlation_id` (the write id). When no
+attempt is re-resolved (no ledger, a ledger without that attempt, or a newer
+attempt of the same write), the recheck's `reasons` say so, and the write
+must be held by hand.
+
+### Choosing the window
+
+`recheck_after_s` has no default. Make it longer than the slowest write
+that can follow a save in your system: a client's delayed retry, a queued
+job, a scheduled task, an integration that writes back. A write that lands
+after the recheck's read is not seen by the recheck or by anything else
+here; to cover a longer delay, make the window longer. The longer the
+window, the more of the app's own background activity it also sees, and each
+such change refutes unless the contract explains it (`allow_tables`, the app
+profile, `ignore_columns`, `side_records`) or the audit log attributes it to
+another user.
+
+Measured on three real apps, Dolibarr 21 and EspoCRM 10 on MariaDB 11.4 and
+Redmine 6.1 on PostgreSQL 17, with `recheck_after_s: 180`:
+
+- Four planted late writes (a changed phone, a second product, a delayed
+  duplicate opportunity, a look-alike lead's title) landed 125 to 130 s
+  after the save. Each check said `CONFIRMED`, and each recheck said
+  `REFUTED`. Correct writes of the same tasks stayed `CONFIRMED`.
+- On Redmine, a time entry's hours changed 150 s after the save, and a
+  delayed retry created a duplicate issue 140 s after it. Each check said
+  `CONFIRMED`, and each recheck said `REFUTED`. Correct writes stayed
+  `CONFIRMED` at the check and the recheck. Redmine's own bookkeeping
+  needed one declaration: `user_preferences.others` in `ignore_columns`
+  (every save records the user's last project there).
+- With the apps' schedulers off, `settle_s: 1` and `settle_attempts: 1` were
+  enough.
+- With EspoCRM's cron daemon on, its job queue moved during every window.
+  Correct writes were refuted at the recheck (about 140 rows each), and a
+  recheck read while a job ran was `UNCERTAIN`. Declaring the scheduler's
+  bookkeeping fixed both: `scheduled_job_log_record` append-only, `job`
+  skipped with a reason (the queue adds and then updates its rows),
+  `scheduled_job.last_run` in `ignore_columns`, and `settle_attempts: 10`.
+  Then the correct writes were `CONFIRMED` again. An app with a scheduler
+  needs this kind of review before its rechecks mean anything.
+
+Each of those declarations stops checking something, at the check and at
+the recheck:
+
+- A skipped table (`job`) is never read. Every write to it is unseen,
+  including a job the agent's own action queues (a mass email, a workflow,
+  a webhook) or one it adds by mistake.
+- An append-only table (`scheduled_job_log_record`) lets any added row
+  through, whoever added it. Only an edited or removed row counts.
+- An ignored column (`scheduled_job.last_run`) is not compared on any row.
+
+Prefer append-only, or `ignore_columns` on the columns that move, over
+skipping a table when the table allows it.
 
 ## Verdicts
 
@@ -252,7 +837,8 @@ and still checks.
 every field of the Execute receipt (`openadapt.execute-evidence-receipt/v1`)
 plus `executor_kind`, `executor_ref_sha256`, `effect_verdict`, and
 `verification_tier`, and `checked_how` (and `remediates` and
-`correlation_id` when given),
+`correlation_id` when given, and `recheck_due_at` when a verified run
+schedules a recheck),
 under the schema `openadapt.effect-receipt/v1`. `evidence.readback` lists
 each effect's contract hash, verdict, and counts. `receipt.evidence_digest`
 is the SHA-256 of `evidence`. Neither part holds record values, URLs, or the

@@ -139,13 +139,26 @@ class WebFaultDriver:
 
     # -- page helpers ---------------------------------------------------------
     def _save_target(self, context: QualificationFaultContext) -> Any:
+        """The save control, found by the bundle's structural locator.
+
+        A CSS selector or, when the control has none (common in React apps,
+        which seldom give a save button an ``id``), its ARIA role and
+        accessible name. Either must find exactly one element: no match or
+        several matches is no target, and the fault declines.
+        """
+
         step = self._steps.get(context.step_id)
         locator = (
             step.anchor.structural
             if step is not None and step.anchor is not None
             else None
         )
-        if locator is None or not locator.selector:
+        by_role = (
+            locator is not None
+            and not locator.selector
+            and bool(locator.role and locator.name)
+        )
+        if locator is None or not (locator.selector or by_role):
             return None
         scoped = getattr(context.backend, "_locator_with_scope", None)
         if callable(scoped):
@@ -155,14 +168,23 @@ class WebFaultDriver:
                     _scope, target = resolved
                     if target.count() == 1:
                         return target.first
+                    if by_role:
+                        return None
             except Exception:  # noqa: BLE001 - fall back to a frame search
                 pass
         page = getattr(context.backend, "page", None)
         found = []
         for frame in list(getattr(page, "frames", None) or []):
             try:
-                loc = frame.locator(locator.selector)
-                if loc.count() == 1:
+                if by_role:
+                    loc = frame.get_by_role(locator.role, name=locator.name, exact=True)
+                    count = loc.count()
+                    if count > 1:
+                        return None
+                else:
+                    loc = frame.locator(locator.selector)
+                    count = loc.count()
+                if count == 1:
                     found.append(loc.first)
             except Exception:  # noqa: BLE001 - detached frames are skipped
                 continue

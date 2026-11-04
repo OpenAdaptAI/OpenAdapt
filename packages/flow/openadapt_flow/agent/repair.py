@@ -212,6 +212,29 @@ class Demonstrator(Protocol):
     def viewport(self) -> tuple[int, int]: ...
 
 
+def _element_identity(screen: Any, x: int, y: int) -> Optional[dict[str, Any]]:
+    """The element identity under (x, y) on ``screen``, or None.
+
+    A screen with no element tree (pixels only, or an older hold) has none.
+    """
+    from openadapt_flow.repair.element_identity import ElementIdentity
+
+    reader = getattr(screen, "element_identity", None)
+    if not callable(reader):
+        return None
+    try:
+        identity = ElementIdentity.from_mapping(reader(x, y))
+    except Exception:  # noqa: BLE001 - no identity is an ordinary miss
+        return None
+    if identity is None:
+        return None
+    payload: dict[str, Any] = identity.evidence()
+    payload["dialog_region"] = (
+        list(identity.dialog_region) if identity.dialog_region else None
+    )
+    return payload
+
+
 class LazyBackendDemonstrator:
     """The operator's pinned local backend, opened on first use.
 
@@ -240,6 +263,10 @@ class LazyBackendDemonstrator:
 
     def click(self, x: int, y: int) -> None:
         self._get().click(x, y)
+
+    def element_identity(self, x: int, y: int) -> Any:
+        reader = getattr(self._get(), "element_identity_at", None)
+        return reader(x, y) if callable(reader) else None
 
     def viewport(self) -> tuple[int, int]:
         viewport = self._get().viewport
@@ -294,6 +321,14 @@ class HeldRunDemonstrator:
 
     def click(self, x: int, y: int) -> None:
         self._call({"op": "click", "x": x, "y": y})
+
+    def element_identity(self, x: int, y: int) -> Any:
+        try:
+            return self._call({"op": "element_identity", "x": x, "y": y}).get(
+                "identity"
+            )
+        except RepairError:
+            return None  # an older hold, or a screen with no element tree
 
     def viewport(self) -> tuple[int, int]:
         width, height = self._call({"op": "viewport"})["viewport"]
@@ -370,7 +405,15 @@ class RepairDesk:
         demonstrator: Optional[Demonstrator] = None,
         scrubber_factory: Callable[[], Any] = default_scrubber,
         agent_id: str = "calling-agent",
+        teach_authorization: Any = None,
     ) -> None:
+        """``teach_authorization`` (a
+        :class:`~openadapt_flow.teach_authorization.TeachAuthority` whose
+        statement covers ``repair`` and names the program's workflow name as
+        its task) is
+        what lets a calling agent's fix be approved: without one, the fix is
+        still proposed, and its approval is refused."""
+        self.teach_authorization = teach_authorization
         self.root = Path(root)
         self.policy = policy
         self.repair_store_root = Path(repair_store_root or self.root / "repair-store")
@@ -596,17 +639,23 @@ class RepairDesk:
     # teaching
     def _record_click(
         self, screen: Demonstrator, directory: Path, x: int, y: int
-    ) -> None:
+    ) -> Optional[dict[str, Any]]:
+        """Record one click; return the element identity under it, if any."""
         before = screen.screenshot()
+        identity = _element_identity(screen, x, y)
         screen.click(x, y)
         after = screen.screenshot()
         frames = directory / "frames"
         frames.mkdir(parents=True)
         (frames / "0000_before.png").write_bytes(before)
         (frames / "0000_after.png").write_bytes(after)
+        event: dict[str, Any] = {"i": 0, "kind": "click", "x": x, "y": y, "t": 1.0}
+        if identity is not None:
+            event["element_identity"] = {
+                k: v for k, v in identity.items() if k != "dialog_region"
+            }
         (directory / "events.jsonl").write_text(
-            json.dumps({"i": 0, "kind": "click", "x": x, "y": y, "t": 1.0}) + "\n",
-            encoding="utf-8",
+            json.dumps(event) + "\n", encoding="utf-8"
         )
         width, height = screen.viewport()
         (directory / "meta.json").write_text(
@@ -621,6 +670,7 @@ class RepairDesk:
             ),
             encoding="utf-8",
         )
+        return identity
 
     def teach(self, token: Any, demonstration: Any) -> dict[str, Any]:
         sha, record = self._load(token)
@@ -668,6 +718,7 @@ class RepairDesk:
             raise RepairError("x and y must be whole pixel coordinates")
         if not (0 <= x < width and 0 <= y < height):
             raise RepairError("the click is outside the screen")
+        authorized = self._authorize(record)
         # Use the token once, before anything acts, so a retry can't click twice.
         record["state"] = "used"
         _write_json(self._token_path(sha), record)
@@ -682,7 +733,10 @@ class RepairDesk:
         if work.exists():
             shutil.rmtree(work)
         recording = work / "recording"
-        self._record_click(screen, recording, x, y)
+        identity = self._record_click(screen, recording, x, y)
+        # The tree's dialog box, when the screen has one; otherwise Flow finds
+        # the dialog in the recorded frame.
+        region = identity.get("dialog_region") if identity else None
         evidence = record.get("scrub_evidence")
         provenance = RepairProvenance(
             agent_id=self.agent_id,
@@ -695,6 +749,13 @@ class RepairDesk:
             screens_scrubbed=bool(record.get("screens_scrubbed", True)),
             scrub_evidence=ScreenScrubEvidence(**evidence) if evidence else None,
             screen_share_approved_by=approval.get("approved_by") if approval else None,
+            teach_authorization=(
+                RepairStore(
+                    self.store_for(record["workflow"])
+                ).keep_teach_authorization(*authorized)
+                if authorized is not None
+                else None
+            ),
         )
         try:
             result = agent_teach.teach_from_calling_agent(
@@ -703,6 +764,7 @@ class RepairDesk:
                 work / "proposed",
                 bundle=record["bundle_dir"],
                 provenance=provenance,
+                dialog_region=tuple(region) if region else None,
             )
         except Exception as exc:
             _LOG.info("agent repair refused: %s", exc)
@@ -739,6 +801,32 @@ class RepairDesk:
                 "the same review and approval."
             )
         return response
+
+    def _authorize(self, record: dict[str, Any]) -> Optional[tuple[Any, Path]]:
+        """The operator's teach authorization for this repair, verified now.
+
+        ``None`` when the server has none (the fix can't be approved). One
+        that doesn't verify, doesn't cover ``repair`` or names another task
+        refuses before anything acts.
+        """
+        authority = self.teach_authorization
+        if authority is None:
+            return None
+        from openadapt_flow import teach_authorization as ta
+
+        try:
+            from openadapt_flow.ir import Workflow
+
+            # The task is the program's own name, which approval checks too.
+            task_id = Workflow.load(Path(record["bundle_dir"])).name
+            verification = authority.verify(purpose="repair", task_id=task_id)
+        except (ta.TeachAuthorizationError, OSError, ValueError) as exc:
+            raise RepairError(
+                "the teach authorization doesn't allow this repair "
+                f"({getattr(exc, 'code', type(exc).__name__)}); "
+                "nothing was done"
+            ) from None
+        return verification, Path(authority.statement)
 
     def _demos_path(self, record: dict[str, Any]) -> Path:
         key = _sha(f"{record['workflow']}\0{record['step_id']}")[:16]

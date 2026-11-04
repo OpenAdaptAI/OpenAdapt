@@ -40,7 +40,7 @@ A label that Capture scrubbed (`<dynamic_label>`) is treated as no label.
 ```python
 from openadapt_flow.compiler.motif_induction import induce_candidate, write_candidate
 
-candidate = induce_candidate(export)          # dict or ShadowEpisodesExport
+candidate = induce_candidate(export)  # dict or ShadowEpisodesExport
 write_candidate(candidate, "shadow-candidates/abc")
 ```
 

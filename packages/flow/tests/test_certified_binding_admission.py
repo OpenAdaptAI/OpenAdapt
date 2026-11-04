@@ -100,8 +100,13 @@ def _derived_event(record=None) -> dict:
 
 
 def _fixture(url: str, **over) -> AdmissionFixture:
+    # MockMed's own shape, named here: the engine assumes no app's paths.
     kw = dict(
         base_url=url,
+        records_path="/api/db",
+        records_key="records",
+        write_path="/api/encounter",
+        server_fields=frozenset({"source"}),
         params={"note": NOTE},
         timeout_s=2.0,
     )
@@ -142,6 +147,68 @@ def test_propose_rest_binding_from_observed_sor_delta():
     assert "source" not in binding.body_template
     assert binding.effects
     assert binding.on_unavailable == "gui"
+
+
+def test_propose_needs_the_apps_write_path_when_none_was_captured():
+    """No captured api_write and no write path named: no guessed endpoint."""
+    fixture = AdmissionFixture(
+        base_url="http://held-out.example",
+        records_path="/api/db",
+        records_key="records",
+        params={"note": NOTE},
+    )
+    step = _save_step()
+    assert (
+        propose_rest_binding(
+            step, _derived_event(), fixture=fixture, exclude_texts=(NOTE,)
+        )
+        is None
+    )
+
+
+def test_propose_uses_another_apps_captured_write_and_server_fields():
+    """A Frappe-shaped write: the captured endpoint, the app's own fields."""
+    step = _save_step()
+    event = _derived_event()
+    event[API_WRITE_KEY] = {
+        "kind": "rest",
+        "method": "POST",
+        "url_template": "/api/resource/Loan Application",
+        "body": {"applicant": "p1", "description": "{note}"},
+    }
+    fixture = AdmissionFixture(
+        base_url="http://held-out.example",
+        records_path="/api/resource/Loan Application",
+        records_key="data",
+        server_fields=frozenset({"owner", "creation", "modified"}),
+        params={"note": NOTE},
+    )
+    proposal = propose_rest_binding(
+        step, event, fixture=fixture, exclude_texts=(NOTE,), params={"note": NOTE}
+    )
+    assert proposal is not None
+    assert proposal.binding.url_template == "/api/resource/Loan Application"
+    assert proposal.binding.body_template == {
+        "applicant": "p1",
+        "description": "{note}",
+    }
+
+    # Without a capture, the body comes from the new record minus the fields
+    # this app assigns itself.
+    fixture = AdmissionFixture(
+        base_url="http://held-out.example",
+        records_path="/api/resource/Loan Application",
+        records_key="data",
+        write_path="/api/resource/Loan Application",
+        server_fields=frozenset({"source"}),
+        params={"note": NOTE},
+    )
+    proposal = propose_rest_binding(
+        step, _derived_event(), fixture=fixture, exclude_texts=(NOTE,)
+    )
+    assert proposal is not None
+    assert "source" not in proposal.binding.body_template
+    assert "id" not in proposal.binding.body_template
 
 
 def test_propose_refuses_fhir_mcp_tool_captures():
@@ -253,7 +320,9 @@ def test_refused_admission_leaves_gui_ladder(tmp_path):
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         ).run(_save_workflow(step), bundle_dir=bundle, run_dir=run_dir)
 
@@ -306,7 +375,9 @@ def test_admitted_binding_halts_on_indeterminate_without_gui_retry(tmp_path):
         report = Replayer(
             backend,
             vision=_vision_that_confirms_saved(),
-            effect_verifier=_IndeterminateVerifier(url),
+            effect_verifier=_IndeterminateVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             api_actuator=ApiActuator(url),
             poll_interval_s=0.01,
         ).run(_save_workflow(step), bundle_dir=bundle, run_dir=run_dir)
@@ -339,7 +410,15 @@ def test_admit_requires_actuated_then_confirmed():
         # build the request. Nothing is written; the step stays GUI-only.
         decision = admit_rest_binding(
             proposal,
-            fixture=AdmissionFixture(base_url=url, params={}, timeout_s=0.5),
+            fixture=AdmissionFixture(
+                records_path="/api/db",
+                records_key="records",
+                write_path="/api/encounter",
+                server_fields=frozenset({"source"}),
+                base_url=url,
+                params={},
+                timeout_s=0.5,
+            ),
         )
         assert decision.admitted is False
         assert decision.actuation is not None
@@ -393,7 +472,7 @@ def test_compile_admits_rest_binding_on_held_out_fixture(tmp_path):
             name="certified-demo",
             risk_overrides={"step_001": "irreversible"},
             admit_api_bindings=True,
-            admission_fixture_url=url,
+            admission_fixture=_fixture(url),
             skill_library_root=tmp_path / "skills",
         )
         save = workflow.steps[1]
