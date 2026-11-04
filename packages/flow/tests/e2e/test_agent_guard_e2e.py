@@ -12,7 +12,6 @@ Synthetic MockMed in front of the ``effect_e2e`` record store; localhost only.
 
 from __future__ import annotations
 
-import json
 import socket
 from pathlib import Path
 
@@ -100,15 +99,16 @@ def test_guard_blocks_wrong_record_then_run_two_is_a_tool(tmp_path: Path) -> Non
 
         # The airbag handoff can't carry a person's teach authorization yet,
         # so admission refuses its draft (docs/TEACH_AUTHORIZATION.md).
-        second = bench.run2(
-            app,
-            Path(handoff["task_dir"]),
-            files["verify"],
-            teach_dir,
-            tmp_path / "taught-runs",
-        )
-        assert not second["admitted"], second
-        assert "teach_auth_not_recorded" in json.dumps(second["detail"]), second
+        from openadapt_flow.jit import AdmissionError
+
+        with pytest.raises(AdmissionError, match="teach_auth_not_recorded"):
+            bench.run2(
+                app,
+                Path(handoff["task_dir"]),
+                files["verify"],
+                teach_dir,
+                tmp_path / "taught-runs",
+            )
     finally:
         app.stop()
 
