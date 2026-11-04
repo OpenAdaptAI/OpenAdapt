@@ -163,7 +163,7 @@ class Person:
     """Physical X input through XTest: what a person's hands would send."""
 
     def __init__(self) -> None:
-        from Xlib import X, XK, display
+        from Xlib import XK, X, display
         from Xlib.ext import xtest
 
         self.X, self.XK, self.xtest = X, XK, xtest
@@ -270,6 +270,8 @@ def record(root: Path, desk: Desk, db: Path) -> dict[str, Any]:
         stderr=subprocess.STDOUT,
         text=True,
     )
+    error = None
+    out = ""
     try:
         geo = desk.wait_geo()
         time.sleep(3.0)
@@ -287,16 +289,22 @@ def record(root: Path, desk: Desk, db: Path) -> dict[str, Any]:
         time.sleep(3.0)
         done.touch()
         out, _ = proc.communicate(timeout=300)
-    finally:
+    except Exception as exc:  # keep the recorder's own output as evidence
+        error = f"{type(exc).__name__}: {exc}"
         if proc.poll() is None:
             proc.kill()
+        out = proc.communicate()[0] or ""
+    finally:
         chart.close()
     events = []
     if (rec / "events.jsonl").exists():
-        events = [json.loads(x) for x in (rec / "events.jsonl").read_text().splitlines()]
+        events = [
+            json.loads(x) for x in (rec / "events.jsonl").read_text().splitlines()
+        ]
     return {
         "exit": proc.returncode,
-        "output": _tail(out),
+        "error": error,
+        "output": _tail(out, 40),
         "events": [
             {k: e.get(k) for k in ("i", "kind", "surface", "x", "y", "viewport_before")}
             for e in events
@@ -345,16 +353,11 @@ def replay(
         "halt": report.get("halt_reason") or report.get("stop_reason"),
         "model_calls": report.get("model_calls"),
         "steps": [
-            {
-                k: s.get(k)
-                for k in ("step_id", "action", "surface", "status", "error")
-            }
+            {k: s.get(k) for k in ("step_id", "action", "surface", "status", "error")}
             for s in steps
         ],
         "new_rows": _rows(db)[len(before_rows) :],
-        "web_counts_delta": {
-            k: desk.counts[k] - before_counts[k] for k in desk.counts
-        },
+        "web_counts_delta": {k: desk.counts[k] - before_counts[k] for k in desk.counts},
     }
 
 
@@ -366,9 +369,18 @@ def qualify(root: Path) -> dict[str, Any]:
     if result["record"]["exit"] != 0:
         return result
     bundle = root / "bundle"
-    proc = _flow("compile", result["record"]["recording"], "--out", str(bundle),
-                 "--name", "referral-cross-window")
-    result["compile"] = {"exit": proc.returncode, "output": _tail(proc.stdout + proc.stderr)}
+    proc = _flow(
+        "compile",
+        result["record"]["recording"],
+        "--out",
+        str(bundle),
+        "--name",
+        "referral-cross-window",
+    )
+    result["compile"] = {
+        "exit": proc.returncode,
+        "output": _tail(proc.stdout + proc.stderr),
+    }
     if proc.returncode != 0:
         return result
     workflow = json.loads((bundle / "workflow.json").read_text())
