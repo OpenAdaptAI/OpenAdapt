@@ -63,6 +63,13 @@ __all__ = [
     "default_tools_dir",
 ]
 
+#: Why the lane teaches and runs no writes: nothing here binds a person's
+#: signed teach authorization to what the agent does.
+TAUGHT_WRITE_REFUSED = (
+    "taught writes are refused in browser teach: a write an agent teaches needs a "
+    "person's signed teach authorization, and this lane can't bind one. Teach "
+    "the write with openadapt-agent serve --teach --teach-authorization"
+)
 PROGRAM_SCHEMA = "openadapt.browser-tool/v1"
 PROGRAM_FILE = "program.json"
 TAUGHT_PREFIX = "taught_"
@@ -1327,6 +1334,11 @@ class BrowserTeachBridge:
         contract_name = args.get("contract")
         contract = None
         if contract_name is not None:
+            # A taught write is an agent teaching a write with no person's
+            # signed teach authorization bound to it (this lane has no teach
+            # scope guard), so it is refused. docs/TEACH_AUTHORIZATION.md.
+            raise BridgeError(TAUGHT_WRITE_REFUSED)
+        if contract_name is not None:
             contract = self.contracts.get(str(contract_name))
             if contract is None:
                 raise BridgeError(f"no write contract named {contract_name!r}")
@@ -2062,5 +2074,10 @@ class BrowserTeachBridge:
                 "model_calls": 0,
             }
         if (program.get("result") or {}).get("kind") == "write":
-            return self._run_write(tool, program, inputs)
+            # A write tool taught here carries no person's teach authorization.
+            return {
+                "outcome": "did_not_run",
+                "what_happened": f"{TAUGHT_WRITE_REFUSED}; nothing was written",
+                "model_calls": 0,
+            }
         return self._replay(program, inputs)

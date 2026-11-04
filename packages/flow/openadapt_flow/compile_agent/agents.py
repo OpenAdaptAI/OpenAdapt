@@ -357,7 +357,15 @@ def _get(block: Any, name: str, default: Any = None) -> Any:
 
 
 def _image(png: bytes) -> dict[str, Any]:
+    """An image block for the model. Every screenshot the model sees leaves
+    the machine, so it is redacted first (or sent raw under the recorded
+    ``OPENADAPT_FLOW_SEND_UNSCRUBBED`` opt-out); without the privacy extra
+    this raises and nothing is sent."""
     import base64
+
+    from openadapt_flow.privacy import prepare_outbound_image
+
+    png = prepare_outbound_image(png, "a compile-agent screenshot")
 
     return {
         "type": "image",
@@ -628,9 +636,7 @@ class ClaudeAgent:
     ) -> list[dict[str, Any]]:
         obs = harness.act({"action": name, **args})
         harness.stats.screenshots_every_turn += 1
-        from openadapt_flow.privacy import scrub_image_bytes
-
-        out: list[dict[str, Any]] = [_image(scrub_image_bytes(obs.png))]
+        out: list[dict[str, Any]] = [_image(obs.png)]
         if obs.notes:
             out.insert(0, {"type": "text", "text": "; ".join(obs.notes)})
         return out

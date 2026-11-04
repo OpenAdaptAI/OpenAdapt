@@ -26,6 +26,13 @@ openadapt-flow compile-agent run .openadapt-compile-agent/<task key> \
 (`claude-opus-5-5`) on your own key from `ANTHROPIC_API_KEY`; OpenAdapt holds
 no key. `--agent steps.json` runs a scripted agent with no model calls.
 
+Run 1 compares whole records between reads. A FHIR `field_paths` mapping to
+`meta.lastUpdated`, `meta.versionId`, or the whole `meta` object is refused
+before recording unless its output key is in `verifier.records_drop_fields`.
+For example, `field_paths: {revision: meta.versionId}` also needs
+`records_drop_fields: [revision]`. The refusal names the field and the fix;
+no field is dropped automatically.
+
 ## What happens
 
 1. **Run 1, in the harness.** The agent does the task while

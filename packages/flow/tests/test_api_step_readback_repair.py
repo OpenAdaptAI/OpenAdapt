@@ -43,7 +43,9 @@ def _run(tmp_path, *, pipeline, durable=False, verifier_url=None):
         report = Replayer(
             EnterWritesBackend(url),
             vision=FakeVision(),
-            effect_verifier=RestRecordVerifier(verifier_url or url),
+            effect_verifier=RestRecordVerifier(
+                verifier_url or url, records_path="/api/db", records_key="records"
+            ),
             web_form_actuator=actuator,
             poll_interval_s=0.01,
             readback_pipeline=pipeline,
@@ -112,7 +114,9 @@ def test_a_probe_or_resumed_run_never_sends_the_api_step(tmp_path):
         backend = EnterWritesBackend(url)
         target = ReplayTarget(
             lambda _fault: _Session(backend),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             policy="permissive",
             profile="demo",
             replayer_kwargs={
@@ -146,7 +150,9 @@ def test_a_standard_change_test_record_run_is_gui_only(tmp_path):
         backend = EnterWritesBackend(url)
         target = ReplayTarget(
             lambda _fault: _Session(backend),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             policy="permissive",
             profile="demo",
             replayer_kwargs={

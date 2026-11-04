@@ -9,6 +9,8 @@ the repository.
 
 from __future__ import annotations
 
+from openadapt_flow.runtime.effects.fhir import DEFAULT_OBSERVATION_PATHS
+
 import base64
 import json
 import logging
@@ -282,6 +284,7 @@ def _fhir_cfg(server: Server, smart: dict) -> EffectsConfig:
     return EffectsConfig.model_validate(
         {
             "kind": "fhir",
+            "field_paths": dict(DEFAULT_OBSERVATION_PATHS),
             "base_url": server.fhir,
             "resource_type": "Observation",
             "timeout_s": 2.0,
@@ -542,12 +545,19 @@ def test_bad_smart_config_is_refused(overrides, message):
 def test_smart_backend_needs_fhir_and_no_static_token():
     with pytest.raises(ValueError, match="only to kind fhir"):
         EffectsConfig.model_validate(
-            {"kind": "rest", "base_url": "https://x.test", "smart_backend": _smart()}
+            {
+                "kind": "rest",
+                "records_path": "/api/db",
+                "base_url": "https://x.test",
+                "smart_backend": _smart(),
+            }
         )
     with pytest.raises(ValueError, match="mutually exclusive"):
         EffectsConfig.model_validate(
             {
                 "kind": "fhir",
+                "resource_type": "Observation",
+                "field_paths": dict(DEFAULT_OBSERVATION_PATHS),
                 "base_url": "https://x.test/fhir",
                 "access_token_env": "TOKEN",
                 "smart_backend": _smart(),
@@ -614,7 +624,13 @@ def test_static_token_and_token_source_are_exclusive(rsa_key):
         token_url="https://auth.example.test/token",
     )
     with pytest.raises(ValueError, match="not both"):
-        FhirEffectVerifier("https://x.test/fhir", access_token="t", token_source=source)
+        FhirEffectVerifier(
+            "https://x.test/fhir",
+            resource_type="Observation",
+            field_paths=dict(DEFAULT_OBSERVATION_PATHS),
+            access_token="t",
+            token_source=source,
+        )
 
 
 @pytest.mark.parametrize(

@@ -40,6 +40,41 @@ def test_profile_digest_changes_with_any_setting():
     assert base.sha256 != SessionProfile(width=1920, height=1080).sha256
 
 
+def test_avc444_asks_for_the_h264_pipeline():
+    args = SessionProfile(lossless=False, avc444=True).client_args()
+    assert "/gfx:AVC444:on" in args
+    assert "-gfx" not in args
+    assert "/gfx:AVC444:on" not in SessionProfile(lossless=False).client_args()
+    with pytest.raises(ValueError, match="lossless"):
+        SessionProfile(avc444=True)
+
+
+def test_avc444_field_keeps_earlier_profile_digests():
+    # The digest of SessionProfile() before the avc444 field existed; saved
+    # session files carry it.
+    assert (
+        SessionProfile().sha256
+        == "aa9e114039316fbf97090145552bbeef82e78e784a146768ec2126f6c6728b58"
+    )
+    assert (
+        SessionProfile(lossless=False, avc444=True).sha256
+        != SessionProfile(lossless=False).sha256
+    )
+
+
+def test_session_file_writes_avc444_only_when_on(tmp_path):
+    import json
+
+    from openadapt_flow.backends.xfreerdp import load_session, save_session
+
+    plain = save_session(tmp_path / "plain.json", RdpTarget("10.0.0.5"))
+    assert "avc444" not in json.loads(plain.read_text())["profile"]
+    avc = SessionProfile(lossless=False, avc444=True)
+    path = save_session(tmp_path / "avc.json", RdpTarget("10.0.0.5"), avc)
+    assert json.loads(path.read_text())["profile"]["avc444"] is True
+    assert load_session(path)[1] == avc
+
+
 @pytest.mark.parametrize("kw", [{"scale": 125}, {"desktop_scale": 50}, {"width": 10}])
 def test_profile_rejects_bad_values(kw):
     with pytest.raises(ValueError):
@@ -92,6 +127,8 @@ def test_password_goes_to_stdin_not_argv(monkeypatch):
     argv = " ".join(client.__dict__.get("argv", spawned[procs.index(client)][0]))
     assert "s3cret-synthetic" not in argv
     assert "/from-stdin:force" in argv and "/u:svc" in argv
+    # No title bar: it would shift the remote desktop off the frame's coordinates.
+    assert "/f" in argv.split() and "-decorations" in argv.split()
     assert client.written == b"s3cret-synthetic\n"
     env = spawned[procs.index(client)][1]["env"]
     assert "s3cret-synthetic" not in " ".join(env.values())

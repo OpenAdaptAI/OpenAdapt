@@ -531,6 +531,9 @@ def _execute_code(
                 f"code child {child.name!r} exceeded its timeout"
             ) from exc
     limit = manifest.permissions.output_limit_bytes
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.unsealed_write("a code child's output", run, refuse=False)
     (run / "stdout.bin").write_bytes(completed.stdout[:limit])
     (run / "stderr.bin").write_bytes(completed.stderr[:limit])
     if completed.returncode:
@@ -974,6 +977,9 @@ def execute_process_contract_v1(
 ) -> ProcessV1Result:
     """Run or resume one ProcessContract v1 without a planner."""
 
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.hold_back_in_strict("a code child's output")
     if contract.schema_version != "openadapt.process-contract/v1":
         raise ProcessV1Error("the v1 runtime requires ProcessContract v1")
     if len(receipt_private_key) != 32:

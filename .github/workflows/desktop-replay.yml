@@ -22,6 +22,7 @@ on:
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
       - packages/flow/tests/test_xfreerdp.py
+      - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
       - packages/flow/uv.lock
@@ -52,10 +53,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock
@@ -68,6 +69,13 @@ jobs:
           python ../../scripts/ci/locked_install.py --lock .github/ci-tools:win-agent
           --lock 'packages/flow[dev]'
           --editable packages/types --editable packages/flow
+      - name: Windows file-system guards (the attempt ledger)
+        # The default temp folder is in the user's profile, where the ledger
+        # must live; the runner's temp drive is not.
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
+            --junitxml=runs/windows-guards-junit.xml
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
@@ -81,8 +89,11 @@ jobs:
           python - <<'PY'
           import sys
           import xml.etree.ElementTree as ET
-          suite = ET.parse("runs/windows-replay-junit.xml").getroot()
-          cases = list(suite.iter("testcase"))
+          cases = [
+              case
+              for name in ("windows-guards", "windows-replay")
+              for case in ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase")
+          ]
           skipped = [c for c in cases if c.find("skipped") is not None]
           if not cases or skipped:
               sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")
@@ -111,10 +122,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-dependency-glob: packages/flow/uv.lock

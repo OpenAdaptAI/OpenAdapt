@@ -290,6 +290,8 @@ class Attempt:
     resolved: Optional[dict[str, Any]] = None
     delivered: bool = False
     released: bool = False
+    #: The ``rechecked`` event: a recheck confirmed a provisional result.
+    rechecked: Optional[dict[str, Any]] = None
     events: list[dict[str, Any]] = field(default_factory=list)
 
     @property
@@ -318,9 +320,15 @@ class Attempt:
         if r.get("retry_safe"):
             return "free"
         if r.get("outcome") == "CONFIRMED" or r.get("landed"):
-            if r.get("write_key_bound") or r.get("review") or not self.delivered:
-                # Under review: handed back until a person releases it, so
-                # no later attempt hides it from the list.
+            if (
+                r.get("write_key_bound")
+                or r.get("review")
+                or not self.delivered
+                or self.recheck_owed
+            ):
+                # Under review, or a recheck still owed: handed back until a
+                # person releases it (or the recheck settles it), so no later
+                # attempt hides it from the list.
                 return "undelivered"
             return "free" if _age(r.get("at")) >= repeat_s else "undelivered"
         if r.get("outcome") == "REFUTED":
@@ -332,6 +340,23 @@ class Attempt:
         """Landed, but a person should look at the store; until released."""
 
         return bool(self.resolved and self.resolved.get("review")) and not self.released
+
+    @property
+    def recheck_owed(self) -> Optional[str]:
+        """The ``recheck_due_at`` of a provisional ``CONFIRMED`` that no
+        recheck has settled yet, else None.
+
+        A recheck that confirms the write records ``rechecked``; one that
+        doesn't resolves the attempt again (no longer provisional). A
+        person's release settles it too.
+        """
+
+        if self.released or self.rechecked is not None or self.resolved is None:
+            return None
+        result = self.resolved.get("result")
+        if not isinstance(result, Mapping) or not result.get("provisional"):
+            return None
+        return str(result.get("recheck_due_at") or "") or None
 
     @property
     def folder(self) -> Path:
@@ -374,10 +399,13 @@ def fold(events: Sequence[Mapping[str, Any]]) -> Optional[Attempt]:
         if kind == "resolved":
             latest.resolved = dict(event)
             latest.delivered = bool(event.get("delivered"))
+            latest.rechecked = None  # a new outcome; any recheck was of the old
         elif kind == "delivered":
             latest.delivered = True
         elif kind == "released":
             latest.released = True
+        elif kind == "rechecked":
+            latest.rechecked = dict(event)
     if latest is not None:
         latest.events = [
             dict(e) for e in events if e.get("attempt") == latest.attempt_id
@@ -512,6 +540,21 @@ class Ledger:
             },
         )
 
+    def rechecked(self, key: str, attempt_id: str, **fields: Any) -> None:
+        """A recheck confirmed the attempt's provisional result: no
+        recheck is owed any more (:attr:`Attempt.recheck_owed`)."""
+
+        self.backend.append(
+            key,
+            {
+                "event": "rechecked",
+                "attempt": attempt_id,
+                "at": _now(),
+                "t": time.time(),
+                **fields,
+            },
+        )
+
     def delivered(self, key: str, attempt_id: str) -> None:
         self.backend.append(
             key, {"event": "delivered", "attempt": attempt_id, "at": _now()}
@@ -597,6 +640,34 @@ class Ledger:
             if attempt.state in ("open", "uncertain", "held") or attempt.review:
                 out.append((key, attempt))
         return out
+
+    def rechecks_owed(self) -> list[tuple[str, Attempt]]:
+        """Every key whose latest attempt is a provisional ``CONFIRMED``
+        still owed its recheck. Kept here, not in a server's memory, so a
+        restart doesn't lose it."""
+
+        out = []
+        for key in self.backend.keys():
+            attempt = self.latest(key)
+            if attempt is not None and attempt.recheck_owed:
+                out.append((key, attempt))
+        return out
+
+    def find_attempt(self, attempt_id: str) -> Optional[tuple[str, Attempt]]:
+        """The key whose latest attempt has this id (a write id), or None
+        when none does or more than one key claims it."""
+
+        found = [
+            key
+            for key, begun, _ in self.attempts()
+            if str(begun.get("attempt")) == attempt_id
+        ]
+        if len(found) != 1:
+            return None
+        attempt = self.latest(found[0])
+        if attempt is None or attempt.attempt_id != attempt_id:
+            return None
+        return found[0], attempt
 
 
 def _now() -> str:
