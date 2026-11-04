@@ -9,7 +9,7 @@ API-step shapes PR (forms) and the JSON/GraphQL PR.
 
 ## Result
 
-- **Safety.** Across 474 runs of every case (normal, blank fields,
+- **Safety.** Across 434 runs of every case (normal, blank fields,
   repeated values, changed defaults, expired sessions, a rejected save, a
   lost response, a duplicated save, a value the server rejects), there was
   **no false success and no incorrect write** on either path.
