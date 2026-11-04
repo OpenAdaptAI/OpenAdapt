@@ -38,6 +38,7 @@ from openadapt_flow.compile_agent import (
 from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.tutorial import _http_json, _records
+from tests._teach_authorization_support import mockmed_note
 
 PROMPT = (
     "Open the referral for Jane Sample, start a Triage encounter, and save "
@@ -204,6 +205,16 @@ def _common(tmp_path: Path, base: str) -> dict[str, Any]:
         model_key=TEST_KEY,
         reset=_reset(base),
         on_warning=lambda text: None,
+        # A person signed what run 1 may do.
+        teach_authorization=mockmed_note(
+            tmp_path / "keys",
+            tmp_path / "teach-authorization",
+            "mockmed.compile_agent_note",
+            base,
+            note=NOTE,
+            record=EXPECT,
+            constants=ON_SCREEN,
+        ),
     )
 
 
@@ -388,6 +399,18 @@ def test_cli_scripted_agent_person_confirms_key_admits(
         "--canary-param",
         "note=Canary test note",
         "--json",
+        "--teach-authorization",
+        str(
+            mockmed_note(
+                key_dir,
+                tmp_path / "teach-authorization",
+                "mockmed.compile_agent_cli",
+                mockmed,
+                note=NOTE,
+                record={"patient_id": "p1"},
+                constants=["Jane Sample", "MRN P1"],
+            ).statement
+        ),
     ]
     # No terminal: run 1 passes, and the checks wait for a person.
     args = build_parser().parse_args(argv)
