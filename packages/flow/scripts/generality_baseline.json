@@ -3,9 +3,6 @@
     "mockmed": 43,
     "textedit": 1
   },
-  "agent/ledger_demo.py": {
-    "mockmed": 4
-  },
   "api.py": {
     "mockmed": 1
   },
@@ -55,7 +52,7 @@
     "mockmed": 1
   },
   "demo_driver.py": {
-    "mockloan": 5
+    "mockloan": 2
   },
   "deployment.py": {
     "mockmed": 2,
@@ -108,27 +105,6 @@
     "espocrm": 2,
     "redmine": 2
   },
-  "guard_demo.py": {
-    "mockmed": 5,
-    "mockmed-records": 2,
-    "mockmed-write": 1
-  },
-  "integrations/harness2/__init__.py": {
-    "mockmed": 2
-  },
-  "integrations/harness2/adapter.py": {
-    "mockmed": 2
-  },
-  "integrations/harness2/agent.py": {
-    "mockmed": 1
-  },
-  "integrations/harness2/apps.py": {
-    "mockmed": 13,
-    "mockmed-records": 1
-  },
-  "integrations/harness2/tasks.py": {
-    "mockmed": 26
-  },
   "ir.py": {
     "token_main": 1
   },
@@ -143,9 +119,6 @@
   },
   "jit/signature.py": {
     "mockmed": 1
-  },
-  "learning/synth_stream.py": {
-    "mockmed": 5
   },
   "mockloan/__init__.py": {
     "mockloan": 2,
@@ -214,11 +187,14 @@
     "csrf_token_form": 2,
     "token_main": 1
   },
+  "reward/bundle.py": {
+    "mockmed": 3
+  },
   "reward/models.py": {
     "mockmed-records": 1
   },
   "reward/seed.py": {
-    "mockmed": 39
+    "mockmed": 34
   },
   "risk.py": {
     "openemr": 1,
