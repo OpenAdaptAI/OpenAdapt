@@ -100,6 +100,9 @@ def cmd_record(a: argparse.Namespace, app: AppBase) -> None:
         raise SystemExit(f"exists: {out}")
     start_proxy(app)
     values = app.recording_values()
+    if a.tag:
+        # A fresh demonstration never collides with a record an earlier run made.
+        values[app.unique_param] = f"{values[app.unique_param]} {a.tag}"
     before = app.rows()
     pw = sync_playwright().start()
     browser = pw.chromium.launch(headless=True)

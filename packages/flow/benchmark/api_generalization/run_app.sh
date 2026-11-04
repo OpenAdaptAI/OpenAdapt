@@ -16,7 +16,11 @@ H="$HERE/run.sh"
 load1() { sysctl -n vm.loadavg | awk '{print $2}'; }
 
 "$H" up --app "$APP"
-[ -d "$REC" ] || "$H" record --app "$APP" --out "$REC" | tee "$OUT/record.json"
+if [ ! -d "$REC" ]; then
+  # A demonstration the judge rejects stops this app (the recording is redone).
+  "$H" record --app "$APP" --out "$REC" --tag "rec$(date +%H%M)" > "$OUT/record.json" 2>&1 || {
+    rm -rf "${REC:?}"; echo "recording failed for $APP"; "$H" down --app "$APP"; exit 1; }
+fi
 rm -rf "${STATE:?}/${APP:?}/bundle" "${STATE:?}/${APP:?}/matrix" "${STATE:?}/${APP:?}/timing"
 "$H" compile --app "$APP" --recording "$REC" --out "$STATE/$APP/bundle" > "$OUT/compile.log" 2>&1
 cp "$STATE/$APP/bundle/apigen-compile.json" "$OUT/compile.json"
