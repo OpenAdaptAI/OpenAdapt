@@ -83,6 +83,11 @@ refuses a write when the record or its outcome cannot be established.
 
 ### Fixes
 
+- Rollback and qualification read-back distinguish nulls from missing fields
+  and the text `None`. An unresolved parameter mapping cannot establish that
+  an uncertain write landed. An on-screen check with no expected value reports
+  `INDETERMINATE` instead of matching only the record selector. SQL reward
+  read-back compares typed numbers by value.
 - Bookkeeping learning excludes fields the agent sent or read, including
   bracketed form-field names and requests captured while verification runs.
   Those fields cannot be proposed as excuses for unrelated database changes.
