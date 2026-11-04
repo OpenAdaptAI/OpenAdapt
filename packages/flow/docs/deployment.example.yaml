@@ -128,8 +128,12 @@ effects:
   #     field: patient_id                  # added to every row for matching
 
   # fhir (used when kind: fhir) ----------------------------------------------
-  # base_url: https://openemr.example.org/apis/default/fhir
-  # resource_type: Observation
+  # base_url: https://fhir.example.org/r4
+  # resource_type: Observation             # required: the app's resource
+  # field_paths:                           # required: where each field lives
+  #   id: id
+  #   patient: subject.reference
+  #   note: valueString
   # search_params: { category: vital-signs }
   # search_param_exprs:
   #   patient: { param: patient_ref }      # bound per-run

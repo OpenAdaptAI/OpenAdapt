@@ -98,6 +98,11 @@ def _run1_save(tmp_path: Path, base: str, store: _Store, **extra: Any) -> str:
                     "kind": "fhir",
                     "base_url": base,
                     "resource_type": "Observation",
+                    "field_paths": {
+                        "id": "id",
+                        "patient": "subject.reference",
+                        "note": "valueString",
+                    },
                     "timeout_s": 2.0,
                     **extra,
                 }
@@ -171,6 +176,7 @@ def test_run1_refuses_mapped_server_metadata_before_recording(
                 "verifier": {
                     "kind": "fhir",
                     "base_url": "https://example.test/fhir",
+                    "resource_type": "Observation",
                     "field_paths": {"revision": path},
                 }
             }
@@ -201,6 +207,7 @@ def test_run1_allows_only_explicitly_dropped_metadata(
     section = {
         "kind": "fhir",
         "base_url": base,
+        "resource_type": "Observation",
         "field_paths": {"id": "id", "revision": path},
         "records_drop_fields": ["revision"],
     }
@@ -223,6 +230,7 @@ def test_run1_keeps_stable_metadata_mappings(tmp_path: Path) -> None:
                 "verifier": {
                     "kind": "fhir",
                     "base_url": "https://example.test/fhir",
+                    "resource_type": "Observation",
                     "field_paths": {"profile": "meta.profile"},
                 }
             }

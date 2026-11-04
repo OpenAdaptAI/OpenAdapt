@@ -1,7 +1,7 @@
 """A throwaway approver for tests, demos and evaluations.
 
 A real teach authorization is signed by a person with their approver key
-(:mod:`openadapt_flow.teach_authorization`). Tests, the MockMed demos and the
+(:mod:`openadapt_flow.teach_authorization`). Tests, the demos and the
 injection evaluation need one without a person at the keyboard, so
 :class:`LocalAuthorizer` makes an Ed25519 approver key in memory, starts (or
 joins) a real signed approver roster in a key directory, and signs statements

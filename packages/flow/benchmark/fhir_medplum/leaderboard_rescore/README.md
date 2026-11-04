@@ -69,7 +69,9 @@ With the verifier able to read, specificity on the same runs is 46/72
 (claude) and 57/68 (openai) with the contracts on main, 55/72 and 42/68 with
 the pre-registered operations rule, and 64/72 and 57/68 with the
 exploratory v2 rule; sensitivity is 25/28 and 30/33 in each, every miss a
-write that lands after the check (A10).
+write that lands after the check (A10). Fara-7B's first half, registered
+separately in [PREREGISTRATION-FARA.md](PREREGISTRATION-FARA.md): 15/15 and
+2/2 in every column.
 
 ## Files
 

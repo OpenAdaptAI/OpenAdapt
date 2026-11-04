@@ -227,7 +227,7 @@ def _norm(value: str) -> str:
 def _scalars(body: str) -> set[str]:
     """Every scalar value in a JSON or form body, as text.
 
-    A form field holding JSON (as Frappe sends ``doc=...``) is read through.
+    A form field holding JSON (such as ``doc=...``) is read through.
     """
     from urllib.parse import parse_qsl
 
@@ -328,6 +328,11 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
     def __init__(self, env_dir: str | Path, *, screenshots: bool = False) -> None:
         super().__init__()
         self.env: EnvDirectory = load_environment(env_dir)
+        if self.env.manifest.app.kind == "desktop":
+            raise TaskError(
+                "a desktop environment runs in openadapt_flow.rl_env.desktop, "
+                "not the browser environment"
+            )
         self.screenshots = screenshots
         self._state = WebState(env_name=self.env.manifest.name)
         self._task: Optional[Task] = None

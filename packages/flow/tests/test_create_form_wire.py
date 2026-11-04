@@ -1166,7 +1166,9 @@ def test_an_api_span_after_a_late_refusal_halts_before_sending(
             report = Replayer(
                 backend,
                 web_form_actuator=actuator,
-                effect_verifier=RestRecordVerifier(sor_url.rstrip("/")),
+                effect_verifier=RestRecordVerifier(
+                    sor_url.rstrip("/"), records_path="/api/db", records_key="records"
+                ),
                 poll_interval_s=0.01,
             ).run(
                 _span_workflow(),
@@ -1269,7 +1271,9 @@ def test_a_late_refusal_adds_to_an_earlier_halt_instead_of_replacing_it(
             replayer = Replayer(
                 backend,
                 web_form_actuator=actuator,
-                effect_verifier=RestRecordVerifier(sor_url.rstrip("/")),
+                effect_verifier=RestRecordVerifier(
+                    sor_url.rstrip("/"), records_path="/api/db", records_key="records"
+                ),
                 poll_interval_s=0.01,
             )
             report = replayer.run(
