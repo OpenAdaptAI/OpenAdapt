@@ -242,6 +242,11 @@ class WindowsBackend:
             ``pin_fingerprint`` is set the pinning adapter is mounted onto it.
     """
 
+    #: ``element_identity_at`` asks UI Automation for the control under a
+    #: point across every window on the desktop (``ControlFromPoint``), so it
+    #: names whatever is on top there: a dialog, another app, nothing.
+    hit_test_sees_every_window = True
+
     def __init__(
         self,
         server_url: str = DEFAULT_SERVER_URL,
