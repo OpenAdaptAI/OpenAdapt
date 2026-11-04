@@ -65,7 +65,7 @@ from openadapt_flow.ir import (
     StructuralHandle,
     StructuralLocator,
 )
-from openadapt_flow.vision.match import Match
+from openadapt_flow.vision.match import LOCALITY_MIN_PX, Match, moved_off_spot
 from openadapt_flow.vision.ocr import (
     AmbiguousOcrMatchError,
     ContradictoryOcrEvidenceError,
@@ -147,6 +147,8 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         DEFAULT_TEMPLATE_SCALES,
         LOCALITY_MIN_PX,
         MAX_PEAKS,
+        SAME_SPOT_MIN_PX,
+        SAME_SPOT_SHARE,
     )
 
     payload = {
@@ -161,6 +163,11 @@ def visual_resolution_evaluator_contract_sha256() -> str:
         "template_locality_min_px": LOCALITY_MIN_PX,
         "template_max_peaks": MAX_PEAKS,
         "template_ambiguity_suspicion_score": AMBIGUITY_SUSPICION_SCORE,
+        "template_moved_lookalike": {
+            "same_spot": ["per-axis", SAME_SPOT_MIN_PX, SAME_SPOT_SHARE],
+            "landmark_share": _MOVED_MATCH_LANDMARK_SHARE,
+            "ocr_local_copy": "whole-frame-unless-in-recorded-region",
+        },
         "template_scales": list(DEFAULT_TEMPLATE_SCALES),
         "ambiguity": "unique-or-independent-retained-evidence",
         "ocr_candidates": "full-frame-enumeration-then-local-region-filter",
@@ -397,10 +404,6 @@ def _estimates_conflict(estimates: list[Point]) -> bool:
     )
 
 
-#: A template match whose origin is farther than this from the recorded
-#: origin (px, or this share of the crop's short side when larger) has moved.
-_SAME_SPOT_MIN_PX = 6
-_SAME_SPOT_SHARE = 0.25
 #: A landmark supports a moved template match when it predicts the click
 #: within this share of the match's short side (8 px at least).
 _MOVED_MATCH_LANDMARK_SHARE = 0.5
@@ -417,11 +420,15 @@ def _moved_match_unsupported(
     neighbour. A moved match is also unsupported when the anchor kept
     landmarks and none of them is found. ``_landmarks_contradict``'s 40 px tolerance is wider than a
     form's row pitch, so it cannot tell the two apart; this test uses the
-    control's own size instead.
+    control's own size instead. Only a move inside the matcher's locality
+    radius, where the next row's copy can sit, is tested.
     """
     x, y, w, h = anchor.region
-    moved = math.hypot(matched[0] - x, matched[1] - y)
-    if moved <= max(_SAME_SPOT_MIN_PX, _SAME_SPOT_SHARE * min(w, h)):
+    if not moved_off_spot(matched[0] - x, matched[1] - y, w, h):
+        return False
+    if math.hypot(matched[0] - x, matched[1] - y) > max(LOCALITY_MIN_PX, min(w, h)):
+        # A far move is the matcher's lone unique peak, which its own
+        # whole-frame test already admitted; no neighbour is in question.
         return False
     tolerance = max(8.0, _MOVED_MATCH_LANDMARK_SHARE * min(matched[2], matched[3]))
     retained = located = 0
@@ -827,10 +834,12 @@ def _model_grounded(
             landmark.dx_px is not None and landmark.dy_px is not None
             for landmark in anchor.landmarks
         )
-        moved = math.hypot(
+        moved = moved_off_spot(
             click(only)[0] - anchor.click_point[0],
             click(only)[1] - anchor.click_point[1],
-        ) > max(_SAME_SPOT_MIN_PX, _SAME_SPOT_SHARE * min(anchor.region[2:]))
+            anchor.region[2],
+            anchor.region[3],
+        )
         if retained and not located and moved:
             # The one look-alike is off the recorded spot and none of the
             # recorded context is found to check the move: a control whose

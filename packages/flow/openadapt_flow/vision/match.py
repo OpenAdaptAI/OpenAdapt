@@ -102,12 +102,20 @@ MAX_PEAKS = 16
 # lone crisp decoy is refused. A refusal here falls through to the ocr/geometry/
 # grounder rungs (stronger POSITION evidence), never to a silent click.
 AMBIGUITY_SUSPICION_SCORE = 0.7
-# A peak within this distance of the expected centre (px, or this share of the
-# template's short side when larger) is the recorded spot itself, redrawn with
-# codec or sub-pixel jitter. Farther than that, inside the locality radius, it
-# may be a neighbouring row's copy of the widget.
+# A neighbouring copy of a widget cannot overlap it, so a match shifted by less
+# than this share of the widget's width (horizontally) or height (vertically)
+# is the recorded widget itself, redrawn with jitter or a small reflow. Shifted
+# farther, inside the locality radius, it may be the next row's copy.
+SAME_SPOT_SHARE = 0.75
 SAME_SPOT_MIN_PX = 6
-SAME_SPOT_SHARE = 0.25
+
+
+def moved_off_spot(dx: float, dy: float, w: int, h: int) -> bool:
+    """Whether a match ``(dx, dy)`` from the recorded spot could be another
+    copy of a ``w`` x ``h`` widget rather than the widget itself."""
+    return abs(dx) >= max(SAME_SPOT_MIN_PX, SAME_SPOT_SHARE * w) or abs(dy) >= max(
+        SAME_SPOT_MIN_PX, SAME_SPOT_SHARE * h
+    )
 
 
 def _repeated_on_frame(
@@ -246,8 +254,8 @@ def _find_template_arrays(
             # NEXT row's identical widget when the target itself moved away.
             # A peak off the recorded spot is kept only when nothing else on
             # the whole frame looks like the template.
-            if _center_dist((score, mx, my)) > max(
-                SAME_SPOT_MIN_PX, SAME_SPOT_SHARE * min(mw, mh)
+            if moved_off_spot(
+                mx + mw // 2 - px, my + mh // 2 - py, mw, mh
             ) and _repeated_on_frame(screen, template, mw, mh):
                 return None
         elif len(peaks) >= 2:
