@@ -17,6 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from urllib.request import urlopen
+from xml.etree import ElementTree
 
 import pytest
 from PIL import Image
@@ -1472,6 +1473,7 @@ def _run_live_cdp_attach_in_child(
     """Run this test's body in a child pytest process with a hard budget."""
 
     watchdog = tmp_path / "trial-watchdog.txt"
+    report = tmp_path / "child-report.xml"
     env = {
         key: value
         for key, value in os.environ.items()
@@ -1489,6 +1491,7 @@ def _run_live_cdp_attach_in_child(
         "-p",
         "no:cacheprovider",
         f"--basetemp={tmp_path / 'child'}",
+        f"--junitxml={report}",
     ]
     process = subprocess.Popen(
         command,
@@ -1516,9 +1519,29 @@ def _run_live_cdp_attach_in_child(
     )
     if timed_out:
         pytest.fail(f"the live CDP attach child exceeded {total_budget_s} s{detail}")
-    assert process.returncode == 0, (
-        f"the live CDP attach child failed (exit {process.returncode}){detail}"
-    )
+    if process.returncode != 0:
+        pytest.fail(
+            f"the live CDP attach child failed (exit {process.returncode}){detail}"
+        )
+    # Exit 0 alone is not a pass: pytest exits 0 for a skipped test, and a
+    # child that calls os._exit(0) early exits 0 without running anything.
+    outcome = _child_test_outcome(report)
+    if outcome != "passed":
+        pytest.fail(f"the live CDP attach child did not pass: {outcome}{detail}")
+
+
+def _child_test_outcome(report: Path) -> str:
+    """Read the child's JUnit report: "passed" only for one completed pass."""
+
+    if not report.exists():
+        return "no test report (the child exited before pytest finished)"
+    cases = list(ElementTree.parse(report).getroot().iter("testcase"))
+    if len(cases) != 1:
+        return f"{len(cases)} tests ran, expected exactly one"
+    for tag in ("skipped", "failure", "error"):
+        if cases[0].find(tag) is not None:
+            return tag
+    return "passed"
 
 
 def _arm_live_cdp_trial_watchdog(
@@ -1555,6 +1578,47 @@ def _arm_live_cdp_trial_watchdog(
         sys.modules[__name__], "record_interactive", bounded_record_interactive
     )
     faulthandler.dump_traceback_later(_LIVE_CDP_TRIAL_BUDGET_S, exit=True, file=log)
+
+
+def _run_fake_live_child(tmp_path: Path, body: str, **kwargs: Any) -> None:
+    """Run a stand-in child test through the live test's child runner."""
+
+    test_file = tmp_path / "test_fake_live_child.py"
+    test_file.write_text(
+        "import os\nimport time\n\nimport pytest\n\n\n"
+        f"def test_fake_live_child():\n    {body}\n",
+        encoding="utf-8",
+    )
+    request = SimpleNamespace(
+        node=SimpleNamespace(nodeid=str(test_file)),
+        config=SimpleNamespace(rootpath=tmp_path),
+    )
+    _run_live_cdp_attach_in_child(request, tmp_path, **kwargs)
+
+
+def test_live_cdp_child_runner_accepts_a_completed_pass(tmp_path: Path) -> None:
+    _run_fake_live_child(tmp_path, "assert True")
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        ("pytest.skip('child-only skip')", "did not pass: skipped"),
+        ("os._exit(0)", "no test report"),
+        ("assert False", r"child failed \(exit 1\)"),
+    ],
+    ids=["skipped", "early-zero-exit", "assertion"],
+)
+def test_live_cdp_child_runner_rejects_a_child_that_did_not_pass(
+    tmp_path: Path, body: str, reason: str
+) -> None:
+    with pytest.raises(pytest.fail.Exception, match=reason):
+        _run_fake_live_child(tmp_path, body)
+
+
+def test_live_cdp_child_runner_kills_a_child_over_its_budget(tmp_path: Path) -> None:
+    with pytest.raises(pytest.fail.Exception, match="exceeded 3 s"):
+        _run_fake_live_child(tmp_path, "time.sleep(60)", total_budget_s=3)
 
 
 @pytest.mark.timeout(_LIVE_CDP_TOTAL_BUDGET_S + 60)
