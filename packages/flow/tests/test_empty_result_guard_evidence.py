@@ -294,6 +294,19 @@ def test_a_disagreeing_guard_off_the_straight_path_refuses() -> None:
         _refuse_unreconciled_guards([col], set(), result)
         assert bool(result.uncertainties) is refused, texts
 
+    # A Confirm off the straight path with no check is noted once.
+    col = _Column(("click", "confirm:select:button"), "single")
+    col.tokens[0] = _SingleTok(confirm(None))
+    col.tokens[1] = _SingleTok(confirm(None))
+    result = InductionResult(n_traces=2)
+    pairs = [{("step_002", "step_003")}, {("step_002", "step_003")}]
+    _refuse_unreconciled_guards([col], set(), result, pairs)
+    assert not result.uncertainties
+    (note,) = result.guard_notes
+    assert note["change"] == "no_empty_result_guard"
+    assert (note["step"], note["confirm_step"]) == ("step_002", "step_003")
+    assert "straight path" in note["warning"]
+
     # The opener's exact postcondition is compared the same way.
     opener = Step(id="step_002", intent="click 'Create'", action=ActionKind.CLICK)
     col = _Column(("click", "select:button"), "single")

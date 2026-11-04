@@ -1573,8 +1573,10 @@ def _reconcile_dialog_guards(
     When no trace mined one, the candidate line each trace's compile kept
     (``dialog_line``, in any language) becomes the check when every trace has
     the same line, there are two or more traces, and every value typed
-    before the opener (since the last save) differs between them. Record data changes with the
-    search; the dialog's own statement does not.
+    before the opener differs between them. Record data changes with the
+    search; the dialog's own statement does not. A value chosen by a click
+    (a list row) is not seen here: the same row clicked in every
+    demonstration does not stop the line from being mined.
     """
 
     from openadapt_flow.compiler.empty_result_guard import exact_checks
@@ -1632,19 +1634,11 @@ def _reconcile_dialog_guards(
             continue
         lines = [_dialog_line(trace_notes[t], openers[t].id) for t in range(n)]
         line_keys = {text_key(line) for line in lines if line}
-        # Every value typed since the last save, before the opener: the
-        # search is one of them, and any of them may feed the dialog.
-        start = max(
-            (
-                j + 1
-                for j in range(idx - 1)
-                if any(step.risk == "irreversible" for step in _col_steps(columns[j]))
-            ),
-            default=0,
-        )
+        # Every value typed before the opener: the search is one of them,
+        # and any of them may feed the dialog.
         typed = [
             j
-            for j in range(start, idx - 1)
+            for j in range(idx - 1)
             if any(
                 step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
                 for step in _col_steps(columns[j])
@@ -1677,9 +1671,9 @@ def _reconcile_dialog_guards(
         confirm.guard = guard
         note(
             "empty_result_guard",
-            f"the same dialog line in all {n} demonstrations, whose typed "
-            "values all differed; checked after the opener and before the "
-            "Confirm click",
+            f"the same dialog line in all {n} demonstrations, while every "
+            "value typed before the dialog differed between them; checked "
+            "after the opener and before the Confirm click",
         )
     _refuse_unreconciled_guards(columns, handled, result, pairs)
 
@@ -1720,18 +1714,20 @@ def _refuse_unreconciled_guards(columns, handled, result, pairs=None) -> None:
             rows = [[tok.step]] if tok.kind == "single" else tok.iterations
             shapes.update(checks(row) for row in rows)
         if all(check == "|" for shape in shapes for check in shape):
-            for t, tok in sorted(col.tokens.items()):
-                for step in _tok_steps(tok):
-                    if (t, step.id) in confirms:
-                        _guard_note(
-                            result,
-                            confirms[(t, step.id)],
-                            step.id,
-                            "no_empty_result_guard",
-                            "no check that the dialog found nothing: the "
-                            "dialog is not on every demonstration's straight "
-                            f"path (recording {t})",
-                        )
+            # One note per column, naming the step the program copied (the
+            # first trace's, its first row's).
+            t, tok = min(col.tokens.items())
+            first = [[tok.step]] if tok.kind == "single" else tok.iterations[:1]
+            for step in (step for row in first for step in row):
+                if (t, step.id) in confirms:
+                    _guard_note(
+                        result,
+                        confirms[(t, step.id)],
+                        step.id,
+                        "no_empty_result_guard",
+                        "no check that the dialog found nothing: the dialog "
+                        "is not on every demonstration's straight path",
+                    )
             continue
         if len(shapes) == 1:
             continue

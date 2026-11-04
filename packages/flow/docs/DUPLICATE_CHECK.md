@@ -41,6 +41,9 @@ Limits:
   is no such contrast check yet. The business-rule run is what catches it,
   and the qualification campaign reads linear bundles only, so an induced
   bundle that carries such a check can't be qualified yet.
+- Only typed and selected values count as the search. A record chosen by
+  clicking a list row is not seen: the same row clicked in every
+  demonstration doesn't stop the line from being mined.
 - The confirmation pair itself is still found from English button labels
   ("Confirm", "Yes").
 
