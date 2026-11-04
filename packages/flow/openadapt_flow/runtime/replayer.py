@@ -48,6 +48,7 @@ import struct
 import threading
 import time
 import uuid
+from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -85,6 +86,7 @@ from openadapt_flow.backend import (
     RemoteFrameContractBackend,
     RichPointerActionBackend,
     SelectOptionBackend,
+    StructuralBackend,
     StructuralElementNotActionable,
     StructuralResolutionRefused,
     SubmitBindingBackend,
@@ -17536,14 +17538,12 @@ class Replayer:
         """Did the just-typed ``text`` visibly land?
 
         Exact structural readback is authoritative when the backend exposes
-        it. Otherwise, for an OCR-able value (>=
-        ``identity.MIN_PARAM_CHARS`` squashed chars), a contiguous squashed
-        run of the value (retried at 2x resolution) must be readable in the
-        field region. Pixel-only acceptance is restricted to steps declared
-        ``secret``: masked password dots may render no readable text. A dialog
+        it. Otherwise the complete whitespace-squashed value must match the
+        field's new OCR text (retried at 2x resolution), including short values.
+        Whole unchanged context lines may be excluded. Pixel-only acceptance
+        is restricted to steps declared ``secret``: masked password dots may render no readable text. A dialog
         painting over the region or an unreadable ordinary field must never
-        count as "input landed". Values too short for OCR to arbitrate retain
-        the legacy diff fallback.
+        count as "input landed".
 
         Returns:
             ``(landed, changed)`` — the verdict, and whether the field
@@ -17606,21 +17606,45 @@ class Replayer:
                 == identity_mod.squash(text).casefold()
             ):
                 return True, True
+        if not changed:
+            return False, False
         needle = identity_mod.squash(text)
-        if len(needle) < identity_mod.MIN_PARAM_CHARS:
-            return changed, changed  # too short for OCR to arbitrate
-        need = identity_mod.required_run(len(needle))
-        after_hay = self._ocr_squashed(after_png, region)
-        if identity_mod.longest_run(needle, after_hay) >= need:
+
+        def exact_ocr_value(
+            before: bytes, after: bytes, crop: Optional[Region]
+        ) -> bool:
+            observed = [
+                identity_mod.squash(line.text)
+                for line in self.vision.ocr(after, region=crop)
+                if identity_mod.squash(line.text)
+            ]
+            if needle and "".join(observed) == needle:
+                return True
+            if allow_masked or not needle:
+                return False
+            # The readback window may include unchanged labels beside the
+            # field. Remove whole unchanged OCR lines, with multiplicity;
+            # every remaining character must belong to the complete value.
+            previous = Counter(
+                identity_mod.squash(line.text)
+                for line in self.vision.ocr(before, region=crop)
+            )
+            added = []
+            for value in observed:
+                if previous[value]:
+                    previous[value] -= 1
+                else:
+                    added.append(value)
+            return "".join(added) == needle
+
+        if exact_ocr_value(baseline_png, after_png, region):
             return True, changed
         if region is not None:
             upscaled = identity_mod.upscale_crop(after_png, region)
-            if upscaled is not None:
-                up_hay = self._ocr_squashed(upscaled, None)
-                if identity_mod.longest_run(needle, up_hay) >= need:
+            before_upscaled = identity_mod.upscale_crop(baseline_png, region)
+            if upscaled is not None and before_upscaled is not None:
+                if exact_ocr_value(before_upscaled, upscaled, None):
                     return True, changed
-        if not changed:
-            return False, False
         # Pixels changed but the value is unreadable: masked rendering is
         # the only acceptable explanation, and masked rendering adds no
         # confidently readable alphanumeric text (dot glyphs OCR as
@@ -17656,10 +17680,10 @@ class Replayer:
     ) -> Optional[str]:
         """Verify a TYPE action landed; one guarded refocus-and-retype retry.
 
-        The retry only fires when exact readback or pixels prove the first
-        attempt changed NOTHING in the field (keystrokes fell on a
-        non-rendering target): re-click
-        the field (when its point is known), select-all so a false-negative
+        A retry needs a browser surface, structural browser observations and
+        exact field readback proving no change. An opaque or native surface
+        cannot prove where the first input went and must halt. For a browser,
+        re-click the field (when its point is known), select-all so a false-negative
         first attempt is replaced rather than duplicated, retype. When the
         region DID change but the value cannot be read (a dialog over the
         field, an unexpected re-render), retyping is not safe — select-all
@@ -17689,12 +17713,24 @@ class Replayer:
                 "or instead of the input) — retyping is unsafe in this "
                 "state; run aborted"
             )
-        if not allow_retry:
+        can_retry = (
+            allow_retry
+            and workflow.surface in (None, "web")
+            and isinstance(self.backend, StructuralBackend)
+            and bool(self.backend.url)
+            and baseline_field_value is not None
+        )
+        if not can_retry:
             result.input_verified = False
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                return refusal
             return (
                 f"Typed input could not be verified for step '{step.id}' "
-                f"({step.intent}): the identity-bound browser field showed no "
-                "confirmed change; refusing an unleased refocus/retype retry"
+                f"({step.intent}): the target field showed no confirmed change; "
+                "refusing an unleased refocus/retype retry after possibly stray input"
             )
         result.input_retried = True
         retry_resolution = resolution
