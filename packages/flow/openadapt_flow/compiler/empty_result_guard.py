@@ -36,6 +36,17 @@ The statement becomes two exact checks (read exactly once, never by the fuzzy
 OCR match): a ``TEXT_PRESENT`` postcondition of the opener, and a ``TEXT_PRESENT``
 guard on the confirm step, checked on the screen right before the Confirm
 click (an early empty state that a slower result replaces is caught there).
+
+The vocabulary is English. A statement in any other words is found by
+:func:`dialog_statement` instead, which knows no words at all: it takes the
+one line the dialog added (not its title, not its button row), when that line
+is confidently read, shown once, not a question, and carries no run value,
+number other than 0, email address, or PHI the optional scrubber finds. One demonstration cannot tell such a line from
+record data, so a compile keeps it only as a candidate in its
+``no_empty_result_guard`` note. Induction mines it when two or more
+demonstrations whose search inputs differ all show the same line
+(:mod:`openadapt_flow.compiler.induction`): record data changes with the
+search, the dialog's own words do not.
 """
 
 from __future__ import annotations
@@ -173,14 +184,21 @@ def mine_empty_result_guard(
             note="the dialog's empty search result carries a run value or PHI",
             statements=shown,
         )
-    return MinedGuard(
-        postcondition=Postcondition(
+    postcondition, guard = exact_checks(text)
+    return MinedGuard(postcondition=postcondition, guard=guard, statements=shown)
+
+
+def exact_checks(text: str) -> tuple[Postcondition, Guard]:
+    """The opener's postcondition and the confirm step's guard for ``text``."""
+
+    return (
+        Postcondition(
             kind=PostconditionKind.TEXT_PRESENT,
             text=text,
             timeout_s=GUARD_TIMEOUT_S,
             exact=True,
         ),
-        guard=Guard(
+        Guard(
             predicate=Predicate(
                 kind=PredicateKind.TEXT_PRESENT,
                 text=text,
@@ -189,8 +207,108 @@ def mine_empty_result_guard(
             ),
             on_unmet="halt",
         ),
-        statements=shown,
     )
+
+
+def looks_like_data(text: str) -> bool:
+    """Whether ``text`` carries a number other than 0, or an email address.
+
+    Counts, dates, ids and addresses change from record to record; a dialog's
+    own statement of an empty result needs none of them ("0 Treffer" is fine).
+    """
+
+    if "@" in text:
+        return True
+    return any(run != "0" for run in re.findall(r"\d+", text))
+
+
+def _overlaps_vertically(a: OcrLine, b: OcrLine) -> bool:
+    _ax, ay, _aw, ah = a.region
+    _bx, by, _bw, bh = b.region
+    return ay < by + bh and by < ay + ah
+
+
+def _contains(line: OcrLine, point: tuple[int, int]) -> bool:
+    x, y, w, h = line.region
+    return x <= point[0] <= x + w and y <= point[1] <= y + h
+
+
+def _exact_count(lines: Sequence[OcrLine], key: str) -> int:
+    return sum(
+        1
+        for readings in wrapped_readings(lines, min_confidence=MIN_CONFIDENCE)
+        if any(text_key(reading) == key for reading in readings)
+    )
+
+
+def dialog_statement(
+    opener_before: Sequence[OcrLine],
+    opener_after: Sequence[OcrLine],
+    confirm_before: Sequence[OcrLine],
+    *,
+    confirm_point: tuple[int, int],
+    title: Optional[str],
+    labels: Sequence[str] = (),
+    reject: Callable[[str], bool] = lambda _text: False,
+) -> tuple[Optional[str], str]:
+    """The one line a dialog added, in any language, or why there is none.
+
+    The line is what the dialog shows besides its title and its button row:
+    every line on the Confirm screen that was not on the screen before the
+    opener click, other than ``title`` (the dialog's accessible name, recorded
+    by the browser), the lines level with the Confirm button (``Cancel``
+    beside it), and ``labels`` (the names of controls the demonstration
+    clicked). It must be exactly one line, or one line wrapped over up to
+    three, every part read at confidence 0.8 or more; shown once on the
+    Confirm screen and at most once after the opener; free of numbers other
+    than 0 and email addresses (:func:`looks_like_data`); not a question
+    ("Are you sure?"); and ``reject`` (run values, and PHI when the optional
+    privacy scrubber is installed) must not refuse it.
+
+    Returns:
+        ``(line, "")``, or ``(None, reason)``. A line returned here is only a
+        candidate: nothing on one screen tells a dialog's statement from a
+        record it lists. It becomes a check only with the evidence induction
+        adds (the same line across demonstrations with different searches).
+    """
+
+    if not title or not text_key(title):
+        return None, "the recording does not name the dialog, so its title is unknown"
+    rows = [line for line in confirm_before if _contains(line, confirm_point)]
+    if not rows:
+        return None, "the Confirm button's label was not read"
+    before = {
+        text_key(reading)
+        for readings in wrapped_readings(opener_before)
+        for reading in readings
+    }
+    skip = {text_key(title), *(text_key(label) for label in labels)}
+    added = [
+        line
+        for line in confirm_before
+        if text_key(line.text)
+        and text_key(line.text) not in before
+        and text_key(line.text) not in skip
+        and not any(_overlaps_vertically(line, row) for row in rows)
+    ]
+    if not added:
+        return None, "the dialog shows no line besides its title and buttons"
+    if any(line.confidence < MIN_CONFIDENCE for line in added):
+        return None, "a line the dialog shows is not confidently read"
+    top = min(added, key=lambda line: (line.region[1], line.region[0]))
+    readings = wrapped_readings([top, *(line for line in added if line is not top)])
+    if len(readings[0]) != len(added):
+        return None, f"the dialog shows {len(added)} lines, not one statement"
+    text = readings[0][-1]
+    key = text_key(text)
+    if _exact_count(confirm_before, key) != 1 or _exact_count(opener_after, key) > 1:
+        return None, "the dialog's line is shown more than once"
+    if looks_like_data(text) or reject(text):
+        return None, "the dialog's line carries a run value, PHI or a number"
+    if text.rstrip().endswith(("?", "\uff1f", "\u061f")):
+        # "Are you sure?" stays on screen whatever the search found.
+        return None, "the dialog's line is a question, not a search result"
+    return text, ""
 
 
 def carries_value(text: str, values: Sequence[str]) -> bool:
@@ -243,9 +361,12 @@ __all__ = [
     "GUARD_TIMEOUT_S",
     "MinedGuard",
     "carries_value",
+    "dialog_statement",
     "empty_result_statements",
+    "exact_checks",
     "has_text_check",
     "is_empty_result_check",
     "is_empty_result_statement",
+    "looks_like_data",
     "mine_empty_result_guard",
 ]

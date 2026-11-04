@@ -6,9 +6,9 @@ name: Nightly
 # fast lane, so a package nobody touched can break on main unseen: a new
 # runner image, a published dependency, a sibling's change it is not
 # re-tested against. This runs Packages (which calls the Desktop test and
-# build workflows) and the launcher CI as a schedule or dispatch, the tier
-# that runs every job, then keeps one "main is red" issue in step with the
-# result. It changes no required check and nothing on the PR lane.
+# build workflows), the launcher CI and the desktop replay jobs as a
+# schedule or dispatch, the tier that runs every job, then keeps one "main is
+# red" issue in step with the result. It changes no required check and nothing on the PR lane.
 
 on:
   schedule:
@@ -33,9 +33,13 @@ jobs:
     name: launcher
     uses: ./.github/workflows/main.yml
 
+  desktop-replay:
+    name: desktop replay
+    uses: ./.github/workflows/desktop-replay.yml
+
   report:
     name: main is red issue
-    needs: [packages, launcher]
+    needs: [packages, launcher, desktop-replay]
     # Runs after failures too, but not when someone cancels the run, and
     # only for main: a dispatch from a branch reports nothing.
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}

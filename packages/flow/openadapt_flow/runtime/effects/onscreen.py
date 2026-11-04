@@ -46,7 +46,6 @@ runtime plumbing, with ``substrate="onscreen"``.
 
 from __future__ import annotations
 
-import difflib
 import re
 from typing import Any, Optional
 
@@ -262,19 +261,17 @@ def _normalize(text: str) -> str:
 def value_matches(
     haystack: str, expected: str, *, min_ratio: float = READBACK_MIN_RATIO
 ) -> bool:
-    """Whether ``expected`` is present in normalized ``haystack`` at ``min_ratio``."""
-    want = _normalize(expected)
-    if not want:
+    """Whether normalized ``haystack`` is exactly ``expected`` (whole field).
+
+    Typed and exact (:func:`~openadapt_flow.runtime.effects.readback_values.compare_value`):
+    ``Ann Smith`` is not ``Ann Smithers`` and ``250`` is not ``$1,250.00``.
+    There is no fuzzy or substring match; ``min_ratio`` is kept for callers
+    and no longer used.
+    """
+
+    if not _normalize(expected):
         return False
-    if want in haystack:
-        return True
-    # Longest contiguous run (tolerant of the value embedded in surrounding
-    # label text, e.g. "saved note for patient 3" containing the value).
-    squashed_want = "".join(want.split())
-    squashed_hay = "".join(haystack.split())
-    matcher = difflib.SequenceMatcher(None, squashed_want, squashed_hay, autojunk=False)
-    longest = max((b.size for b in matcher.get_matching_blocks()), default=0)
-    return longest >= min_ratio * len(squashed_want)
+    return compare_value(haystack, expected, source="structure") == "match"
 
 
 class OnScreenReadbackVerifier(VerifierAdapterBase):
@@ -293,7 +290,7 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         region: The ``(x, y, w, h)`` saved-value region to OCR. May be ``None``
             when each effect carries its own :attr:`ReadbackSpec.region`
             (the auto-derived path); a per-effect region wins over this one.
-        min_ratio: Fuzzy-match floor to accept the expected value.
+        min_ratio: Unused; kept for callers. Read-backs compare exactly.
         vision: Namespace exposing ``ocr(png, region=...)`` (injectable for
             tests); defaults to :mod:`openadapt_flow.vision`.
         reference_value: A reference number read before this verifier runs
@@ -391,10 +388,6 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         text = _normalize(" ".join(line.text for line in lines))
         conf = max((float(line.confidence) for line in lines), default=0.0)
         return text, conf
-
-    def _match(self, haystack: str, expected: str) -> bool:
-        """Whether ``expected`` is present in ``haystack`` at ``min_ratio``."""
-        return value_matches(haystack, expected, min_ratio=self._min_ratio)
 
     # -- re-navigation (DIFFERENT-PATH only) ---------------------------------
 
@@ -570,8 +563,8 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
     ) -> EffectVerdict:
         """Rule on whether ``expected_text`` is on the saved-value region NOW.
 
-        - CONFIRMED   — the expected value reads back in the region (fuzzy
-          for free text; normalized-exact for codes, dates and amounts).
+        - CONFIRMED   — the region reads as exactly the expected value, as a
+          whole field, normalized only by its kind (``readback_values``).
         - INDETERMINATE — the region has no readable text, or the read differs
           from the expected value only in glyphs OCR confuses (``O``/``0``,
           ``l``/``1``) or is a date that reads two ways -> HALT.
@@ -615,16 +608,16 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                 substrate=self.substrate,
                 reason=(
                     "the read differs from the expected value only in "
-                    "characters OCR can't tell apart (O/0, l/1) or reads as "
-                    "more than one date; cannot certify write"
+                    "characters OCR can't tell apart (O/0, l/1), reads as "
+                    "more than one date, or shows the value among other "
+                    "text; cannot certify write"
                 ),
                 observed_value=text,
                 expected_value=expected_text,
             )
-        matched = comparison == "match" or (
-            value_kind == "text" and self._match(text, expected_text)
-        )
-        if matched:
+        # Whole field only: a value found inside a longer read is ambiguous
+        # (above), and there is no fuzzy fallback.
+        if comparison == "match":
             return EffectVerdict(
                 verdict=Verdict.CONFIRMED,
                 kind=EffectKind.FIELD_EQUALS,
@@ -850,7 +843,7 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                 date_order=date_order,
                 exact=False,
             )
-            == "match"
+            == "ambiguous"
         )
         if not matched and (comparison == "ambiguous" or contained):
             # The element holds more than the field (an accessibility row,

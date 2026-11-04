@@ -117,9 +117,13 @@ def main(argv: list[str] | None = None) -> int:
     # 3. Independent channel: the app's scheduled report export, taken from
     #    saved data rather than the open session, so it is committed_store.
     export_file = app.export_csv(out / "app_report_export.csv")
-    rows = {row["account_number"]: row for row in csv.DictReader(export_file.open())}
+    exported = list(csv.DictReader(export_file.open()))
+    rows = {row["account_number"]: row for row in exported}
     for i, record in enumerate(records):
         row = rows[record.record_key]
+        # The read says which record it took and how many rows matched, so
+        # a duplicated or missing account never passes as one record.
+        matched = sum(r["account_number"] == record.record_key for r in exported)
         fields = tuple(
             add_read(
                 SCHEMA.field(f.field),
@@ -129,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
                     "export",
                     row[f.field],
                     source_kind="committed_store",
+                    record_id=record.record_key,
+                    record_count=matched,
                 ),
             )
             for f in record.fields

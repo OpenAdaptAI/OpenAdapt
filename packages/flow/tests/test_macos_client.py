@@ -248,6 +248,13 @@ def _ax_module(
     selected_settable: bool = True,
     stale_top_level: bool = False,
     set_result: int = 0,
+    value_settable: bool = False,
+    value: str | None = None,
+    selected_range: tuple[int, int] | None = None,
+    readback: str | None = None,
+    parent_walk: bool = False,
+    walk_reaches_app: bool = False,
+    value_drifts: bool = False,
 ):
     module = types.ModuleType("ApplicationServices")
     module.kAXWindowsAttribute = "windows"
@@ -259,6 +266,13 @@ def _ax_module(
     module.kAXFocusedUIElementAttribute = "focused-element"
     module.kAXTopLevelUIElementAttribute = "top-level"
     module.kAXSelectedTextAttribute = "selected-text"
+    module.kAXValueAttribute = "value"
+    module.kAXSelectedTextRangeAttribute = "selected-range"
+    module.kAXValueCFRangeType = "cf-range"
+    module.kAXParentAttribute = "parent"
+    module.kAXRoleAttribute = "role"
+    module.AXValueCreate = lambda kind, raw: (kind, tuple(raw))
+    module.AXValueGetValue = lambda raw, kind, _out: (raw[0] == kind, raw[1])
 
     app = object()
     target = object()
@@ -277,18 +291,39 @@ def _ax_module(
         ),
         (other, "title"): focused_title,
     }
+    if value is not None:
+        values[(focused, "value")] = value
+    if selected_range is not None:
+        values[(focused, "selected-range")] = ("cf-range", selected_range)
+    if parent_walk:
+        # Qt's item views: no AXTopLevelUIElement; the window is up the tree.
+        del values[(focused, "top-level")]
+        table = object()
+        values[(focused, "parent")] = table
+        values[(table, "role")] = "AXTable"
+        values[(table, "parent")] = app if walk_reaches_app else target
+        values[(target, "role")] = "AXWindow"
+        values[(app, "role")] = "AXApplication"
     calls: list[tuple] = []
 
     module.AXUIElementCreateApplication = lambda pid: app if pid == 9001 else None
 
+    reads = {"value": 0}
+
     def copy(element, attribute, _error):
         key = (element, attribute)
+        if value_drifts and key == (focused, "value"):
+            # Something else edits the field between two reads.
+            reads["value"] += 1
+            return 0, values[key] + "x" * (reads["value"] - 1)
         return (0, values[key]) if key in values else (1, None)
 
     def set_value(element, attribute, value):
         calls.append(("set", element, attribute, value))
         if set_result == 0:
-            values[(element, attribute)] = value
+            values[(element, attribute)] = (
+                readback if readback is not None and attribute == "value" else value
+            )
         return set_result
 
     module.AXUIElementCopyAttributeValue = copy
@@ -299,6 +334,8 @@ def _ax_module(
             return 1, False
         if attribute == "selected-text":
             return 0, selected_settable
+        if attribute == "value":
+            return 0, value_settable
         return 1, False
 
     module.AXUIElementIsAttributeSettable = is_settable
@@ -511,4 +548,82 @@ def test_replace_selected_text_refuses_duplicate_ax_target_titles(monkeypatch) -
     monkeypatch.setitem(sys.modules, "ApplicationServices", module)
 
     assert MacWindowClient().replace_selected_text(_window(), "must not land") is False
+    assert calls == []
+
+
+# -- toolkits that allow only AXValue (Qt line edits) --------------------------
+
+
+def test_value_only_field_gets_the_text_spliced_over_the_selection(
+    monkeypatch,
+) -> None:
+    module, _app, _target, focused, calls = _ax_module(
+        selected_settable=False,
+        value_settable=True,
+        value="endocrine",
+        selected_range=(0, 9),
+    )
+    monkeypatch.setitem(sys.modules, "ApplicationServices", module)
+
+    assert MacWindowClient().replace_selected_text(_window(), "review-q4") is True
+    assert calls == [
+        ("set", focused, "value", "review-q4"),
+        ("set", focused, "selected-range", ("cf-range", (9, 0))),
+    ]
+
+
+def test_value_only_field_inserts_at_the_caret(monkeypatch) -> None:
+    module, _app, _target, focused, calls = _ax_module(
+        selected_settable=False,
+        value_settable=True,
+        value="abc",
+        selected_range=(1, 0),
+    )
+    monkeypatch.setitem(sys.modules, "ApplicationServices", module)
+
+    assert MacWindowClient().replace_selected_text(_window(), "XY") is True
+    assert calls[0] == ("set", focused, "value", "aXYbc")
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # The field reads back something else: not delivered.
+        {"value": "", "selected_range": (0, 0), "readback": "autocorrected"},
+        # A non-empty field whose selection can't be read.
+        {"value": "endocrine", "selected_range": None},
+        # A selection past the end of the value.
+        {"value": "abc", "selected_range": (2, 5)},
+        # The value write itself fails.
+        {"value": "", "selected_range": (0, 0), "set_result": 7},
+        # The field changes between the read and the write.
+        {"value": "ab", "selected_range": (2, 0), "value_drifts": True},
+        # AX ranges count UTF-16 units: a field outside the BMP is refused.
+        {"value": "\U0001f600ab", "selected_range": (3, 0)},
+    ],
+)
+def test_value_only_field_fails_closed(monkeypatch, case) -> None:
+    module, *_rest = _ax_module(selected_settable=False, value_settable=True, **case)
+    monkeypatch.setitem(sys.modules, "ApplicationServices", module)
+
+    assert MacWindowClient().replace_selected_text(_window(), "review-q4") is False
+
+
+def test_focus_without_a_top_level_is_scoped_by_its_parent_window(
+    monkeypatch,
+) -> None:
+    module, _app, _target, focused, calls = _ax_module(parent_walk=True)
+    monkeypatch.setitem(sys.modules, "ApplicationServices", module)
+
+    assert MacWindowClient().replace_selected_text(_window(), "text") is True
+    assert calls == [("set", focused, "selected-text", "text")]
+
+
+def test_focus_whose_parents_reach_the_application_is_refused(monkeypatch) -> None:
+    module, _app, _target, _focused, calls = _ax_module(
+        parent_walk=True, walk_reaches_app=True
+    )
+    monkeypatch.setitem(sys.modules, "ApplicationServices", module)
+
+    assert MacWindowClient().replace_selected_text(_window(), "text") is False
     assert calls == []
