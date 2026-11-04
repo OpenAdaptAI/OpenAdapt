@@ -757,7 +757,6 @@ export default function App() {
       <>
         {pairingNotice}
         {authoringNotice}
-      {atRestNotice}
         {atRestNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
@@ -772,7 +771,6 @@ export default function App() {
       <>
         {pairingNotice}
         {authoringNotice}
-      {atRestNotice}
         {atRestNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
@@ -796,7 +794,6 @@ export default function App() {
       <>
         {pairingNotice}
         {authoringNotice}
-      {atRestNotice}
         {atRestNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
@@ -813,7 +810,6 @@ export default function App() {
       <>
         {pairingNotice}
         {authoringNotice}
-      {atRestNotice}
         {atRestNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>

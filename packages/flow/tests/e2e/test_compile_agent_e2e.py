@@ -76,6 +76,32 @@ def _verify_yaml(tmp_path: Path, base: str) -> Path:
     return path
 
 
+class _ImageScrubber:
+    """Redacts nothing. The model here is scripted, so no screenshot leaves
+    the machine, but compile-agent redacts every screenshot it would send
+    and refuses without a scrubber (agents._image)."""
+
+    def __init__(self) -> None:
+        self.images = 0
+
+    def scrub_text(self, text: str, is_separated: bool = False) -> str:
+        return text
+
+    def scrub_image(self, image: Any, fill_color: Any = None) -> Any:
+        self.images += 1
+        return image
+
+
+@pytest.fixture(autouse=True)
+def _scrubber() -> Any:
+    from openadapt_flow import privacy
+
+    scrubber = _ImageScrubber()
+    privacy.set_text_scrubber(scrubber)
+    yield scrubber
+    privacy.reset_scrubbers()
+
+
 def _policy_agent(key_dir: Path, base: str, monkeypatch: pytest.MonkeyPatch) -> Any:
     """A registered agent, under a policy a person signed that lets it admit
     what it recorded itself."""
@@ -208,7 +234,7 @@ def _common(tmp_path: Path, base: str) -> dict[str, Any]:
 
 
 def test_compile_agent_then_replay_with_no_model_calls(
-    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _scrubber: Any
 ) -> None:
     admitter = _policy_agent(tmp_path / "keys", mockmed, monkeypatch)
     fake = FakeClaude("Jane Sample", NOTE)
@@ -232,6 +258,7 @@ def test_compile_agent_then_replay_with_no_model_calls(
     # Selective vision: no screenshot asked for; one at the save gate.
     assert harness["screenshots_requested"] == 0
     assert harness["screenshots_at_gate"] == 1
+    assert _scrubber.images == 1  # the gate screenshot was redacted first
     assert harness["screenshots_every_turn"] == 0
     assert harness["gate_checks"] == 1 and harness["gate_refusals"] == 0
     assert result.run1["gates"][0]["decision"] == "passed_no_hold"
