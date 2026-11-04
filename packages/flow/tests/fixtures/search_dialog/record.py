@@ -29,13 +29,28 @@ RECORDINGS = {
     "en_weber": ("No results found", "Jonas Weber"),
     "question_marsh": ("Wirklich speichern?", "Elena Marsh"),
 }
+#: Recordings that also type a comment after the name (the search is the same).
+COMMENTS = {
+    "comment_marsh_first": (
+        "Keine Treffer im Archiv {archive}",
+        "Elena Marsh",
+        "Erster Anruf",
+    ),
+    "comment_marsh_second": (
+        "Keine Treffer im Archiv {archive}",
+        "Elena Marsh",
+        "Rueckruf morgen",
+    ),
+}
 
 
-def record(name: str, statement: str, typed: str) -> None:
+def record(name: str, statement: str, typed: str, comment: str = "") -> None:
     out = HERE / name
     if out.exists():
         shutil.rmtree(out)
     url = (HERE / "app.html").as_uri() + "?s=" + quote(statement)
+    if comment:
+        url += "&c=1"
     backend, close = PlaywrightBackend.launch(url)
     try:
         page = backend.page
@@ -48,6 +63,9 @@ def record(name: str, statement: str, typed: str) -> None:
         recorder = Recorder(backend, out, app_url="http://records.test/")
         recorder.click(*center("#name"))
         recorder.type_text(typed, param="name")
+        if comment:
+            recorder.click(*center("#comment"))
+            recorder.type_text(comment, param="comment")
         recorder.click(*center("#create"))
         recorder.click(*center("#confirm"))
         recorder.finish()
@@ -70,5 +88,5 @@ def record(name: str, statement: str, typed: str) -> None:
 
 
 if __name__ == "__main__":
-    for key in sys.argv[1:] or RECORDINGS:
-        record(key, *RECORDINGS[key])
+    for key in sys.argv[1:] or [*RECORDINGS, *COMMENTS]:
+        record(key, *(RECORDINGS.get(key) or COMMENTS[key]))

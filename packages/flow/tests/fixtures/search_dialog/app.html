@@ -18,6 +18,7 @@
 <body>
 <h1>New record</h1>
 <p><label for="name">Name</label><input id="name" autocomplete="off"></p>
+<p id="comment-row" hidden><label for="comment" style="width: 110px">Note</label><input id="comment" autocomplete="off"></p>
 <button id="create" type="button">Create record</button>
 <p id="saved" hidden>Record saved</p>
 <div id="dialog" role="dialog" aria-labelledby="dialog-title" hidden>
@@ -28,7 +29,10 @@
 <script>
   // ?s=<statement>: what the duplicate search shows. {name} is the typed
   // name; {archive} depends on the typed name (data, not a fixed line).
-  const statement = new URLSearchParams(location.search).get("s") || "";
+  const query = new URLSearchParams(location.search);
+  const statement = query.get("s") || "";
+  // ?c=1: a comment field after the name (typed, not searched).
+  document.getElementById("comment-row").hidden = query.get("c") !== "1";
   document.getElementById("create").onclick = () => {
     const name = document.getElementById("name").value;
     const archive = name.trim().toUpperCase() < "F" ? "Nord" : "West";

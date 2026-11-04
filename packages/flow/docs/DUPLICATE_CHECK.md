@@ -12,7 +12,7 @@ The compiler knows an English vocabulary for that statement. A statement in
 other words ("Keine Treffer gefunden.") is mined from two or more
 demonstrations instead. The dialog must be named, and it must add exactly one
 line besides its title and button row. That line must read the same in every
-demonstration although the value typed last before the dialog differs. Then
+demonstration although every value typed before the dialog differs. Then
 induction checks it the same way. The line is not mined when:
 
 - it changes with the search;

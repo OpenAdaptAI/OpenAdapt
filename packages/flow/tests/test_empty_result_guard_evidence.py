@@ -36,6 +36,8 @@ RECORDINGS = (
     "archive_weber",
     "names_marsh",
     "en_weber",
+    "comment_marsh_first",
+    "comment_marsh_second",
 )
 
 
@@ -173,7 +175,7 @@ def test_the_same_line_across_different_searches_is_mined(compiled: dict) -> Non
     assert confirm.guard.predicate.kind is PredicateKind.TEXT_PRESENT
     assert confirm.guard.predicate.text == GERMAN and confirm.guard.predicate.exact
     (note,) = result.guard_notes
-    assert note["change"] == "empty_result_guard" and "searches" in note["evidence"]
+    assert note["change"] == "empty_result_guard" and "typed" in note["evidence"]
 
 
 def test_recording_directories_carry_their_candidates() -> None:
@@ -208,9 +210,29 @@ def test_the_same_search_twice_proves_nothing(compiled: dict) -> None:
     result = _induce(compiled, "de_marsh", "de_marsh_again")
     _opener, confirm = _steps(result)
     assert confirm.guard is None
-    assert (
-        "typed last before the dialog is the same" in result.guard_notes[0]["warning"]
-    )
+    assert "typed before the dialog is the same" in result.guard_notes[0]["warning"]
+
+
+def test_a_later_field_that_differs_does_not_prove_the_search_differed(
+    compiled: dict,
+) -> None:
+    """The same name both times, then a different comment: the archive line
+    depends on the name, which did not change, so it proves nothing."""
+
+    for name in ("comment_marsh_first", "comment_marsh_second"):
+        (missed,) = [
+            n for n in compiled[name][1] if n["change"] == "no_empty_result_guard"
+        ]
+        # Both compiles kept the line: the refusal is induction's.
+        assert missed["dialog_line"] == "Keine Treffer im Archiv Nord"
+    result = _induce(compiled, "comment_marsh_first", "comment_marsh_second")
+    assert result.certified, result.uncertainties
+    opener, confirm = _steps(result)
+    assert confirm.guard is None and _exact_texts(opener) == []
+    (note,) = result.guard_notes
+    assert note["change"] == "no_empty_result_guard"
+    assert "typed before the dialog is the same" in note["warning"]
+    assert note["step"].startswith("step_") and note["confirm_step"].startswith("step_")
 
 
 def test_a_guard_the_demonstrations_disagree_on_refuses_induction(

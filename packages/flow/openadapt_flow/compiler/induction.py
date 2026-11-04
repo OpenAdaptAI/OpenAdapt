@@ -1545,6 +1545,12 @@ def _dialog_line(notes: Sequence[dict[str, Any]], opener_id: str) -> Optional[st
     return None
 
 
+def _col_steps(col: _Column) -> list[Step]:
+    """Every step of every trace at one aligned column (loop rows included)."""
+
+    return [step for tok in col.tokens.values() for step in _tok_steps(tok)]
+
+
 def _guard_note(
     result: InductionResult, opener_sid: str, confirm_sid: str, change: str, why: str
 ) -> None:
@@ -1566,8 +1572,8 @@ def _reconcile_dialog_guards(
 
     When no trace mined one, the candidate line each trace's compile kept
     (``dialog_line``, in any language) becomes the check when every trace has
-    the same line, there are two or more traces, and the value typed last
-    before the opener differs between them. Record data changes with the
+    the same line, there are two or more traces, and every value typed
+    before the opener (since the last save) differs between them. Record data changes with the
     search; the dialog's own statement does not.
     """
 
@@ -1593,7 +1599,7 @@ def _reconcile_dialog_guards(
         confirm = singles[idx].states[confirm_sid].step
         texts = [_exact_guard_text(step) for step in confirms]
         keys = {text_key(text) if text else "" for text in texts}
-        note = functools.partial(_guard_note, result, opener_sid, confirm_sid)
+        note = functools.partial(_guard_note, result, opener.id, confirm.id)
         if any(texts):
             if all(paired) and len(keys) == 1:
                 note(
@@ -1626,13 +1632,22 @@ def _reconcile_dialog_guards(
             continue
         lines = [_dialog_line(trace_notes[t], openers[t].id) for t in range(n)]
         line_keys = {text_key(line) for line in lines if line}
+        # Every value typed since the last save, before the opener: the
+        # search is one of them, and any of them may feed the dialog.
+        start = max(
+            (
+                j + 1
+                for j in range(idx - 1)
+                if any(step.risk == "irreversible" for step in _col_steps(columns[j]))
+            ),
+            default=0,
+        )
         typed = [
             j
-            for j in range(idx - 1)
+            for j in range(start, idx - 1)
             if any(
-                getattr(tok, "kind", "") == "single"
-                and tok.step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
-                for tok in columns[j].tokens.values()
+                step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
+                for step in _col_steps(columns[j])
             )
         ]
         why = ""
@@ -1642,9 +1657,9 @@ def _reconcile_dialog_guards(
             why = "not every demonstration's dialog showed one candidate line"
         elif len(line_keys) != 1:
             why = "the dialog's line differs between demonstrations (record data)"
-        elif not typed or kinds.get(typed[-1]) != "param":
+        elif not typed or any(kinds.get(j) != "param" for j in typed):
             why = (
-                "the value typed last before the dialog is the same in every "
+                "a value typed before the dialog is the same in every "
                 "demonstration, so a line that stays the same proves nothing"
             )
         elif confirm.guard is not None:
@@ -1662,19 +1677,27 @@ def _reconcile_dialog_guards(
         confirm.guard = guard
         note(
             "empty_result_guard",
-            f"the same dialog line in all {n} demonstrations, whose searches "
-            "differed; checked after the opener and before the Confirm click",
+            f"the same dialog line in all {n} demonstrations, whose typed "
+            "values all differed; checked after the opener and before the "
+            "Confirm click",
         )
-    _refuse_unreconciled_guards(columns, handled, result)
+    _refuse_unreconciled_guards(columns, handled, result, pairs)
 
 
-def _refuse_unreconciled_guards(columns, handled, result) -> None:
+def _refuse_unreconciled_guards(columns, handled, result, pairs=None) -> None:
     """Refuse a mined dialog check the traces disagree on off the straight path.
 
     An optional, divergent or loop column copies one trace's step, and with
     it that trace's check. It is kept only when every step at that place, in
     every trace and every loop row, has the same check (or none has one).
+    A Confirm click there with no check is noted (``no_empty_result_guard``).
     """
+
+    confirms = {
+        (t, confirm): opener
+        for t, trace_pairs in enumerate(pairs or [])
+        for opener, confirm in trace_pairs
+    }
 
     from openadapt_flow.vision.ocr import text_key
 
@@ -1696,7 +1719,21 @@ def _refuse_unreconciled_guards(columns, handled, result) -> None:
         for tok in col.tokens.values():
             rows = [[tok.step]] if tok.kind == "single" else tok.iterations
             shapes.update(checks(row) for row in rows)
-        if len(shapes) == 1 or all(check == "|" for shape in shapes for check in shape):
+        if all(check == "|" for shape in shapes for check in shape):
+            for t, tok in sorted(col.tokens.items()):
+                for step in _tok_steps(tok):
+                    if (t, step.id) in confirms:
+                        _guard_note(
+                            result,
+                            confirms[(t, step.id)],
+                            step.id,
+                            "no_empty_result_guard",
+                            "no check that the dialog found nothing: the "
+                            "dialog is not on every demonstration's straight "
+                            f"path (recording {t})",
+                        )
+            continue
+        if len(shapes) == 1:
             continue
         _add_uncertainty(
             result,

@@ -11,7 +11,10 @@ parameter:
 - `names_marsh`: "Keine Treffer für Elena Marsh" (the typed value);
 - `en_weber`: "No results found" (the English vocabulary);
 - `question_marsh`: "Wirklich speichern?" (a question, shown whatever the
-  search found).
+  search found);
+- `comment_marsh_first`, `comment_marsh_second`: the archive line, the same
+  name both times, and a different comment typed after it into a field
+  labelled "Note" (`?c=1` shows that field).
 
 The buttons are in English because the confirmation pair is found from the
 Confirm label. The page URL is replaced with `http://records.test/new` in the
