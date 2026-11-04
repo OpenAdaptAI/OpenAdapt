@@ -161,9 +161,7 @@ def _terminate(pid: int) -> dict[str, Any]:
     return receipt
 
 
-def _blocked(
-    reason: str, missing: list[str], candidate: dict[str, Any]
-) -> dict[str, Any]:
+def _blocked(reason: str, missing: list[str], candidate: dict[str, Any]) -> dict[str, Any]:
     return {
         "task": "macos_ax_structured_identity",
         "status": "blocked",
@@ -184,9 +182,7 @@ def qualify(*, client: Optional[MacWindowClient] = None) -> dict[str, Any]:
     if not client.input_trusted():
         missing.append("accessibility")
     if missing:
-        return _blocked(
-            "required macOS permissions are not granted", missing, candidate
-        )
+        return _blocked("required macOS permissions are not granted", missing, candidate)
 
     pids_before = _textedit_pids()
     root = Path(tempfile.mkdtemp(prefix="oa-axid-"))
@@ -268,9 +264,7 @@ def qualify(*, client: Optional[MacWindowClient] = None) -> dict[str, Any]:
         # file's exact content (or a timeout, recording whatever was observed).
         observed: Optional[str] = None
         px = py = 0
-        enum = ax.find_candidates(
-            window.pid, window.title, text_view_locator, limit=4000
-        )
+        enum = ax.find_candidates(window.pid, window.title, text_view_locator, limit=4000)
         deadline = time.monotonic() + 6.0
         while time.monotonic() < deadline:
             enum = ax.find_candidates(
@@ -309,7 +303,9 @@ def qualify(*, client: Optional[MacWindowClient] = None) -> dict[str, Any]:
         )
 
         locator = backend.structural_locator_at(px, py)
-        report["structural_locator"] = None if locator is None else locator.model_dump()
+        report["structural_locator"] = (
+            None if locator is None else locator.model_dump()
+        )
 
         handle = backend.locate_structural(locator) if locator is not None else None
         report["structural_handle"] = (
@@ -368,8 +364,8 @@ def qualify(*, client: Optional[MacWindowClient] = None) -> dict[str, Any]:
             cleanup["terminate"] = _terminate(launched_pid)
         pids_after = _textedit_pids()
         harness = {launched_pid} if launched_pid is not None else set()
-        cleanup["unrelated_textedit_pids_preserved"] = (pids_before - harness) == (
-            pids_after - harness
+        cleanup["unrelated_textedit_pids_preserved"] = (
+            (pids_before - harness) == (pids_after - harness)
         )
         cleanup["unrelated_textedit_pids_after"] = sorted(pids_after - harness)
         try:
@@ -411,9 +407,7 @@ def _write_evidence(report: dict[str, Any]) -> dict[str, Any]:
         ),
         "refusal_contract_is_unit_covered_in": "tests/test_macos_structural.py",
     }
-    ADJUDICATION_PATH.write_text(
-        json.dumps(adjudication, indent=2, sort_keys=True) + "\n"
-    )
+    ADJUDICATION_PATH.write_text(json.dumps(adjudication, indent=2, sort_keys=True) + "\n")
     return {"sha256": digest, "evidence": str(EVIDENCE_PATH)}
 
 

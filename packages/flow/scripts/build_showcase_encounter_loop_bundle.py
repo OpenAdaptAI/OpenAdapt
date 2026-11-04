@@ -158,7 +158,9 @@ def main() -> int:
     _reset(LOOP_OUT)
     looped.save(LOOP_OUT)
 
-    print(f"Wrote {BODY_OUT} (program:false): {len(body.steps)} demonstrated steps.")
+    print(
+        f"Wrote {BODY_OUT} (program:false): {len(body.steps)} demonstrated steps."
+    )
     print(
         f"Wrote {LOOP_OUT} (program:true): {len(records)} records over relation "
         f"'worklist', body = {len(body.steps)} demonstrated steps."

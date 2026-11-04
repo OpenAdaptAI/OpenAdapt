@@ -168,20 +168,15 @@ def main() -> None:
     import os
 
     if len(sys.argv) < 2:
-        print("usage: session1_launch.py <script.py> [args...]", file=sys.stderr)
+        print("usage: session1_launch.py <script.py> [args...]",
+              file=sys.stderr)
         sys.exit(2)
     script = os.path.abspath(sys.argv[1])
     extra = list(sys.argv[2:])
     if script.lower().endswith(".ps1"):
         # A WinForms/PowerShell UI target: run STA so WinForms works.
-        parts = [
-            "powershell.exe",
-            "-STA",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            f'"{script}"',
-        ] + extra
+        parts = ["powershell.exe", "-STA", "-ExecutionPolicy", "Bypass",
+                 "-File", f'"{script}"'] + extra
     else:
         pythonw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
         if not os.path.exists(pythonw):

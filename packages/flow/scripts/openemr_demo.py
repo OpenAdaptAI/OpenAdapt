@@ -49,7 +49,9 @@ DEMO_USER = "admin"
 DEMO_PASS = "pass"
 PATIENT_SEARCH = "Phil"  # matches demo patient "Belford, Phil" only
 
-RECORDED_NOTE = "Reviewed hypertension follow-up; BP within target range today."
+RECORDED_NOTE = (
+    "Reviewed hypertension follow-up; BP within target range today."
+)
 
 # Distinct per-run values so replay success proves parameter substitution,
 # not replay of the baked-in literal.
@@ -61,7 +63,8 @@ REPLAY_NOTES = [
     "Replay run 5: home BP log reviewed, readings stable.",
 ]
 
-SETTLE = dict(settle_timeout_s=10.0, settle_stable_frames=3, settle_interval_s=0.3)
+SETTLE = dict(settle_timeout_s=10.0, settle_stable_frames=3,
+              settle_interval_s=0.3)
 
 
 def _center(locator) -> tuple[int, int]:
@@ -70,7 +73,8 @@ def _center(locator) -> tuple[int, int]:
     box = locator.bounding_box()
     if box is None:
         raise RuntimeError(f"no bounding box for {locator}")
-    return (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2))
+    return (int(box["x"] + box["width"] / 2),
+            int(box["y"] + box["height"] / 2))
 
 
 def _frame(page, url_fragment: str):
@@ -149,14 +153,14 @@ def record(headed: bool = False, recording_dir: Path = RECORDING_DIR) -> Path:
         recorder.click(*_center(pencil))
         page.wait_for_timeout(3000)
         pnotes = _frame(page, "pnotes_full")
-        recorder.click(
-            *_center(pnotes.locator("button, a").filter(has_text="Add").first)
-        )
+        recorder.click(*_center(pnotes.locator("button, a").filter(
+            has_text="Add").first))
         page.wait_for_timeout(2000)
         # The add-note form opens as a second nested pnotes_full iframe.
         recorder.click(*_center(_locate_any_frame(page, "textarea#note")))
         recorder.type_text(RECORDED_NOTE, param="note")
-        recorder.click(*_center(_locate_any_frame(page, "text=Save as new message")))
+        recorder.click(*_center(_locate_any_frame(
+            page, "text=Save as new message")))
         page.wait_for_timeout(3000)
 
         return recorder.finish()
@@ -228,44 +232,35 @@ def replay(n: int = 5) -> dict:
             (run_dir / "final.png").write_bytes(final_png)
             note_visible = _note_visible(final_png, note)
         except Exception as exc:  # noqa: BLE001 - record and continue
-            summary["runs"].append(
-                {
-                    "run": i + 1,
-                    "success": False,
-                    "error": f"{type(exc).__name__}: {exc}",
-                }
-            )
+            summary["runs"].append({
+                "run": i + 1, "success": False, "error": f"{type(exc).__name__}: {exc}",
+            })
             print(f"run {i + 1}: EXCEPTION {exc}")
             continue
         finally:
             close()
         failed = [r for r in report.results if not r.ok]
-        summary["runs"].append(
-            {
-                "run": i + 1,
-                "success": report.success,
-                "note_visible": note_visible,
-                "steps_ok": sum(1 for r in report.results if r.ok),
-                "steps_total": len(workflow.steps),
-                "rung_counts": report.rung_counts,
-                "heal_count": report.heal_count,
-                "total_s": round(elapsed, 1),
-                "first_failure": (
-                    {"step": failed[0].step_id, "error": failed[0].error}
-                    if failed
-                    else None
-                ),
-            }
-        )
+        summary["runs"].append({
+            "run": i + 1,
+            "success": report.success,
+            "note_visible": note_visible,
+            "steps_ok": sum(1 for r in report.results if r.ok),
+            "steps_total": len(workflow.steps),
+            "rung_counts": report.rung_counts,
+            "heal_count": report.heal_count,
+            "total_s": round(elapsed, 1),
+            "first_failure": (
+                {"step": failed[0].step_id, "error": failed[0].error}
+                if failed else None
+            ),
+        })
         try:
             render_run_report(run_dir)
         except Exception as exc:  # noqa: BLE001
             print(f"run {i + 1}: report render failed: {exc}")
-        print(
-            f"run {i + 1}: success={report.success} "
-            f"note_visible={note_visible} rungs={report.rung_counts} "
-            f"heals={report.heal_count} {elapsed:.0f}s"
-        )
+        print(f"run {i + 1}: success={report.success} "
+              f"note_visible={note_visible} rungs={report.rung_counts} "
+              f"heals={report.heal_count} {elapsed:.0f}s")
     ok = sum(1 for r in summary["runs"] if r.get("success"))
     verified = sum(
         1 for r in summary["runs"] if r.get("success") and r.get("note_visible")
