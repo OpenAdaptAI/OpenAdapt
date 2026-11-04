@@ -1271,6 +1271,7 @@ def _replay_desktop(
     except ValueError as e:
         raise SystemExit(str(e))
     surface_backends = _build_surface_backends(surface_cfgs or {}, page=None)
+    hold_s = min(max(float(getattr(args, "hold_on_halt", 0.0) or 0.0), 0.0), 1800.0)
 
     try:
         report = _build_and_run_replayer(
@@ -1305,6 +1306,20 @@ def _replay_desktop(
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
         )
+        if hold_s > 0 and not report.success:
+            # As in a browser run: report first, then keep the app's session
+            # open for a repair demonstration on the same backend.
+            exit_code = _finish_replay(
+                run_dir,
+                report,
+                args,
+                backend_kind=_report_backend_kind(backend_cfg.kind),
+            )
+            sys.stdout.flush()
+            from openadapt_flow.repair.hold import hold_for_repair
+
+            hold_for_repair(backend, run_dir, hold_s, exit_code=exit_code)
+            return exit_code
     finally:
         for owned in (backend, *surface_backends.values()):
             close = getattr(owned, "close", None)
@@ -9452,8 +9467,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.0,
         metavar="SECONDS",
         help=(
-            "When a browser run halts, keep its page open for up to SECONDS "
-            "so openadapt-agent can record a repair on it (see "
+            "When a run halts, keep its page or app session open for up to "
+            "SECONDS so openadapt-agent can record a repair on it (see "
             "openadapt_flow.repair.hold). 0, the default, closes it at once. "
             "Max 1800."
         ),

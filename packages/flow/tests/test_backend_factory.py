@@ -531,3 +531,57 @@ def test_replay_desktop_refuses_drift(monkeypatch, tmp_path) -> None:
     )
     with pytest.raises(SystemExit, match="drift"):
         m._cmd_replay(args)
+
+
+class _HaltedReport:
+    success = False
+    screenshots_may_leave_box = False
+
+
+@pytest.mark.parametrize("hold, held", [("30", True), ("0", False)])
+def test_a_halted_desktop_run_holds_its_session_for_a_repair(
+    monkeypatch, tmp_path, hold, held
+) -> None:
+    """--hold-on-halt keeps a halted desktop run's backend open for a repair
+    demonstration (#1694), reporting first and closing it afterwards."""
+    import openadapt_flow.__main__ as m
+
+    order: list[str] = []
+
+    class Backend:
+        def close(self) -> None:
+            order.append("close")
+
+    monkeypatch.setattr(
+        "openadapt_flow.backends.factory.build_backend", lambda cfg: Backend()
+    )
+    monkeypatch.setattr(m, "_build_and_run_replayer", lambda b, **kw: _HaltedReport())
+    monkeypatch.setattr(
+        m, "_finish_replay", lambda *a, **kw: order.append("report") or 7
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.repair.hold.hold_for_repair",
+        lambda backend, run_dir, timeout_s, *, exit_code: order.append(
+            f"hold {type(backend).__name__} {timeout_s:g} {exit_code}"
+        ),
+    )
+    monkeypatch.setattr("openadapt_flow.ir.Workflow.load", lambda bundle: object())
+    args = m.build_parser().parse_args(
+        [
+            "replay",
+            "bundle",
+            "--backend",
+            "windows",
+            "--agent-url",
+            "http://localhost:5001",
+            "--run-dir",
+            str(tmp_path / "run"),
+        ]
+    )
+    args.hold_on_halt = float(hold)
+    rc = m._cmd_replay(args)
+    assert rc == 7
+    if held:
+        assert order == ["report", "hold Backend 30 7", "close"]
+    else:
+        assert order == ["close", "report"]
