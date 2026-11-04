@@ -194,21 +194,45 @@ def fresh_presence(
             (s for s in iter_workflow_steps(workflow) if s.id == entry.step_id), None
         )
         effects = list(step.effects) if step is not None else []
+        # A null value counts only when declared or passed as None: an unset
+        # parameter has no value, so the step's new values can't be told.
         new_values = {
             e.field: e.value.resolve(params)
             for e in effects
-            if e.field is not None and e.value is not None
+            if e.field is not None
+            and e.value is not None
+            and (
+                e.value.resolve(params) is not None
+                or e.value.null
+                or (e.value.param is not None and e.value.param in params)
+            )
         }
         row = rows[0]
         fields = list(undo.restore.fields)
-        if all(str(row.get(f)) == str(values.get(f)) for f in fields):
+        if all(
+            f in row and f in values and _same_text(row[f], values[f]) for f in fields
+        ):
             return "absent", "the record still holds its old values"
         if fields and all(
-            f in new_values and str(row.get(f)) == str(new_values[f]) for f in fields
+            f in row and f in new_values and _same_text(row[f], new_values[f])
+            for f in fields
         ):
             return "present", "the record holds the run's new values"
         return "unknown", "the record holds neither the old nor the new values"
     return _judge_declared(entry, workflow, records, params)
+
+
+def _same_text(stored: Any, want: Any) -> bool:
+    """Whether a stored field equals a value, by text.
+
+    A null equals only a null: ``str(None)`` is ``"None"``, which would let a
+    stored null match the text ``"None"``, and a missing field or old value
+    match a null.
+    """
+
+    if stored is None or want is None:
+        return stored is None and want is None
+    return str(stored) == str(want)
 
 
 def _judge_declared(
