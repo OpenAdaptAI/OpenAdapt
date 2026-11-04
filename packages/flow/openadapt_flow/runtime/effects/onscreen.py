@@ -940,9 +940,12 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
     @staticmethod
     def _expected_text(expected: Effect, params: dict) -> Optional[str]:
         if expected.value is not None:
+            # A declared value with no text (a null or unset parameter, or
+            # "") has nothing to read on screen. Don't fall through to a
+            # selector value, which would confirm the record is shown, not
+            # that the field holds the value.
             resolved = expected.value.resolve(params)
-            if resolved:
-                return resolved
+            return resolved or None
         for v in expected.match.values():
             resolved = v.resolve(params)
             if resolved:

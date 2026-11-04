@@ -560,6 +560,21 @@ def _records_reader(
     return None
 
 
+def _same_field(record: Mapping[str, Any], key: str, want: Any) -> bool:
+    """Whether ``record[key]`` equals ``want``, by text.
+
+    A null equals only a field that is there and null: ``str(None)`` is
+    ``"None"``, which would match the text ``"None"`` or a missing field.
+    """
+
+    if key not in record:
+        return False
+    have = record[key]
+    if have is None or want is None:
+        return have is None and want is None
+    return str(have) == str(want)
+
+
 def _canon(record: Mapping[str, Any]) -> str:
     return json.dumps(record, sort_keys=True, default=str)
 
@@ -623,7 +638,7 @@ class RecordReadback:
         }
 
         def matches(rec: Mapping[str, Any], sel: Mapping[str, Any]) -> bool:
-            return all(str(rec.get(k)) == str(v) for k, v in sel.items())
+            return all(_same_field(rec, k, v) for k, v in sel.items())
 
         matched = [rec for rec in after if selector and matches(rec, selector)]
         after_set = {_canon(rec) for rec in after}
@@ -633,7 +648,7 @@ class RecordReadback:
             if effect.kind.value != "field_equals" or effect.field is None:
                 continue
             want = effect.value.literal if effect.value is not None else None
-            ok = len(matched) == 1 and str(matched[0].get(effect.field)) == str(want)
+            ok = len(matched) == 1 and _same_field(matched[0], effect.field, want)
             field_checks.append({"field": effect.field, "match": ok})
         expected = written.expected_count if written else 1
         exact = (

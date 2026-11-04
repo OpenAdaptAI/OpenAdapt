@@ -147,6 +147,37 @@ side rows. A plain number whose exponent is beyond ±999999 can't be
 compared exactly: `begin_write` refuses it and names the parameter. A
 literal marked `number: true` is part of the contract hash.
 
+## Values the app transforms on save
+
+Some forms change what was typed before they save it. Declare that per
+field with `stored`, from a closed set:
+
+- `upper` or `lower`: full Unicode case mapping (`Straße` is stored
+  `STRASSE`).
+- `capitalize_words`: each space-separated word gets a capital first
+  letter, the rest of the word keeps its case, and extra spaces are dropped
+  (`ada  mcQuill` is stored `Ada McQuill`).
+
+OpenEMR's New Patient form saves street and city in capitals (the "U" edit
+option) and capitalizes the names ("C"):
+
+```yaml
+fields:
+  fname: {param: fname, stored: capitalize_words}
+  street: {param: street, stored: upper}
+```
+
+The transform is applied to the parameter, after any `map`, and the check
+stays exact: it expects that stored form and no other casing, and a
+different value is still refuted. Declare only a transform the app
+applies on every save path: a wrong declaration refutes correct saves, and
+lets a value that differs only in that transform (case or spacing) confirm.
+OpenEMR applies its transforms when a field changes in the form, so a value
+set by a script or a replayed form post is stored as sent.
+`tests/test_stored_form_live_openemr.py` checks the declarations against
+the app's own layout. A field without `stored` compares what was typed.
+`stored` is part of the contract hash.
+
 ## Writes that land after the result
 
 With `frame.database.recheck_after_s`, a `CONFIRMED` result has
