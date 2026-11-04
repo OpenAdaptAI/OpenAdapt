@@ -721,7 +721,9 @@ def test_r3b1_s12_on_postgresql(pg: Any) -> None:  # noqa: F811
         write = [zt.Op("res", {"id": "2"}, new)]
 
         def dup_of(values: dict[str, Any]) -> Any:
-            cases = zt.faults(sb.schema, sb, type("D", (), {"values": values})(), write)
+            bound = {("res", k) for k in values}  # the generator's bindings
+            cases = zt.faults(sb.schema, sb, type("D", (), {"values": values})(),
+                              write, bound)  # fmt: skip
             return next(c for c in cases if c.cls == "duplicate")
 
         # The task gives the name; the app makes the code: the copy gets a
@@ -777,4 +779,70 @@ def test_r3b2_a_broken_sandbox_stops_the_setup(
                         log=lambda s: None)  # fmt: skip
     assert result["admitted"] == [] and "injected" in result["stopped"]
     assert not (out / "contracts").exists()
+    assert list(out.glob("contracts.stopped-*"))  # kept aside, never served
     assert "setup stopped" in (out / "EXCEPTIONS.md").read_text()
+
+
+# -- review round 4: R4-B1 ------------------------------------------------------
+
+
+def test_r4b1_an_app_value_equal_to_a_task_value_is_still_made_fresh(pg: Any) -> None:  # noqa: F811
+    """The app's number 7 equals the task's quantity 7, and the app's
+    reference starts with the task's due date: neither is the task's, by the
+    generator's bindings, so both are made fresh and the store takes the
+    duplicate (it is never waived as impossible)."""
+
+    admin = psycopg2.connect(
+        host="127.0.0.1", port=pg["port"], user="admin", dbname="postgres"
+    )
+    admin.autocommit = True
+    admin.cursor().execute("CREATE DATABASE uq_r4")
+    admin.close()
+    c = psycopg2.connect(
+        host="127.0.0.1", port=pg["port"], user="admin", dbname="uq_r4"
+    )
+    c.autocommit = True
+    c.cursor().execute(
+        "CREATE TABLE r4 (id integer PRIMARY KEY, num integer NOT NULL, qty integer,"
+        " ref text NOT NULL, due date);"
+        "CREATE UNIQUE INDEX uk_num ON r4 (num); CREATE UNIQUE INDEX uk_ref ON r4 (ref);"
+        "INSERT INTO r4 VALUES (1, 5, 3, 'X-1', '2026-01-01');"
+    )
+    c.close()
+    read = {"sql_driver": "psycopg2", "sql_connect_args": {"host": "127.0.0.1",
+            "port": pg["port"], "user": "admin", "dbname": "uq_r4"}}  # fmt: skip
+    sb = zt.Sandbox(read, read)
+    sb.create(zt.store.read_schema(zt.store.connector(read), "postgresql"), "admin")
+    try:
+        new = {
+            "id": "2",
+            "num": "7",
+            "qty": "7",
+            "ref": "2026-12-01-0001",
+            "due": "2026-12-01",
+        }
+        demo = type("D", (), {"values": {"qty": 7, "due": "2026-12-01"}})()
+        bound = {("r4", "qty"), ("r4", "due")}
+        cases = zt.faults(sb.schema, sb, demo, [zt.Op("r4", {"id": "2"}, new)], bound)
+        dup = next(c for c in cases if c.cls == "duplicate")
+        copy = dup.write[-1].row
+        assert copy["num"] != "7" and copy["ref"] != "2026-12-01-0001"
+        assert copy["qty"] == "7" and copy["due"] == "2026-12-01"
+        sb.put_many(dup.write)  # accepted: a duplicate the contract must stop
+    finally:
+        sb.drop()
+
+
+def test_r4b1_bindings_come_from_the_generators_report() -> None:
+    report = {"kinds": {"k": {"locations": {
+        "qty": "r4.qty (number)",
+        "project": "issues.project_id -> projects.name (exact)",
+        "ref": "custom_values (whose customized_id is the issues key).value (exact)",
+        "odd": "something else",
+    }}}}  # fmt: skip
+    assert zt.bound_columns(report, "k") == {
+        ("r4", "qty"),
+        ("issues", "project_id"),
+        ("custom_values", "value"),
+    }
+    assert zt.bound_columns({}, "k") == set()

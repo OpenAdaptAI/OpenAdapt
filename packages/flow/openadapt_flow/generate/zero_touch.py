@@ -742,7 +742,36 @@ def _copy_row(
     return out
 
 
-def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[Case]:
+_BOUND = (
+    re.compile(r"^([A-Za-z0-9_$]+)\.([A-Za-z0-9_$]+)\b"),
+    re.compile(r"^([A-Za-z0-9_$]+) \(whose .*?\)\.([A-Za-z0-9_$]+)\b"),
+)
+
+
+def bound_columns(report: Mapping[str, Any], kind: str) -> set[tuple[str, str]]:
+    """The columns a task's parameters are stored in, as the generator's
+    report places them (``table.column``, or a row beside the record's
+    ``table (whose ...).column``). A place in any other form is left out, so
+    fewer columns count as the task's: never more."""
+
+    out: set[tuple[str, str]] = set()
+    entry = (report.get("kinds") or {}).get(kind) or {}
+    for place in (entry.get("locations") or {}).values():
+        for pat in _BOUND:
+            m = pat.match(str(place))
+            if m:
+                out.add((m.group(1), m.group(2)))
+                break
+    return out
+
+
+def faults(
+    schema: Schema,
+    sb: "Sandbox",
+    demo: Demo,
+    write: list[Op],
+    bound: Optional[set[tuple[str, str]]] = None,
+) -> list[Case]:
     """Faults planted from one held-out write: its diff, the schema and its
     task's values. The contracts are never read here.
 
@@ -872,11 +901,13 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
                 # is made again for a second submit: plant a fresh one, so
                 # the copy is a duplicate the store accepts.
                 for col in unique_columns(sb, op.table) - set(key):
-                    if not _is_value(dup.get(col), values):
+                    if (op.table, col) not in (bound or set()):
                         v = fresh_value(sb, t, col, dup.get(col))
                         if v is not None:
                             dup[col] = v
-                given = {c for c, v in op.row.items() if _is_value(v, values)}
+                # The task's columns: where the generator stores its
+                # parameters (bindings, never a value that happens to match).
+                given = {c for c in op.row if (op.table, c) in (bound or set())}
                 out.append(Case(f"duplicate:{op.table}", "duplicate",
                                 write + [Op(op.table, key, dup)],
                                 copy_of=(op.table, dict(op.row), dup, given)))  # fmt: skip
@@ -1272,6 +1303,10 @@ def validate(
 
     if modes is None:
         modes = {}
+    try:
+        report = json.loads((Path(manifest).parent / "report.json").read_text())
+    except (OSError, ValueError):
+        report = {}  # no bindings: no column counts as the task's
 
     assert sb.schema is not None
     by_kind: dict[str, list[Outcome]] = {}
@@ -1288,7 +1323,8 @@ def validate(
         saved = [(op, sb.get(op.table, op.key)) for op in undo]
         _put_all(sb, undo)
         try:
-            cases += faults(sb.schema, sb, demo, write)
+            cases += faults(sb.schema, sb, demo, write,
+                            bound_columns(report, demo.kind))  # fmt: skip
         finally:
             try:
                 sb.put_many([Op(op.table, op.key, row) for op, row in saved])
@@ -1661,8 +1697,11 @@ def onboard(
         # can be trusted: no contract is installed, and every kind says why.
         import shutil
 
-        for d in (out / "contracts", out / ".contracts.staged"):
-            shutil.rmtree(d, ignore_errors=True)
+        shutil.rmtree(out / ".contracts.staged", ignore_errors=True)
+        if (out / "contracts").exists():
+            # Kept aside for a look, never served: choose reads contracts/.
+            aside = out / f"contracts.stopped-{time.strftime('%Y%m%dT%H%M%S')}"
+            (out / "contracts").rename(aside)
         why = f"setup stopped: {broken}"
         summary = {k: {"admitted": False, "why": why, "correct_writes": 0,
                        "false_stops": [], "faults": 0, "faults_stopped": 0,
@@ -1770,7 +1809,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             }
         )
     )
-    return 0
+    return 2 if result.get("stopped") else 0
 
 
 if __name__ == "__main__":
