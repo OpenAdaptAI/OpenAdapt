@@ -157,9 +157,6 @@
     "mockloan": 1,
     "mockmed": 1
   },
-  "network_capture.py": {
-    "clearpass": 1
-  },
   "operator_profile.py": {
     "openemr": 1
   },
@@ -202,9 +199,8 @@
     "openemr": 2
   },
   "report_redaction.py": {
-    "csrf_token_form": 3,
-    "openemr": 2,
-    "token_main": 5
+    "csrf_token_form": 2,
+    "token_main": 1
   },
   "reward/models.py": {
     "mockmed-records": 1
