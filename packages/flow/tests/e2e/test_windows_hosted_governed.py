@@ -394,9 +394,9 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
             os.environ.pop(KEY_DIR_ENV, None)
         else:
             os.environ[KEY_DIR_ENV] = previous_key_dir
-    # The run knows only the approvers' root public key. The person's key
-    # and passphrase go to the person's process alone, so the run cannot
-    # sign its own approval.
+    # The run reads the approver roster from the key directory, but never
+    # gets the passphrase that unlocks the person's signing key, so it
+    # cannot sign its own approval. Only the person's process has it.
     env = {
         **host.env,
         # The attempt ledger must sit in this user's profile, as the default
@@ -404,14 +404,10 @@ def _governed(host, tmp_path, evidence: dict[str, Any]) -> None:
         "OPENADAPT_HOME": str(state_root),
         "OPENADAPT_BUNDLE_KEY": BUNDLE_KEY,
         ROOT_ENV: root,
-    }
-    for name in (KEY_DIR_ENV, KEY_PASSPHRASE_ENV):
-        env.pop(name, None)
-    person_env = {
-        **env,
         KEY_DIR_ENV: str(key_dir),
-        KEY_PASSPHRASE_ENV: approver_keys.PASSPHRASE,
     }
+    env.pop(KEY_PASSPHRASE_ENV, None)
+    person_env = {**env, KEY_PASSPHRASE_ENV: approver_keys.PASSPHRASE}
     config = _config(
         tmp_path,
         host,
