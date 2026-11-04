@@ -627,6 +627,38 @@ class PlaywrightSessionTransport:
             timeout_s=self._timeout_ms / 1000.0,
         )
 
+    def session_header_values(self, names: list[str]) -> Optional[dict[str, str]]:
+        """The values the app's own script last sent for ``names`` here."""
+
+        from openadapt_flow.runtime.actuators import session_headers
+
+        return session_headers.values(self._page.context, self.base_url, names)
+
+    def send_json(
+        self,
+        method: str,
+        path: str,
+        body: str,
+        *,
+        referer: str,
+        headers: dict[str, str],
+    ) -> Response:
+        return self._wrap(
+            self._request.fetch(
+                self.base_url + path,
+                method=method.upper(),
+                data=body.encode("utf-8"),
+                headers={
+                    **headers,
+                    "Content-Type": "application/json",
+                    "Referer": referer,
+                    "Origin": self.base_url,
+                },
+                timeout=self._timeout_ms,
+                max_redirects=0,
+            )
+        )
+
     def _wrap(self, resp: Any) -> Response:
         return _Resp(
             resp.status, resp.text(), {k.lower(): v for k, v in resp.headers.items()}
@@ -740,13 +772,23 @@ class PreparedSave:
     encoding: str = "urlencoded"
     #: Fields sent as empty file inputs in a multipart body.
     empty_files: frozenset[str] = frozenset()
+    #: A ``json`` save's exact body text (``body`` then lists the run's
+    #: values by JSON pointer, for the person approving it).
+    json_text: str = ""
+    #: Headers the app's own script sends, with this session's values.
+    #: In the digest; never shown to the person.
+    headers: tuple[tuple[str, str], ...] = ()
 
     def encoded(self) -> str:
+        if self.encoding == "json":
+            return self.json_text
         if self.encoding == "multipart":
             return encode_multipart(self.body, self.empty_files)[0]
         return up.urlencode(list(self.body))
 
     def content_type(self) -> str:
+        if self.encoding == "json":
+            return "application/json"
         if self.encoding == "multipart":
             return encode_multipart(self.body, self.empty_files)[1]
         return URLENCODED
@@ -759,6 +801,8 @@ class PreparedSave:
             "body": self.encoded(),
             "referer": self.referer,
         }
+        if self.headers:
+            payload["headers"] = [list(h) for h in self.headers]
         if self.writes:
             # Every request the API step sends, in order. A save without step
             # writes keeps the digest it always had.
@@ -922,6 +966,8 @@ class WebFormActuator:
 
         if spec is None:
             return unavailable("the binding has no recorded form")
+        if spec.encoding == "json":
+            return self._prepare_json(binding, params, unavailable)
         try:
             # Record identifiers in the URLs are run parameters (fill_url).
             form_path = fill_url(spec.form_path, params)
@@ -1036,6 +1082,51 @@ class WebFormActuator:
             empty_files=frozenset(
                 f.name for f in spec.fields if f.source == "empty_file"
             ),
+        )
+
+    def _prepare_json(
+        self, binding: Any, params: dict[str, str], unavailable: Any
+    ) -> "PreparedSave | ApiActuationResult":
+        """A JSON save: the recorded body with the run's values, and the
+        headers the app's own script sends in this session."""
+
+        spec = binding.web_form
+        try:
+            form_path = fill_url(spec.form_path, params)
+            save_path = fill_url(binding.url_template, params)
+            if spec.writes or spec.prechecks:
+                return unavailable("a JSON save is sent alone, with no other request")
+            page = self.transport.get(form_path)
+            self.log.append({"stage": "read_page", "status": page.status})
+            if page.status != 200:
+                return unavailable(
+                    f"the page the save is sent from returned HTTP {page.status}"
+                )
+            text, values, problem = fill_json(spec, params)
+            if problem:
+                return unavailable(problem)
+            headers: dict[str, str] = {}
+            if spec.session_headers:
+                read = getattr(self.transport, "session_header_values", None)
+                found = read(list(spec.session_headers)) if read else None
+                if found is None:
+                    return unavailable(
+                        "the app's script hasn't sent its "
+                        f"{', '.join(spec.session_headers)} header(s) in this session"
+                    )
+                headers = found
+        except KeyError as exc:
+            return unavailable(f"the run has no value for {exc}")
+        except Exception as exc:  # noqa: BLE001 - only reads were sent
+            return unavailable(f"a read before the save failed ({type(exc).__name__})")
+        return PreparedSave(
+            method=binding.method,
+            path=save_path,
+            body=tuple(values),
+            referer=self.transport.base_url + form_path,
+            encoding="json",
+            json_text=text,
+            headers=tuple(sorted(headers.items())),
         )
 
     def _precheck(self, read: tuple[str, tuple[str, ...], str]) -> Optional[str]:
@@ -1203,7 +1294,15 @@ class WebFormActuator:
                         request_summary=summary,
                     )
         try:
-            if prepared.encoding == "urlencoded":
+            if prepared.encoding == "json":
+                resp = self.transport.send_json(  # type: ignore[attr-defined]
+                    prepared.method,
+                    prepared.path,
+                    prepared.json_text,
+                    referer=prepared.referer,
+                    headers=dict(prepared.headers),
+                )
+            elif prepared.encoding == "urlencoded":
                 resp = self.transport.post_form(
                     prepared.path, prepared.encoded(), referer=prepared.referer
                 )
@@ -1231,6 +1330,9 @@ class WebFormActuator:
         if spec.success_pattern:
             target = (resp.headers.get("location") or "") + "\n" + resp.text
             signature = re.search(spec.success_pattern, target) is not None
+        if spec.graphql:
+            # A GraphQL server answers 200 with the error in the body.
+            signature = signature and graphql_succeeded(resp.text)
         self.log.append(
             {
                 "stage": "save",
@@ -1318,6 +1420,71 @@ class WebFormActuator:
                     if problem:
                         return [], problem
         return body, None
+
+
+def graphql_succeeded(text: str) -> bool:
+    """A GraphQL response with data and no errors."""
+
+    try:
+        doc = json.loads(text)
+    except ValueError:
+        return False
+    return (
+        isinstance(doc, dict)
+        and not doc.get("errors")
+        and isinstance(doc.get("data"), dict)
+        and any(v is not None for v in doc["data"].values())
+    )
+
+
+def json_pointer(name: str) -> list[str]:
+    """The tokens of a JSON pointer written without its leading ``/``."""
+
+    return [t.replace("~1", "/").replace("~0", "~") for t in name.split("/")]
+
+
+def fill_json(
+    spec: Any, params: dict[str, str]
+) -> tuple[str, list[tuple[str, str]], Optional[str]]:
+    """``spec.json_body`` with each ``param`` field's leaf set to the run's value.
+
+    A leaf recorded as a number takes the run's value as a number; one that
+    isn't a number keeps the save on the GUI. Returns the exact body text, the
+    ``(pointer, value)`` rows, and the problem, if any.
+    """
+
+    import copy
+    import math
+
+    body = copy.deepcopy(spec.json_body)
+    rows: list[tuple[str, str]] = []
+    for field in spec.fields:
+        if field.source != "param" or field.param is None:
+            return "", [], f"{field.name}: a JSON save takes only run values"
+        tokens = json_pointer(field.name)
+        parent: Any = body
+        try:
+            for token in tokens[:-1]:
+                parent = parent[int(token) if isinstance(parent, list) else token]
+            key: Any = int(tokens[-1]) if isinstance(parent, list) else tokens[-1]
+            leaf = parent[key]
+        except (KeyError, IndexError, ValueError, TypeError):
+            return "", [], f"{field.name}: not in the recorded body"
+        raw = str(params[field.param])
+        value: Any = raw
+        if isinstance(leaf, bool) or leaf is None:
+            return "", [], f"{field.name}: the recorded value isn't text or a number"
+        if isinstance(leaf, (int, float)):
+            try:
+                value = int(raw) if re.fullmatch(r"-?\d+", raw) else float(raw)
+            except ValueError:
+                return "", [], f"{field.name}: {raw!r} is not a number"
+            if isinstance(value, float) and not math.isfinite(value):
+                return "", [], f"{field.name}: {raw!r} is not a number"
+        parent[key] = value
+        rows.append((field.name, raw))
+    text = json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+    return text, rows, None
 
 
 def _form_part_problem(field: Any, form: Optional[dict[str, Any]]) -> Optional[str]:
