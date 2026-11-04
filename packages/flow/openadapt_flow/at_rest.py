@@ -105,16 +105,23 @@ def unsealed_write(artifact: str, path: Path | str, *, refuse: bool = True) -> N
             f"Not writing {artifact} at {path}: it can't be encrypted yet, and "
             f"{MODE_ENV}=strict refuses plaintext. Nothing was written."
         )
-    _record(
-        f"{artifact} at {path}",
-        "can't be encrypted yet",
-        path=str(path),
-        warning=(
-            f"WARNING: writing {artifact} in plaintext at {path}: it can't be "
-            "encrypted yet and can hold patient data. Set "
-            f"{MODE_ENV}=strict to refuse instead."
-        ),
-    )
+    try:
+        _record(
+            f"{artifact} at {path}",
+            "can't be encrypted yet",
+            path=str(path),
+            warning=(
+                f"WARNING: writing {artifact} in plaintext at {path}: it can't be "
+                "encrypted yet and can hold patient data. Set "
+                f"{MODE_ENV}=strict to refuse instead."
+            ),
+        )
+    except AtRestRefused as exc:
+        if refuse:
+            raise
+        # After records changed, the report is the only account of what was
+        # written: keep it, and say loudly that the ledger missed it.
+        print(f"ERROR: {exc} The report is written anyway.", file=sys.stderr)
 
 
 HOME_ENV: Final[str] = "OPENADAPT_FLOW_AT_REST_HOME"
@@ -351,6 +358,18 @@ def seal_new(artifact: str, path: Path | str) -> bool:
         return True
     unsealed_write(artifact, path)
     return False
+
+
+def existing_key() -> Optional[str]:
+    """The local key if it already exists, for read paths: creates nothing
+    and records nothing. None when there is no local key yet."""
+    path = local_key_path()
+    try:
+        if not path.exists():
+            return None
+        return _read(path)
+    except OSError as exc:
+        raise LocalKeyError(f"{path} can't be read ({exc}).") from exc
 
 
 def default_key() -> Optional[str]:

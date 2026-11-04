@@ -12652,6 +12652,51 @@ _STRICT_SAFE_COMMANDS: frozenset[str] = frozenset(
 )
 
 
+#: Sealed-ready commands that seal plaintext input themselves under strict
+#: mode (a recording, a compiled, induced or admitted bundle, a run directory).
+_STRICT_SELF_SEALING: frozenset[str] = frozenset(
+    {
+        "openadapt_flow.__main__:_cmd_record",
+        "openadapt_flow.__main__:_cmd_compile",
+        "openadapt_flow.__main__:_cmd_induce",
+        "openadapt_flow.cli_admit:cmd_admit_run",
+        "openadapt_flow.__main__:_cmd_run",
+        "openadapt_flow.__main__:_cmd_replay",
+        "openadapt_flow.__main__:_cmd_resume",
+    }
+)
+
+
+def _plaintext_directories_in(args: argparse.Namespace) -> list[Path]:
+    """Existing directories among the arguments that are not inside a sealed
+    set. Files a person passes (a config, a results JSON) are not artifacts
+    and are not checked."""
+    from openadapt_flow import sealed_set
+
+    found: list[Path] = []
+    for name, value in vars(args).items():
+        if name == "func":
+            continue
+        for item in value if isinstance(value, (list, tuple)) else [value]:
+            if not isinstance(item, (str, Path)) or not str(item):
+                continue
+            text = str(item)
+            if "://" in text or "\n" in text or len(text) > 4096:
+                continue
+            candidates = [text]
+            if isinstance(item, str) and "=" in text:
+                candidates.append(text.split("=", 1)[1])
+            for candidate in candidates:
+                path = Path(candidate)
+                if not path.is_dir():
+                    continue
+                if sealed_set.is_sealed(path) or sealed_set.sealed_root(path):
+                    continue
+                if path not in found:
+                    found.append(path)
+    return found
+
+
 def _unsealed_output_check(args: argparse.Namespace) -> None:
     """Warn and record, or refuse in strict mode, a command whose output
     can't be encrypted yet. Strict mode runs only the sealed-ready and
@@ -12667,6 +12712,26 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
                 f"{at_rest.MODE_ENV}=strict runs only the commands that keep "
                 "patient data encrypted, and this one writes files outside an "
                 "encrypted set. Nothing was run."
+            )
+        if command in _SEALED_READY_COMMANDS and command not in _STRICT_SELF_SEALING:
+            # These keep sealed input sealed; given plaintext input they
+            # re-save or write beside it in plaintext. So every directory
+            # they are given must already be encrypted.
+            plain = _plaintext_directories_in(args)
+            if plain:
+                raise at_rest.AtRestRefused(
+                    f"{at_rest.MODE_ENV}=strict runs this command on encrypted "
+                    f"input only, and {plain[0]} is not encrypted. Seal it first "
+                    "(openadapt-flow seal, or compile/run under strict mode). "
+                    "Nothing was run."
+                )
+        if command == "openadapt_flow.__main__:_cmd_qualify" and getattr(
+            args, "qualify_cmd", None
+        ) in {"run-case", "drills"}:
+            raise at_rest.AtRestRefused(
+                f"{at_rest.MODE_ENV}=strict holds back qualification trials: "
+                "their case inputs and fault files are written beside the "
+                "sealed run. Nothing was run."
             )
         # Written after records change, so refused before the run starts.
         healed = getattr(args, "save_healed_to", None)

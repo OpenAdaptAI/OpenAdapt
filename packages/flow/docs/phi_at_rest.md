@@ -39,11 +39,20 @@ A sealed bundle always runs into a sealed run directory, in every mode.
 
 **Healthcare and other regulated deployments:** set
 `OPENADAPT_FLOW_AT_REST=strict` and a key from your secret manager. Strict
-mode runs the commands that keep their files encrypted (the ones listed under
-[Commands on sealed input](#commands-on-sealed-input)) and the ones that
-write no recorded data (service health and control, the no-outbound allow
-list, key and Seal verification), and holds back every other command before
-it starts. It encrypts every recording, bundle and run directory, and an
+mode runs:
+
+- `record`, `compile`, `induce`, `admit run`, `run`, `replay` and `resume`,
+  which encrypt what they write, plaintext input included;
+- the other commands listed under
+  [Commands on sealed input](#commands-on-sealed-input), on encrypted input
+  (every directory they are given must be encrypted);
+- the commands that write no recorded data: service health and control, the
+  no-outbound allow list, key and Seal verification. `service run` runs the
+  queue script it is given; the Flow commands the script starts inherit
+  strict mode, and the script's other actions are the operator's.
+
+Every other command, and qualification trials (`qualify campaign`,
+`qualify run-case`, `qualify drills`), is held back before it starts. It encrypts every recording, bundle and run directory, and an
 unknown value of `OPENADAPT_FLOW_AT_REST` stops the command. `seal` and
 record checks on encrypted bundles use `OPENADAPT_BUNDLE_KEY` only.
 

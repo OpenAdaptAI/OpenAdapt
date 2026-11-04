@@ -460,3 +460,91 @@ def test_an_open_keys_directory_is_refused(default_mode: Path) -> None:
             crypto.resolve_key(None)
     finally:
         (default_mode / "keys").chmod(0o700)
+
+
+# -- review round 2 (#1755) -----------------------------------------------------
+
+
+def test_strict_runs_other_sealed_ready_commands_on_encrypted_input_only(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+    from tests.test_after_stop_mockmed import _workflow
+
+    plain = tmp_path / "plain-bundle"
+    _workflow().save(plain)
+    sealed = tmp_path / "sealed-bundle"
+    with sealed_set.writing(sealed, "bundle", crypto.resolve_key(None)):
+        _workflow().save(sealed)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    for func in (cli._cmd_scaffold_verifier, cli._cmd_certify):
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(argparse.Namespace(func=func, bundle=str(plain)))
+        cli._unsealed_output_check(argparse.Namespace(func=func, bundle=str(sealed)))
+    # The commands that seal plaintext input themselves still take it.
+    cli._unsealed_output_check(
+        argparse.Namespace(func=cli._cmd_compile, recording=str(plain))
+    )
+
+
+def test_strict_holds_back_qualification_trials(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed = tmp_path / "sealed-bundle"
+    from tests.test_after_stop_mockmed import _workflow
+
+    with sealed_set.writing(sealed, "bundle", crypto.resolve_key(None)):
+        _workflow().save(sealed)
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    for verb in ("run-case", "drills"):
+        with pytest.raises(at_rest.AtRestRefused, match="qualification trials"):
+            cli._unsealed_output_check(
+                argparse.Namespace(
+                    func=cli._cmd_qualify, qualify_cmd=verb, bundle=str(sealed)
+                )
+            )
+    with pytest.raises(at_rest.AtRestRefused, match="strict"):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_qualify_campaign, bundle=str(sealed))
+        )
+
+
+def test_a_local_key_bundle_under_the_opt_out_refuses_to_run(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from tests.test_after_stop_mockmed import _workflow
+
+    bundle = tmp_path / "bundle"
+    with sealed_set.writing(bundle, "bundle", crypto.resolve_key(None)):
+        _workflow().save(bundle)
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "desktop")
+    with pytest.raises(sealed_set.SealedSetError):
+        _mockmed_run(tmp_path, bundle, tmp_path / "run")
+    assert not (tmp_path / "run").exists()
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="POSIX perms")
+def test_a_report_after_records_changed_survives_a_ledger_failure(
+    default_mode: Path, tmp_path: Path, monkeypatch, capsys
+) -> None:
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / at_rest.LEDGER_NAME).mkdir()
+    monkeypatch.setenv(at_rest.HOME_ENV, str(locked))
+    at_rest.unsealed_write("a worklist report", "/data/pool", refuse=False)
+    assert "ERROR" in capsys.readouterr().err
+
+
+def test_read_paths_create_no_key_and_no_ledger_line(
+    default_mode: Path, monkeypatch
+) -> None:
+    assert crypto.resolve_read_key(None) is None
+    assert not (default_mode / "keys").exists()
+    monkeypatch.setenv(at_rest.OPT_OUT_ENV, "desktop")
+    assert crypto.resolve_read_key(None) is None
+    assert _ledger(default_mode) == []
+    monkeypatch.delenv(at_rest.OPT_OUT_ENV)
+    key = crypto.resolve_key(None)
+    assert crypto.resolve_read_key(None) == key
