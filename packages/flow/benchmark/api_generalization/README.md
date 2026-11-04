@@ -1,103 +1,100 @@
-# API step generalization: draft report
+# API step generalization: results
 
-**Status: draft.** This is a preview on `main` 3cb70fa6, before the six
-API-step review fixes merged. It is not the frozen experiment in
-[PROTOCOL.md](PROTOCOL.md). The frozen compile and the run matrix will
-replace this page. The fixes make the API step stricter, not broader, so
-coverage is expected to stay near zero.
+Does the API step, which repeats a recorded save as the request the app's own
+page sends, work beyond the OpenEMR referral? This experiment ran ten save
+workflows on seven open-source apps, each in a local container with
+synthetic data, and judged every run against the app's own database
+([PROTOCOL.md](PROTOCOL.md)). The engine changes it depends on are in the
+API-step shapes PR (forms) and the JSON/GraphQL PR.
 
-## Result in one line
+## Result
 
-Across 8 save workflows on 5 apps other than OpenEMR, the compiler proposed
-an API step for **0**. Every refusal came from the compiler, before
-anything ran. No API step was admitted, so none ran, and there were no API
-writes to judge. The compiler's output for each workflow is in
-[results/preview-3cb70fa6](results/preview-3cb70fa6).
+- **Safety.** Across about 500 runs of every case (normal, blank fields,
+  repeated values, changed defaults, expired sessions, a rejected save, a
+  lost response, a duplicated save, a value the server rejects), there was
+  **no false success and no incorrect write** on either path.
+- **Coverage.** The compiler proposed an API step for 7 of the 10 workflows
+  (0 of 8 before this work). After the side-effect check below, **2 are
+  admitted** (WordPress comment, Wiki.js group). The other 5 stay on the GUI
+  for a stated reason.
+- **Speed**, median engine seconds of correct runs, interleaved timing runs:
 
-## Per app
+| Workflow | GUI steps | API step |
+| --- | --- | --- |
+| WordPress comment (form) | 4.15 (n=10) | 2.40 (n=10) |
+| Wiki.js group (GraphQL) | 7.16 (n=8) | 0.36 (n=8) |
+| EspoCRM account (JSON) | 4.21 (n=10) | 0.70 (n=10), not admitted: see below |
 
-| App | Workflow | Proposed | Compiler's reason | Underlying cause |
+## Per workflow
+
+| Workflow | Save shape | Proposed | Side effects (footprint) | Outcome |
 | --- | --- | --- | --- | --- |
-| Redmine 6.0 | new issue | no | no form request was sent by the save step | the form is `multipart/form-data` (it has an attachment input, left empty); capture keeps no multipart body |
-| WordPress 6.6 | visitor posts a comment | no | field `submit` of the save is not a recorded value, a form default or a session value | the browser sends the clicked button's `name=value` (`submit=Post Comment`); the form reader skips submit buttons |
-| WordPress 6.6 | editor adds a category | no | the page that serves the form is not in the capture | the page's script posts the form to `admin-ajax.php`, not to the form's `action`; the form page was captured, so the reason is misleading |
-| NetBox 4.1 | add an IP address | no | no form request was sent by the save step | multipart form (no file input on this form) |
-| Dolibarr 20 | new contact | no | field `add` of the save is not a recorded value, a form default or a session value | named submit button (`add=Add`) |
-| Dolibarr 20 | new customer | no | no form request was sent by the save step | multipart form (logo input, left empty) |
-| Trac 1.6 | new ticket | no | field `submit` of the save is not a recorded value, a form default or a session value | named submit button (`submit=Create ticket`) |
+| WordPress comment | form, submit-button pair | yes | same tables, rows and fields (`wp_comments`) | **admitted** |
+| Wiki.js group | GraphQL mutation, batch of one, bearer header | yes | same (`groups`) | **admitted** |
+| EspoCRM account | JSON, three app headers | yes | the GUI also writes a `read` entry to `action_history_record` when it shows the new account; the API step doesn't | stays on the GUI |
+| Dolibarr contact | form, submit-button pair | yes | not comparable: the GUI save itself fails (see below) | stays on the GUI |
+| Medplum patient | JSON to the FHIR server's own origin, bearer header | yes | not comparable: the GUI save itself fails | stays on the GUI |
+| Redmine issue | multipart, refreshed CSRF token | yes | not comparable: the GUI save itself fails | stays on the GUI |
+| WordPress category | form fields posted by page script to `admin-ajax.php` | yes | - | stays on the GUI at run time: the page's script raises an error in the scratch run (its blocked save gets an empty answer), so it can't be checked |
+| Trac ticket | form | no | - | the page's live preview posts the form while the person types; that write can't be explained |
+| Dolibarr customer | multipart | no | - | `client` is chosen in a select widget by a click, not a recorded value |
+| NetBox IP address | multipart, form with no action | no | - | `comments` is not a recorded value, a form default or a session value |
 
-ERPNext and Odoo were left out of the sample: their desks save records as
-JSON over XHR, not through server-rendered forms.
+Where an API step was admitted for evaluation and ran, every run was
+correct, including the rejected, lost and duplicated saves (it halts, it is
+never retried, and a lost response ends as `RECONCILIATION_REQUIRED`).
+[results/SUMMARY.md](results/SUMMARY.md) has the counts for every workflow.
 
-## What each kind of support would take, and what it would unlock
+Redmine's page script asks the server to refresh the form while values are
+typed (`POST .../issues/new.js`). The scratch run blocks that request, so in
+most runs the API step stayed on the GUI.
 
-Counts are out of the 8 workflows in this sample.
+## Side effects: the footprint check
 
-| Support | What it takes | Unlocks here |
-| --- | --- | --- |
-| **The submitter's `name=value` pair** | Read `<input type=submit>` and `<button name>` controls in the form reader; explain the pair as the clicked control's own value; send it at run time, read from the live form like any other control. | **3** (WordPress comment, Dolibarr contact, Trac). Shown by the counterfactual below: with only this pair removed from the captured save, the same compiler proposes an API step for all three. |
-| **Multipart bodies without files** | Capture the multipart body when every file part is empty (today `body_omitted: "multipart"`); parse it into the same field list; send it as multipart at run time; keep refusing when a file is attached. | **0 alone, 3 together with the submitter pair** (Redmine, NetBox, Dolibarr customer all have named submit buttons too: `commit`, `_create`, `save`). Behind those sit more blockers, listed in the next table. |
-| **Saves sent by page script** | Match a script-sent POST to the form whose fields it carries, rather than by the form's `action`; take the extra fields the script adds (`action=add-tag`, `screen`, `taxonomy`) as constants; read success from the response body, since there is no redirect. | **1** (WordPress category). JSON bodies built by script (ERPNext, Odoo) would need body templating as well; they are outside this sample. |
+Repeating a save as one request skips whatever the page does around it. So
+before an API step is admitted, three GUI saves and three API saves run on
+the same inputs, the whole database is diffed around each, and the two are
+compared table by table and field by field
+(`openadapt_flow/api_footprint.py`). A column that varies between the GUI
+saves themselves (ids, times, hashes) is server-owned and not compared;
+anything else that differs keeps the save on the GUI, and `api admit
+--footprint` refuses it. On EspoCRM it found exactly the kind of gap it is
+for: the GUI path writes an audit `read` entry the API step skips. A
+workflow whose GUI save doesn't work can't be compared, so it isn't
+admitted.
 
-With all three, at most 7 of 8 could be proposed. The blockers known to sit
-behind them follow.
+## Engine problems found (not API-step code)
 
-### Known next blockers (from the captured form pages)
+- The GUI path fails on Dolibarr contact and Trac at the save: the write
+  check reports the save "sent to a different address than the checked
+  form's" (`wire_check.py`).
+- The GUI path fails on Medplum's web app at the save: a `Page.evaluate`
+  returns a React input element ("Converting circular structure to JSON").
+- The GUI path fails on most Redmine runs (an identity check on the Create
+  button finds its target only by position).
+- Capture leaves a form's hidden CSRF token in the page HTML unredacted
+  unless that token was sent (Redmine's per-form token).
 
-| Workflow | Blocker | Effect with today's rules |
-| --- | --- | --- |
-| Redmine new issue | `issue[start_date]` defaults to today | the form default differs every day after recording, so the API step refuses and the GUI steps run |
-| NetBox add IP | the form posts to `action=""`; `_init_time` holds the page-load time | the form reader doesn't match an empty action; `_init_time` differs on every load, so it would refuse each run |
-| Dolibarr new customer | `customer_code` is generated per record (`CU2610-00001`, then `-00002`) | differs after the first save, so it refuses each run |
-| Trac new ticket | the success pattern compiled to `'1'` (the record number in the path is not generalized) | matches almost any URL; the success check carries no information |
-| WordPress comment | the success pattern contains this comment's `moderation-hash` literal | never matches again; a successful save would end as a halt |
+## Data
 
-The first three are fields the server fills in on every page load that are
-not CSRF tokens. Taking them from the live form, as the GUI does, would
-unlock them, but the same rule currently catches a changed default (case
-C1 in the protocol). Telling the two apart needs a rule, not a patch.
+- `recordings/<workflow>/rec1`: the preview recordings (Oct 19).
+- `recordings/<workflow>/rec-<engine>`: the recording each workflow's
+  reported results were compiled from. Synthetic values only; the capture
+  keeps no header value, cookie or session token.
+- `results/frozen-<engine>/<workflow>/`: `compile.json`, `matrix.csv`
+  (every case, both arms), `timing.csv`, `footprint.json` (tables and
+  column names only, never values). Each run row names its engine commit.
+  Engine commits: 969cb939 (first full run), cf28c2af and f761fff8 (re-runs
+  after harness and lookup fixes), 4d977a4e (footprint check).
+- `results/preview-3cb70fa6`: the earlier preview, where 0 of 8 were proposed.
 
-## Counterfactual (labelled, not a product result)
+The fault cases run through `proxy.py` on one origin; Medplum's save goes
+straight to its FHIR server, so it has no fault cases. Wiki.js keeps no
+server-side session, so it has no expired-session case.
 
-`counterfactual.py` copied the three named-submit recordings with only the
-submitter pair removed from the captured save. The same compiler then
-proposed an API step for all three (Trac: 12 fields, 4 from parameters, 7
-form defaults, 1 session value; WordPress comment: 6; Dolibarr contact: 23).
-These bundles are the planned `api_cf` arm, which exercises the frozen
-runtime on new apps. A development matrix on the Trac bundle was used only
-to fix the harness and is not reported.
+## Reproduce
 
-## Other findings, logged and not fixed
-
-- **Blank values.** A run refuses `""` for a required parameter, and compile
-  marks every parameter required. A person must mark fields that may be
-  blank as optional before a blank value can run at all. The harness does
-  that at compile time (PROTOCOL.md).
-- **GUI programs fail their own compiled checks.** On Trac, a check that
-  text OCR'd at recording time is present (`'BIA图一I'`, noise) fails on
-  some runs. On the WordPress category form, a `region_stable` check after
-  the save fails because the list now shows the new category. Both end as
-  safe stops (`HALTED_BEFORE_EFFECT` or `RECONCILIATION_REQUIRED`), not
-  false successes.
-- **Misleading refusal reason** for script-sent saves (WordPress category,
-  above).
-
-## Setup cost
-
-Agent wall-clock minutes from image pull to the first correct
-demonstration, on top of a shared harness (about 15 minutes, once). A
-person would take longer. See `setup_log.csv`.
-
-| App | Minutes | Main work |
-| --- | --- | --- |
-| Redmine | 10 | seeding through `rails runner`; Enter on a `<select>` submitted the form early |
-| WordPress (2 workflows) | 4 | install by HTTP; a must-use plugin turns off the comment flood throttle |
-| NetBox | 4 | custom-field seed for the changed-default case |
-| Dolibarr (2 workflows) | 4 | select2 widgets; the company-country default |
-| Trac | 9 | building the image; basic-auth sign-in; a server-side length rule for the validation case |
-
-## Next
-
-When all six fixes are on `main`: re-record at that commit (the redaction
-fix changes the capture), compile, and run the matrix in PROTOCOL.md,
-including the counterfactual arm. The timed runs wait for a quiet window.
+```bash
+APIGEN_FROZEN=<engine commit> APIGEN_PY=<python> ./run_app.sh <workflow> 10
+python -m benchmark.api_generalization.summarize > results/SUMMARY.md
+```
