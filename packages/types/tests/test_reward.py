@@ -42,7 +42,7 @@ _SIGNATURE = "A" * 86 + "=="
 # Pinned once from the payload below. A change here means the canonical form
 # changed, which breaks every digest a consumer has stored.
 _PINNED_CONTRACT_DIGEST = (
-    "sha256:4dd42acff78802d1815798dfe04b95fe27847b972d348dcdafa7bbabc5d6be15"
+    "sha256:52eb5a011dabede8b11fdef0da7b0d34ee52a33e3ca9a231e075ff51f67a84ea"
 )
 
 
@@ -273,6 +273,9 @@ def test_every_outcome_has_exactly_one_scoring_class() -> None:
         RewardOutcomeV1.WRONG_EFFECT,
     ):
         assert REWARD_SCORING_CLASS[outcome] is RewardScoringClassV1.ZERO_OR_PENALTY
+    assert REWARD_SCORING_CLASS[RewardOutcomeV1.ESCALATED_AFTER_EFFECT] is (
+        RewardScoringClassV1.PARTIAL_CREDIT
+    )
 
 
 @pytest.mark.parametrize("outcome", sorted(UNSCORED_REWARD_OUTCOMES, key=str))
@@ -686,3 +689,83 @@ def test_packaged_schemas_match_models(model: object, filename: str) -> None:
         files("openadapt_types.schemas").joinpath(filename).read_text(encoding="utf-8")
     )
     assert packaged == model.model_json_schema()
+
+
+# --- partial credit for an escalation after the effect landed ---------------
+
+
+def _contract_with_scoring(**scoring: float) -> RewardContractV1:
+    payload = _contract_payload()
+    payload["scoring"] = scoring
+    return RewardContractV1.model_validate(payload)
+
+
+def test_default_scalar_for_each_scored_outcome() -> None:
+    contract = _contract()
+    expected = {
+        RewardOutcomeV1.VERIFIED: 1.0,
+        RewardOutcomeV1.ESCALATED_AFTER_EFFECT: 0.5,
+        RewardOutcomeV1.HALTED_BEFORE_EFFECT: 0.0,
+        RewardOutcomeV1.REFUSED: 0.0,
+        RewardOutcomeV1.REJECTED_POLICY: 0.0,
+        RewardOutcomeV1.WRONG_EFFECT: -1.0,
+        RewardOutcomeV1.RECONCILIATION_REQUIRED: None,
+        RewardOutcomeV1.FAILED_PLATFORM: None,
+    }
+    assert set(expected) == set(RewardOutcomeV1)
+    for outcome, scalar in expected.items():
+        assert score(outcome, 2, None, 0, contract=contract).scalar == scalar
+
+
+@pytest.mark.parametrize("value", [0.0, 0.25, 0.5, 0.999])
+def test_escalated_after_effect_reward_is_configurable(value: float) -> None:
+    contract = _contract_with_scoring(escalated_after_effect_reward=value)
+    scored = score(
+        RewardOutcomeV1.ESCALATED_AFTER_EFFECT, 2, None, 0, contract=contract
+    )
+    assert scored.scalar == value
+
+
+@pytest.mark.parametrize(
+    "value", [-0.01, 1.0, 1.5, float("nan"), float("inf"), -float("inf")]
+)
+def test_escalated_after_effect_reward_out_of_range_is_refused(value: float) -> None:
+    with pytest.raises(ValidationError, match="escalated_after_effect_reward"):
+        _contract_with_scoring(escalated_after_effect_reward=value)
+
+
+def test_escalated_after_effect_reward_must_stay_below_verified() -> None:
+    with pytest.raises(ValidationError, match="below verified_reward"):
+        _contract_with_scoring(verified_reward=0.5, escalated_after_effect_reward=0.5)
+    contract = _contract_with_scoring(
+        verified_reward=0.8, escalated_after_effect_reward=0.4
+    )
+    assert contract.scoring.escalated_after_effect_reward == 0.4
+
+
+def test_escalated_after_effect_reward_is_part_of_the_contract_digest() -> None:
+    half = _contract_with_scoring(escalated_after_effect_reward=0.5)
+    quarter = _contract_with_scoring(escalated_after_effect_reward=0.25)
+    assert half.digest == _contract().digest
+    assert quarter.digest != half.digest
+
+
+def test_receipt_partial_credit_is_never_negative_or_uncertain() -> None:
+    receipt = _receipt(reward_outcome="escalated_after_effect", scalar_reward=0.5)
+    assert receipt.scoring_class is RewardScoringClassV1.PARTIAL_CREDIT
+    zero = _receipt(reward_outcome="escalated_after_effect", scalar_reward=0.0)
+    assert zero.scalar_reward == 0.0
+    with pytest.raises(ValidationError, match="zero or partial credit"):
+        _receipt(reward_outcome="escalated_after_effect", scalar_reward=-0.5)
+    with pytest.raises(ValidationError, match="requires a scalar"):
+        _receipt(
+            reward_outcome="escalated_after_effect",
+            scalar_reward=None,
+            reward_components={},
+        )
+    with pytest.raises(ValidationError, match="cannot carry uncertainty"):
+        _receipt(
+            reward_outcome="escalated_after_effect",
+            scalar_reward=0.5,
+            uncertainty="effect_uncertain",
+        )

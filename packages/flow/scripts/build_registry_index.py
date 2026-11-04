@@ -52,7 +52,34 @@ def build(archives: Optional[Path] = None, asset_base: Optional[str] = None) -> 
             }
     sources["schema_version"] = 1
     validate_index(sources)
+    for item in sources["workflows"]:
+        check_shipped_contract(item)
     return sources
+
+
+def check_shipped_contract(item: dict) -> None:
+    """Refuse a bundle whose shipped record check could run code or write.
+
+    The same rules ``skill qualify`` applies on the user's machine
+    (``skills.shipped_contract_problems``): every address, credential name,
+    path and command is a declared variable, and a SQL read-back is one
+    parameterized, read-only SELECT.
+    """
+
+    if not item.get("contract"):
+        return
+    import yaml
+
+    from openadapt_flow.skills import shipped_contract_problems
+
+    path = ROOT / "registry" / item["path"] / item["contract"]
+    kinds = {v["name"]: v["kind"] for v in item.get("contract_vars") or []}
+    problems = shipped_contract_problems(yaml.safe_load(path.read_text()), kinds)
+    if problems:
+        raise SystemExit(
+            f"{item['id']}: its shipped record check may not ship:\n  "
+            + "\n  ".join(problems)
+        )
 
 
 def main() -> int:

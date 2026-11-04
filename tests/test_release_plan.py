@@ -10,6 +10,7 @@ one is resumed from PyPI's bytes on a dispatch, never rebuilt.
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -150,3 +151,41 @@ def test_each_package_chain_gates_on_its_own_legs() -> None:
     # It tags only what PyPI serves, at the built (or already tagged) commit.
     assert "pypi_dist.py compare" in runs and "pypi_dist.py fetch" in runs
     assert "$GITHUB_SHA" not in runs and "$RELEASE_COMMIT" in runs
+
+
+def test_every_shell_variable_a_step_reads_is_set() -> None:
+    # The plan step once read $RELEASE_COMMIT without setting it, so every run
+    # that got past the Packages check failed with "unbound variable".
+    jobs = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+    builtin = {
+        "GITHUB_OUTPUT",
+        "GITHUB_REPOSITORY",
+        "GITHUB_ENV",
+        "GITHUB_SHA",
+        "GITHUB_STEP_SUMMARY",
+        "GITHUB_WORKSPACE",
+        "GITHUB_REF",
+        "GITHUB_EVENT_NAME",
+        "RUNNER_TEMP",
+    }
+    for name, job in jobs.items():
+        for step in job["steps"]:
+            run = step.get("run", "")
+            assigned = set(
+                re.findall(
+                    r"^\s*(?:export\s+|local\s+)?([A-Za-z_][A-Za-z0-9_]*)=", run, re.M
+                )
+            )
+            assigned |= set(re.findall(r"\bfor\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\b", run))
+            assigned |= set(
+                re.findall(r"\bread\s+(?:-r\s+)?([A-Za-z_][A-Za-z0-9_]*)", run)
+            )
+            defined = (
+                set(job.get("env") or {})
+                | set(step.get("env") or {})
+                | builtin
+                | assigned
+            )
+            used = set(re.findall(r"\$\{?([A-Z][A-Z0-9_]*)\b", run))
+            missing = used - defined
+            assert not missing, f"{name} / {step.get('name')}: {sorted(missing)}"

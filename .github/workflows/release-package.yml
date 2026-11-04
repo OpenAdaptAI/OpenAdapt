@@ -114,6 +114,8 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PACKAGE: ${{ inputs.package || 'all' }}
           RESUME: ${{ inputs.resume && 'true' || 'false' }}
+          # The commit the checkout above holds: main's tip for this run.
+          RELEASE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           args=(--package "$PACKAGE" --tip "$RELEASE_COMMIT" --github-output "$GITHUB_OUTPUT")

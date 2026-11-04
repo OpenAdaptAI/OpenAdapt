@@ -92,7 +92,7 @@ def is_identity_armed(step: Step) -> bool:
     The compiler-written ``identity_armed`` field is an audit flag, not the
     identity evidence. An explicit false remains a refusal. Otherwise require
     the ground truth the replayer uses: structured/context identity, an
-    identity template, or an identifier crop.
+    identity template, an identifier crop, or a create-new form's identity.
     """
     if step.identity_armed is False:
         return False
@@ -102,6 +102,7 @@ def is_identity_armed(step: Step) -> bool:
         or a.structured_identity
         or a.identity_template
         or a.identifier_crop
+        or a.form_identity
     )
 
 

@@ -37,13 +37,16 @@ element is acted on by the gated physical click, not a bypassing AX action.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import sys
 import time
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Optional, Protocol, runtime_checkable
 
 from openadapt_flow.backend import FreshActuationRequired, StructuralResolutionRefused
@@ -58,9 +61,11 @@ from openadapt_flow.backends.remote_display import (
     RemoteDisplayError,
     WindowClient,
     WindowInfo,
+    _ax_top_level,
     require_pyobjc,
 )
 from openadapt_flow.ir import (
+    ActionDeliveryReceipt,
     StructuralHandle,
     StructuralLocator,
 )
@@ -272,6 +277,13 @@ class MacAXClient(Protocol):
         """Exact AX text of ``element`` (value/title/description), or None."""
         ...
 
+    # Optional (act_structural): a client without it can't prove the element
+    # under the pointer is the target, so every structural click is refused.
+    #
+    # def is_part_of(self, hit: MacElement, target: MacElement) -> bool:
+    #     """Whether the live hit-tested element is the target, or under it in
+    #     the tree with nothing pressable in between."""
+    #
     # Optional (IdentityCandidatesBackend): a client without it cannot count
     # look-alike rows, and the runtime halts a row pick before a write.
     #
@@ -279,6 +291,37 @@ class MacAXClient(Protocol):
     #                limit: int) -> Optional[dict[str, Any]]:
     #     """identity_candidates_at's census at screen point (x, y), with row
     #     offsets in screen points."""
+
+
+#: How long a sheet may take to settle before it is proved attached (#1711).
+_SHEET_SETTLE_POLLS = 15
+_SHEET_SETTLE_STEP_S = 0.1
+
+
+def _ax_window_of(element: Any) -> Any:
+    """The AX window ``element`` is in, a sheet's elements included.
+
+    The element's top level (:func:`_ax_top_level`) is the sheet for an
+    element inside a sheet; the sheet's parent is the window it is attached
+    to. None on any failure.
+    """
+    from ApplicationServices import (
+        AXUIElementCopyAttributeValue,
+        kAXParentAttribute,
+        kAXRoleAttribute,
+    )
+
+    top = _ax_top_level(element)
+    if top is None:
+        return None
+    _e, role = AXUIElementCopyAttributeValue(top, kAXRoleAttribute, None)
+    if str(role or "") == "AXSheet":
+        error, parent = AXUIElementCopyAttributeValue(top, kAXParentAttribute, None)
+        if error != 0 or parent is None:
+            return None
+        _e, parent_role = AXUIElementCopyAttributeValue(parent, kAXRoleAttribute, None)
+        return parent if str(parent_role or "") == "AXWindow" else None
+    return top
 
 
 def _clean_text(value: object) -> Optional[str]:
@@ -462,7 +505,6 @@ class QuartzMacAXClient:
                 AXUIElementCopyElementAtPosition,
                 AXUIElementCreateApplication,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
             )
 
             app = AXUIElementCreateApplication(int(pid))
@@ -471,10 +513,8 @@ class QuartzMacAXClient:
             )
             if hit_error != 0 or element is None:
                 return None
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                element, kAXTopLevelUIElementAttribute, None
-            )
-            if top_error != 0 or top_level is None:
+            top_level = _ax_window_of(element)
+            if top_level is None:
                 return None
             title_error, title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
@@ -529,12 +569,129 @@ class QuartzMacAXClient:
             and element.name == locator.name
         )
 
+    #: Containers whose direct children are rows or cells.
+    _TABLE_ROLES = frozenset({"AXTable", "AXOutline", "AXGrid"})
+    #: Bound on the nodes read for one row's text.
+    _ROW_TEXT_NODES = 256
+
     def structured_text(self, element: MacElement) -> Optional[str]:
+        """The element's record text: its row's text inside a table.
+
+        A cell's own text names one field, not the record, so a cell inside
+        an ``AXRow`` reads as the text of every element in that row, in tree
+        order. A cell directly under a table with no ``AXRow`` (Qt's item
+        views) abstains (None): its row can't be read, and identity falls back
+        to the recorded band. Any other element reads as its own AX text.
+        """
         try:
-            if element.native is not None:
-                return _clean_text(self._text(element.native))
-            return element.text
+            native = element.native
+            if native is None:
+                return element.text
+            node = native
+            for _ in range(4):
+                node = self._attr(node, "AXParent")
+                if node is None:
+                    break
+                role = str(self._attr(node, "AXRole") or "")
+                if role == "AXRow":
+                    return self._row_text(node)
+                if role in self._TABLE_ROLES:
+                    return None
+            return _clean_text(self._text(native))
         except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
+
+    def _row_text(self, row: Any) -> Optional[str]:
+        """Every element's own text in ``row``, in tree order; None if too big."""
+        parts: list[str] = []
+        stack = list(reversed(list(self._attr(row, "AXChildren") or [])))
+        seen = 0
+        while stack:
+            node = stack.pop()
+            seen += 1
+            if seen > self._ROW_TEXT_NODES:
+                return None
+            text = self._text(node)
+            if text:
+                parts.append(text)
+            stack.extend(reversed(list(self._attr(node, "AXChildren") or [])))
+        return _clean_text(" ".join(parts))
+
+    #: AX actions that don't change the app: a node offering only these is
+    #: not pressable for ``is_part_of``.
+    _INERT_ACTIONS = frozenset({"AXScrollToVisible", "AXShowMenu"})
+
+    def is_part_of(self, hit: MacElement, target: MacElement) -> bool:
+        """Whether the live ``hit`` is ``target`` or under it with nothing pressable.
+
+        Walks ``AXParent`` from the hit with ``CFEqual`` until it reaches the
+        target, at most 16 steps. Every node on the way, the hit included,
+        must offer no AX action besides scrolling or a context menu. False
+        on any failure.
+        """
+        try:
+            from ApplicationServices import (
+                AXUIElementCopyActionNames,
+                kAXParentAttribute,
+            )
+            from CoreFoundation import CFEqual
+
+            node, goal = hit.native, target.native
+            if node is None or goal is None:
+                return False
+            for _ in range(16):
+                if CFEqual(node, goal):
+                    return True
+                error, actions = AXUIElementCopyActionNames(node, None)
+                if error != 0:
+                    return False
+                if any(str(a) not in self._INERT_ACTIONS for a in actions or ()):
+                    return False
+                node = self._attr(node, kAXParentAttribute)
+                if node is None:
+                    return False
+            return False
+        except Exception:  # noqa: BLE001 - unobservable AX is never a match
+            return False
+
+    def ancestry(
+        self, element: MacElement
+    ) -> Optional[list[tuple[str, Optional[str], Optional[tuple]]]]:
+        """(raw AX role, name, screen bounds) of each ancestor, parent first.
+
+        Ends at the element's ``AXWindow``, which must carry the element's
+        exact window title. None when the walk fails or never reaches it.
+        """
+        try:
+            from ApplicationServices import (
+                kAXParentAttribute,
+                kAXRoleAttribute,
+                kAXSubroleAttribute,
+            )
+
+            node = element.native
+            if node is None:
+                return None
+            trail: list[tuple[str, Optional[str], Optional[tuple]]] = []
+            for _ in range(32):
+                node = self._attr(node, kAXParentAttribute)
+                if node is None:
+                    return None
+                role = str(self._attr(node, kAXRoleAttribute) or "")
+                if not role:
+                    return None
+                subrole = str(self._attr(node, kAXSubroleAttribute) or "")
+                if role == "AXWindow" and subrole in ("AXDialog", "AXSystemDialog"):
+                    shown = subrole
+                else:
+                    shown = role
+                trail.append((shown, self._name(node), self._bounds(node)))
+                if role == "AXWindow":
+                    return trail if self._name(node) == element.window_title else None
+                if role == "AXApplication":
+                    return None
+            return None
+        except Exception:  # noqa: BLE001 - unobservable AX is an ordinary miss
             return None
 
     def row_census(
@@ -542,8 +699,10 @@ class QuartzMacAXClient:
     ) -> Optional[dict[str, Any]]:
         """Census of the rows that read the same as the element at (x, y).
 
-        The element's identity is its own AX text (as ``structured_text``).
-        Its record row is the enclosing ``AXRow``, or the item of an
+        A row reads the way ``structured_text`` reads its cells: an ``AXRow``
+        as the text of every element in it, an ``AXList`` item at the
+        target's child path as that node's own text. Its record row is the
+        enclosing ``AXRow``, or the item of an
         ``AXList``; every sibling row is read at the same child path. Record
         ids are the AX identifier and URL of the row and of the target's
         node. A table that reports more ``AXRows`` than it exposes as
@@ -556,7 +715,6 @@ class QuartzMacAXClient:
                 AXUIElementCopyElementAtPosition,
                 AXUIElementCreateApplication,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
             )
 
             from openadapt_flow.runtime.identity_census import tree_row_census
@@ -567,10 +725,8 @@ class QuartzMacAXClient:
             )
             if hit_error != 0 or element is None:
                 return None
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                element, kAXTopLevelUIElementAttribute, None
-            )
-            if top_error != 0 or top_level is None:
+            top_level = _ax_window_of(element)
+            if top_level is None:
                 return None
             title_error, title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
@@ -579,6 +735,8 @@ class QuartzMacAXClient:
                 return None
 
             def identity(row: Any, path: list[int]) -> Optional[str]:
+                if _AXTreeView(self).role(row) == "AXRow":
+                    return self._row_text(row)
                 node = row
                 for index in path:
                     children = _AXTreeView(self).children(node)
@@ -715,6 +873,7 @@ class MacOSBackend(RemoteDisplayBackend):
         foreground_retries: int = 10,
         foreground_settle_s: float = 0.1,
         ax_client: Optional[MacAXClient] = None,
+        pointer_settle_timeout_s: float = 2.0,
     ) -> None:
         if not app.strip():
             raise ValueError("native macOS backend requires a non-empty app name")
@@ -732,6 +891,11 @@ class MacOSBackend(RemoteDisplayBackend):
         self._foreground_retries = max(1, int(foreground_retries))
         self._foreground_settle_s = max(0.0, float(foreground_settle_s))
         self._captured_window: Optional[WindowInfo] = None
+        #: Set by ``act_structural`` for the length of its click: re-proves the
+        #: AX element right before every mouse-down edge.
+        self._pre_edge_check: Optional[Any] = None
+        #: step id -> (window id, pid) the step's verified identity was in.
+        self._verified_windows: dict[str, tuple[int, int]] = {}
         # Opaque AX object captured with the one-shot actuation frame. It is
         # process-local, never serialized/logged, and prevents an unchanged-
         # pixel focus switch from redirecting consequential TYPE/KEY input.
@@ -743,6 +907,7 @@ class MacOSBackend(RemoteDisplayBackend):
             require_input_trust=require_input_trust,
             activate_before_input=False,
             settle_s=settle_s,
+            pointer_settle_timeout_s=pointer_settle_timeout_s,
         )
 
     def _resolve_window(self, *, refresh: bool = False) -> WindowInfo:
@@ -770,11 +935,158 @@ class MacOSBackend(RemoteDisplayBackend):
     def _window_focus_matches(self, window: WindowInfo) -> bool:
         """Use authoritative CG+AX focus; NSWorkspace may lag after AXRaise."""
 
+        sheet = self._attached_sheet(window)
         return (
-            self._mac_client.frontmost_window_id() == window.window_id
+            self._mac_client.frontmost_window_id() in self._front_ids(window, sheet)
             and self._mac_client.focused_application_pid() == window.pid
-            and self._mac_client.exact_window_focused_main(window)
+            and self._focused_main(window, sheet)
         )
+
+    # -- the pinned window's own sheet (#1711) ---------------------------------
+    #
+    # An AppKit sheet (an NSAlert attached to the window) is a separate
+    # CoreGraphics window that becomes frontmost and key, and the AX focused
+    # window. It is accepted in place of the pinned window only when the
+    # window's AX element lists exactly that one sheet and exactly one window
+    # of the same process has its bounds inside the window
+    # (``MacWindowClient.attached_sheet``). Any other window stays refused.
+
+    def record_verified_window(self, step_id: str, x: int, y: int) -> bool:
+        """Remember the window a step's verified identity was in (#1724).
+
+        Uses the window the identity check just captured, without another
+        window-server read. It proves the same window, not the same record.
+        """
+        self._verified_windows.pop(str(step_id), None)
+        window = self._captured_window
+        if window is None:
+            return False
+        self._verified_windows[str(step_id)] = (window.window_id, window.pid)
+        return True
+
+    def owned_window_over(
+        self, region: tuple[int, int, int, int], *, pinned_step_id: str
+    ) -> Optional[dict[str, Any]]:
+        """The pinned window's own sheet, when it covers ``region`` (#1724).
+
+        ``pinned_step_id`` names the step whose verified identity recorded the
+        window (:meth:`record_verified_window`). Only that same window's one
+        proved sheet counts. None on anything else: no capture, the window is
+        gone or another one now, no proved sheet, no overlap, any failure.
+        """
+        captured = self._verified_windows.get(str(pinned_step_id))
+        if captured is None:
+            return None
+        try:
+            window = self._resolve_window(refresh=True)
+            if (window.window_id, window.pid) != captured:
+                return None
+            sheet = self._attached_sheet(window, wait=False)
+            if sheet is None:
+                return None
+            self._ensure_captured()
+            rect = self._in_window_pixel_rect(window, sheet[1])
+        except Exception:  # noqa: BLE001 - no proof
+            return None
+        if rect is None:
+            return None
+        sx, sy, sw, sh = rect
+        x, y, w, h = (int(v) for v in region)
+        if sx < x + w and x < sx + sw and sy < y + h and y < sy + sh:
+            return {
+                "kind": "sheet",
+                "window_id": sheet[0],
+                "pid": window.pid,
+                "region": [int(sx), int(sy), int(sw), int(sh)],
+            }
+        return None
+
+    def _attached_sheet(
+        self, window: WindowInfo, *, wait: bool = True
+    ) -> Optional[tuple[int, tuple[float, float, float, float]]]:
+        """The window's proved sheet, or None.
+
+        ``wait=False`` probes once: for a check whose last read must come right
+        before input (``_assert_click_target``).
+        """
+        probe = getattr(self._mac_client, "attached_sheet", None)
+        if not callable(probe):
+            return None
+        for _ in range(_SHEET_SETTLE_POLLS if wait else 1):
+            try:
+                sheet = probe(window)
+            except Exception:  # noqa: BLE001 - no proof of a sheet means no sheet
+                sheet = None
+            if isinstance(sheet, tuple) and len(sheet) == 2:
+                return sheet
+            # A sheet sliding in is already frontmost while its bounds still
+            # move, so it can't be proved yet. Wait (bounded) only while some
+            # other window of this process is frontmost; anything else is
+            # refused at once.
+            front = self._mac_client.frontmost_window_id()
+            if front in (None, window.window_id) or not self._same_process_window(
+                front, window
+            ):
+                return None
+            time.sleep(_SHEET_SETTLE_STEP_S)
+        return None
+
+    def _same_process_window(self, window_id: int, window: WindowInfo) -> bool:
+        owner = getattr(self._mac_client, "window_owner_pid", None)
+        if not callable(owner):
+            return False
+        try:
+            return owner(window_id) == window.pid
+        except Exception:  # noqa: BLE001
+            return False
+
+    @staticmethod
+    def _front_ids(
+        window: WindowInfo, sheet: Optional[tuple[int, Any]]
+    ) -> frozenset[int]:
+        """The window ids that may be frontmost: the window, or its sheet."""
+
+        return frozenset({window.window_id, sheet[0]} if sheet else {window.window_id})
+
+    def _focused_main(
+        self, window: WindowInfo, sheet: Optional[tuple[int, Any]]
+    ) -> bool:
+        if sheet is None:
+            return bool(self._mac_client.exact_window_focused_main(window))
+        either = getattr(self._mac_client, "exact_window_or_sheet_focused", None)
+        return bool(callable(either) and either(window))
+
+    def _assert_click_target(self, sx: float, sy: float) -> None:
+        """The point hits the leased window, or its attached sheet inside it.
+
+        The sheet is probed once, without waiting, and the hit test is read
+        last: it is the final window check before the base class's mouse-down.
+        """
+        assert self._frame_window is not None
+        window = self._frame_window
+        sheet = self._attached_sheet(window, wait=False)
+        expected = window.window_id
+        if sheet is not None:
+            x, y, w, h = sheet[1]
+            if x <= sx < x + w and y <= sy < y + h:
+                expected = sheet[0]
+        hit = self._client.window_at_point(sx, sy)
+        if hit == expected:
+            return
+        raise MacOSBackendError(
+            f"screen point {(sx, sy)!r} is covered by window {hit!r}, not the "
+            f"leased window {window.window_id} or its attached sheet; refusing a "
+            "click that could hit an occluder"
+        )
+
+    def _capture_window(self, win: WindowInfo) -> tuple[bytes, int, int]:
+        """The window's pixels, with its attached sheet drawn on top."""
+
+        sheet = self._attached_sheet(win)
+        stack = getattr(self._mac_client, "capture_stack", None)
+        if sheet is not None and callable(stack):
+            return stack([sheet[0], win.window_id], win.bounds)
+        return self._mac_client.capture(win.window_id)
 
     @timed_span("screenshot")
     def screenshot(self) -> bytes:
@@ -860,25 +1172,57 @@ class MacOSBackend(RemoteDisplayBackend):
         *,
         point: Optional[tuple[float, float]] = None,
     ) -> None:
-        """Require every global-input proof to still match one bound window."""
+        """Require every global-input proof to still match one bound window.
+
+        While a sheet of the window opens or closes, the window server and AX
+        disagree for a moment (the sheet is frontmost but not yet, or no
+        longer, listed). Only then is the whole check taken again, for at most
+        :data:`_SHEET_SETTLE_POLLS` steps, and it passes only on one snapshot
+        in which every condition holds.
+        """
+        for attempt in range(_SHEET_SETTLE_POLLS):
+            sheet = self._attached_sheet(bound)
+            if self._bound_target_holds(bound, sheet, point):
+                return
+            front = self._mac_client.frontmost_window_id()
+            in_transition = sheet is not None or (
+                front not in (None, bound.window_id)
+                and self._same_process_window(front, bound)
+            )
+            if not in_transition or attempt == _SHEET_SETTLE_POLLS - 1:
+                break
+            time.sleep(_SHEET_SETTLE_STEP_S)
+        raise MacOSBackendError(
+            "native physical-input target changed after foreground proof; "
+            f"bound id={bound.window_id} pid={bound.pid} "
+            f"bounds={bound.bounds!r} title={bound.title!r}. Refusing "
+            "coordinate/global input against a stale window mapping"
+        )
+
+    def _bound_target_holds(
+        self,
+        bound: WindowInfo,
+        sheet: Optional[tuple[int, Any]],
+        point: Optional[tuple[float, float]],
+    ) -> bool:
         current = self._resolve_window(refresh=True)
         point_window_id = (
             self._mac_client.window_id_at_point(*point) if point is not None else None
         )
-        if (
+        expected_at_point = bound.window_id
+        if sheet is not None and point is not None:
+            sx, sy, sw, sh = sheet[1]
+            if sx <= point[0] < sx + sw and sy <= point[1] < sy + sh:
+                expected_at_point = sheet[0]
+        return not (
             current != bound
             or not current.on_screen
             or self._mac_client.focused_application_pid() != bound.pid
-            or self._mac_client.frontmost_window_id() != bound.window_id
-            or not self._mac_client.exact_window_focused_main(bound)
-            or (point is not None and point_window_id != bound.window_id)
-        ):
-            raise MacOSBackendError(
-                "native physical-input target changed after foreground proof; "
-                f"bound id={bound.window_id} pid={bound.pid} "
-                f"bounds={bound.bounds!r} title={bound.title!r}. Refusing "
-                "coordinate/global input against a stale window mapping"
-            )
+            or self._mac_client.frontmost_window_id()
+            not in self._front_ids(bound, sheet)
+            or not self._focused_main(bound, sheet)
+            or (point is not None and point_window_id != expected_at_point)
+        )
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click only through one foregrounded, frame-compatible window binding."""
@@ -968,6 +1312,13 @@ class MacOSBackend(RemoteDisplayBackend):
             counts = 2 if double else 1
             for index in range(counts):
                 self._assert_bound_physical_target(bound, point=point)
+                if self._pre_edge_check is not None:
+                    try:
+                        self._pre_edge_check(bound, sx, sy)
+                    except StructuralResolutionRefused as exc:
+                        if index == 0:
+                            raise  # nothing was pressed yet
+                        raise MacOSBackendError(str(exc)) from exc
                 self._mac_client.mouse(
                     sx,
                     sy,
@@ -1007,11 +1358,18 @@ class MacOSBackend(RemoteDisplayBackend):
             # below before input. A failed AX raise never relaxes the check.
             exact_ax_focus = self._mac_client.raise_window(target)
             target = self._resolve_window(refresh=True)
+            sheet = self._attached_sheet(target)
+            # With a sheet up, AppKit keeps the sheet focused: the window is
+            # raised and main, and its own sheet holds focus.
+            exact_ax_focus = bool(exact_ax_focus) or (
+                sheet is not None and self._focused_main(target, sheet)
+            )
             if (
                 exact_ax_focus
                 and target.on_screen
                 and self._mac_client.focused_application_pid() == target.pid
-                and self._mac_client.frontmost_window_id() == target.window_id
+                and self._mac_client.frontmost_window_id()
+                in self._front_ids(target, sheet)
             ):
                 return
             # Activation is asynchronous on some applications, so retry after
@@ -1101,9 +1459,12 @@ class MacOSBackend(RemoteDisplayBackend):
             self._mac_client.activate(target.pid)
             exact_ax_focus = self._mac_client.raise_window(target)
             target = self._resolve_window(refresh=True)
-            exact_cg_topmost = (
-                target.on_screen
-                and self._mac_client.frontmost_window_id() == target.window_id
+            sheet = self._attached_sheet(target)
+            exact_ax_focus = bool(exact_ax_focus) or (
+                sheet is not None and self._focused_main(target, sheet)
+            )
+            exact_cg_topmost = target.on_screen and (
+                self._mac_client.frontmost_window_id() in self._front_ids(target, sheet)
             )
             if exact_ax_focus and exact_cg_topmost:
                 self._ensure_input_ready()
@@ -1298,6 +1659,46 @@ class MacOSBackend(RemoteDisplayBackend):
             window_name=window.title,
         )
 
+    def element_identity_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """The AX element identity under pixel (x, y), for a repair's new click.
+
+        Shape: :class:`openadapt_flow.repair.element_identity.ElementIdentity`.
+        Scoped to this backend's exact window; None on any miss (never raises).
+        """
+        try:
+            window = self._ensure_captured()
+            screen_x, screen_y = self._pixel_to_screen(window, int(x), int(y))
+            element = self._ax_client.element_at_point(
+                window.pid, window.title, screen_x, screen_y
+            )
+            if element is None or not self._scoped_to_target(element):
+                return None
+            if self._in_window_pixel_rect(window, element.bounds) is None:
+                return None
+            read = getattr(self._ax_client, "ancestry", None)
+            trail = read(element) if callable(read) else None
+            if not trail:
+                return None
+            from openadapt_flow.repair.element_identity import DIALOG_ROLES
+
+            dialog_region = None
+            for role, _name, bounds in trail:
+                if role in DIALOG_ROLES and bounds is not None:
+                    dialog_region = self._in_window_pixel_rect(window, bounds)
+                    break
+            return {
+                "source": "ax",
+                "role": element.role,
+                "name": element.name,
+                "automation_id": element.accessible_id,
+                "ancestry": [[role, name] for role, name, _bounds in trail],
+                "window": window.title,
+                "process": window.owner,
+                "dialog_region": list(dialog_region) if dialog_region else None,
+            }
+        except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
+
     def _unique_candidate(self, locator: StructuralLocator) -> Optional[MacElement]:
         window = self._resolve_window()
         if (
@@ -1364,6 +1765,94 @@ class MacOSBackend(RemoteDisplayBackend):
             supported_operations=list(candidate.supported_operations),
         )
 
+    def act_structural(
+        self,
+        locator: StructuralLocator,
+        handle: StructuralHandle,
+        *,
+        double: bool = False,
+    ) -> ActionDeliveryReceipt:
+        """Click the same unique AX element the resolver found, or refuse.
+
+        Re-finds ``locator``'s one element and requires its fingerprint (AX
+        path, role, name, id, app, window and bounds) to still equal the
+        handle's, then delivers the fully gated physical click at its center.
+        Right before every mouse-down edge it proves the element again: still
+        the one match with that fingerprint, and the AX client's
+        ``is_part_of`` says the live element the hit-test finds at the point
+        is that element, or lies under it in the tree with nothing pressable
+        in between (its label). A nested button or link there, an overlay
+        from another subtree, or a client that can't tell is refused.
+
+        The receipt binds that fingerprint. It proves input delivery to that
+        element only: the fingerprint is positional, so a same-looking record
+        in its place is caught by the identity check that ran before, not by
+        this. Postconditions and system-of-record effects decide the outcome.
+        Every refusal before the first mouse-down is a
+        :class:`StructuralResolutionRefused` (no input was sent).
+        """
+        expected = handle.target_fingerprint
+        if not expected:
+            raise StructuralResolutionRefused(
+                "AX actuation requires a target fingerprint"
+            )
+        with self._input_lock:
+            window = self._ensure_captured()
+            candidate = self._same_element(locator, expected)
+            rect = self._in_window_pixel_rect(window, candidate.bounds)
+            if rect is None:
+                raise StructuralResolutionRefused(
+                    "AX target is no longer inside the window"
+                )
+            x, y, w, h = rect
+            point = (x + w // 2, y + h // 2)
+            if point != tuple(handle.point):
+                raise StructuralResolutionRefused(
+                    "AX target moved between resolution and actuation"
+                )
+
+            def check(bound: WindowInfo, sx: float, sy: float) -> None:
+                current = self._same_element(locator, expected)
+                hit = self._ax_client.element_at_point(bound.pid, bound.title, sx, sy)
+                part_of = getattr(self._ax_client, "is_part_of", None)
+                if (
+                    hit is None
+                    or not callable(part_of)
+                    or part_of(hit, current) is not True
+                ):
+                    raise StructuralResolutionRefused(
+                        "the element under the pointer is not the resolved AX "
+                        "target; refusing the click"
+                    )
+
+            self._pre_edge_check = check
+            try:
+                self.click(*point, double=double)
+            finally:
+                self._pre_edge_check = None
+        return ActionDeliveryReceipt(
+            receipt_id=secrets.token_hex(12),
+            operation="physical_double_click" if double else "physical_click",
+            native=False,
+            target_fingerprint=expected,
+            delivered_at=datetime.now(timezone.utc).isoformat(),
+            outcome_verified=False,
+        )
+
+    def _same_element(self, locator: StructuralLocator, expected: str) -> MacElement:
+        """``locator``'s one element, if its fingerprint is still ``expected``."""
+        candidate = self._unique_candidate(locator)
+        if candidate is None:
+            raise StructuralResolutionRefused(
+                "AX target disappeared between resolution and actuation"
+            )
+        if not hmac.compare_digest(expected, _fingerprint(candidate)):
+            raise StructuralResolutionRefused(
+                "AX target changed between resolution and actuation; refusing a "
+                "stale click"
+            )
+        return candidate
+
     def identity_candidates_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
         """Census of the rows that read the same as the element at (x, y).
 
@@ -1401,11 +1890,21 @@ class MacOSBackend(RemoteDisplayBackend):
     def displayed_text_at(self, x: int, y: int) -> Optional[str]:
         """The text of the one AX element under (x, y), for a read-back.
 
-        Same read as :meth:`structured_text_at`: on this backend that is the
-        element's own text, not a row. A demonstrated read-back compares it
-        with the expected value for equality.
+        The element's own text, not its row (which :meth:`structured_text_at`
+        reads for identity). A demonstrated read-back compares it with the
+        expected value for equality.
         """
-        return self.structured_text_at(x, y)
+        try:
+            window = self._ensure_captured()
+            screen_x, screen_y = self._pixel_to_screen(window, int(x), int(y))
+            element = self._ax_client.element_at_point(
+                window.pid, window.title, screen_x, screen_y
+            )
+            if element is None or not self._scoped_to_target(element):
+                return None
+            return _clean_text(element.text)
+        except Exception:  # noqa: BLE001 - a momentary AX failure is not fatal
+            return None
 
     def structured_text_at(self, x: int, y: int) -> Optional[str]:
         """Return the exact AX text at/around pixel (x, y), or None."""

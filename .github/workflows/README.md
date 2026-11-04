@@ -34,7 +34,9 @@ To keep pull requests fast, CI runs in three tiers:
 - **Nightly** (`nightly.yml`, daily at 07:23 UTC and on dispatch): calls
   Packages (with the Desktop test and build workflows) and the launcher CI as
   a scheduled run, so every package's full suite runs against main on every
-  platform its CI covers, whatever changed. The merge queue's push and a pull
+  platform its CI covers, whatever changed. Flow's unit shards also run all
+  of `tests/e2e` there; pull requests and main run the end-to-end tests
+  `flow-critical` names. The merge queue's push and a pull
   request run only the packages a change touches; this catches a package
   nobody touched breaking on main. When a job fails, the run opens the
   `main is red` issue (label `main-is-red`), or updates it if one is open. A
@@ -61,7 +63,11 @@ from the PR and queue tiers runs in the post-merge tier and nightly.
 | `dependency-review` | dependency-review.yml | runs | runs |
 
 The `ci` job needs Packages, the launcher CI and the smoke test. It fails
-unless each one passed. Inside Packages, `packages-gate` still requires every
+unless each one passed. When all three passed it is skipped instead of run:
+GitHub counts a skipped required check as passing, so a green run doesn't
+wait for a runner just to report. On 2026-11-03 these reporter jobs did no
+work but each waited 15 to 30 minutes for a runner. The two legacy names
+below follow the same rule. Inside Packages, `packages-gate` still requires every
 job the change selects to run and pass, except on a tier where that job
 doesn't run:
 
@@ -76,7 +82,7 @@ queue themselves. ci.yml calls them, so each job runs once per pull request.
 
 **Switching branch protection.** Until branch protection names `ci`, ci.yml
 also reports the two old required names, `run-ci (ubuntu-latest, 3.12)` and
-`packages-gate`, with `ci`'s result. CodeQL keeps reporting
+`packages-gate`, by the same rule as `ci`. CodeQL keeps reporting
 `Analyze (python)` from codeql.yml, as a non-required check after the
 switch. An admin switches it with:
 
@@ -98,7 +104,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | packages.yml | `types`, `agent` | Python 3.12 | Python 3.12 | Python 3.10 and 3.12 |
 | packages.yml | `flow-lint`, `flow-critical` | yes | yes | yes |
 | ci.yml | `smoke`, `ci` | yes | yes | no |
-| packages.yml | `flow-unit` | 2 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
+| packages.yml | `flow-unit` | 3 shards packed by measured time, fast lane (without `nightly_only.txt`) | no | 2 shards |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
@@ -115,6 +121,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | desktop-build.yml | `native-installers` | no | no | macOS arm64, macOS Intel, Windows, Linux bundles |
 | desktop-dependency-audit.yml | `python`, `npm`, `rust` | when Desktop changes | no | when Desktop changes, and weekly |
 | desktop-dependency-audit.yml | `python-macos-intel` | no | no | when Desktop changes, and weekly |
+| desktop-replay.yml | `replay` (Patient Notes through WindowsBackend, judged from SQLite), `freerdp` (FreeRDP transport round trip over a loopback RDP session) | when the Windows path changes; not required | no | nightly |
 | codeql.yml | `Analyze` (Python, JavaScript/TypeScript, Rust) | per changed language | per changed language | all languages on main and weekly |
 | secret-scan.yml, dependency-review.yml, platform-manifest.yml | all | yes | yes | yes |
 | docs.yml, link-check.yml (internal), production-lifecycle.yml, release-health.yml (self-test) | all | yes | no | main only |
@@ -123,9 +130,15 @@ packages.yml jobs run only for the packages a change touches. The `scope` job
 decides from the PR diff, the queue group's diff against its base commit, or
 the push's diff against the previous main.
 
-Flow's unit shards run `pytest -n auto --dist loadfile`: four xdist workers
-per runner, one test file per worker at a time, each worker with its own
-`--basetemp` directory. A test file that can't share the runner with others
+Flow's unit shards run `pytest -n logical --dist loadfile`: one xdist worker
+per vCPU (four on ubuntu-latest; `-n auto` counted physical cores and started
+two), one test file per worker at a time, each worker with its own
+`--basetemp` directory. `scripts/ci/flow_shards.py` packs the files into
+shards by their run time in `scripts/ci/flow_test_durations.json`, longest
+first, so the shards end together. A file with no recorded time counts as
+the median. Refresh the times from a run's shard logs with
+`python scripts/ci/flow_shards.py --from-logs <logs>` when the shards drift
+apart by more than a minute or two. A test file that can't share the runner with others
 should get its own serial step rather than turning xdist off.
 
 ## Releases
@@ -186,15 +199,17 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
-Three kinds of workflow keep their own groups:
+The release workflows, `desktop-release.yml` among them, keep a fixed group
+and never cancel, so releases run one at a time.
 
-- The release workflows use a fixed group and never cancel, so releases run
-  one at a time.
-- `desktop-release.yml` follows the same pattern.
-- `packages.yml` has its own rule (#1398). A push to main that doesn't touch
-  Desktop may cancel an older one, because `desktop-release.yml` waits only
-  for runs on commits that touch Desktop. Queue groups and dispatches are never
-  cancelled.
+`packages.yml` follows the same rule as the others (its group is named
+`packages-…`). It used to let a push to main without a Desktop change cancel
+an older one, judging the change from the push payload's file lists. Those
+lists missed Desktop files on PR merge pushes, so Desktop-changing runs were
+cancelled and Desktop 0.23.0 and 0.24.1 never released. Now no push to main is
+cancelled. `desktop-release.yml` also no longer depends on one particular run:
+each time Packages completes on main, and every three hours, it releases from
+the newest Desktop-changing commit's latest successful Packages push run.
 
 ## Caches
 

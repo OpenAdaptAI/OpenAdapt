@@ -831,22 +831,29 @@ RecordsReader = Callable[[], Optional[list[dict[str, Any]]]]
 
 def _resolved_selector(
     match: dict[str, Any], params: Mapping[str, Any]
-) -> Optional[dict[str, str]]:
-    """``match`` bound to ``params``; None when a value is missing."""
-    from openadapt_flow.runtime.effects.effect import Effect, EffectKind
+) -> Optional[dict[str, Any]]:
+    """``match`` bound to ``params``; None when a value is missing.
+
+    Values are bound expressions (:func:`selector_value`), so a number
+    compares by value as it does when the record check selects the record.
+    """
+    from openadapt_flow.runtime.effects.effect import (
+        Effect,
+        EffectKind,
+        selector_value,
+    )
 
     effect = Effect(kind=EffectKind.RECORD_WRITTEN, match=match)
-    out: dict[str, str] = {}
+    out: dict[str, Any] = {}
     for key, expr in effect.match.items():
-        value = expr.resolve(params)
-        if value is None:
+        if expr.resolve(params) is None:
             return None
-        out[key] = value
+        out[key] = selector_value(expr.resolved(params))
     return out
 
 
 def _matching(
-    records: list[dict[str, Any]], selector: dict[str, str]
+    records: list[dict[str, Any]], selector: dict[str, Any]
 ) -> list[dict[str, Any]]:
     from openadapt_flow.runtime.effects.effect import record_matches
 
