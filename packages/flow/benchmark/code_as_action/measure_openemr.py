@@ -184,7 +184,7 @@ KEYS = [
 
 
 def spec_for(key: str) -> Any:
-    from openadapt_flow.benchmark.openemr_local import SyntheticPatientSpec
+    from benchmark.harness.openemr_local import SyntheticPatientSpec
 
     return SyntheticPatientSpec(**REFERRALS[key], **COMMON_FIELDS)
 
@@ -390,7 +390,7 @@ def main() -> int:
     keys = [k for k in args.referrals.split(",") if k]
 
     from benchmark.openemr_local import qualify_hooks
-    from openadapt_flow.benchmark.openemr_local import SyntheticPatientSpec
+    from benchmark.harness.openemr_local import SyntheticPatientSpec
 
     fixture = qualify_hooks.fixture()
     demo = _demo()

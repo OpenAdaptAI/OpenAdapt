@@ -17,7 +17,7 @@ exist; the effect selector/field reference real params), and every task carries
 
 ``oracle.config["query"]`` + ``["query_params"]`` is what the multi-baseline
 runner materializes into a
-:class:`~openadapt_flow.benchmark.effectbench.SqlRecordVerifier` (read-only role,
+:class:`~benchmark.harness.effectbench.SqlRecordVerifier` (read-only role,
 DB-API-bound params). The loan-application docname has a space
 (`` `tabLoan Application` ``), so the table is back-tick quoted in the SELECT.
 """
@@ -33,15 +33,15 @@ from benchmark.effectbench.task_pack._authoring import (
     record_written_effect,
 )
 from benchmark.effectbench.task_pack.openemr_tasks import ContainerTask
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     DivergenceCategory as DC,
 )
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     Effect,
     Substrate,
     TaskSpec,
 )
-from openadapt_flow.benchmark.effectbench.schema import OracleChannel
+from benchmark.harness.effectbench.schema import OracleChannel
 
 ENVIRONMENT = "frappe_lending"
 

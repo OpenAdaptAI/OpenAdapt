@@ -148,7 +148,7 @@ def compile_bundle() -> None:
 
 def _replay_one(label: str, params: dict[str, str], url: str) -> dict:
     """One fresh-browser compiled replay; returns a summary row."""
-    from openadapt_flow.benchmark.verify import verify_note_saved
+    from benchmark.harness.verify import verify_note_saved
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime.replayer import Replayer
     from openadapt_flow.vision.ocr import normalize_text, ocr

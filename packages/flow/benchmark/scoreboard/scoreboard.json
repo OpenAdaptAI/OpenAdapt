@@ -1,7 +1,7 @@
 {
   "protocol_version": "2026-10-18.1",
   "timed_load_max": 12.0,
-  "spend_usd": 12.543253,
+  "spend_usd": 12.975542,
   "tasks": {
     "mockmed": {
       "agent": {
@@ -304,8 +304,8 @@
       },
       "program": {
         "label": "3. Compiled program driving the UI",
-        "items": 100,
-        "attempts": 102,
+        "items": 120,
+        "attempts": 124,
         "runs": {
           "2026-10-18-a": {
             "items": 100,
@@ -358,19 +358,65 @@
               "min": 82.45,
               "max": 532.93
             }
+          },
+          "2026-10-25-rb": {
+            "items": 20,
+            "attempts": 22,
+            "runs": [
+              "2026-10-25-rb"
+            ],
+            "normal_items": 18,
+            "correct": 18,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 2,
+            "fault_items_by_kind": {
+              "optimistic": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 1,
+                "flagged_wrong": 0
+              },
+              "wrong_record": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 0,
+                "flagged_wrong": 1
+              }
+            },
+            "planned_items": 20,
+            "done_correctly_all_items": 18,
+            "flagged_wrong": 1,
+            "paused": 0,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 38.6,
+              "max": 140.76
+            }
           }
         },
-        "normal_items": 47,
-        "correct": 47,
+        "normal_items": 65,
+        "correct": 65,
         "correct_rate": 1.0,
         "silent_wrong": 0,
         "safe_stops_normal": 0,
-        "fault_items": 53,
+        "fault_items": 55,
         "fault_items_by_kind": {
           "optimistic": {
             "correct": 0,
             "silent_wrong": 0,
-            "safe_stop": 1,
+            "safe_stop": 2,
             "flagged_wrong": 0
           },
           "ui_change": {
@@ -383,12 +429,12 @@
             "correct": 0,
             "silent_wrong": 0,
             "safe_stop": 0,
-            "flagged_wrong": 1
+            "flagged_wrong": 2
           }
         },
-        "planned_items": 100,
-        "done_correctly_all_items": 98,
-        "flagged_wrong": 1,
+        "planned_items": 120,
+        "done_correctly_all_items": 116,
+        "flagged_wrong": 2,
         "paused": 0,
         "model_calls_per_item": 0.0,
         "tokens_per_item": 0,
@@ -402,7 +448,7 @@
         "wall_s_p90": null,
         "items_per_hour": null,
         "host_load_1m": {
-          "min": 82.45,
+          "min": 38.6,
           "max": 532.93
         },
         "run_meta": {
@@ -422,10 +468,27 @@
             "arm": "program",
             "program_from": "2026-10-18-a",
             "n": 100
+          },
+          "2026-10-25-rb": {
+            "run": "2026-10-25-rb",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-24T23:41:33-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.7",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+              "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
+            },
+            "benchmark_git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31",
+            "task": "mockmed",
+            "arm": "program",
+            "program_from": "code-2026-10-25-rb",
+            "n": 40
           }
         },
         "hand_check": {
-          "rows_not_correct": 4,
+          "rows_not_correct": 8,
           "checked": 0,
           "confirmed": 0,
           "items": []
@@ -437,13 +500,20 @@
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
               "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
             }
+          },
+          {
+            "run": "2026-10-25-rb",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+              "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
+            }
           }
         ]
       },
       "code_agent": {
         "label": "7. Code-as-action authoring agent, first run",
-        "items": 5,
-        "attempts": 5,
+        "items": 25,
+        "attempts": 25,
         "runs": {
           "2026-10-19-timed": {
             "items": 5,
@@ -477,24 +547,83 @@
               "min": 11.78,
               "max": 14.29
             }
+          },
+          "2026-10-25-rb": {
+            "items": 20,
+            "attempts": 20,
+            "runs": [
+              "2026-10-25-rb"
+            ],
+            "normal_items": 18,
+            "correct": 18,
+            "correct_rate": 1.0,
+            "silent_wrong": 1,
+            "safe_stops_normal": 0,
+            "fault_items": 2,
+            "fault_items_by_kind": {
+              "optimistic": {
+                "correct": 0,
+                "silent_wrong": 1,
+                "safe_stop": 0,
+                "flagged_wrong": 0
+              },
+              "wrong_record": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 0,
+                "flagged_wrong": 1
+              }
+            },
+            "planned_items": 20,
+            "done_correctly_all_items": 18,
+            "flagged_wrong": 1,
+            "paused": 0,
+            "model_calls_per_item": 4.05,
+            "tokens_per_item": 7656,
+            "cost_usd_total": 0.1858,
+            "cost_usd_per_item": 0.0093,
+            "approvals_asked": 18,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 53.44,
+              "max": 131.43
+            }
           }
         },
-        "normal_items": 5,
-        "correct": 5,
+        "normal_items": 23,
+        "correct": 23,
         "correct_rate": 1.0,
-        "silent_wrong": 0,
+        "silent_wrong": 1,
         "safe_stops_normal": 0,
-        "fault_items": 0,
-        "fault_items_by_kind": {},
-        "planned_items": 5,
-        "done_correctly_all_items": 5,
-        "flagged_wrong": 0,
+        "fault_items": 2,
+        "fault_items_by_kind": {
+          "optimistic": {
+            "correct": 0,
+            "silent_wrong": 1,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          },
+          "wrong_record": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 0,
+            "flagged_wrong": 1
+          }
+        },
+        "planned_items": 25,
+        "done_correctly_all_items": 23,
+        "flagged_wrong": 1,
         "paused": 0,
-        "model_calls_per_item": 5.0,
-        "tokens_per_item": 9913,
-        "cost_usd_total": 0.0522,
-        "cost_usd_per_item": 0.0104,
-        "approvals_asked": 5,
+        "model_calls_per_item": 4.24,
+        "tokens_per_item": 8108,
+        "cost_usd_total": 0.2379,
+        "cost_usd_per_item": 0.0095,
+        "approvals_asked": 23,
         "timed_correct_items": 1,
         "item_s_median": 8.17,
         "item_s_p90": 8.17,
@@ -503,7 +632,7 @@
         "items_per_hour": 368.0,
         "host_load_1m": {
           "min": 11.78,
-          "max": 14.29
+          "max": 131.43
         },
         "run_meta": {
           "2026-10-19-timed": {
@@ -554,10 +683,34 @@
                 ]
               }
             ]
+          },
+          "2026-10-25-rb": {
+            "run": "2026-10-25-rb",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-24T23:34:22-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.7",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+              "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
+            },
+            "benchmark_git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31",
+            "task": "mockmed",
+            "arm": "code_agent",
+            "model": "claude-sonnet-5-5",
+            "n": 40,
+            "vision": "code",
+            "effort": "medium",
+            "max_cost_per_item": 0.3,
+            "on_screen": [
+              "Jane Sample",
+              "MRN P1"
+            ]
           }
         },
         "hand_check": {
-          "rows_not_correct": 0,
+          "rows_not_correct": 2,
           "checked": 0,
           "confirmed": 0,
           "items": []
@@ -569,6 +722,14 @@
             "engine": {
               "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
               "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+            }
+          },
+          {
+            "run": "2026-10-25-rb",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+              "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
             }
           }
         ]
@@ -1691,8 +1852,8 @@
       },
       "code_agent": {
         "label": "7. Code-as-action authoring agent, first run",
-        "items": 5,
-        "attempts": 5,
+        "items": 11,
+        "attempts": 11,
         "runs": {
           "2026-10-19-timed": {
             "items": 5,
@@ -1726,23 +1887,89 @@
               "min": 10.84,
               "max": 32.3
             }
+          },
+          "2026-10-25-rb": {
+            "items": 5,
+            "attempts": 5,
+            "runs": [
+              "2026-10-25-rb"
+            ],
+            "normal_items": 5,
+            "correct": 5,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 5,
+            "done_correctly_all_items": 5,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 10.6,
+            "tokens_per_item": 63381,
+            "cost_usd_total": 0.2068,
+            "cost_usd_per_item": 0.0414,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 47.17,
+              "max": 256.05
+            }
+          },
+          "2026-10-25-rb-admit": {
+            "items": 1,
+            "attempts": 1,
+            "runs": [
+              "2026-10-25-rb-admit"
+            ],
+            "normal_items": 1,
+            "correct": 1,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 0,
+            "fault_items_by_kind": {},
+            "planned_items": 1,
+            "done_correctly_all_items": 1,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 11.0,
+            "tokens_per_item": 58722,
+            "cost_usd_total": 0.0398,
+            "cost_usd_per_item": 0.0398,
+            "approvals_asked": 0,
+            "timed_correct_items": 0,
+            "item_s_median": null,
+            "item_s_p90": null,
+            "wall_s_median": null,
+            "wall_s_p90": null,
+            "items_per_hour": null,
+            "host_load_1m": {
+              "min": 143.52,
+              "max": 143.52
+            }
           }
         },
-        "normal_items": 5,
-        "correct": 5,
+        "normal_items": 11,
+        "correct": 11,
         "correct_rate": 1.0,
         "silent_wrong": 0,
         "safe_stops_normal": 0,
         "fault_items": 0,
         "fault_items_by_kind": {},
-        "planned_items": 5,
-        "done_correctly_all_items": 5,
+        "planned_items": 11,
+        "done_correctly_all_items": 11,
         "flagged_wrong": 0,
         "paused": 0,
-        "model_calls_per_item": 10.8,
-        "tokens_per_item": 65772,
-        "cost_usd_total": 0.2144,
-        "cost_usd_per_item": 0.0429,
+        "model_calls_per_item": 10.73,
+        "tokens_per_item": 64044,
+        "cost_usd_total": 0.4609,
+        "cost_usd_per_item": 0.0419,
         "approvals_asked": 0,
         "timed_correct_items": 0,
         "item_s_median": null,
@@ -1752,7 +1979,7 @@
         "items_per_hour": null,
         "host_load_1m": {
           "min": 10.84,
-          "max": 32.3
+          "max": 256.05
         },
         "run_meta": {
           "2026-10-19-timed": {
@@ -1801,6 +2028,52 @@
                 ]
               }
             ]
+          },
+          "2026-10-25-rb": {
+            "run": "2026-10-25-rb",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-24T23:47:00-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.7",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+              "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
+            },
+            "benchmark_git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31",
+            "task": "openemr_referral",
+            "arm": "code_agent",
+            "model": "claude-sonnet-5-5",
+            "n": 5,
+            "vision": "code",
+            "effort": "medium",
+            "max_cost_per_item": 0.3,
+            "on_screen": [
+              "Create New Patient"
+            ]
+          },
+          "2026-10-25-rb-admit": {
+            "run": "2026-10-25-rb-admit",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-25T00:06:24-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.7",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+              "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
+            },
+            "benchmark_git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31",
+            "task": "openemr_referral",
+            "arm": "code_agent",
+            "model": "claude-sonnet-5-5",
+            "n": 6,
+            "vision": "code",
+            "effort": "medium",
+            "max_cost_per_item": 0.3,
+            "on_screen": [
+              "Create New Patient"
+            ]
           }
         },
         "hand_check": {
@@ -1816,6 +2089,22 @@
             "engine": {
               "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
               "git_head": "a5627748b9c9334fc2401c5636c57e7c858101d5"
+            }
+          },
+          {
+            "run": "2026-10-25-rb",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+              "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
+            }
+          },
+          {
+            "run": "2026-10-25-rb-admit",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/code-agent-default/packages/flow/openadapt_flow",
+              "git_head": "bedf5439f462acd296a8056acdad8a58f4db2b31"
             }
           }
         ]

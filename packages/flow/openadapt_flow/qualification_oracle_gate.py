@@ -293,13 +293,17 @@ def _resolved_effect(workflow: Workflow, effect: Effect) -> Effect:
 def _execute_screen_oracle(
     workflow: Workflow, effect: Effect, banner_text: str
 ) -> EffectVerdict:
+    resolved = _resolved_effect(workflow, effect)
+    # A lying screen can paint exactly what the oracle reads, so the broken
+    # case shows the oracle's own expected text when it names one.
+    expected = resolved.value.literal if resolved.value is not None else None
+    if isinstance(expected, str) and expected.strip():
+        banner_text = expected
     verifier = OnScreenReadbackVerifier(
         _BreakItBannerBackend(),
         vision=_BreakItBannerVision(banner_text),
     )
-    return verifier.verify(
-        _resolved_effect(workflow, effect), verifier.capture_pre_state()
-    )
+    return verifier.verify(resolved, verifier.capture_pre_state())
 
 
 def _execute_sor_oracle(

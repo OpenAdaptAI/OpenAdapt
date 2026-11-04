@@ -127,7 +127,13 @@ def engine() -> dict[str, str]:
     import openadapt_flow
 
     root = Path(openadapt_flow.__file__).resolve().parent
-    return {"path": str(root), "git_head": git_head(root)}
+    # Relative to the repository, so no local path lands in committed data.
+    repo = HERE.parents[3]
+    try:
+        shown = str(root.relative_to(repo))
+    except ValueError:
+        shown = root.name
+    return {"path": shown, "git_head": git_head(root)}
 
 
 def write_meta(out: Path, **extra: Any) -> None:
