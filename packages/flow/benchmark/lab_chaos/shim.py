@@ -61,7 +61,9 @@ def make_handler(args: argparse.Namespace) -> type[BaseHTTPRequestHandler]:
         def log_message(self, *a: object) -> None:  # quiet
             pass
 
-        def _send(self, status: int, headers: list[tuple[str, str]], body: bytes) -> None:
+        def _send(
+            self, status: int, headers: list[tuple[str, str]], body: bytes
+        ) -> None:
             self.send_response(status)
             for k, v in headers:
                 self.send_header(k, v)
@@ -91,9 +93,7 @@ def make_handler(args: argparse.Namespace) -> type[BaseHTTPRequestHandler]:
                 note(kind="stale", path=self.path)
                 self._send(status, headers, cached)
                 return
-            headers = {
-                k: v for k, v in self.headers.items() if k.lower() not in HOP
-            }
+            headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
             headers["Host"] = args.app_origin
             headers["Accept-Encoding"] = "identity"
             for name in ("Origin", "Referer"):
@@ -113,9 +113,7 @@ def make_handler(args: argparse.Namespace) -> type[BaseHTTPRequestHandler]:
                     out.append((k, v))
                 ctype = resp.getheader("Content-Type") or ""
                 if "html" in ctype or "javascript" in ctype or "json" in ctype:
-                    data = data.replace(
-                        args.app_origin.encode(), args.public.encode()
-                    )
+                    data = data.replace(args.app_origin.encode(), args.public.encode())
                 status = resp.status
             except Exception as exc:  # noqa: BLE001 - upstream down
                 note(kind="upstream_error", error=type(exc).__name__, path=self.path)

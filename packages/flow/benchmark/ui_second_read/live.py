@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import secrets
 import sys
 import time
@@ -172,9 +171,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             rows.append(row)
             print(json.dumps(row)[:600], flush=True)
     rows.append({"api_requests_blocked": NoApiDriver.api_blocked})
-    (out / f"{args.app}.jsonl").write_text(
-        "".join(json.dumps(r) + "\n" for r in rows)
-    )
+    (out / f"{args.app}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     return 0
 
 
