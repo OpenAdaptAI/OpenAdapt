@@ -652,7 +652,11 @@ def _program_action_trace(
             raise ValueError("transition evidence decision rows disagree")
         return group
 
-    def _verified_inventory_bytes(ref: str, expected_sha256: str) -> bytes:
+    def _verified_inventory_bytes(
+        ref: str, expected_sha256: str, *, attended: bool = False
+    ) -> bytes:
+        if attended:
+            return _verified_attended_bytes(ref, expected_sha256)
         if transition_evidence_root is None:
             raise ValueError("visual transition evidence has no local evidence root")
         root = transition_evidence_root.resolve()
@@ -679,6 +683,43 @@ def _program_action_trace(
             payload = path.read_bytes()
         except OSError as exc:
             raise ValueError("transition frame evidence is unreadable") from exc
+        if hashlib.sha256(payload).hexdigest() != expected_sha256:
+            raise ValueError("transition evidence digest does not match")
+        return payload
+
+    def _verified_attended_bytes(ref: str, expected_sha256: str) -> bytes:
+        """Plaintext of an attended receipt or control file, which may be
+        encrypted at rest as ``<ref>.enc`` (``attended_state``)."""
+        from openadapt_flow import crypto as _crypto
+        from openadapt_flow.runtime.durable import attended_state as _state
+
+        if transition_evidence_root is None:
+            raise ValueError("visual transition evidence has no local evidence root")
+        root = transition_evidence_root.resolve()
+        encrypted = root.joinpath(*PurePosixPath(ref + _state.ENC_SUFFIX).parts)
+        if not (encrypted.exists() or encrypted.is_symlink()):
+            if (root / _state.MARKER_FILENAME).exists():
+                raise ValueError("attended evidence is plaintext where encrypted")
+            return _verified_inventory_bytes(ref, expected_sha256)
+        parts = PurePosixPath(ref + _state.ENC_SUFFIX).parts
+        cursor_path = root
+        for part in parts:
+            cursor_path /= part
+            if cursor_path.is_symlink():
+                raise ValueError("transition frame path contains a symlink")
+        try:
+            path = encrypted.resolve(strict=True)
+            path.relative_to(root)
+            container = path.read_bytes()
+        except (OSError, ValueError) as exc:
+            raise ValueError("attended transition evidence is unreadable") from exc
+        payload = _state.open_sealed(
+            container,
+            _crypto.resolve_key(None),
+            _state.FILE_AAD_PREFIX + ref.encode("utf-8"),
+        )
+        import hashlib
+
         if hashlib.sha256(payload).hexdigest() != expected_sha256:
             raise ValueError("transition evidence digest does not match")
         return payload
@@ -835,6 +876,7 @@ def _program_action_trace(
         payload = _verified_inventory_bytes(
             item.receipt_inventory_ref,
             item.receipt_sha256,
+            attended=True,
         )
         from openadapt_flow.runtime.durable.attended import (
             AttendedActionRefused,
@@ -895,6 +937,7 @@ def _program_action_trace(
         control_payload = _verified_inventory_bytes(
             item.control_frames_inventory_ref,
             item.control_frames_sha256,
+            attended=True,
         )
         try:
             control_frames = [

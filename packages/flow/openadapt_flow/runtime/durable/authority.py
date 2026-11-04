@@ -1056,8 +1056,15 @@ class DurableAuthority:
         *,
         expected_run_id: str,
         authority_record: DurableAuthorityRecord,
+        key: Optional[str] = None,
     ) -> tuple[Optional[str], str]:
-        """Verify the full external hash chain and return its latest snapshot."""
+        """Verify the full external hash chain and return its latest snapshot.
+
+        A snapshot stored encrypted (``attended_state.JOURNAL_MARKER``) is
+        decrypted under ``key``; an older plaintext row reads as it is.
+        """
+
+        from openadapt_flow.runtime.durable import attended_state as _state
 
         rows = connection.execute(
             "SELECT * FROM attended_journal WHERE path_key = ? ORDER BY sequence",
@@ -1085,7 +1092,17 @@ class DurableAuthority:
                 raise DurableAuthorityBusy(
                     "the external attended-decision journal chain is invalid"
                 )
-            snapshot_json = str(values["snapshot_json"])
+            try:
+                snapshot_json = _state.open_journal_snapshot(
+                    str(values["snapshot_json"]),
+                    key,
+                    path_key=self.path_key,
+                    sequence=expected_sequence,
+                )
+            except _state.AttendedStateUnreadable as exc:
+                raise DurableAuthorityBusy(
+                    "the external attended-decision snapshot does not decrypt"
+                ) from exc
             snapshot_digest = (
                 "sha256:" + hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest()
             )
@@ -1216,9 +1233,12 @@ class DurableAuthority:
             )
 
     def read_attended_snapshot(
-        self, *, expected_run_id: str
+        self, *, expected_run_id: str, key: Optional[str] = None
     ) -> tuple[Optional[str], str]:
-        """Read the authenticated journal snapshot and its monotonic head."""
+        """Read the authenticated journal snapshot and its monotonic head.
+
+        ``key`` decrypts snapshots stored encrypted.
+        """
 
         with self._transaction() as connection:
             record = self._read(connection)
@@ -1230,6 +1250,7 @@ class DurableAuthority:
                 connection,
                 expected_run_id=expected_run_id,
                 authority_record=record,
+                key=key,
             )
 
     def append_attended_snapshot(
@@ -1238,8 +1259,15 @@ class DurableAuthority:
         expected_run_id: str,
         expected_head_digest: str,
         snapshot_json: str,
+        key: Optional[str] = None,
     ) -> str:
-        """Append one authenticated journal revision in the external authority."""
+        """Append one authenticated journal revision in the external authority.
+
+        With ``key`` the snapshot is stored encrypted, bound to this run path
+        and sequence. The digest and HMAC cover the plaintext snapshot.
+        """
+
+        from openadapt_flow.runtime.durable import attended_state as _state
 
         # Parse before the transaction so invalid JSON never enters authority.
         self._validate_snapshot_extension(None, snapshot_json)
@@ -1253,6 +1281,7 @@ class DurableAuthority:
                 connection,
                 expected_run_id=expected_run_id,
                 authority_record=record,
+                key=key,
             )
             if head != expected_head_digest:
                 raise DurableAuthorityBusy(
@@ -1299,7 +1328,12 @@ class DurableAuthority:
                     expected_run_id,
                     head,
                     snapshot_digest,
-                    snapshot_json,
+                    _state.seal_journal_snapshot(
+                        snapshot_json,
+                        key,
+                        path_key=self.path_key,
+                        sequence=sequence,
+                    ),
                     record_digest,
                     record_mac,
                     created_at,
