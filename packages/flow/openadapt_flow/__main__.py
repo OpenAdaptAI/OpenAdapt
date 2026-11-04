@@ -12974,7 +12974,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv = admit_default_form(argv)
     # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
-    # any command runs, so no code path can open a connection off the machine.
+    # any command runs, so no Python socket in this process, and no child it
+    # starts uncontained, can open a connection off the machine. Native code and
+    # loopback relays are outside it (docs/OFFLINE_SEALS.md).
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()
