@@ -1092,3 +1092,23 @@ def test_a_read_spec_and_grade_floor_are_sealed_content(tmp_path):
     )
     content = bv._workflow_content(read)
     assert content["steps"][0]["read"]["field"]["name"] == "amount"
+
+
+@pytest.mark.parametrize("shape", ["linear", "program"])
+def test_dialog_row_evidence_preserves_frozen_legacy_seal_and_is_tamper_evident(tmp_path, shape):
+    b = _write_bundle_dir(tmp_path)
+    wf = _structural_workflow(shape)
+    old_digest = _write_synthetic_pre_field_bundle(b, wf, shape, encrypted=False)
+    assert old_digest == _SYNTHETIC_LEGACY_DIGESTS[shape]
+    raw = json.loads((b / "workflow.json").read_text())
+    assert "dialog_row" not in _anchor_payload(raw, shape)
+    loaded = Workflow.load(b, verify_integrity=True)
+    anchor = loaded.steps[0].anchor if shape == "linear" else loaded.program.states["s1"].step.anchor
+    assert anchor.dialog_row is None
+    for evidence in (True, False):
+        anchor.dialog_row = evidence
+        assert bv.compute_content_digest(loaded, loaded.manifest.file_hashes) != old_digest
+        _anchor_payload(raw, shape)["dialog_row"] = evidence
+        (b / "workflow.json").write_text(json.dumps(raw))
+        with pytest.raises(bv.BundleIntegrityError):
+            Workflow.load(b, verify_integrity=True)

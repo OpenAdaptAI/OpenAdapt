@@ -507,3 +507,16 @@ def test_heal_keeps_a_dialog_target_band_inside_the_dialog():
     assert event.new_anchor.dialog_region == (70, 45, 180, 120)
     full = cv2.imdecode(np.frombuffer(frames[-1], np.uint8), cv2.IMREAD_COLOR)
     assert (full[:45] == 255).all() and (full[45:165, 70:250] == 0).all()
+
+
+def test_heal_dialog_mask_failure_never_recontexts_unmasked_frame(monkeypatch):
+    from openadapt_flow.runtime import identity as identity_mod
+
+    step = ocr_anchored_step()
+    step.anchor.dialog_region = (60, 40, 180, 120)
+    monkeypatch.setattr(identity_mod, "mask_outside", lambda *args: None)
+    resolution = Resolution(rung="template_global", point=step.anchor.click_point,
+                            confidence=0.99, elapsed_ms=1)
+    event, _ = build_heal_event(step, resolution, step.anchor.region,
+                                make_png(VIEWPORT, (0, 0, 0)), FakeVision())
+    assert event.new_anchor.context_text is None

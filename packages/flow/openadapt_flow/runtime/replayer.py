@@ -11000,10 +11000,15 @@ class Replayer:
                 "on the fresh frame — refusing to act; run aborted"
             )
         elif check.look_halt is not None:
+            reason = (
+                "the dialog could not be masked"
+                if check.look_halt == "identity_dialog_mask_failed"
+                else "the screen changed outside the identifier"
+            )
             error = (
                 f"Step '{step.id}' ({step.intent}) took an extra look at a "
-                "look-alike identifier and the screen changed outside the "
-                f"identifier ({check.look_halt}) — refusing to act"
+                f"look-alike identifier and {reason} "
+                f"({check.look_halt}) — refusing to act"
             )
             result.safety_halt = True
         elif check.known_id_halt is not None:
@@ -15986,6 +15991,15 @@ class Replayer:
             if isinstance(scoped, IdentityCheck):
                 return scoped
             before_png = scoped
+            if anchor.dialog_row is False:
+                # Whole-dialog text cannot identify a row's Select button.
+                # Reconfirm the recorded non-row role before any tier runs.
+                if self._structured_census(step, resolution.point).verdict != "not_a_row":
+                    return IdentityCheck(
+                        status="unreadable",
+                        mode="context",
+                        observed="the dialog control's non-row role could not be confirmed",
+                    )
         project = getattr(workflow, "qualification", None)
         if project is not None:
             identity_policy = project.identity_policies.get(step.id)
@@ -16190,17 +16204,22 @@ class Replayer:
         tmpl = anchor.identity_template
         if not (anchor.context_text or (tmpl is not None and tmpl.tokens)):
             return census_mod.CensusDecision("cannot_count")
-        if anchor.dialog_region is not None:
-            # The band of a dialog target is the whole topmost dialog, and
-            # only one dialog is on top: there are no look-alike rows to count.
-            return census_mod.CensusDecision("not_a_row")
+        if anchor.dialog_row is False and anchor.dialog_region is not None:
+            # Count through the live row probe; the dialog itself proves
+            # nothing about whether its target belongs to a record row.
+            return self._structured_census(step, resolution.point)
         today = date.today()
+        dialog_box = self.__dict__.get("_identity_dialog_box")
         try:
             lines = [
                 line
                 for line in self.vision.ocr(before_png, region=None)
                 if line.text.strip()
                 and not identity_mod.is_volatile_line(line.text, reference_date=today)
+                and (
+                    dialog_box is None
+                    or identity_mod.centered_in(line.region, dialog_box)
+                )
             ]
         except Exception:
             return census_mod.CensusDecision("cannot_count")
@@ -16736,8 +16755,8 @@ class Replayer:
         band = identity_mod.band_region(
             resolution.point, anchor.region[3], self.backend.viewport
         )
-        # A target in a dialog was recorded with the whole dialog as its band
-        # (see _verify_identity, which blanked the frame outside it).
+        # Dialog pixels are scoped by _verify_identity. Row refinement still
+        # applies unless compile positively identified a standalone control.
         dialog_box: Optional[Region] = self.__dict__.get("_identity_dialog_box")
         if dialog_box is not None:
             band = dialog_box
@@ -16790,7 +16809,7 @@ class Replayer:
                         line.text, reference_date=today
                     )
                 ]
-                if dialog_box is None:
+                if dialog_box is None or anchor.dialog_row is not False:
                     lines = identity_mod.lines_near_point(lines, point_y)
                 if row_lines is not None:
                     row_lines.extend(lines)
@@ -17430,7 +17449,15 @@ class Replayer:
             box = self.__dict__.get("_identity_dialog_box")
             if box is not None:
                 # Read the fresh frame in the same dialog as the first look.
-                png = identity_mod.mask_outside(png, box) or png
+                masked = identity_mod.mask_outside(png, box)
+                if masked is None:
+                    return first.model_copy(
+                        update={
+                            "status": "unreadable",
+                            "look_halt": "identity_dialog_mask_failed",
+                        }
+                    )
+                png = masked
             frames.append((read(png), sha256_bytes(png)))
             if frames[-1][0].status == "mismatch":
                 break  # final; no further looks

@@ -109,6 +109,8 @@ def _recontext(
     frame: tuple[int, int],
     *,
     identifier_region: Region | None = None,
+    dialog_region: Region | None = None,
+    dialog_row: bool = True,
 ) -> str | None:
     """Re-derive the anchor's identity context band from the live frame.
 
@@ -139,11 +141,12 @@ def _recontext(
     return identity_mod.context_from_lines(
         lines,
         exclude_region=region,
-        band=identity_mod.band_region(click_point, region[3], frame),
+        band=dialog_region or identity_mod.band_region(click_point, region[3], frame),
         # Same row refinement the compiler applies: record only the click
         # point's own text row, matching what verification reads back.
-        point=click_point,
+        point=None if dialog_region is not None and not dialog_row else click_point,
         reference_date=date.today(),
+        scope=dialog_region,
     )
 
 
@@ -222,21 +225,24 @@ def build_heal_event(
         # identity evidence. Do not add live plaintext to the healed anchor.
         new_context = None
     else:
-        context_png = frame_png
+        context_png: bytes | None = frame_png
         if translated_dialog_region is not None:
             # A target in a dialog keeps its band read on the dialog alone, as
             # the compiler read it; replay masks the live frame the same way.
-            context_png = (
-                identity_mod.mask_outside(frame_png, translated_dialog_region)
-                or frame_png
+            context_png = identity_mod.mask_outside(frame_png, translated_dialog_region)
+        new_context = (
+            _recontext(
+                vision,
+                context_png,
+                new_region,
+                resolution.point,
+                frame,
+                identifier_region=translated_identifier_region,
+                dialog_region=translated_dialog_region,
+                dialog_row=old_anchor.dialog_row is not False,
             )
-        new_context = _recontext(
-            vision,
-            context_png,
-            new_region,
-            resolution.point,
-            frame,
-            identifier_region=translated_identifier_region,
+            if context_png is not None
+            else None
         )
     new_anchor = old_anchor.model_copy(
         update={

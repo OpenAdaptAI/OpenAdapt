@@ -1709,6 +1709,7 @@ def _emit_identifier_crop(
     click: Point,
     reference_date: Optional[date],
     scope: Optional[Region] = None,
+    dialog_row: bool = True,
 ) -> tuple[Optional[str], Optional[Region], Optional[str]]:
     """Emit the pixel identifier crop for one click step, or say why not.
 
@@ -1761,7 +1762,7 @@ def _emit_identifier_crop(
             frame_lines,
             exclude_region=crop_region,
             band=scope or band_region(click, crop_region[3], frame_size),
-            point=None if scope is not None else click,
+            point=None if scope is not None and not dialog_row else click,
             min_confidence=MIN_OCR_CONFIDENCE,
             reference_date=reference_date,
             scope=scope,
@@ -2523,22 +2524,39 @@ def _compile_recording(
                 identity_lines = (
                     cached_lines(i, "dialog", masked) if masked is not None else []
                 )
-            # In a dialog the band is the whole dialog (its title, its result
-            # text, its buttons), not the button's row: the row of a dialog
-            # button often holds nothing but the other buttons.
+            # Keep the clicked row inside the dialog. Only a positively
+            # identified standalone control may fall back to the whole dialog
+            # when its row has too little text to arm identity.
+            dialog_row = True
+            context_band = dialog_region or band_region(
+                click, crop_region[3], (frame.shape[1], frame.shape[0])
+            )
             context_text = context_from_lines(
                 identity_lines,
                 exclude_region=crop_region,
-                band=dialog_region
-                or band_region(click, crop_region[3], (frame.shape[1], frame.shape[0])),
+                band=context_band,
                 # Row refinement: record only the click point's OWN text
                 # row, matching what replay-time verification reads (the
                 # 64px band spans 2-3 rows of a dense table).
-                point=None if dialog_region is not None else click,
+                point=click,
                 min_confidence=MIN_OCR_CONFIDENCE,
                 reference_date=reference_date,
                 scope=dialog_region,
             )
+            if (
+                context_text is None
+                and dialog_region is not None
+                and event.get("dialog_row") is False
+            ):
+                dialog_row = False
+                context_text = context_from_lines(
+                    identity_lines,
+                    exclude_region=crop_region,
+                    band=context_band,
+                    min_confidence=MIN_OCR_CONFIDENCE,
+                    reference_date=reference_date,
+                    scope=dialog_region,
+                )
             # Structured identity (DOM / a11y text of the clicked row),
             # captured by the recorder when the recording backend exposed it
             # (openadapt_flow.backend.IdentityBackend). Stored alongside the
@@ -2599,6 +2617,7 @@ def _compile_recording(
                     click=click,
                     reference_date=reference_date,
                     scope=dialog_region,
+                    dialog_row=dialog_row,
                 )
             )
             # The OCR fallback must compare like-for-like evidence. Derive the
@@ -2673,6 +2692,7 @@ def _compile_recording(
                 identifier_crop=identifier_crop_rel,
                 identifier_region=identifier_region,
                 dialog_region=dialog_region,
+                dialog_row=dialog_row if dialog_region is not None else None,
             )
             drag_end_anchor: Optional[Anchor] = None
             if kind == "drag":

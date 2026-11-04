@@ -775,6 +775,11 @@ class Recorder:
             dialog = self._dialog_region_at(int(event["x"]), int(event["y"]))
             if dialog is not None:
                 event = {**event, "dialog_region": list(dialog)}
+                # A whole-dialog fallback is valid only for a control that
+                # positively has no record row, never for unreadable row text.
+                census = self._identity_census_at(int(event["x"]), int(event["y"]))
+                if census is not None:
+                    event = {**event, "dialog_row": census.get("row") is not False}
             # The part of the form the target sits in (a legend, an accordion
             # or tab header, a heading), for the program's named sections.
             # Display only: the compiler never puts it on a step.

@@ -1344,7 +1344,12 @@ _IDENTITY_CANDIDATES_AT_JS = (
         ? Array.from(document.getElementsByTagName(level.tagName)).filter(
             (candidate) => !tag || candidate.getElementsByTagName(tag).length > 0)
         : Array.from(document.querySelectorAll('tr, [role="row"], li, [role="listitem"]'));
-    const pool = new Set(siblings.concat(pageWide));
+    const dialog = el.closest(
+        'dialog:modal, [aria-modal="true"], [role="alertdialog"], .modal.show'
+    );
+    const pool = new Set(siblings.concat(pageWide).filter(
+        (candidate) => !dialog || dialog.contains(candidate)
+    ));
     const result = {
         record_key: recordKey(row, el),
         incomplete: pool.size > cap,
