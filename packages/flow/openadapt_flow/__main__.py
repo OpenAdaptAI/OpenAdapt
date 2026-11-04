@@ -5255,6 +5255,87 @@ def _cmd_approver_grant(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_teach_authorization(args: argparse.Namespace) -> int:
+    """Create, sign or check a teach authorization (what a teaching agent may do)."""
+    import json
+    import sys
+    from datetime import datetime, timedelta, timezone
+
+    from openadapt_flow import teach_authorization as ta
+    from openadapt_flow.approval_mode.human_attestation import (
+        AttestationRefused,
+        load_signer,
+    )
+
+    def refuse(code: str, message: str) -> int:
+        print(json.dumps({"ok": False, "code": code, "message": message}))
+        return 2
+
+    if args.teach_auth_cmd == "create":
+        try:
+            spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
+            if not 0 < args.expires_in_hours <= 24 * 90:
+                return refuse(
+                    "teach_auth_malformed", "--expires-in-hours is from 0 to 2160"
+                )
+            expires = datetime.now(timezone.utc) + timedelta(
+                hours=args.expires_in_hours
+            )
+            path = ta.create(
+                Path(args.out),
+                spec,
+                authorizer=args.authorizer,
+                authorizer_public_key=args.authorizer_public_key,
+                expires_at=expires,
+            )
+        except (OSError, ValueError, ta.TeachAuthorizationError) as exc:
+            return refuse(getattr(exc, "code", "teach_auth_malformed"), str(exc))
+        print(json.dumps({"ok": True, "statement": str(path)}))
+        return 0
+    try:
+        key_dir, root = ta.pinned_trust(
+            Path(args.key_dir) if args.key_dir else None, args.approver_root
+        )
+    except ta.TeachAuthorizationError as exc:
+        return refuse(exc.code, str(exc))
+    if args.teach_auth_cmd == "verify":
+        result = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+        if not result.ok:
+            return refuse(str(result.reason), result.detail)
+        record = ta.record(result)
+        print(json.dumps({"ok": True, **record}))
+        return 0
+    # sign: the person whose approver key file it is, at a terminal.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return refuse(
+            "teach_auth_unsigned",
+            "teach-authorization sign needs a person at an interactive terminal",
+        )
+    try:
+        signer = load_signer(
+            Path(args.approver_key), key_dir, method="person_key", root=root
+        )
+    except AttestationRefused as exc:
+        return refuse(exc.code, str(exc))
+    preview = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+    if preview.statement is None:
+        return refuse(str(preview.reason), preview.detail)
+    print(ta.render(preview))
+    reply = input("Sign this teach authorization? Type yes to sign: ")
+    if reply.strip().lower() != "yes":
+        print("Not signed.")
+        return 1
+    try:
+        ta.sign(Path(args.statement), signer)
+    except (ta.TeachAuthorizationError, AttestationRefused) as exc:
+        return refuse(getattr(exc, "code", "teach_auth_unsigned"), str(exc))
+    result = ta.verify(Path(args.statement), key_dir=key_dir, root=root)
+    if not result.ok:
+        return refuse(str(result.reason), result.detail)
+    print(json.dumps({"ok": True, **ta.record(result)}))
+    return 0
+
+
 def _answer_durable_item_pause(run_dir: Path, request, answer) -> bool:
     """Carry an answer to a durable pause the run left after waiting.
 
@@ -10081,6 +10162,51 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("grant", help="Signed grant JSON")
     q.add_argument("--key-dir", default=None)
     q.set_defaults(func=_cmd_approver_grant)
+
+    p = sub.add_parser(
+        "teach-authorization",
+        help=(
+            "Create, sign or check a teach authorization: what a teaching agent "
+            "may do, signed by a person with their approver key"
+        ),
+    )
+    ta_sub = p.add_subparsers(dest="teach_auth_cmd", required=True)
+    q = ta_sub.add_parser("create", help="Write the unsigned statement for a spec")
+    q.add_argument(
+        "spec", help="JSON: task, purposes, origins, inputs, writes, forbidden"
+    )
+    q.add_argument("--out", required=True, help="Folder for teach-authorization.json")
+    q.add_argument("--authorizer", required=True, help="Your principal on the roster")
+    q.add_argument(
+        "--authorizer-public-key", required=True, help="Your approver key (64 hex)"
+    )
+    q.add_argument(
+        "--expires-in-hours",
+        type=float,
+        default=24.0,
+        help="How long it may be used to teach (default 24, at most 2160)",
+    )
+    q.set_defaults(func=_cmd_teach_authorization)
+    for verb, text in (
+        ("sign", "Show what the statement allows, then sign it with your approver key"),
+        ("verify", "Check a signed statement against the approver roster"),
+    ):
+        q = ta_sub.add_parser(verb, help=text)
+        q.add_argument("statement", help="teach-authorization.json or its folder")
+        q.add_argument("--key-dir", default=None, help="Holds the approver roster")
+        q.add_argument(
+            "--approver-root",
+            default=None,
+            help="The approver root to pin (default OPENADAPT_APPROVER_ROOT)",
+        )
+        if verb == "sign":
+            q.add_argument(
+                "--approver-key",
+                required=True,
+                help="Your encrypted approver key file (passphrase from "
+                "OPENADAPT_JIT_KEY_PASSPHRASE)",
+            )
+        q.set_defaults(func=_cmd_teach_authorization)
 
     p = sub.add_parser(
         "bench", help="Replay a bundle N times against MockMed and aggregate"
