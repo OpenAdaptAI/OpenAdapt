@@ -714,18 +714,23 @@ class Shadow:
 
     def _unexplained_later(self, ep: Episode) -> int:
         """Later writes through the shadow a recheck can't excuse: in fhir,
-        a write whose record isn't known (a lost reply); in sql, a write
-        under no contract or another one, or with no result."""
+        a write whose record isn't known (a lost reply or a 2xx write that
+        names no record); in sql, a write under no contract or another one,
+        or with no result."""
 
         n = 0
         for o in self._later(ep):
             if ep.kind == "fhir":
                 # Per write: a create whose reply didn't come back may have
                 # made a record no one knows, even in an episode that has one.
+                # A 2xx reply with no known record (minimal return without
+                # Location, transaction bundle, conditional write) is also
+                # unexplained.
                 n += sum(
                     1
                     for w in o.writes
-                    if w.status // 100 != 2 and (w.method == "POST" or not o.refs)
+                    if (w.status // 100 != 2 and (w.method == "POST" or not o.refs))
+                    or (w.status // 100 == 2 and not o.refs)
                 )
             else:
                 n += not (o.kind == "sql" and o.contract is ep.contract and o.result)

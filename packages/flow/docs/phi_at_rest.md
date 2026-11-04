@@ -152,6 +152,7 @@ of truth; a test keeps this table in step with them.
 | `undo-lineage.json`, `record-check-binding.json` | Prior digests; record-check coverage | Encrypted |
 | `qualification-proposal.json`, `qualification-proposal.draft.json`, `qualification-admission.local-dev.json`, `qualification/*` | Qualification pins, cases and reports | Encrypted |
 | `admission-decision.json`, `admission.json`, `admit.json`, `jit_draft.json` | Admission records; some carry read-back values or a login name | Encrypted |
+| `teach-authorization/*` | The person-signed teach authorization the program was taught under; a spelled-out input or record value is in it | Encrypted |
 | `openadapt-card.json`, `repair/*`, `evidence/*` | Operator card, repair candidates with anchor text, copied evidence | Encrypted |
 | Anything else | Unknown | `seal` refuses |
 

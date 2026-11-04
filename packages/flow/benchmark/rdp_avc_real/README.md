@@ -163,7 +163,8 @@ case first wrote a known note straight into the database. Results are in
 
 - The shipped pixel path records, compiles and replays through a real
   AVC444-encoded RDP session in the stock Windows client. Every run made zero
-  model calls.
+  model calls. The harness records with the scripted `Recorder` API and replays
+  with `Replayer.run`.
 - In 105 runs on two apps it never saved to the wrong record. It never
   reported a save the database did not hold, and never saved without
   reporting it.

@@ -6,7 +6,7 @@ import json
 import statistics
 from typing import Any, Iterable, Optional
 
-from openadapt_flow.benchmark.effectbench.metrics import wilson_interval
+from benchmark.harness.effectbench.metrics import wilson_interval
 
 
 def rate(k: int, n: int) -> dict[str, Any]:

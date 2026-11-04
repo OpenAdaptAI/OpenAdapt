@@ -484,9 +484,7 @@ the API.
 `list_patches(app_family, app_fingerprint_sha256)`. `FilePatchFeed` stores
 one `<patch_id>.json` per patch in a directory and skips malformed files. It
 also stores the revocation list and numbered kill-switch files under
-`status/`. `CloudPatchFeed` is a stub: listing raises `NotImplementedError`
-and its status methods raise `FleetStatusUnavailable`, so a tenant pointed at
-it never auto-promotes. There is no server.
+`status/`.
 
 ## Simulator
 
