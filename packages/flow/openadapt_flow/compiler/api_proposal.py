@@ -865,7 +865,17 @@ def propose_api_step(
         if (
             value.startswith("<session:")
             and ctl is not None
-            and ctl.get("default") == value
+            and (
+                ctl.get("default") == value
+                or (
+                    # The page's script put the session's own token in the
+                    # form's token field as it submitted (a per-form token
+                    # swapped for the page's); the live form's token is sent.
+                    ctl.get("kind") == "hidden"
+                    and nc.TOKEN_NAME.search(name) is not None
+                    and bool(ctl.get("default"))
+                )
+            )
         ):
             fields.append(WebFormField(name=name, source="session"))
             continue

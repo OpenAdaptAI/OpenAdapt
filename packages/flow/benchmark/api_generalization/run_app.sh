@@ -29,7 +29,7 @@ cp "$STATE/$APP/bundle/apigen-compile.json" "$OUT/compile.json"
 cp "$STATE/$APP/matrix/runs.csv" "$OUT/matrix.csv" 2>/dev/null || true
 if grep -q '"proposed": true' "$OUT/compile.json"; then
   until [ "$(load1 | cut -d. -f1)" -lt 35 ]; do sleep 30; done
-  "$H" timing --app "$APP" --bundle "$STATE/$APP/bundle" --out "$STATE/$APP/timing" --reps "$REPS" \
+  "$H" timing --app "$APP" --bundle "$STATE/$APP/bundle" --out "$STATE/$APP/timing" --reps "$REPS" --tag "$(date +%H%M)" \
     > "$OUT/timing.log" 2>&1 || true
   cp "$STATE/$APP/timing/runs.csv" "$OUT/timing.csv" 2>/dev/null || true
 fi

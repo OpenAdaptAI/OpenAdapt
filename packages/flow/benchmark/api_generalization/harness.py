@@ -311,7 +311,7 @@ def cmd_timing(a: argparse.Namespace, app: AppBase) -> None:
     try:
         for r in range(a.reps):
             for arm in (["gui", "api"] if r % 2 == 0 else ["api", "gui"]):
-                case = app.unique(normal[r % len(normal)], f"t{r:02d}{arm[0]}")
+                case = app.unique(normal[r % len(normal)], f"t{r:02d}{arm[0]}{a.tag}")
                 start = time.strftime("%H:%M:%S")
                 res = run_one(env, app, case, arm, bundle, out / f"r{r:02d}-{arm}", rep=r + 1)
                 row = res | {"load1": _load1(), "start_local": start, "engine_sha": engine_sha()[:8],
