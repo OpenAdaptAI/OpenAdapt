@@ -405,7 +405,15 @@ class RepairDesk:
         demonstrator: Optional[Demonstrator] = None,
         scrubber_factory: Callable[[], Any] = default_scrubber,
         agent_id: str = "calling-agent",
+        teach_authorization: Any = None,
     ) -> None:
+        """``teach_authorization`` (a
+        :class:`~openadapt_flow.teach_authorization.TeachAuthority` whose
+        statement covers ``repair`` and names the program's workflow name as
+        its task) is
+        what lets a calling agent's fix be approved: without one, the fix is
+        still proposed, and its approval is refused."""
+        self.teach_authorization = teach_authorization
         self.root = Path(root)
         self.policy = policy
         self.repair_store_root = Path(repair_store_root or self.root / "repair-store")
@@ -707,6 +715,7 @@ class RepairDesk:
             raise RepairError("x and y must be whole pixel coordinates")
         if not (0 <= x < width and 0 <= y < height):
             raise RepairError("the click is outside the screen")
+        authorized = self._authorize(record)
         # Use the token once, before anything acts, so a retry can't click twice.
         record["state"] = "used"
         _write_json(self._token_path(sha), record)
@@ -737,6 +746,13 @@ class RepairDesk:
             screens_scrubbed=bool(record.get("screens_scrubbed", True)),
             scrub_evidence=ScreenScrubEvidence(**evidence) if evidence else None,
             screen_share_approved_by=approval.get("approved_by") if approval else None,
+            teach_authorization=(
+                RepairStore(
+                    self.store_for(record["workflow"])
+                ).keep_teach_authorization(*authorized)
+                if authorized is not None
+                else None
+            ),
         )
         try:
             result = agent_teach.teach_from_calling_agent(
@@ -782,6 +798,32 @@ class RepairDesk:
                 "the same review and approval."
             )
         return response
+
+    def _authorize(self, record: dict[str, Any]) -> Optional[tuple[Any, Path]]:
+        """The operator's teach authorization for this repair, verified now.
+
+        ``None`` when the server has none (the fix can't be approved). One
+        that doesn't verify, doesn't cover ``repair`` or names another task
+        refuses before anything acts.
+        """
+        authority = self.teach_authorization
+        if authority is None:
+            return None
+        from openadapt_flow import teach_authorization as ta
+
+        try:
+            from openadapt_flow.ir import Workflow
+
+            # The task is the program's own name, which approval checks too.
+            task_id = Workflow.load(Path(record["bundle_dir"])).name
+            verification = authority.verify(purpose="repair", task_id=task_id)
+        except (ta.TeachAuthorizationError, OSError, ValueError) as exc:
+            raise RepairError(
+                "the teach authorization doesn't allow this repair "
+                f"({getattr(exc, 'code', type(exc).__name__)}); "
+                "nothing was done"
+            ) from None
+        return verification, Path(authority.statement)
 
     def _demos_path(self, record: dict[str, Any]) -> Path:
         key = _sha(f"{record['workflow']}\0{record['step_id']}")[:16]

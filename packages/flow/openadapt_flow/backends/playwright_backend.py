@@ -17,7 +17,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
@@ -28,7 +28,11 @@ from openadapt_flow.runtime.step_timing import timed_span
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
 
-from openadapt_flow.backend import ActionDeliveryUncertain, StructuralResolutionRefused
+from openadapt_flow.backend import (
+    ActionDeliveryUncertain,
+    StructuralElementNotActionable,
+    StructuralResolutionRefused,
+)
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     FormIdentity,
@@ -601,6 +605,10 @@ _INSTALL_GUARD_BODY_JS = (
 """
 )
 
+# True when the element is fully transparent. Such a control is laid over its
+# own visible box on purpose, so the bind guard refusing it is not occlusion.
+_TRANSPARENT_JS = "el => Number(window.getComputedStyle(el).opacity || '1') === 0"
+
 _BIND_STRUCTURAL_TARGET_JS = (
     "(el, args) => { const describe = "
     + _DESCRIBE_TARGET_JS
@@ -1050,6 +1058,55 @@ _FOCUSED_PLAIN_TEXT_JS = r"""() => {
     const t = (el.getAttribute('type') || 'text').toLowerCase();
     return ['text', 'email', 'tel', 'search', 'url'].includes(t);
 }"""
+
+#: An ISO calendar date, the value a native ``<input type=date>`` holds.
+_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+#: Is the element an editable native date input?
+_IS_DATE_INPUT_JS = (
+    "e => e.tagName === 'INPUT' && e.type === 'date' && !e.readOnly && !e.disabled"
+)
+#: The focused element, through open shadow roots (frames are walked in Python).
+_ACTIVE_ELEMENT_JS = """() => {
+    let e = document.activeElement;
+    while (e && e.shadowRoot && e.shadowRoot.activeElement) {
+        e = e.shadowRoot.activeElement;
+    }
+    return e;
+}"""
+
+
+def _is_iso_date(text: str) -> bool:
+    """True for a real calendar date written ``YYYY-MM-DD`` in ASCII digits."""
+
+    if not _ISO_DATE.fullmatch(text or ""):
+        return False
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _fill_iso_date(target: Any, text: str) -> bool:
+    """Set an ISO date (``YYYY-MM-DD``) into a native ``<input type=date>``.
+
+    Chromium splits a date input into locale-ordered segments that a typed
+    string can't fill: ``-`` doesn't move to the next segment, and the year
+    segment takes six digits. ``fill`` takes the ISO value whatever the
+    locale and fires ``input`` and ``change`` (no key events). ``target`` is
+    an element handle; the check and the fill run on that one element.
+    Returns ``False``, with nothing delivered, when ``text`` isn't a real ISO
+    date or the target isn't an editable date input. Once it is, a failed
+    ``fill`` raises rather than falling back to typing.
+    """
+
+    if not _is_iso_date(text):
+        return False
+    if target.evaluate(_IS_DATE_INPUT_JS) is not True:
+        return False
+    target.fill(text, timeout=1000)
+    return True
+
 
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
     // Recorded texts come from OCR, which drops spaces and misreads
@@ -3244,9 +3301,12 @@ class PlaywrightBackend:
         """Locate ``locator``'s element in the live DOM; return its center.
 
         Resolves by the recorded ``selector`` first, else by ``role`` +
-        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing,
-        off-viewport, or covered element returns None; ambiguity is an explicit
-        structural refusal and cannot fall through to a weaker pixel match.
+        ``name``. Requires a UNIQUE, on-screen, UNOCCLUDED match. A missing
+        element (or a transparent one, ``opacity: 0``) returns None.
+        Ambiguity raises ``StructuralResolutionRefused``; one candidate that
+        is covered, off-viewport, zero-sized or outside its recorded frame
+        chain raises ``StructuralElementNotActionable``. Neither may fall
+        through to a weaker pixel match.
         The returned handle binds an opaque one-shot token to the exact Element
         and its enclosing-row identity for same-operation delivery.
         """
@@ -3277,18 +3337,16 @@ class PlaywrightBackend:
                     },
                 )
                 box = loc.bounding_box()
-                if (
-                    not isinstance(observed, dict)
-                    or not isinstance(box, dict)
-                    or not self._frame_chain_matches(
-                        scope, tuple(locator.frame_path or ()), box
-                    )
-                ):
+                if not isinstance(box, dict):
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        "DOM candidate is not rendered or has no bounding box"
+                    )
                 if float(box["width"]) <= 0 or float(box["height"]) <= 0:
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        f"DOM candidate has non-positive dimensions: {box['width']}x{box['height']}"
+                    )
                 point = (
                     int(round(float(box["x"]) + float(box["width"]) / 2)),
                     int(round(float(box["y"]) + float(box["height"]) / 2)),
@@ -3296,7 +3354,23 @@ class PlaywrightBackend:
                 vw, vh = self.viewport
                 if not (0 <= point[0] < vw and 0 <= point[1] < vh):
                     self._cleanup_guard(token, scope)
+                    raise StructuralElementNotActionable(
+                        f"DOM candidate center is outside the viewport: point={point}, viewport=({vw}, {vh})"
+                    )
+                if not isinstance(observed, dict) and loc.evaluate(_TRANSPARENT_JS):
+                    # A transparent control laid over its own visible box (a
+                    # styled checkbox, radio, switch or file input) never
+                    # binds, and can't be shown covered either. It keeps the
+                    # visual ladder, as before.
+                    self._cleanup_guard(token, scope)
                     return None
+                if not isinstance(observed, dict) or not self._frame_chain_matches(
+                    scope, tuple(locator.frame_path or ()), box
+                ):
+                    self._cleanup_guard(token, scope)
+                    raise StructuralElementNotActionable(
+                        "DOM candidate is covered or outside its recorded frame chain"
+                    )
                 # The handle's region is the target's VISIBLE box: its
                 # bounding box clipped to the viewport. A control that runs a
                 # few pixels past the viewport edge (a full-width section
@@ -3311,7 +3385,9 @@ class PlaywrightBackend:
                 x1, y1 = min(vw, bx + bw), min(vh, by + bh)
                 if x1 <= x0 or y1 <= y0:
                     self._cleanup_guard(token, scope)
-                    return None
+                    raise StructuralElementNotActionable(
+                        "DOM candidate visible region clipped to viewport is empty"
+                    )
                 region = (x0, y0, x1 - x0, y1 - y0)
             except Exception:
                 self._cleanup_guard(token, scope)
@@ -4209,7 +4285,13 @@ class PlaywrightBackend:
             operation="guarded_dom_type",
             # Keys go through the leased element itself, never the page
             # keyboard, so delivery stays bound to the checked target.
-            deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
+            deliver=lambda locator: (
+                (
+                    _is_iso_date(text)
+                    and _fill_iso_date(locator.element_handle(timeout=1000), text)
+                )
+                or locator.press_sequentially(text, timeout=1000)
+            ),
         )
         self._snapshot_focused_field(text)
         return receipt
@@ -4772,11 +4854,39 @@ class PlaywrightBackend:
         except Exception:
             return False
 
+    def _focused_element_handle(self) -> Any:
+        """The focused element's handle, through frames and open shadow
+        roots, or None."""
+
+        scope: Any = self.page
+        for _depth in range(9):
+            handle = scope.evaluate_handle(_ACTIVE_ELEMENT_JS).as_element()
+            if handle is None:
+                return None
+            if handle.evaluate("e => e.localName") not in {"iframe", "frame"}:
+                return handle
+            scope = handle.content_frame()
+            if scope is None:
+                return None
+        return None
+
+    def _fill_focused_iso_date(self, text: str) -> bool:
+        if not _is_iso_date(text):
+            return False
+        try:
+            target = self._focused_element_handle()
+        except Exception:  # noqa: BLE001 - unreadable focus: type as before
+            return False
+        return target is not None and _fill_iso_date(target, text)
+
     def _deliver_text(self, text: str, per_key: Callable[[], None]) -> None:
         """Insert ``text`` at the caret in one call when the focused element
         is an ordinary text field (native fill: the field's ``input`` event
         fires, and ``change`` on blur, as for typing); otherwise ``per_key``
-        types it key by key."""
+        types it key by key. An ISO date into a native date input is set
+        with ``fill`` (see :func:`_fill_iso_date`)."""
+        if self._fill_focused_iso_date(text):
+            return
         if self.native_fill and text and self._focused_plain_text_field():
             self.page.keyboard.insert_text(text)
             return

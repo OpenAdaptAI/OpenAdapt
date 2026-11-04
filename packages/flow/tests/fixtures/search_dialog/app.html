@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Records</title>
+<style>
+  body { font: 18px Arial, sans-serif; margin: 40px; background: #fff; color: #111; }
+  label { display: inline-block; width: 80px; }
+  input { font: 18px Arial, sans-serif; width: 260px; padding: 4px; }
+  button { font: 18px Arial, sans-serif; padding: 6px 16px; margin-right: 12px; }
+  #create { margin-top: 24px; }
+  #dialog { position: absolute; left: 380px; top: 260px; width: 520px;
+            border: 2px solid #333; background: #fff; padding: 20px 28px; }
+  #dialog h2 { font-size: 22px; margin: 0 0 28px 0; }
+  #result { margin: 0 0 36px 0; word-spacing: 5px; }
+</style>
+</head>
+<body>
+<h1>New record</h1>
+<p><label for="name">Name</label><input id="name" autocomplete="off"></p>
+<p id="comment-row" hidden><label for="comment" style="width: 110px">Note</label><input id="comment" autocomplete="off"></p>
+<button id="create" type="button">Create record</button>
+<p id="saved" hidden>Record saved</p>
+<div id="dialog" role="dialog" aria-labelledby="dialog-title" hidden>
+  <h2 id="dialog-title">Dublettensuche</h2>
+  <p id="result"></p>
+  <div><button id="confirm" type="button">Confirm</button><button id="cancel" type="button">Cancel</button></div>
+</div>
+<script>
+  // ?s=<statement>: what the duplicate search shows. {name} is the typed
+  // name; {archive} depends on the typed name (data, not a fixed line).
+  const query = new URLSearchParams(location.search);
+  const statement = query.get("s") || "";
+  // ?c=1: a comment field after the name (typed, not searched).
+  document.getElementById("comment-row").hidden = query.get("c") !== "1";
+  document.getElementById("create").onclick = () => {
+    const name = document.getElementById("name").value;
+    const archive = name.trim().toUpperCase() < "F" ? "Nord" : "West";
+    document.getElementById("result").textContent =
+      statement.replace("{name}", name).replace("{archive}", archive);
+    document.getElementById("dialog").hidden = false;
+  };
+  document.getElementById("confirm").onclick = () => {
+    document.getElementById("dialog").hidden = true;
+    document.getElementById("saved").hidden = false;
+  };
+  document.getElementById("cancel").onclick = () => {
+    document.getElementById("dialog").hidden = true;
+  };
+</script>
+</body>
+</html>

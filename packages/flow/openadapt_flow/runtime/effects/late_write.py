@@ -67,6 +67,9 @@ POST_STATE_LABEL = "recheck_post_state"
 LATER_WRITE_RULE = "later_write_window"
 #: The same, when the change may be what refuted that later write.
 LATER_WRITE_DISPUTED = "later_write_window_disputed"
+#: A later write whose own frame wasn't judged: nothing in its window is
+#: excused, so a refutation may be that write's change, not this one's.
+LATER_WRITE_UNJUDGED = "later_write_unjudged"
 
 #: ``CONFIRMED``: nothing unexplained moved since the post-save read.
 #: ``REFUTED``: something did (late collateral). ``UNCERTAIN``: the database,

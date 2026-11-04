@@ -105,7 +105,17 @@ DRAFT_MARKER = "jit_draft.json"
 DRAFT_ORIGIN = "agent_run"
 #: The fields of ``candidate.json`` that say who made the recording. They are
 #: signed with the bundle digest in the candidate's ``recorder`` block.
-RECORDER_FIELDS = ("recorded_by", "agent_principal_id", "dialect")
+RECORDER_FIELDS = (
+    "recorded_by",
+    "agent_principal_id",
+    "dialect",
+    # What the agent was allowed to do and who signed it. Absent (None) on
+    # drafts from before teach authorizations, which still verify.
+    "teach_scope",
+    "teach_authorization",
+)
+#: Where a draft keeps a copy of the teach authorization it was taught under.
+TEACH_AUTHORIZATION_DIR = "teach-authorization"
 EVENTS_FILE = "lifecycle.jsonl"
 ADMISSION_FILE = "admission.json"
 #: Every canary run, one JSON object per line. ``canary.json`` is the latest.
@@ -761,6 +771,26 @@ def state_of(
     return None
 
 
+def _teach_authorization_status(
+    program: Path,
+    candidate: Mapping[str, Any],
+    key_dir: Optional[Path],
+    trust: Any = None,
+) -> dict[str, Any]:
+    try:
+        recorded = teach_authorization_gate(
+            program, candidate, key_dir=key_dir, trust=trust
+        )
+    except AdmissionError as exc:
+        return {"met": False, "required": True, "problem": str(exc)}
+    return {
+        "met": True,
+        "required": True,
+        "sha256": recorded.get("sha256"),
+        "authorizer": recorded.get("authorizer"),
+    }
+
+
 def _evidence_at(path: Path, digest: str) -> Optional[dict[str, Any]]:
     record = _read(path)
     if record is None or record.get("digest") != digest:
@@ -769,7 +799,7 @@ def _evidence_at(path: Path, digest: str) -> Optional[dict[str, Any]]:
 
 
 def admission_status(
-    program_dir: Path | str, *, key_dir: Optional[Path] = None
+    program_dir: Path | str, *, key_dir: Optional[Path] = None, trust: Any = None
 ) -> dict[str, Any]:
     """What the draft has and what it still needs, pinned to its digest."""
 
@@ -817,6 +847,9 @@ def admission_status(
                 "met": bool(canary and canary.get("passed")),
                 "outcome": (canary or {}).get("outcome"),
             },
+            "teach_authorization": _teach_authorization_status(
+                program, candidate, key_dir, trust
+            ),
         },
         "needs_person": _evidence_at(program / NEEDS_PERSON_FILE, digest),
         # A policy such as clinical-write needs one on every write; a person
@@ -1207,6 +1240,8 @@ def admit(
     confirm: object = None,
     key_dir: Optional[Path] = None,
     require_distinct_reviewer_and_admitter: bool = False,
+    approver_root: Optional[str] = None,
+    trust: Any = None,
 ) -> dict[str, Any]:
     """A person admits a DRAFT and the signed admission manifest is written.
 
@@ -1255,7 +1290,9 @@ def admit(
             f"{name!r} reviewed this draft; the policy requires a different "
             "principal to admit it"
         )
-    canary = _evidence_gates(program, candidate, workflow, digest, key_dir)
+    canary = _evidence_gates(
+        program, candidate, workflow, digest, key_dir, approver_root, trust
+    )
     assert canary is not None
     return _write_manifest(
         program,
@@ -1276,6 +1313,8 @@ def _evidence_gates(
     workflow: Any,
     digest: str,
     key_dir: Optional[Path] = None,
+    approver_root: Optional[str] = None,
+    trust: Any = None,
 ) -> Optional[dict[str, Any]]:
     """The checks every admission mode makes: parameters confirmed, a
     passing canary for this digest, independent read-back on every write
@@ -1284,6 +1323,9 @@ def _evidence_gates(
 
     from openadapt_flow.policy import evaluate_policy, load_policy
 
+    teach_authorization_gate(
+        program, candidate, key_dir=key_dir, approver_root=approver_root, trust=trust
+    )
     task_params = _task_params(candidate)
     if task_params and _evidence_at(program / PARAMS_FILE, digest) is None:
         raise AdmissionError(f"confirm the parameters {task_params} first")
@@ -1321,6 +1363,115 @@ def _evidence_gates(
     if not report.passed:
         raise AdmissionError(f"not certified under {policy!r}:\n{report.render()}")
     return canary
+
+
+def teach_authorization_gate(
+    program: Path,
+    candidate: Mapping[str, Any],
+    *,
+    key_dir: Optional[Path] = None,
+    approver_root: Optional[str] = None,
+    trust: Any = None,
+) -> dict[str, Any]:
+    """Every JIT draft needs a person's signed teach authorization.
+
+    A JIT draft is compiled from an agent's run, so it is agent-taught. What
+    decides it is the signed recorder block (:func:`_recorder`), not an
+    editable field. The block's ``teach_authorization`` entry must name the
+    statement kept beside the draft (:data:`TEACH_AUTHORIZATION_DIR`), and
+    that statement must verify against the approver roster as it is now
+    (:mod:`openadapt_flow.teach_authorization`): the key directory's roster
+    under the pinned approver root (``approver_root``, else
+    ``OPENADAPT_APPROVER_ROOT``). An unknown, removed or wrong key, an
+    unpinned root, a changed statement, another task, or the recording agent
+    as signer refuses. The capture must also have run under the scope the
+    authorization binds, with a verified read-back. Returns the recorded
+    entry. ``trust`` (a
+    :class:`~openadapt_flow.teach_authorization.TeachAuthority`) gives the
+    roster's key directory, root and recorded heads instead, as the process
+    that taught it pinned them (the deployment config's, for a server an
+    agent runs).
+
+    Drafts from a path that can't bind an authorization (the airbag
+    handoff, ``agent_guard.handoff``) record none, so they are refused here.
+    """
+
+    from openadapt_flow import teach_authorization as ta
+
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    recorder = _recorder(program, keys)
+    recorded = recorder.get("teach_authorization")
+    if not recorded:
+        dialect = str(recorder.get("dialect") or "")
+        why = (
+            " Drafts from the airbag handoff can't carry one yet; teach the task "
+            "with a teach authorization instead."
+            if dialect == "attached-browser"
+            else ""
+        )
+        raise AdmissionError(
+            "an agent-taught draft needs a person's signed teach authorization "
+            f"(teach_auth_not_recorded).{why}"
+        )
+    statement = program / TEACH_AUTHORIZATION_DIR / ta.STATEMENT_FILE
+    scope = recorder.get("teach_scope") or {}
+    try:
+        if trust is not None:
+            trust_dir, root = trust.trust()
+        else:
+            trust_dir, root = ta.pinned_trust(keys, approver_root)
+        ta.check_admission(
+            recorded,
+            statement,
+            key_dir=trust_dir,
+            root=root,
+            # The task the signed recorder block names.
+            task_id=str((scope.get("scope") or {}).get("task_id") or "") or None,
+            not_signed_by=recorder.get("agent_principal_id"),
+            at_least=getattr(trust, "at_least", None),
+        )
+    except ta.TeachAuthorizationError as exc:
+        raise AdmissionError(
+            f"an agent-taught draft needs a person's signed teach authorization "
+            f"({exc.code}): {exc}"
+        ) from exc
+    if (scope.get("scope") or {}).get("task_id") != (candidate.get("task") or {}).get(
+        "task_id"
+    ):
+        raise AdmissionError(
+            "the draft's task is not the one its capture was scoped to "
+            "(teach_auth_task_mismatch)"
+        )
+    bound = (scope.get("scope") or {}).get("authorization") or {}
+    readback = scope.get("readback") or {}
+    if bound.get("sha256") != recorded.get("sha256"):
+        raise AdmissionError(
+            "the draft was not captured under the scope its teach authorization "
+            "binds (teach_auth_not_bound)"
+        )
+    if readback.get("status") != "verified":
+        raise AdmissionError(
+            "the authorized capture's read-back did not verify "
+            "(teach_auth_readback_unverified)"
+        )
+    return dict(recorded)
+
+
+def _keep_authorization(source: Path, bundle: Path) -> None:
+    """Keep the teach authorization's statement inside the admitted bundle.
+
+    A repaired copy carries it from there (:func:`admit_repair`), so its
+    signature can be checked again wherever the bundle goes.
+    """
+
+    from openadapt_flow import teach_authorization as ta
+
+    statement = source / ta.STATEMENT_FILE
+    if statement.is_file():
+        try:
+            ta.copy_into(statement, bundle / TEACH_AUTHORIZATION_DIR)
+        except ta.TeachAuthorizationError as exc:
+            raise AdmissionError(str(exc)) from exc
 
 
 def _write_manifest(
@@ -1383,6 +1534,11 @@ def _write_manifest(
         "signing_key": fingerprint_of(private.public_key()),
         **(extra or {}),
     }
+    if candidate.get("teach_authorization"):
+        # The bundle carries who authorized the teaching. Only written when
+        # present, so manifests from before teach authorizations verify.
+        body["teach_authorization"] = candidate["teach_authorization"]
+        _keep_authorization(program / TEACH_AUTHORIZATION_DIR, program / "bundle")
     if mode == "agent_policy" and _is_recording_agent(name, recorder):
         # Only written when true, so manifests from before self-admission
         # existed verify unchanged.
@@ -1412,6 +1568,8 @@ def admit_with_key(
     principal: Any,
     key_dir: Optional[Path] = None,
     now: Optional[Any] = None,
+    approver_root: Optional[str] = None,
+    trust: Any = None,
 ) -> dict[str, Any]:
     """Admit without a person at a terminal. Returns ``{"outcome": ...}``.
 
@@ -1452,7 +1610,9 @@ def admit_with_key(
     workflow = _load_workflow(program / "bundle")
     digest = _digest(workflow)
     if principal.kind == "admitter_key":
-        canary = _evidence_gates(program, candidate, workflow, digest, keys)
+        canary = _evidence_gates(
+            program, candidate, workflow, digest, keys, approver_root, trust
+        )
         assert canary is not None
         manifest = _write_manifest(
             program,
@@ -1521,7 +1681,9 @@ def admit_with_key(
             f"{len(clean)} clean canaries for this bundle; the policy needs "
             f"{policy.min_clean_canaries}"
         )
-    canary = _evidence_gates(program, candidate, workflow, digest, keys)
+    canary = _evidence_gates(
+        program, candidate, workflow, digest, keys, approver_root, trust
+    )
     assert canary is not None
     manifest = _write_manifest(
         program,
@@ -1678,6 +1840,7 @@ def admit_repair(
     route: Optional[str] = None,
     probe_only: bool = False,
     key_dir: Optional[Path] = None,
+    approver_root: Optional[str] = None,
 ) -> dict[str, Any]:
     """Carry an admitted program's admission to a repaired copy of it.
 
@@ -1694,9 +1857,16 @@ def admit_repair(
     approved the repair, or ``standard-change:<policy digest>`` for a fix a
     signed repair policy allowed.
 
+    The repair is taught too (a model re-anchors steps or demonstrates a
+    bridge), so the prior admission's teach authorization must cover
+    ``repair`` and still verify against the approver roster
+    (:func:`_repair_authorization`); its statement is copied into the
+    repaired bundle.
+
     Raises:
-        AdmissionError: the prior program is not admitted, the copy changes
-            its record check or parameters, or no approver is named.
+        AdmissionError: the prior program is not admitted, has no teach
+            authorization that covers repair, the copy changes its record
+            check or parameters, or no approver is named.
     """
 
     from openadapt_flow.execute.keys import (
@@ -1710,6 +1880,9 @@ def admit_repair(
     prior = verify_admission(prior_bundle, key_dir=keys)
     if prior.get("admission_mode") == "repair_probe":
         raise AdmissionError("a repair probe's admission can't carry to another copy")
+    _repair_authorization(
+        prior, Path(prior_bundle), Path(repaired_bundle), keys, approver_root
+    )
     prior_workflow = _load_workflow(Path(prior_bundle))
     repaired = _load_workflow(Path(repaired_bundle))
     if sorted(repaired.params) != sorted(prior.get("params") or []):
@@ -1751,6 +1924,34 @@ def admit_repair(
     manifest = {**body, "signature": sign_bytes(private, _canonical(body))}
     _write(Path(repaired_bundle) / ADMISSION_FILE, manifest)
     return manifest
+
+
+def _repair_authorization(
+    prior: Mapping[str, Any],
+    prior_bundle: Path,
+    repaired_bundle: Path,
+    keys: Path,
+    approver_root: Optional[str],
+) -> None:
+    from openadapt_flow import teach_authorization as ta
+
+    recorded = prior.get("teach_authorization")
+    try:
+        trust_dir, root = ta.pinned_trust(keys, approver_root)
+        ta.check_admission(
+            recorded,
+            prior_bundle / TEACH_AUTHORIZATION_DIR / ta.STATEMENT_FILE,
+            key_dir=trust_dir,
+            root=root,
+            purpose="repair",
+            not_signed_by=prior.get("agent_principal_id"),
+        )
+    except ta.TeachAuthorizationError as exc:
+        raise AdmissionError(
+            "a repair of an agent-taught program needs its teach authorization "
+            f"to cover repair ({exc.code}): {exc}"
+        ) from exc
+    _keep_authorization(prior_bundle / TEACH_AUTHORIZATION_DIR, repaired_bundle)
 
 
 def _verify_repair(body: Mapping[str, Any], keys: Path) -> None:

@@ -383,6 +383,7 @@ PUBLIC_ARTIFACT_APPROVED_DIRECTORIES = (
     "benchmark/run_player/",
     "benchmark/scoreboard/",
     "benchmark/silent_saves/",
+    "benchmark/verifier_baselines/results/",
     "docs/showcase-encounter-loop/",
     "docs/showcase-loop/",
     "docs/showcase-openemr/",
