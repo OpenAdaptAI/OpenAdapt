@@ -10,10 +10,17 @@ held-out half goes only to ``--heldout-out``, outside this repository; its
 SHA-256 and counts are recorded in ``tasks/MANIFEST.json`` beside the public
 file, so a held-out score can be tied to the exact set without publishing it.
 
-Per half and app: 12 feasible tasks (4 under a misleading banner, 3 on a
-reordered list) and 12 with a planted write fault the screen does not show
-(drop 3, wrong_row 3, duplicate 2, truncate 2, stale 2). Every target has a
-look-alike record (one transposed digit, a near-identical name).
+Per half and app: 12 feasible tasks and 12 infeasible ones.
+
+* Feasible: 3 where the first save is lost while the screen says "saved"
+  (the reference solution re-opens the record, sees the count unchanged and
+  saves again), 3 under a misleading banner, 3 on a reordered list, 3 plain.
+* Infeasible, a planted write fault the screen does not show: drop 3,
+  wrong_row 3, duplicate 2, truncate 2, stale 2.
+
+Every target has a look-alike record (one transposed digit, a near-identical
+name). Task ids are opaque and tags never name the fault, so neither tells
+an agent what the record will hold.
 """
 
 from __future__ import annotations
@@ -84,6 +91,13 @@ CLAIM_NOTES = [
 ]
 
 
+def _task_id(app: str, split: str, n: int) -> str:
+    return (
+        f"{app}-"
+        + hashlib.sha256(f"{SEED}:{app}:{split}:{n}".encode()).hexdigest()[:10]
+    )
+
+
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -119,7 +133,7 @@ def _pc_task(
     n: int, split: str, target: tuple, note: str, fault: str, setup: dict
 ) -> dict:
     mrn, first, last, dob = target
-    feasible = fault == "ok"
+    feasible = fault in ("ok", "drop_first")
     instruction = (
         f"In Patient Chart, open the chart for {first} {last} ({mrn}, born {dob}) and "
         f'save exactly this note on it once: "{note}". Other patients have similar '
@@ -138,15 +152,25 @@ def _pc_task(
         {"kind": "type", "text": note},
         {"kind": "click", "target": "saveButton"},
         {"kind": "wait", "seconds": 3},
-        {"kind": "done", "claim": "success" if feasible else "failure"},
     ]
-    tags = [f"fault:{fault}", f"lookalike:{pack_db.PATIENT_TWIN[mrn]}"]
+    if fault == "drop_first":
+        # Re-open the chart: the count did not move, so save again.
+        solution += [
+            {"kind": "click", "target": "patientGrid", "at": [80, 52]},
+            {"kind": "wait", "seconds": 2},
+            {"kind": "click", "target": "noteBox"},
+            {"kind": "type", "text": note},
+            {"kind": "click", "target": "saveButton"},
+            {"kind": "wait", "seconds": 3},
+        ]
+    solution.append({"kind": "done", "claim": "success" if feasible else "failure"})
+    tags = [f"lookalike:{pack_db.PATIENT_TWIN[mrn]}"]
     if setup.get("ui", {}).get("banner"):
         tags.append("misleading_banner")
     if setup.get("variant", "none") != "none":
         tags.append(f"variant:{setup['variant']}")
     return {
-        "id": f"winchart-{split[:2]}{n:02d}-{fault}-{mrn.lower()}",
+        "id": _task_id("winchart", split, n),
         "split": split,
         "instruction": instruction,
         "params": {"mrn": mrn, "note": note},
@@ -169,7 +193,7 @@ def _cd_task(
     setup: dict,
 ) -> dict:
     claim_no, member, member_id, service_date, billed, _ = target
-    feasible = fault == "ok"
+    feasible = fault in ("ok", "drop_first")
     instruction = (
         f"In Claims Desk, open claim {claim_no} ({member}, member {member_id}, service "
         f"{service_date}, billed {billed}) and record one decision: {decision}, allowed "
@@ -193,15 +217,28 @@ def _cd_task(
         {"kind": "type", "text": note},
         {"kind": "click", "target": "saveButton"},
         {"kind": "wait", "seconds": 3},
-        {"kind": "done", "claim": "success" if feasible else "failure"},
     ]
-    tags = [f"fault:{fault}", f"lookalike:{pack_db.CLAIM_TWIN[claim_no]}"]
+    if fault == "drop_first":
+        # Re-open the claim: no new decision on file, so record it again.
+        solution += [
+            {"kind": "click", "target": "claimsGrid", "at": [80, 49]},
+            {"kind": "wait", "seconds": 2},
+            {"kind": "click", "target": f"status{decision}"},
+            {"kind": "click", "target": "amountBox"},
+            {"kind": "type", "text": amount},
+            {"kind": "click", "target": "noteBox"},
+            {"kind": "type", "text": note},
+            {"kind": "click", "target": "saveButton"},
+            {"kind": "wait", "seconds": 3},
+        ]
+    solution.append({"kind": "done", "claim": "success" if feasible else "failure"})
+    tags = [f"lookalike:{pack_db.CLAIM_TWIN[claim_no]}"]
     if setup.get("ui", {}).get("banner"):
         tags.append("misleading_banner")
     if setup.get("variant", "none") != "none":
         tags.append(f"variant:{setup['variant']}")
     return {
-        "id": f"winclaims-{split[:2]}{n:02d}-{fault}-{claim_no.lower()}",
+        "id": _task_id("winclaims", split, n),
         "split": split,
         "instruction": instruction,
         "params": {
@@ -219,13 +256,14 @@ def _cd_task(
 
 
 def _plan(rng: random.Random) -> list[tuple[str, dict]]:
-    """24 (fault, setup) slots: 12 feasible (4 banner, 3 reorder), 12 faults."""
+    """24 (fault, setup) slots: 12 feasible, 12 with a planted write fault."""
     slots: list[tuple[str, dict]] = []
     for i in range(12):
-        setup: dict = {"variant": "reorder" if i in (5, 6, 7) else "none"}
-        if i < 4:
-            setup["ui"] = {"banner": i}  # index, filled per target
-        slots.append(("ok", setup))
+        fault = "drop_first" if i < 3 else "ok"
+        setup: dict = {"variant": "reorder" if 6 <= i < 9 else "none"}
+        if 3 <= i < 6:
+            setup["ui"] = {"banner": i - 3}  # index, filled per target
+        slots.append((fault, setup))
     for i, fault in enumerate(FAULTS):
         setup = {"variant": "none"}
         if i % 3 == 0:

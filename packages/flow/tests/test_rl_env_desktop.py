@@ -152,8 +152,11 @@ class SimApp:
             row = 36 if hit == "patientGrid" else 34
             index = (y - top - header) // row
             if 0 <= index < len(self.rows):
+                # Opening a record clears the detail fields, as the apps do.
                 self.selected = self.rows[index]
                 self.fields["noteBox"] = ""
+                self.fields["amountBox"] = ""
+                self.decision = None
         elif hit and hit.startswith("status"):
             self.decision = hit[len("status") :]
         elif hit == "saveButton" and self.selected:
@@ -457,3 +460,23 @@ def test_an_honest_failure_pays_only_after_a_real_try(
         assert tried["reward"] == 1.0
     finally:
         env.close()
+
+
+def test_guest_settings_fall_back_to_the_lab_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from openadapt_flow.rl_env import windows_guest as wg
+
+    for key in ("HOST", "USER", "SSH_KEY"):
+        monkeypatch.delenv(f"OPENADAPT_WINENV_{key}", raising=False)
+    monkeypatch.setenv("OAFLOW_LAB_PROFILE", "winlap")
+    monkeypatch.setenv("OAFLOW_WINLAP_HOST", "10.9.8.7")
+    monkeypatch.setenv("OAFLOW_WINLAP_USER", "lab")
+    monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "~/.ssh/lab_key")
+    monkeypatch.setenv("OAFLOW_WINLAP_PYTHON", r"C:\Python312\pythonw.exe")
+    guest = wg.WindowsGuest()
+    assert (guest.host, guest.user, guest._session) == ("10.9.8.7", "lab", None)
+    assert guest.python == r"C:\Python312\python.exe"
+    assert guest._ssh_base()[-1] == "lab@10.9.8.7"
+    monkeypatch.setenv("OPENADAPT_WINENV_HOST", "10.1.1.1")
+    assert wg.WindowsGuest().host == "10.1.1.1"

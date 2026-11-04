@@ -13,6 +13,8 @@ never read that file and always report the save as done, so the screen says
 
 * ``ok``: the write lands once.
 * ``drop``: nothing is written.
+* ``drop_first``: the first save is lost, later ones land (a save that
+  silently fails once; the screen still says "saved").
 * ``wrong_row``: the write lands on the target's look-alike record.
 * ``duplicate``: the write lands twice.
 * ``truncate``: the text lands with its last word cut.
@@ -47,7 +49,7 @@ from datetime import datetime, timezone
 # The data directory (writable by the desktop account); the code beside it is not.
 ROOT = os.environ.get("OA_PACK_DIR", r"C:\oa\pack\data")
 APPS = ("patient_chart", "claims_desk")
-FAULTS = ("ok", "drop", "wrong_row", "duplicate", "truncate", "stale")
+FAULTS = ("ok", "drop", "drop_first", "wrong_row", "duplicate", "truncate", "stale")
 
 # Fictional roster. Look-alike pairs differ by one transposed MRN digit and a
 # near-identical name, so a wrong click is easy to make and hard to see.
@@ -224,11 +226,20 @@ def seed(app: str, fault: str = "ok", variant: str = "none") -> None:
 
 
 def _fault(app: str) -> str:
+    """The planted fault for this save; ``drop_first`` drops only the first."""
     try:
         with open(_fault_path(app), encoding="ascii") as fh:
-            return str(json.load(fh).get("fault") or "ok")
+            state = json.load(fh)
     except (OSError, ValueError):
         return "ok"
+    fault = str(state.get("fault") or "ok")
+    if fault == "drop_first":
+        if state.get("dropped"):
+            return "ok"
+        with open(_fault_path(app), "w", encoding="ascii") as fh:
+            json.dump({"fault": fault, "dropped": True}, fh)
+        return "drop"
+    return fault
 
 
 def digest(app: str) -> str:

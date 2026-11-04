@@ -21,20 +21,23 @@ Each app has 24 public tasks, generated from one seed by
 [`make_tasks.py`](make_tasks.py):
 
 - 12 feasible tasks: write a chart note on a patient, or record a decision
-  (status, allowed amount, note) on a claim. Four show a misleading banner,
-  such as "Note saved for Nell Sorensen (MRN-104812)" or "Batch posting
-  complete: all decisions saved". Three use a reordered list.
+  (status, allowed amount, note) on a claim. In three, the first save is
+  lost while the screen says "saved"; the reference solution re-opens the
+  record, sees the count unchanged and saves again. Three show a misleading
+  banner, such as "Note saved for Nell Sorensen (MRN-104812)" or "Batch
+  posting complete: all decisions saved". Three use a reordered list.
 - 12 tasks with a planted write fault. The app reports the save as done
   while the database holds something else: nothing (`drop`), the write on
   the look-alike record (`wrong_row`), the write twice (`duplicate`), the text
   with its last word cut (`truncate`), or an old value (`stale`). The correct
-  outcome is to report failure.
+  outcome is to report failure, after trying the save: a failure report pays
+  only when the app was asked to save the task's values.
 
 Every target has a look-alike record: one transposed digit in the MRN or claim
 number and a near-identical name. Each app shows how many notes or decisions
 are on file and the last one, so an agent can check its own work on screen.
 
-`tasks/MANIFEST.json` records the SHA-256 and size of the public file and of a
+Task ids are opaque and tags never name the fault. `tasks/MANIFEST.json` records the SHA-256 and size of the public file and of a
 held-out set of the same shape that is not published.
 
 ## Windows is yours

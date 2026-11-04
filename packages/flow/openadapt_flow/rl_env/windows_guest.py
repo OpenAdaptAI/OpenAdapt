@@ -30,6 +30,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -109,6 +110,28 @@ def _stop_desktop_processes(user: str) -> str:
     )
 
 
+# The pack's own processes only: its apps, and any save still writing.
+_STOP_PACK_PROCESSES = (
+    "Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq 'powershell.exe' -and "
+    "$_.CommandLine -like '*\\pack\\*.ps1*') -or ($_.Name -eq 'python.exe' -and "
+    "$_.CommandLine -like '*pack_db.py*') } | "
+    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n"
+    "Start-Sleep -Milliseconds 300\n"
+)
+# Run over SSH: read the script from stdin and run it as one block; exit 1
+# when its last statement failed (as ``powershell -Command`` does).
+_SSH_BOOTSTRAP = base64.b64encode(
+    (
+        "$ProgressPreference='SilentlyContinue'; "
+        "[Console]::InputEncoding=[Text.Encoding]::UTF8; "
+        "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
+        "$global:OAEnvLastOk=$true; "
+        '$s=[Console]::In.ReadToEnd() + "`n`$global:OAEnvLastOk=`$?"; '
+        "& ([scriptblock]::Create($s)); "
+        "if (-not $global:OAEnvLastOk) { exit 1 }"
+    ).encode("utf-16-le")
+).decode("ascii")
+
 # Every oracle-side script starts here: no profile scripts (run_ps passes
 # -NoProfile) and only the system's own modules, so nothing the desktop
 # account can write is loaded into the elevated WinRM shell.
@@ -131,12 +154,22 @@ class GuestResult:
     stderr: str
 
 
-def _env(*names: str) -> str:
-    for name in names:
+def _setting(key: str, *, required: bool = False) -> Optional[str]:
+    """``OPENADAPT_WINENV_<KEY>``, else the lab profile's ``OAFLOW_<PROFILE>_<KEY>``.
+
+    The lab profile is the one ``OAFLOW_LAB_PROFILE`` names (default
+    ``winlab``), the same variables the lab harnesses read.
+    """
+    profile = os.environ.get("OAFLOW_LAB_PROFILE", "winlab").upper()
+    for name in (f"OPENADAPT_WINENV_{key}", f"OAFLOW_{profile}_{key}"):
         value = os.environ.get(name)
         if value:
             return value
-    raise GuestError(f"set {names[0]} (the Windows guest is not configured)")
+    if required:
+        raise GuestError(
+            f"set OPENADAPT_WINENV_{key} (the Windows guest is not configured)"
+        )
+    return None
 
 
 # PowerShell also ends a single-quoted string at these.
@@ -179,29 +212,47 @@ class WindowsGuest:
         *,
         port: int = 5985,
         python: Optional[str] = None,
+        ssh_key: Optional[str] = None,
     ) -> None:
-        import winrm  # noqa: PLC0415 - optional dependency
-
-        self.host = host or _env("OPENADAPT_WINENV_HOST", "OAFLOW_WINLAB_HOST")
-        self.user = user or _env("OPENADAPT_WINENV_USER", "OAFLOW_WINLAB_USER")
-        secret = password or _env("OPENADAPT_WINENV_PASSWORD", "OAFLOW_WINLAB_PASSWORD")
+        self.host = host or _setting("HOST", required=True)
+        self.user = user or _setting("USER", required=True)
+        key = ssh_key or _setting("SSH_KEY")
+        # SSH with a key when one is configured (no password handled), else
+        # WinRM over HTTP with NTLM message encryption.
+        self._ssh_key: Optional[str] = os.path.expanduser(key) if key else None
+        secret = password or _setting("PASSWORD", required=self._ssh_key is None)
         # The account signed in to the desktop (apps, agent, RDP). A separate
-        # standard account is safest; by default it is the WinRM account.
+        # standard account is safest; by default it is the control account.
         self.desktop_user = os.environ.get("OPENADAPT_WINENV_DESKTOP_USER") or self.user
         self._desktop_secret = (
             os.environ.get("OPENADAPT_WINENV_DESKTOP_PASSWORD")
             if self.desktop_user != self.user
             else secret
         )
-        self._session = winrm.Session(
-            f"http://{self.host}:{port}/wsman",
-            auth=(self.user, secret),
-            transport="ntlm",
-            message_encryption="always",
+        self._session: Any = None
+        if self._ssh_key is None:
+            import winrm  # noqa: PLC0415 - optional dependency
+
+            self._session = winrm.Session(
+                f"http://{self.host}:{port}/wsman",
+                auth=(self.user, secret),
+                transport="ntlm",
+                message_encryption="always",
+            )
+        configured = (
+            python
+            or _setting("PYTHON")
+            or r"C:\Program Files\Python312-arm64\python.exe"
         )
-        self.python = python or os.environ.get(
-            "OPENADAPT_WINENV_PYTHON", r"C:\Program Files\Python312-arm64\python.exe"
-        )
+        # A lab profile may name pythonw.exe; the oracle wants the console one.
+        self.python = re.sub(r"pythonw\.exe$", "python.exe", configured, flags=re.I)
+        #: ``account``: a reset stops every process of the desktop account
+        #: in its session but its shell and the agent (a dedicated machine).
+        #: ``pack``: only the pack's own processes (a desktop shared with
+        #: other work, which then must not cover the app).
+        self.reset_scope = os.environ.get("OPENADAPT_WINENV_RESET_SCOPE", "account")
+        if self.reset_scope not in ("account", "pack"):
+            raise GuestError("OPENADAPT_WINENV_RESET_SCOPE is account or pack")
 
     def rdp_password(self) -> str:
         """The desktop account's password, for the RDP surface's sign-in only."""
@@ -214,31 +265,62 @@ class WindowsGuest:
     # -- primitives ---------------------------------------------------------
     def run_ps(self, script: str, *, check: bool = True) -> GuestResult:
         """Run ``script`` in PowerShell without profile scripts or user modules."""
-        encoded = base64.b64encode((_PREAMBLE + script).encode("utf-16-le")).decode(
-            "ascii"
-        )
-        raw = self._session.run_cmd(
-            "powershell.exe",
-            [
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-EncodedCommand",
-                encoded,
-            ],
-        )
-        stderr = raw.std_err.decode("utf-8", "replace")
+        if self._session is None:
+            # Over SSH the script goes on stdin: neither its length nor what
+            # it holds (an agent token) is on a command line.
+            proc = subprocess.run(
+                [
+                    *self._ssh_base(),
+                    f"powershell -NoProfile -NonInteractive -EncodedCommand {_SSH_BOOTSTRAP}",
+                ],
+                input=(_PREAMBLE + script).encode("utf-8"),
+                capture_output=True,
+                timeout=600,
+            )
+            status, stdout, stderr = (
+                proc.returncode,
+                proc.stdout.decode("utf-8", "replace"),
+                proc.stderr.decode("utf-8", "replace"),
+            )
+        else:
+            encoded = base64.b64encode((_PREAMBLE + script).encode("utf-16-le")).decode(
+                "ascii"
+            )
+            raw = self._session.run_cmd(
+                "powershell.exe",
+                [
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-EncodedCommand",
+                    encoded,
+                ],
+            )
+            status = raw.status_code
+            stdout = raw.std_out.decode("utf-8", "replace")
+            stderr = raw.std_err.decode("utf-8", "replace")
         if stderr.startswith("#< CLIXML"):
             stderr = re.sub(r"<[^>]+>", " ", stderr)
-        result = GuestResult(
-            raw.status_code, raw.std_out.decode("utf-8", "replace"), stderr
-        )
+        result = GuestResult(status, stdout, stderr)
         if check and result.status != 0:
             raise GuestError(
                 f"guest PowerShell exited {result.status}: {result.stderr[-600:]}"
             )
         return result
+
+    def _ssh_base(self) -> list[str]:
+        assert self._ssh_key is not None
+        return [
+            "ssh",
+            "-i",
+            self._ssh_key,
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=15",
+            f"{self.user}@{self.host}",
+        ]
 
     def push_file(self, local: Path, remote: str) -> None:
         """Copy ``local`` to ``remote`` in the guest unless it is already there."""
@@ -255,12 +337,31 @@ class WindowsGuest:
             f"$p='{target}'; New-Item -ItemType Directory -Force (Split-Path -Parent $p) "
             "| Out-Null; [IO.File]::WriteAllBytes($p, [byte[]]@())"
         )
-        for start in range(0, len(data), _CHUNK):
-            chunk = base64.b64encode(data[start : start + _CHUNK]).decode("ascii")
-            self.run_ps(
-                f"$p='{target}'; $b=[Convert]::FromBase64String('{chunk}'); "
-                "$f=[IO.File]::Open($p,'Append'); $f.Write($b,0,$b.Length); $f.Close()"
+        if self._session is None:
+            proc = subprocess.run(
+                [
+                    "scp",
+                    "-q",
+                    "-i",
+                    str(self._ssh_key),
+                    "-o",
+                    "BatchMode=yes",
+                    str(local),
+                    f"{self.user}@{self.host}:/" + remote.replace("\\", "/"),
+                ],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                timeout=600,
             )
+            if proc.returncode != 0:
+                raise GuestError(f"copy of {Path(local).name} failed")
+        else:
+            for start in range(0, len(data), _CHUNK):
+                chunk = base64.b64encode(data[start : start + _CHUNK]).decode("ascii")
+                self.run_ps(
+                    f"$p='{target}'; $b=[Convert]::FromBase64String('{chunk}'); "
+                    "$f=[IO.File]::Open($p,'Append'); $f.Write($b,0,$b.Length); $f.Close()"
+                )
         got = self.run_ps(
             f"(Get-FileHash '{target}' -Algorithm SHA256).Hash"
         ).stdout.strip()
@@ -411,7 +512,11 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             # The desktop account's processes other than the agent and the
             # shell: the app, a save still writing, and anything the last
             # episode opened.
-            + _stop_desktop_processes(self.desktop_user)
+            + (
+                _stop_desktop_processes(self.desktop_user)
+                if self.reset_scope == "account"
+                else _STOP_PACK_PROCESSES
+            )
             + f"$seed = & '{_ps_quote(self.python)}' -I '{GUEST_DIR}\\pack_db.py' seed '{app}' "
             f"--fault '{fault}' --variant '{variant}'\n"
             f"Set-Content -Encoding utf8 -Path '{DATA_DIR}\\{app}_ui.json' "
