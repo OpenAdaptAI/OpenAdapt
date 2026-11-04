@@ -1004,3 +1004,86 @@ def test_a_write_result_with_wrong_params_is_still_held_in_the_ledger(
     with pytest.raises(verifier.WriteBlocked) as raised:
         begin_write(contract, _params(2), actor=BOT, write_key="k-own")
     assert not isinstance(raised.value, verifier.AlreadyWritten)
+
+
+# -- review #1670: owed rechecks in the ledger, call faults, a held REFUTED ----
+
+
+def test_a_recheck_owed_is_in_the_ledger_until_a_recheck_confirms_it(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    contract, _, result = _keyed(tmp_path, "k-owed")
+    owed = dict(default_ledger().rechecks_owed())
+    assert owed[result.write_key].recheck_owed == result.recheck_due_at
+    with pytest.raises(verifier.AlreadyWritten) as raised:
+        begin_write(contract, _params(2), actor=BOT, write_key="k-owed")
+    assert raised.value.result["provisional"] is True
+
+    assert _recheck(contract, result).outcome == "CONFIRMED"
+    assert default_ledger().rechecks_owed() == []
+    with pytest.raises(verifier.AlreadyWritten) as raised:
+        begin_write(contract, _params(2), actor=BOT, write_key="k-owed")
+    earlier = raised.value.result
+    assert earlier["outcome"] == "CONFIRMED"
+    assert earlier["provisional"] is False and earlier["recheck_due_at"] is None
+    assert earlier["rechecked_at"]
+
+
+def test_a_confirming_recheck_from_a_saved_state_settles_the_owed_recheck(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    contract, _, result = _keyed(tmp_path, "k-owed-saved")
+    assert result.recheck is not None and result.recheck.path is not None
+    saved = RecheckState.load(result.recheck.path, params=_params(2))
+    assert _recheck(contract, saved).outcome == "CONFIRMED"
+    assert default_ledger().rechecks_owed() == []
+
+
+def test_a_refuting_recheck_settles_the_owed_recheck_and_holds_the_write(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    contract, db, result = _keyed(tmp_path, "k-owed-ref")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert _recheck(contract, result).outcome == "REFUTED"
+    led = default_ledger()
+    assert led.rechecks_owed() == []
+    assert result.write_key in dict(led.unresolved())
+
+
+def test_a_recheck_call_with_other_params_or_actor_says_the_call_was_wrong(
+    tmp_path: Path, due_now: None
+) -> None:
+    contract, _, first = _first(tmp_path)
+    for late in (
+        _recheck(contract, first, n=7),
+        recheck(
+            contract, first, params=_params(2), actor=Actor("agent", "someone-else")
+        ),
+    ):
+        assert late.outcome == "UNCERTAIN"
+        assert "the recheck call doesn't match the write" in late.reasons[0]
+        assert "says nothing about the write itself" in late.reasons[0]
+
+
+def test_a_later_uncertain_recheck_does_not_replace_a_held_refuted(
+    tmp_path: Path, due_now: None
+) -> None:
+    from openadapt_flow.write_ledger import default_ledger
+
+    contract, db, result = _keyed(tmp_path, "k-keep")
+    _sql(db, "INSERT INTO calendar (pid, title) VALUES (2, 'New Patient')")
+    assert _recheck(contract, result).outcome == "REFUTED"
+    db.unlink()  # a second recheck can't read the database: UNCERTAIN
+    late = _recheck(contract, result)
+    assert late.outcome == "UNCERTAIN"
+    assert "already holds this write as REFUTED" in late.reasons[-1]
+    attempt = default_ledger().latest(result.write_key)
+    assert attempt is not None and attempt.resolved["outcome"] == "REFUTED"
+    with pytest.raises(verifier.WriteHeld):
+        begin_write(contract, _params(2), actor=BOT, write_key="k-keep")
