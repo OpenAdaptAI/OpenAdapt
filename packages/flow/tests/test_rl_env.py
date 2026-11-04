@@ -264,3 +264,18 @@ def test_our_tooling_calls_eval_only_through_the_wrapper() -> None:
             if direct.search(line) and "run_eval" not in line:
                 offenders.append(f"{path.relative_to(ROOT)}:{number}")
     assert offenders == []
+
+
+def test_a_stuck_step_ends_the_episode_with_no_reward(monkeypatch) -> None:
+    pytest.importorskip("openenv")
+    import time
+
+    from openadapt_flow.rl_env import environment as E
+
+    monkeypatch.setattr(E, "STEP_TIMEOUT_S", 0.2)
+    env = E.OpenAdaptWebEnvironment(ENVS / "mockmed")
+    env._task = env.env.tasks[0]
+    env._step = lambda *a, **k: time.sleep(2)  # type: ignore[method-assign]
+    obs = env.step(E.WebAction(kind="wait", seconds=1))
+    assert (obs.done, obs.reward, obs.verdict) == (True, 0.0, "INDETERMINATE")
+    assert env._worker is None and env._task is None and env.state.done
