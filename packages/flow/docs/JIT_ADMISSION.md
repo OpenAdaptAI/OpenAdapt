@@ -70,7 +70,9 @@ The agent then runs canaries and admits, with its own key:
 
 ```python
 from openadapt_flow.jit.authority import (
-    SignedAdmissionPolicy, load_encrypted_key, principal_from_key,
+    SignedAdmissionPolicy,
+    load_encrypted_key,
+    principal_from_key,
 )
 
 agent = principal_from_key(

@@ -18,6 +18,7 @@ turns the switch off with ``screen_changed``.
 
 from __future__ import annotations
 
+import dataclasses
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -257,7 +258,155 @@ def engine_refusal_decision(
     return None
 
 
+#: A problem with the item's own inputs: the program and the app both worked,
+#: and this item needs a person. It leaves the switch on.
+INPUT_PROBLEM = "input"
+#: A problem with the program or its environment. It turns the switch off.
+PROGRAM_PROBLEM = "program"
+#: Item checks that judge the item's inputs, not the program.
+_INPUT_CHECK_CODES = frozenset({"inputs_supplied", "inputs_strict", "channel"})
+#: ``StepResult.duplicate_check`` values (set by the duplicate check): a real
+#: candidate was found, or the list or record channel couldn't be read.
+#: The record channel's own decisions name an exact or close match.
+_DUPLICATE_FOUND = frozenset({"candidate", "exact", "close"})
+_DUPLICATE_UNREADABLE = "unreadable"
+
+
+def problem_class(report: "RunReport", reason: Optional[str] = None) -> str:
+    """``input`` or ``program`` for a finished item that needs a person.
+
+    An input problem is one the program caught in the item's own values
+    before anything was written:
+
+    - a value refused before the first step: a missing required value, or a
+      typed value that isn't valid (a date that isn't an ISO date);
+    - an item check on the inputs (``inputs_supplied``, ``inputs_strict``);
+    - a real duplicate candidate in the app's possible-duplicate list.
+
+    Everything else is a program or environment problem: a wrong write the
+    record check caught, a failed identity check, a postcondition that failed
+    after delivery, a changed screen, and any cause not named here. An
+    unknown cause is a program problem (fail closed), and so is any outcome
+    that doesn't read "nothing was written" consistently.
+    """
+
+    if report.transaction_outcome not in NOTHING_WRITTEN or outcome_is_uncertain(
+        report
+    ):
+        return PROGRAM_PROBLEM
+    if reason in _INPUT_CHECK_CODES:
+        return INPUT_PROBLEM
+    halted = next(
+        (r for r in reversed(report.results) if not r.ok and not r.skipped), None
+    )
+    if halted is None:
+        return PROGRAM_PROBLEM
+    if halted.step_id == "<params>":
+        return INPUT_PROBLEM
+    # The duplicate check says why it failed in a structured field; the error
+    # text is never read. A check that couldn't read its list, and any
+    # duplicate stop that doesn't say, is a program problem.
+    if (
+        report.transaction_outcome == "HALTED_BEFORE_EFFECT"
+        and getattr(halted, "duplicate_check", None) in _DUPLICATE_FOUND
+        and not any(
+            r.delivery_uncertainty is not None
+            or (r.delivery_attempted is True and _consequential(r))
+            for r in report.results
+        )
+    ):
+        return INPUT_PROBLEM
+    return PROGRAM_PROBLEM
+
+
+#: Gate pre-save checks, by the closed off reason their failure means.
+_GATE_OFF_REASONS = {
+    "signed_in_user": OffReason.ENVIRONMENT_CHANGED,
+    "right_record": OffReason.SCREEN_CHANGED,
+    "same_screens": OffReason.SCREEN_CHANGED,
+    "record_check_ready": OffReason.RECORD_CHECK_LOST,
+}
+
+
+def _program_off_reason(report: "RunReport", reason: Optional[str] = None) -> OffReason:
+    """The closed off reason for a program problem that named none."""
+
+    if reason in _GATE_OFF_REASONS:
+        return _GATE_OFF_REASONS[reason]
+    if any(
+        getattr(result, "duplicate_check", None) == _DUPLICATE_UNREADABLE
+        for result in report.results
+    ):
+        return OffReason.RECORD_CHECK_LOST
+
+    for result in report.results:
+        evidence = result.safety_refusal_evidence
+        if evidence is not None and evidence.stage == "identity_verification":
+            return OffReason.SCREEN_CHANGED
+    if report.transaction_outcome == "HALTED_BEFORE_EFFECT" and not (
+        outcome_is_uncertain(report)
+    ):
+        # The program stopped before any effect: the app no longer looks the
+        # way the program was admitted for.
+        return OffReason.SCREEN_CHANGED
+    return OffReason.UNCERTAIN_RESULT
+
+
+def classify_decision(report: "RunReport", decision: ItemDecision) -> ItemDecision:
+    """Apply the switch policy to a decision that counts as a problem.
+
+    An input problem goes to a person and leaves the switch on: it no longer
+    counts toward ``too_many_problems``. A program problem turns the switch
+    off, with the decision's own reason or a closed one for its cause. A
+    decision that isn't a problem (a person is waiting to approve, the item
+    checks sent it to a person) is unchanged.
+    """
+
+    if not decision.needs_person or not (
+        decision.counts_toward_problems or decision.switch_off is not None
+    ):
+        return decision
+    if decision.switch_off is not None:
+        # The gate, R2 or the engine already turned the switch off for a
+        # named reason. Nothing classes that down to an input problem.
+        return decision
+    if problem_class(report, decision.reason) == INPUT_PROBLEM:
+        return dataclasses.replace(
+            decision, counts_toward_problems=False, switch_off=None
+        )
+    if decision.switch_off is None:
+        return dataclasses.replace(
+            decision,
+            counts_toward_problems=True,
+            switch_off=_program_off_reason(report, decision.reason),
+        )
+    return decision
+
+
 def decide_problems_only(
+    report: "RunReport",
+    *,
+    r1: CheckOutcome,
+    r2: CheckOutcome,
+    gate_decision: Optional[ItemDecision],
+    save_delivered: bool = False,
+) -> ItemDecision:
+    """The item's decision under ``problems_only``, with the switch policy
+    applied (:func:`classify_decision`)."""
+
+    return classify_decision(
+        report,
+        _decide_problems_only(
+            report,
+            r1=r1,
+            r2=r2,
+            gate_decision=gate_decision,
+            save_delivered=save_delivered,
+        ),
+    )
+
+
+def _decide_problems_only(
     report: "RunReport",
     *,
     r1: CheckOutcome,

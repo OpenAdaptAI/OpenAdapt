@@ -1,0 +1,150 @@
+{
+ "note": "Single-case reruns between rounds 1 and 2: the duplicate case repeated (dup2), at another street (dup3), and with another given name (dup4, became extra-record).",
+ "runs": {
+  "dup2": {
+   "summary": {
+    "cases": 1,
+    "right": 0,
+    "faults_passed_as_verified": 1,
+    "harness_errors": 0,
+    "sandbox_calls": 4,
+    "date": "2026-10-29"
+   },
+   "cases": [
+    {
+     "id": "duplicate",
+     "class": "duplicate",
+     "contract": "register_patient.yaml",
+     "right_answer": "REFUTED",
+     "outcome": "CONFIRMED",
+     "right": false,
+     "fault_passed_as_verified": true,
+     "checked": {
+      "delta": "held",
+      "frame": "held",
+      "source": "instruction"
+     },
+     "observed": "present",
+     "reasons": [],
+     "not_covered": [
+      "writes that land after read_at (delayed or queued writes)",
+      "stores the contract doesn't read: email, other services, files",
+      "whether the write was authorized; the verifier doesn't judge it",
+      "records outside the read set (no frame.database)"
+     ],
+     "read_paths": [
+      "fhir"
+     ],
+     "truth": {
+      "creates_answered": 2,
+      "distinct_locations": 1,
+      "location_is_seed": false,
+      "search_matches": 1,
+      "locations_in_search": 1
+     },
+     "seconds": 2.7
+    }
+   ]
+  },
+  "dup3": {
+   "summary": {
+    "cases": 1,
+    "right": 0,
+    "faults_passed_as_verified": 1,
+    "harness_errors": 0,
+    "sandbox_calls": 4,
+    "date": "2026-10-29"
+   },
+   "cases": [
+    {
+     "id": "duplicate-other-street",
+     "class": "duplicate",
+     "contract": "register_patient.yaml",
+     "right_answer": "REFUTED",
+     "outcome": "CONFIRMED",
+     "right": false,
+     "fault_passed_as_verified": true,
+     "checked": {
+      "delta": "held",
+      "frame": "held",
+      "source": "instruction"
+     },
+     "observed": "present",
+     "reasons": [],
+     "not_covered": [
+      "writes that land after read_at (delayed or queued writes)",
+      "stores the contract doesn't read: email, other services, files",
+      "whether the write was authorized; the verifier doesn't judge it",
+      "records outside the read set (no frame.database)"
+     ],
+     "read_paths": [
+      "fhir"
+     ],
+     "truth": {
+      "creates_answered": 2,
+      "distinct_locations": 1,
+      "location_is_seed": false,
+      "search_matches": 1,
+      "locations_in_search": 1
+     },
+     "seconds": 2.8
+    }
+   ]
+  },
+  "dup4": {
+   "summary": {
+    "cases": 1,
+    "right": 1,
+    "faults_passed_as_verified": 0,
+    "harness_errors": 0,
+    "sandbox_calls": 4,
+    "date": "2026-10-29"
+   },
+   "cases": [
+    {
+     "id": "extra-record",
+     "class": "duplicate",
+     "contract": "register_patient.yaml",
+     "right_answer": "REFUTED",
+     "outcome": "REFUTED",
+     "right": true,
+     "fault_passed_as_verified": false,
+     "checked": {
+      "delta": "refuted",
+      "frame": "held",
+      "source": "instruction"
+     },
+     "observed": "conflicting",
+     "reasons": [
+      "record_written was refuted: observed conflicting, 2 of 1 expected record(s)",
+      "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+      "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+      "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+      "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+      "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+      "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+      "field_equals was refuted: observed conflicting, 2 of None expected record(s)",
+      "field_equals was refuted: observed conflicting, 2 of None expected record(s)"
+     ],
+     "not_covered": [
+      "writes that land after read_at (delayed or queued writes)",
+      "stores the contract doesn't read: email, other services, files",
+      "whether the write was authorized; the verifier doesn't judge it",
+      "records outside the read set (no frame.database)"
+     ],
+     "read_paths": [
+      "fhir"
+     ],
+     "truth": {
+      "creates_answered": 2,
+      "distinct_locations": 2,
+      "location_is_seed": false,
+      "search_matches": 2,
+      "locations_in_search": 2
+     },
+     "seconds": 94.4
+    }
+   ]
+  }
+ }
+}

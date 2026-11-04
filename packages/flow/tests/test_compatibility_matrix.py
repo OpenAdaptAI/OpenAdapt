@@ -376,3 +376,7 @@ def test_self_repair_where_the_matrix_says(feature, profile):
         assert item.evidence
     else:
         assert refusal is None
+
+
+# Every person in these tests signs with a registered approver key.
+pytestmark = pytest.mark.usefixtures("approver")

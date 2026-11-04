@@ -61,6 +61,13 @@ class TestHeuristic:
             "Approve",
             "Pay now",
             "Sign up",
+            "Sign visit note",
+            "Co-sign",
+            "Sign out patient",
+            "Sign-out patient Jane Doe",
+            "Log out patient",
+            "Discharge patient",
+            "Check out patient",
             "Next",
             "Continue",
             "Cancel",
@@ -74,6 +81,15 @@ class TestHeuristic:
         [
             "Login",
             "Sign In",
+            "Sign in with SSO",
+            "Sign on",
+            "Sign out",
+            "Sign Out",
+            "Signing out",
+            "Sign out of OpenAdapt",
+            "Sign out now",
+            "Sign out all devices",
+            "Log out",
             "Search",
             "Belford, Phil",
             "Address book",  # 'add' must not trip inside 'address'
@@ -84,6 +100,17 @@ class TestHeuristic:
     )
     def test_write_shaped_false(self, text: str) -> None:
         assert not is_write_shaped(text)
+
+    def test_the_session_sign_out_button_stays_reversible(self) -> None:
+        """Intent and label both read "Sign out": the labels must not join
+        into "sign out Sign" and look like a clinical sign-out."""
+
+        step = _click_step("click 'Sign out'", "Sign out")
+        assert classify_step_risk(step) == "reversible"
+
+    def test_signing_out_a_patient_is_irreversible(self) -> None:
+        step = _click_step("click 'Sign out patient'", "Sign out patient")
+        assert classify_step_risk(step) == "irreversible"
 
     def test_submit_click_is_irreversible(self) -> None:
         assert (

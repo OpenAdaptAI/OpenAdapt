@@ -1,0 +1,27 @@
+[
+ {
+  "resourceType": "Appointment",
+  "status": "booked",
+  "start": "2026-12-08T11:00:00Z",
+  "end": "2026-12-08T11:20:00Z",
+  "participant": [
+   {
+    "actor": {
+     "reference": "Patient/d182de96-c7ff-4ea3-ab04-e72fe5de9fdf"
+    },
+    "status": "accepted"
+   },
+   {
+    "actor": {
+     "reference": "Practitioner/5a6f0f86-8e60-4749-b00a-4c7a75eba11e"
+    },
+    "status": "accepted"
+   }
+  ],
+  "id": "24fa207e-ad42-48f6-9815-c939349582ca",
+  "meta": {
+   "versionId": "cd910437-ee73-4589-9b9a-745f747a3a81",
+   "lastUpdated": "2026-10-30T02:12:33.044Z"
+  }
+ }
+]

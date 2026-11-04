@@ -303,6 +303,7 @@ class OpenAdaptProgram:
             cache_dir=self.cache,
             key_dir=self.cache / "admission-keys",
             dialect="anthropic",
+            teach_authorization=_demo_authority(self.cache, task),
         )
         try:
             result = jit.run(**task.params)
@@ -376,3 +377,22 @@ def _python(target: str) -> Any:
     if not isinstance(obj, Executor):
         raise SystemExit(f"{target} has no name and run(task) -> Report")
     return obj
+
+
+def _demo_authority(cache: Path, task: Any) -> Any:
+    """A throwaway approver signs what run 1 of this task may do.
+
+    Admission needs a person's teach authorization; a benchmark stands one
+    in (openadapt_flow.teach_authorization_fixture). The note is the record.
+    """
+
+    from openadapt_flow.teach_authorization_fixture import demo_authority
+
+    return demo_authority(
+        cache,
+        task_id="mockmed.add_note",
+        url=task.url,
+        record={"note": task.params["note"]},
+        inputs=task.params,
+        record_kind="encounter",
+    )

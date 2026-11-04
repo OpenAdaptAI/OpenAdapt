@@ -317,8 +317,9 @@ def application_risk_rules_from_data(value: object) -> tuple[ApplicationRiskRule
 # "postal". Ordered roughly by how common they are on real controls.
 #
 # "sign" counts in its writing sense ("Sign visit note", "Co-sign", "Signed"),
-# the clinical attestation that locks a note, but never as "sign in", "sign
-# on" or "sign out", which are session chrome.
+# the clinical attestation that locks a note, but never as "sign in" or "sign
+# on", and "sign out" / "log out" only with a clinical object ("Sign out
+# patient"), never as the session's own "Sign out".
 #
 # Deliberately EXCLUDED to avoid noisy false positives on navigation chrome:
 # bare "post"/"order"/"book"/"complete" (collide with "Posts"/"Orders"/
@@ -340,6 +341,14 @@ _WRITE_STEMS: tuple[str, ...] = (
     r"sign[\s\-_]?up",
     r"signup",
     r"(?:co[\-_]?|e[\-_]?)?sign(?:s|ed|ing)?(?![\s\-_]*(?:in|on|out)\b)",
+    # "Sign out patient", "Log out Jane Doe": signing out a record (a
+    # discharge or check-out) is a write. Only a bare "sign out" / "log out",
+    # or one that names the session ("sign out of OpenAdapt", "sign out now"),
+    # is session chrome.
+    r"(?:sign|log)(?:s|ged|ging|ed|ing)?[\s\-_]*out[\s\-_]+"
+    r"(?!(?:of|now|here|and|from|all|everywhere|completely|securely|safely)\b)"
+    r"[a-z]+",
+    r"discharg(?:e|es|ed|ing)",
     r"regist(?:er|ers|ering|ration)",
     r"enroll(?:s|ed|ing|ment)?",
     r"add(?:s|ed|ing)?",
@@ -602,6 +611,47 @@ def confirmation_opener_step_ids(steps: Iterable[Step]) -> tuple[tuple[str, str]
     return tuple(pairs)
 
 
+def is_confirm_click(step: Step) -> bool:
+    """Whether ``step`` is an irreversible click labelled "Confirm" or "Yes"."""
+
+    return (
+        step.action in _POINTER_ACTIONS
+        and step.risk == "irreversible"
+        and _CONFIRMATION_LABEL.search(step_text(step)) is not None
+    )
+
+
+def opener_explanation(confirm_id: str) -> str:
+    """The risk explanation the compiler gives a click that opens a dialog."""
+
+    return f"opens a confirmation dialog; the save is the next click ({confirm_id})"
+
+
+def compiled_confirmation_pairs(
+    steps: Iterable[Step],
+) -> tuple[tuple[str, str], ...]:
+    """``(opener_id, confirm_id)`` pairs, before or after compiling.
+
+    :func:`confirmation_opener_step_ids` reads the per-step risk inference,
+    which the compiler then changes: the opener becomes reversible, with
+    :func:`opener_explanation` as its reason. A compiled program's pairs are
+    the steps that carry that reason, followed by the irreversible click it
+    names.
+    """
+
+    ordered = list(steps)
+    inferred = set(confirmation_opener_step_ids(ordered))
+    return tuple(
+        (opener.id, confirm.id)
+        for opener, confirm in zip(ordered, ordered[1:])
+        if (opener.id, confirm.id) in inferred
+        or (
+            confirm.risk == "irreversible"
+            and opener.risk_explanation == opener_explanation(confirm.id)
+        )
+    )
+
+
 def step_text(step: Step) -> str:
     """The text a click step's risk is inferred from: its intent plus its
     target's retained OCR and structural-accessibility labels (the intent
@@ -622,7 +672,9 @@ def step_text(step: Step) -> str:
     drag_end_structural = drag_end.structural if drag_end is not None else None
     if drag_end_structural is not None and drag_end_structural.name:
         parts.append(drag_end_structural.name)
-    return " ".join(parts)
+    # " | " keeps a write phrase from spanning two labels: "Sign out" twice
+    # must not read as "sign out Sign".
+    return " | ".join(parts)
 
 
 def infer_step_risk(

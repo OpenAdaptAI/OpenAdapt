@@ -1,0 +1,95 @@
+resource_type: Patient
+demos:
+- name: noor
+  params:
+    given: Noor
+    family: Haddad
+    birthDate: '1972-03-09'
+    gender: female
+    line: 9 Elm Court
+    city: Lowell
+    state: MA
+    postalCode: 01852
+    phone: 978-555-0121
+    email: noor.haddad@example.org
+  resource:
+    resourceType: Patient
+    name:
+    - given:
+      - Noor
+      family: Haddad
+    birthDate: '1972-03-09'
+    gender: female
+    telecom:
+    - system: phone
+      value: 978-555-0121
+    - system: email
+      value: noor.haddad@example.org
+    address:
+    - line:
+      - 9 Elm Court
+      city: Lowell
+      state: MA
+      postalCode: 01852
+- name: elias
+  params:
+    given: Elias
+    family: Brandt
+    birthDate: '1985-12-01'
+    gender: male
+    line: 220 Pine St
+    city: Albany
+    state: NY
+    postalCode: '12207'
+    phone: 518-555-0164
+    email: elias.brandt@example.org
+  resource:
+    resourceType: Patient
+    name:
+    - given:
+      - Elias
+      family: Brandt
+    birthDate: '1985-12-01'
+    gender: male
+    telecom:
+    - system: phone
+      value: 518-555-0164
+    - system: email
+      value: elias.brandt@example.org
+    address:
+    - line:
+      - 220 Pine St
+      city: Albany
+      state: NY
+      postalCode: '12207'
+- name: mei
+  params:
+    given: Mei
+    family: Tanaka
+    birthDate: '1958-07-27'
+    gender: female
+    line: 3 Shore Rd
+    city: Portland
+    state: ME
+    postalCode: '04101'
+    phone: 207-555-0198
+    email: mei.tanaka@example.org
+  resource:
+    resourceType: Patient
+    name:
+    - given:
+      - Mei
+      family: Tanaka
+    birthDate: '1958-07-27'
+    gender: female
+    telecom:
+    - system: phone
+      value: 207-555-0198
+    - system: email
+      value: mei.tanaka@example.org
+    address:
+    - line:
+      - 3 Shore Rd
+      city: Portland
+      state: ME
+      postalCode: '04101'

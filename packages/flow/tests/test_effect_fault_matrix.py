@@ -125,7 +125,7 @@ def test_screen_passes_but_effect_catches(sor, mode):
     seed = mode == "stale"
     db.reset(seed_concurrent=seed)
 
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     assert before.reachable
 
@@ -148,7 +148,7 @@ def test_screen_passes_but_effect_catches(sor, mode):
 def test_control_clean_write_both_agree(sor):
     base, db = sor
     db.reset()
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     _drive_persistence_boundary(base, db, "ok")
     assert SCREEN_SHOWS_SUCCESS["ok"] is True
@@ -161,7 +161,7 @@ def test_idempotency_key_neutralizes_duplicate(sor):
     # refuted -- proving the at-most-once check.
     base, db = sor
     db.reset()
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     _drive_persistence_boundary(base, db, "idempotent")
     written = Effect(
@@ -181,7 +181,7 @@ def test_timeout_effect_verify_is_more_correct_than_screen(sor):
     # would double-write.
     base, db = sor
     db.reset()
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     _drive_persistence_boundary(base, db, "timeout")
     assert SCREEN_SHOWS_SUCCESS["timeout"] is False  # screen: false-abort
@@ -199,7 +199,7 @@ def test_session_expiry_both_safe(sor):
     # no banner -> the screen halts, and effect-verify agrees nothing landed.
     base, db = sor
     db.reset()
-    verifier = RestRecordVerifier(base)
+    verifier = RestRecordVerifier(base, records_path="/api/db", records_key="records")
     before = verifier.capture_pre_state()
     _drive_persistence_boundary(base, db, "session")
     assert SCREEN_SHOWS_SUCCESS["session"] is False

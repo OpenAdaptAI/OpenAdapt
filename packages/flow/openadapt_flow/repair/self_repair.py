@@ -97,6 +97,13 @@ from openadapt_flow.repair.candidate import (
     TaughtStep,
     sha256_hex,
 )
+from openadapt_flow.repair.element_identity import (
+    BASIS_RECORD_IDENTITY,
+    ClickAdmission,
+    ClickRefused,
+    admit_new_click,
+    record_check_cover,
+)
 
 if TYPE_CHECKING:
     from openadapt_flow.jit.keys import CustomerModelKey
@@ -595,6 +602,14 @@ class _Patch:
     summary: str = ""
     #: The agent's own account of its proposal, shown to the approver as such.
     proposal_note: str = ""
+    #: How each new click was admitted, by step id.
+    admissions: Mapping[str, ClickAdmission] = field(default_factory=dict)
+
+    @property
+    def needs_person(self) -> bool:
+        """A new click rests on the record check, so only a person approves."""
+
+        return any(a.needs_person for a in self.admissions.values())
 
 
 # -- the loop ------------------------------------------------------------------
@@ -707,6 +722,8 @@ class SelfRepair:
         self._sleep = sleep
         self._monotonic = monotonic
         self._token = secrets.token_urlsafe(32)
+        #: The proved cover when this run's halt is a covered band (#1724).
+        self._covered: Optional[_CoveredHalt] = None
 
     # -- public entry point --------------------------------------------------
 
@@ -728,6 +745,7 @@ class SelfRepair:
             agent_dialect=self.agent.dialect,
             prior_bundle_digest=_digest_of(workflow),
         )
+        self._covered = None
         session = self.target.open()
         try:
             report = self.target.execute(workflow, bundle_dir, session, run_dir)
@@ -742,7 +760,18 @@ class SelfRepair:
                     run_dir,
                     work,
                 )
-            if report.transaction_outcome not in (None, "HALTED_BEFORE_EFFECT"):
+            covered = _covered_band_halt(
+                report,
+                workflow,
+                session.backend,
+                recorded_band=lambda step: _recorded_band_text(
+                    workflow, Path(bundle_dir), step, self.vision
+                ),
+            )
+            if covered is None and report.transaction_outcome not in (
+                None,
+                "HALTED_BEFORE_EFFECT",
+            ):
                 return self._finish(
                     "not_repairable",
                     _not_before_effect(report),
@@ -752,7 +781,8 @@ class SelfRepair:
                     work,
                 )
             evidence.halted_run_dir = str(run_dir)
-            found = _repairable(report, workflow)
+            self._covered = covered
+            found = covered if covered is not None else _repairable(report, workflow)
             if isinstance(found, str):
                 evidence.steps.append(
                     SelfRepairStepRecord(stage="halt", passed=False, detail=found)
@@ -766,8 +796,13 @@ class SelfRepair:
                 SelfRepairStepRecord(
                     stage="halt",
                     passed=True,
-                    detail=f"{step.id} halted before any effect ({mode}): "
-                    f"{(halted.error or '')[:300]}",
+                    detail=(
+                        f"the next step's identity band is covered by the app's own "
+                        f"window; repaired after {step.id} ({mode})"
+                        if covered is not None
+                        else f"{step.id} halted before any effect ({mode}): "
+                        f"{(halted.error or '')[:300]}"
+                    ),
                 )
             )
             live_png = session.backend.screenshot()
@@ -997,15 +1032,25 @@ class SelfRepair:
                         _close(current)
                         current = None
                     continue
-                if touched[0]:
+                if touched[0] or getattr(self.target, "one_session_at_a_time", False):
+                    # A target that can't run two sessions of the app side by
+                    # side (a desktop app) closes the halted one before the
+                    # probe opens its own; the next attempt reaches the halt
+                    # again.
                     _close(current)
                     current = None
                 evidence.steps.append(
                     SelfRepairStepRecord(
                         stage="patch",
                         passed=True,
-                        detail=f"{patch.summary}; bundle "
-                        f"{patch.candidate.proposed_content_digest[:16]}"[:1024],
+                        detail=(
+                            f"{patch.summary}; bundle "
+                            f"{patch.candidate.proposed_content_digest[:16]}"
+                            + "".join(
+                                f"; {sid} admitted by {a.describe()}"
+                                for sid, a in patch.admissions.items()
+                            )
+                        )[:1024],
                         attempt=attempt,
                     )
                 )
@@ -1134,6 +1179,13 @@ class SelfRepair:
                 raise SelfRepairRefused(
                     "a bridge can only be added to a linear workflow for now"
                 )
+        if self._covered is not None and [op.kind for op in ops] != ["click"]:
+            # A covered band is repaired by dismissing the one proved dialog:
+            # a single click in it (checked in _new_click), nothing typed.
+            raise SelfRepairRefused(
+                "a covered identity band is repaired by one click that dismisses "
+                "the covering dialog, and nothing else"
+            )
         if mode == "replace" and ops[-1].kind != _POINTER_KINDS[step.action]:
             raise SelfRepairRefused(
                 f"{step.id} is a {_POINTER_KINDS[step.action]}; the bridge's last "
@@ -1152,6 +1204,8 @@ class SelfRepair:
         new_steps: list[Step] = []
         crops: dict[str, bytes] = {}
         described: list[str] = []
+        admissions: dict[str, ClickAdmission] = {}
+        extra_files: dict[str, bytes] = {}
         screen = live_png
         replaced: Optional[Step] = None
         target_region = tuple(step.anchor.region)
@@ -1215,7 +1269,7 @@ class SelfRepair:
                 persist_heal(event, crop, screen, evidence_dir)
                 continue
             new_id = f"{step.id}_bridge_{index + 1}"
-            new_step, crop, label = self._new_click(
+            new_step, crop, label, admission, files = self._new_click(
                 workflow,
                 new_id,
                 op,
@@ -1226,7 +1280,13 @@ class SelfRepair:
                 session,
             )
             crops[new_id] = crop
-            described.append(f"clicks {label!r}")
+            extra_files.update(files)
+            admissions[new_id] = admission
+            described.append(
+                f"clicks {label!r}"
+                if admission.basis == BASIS_RECORD_IDENTITY
+                else f"clicks {label!r} (checked by the record check)"
+            )
             frame_dir = evidence_dir / "heals" / new_id
             frame_dir.mkdir(parents=True, exist_ok=True)
             (frame_dir / "screen.png").write_bytes(screen)
@@ -1313,6 +1373,10 @@ class SelfRepair:
             path = bundle_out / target.anchor.template
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(crop)
+        for rel, data in extra_files.items():
+            path = bundle_out / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
         _uncertify_patch(patched)
         patched.save(bundle_out, encrypt=bool(workflow.encrypted))
         run_dir = attempt_dir.parent.parent
@@ -1370,6 +1434,7 @@ class SelfRepair:
             checked_step_ids=checked,
             summary=summary,
             proposal_note=str(proposal.note or ""),
+            admissions=admissions,
         )
 
     def _retarget(
@@ -1438,17 +1503,25 @@ class SelfRepair:
         screen: bytes,
         size_like: tuple[int, int, int, int],
         session: AppSession,
-    ) -> tuple[Step, bytes, str]:
-        """A new bridge click: a readable control in the recorded record.
+    ) -> tuple[Step, bytes, str, ClickAdmission, dict[str, bytes]]:
+        """A new bridge click: a readable control that doesn't save.
 
-        The control must not read as a save, and the record identity the DOM
-        shows under it must be one the recording already verified (the same
-        salted hash), so the new step carries an identity check of its own.
+        The control must not read as a save. Its admission
+        (:func:`~openadapt_flow.repair.element_identity.admit_new_click`) is
+        the record identity under it when the backend shows one the recording
+        verified (the same salted hash), so the new step carries an identity
+        check of its own. In a browser that is the only way in. On an
+        accessibility or pixel-only backend a click with no record identity
+        is admitted only when a record check covers the workflow's saves, and
+        its step is identified by the dialog around it (:func:`_dialog_band`),
+        a screen pre-check. Returns the step, its crop, its label, how it was
+        admitted, and any identifier crop to write into the bundle.
         """
 
         from openadapt_flow.ir import Anchor
         from openadapt_flow.risk import is_meaningful_label, is_write_shaped
         from openadapt_flow.runtime.heal import _crop_png, _reocr_text
+        from openadapt_flow.runtime.identity import squash
 
         region = _centered_region(
             point, (size_like[2], size_like[3]), _png_size(screen)
@@ -1466,13 +1539,51 @@ class SelfRepair:
                 f"the bridge clicks {label!r}, which reads as a save; a bridge may "
                 "only lead to the recorded save"
             )
+        if self._covered is not None:
+            if squash(label).casefold() != _NOTICE_DISMISS_LABEL:
+                raise SelfRepairRefused(
+                    f"a covered identity band is dismissed only with 'OK'; the "
+                    f"bridge clicks {label!r}"
+                )
+            self._dismisses_the_cover(session, point, screen)
+        try:
+            admission = admit_new_click(
+                session.backend,
+                point,
+                record_identity=lambda: _recorded_identity(
+                    workflow, session.backend, point
+                ),
+                cover=lambda: record_check_cover(workflow, self.target),
+            )
+        except ClickRefused as exc:
+            raise SelfRepairRefused(str(exc)) from exc
+        identity_template = admission.identity_template
+        identifier_crop = identifier_region = None
+        files: dict[str, bytes] = {}
+        if admission.basis != BASIS_RECORD_IDENTITY:
+            identity_template, identifier_region, band_png = _dialog_band(
+                workflow,
+                admission,
+                screen,
+                point,
+                self.vision,
+                proved_region=(
+                    _cover_region(self._covered.cover)
+                    if self._covered is not None
+                    else None
+                ),
+            )
+            identifier_crop = f"templates/identifiers/{step_id}.png"
+            files[identifier_crop] = band_png
         anchor = Anchor(
             template=f"templates/{step_id}.png",
-            structural=structural,
+            structural=admission.structural(structural),
             region=region,
             click_point=point,
             ocr_text=read,
-            identity_template=_recorded_identity(workflow, session.backend, point),
+            identity_template=identity_template,
+            identifier_crop=identifier_crop,
+            identifier_region=identifier_region,
         )
         step = Step(
             id=step_id,
@@ -1483,7 +1594,77 @@ class SelfRepair:
             anchor=anchor,
             risk="reversible",
         )
-        return step, _crop_png(screen, region), label
+        return step, _crop_png(screen, region), label, admission, files
+
+    def _dismisses_the_cover(
+        self, session: AppSession, point: tuple[int, int], screen: bytes
+    ) -> None:
+        """Refuse a covered-band bridge click outside the proved dialog.
+
+        The click must land in the very window ``owned_window_over`` reported
+        over the band (asked again at the point, against the same verified
+        window), and that dialog's text must read as a notice only
+        (:func:`_dialog_message_refusal`).
+        """
+
+        covered = self._covered
+        assert covered is not None
+        probe = getattr(session.backend, "owned_window_over", None)
+        try:
+            here = (
+                probe(
+                    (int(point[0]), int(point[1]), 1, 1), pinned_step_id=covered.pinned
+                )
+                if callable(probe)
+                else None
+            )
+        except Exception:  # noqa: BLE001 - no proof is a refusal
+            here = None
+        reported = _window_key(covered.cover)
+        if (
+            reported is None
+            or not isinstance(here, dict)
+            or _window_key(here) != reported
+        ):
+            raise SelfRepairRefused(
+                "the bridge click is not in the dialog that covers the identity "
+                "band; only that dialog may be dismissed"
+            )
+        rect = _cover_region(covered.cover)
+        if "region" in here and _cover_region(here) != rect:
+            # The dismiss step's dialog box is the proved region; a dialog
+            # that moved since the halt would leave it stale.
+            raise SelfRepairRefused(
+                "the covering dialog moved since the halt; its box can't be "
+                "used as the new step's identity"
+            )
+        text = ""
+        if rect is not None:
+            x, y, w, h = rect
+            try:
+                lines = self.vision.ocr(screen)
+            except Exception:  # noqa: BLE001 - unreadable is a refusal below
+                lines = []
+            inside: list[str] = []
+            for line in lines:
+                lx, ly, lw, lh = (int(v) for v in line.region)
+                overlap_w = min(lx + lw, x + w) - max(lx, x)
+                overlap_h = min(ly + lh, y + h) - max(ly, y)
+                if overlap_w <= 0 or overlap_h <= 0:
+                    continue
+                if lx >= x and ly >= y and lx + lw <= x + w and ly + lh <= y + h:
+                    inside.append(str(line.text))
+                elif overlap_w > _STRADDLE_SLACK_PX and overlap_h > _STRADDLE_SLACK_PX:
+                    # A line reaching into the dialog from outside may carry
+                    # its message merged with other text: it can't be read.
+                    raise SelfRepairRefused(
+                        "text runs across the covering dialog's edge, so its "
+                        "message can't be read on its own"
+                    )
+            text = " ".join(inside)
+        refusal = _dialog_message_refusal(text)
+        if refusal is not None:
+            raise SelfRepairRefused(refusal)
 
     def _landmarks(
         self,
@@ -1720,7 +1901,9 @@ class SelfRepair:
                 candidate=candidate,
                 patched_bundle=patch.bundle_dir,
             )
-        if self.standard_changes is not None:
+        # A new click that rests on the record check, not on a record identity
+        # the screen shows, is never applied by policy: a person approves it.
+        if self.standard_changes is not None and not patch.needs_person:
             standard = self.standard_changes.apply(
                 self,
                 patch=patch,
@@ -2520,6 +2703,14 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any]
             f"{step.id} stopped on the record check ({halted.identity.status}); a "
             "wrong-record halt is never repaired"
         )
+    refusal = halted.safety_refusal_evidence
+    if refusal is not None and refusal.code == "target_not_actionable":
+        # The target is on the page, but covered. A new target picked from
+        # the screen could be whatever covers it.
+        return (
+            f"{step.id} stopped because its target is covered or off screen; "
+            "a covered target is never retargeted"
+        )
     if step.action not in _POINTER_KINDS or step.anchor is None:
         return f"{step.id} is not a click on an on-screen target"
     # Only the ladder's own refusals count as "the screen changed": it found
@@ -2571,6 +2762,444 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any]
     if not report.halt or report.halt.state_id != step.id:
         return "the report's halt does not name the failed step"
     return step, mode, halted
+
+
+def _covered_band_halt(
+    report: RunReport,
+    workflow: Workflow,
+    backend: Any,
+    *,
+    recorded_band: Callable[[Step], Optional[str]] = lambda step: None,
+) -> "Optional[_CoveredHalt]":
+    """An identity halt caused by the app's own window over the band (#1724).
+
+    A dialog the app opens after a step (a session notice, an update prompt)
+    can cover the next step's identity band, so that step's identity check
+    reads part of the record and refuses. That is not a wrong record, and the
+    fix is the one ``after`` mode handles: dismiss the dialog after the
+    previous step. Returns ``(previous step, "after", its result)`` only when
+    every condition holds, else None (the halt keeps its usual routing):
+
+    - the run halted at a pointer step whose identity check did not verify,
+      and no input reached it;
+    - no step that saves received input and no effect was observed;
+    - the backend proves that a window of the app itself covers the step's
+      identity band on the halted screen (``owned_window_over``): a window of
+      the same process, owned by the top-level window the backend captured
+      when the last identity-verified step passed (``pinned_step_id``). Its
+      reported ``region`` must span the band from where the read stops to the
+      band's right edge, at full height (:func:`_cover_explains_cut`);
+    - the identity was read from the screen (``context``), its band has no
+      run parameter, and the text read is the recorded band word for word up
+      to where the dialog cuts it (only the last word read may be cut short),
+      with at least half the band matched (:func:`_uncovered_band_matches`).
+      Another patient behind the dialog, a different birth date showing, or
+      a missing first name fails this;
+    - the run ended with that identity refusal (``REJECTED_POLICY``) or
+      before any effect, nobody declined it, it has exactly one save, its
+      halt names the step, and no delivery was left uncertain;
+    - the previous step is a click that doesn't save, acted on a trusted rung
+      and passed, in a linear workflow.
+
+    Nothing is relaxed after this: the probe replays the halted step with its
+    own identity check, which must verify on the uncovered band, then the
+    record check and a person decide as for any repair.
+    """
+
+    from openadapt_flow.run_gate import is_consequential
+
+    probe = getattr(backend, "owned_window_over", None)
+    if not callable(probe) or workflow.program is not None or workflow.subflows:
+        return None
+    if report.transaction_outcome not in (
+        None,
+        "HALTED_BEFORE_EFFECT",
+        "REJECTED_POLICY",
+    ):
+        return None
+    if (
+        report.approval is not None
+        and report.approval.decision is ItemDecisionKind.DECLINED
+    ):
+        return None
+    if sum(1 for s in workflow.steps if is_consequential(s, workflow)) != 1:
+        return None
+    if any(r.delivery_uncertainty is not None for r in report.results):
+        return None
+    steps = {step.id: (index, step) for index, step in enumerate(workflow.steps)}
+    for result in report.results:
+        found = steps.get(result.step_id)
+        if found is None:
+            return None
+        if result.delivery_attempted and is_consequential(found[1], workflow):
+            return None
+        if any(
+            item.observed_effect not in (None, "absent")
+            for item in result.effect_evidence
+        ):
+            return None
+    halted = next(
+        (r for r in reversed(report.results) if not r.ok and not r.skipped), None
+    )
+    if halted is None or halted.step_id not in steps:
+        return None
+    index, step = steps[halted.step_id]
+    if (
+        halted.delivery_attempted is not False
+        or halted.identity is None
+        or halted.identity.status == "verified"
+        or halted.identity.mode != "context"
+        or step.anchor is None
+        or step.anchor.identifier_region is None
+        or index == 0
+        or report.halt is None
+        or report.halt.state_id != step.id
+    ):
+        return None
+    rx, ry, rw, rh = (int(v) for v in step.anchor.identifier_region)
+    region = (rx, ry, rw, rh)
+    if halted.resolution is not None:
+        dx = int(halted.resolution.point[0]) - int(step.anchor.click_point[0])
+        dy = int(halted.resolution.point[1]) - int(step.anchor.click_point[1])
+        region = (region[0] + dx, region[1] + dy, region[2], region[3])
+    # The window the run was in is the one the last identity-verified step
+    # captured, not a hit-test at the halted step (which the dialog covers).
+    pinned = next(
+        (
+            r.step_id
+            for r in reversed(report.results)
+            if r.ok and r.identity is not None and r.identity.status == "verified"
+        ),
+        None,
+    )
+    if pinned is None:
+        return None
+    try:
+        cover = probe(region, pinned_step_id=pinned)
+    except Exception:  # noqa: BLE001 - no proof means no reclassification
+        return None
+    if not isinstance(cover, dict) or not cover:
+        return None
+    try:
+        recorded = recorded_band(step)
+    except Exception:  # noqa: BLE001 - an unreadable record is doubt
+        return None
+    if not _uncovered_band_matches(
+        step, halted.identity.observed, recorded
+    ) or not _cover_explains_cut(cover, region, halted.identity.observed, recorded):
+        return None
+    previous = workflow.steps[index - 1]
+    acted = next((r for r in report.results if r.step_id == previous.id), None)
+    rung = acted.resolution.rung if acted and acted.resolution else None
+    if (
+        acted is None
+        or not acted.ok
+        or acted.delivery_attempted is not True
+        or previous.action not in _POINTER_KINDS
+        or previous.anchor is None
+        or rung not in TRUSTED_RUNGS
+        or is_consequential(previous, workflow)
+    ):
+        return None
+    return _CoveredHalt((previous, "after", acted), cover=dict(cover), pinned=pinned)
+
+
+def _window_key(window: Mapping[str, Any]) -> Optional[tuple[int, int]]:
+    """A reported window's ``(id, pid)``: ``hwnd`` on Windows, ``window_id`` on
+    macOS. None when either is missing or not a positive integer."""
+
+    ident = window.get("hwnd", window.get("window_id"))
+    pid = window.get("pid")
+    if any(
+        isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in (ident, pid)
+    ):
+        return None
+    return int(ident), int(pid)  # type: ignore[arg-type]
+
+
+class _CoveredHalt(tuple):
+    """``(previous step, "after", its result)``, with the proved cover.
+
+    ``cover`` is what ``owned_window_over`` returned for the band and
+    ``pinned`` the step whose verified window it was checked against; the
+    dismiss click is held to that same window (:meth:`SelfRepair._new_click`).
+    """
+
+    cover: dict
+    pinned: str
+
+    def __new__(cls, items: tuple, *, cover: dict, pinned: str) -> "_CoveredHalt":
+        found = super().__new__(cls, items)
+        found.cover = cover
+        found.pinned = pinned
+        return found
+
+
+#: How far the share of the band left uncovered may be from the share of the
+#: recorded text read: the dialog's left edge must be where the read stops.
+#: On one lab app's session notice the two were 0.79 and 0.81.
+_CUT_TOLERANCE = 0.1
+
+
+def _cover_region(cover: Mapping[str, Any]) -> Optional[tuple[int, int, int, int]]:
+    """The covering window's ``region`` as ``(x, y, w, h)``, or None."""
+
+    value = cover.get("region")
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    if any(isinstance(v, bool) or not isinstance(v, int) for v in value):
+        return None
+    x, y, w, h = value
+    if w <= 0 or h <= 0:
+        return None
+    return x, y, w, h
+
+
+def _cover_explains_cut(
+    cover: Mapping[str, Any],
+    band: tuple[int, int, int, int],
+    observed: str,
+    recorded: Optional[str],
+) -> bool:
+    """Whether the covering window is what cut the band where the read stops.
+
+    The window must span the band from a point inside it to its right edge,
+    at the band's full height, and its left edge must sit where the text
+    read ends: the share of the band's width left uncovered is within
+    ``_CUT_TOLERANCE`` of the share of the recorded text read. A popup that
+    only touches the band (a tooltip over a column's ellipsis) fails. A
+    cover with no ``region`` is doubt.
+    """
+
+    from openadapt_flow.runtime.identity import ocr_canonical, squash
+
+    rect = _cover_region(cover)
+    if rect is None or not (recorded or "").strip():
+        return False
+    bx, by, bw, bh = band
+    cx, cy, cw, ch = rect
+    if not (
+        bx < cx < bx + bw and cy <= by and cy + ch >= by + bh and cx + cw >= bx + bw
+    ):
+        return False
+    read = len(ocr_canonical(squash(observed or "")))
+    whole = len(ocr_canonical(squash(str(recorded))))
+    if whole <= 0 or read <= 0:
+        return False
+    return abs((cx - bx) / bw - read / whole) <= _CUT_TOLERANCE
+
+
+#: The only words a dismissable covering dialog may show (title, message
+#: and button), casefolded after NFKC: a notice that the session expires,
+#: answered with "OK". Any other word, any punctuation outside
+#: ``_NOTICE_DIALOG_MARKS``, or no readable word refuses. An allowlist, so an
+#: unlisted "Log out of the other session?", "Update the application now" or
+#: a dialog in another language is refused rather than dismissed.
+_NOTICE_DIALOG_WORDS = frozenset(
+    {
+        "a",
+        "expire",
+        "expires",
+        "expiring",
+        "hour",
+        "hours",
+        "in",
+        "information",
+        "is",
+        "minute",
+        "minutes",
+        "notice",
+        "ok",
+        "reminder",
+        "second",
+        "seconds",
+        "session",
+        "the",
+        "this",
+        "will",
+        "i",  # the information icon, as OCR may read it
+        "x",  # the close glyph, as OCR may read it
+        "your",
+    }
+)
+
+#: Marks a notice may carry besides letters and digits: no question mark in
+#: any script, nothing else.
+_NOTICE_DIALOG_MARKS = frozenset(" \t\n.,:!×")
+
+#: How far, in pixels, an OCR line may reach over the dialog's edge before
+#: it counts as text running across it (a glyph's antialiasing, a border).
+_STRADDLE_SLACK_PX = 4
+
+#: A notice must say both: what it is about, and that it expires.
+_NOTICE_SUBJECT_WORDS = frozenset({"session"})
+_NOTICE_EXPIRY_WORDS = frozenset({"expire", "expires", "expiring"})
+
+#: The one label the dismiss click may have.
+_NOTICE_DISMISS_LABEL = "ok"
+
+
+def _notice_parts(token: str) -> Optional[list[str]]:
+    """``token`` as allowlisted notice words and ASCII numbers, or None.
+
+    OCR often runs a line's words together (``yoursession``, ``in5minutes``),
+    so a token may be several words; it is accepted only when it splits
+    completely into notice words of two or more letters and digit runs. A
+    one-letter word (``a``, ``i``, ``x``) counts only as a whole token.
+    """
+
+    if token in _NOTICE_DIALOG_WORDS or (token.isascii() and token.isdecimal()):
+        return [token]
+    if not token.isascii():
+        return None
+    words = sorted((w for w in _NOTICE_DIALOG_WORDS if len(w) > 1), key=len)
+    best: list[Optional[list[str]]] = [None] * (len(token) + 1)
+    best[0] = []
+    for end in range(1, len(token) + 1):
+        for start in range(end):
+            before = best[start]
+            if before is None:
+                continue
+            piece = token[start:end]
+            if piece in words or piece.isdecimal():
+                best[end] = [*before, piece]
+                break
+    return best[len(token)]
+
+
+def _dialog_message_refusal(text: str) -> Optional[str]:
+    """Why a covering dialog's text forbids dismissing it, or None.
+
+    Only a session notice may be dismissed by a bridge: after NFKC, every
+    word must be in ``_NOTICE_DIALOG_WORDS`` (numbers aside) and every other
+    character in ``_NOTICE_DIALOG_MARKS``, so nothing asks a question in any
+    script. Answering "OK" to "Discard unsaved changes?" or "Update the
+    application now" loses data, so anything else is refused, including
+    unreadable text.
+    """
+
+    import unicodedata
+
+    folded = unicodedata.normalize("NFKC", text).casefold()
+    marks = sorted(
+        {c for c in folded if not c.isalnum() and c not in _NOTICE_DIALOG_MARKS}
+    )
+    if marks:
+        return (
+            "the covering dialog shows "
+            f"{' '.join(marks[:6])!r}, which a notice does not; answering it may "
+            "discard, end or commit something"
+        )
+    words = folded.replace("×", " ")
+    words_list = [w for w in "".join(c if c.isalnum() else " " for c in words).split()]
+    if not words_list:
+        return "the covering dialog's message can't be read"
+    other = sorted({w for w in words_list if _notice_parts(w) is None})
+    if other:
+        return (
+            "the covering dialog shows words a session notice does not "
+            f"({', '.join(other[:6])}); it is not dismissed"
+        )
+    present = {part for w in words_list for part in _notice_parts(w) or ()}
+    if not present & _NOTICE_SUBJECT_WORDS or not present & _NOTICE_EXPIRY_WORDS:
+        return (
+            "the covering dialog's text does not say that a session expires; "
+            "only that notice is dismissed (its message may not have been read)"
+        )
+    return None
+
+
+#: The least share of the recorded band the uncovered part must match.
+_MIN_UNCOVERED_COVERAGE = 0.5
+
+
+def _uncovered_band_matches(step: Step, observed: str, recorded: Optional[str]) -> bool:
+    """Whether the band text read beside the covering window is the record's.
+
+    ``recorded`` is the step's recorded band, read from its identifier crop
+    (:func:`_recorded_band_text`). The text read must be that band word for
+    word, in order, up to where the dialog cuts it: only its last word may be
+    a shortened form of the recorded word. Every word read must therefore be
+    the record's; a different date or identifier showing, or a missing first
+    name, refuses. The template must also be met by at least half (the read
+    is the record's, not a stray line). Any doubt is False.
+    """
+
+    from openadapt_flow.runtime.identity import ocr_canonical, squash
+    from openadapt_flow.runtime.identity_template import _band_match_template
+
+    template = step.anchor.identity_template if step.anchor is not None else None
+    if (
+        template is None
+        or not template.tokens
+        or getattr(template, "param_token_indices", None)
+    ):
+        return False
+    if not (observed or "").strip() or not (recorded or "").strip():
+        return False
+
+    def words(text: str) -> list[str]:
+        return [w for w in (ocr_canonical(squash(t)) for t in text.split()) if w]
+
+    read, band = words(observed), words(str(recorded))
+    if not read or len(read) > len(band):
+        return False
+    if read[:-1] != band[: len(read) - 1]:
+        return False
+    if not band[len(read) - 1].startswith(read[-1]):
+        return False
+    whole = observed
+    if read[-1] != band[len(read) - 1]:
+        # The word the dialog cuts is checked above as a prefix of the
+        # recorded word; the template weighs whole words only, so a cut
+        # date or id ("1984-") is not read as a different value.
+        whole = " ".join(observed.split()[:-1])
+    try:
+        match = _band_match_template(template, whole)
+    except Exception:  # noqa: BLE001 - an unreadable match is doubt
+        return False
+    return (
+        match.contradicted_chars == 0
+        and match.suspect_chars == 0
+        and match.unexplained_name_tokens == 0
+        and match.glyph_ambiguous_id_chars == 0
+        and match.coverage >= _MIN_UNCOVERED_COVERAGE
+    )
+
+
+def _recorded_band_text(
+    workflow: Workflow, bundle_dir: Path, step: Step, vision: Any
+) -> Optional[str]:
+    """The step's recorded identity band as text, from its identifier crop.
+
+    Read with the run's OCR, and accepted only when it meets the step's
+    hashed identity template in full (the crop is the recorded record).
+    None when there is no crop, it can't be read, or it doesn't match.
+    """
+
+    from openadapt_flow.runtime.identity_template import _band_match_template
+
+    anchor = step.anchor
+    if anchor is None or not anchor.identifier_crop or anchor.identity_template is None:
+        return None
+    png = workflow.decrypted_template(anchor.identifier_crop)
+    if png is None:
+        path = bundle_dir / anchor.identifier_crop
+        png = path.read_bytes() if path.is_file() else None
+    if png is None:
+        return None
+    try:
+        lines = sorted(
+            vision.ocr(png),
+            key=lambda ln: (int(ln.region[1]) // 8, int(ln.region[0])),
+        )
+        text = " ".join(str(ln.text) for ln in lines).strip()
+        match = _band_match_template(anchor.identity_template, text)
+    except Exception:  # noqa: BLE001 - unreadable is no recorded band
+        return None
+    if not text or match.contradicted_chars or match.coverage < 0.999:
+        return None
+    return text
 
 
 def _before_frame(run_dir: Path, result: Any) -> Optional[bytes]:
@@ -2627,6 +3256,78 @@ def _recorded_identity(workflow: Workflow, backend: Any, point: tuple[int, int])
             "may only act on the recorded record"
         )
     return template
+
+
+def _dialog_band(
+    workflow: Workflow,
+    admission: ClickAdmission,
+    screen: bytes,
+    point: tuple[int, int],
+    vision: Any,
+    *,
+    proved_region: Optional[tuple[int, int, int, int]] = None,
+) -> tuple[Any, tuple[int, int, int, int], bytes]:
+    """The dialog around a new click, as the step's identity band.
+
+    Used for a click admitted on the record check: the band is a screen
+    pre-check (the same dialog shows), never what makes the click safe. The
+    dialog's box comes from the element's ancestry when the tree reads one,
+    otherwise from the drawn box around the click. ``proved_region`` is a
+    box the backend already proved is the dialog's window (a covered band's
+    ``owned_window_over``); it is used first. Its text is hashed with
+    the bundle's salt, as a recorded identity band is. Refuses when there is
+    no dialog around the click or it has no readable text.
+    """
+
+    from openadapt_flow.repair.dialog_identity import enclosing_dialog_region
+    from openadapt_flow.runtime.heal import _crop_png
+    from openadapt_flow.runtime.identity import identifier_text_from_lines
+    from openadapt_flow.runtime.identity_template import (
+        build_identity_template,
+        new_salt_hex,
+    )
+
+    element = admission.element
+    region = proved_region
+    if region is None and element is not None:
+        region = element.dialog_region
+    if region is None:
+        region = enclosing_dialog_region(screen, point)
+    if region is None:
+        raise SelfRepairRefused(
+            "a new click with no record identity must sit in a dialog that "
+            "identifies it; no dialog was found around the click"
+        )
+    x, y, w, h = region
+    if not (x <= point[0] < x + w and y <= point[1] < y + h):
+        raise SelfRepairRefused("the click is outside the dialog around it")
+    try:
+        lines = vision.ocr(screen)
+    except Exception:  # noqa: BLE001 - unreadable is refused
+        lines = []
+    text = identifier_text_from_lines(lines or [], region=region)
+    salt = next(
+        (
+            s.anchor.identity_template.salt
+            for s in workflow.steps
+            if s.anchor is not None and s.anchor.identity_template is not None
+        ),
+        None,
+    )
+    template = (
+        build_identity_template(
+            text,
+            param_examples=dict(workflow.params),
+            salt_hex=salt or new_salt_hex(),
+        )
+        if text
+        else None
+    )
+    if template is None:
+        raise SelfRepairRefused(
+            "the dialog around the new click has no readable text to identify it by"
+        )
+    return template, (int(x), int(y), int(w), int(h)), _crop_png(screen, region)
 
 
 def _expected_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional[bytes]:
@@ -2846,9 +3547,20 @@ def _pre_save_checks(
     if expected:
         values = _form_values(backend)
         if values is None:
-            words = _screen_words(vision, frame)
+            # No form to read (a native or pixel-only backend): the screen's
+            # words. OCR may glue a field's words together ("FOLLOWUPIN"), so a
+            # value also counts when its words appear joined on one line.
+            lines = _screen_lines(vision, frame)
+            words = (
+                {w for line in lines for w in _words(line)}
+                if lines is not None
+                else None
+            )
             missing = [
-                v for v in expected if words is None or not set(_words(v)) <= words
+                v
+                for v in expected
+                if words is None
+                or not (set(_words(v)) <= words or _glued_on_a_line(v, lines or []))
             ]
         else:
             pool = list(values)
@@ -2883,6 +3595,44 @@ def _words(text: str) -> list[str]:
     import re
 
     return [w.casefold() for w in re.findall(r"[0-9A-Za-zÀ-ɏ]+", text)]
+
+
+def _glued_on_a_line(value: str, lines: Sequence[str]) -> bool:
+    """Whether a value of several words shows on one line with its words glued.
+
+    The joined value must equal a run of whole, consecutive OCR words on the
+    line (one glued word counts as a run), never a part of a word: "5 mg"
+    doesn't match "25mg", nor "John Smith" "JOHNSMITHSON". Only for a value
+    of two or more words and six or more letters.
+    """
+
+    words = _words(value)
+    glued = "".join(words)
+    if len(words) < 2 or len(glued) < 6:
+        return False
+    for line in lines:
+        tokens = _words(line)
+        for start in range(len(tokens)):
+            run = ""
+            for token in tokens[start:]:
+                run += token
+                if run == glued:
+                    return True
+                if not glued.startswith(run):
+                    break
+    return False
+
+
+def _screen_lines(vision: Any, frame: Optional[bytes]) -> Optional[list[str]]:
+    """The OCR text of each line on ``frame``, or None when unreadable."""
+
+    if not frame:
+        return None
+    try:
+        lines = vision.ocr(frame)
+    except Exception:  # noqa: BLE001
+        return None
+    return [str(getattr(line, "text", "")) for line in lines or []]
 
 
 def _screen_words(vision: Any, frame: Optional[bytes]) -> Optional[set[str]]:

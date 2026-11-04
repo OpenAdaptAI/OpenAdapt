@@ -1,0 +1,40 @@
+[
+ {
+  "resourceType": "Patient",
+  "name": [
+   {
+    "given": [
+     "Elias"
+    ],
+    "family": "Brandt"
+   }
+  ],
+  "birthDate": "1985-12-01",
+  "gender": "male",
+  "telecom": [
+   {
+    "system": "phone",
+    "value": "518-555-0164"
+   },
+   {
+    "system": "email",
+    "value": "elias.brandt@example.org"
+   }
+  ],
+  "address": [
+   {
+    "line": [
+     "220 Pine St"
+    ],
+    "city": "Albany",
+    "state": "NY",
+    "postalCode": "12207"
+   }
+  ],
+  "id": "4e89fbd0-296c-4acd-ad02-c4c77dd26273",
+  "meta": {
+   "versionId": "0bf61ea8-f3cc-4444-810d-3a85174b23fb",
+   "lastUpdated": "2026-10-30T02:11:31.115Z"
+  }
+ }
+]

@@ -79,6 +79,23 @@ package availability, repository text, or a sibling repository.
 - Never place customer-derived data, deployment recipes, or secrets in a public
   fixture or package artifact.
 
+### Pushing to a pull request
+
+Every push to a pull request starts a full CI run and cancels the run in
+progress. All open pull requests share the same CI runners, so each extra run
+delays every other pull request. In early November 2026, about 40% of
+pull-request CI time went to runs that a newer push cancelled.
+
+- Run the tests you touched locally before you push, for example
+  `pytest -q tests/test_x.py` in the package's directory.
+- Batch your fixes, including fixes for review comments, into one push.
+  Don't push each fix on its own.
+- Merge `main` into your branch only to resolve a conflict. CI already tests
+  your branch merged with the current `main`, and branch protection doesn't
+  require it to be up to date.
+- To retry a failed job, re-run it with `gh run rerun <run-id> --failed`.
+  Don't push an empty commit to start CI again.
+
 ## Licensing and the open-core boundary
 
 OpenAdapt is open-core. The public repositories (this monorepo with the

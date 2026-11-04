@@ -158,6 +158,39 @@ def test_scrubbing_keeps_the_values_the_operator_named(monkeypatch) -> None:
 # -- the Claude loop -------------------------------------------------------------
 
 
+def _png() -> bytes:
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (4, 4), (255, 255, 255)).save(out, format="PNG")
+    return out.getvalue()
+
+
+_TINY_PNG = _png()
+
+
+class _OutboundScrubber(_Scrubber):
+    """Text and image scrubbing for the model-facing screenshots."""
+
+    def __init__(self) -> None:
+        self.images = 0
+
+    def scrub_image(self, image, fill_color=None):
+        self.images += 1
+        return image
+
+
+@pytest.fixture(autouse=True)
+def _outbound_scrubber():
+    """Screenshots sent to the model are redacted first (agents._image)."""
+    scrubber = _OutboundScrubber()
+    privacy.set_text_scrubber(scrubber)
+    yield scrubber
+    privacy.reset_scrubbers()
+
+
 class _Harness:
     """Stands in for the browser harness: a fixed listing and counters."""
 
@@ -171,7 +204,7 @@ class _Harness:
 
     def screenshot(self, why: str = "requested") -> bytes:
         self.stats.screenshots_requested += 1
-        return b"\x89PNG fake"
+        return _TINY_PNG
 
     def click(self, ref: str) -> None:
         if ref == "e9":
@@ -216,7 +249,7 @@ class _Client:
 REQUEST = TaskRequest(task_id="t", instruction="Save it", inputs={})
 
 
-def test_claude_loop_counts_tokens_and_the_gate_screenshot() -> None:
+def test_claude_loop_counts_tokens_and_the_gate_screenshot(_outbound_scrubber) -> None:
     client = _Client(
         [
             ("click", {"ref": "e9"}),
@@ -225,10 +258,11 @@ def test_claude_loop_counts_tokens_and_the_gate_screenshot() -> None:
         ]
     )
     harness = _Harness()
-    ledger = ClaudeAgent(client=client).drive(REQUEST, harness)  # type: ignore[arg-type]
+    ledger = ClaudeAgent(vision="selective", client=client).drive(REQUEST, harness)  # type: ignore[arg-type]
     assert ledger.finished and ledger.summary == "done"
     assert ledger.model_calls == 3 and ledger.tool_errors == 1  # the stale ref
     assert harness.clicks == ["e1"]
+    assert _outbound_scrubber.images >= 1  # redacted before the model saw it
     # The save's result carried a screenshot: the verification gate.
     messages = client.requests[2]["messages"]  # the loop appends to one list
     third = messages[4]["content"][0]["content"]
@@ -252,13 +286,17 @@ def test_every_turn_mode_uses_the_computer_toolset() -> None:
 def test_a_refused_save_ends_the_loop() -> None:
     client = _Client([("click", {"ref": "e1"})])
     with pytest.raises(GateRefused):
-        ClaudeAgent(client=client).drive(REQUEST, _Harness(refuse=True))  # type: ignore[arg-type]
+        ClaudeAgent(vision="selective", client=client).drive(
+            REQUEST, _Harness(refuse=True)
+        )  # type: ignore[arg-type]
 
 
 def test_the_cost_cap_ends_the_loop() -> None:
     client = _Client([("observe", {})] * 5, tokens=400_000)
     with pytest.raises(BudgetExceeded):
-        ClaudeAgent(client=client, max_cost_usd=1.0).drive(REQUEST, _Harness())  # type: ignore[arg-type]
+        ClaudeAgent(vision="selective", client=client, max_cost_usd=1.0).drive(
+            REQUEST, _Harness()
+        )  # type: ignore[arg-type]
     assert len(client.requests) == 1
 
 
@@ -330,11 +368,11 @@ class _Computer:
         self.executed: list[dict[str, Any]] = []
 
     def screenshot(self) -> bytes:
-        return b"png"
+        return _TINY_PNG
 
     def execute(self, native: dict[str, Any]) -> Any:
         self.executed.append(native)
-        return SimpleNamespace(png=b"png", notes=[])
+        return SimpleNamespace(png=_TINY_PNG, notes=[])
 
 
 def _refused(computer: _Computer, native: dict[str, Any], tmp_path: Path) -> Any:

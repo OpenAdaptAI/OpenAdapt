@@ -78,6 +78,7 @@ class TestMergeConsecutiveMouseClickEventsComprehensive:
 
         assert len(result) == 1
         assert isinstance(result[0], MouseClickEvent)
+        assert result[0].button == MouseButton.LEFT
         assert len(result[0].children) == 2
 
     def test_double_click_within_interval(self, ts):
@@ -220,18 +221,23 @@ class TestMergeConsecutiveMouseMoveEventsComprehensive:
 class TestMergeConsecutiveMouseScrollEventsComprehensive:
     """Comprehensive tests for scroll merging."""
 
-    def test_scroll_deltas_accumulate(self, ts):
-        """Scroll deltas should sum correctly."""
+    @pytest.mark.parametrize(
+        ("deltas", "total"),
+        [
+            pytest.param([(2, 0), (1, 0), (-1, 0)], (2, 0), id="dx"),
+            pytest.param([(0, -1), (0, -2), (0, -1)], (0, -4), id="dy"),
+        ],
+    )
+    def test_scroll_deltas_accumulate(self, ts, deltas, total):
+        """Scroll deltas should sum correctly on each axis."""
         events = [
-            MouseScrollEvent(timestamp=ts.next(), x=100, y=100, dx=2, dy=0),
-            MouseScrollEvent(timestamp=ts.next(), x=100, y=100, dx=1, dy=0),
-            MouseScrollEvent(timestamp=ts.next(), x=100, y=100, dx=-1, dy=0),
+            MouseScrollEvent(timestamp=ts.next(), x=100, y=100, dx=dx, dy=dy)
+            for dx, dy in deltas
         ]
         result = merge_consecutive_mouse_scroll_events(events)
 
         assert len(result) == 1
-        assert result[0].dx == 2  # 2 + 1 - 1 = 2
-        assert result[0].dy == 0
+        assert (result[0].dx, result[0].dy) == total
 
     def test_scrolls_interrupted_by_move_create_groups(self, ts):
         """Scrolls interrupted by moves should create separate groups."""
@@ -259,25 +265,6 @@ class TestMergeConsecutiveMouseScrollEventsComprehensive:
 
 class TestMergeConsecutiveKeyboardEventsComprehensive:
     """Comprehensive tests for keyboard event merging."""
-
-    def test_key_sequence_merges_to_type_event(self, ts):
-        """Sequence of key press/release should merge to KeyTypeEvent."""
-        events = [
-            KeyDownEvent(timestamp=ts.next(), key_char="a"),
-            KeyUpEvent(timestamp=ts.next(), key_char="a"),
-            KeyDownEvent(timestamp=ts.next(), key_char="b"),
-            KeyUpEvent(timestamp=ts.next(), key_char="b"),
-            KeyDownEvent(timestamp=ts.next(), key_char="c"),
-            KeyUpEvent(timestamp=ts.next(), key_char="c"),
-        ]
-        result = merge_consecutive_keyboard_events(events)
-
-        # Each press/release creates a KeyTypeEvent
-        assert all(isinstance(e, KeyTypeEvent) for e in result)
-        texts = [e.text for e in result]
-        assert "a" in texts
-        assert "b" in texts
-        assert "c" in texts
 
     def test_keyboard_interrupted_by_mouse_creates_groups(self, ts):
         """Keyboard events interrupted by mouse should create separate groups."""

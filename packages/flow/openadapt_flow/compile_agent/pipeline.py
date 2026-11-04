@@ -45,6 +45,7 @@ from openadapt_flow.compile_agent.harness import (
     Harness,
     SaveGate,
     SurfaceHarness,
+    record_readback,
 )
 from openadapt_flow.jit import lifecycle
 from openadapt_flow.jit.compile_agent import (
@@ -236,7 +237,8 @@ class CompileResult:
     ``status`` is ``admitted`` (later runs make no model calls), ``draft``
     (run 1 passed; checks or admission wait for a person), ``needs_person``
     (outside the agent's admission policy), or why nothing can be admitted:
-    ``refused_wrong_record``, ``refused_by_hold``, ``record_check_failed``,
+    ``refused_wrong_record``, ``refused_by_hold``, ``readback_wrong_record``
+    (a save landed on a record the task does not name), ``record_check_failed``,
     ``canary_failed``, ``capture_failed``, ``unsupported``, ``scope_refused``
     (run 1 went outside the task's declared scope), ``readback_refused``
     (the system of record did not show exactly the declared write).
@@ -300,8 +302,11 @@ class _HarnessedAgent:
         keep: Sequence[str],
         evidence_dir: Path,
         principal_id: Optional[str],
+        readback: Optional[Callable[[], Any]] = None,
     ) -> None:
         self.inner = inner
+        #: Read after every save that goes through the gate (harness module).
+        self.readback = readback
         self.dialect = str(inner.dialect)
         self.gate = gate
         self.keep = list(keep)
@@ -320,9 +325,17 @@ class _HarnessedAgent:
         # window, an RDP or Citrix client window) gets the surface harness.
         harness_type = Harness if computer.page is not None else SurfaceHarness
         self.harness = harness_type(
-            computer, self.gate, keep=self.keep, evidence_dir=self.evidence_dir
+            computer,
+            self.gate,
+            keep=self.keep,
+            evidence_dir=self.evidence_dir,
+            readback=self.readback,
         )
         try:
+            if self.readback is not None:
+                from openadapt_flow.compile_agent.harness import _start_readback
+
+                _start_readback(self.harness)
             self.ledger = self.inner.drive(request, self.harness)
         except BaseException as exc:
             self.error = f"{type(exc).__name__}: {exc}"
@@ -364,6 +377,7 @@ class FirstRunCompiler:
         allow_origins: Sequence[str] = (),
         constants: Sequence[str] = (),
         write_adapter: Optional[Any] = None,
+        teach_authorization: Optional[Any] = None,
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
@@ -412,12 +426,19 @@ class FirstRunCompiler:
         self.headless = headless
         self.on_warning = on_warning
         self.model_key = model_key
-        self.observer, self.verifier_section = load_observer(self.verify_path)
+        self.observer, self.verifier_section = load_observer(
+            self.verify_path, for_run1=True
+        )
         #: Run 1's teach scope (see :meth:`teach_scope`): more app origins,
         #: more text the agent may type, and the app's write adapter.
         self.allow_origins = [str(o) for o in allow_origins]
         self.constants = [str(c) for c in constants if str(c)]
         self.write_adapter = write_adapter
+        #: A person's signed teach authorization
+        #: (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). Run 1
+        #: is scoped by it (the flags may only narrow it); without one the
+        #: draft is refused at admission.
+        self.teach_authorization = teach_authorization
         self._baseline: Optional[list[dict[str, Any]]] = None
         self._pending: Optional[tuple[Any, dict[str, str], Path]] = None
         self._receipt_baseline: Optional[Path] = None
@@ -467,7 +488,12 @@ class FirstRunCompiler:
             model_key=self.model_key,
             key_dir=self.key_dir,
             on_warning=self.on_warning,
-            teach_scope=self.teach_scope,
+            # A signed authorization is the whole scope: the person who
+            # signed it named the origins, record, fields and typeable text.
+            teach_scope=None
+            if self.teach_authorization is not None
+            else self.teach_scope,
+            teach_authorization=self.teach_authorization,
         )
 
     def teach_scope(self, params: Mapping[str, Any]) -> Any:
@@ -619,6 +645,14 @@ class FirstRunCompiler:
             keep=[*self.on_screen, *values.values(), *self.expect.values()],
             evidence_dir=attempt / "gates",
             principal_id=principal_id or getattr(agent, "principal_id", None),
+            # Every save in run 1 is read back from the system of record and
+            # compared with the read taken when run 1 started.
+            readback=record_readback(
+                lambda: self.observer.system_of_record,
+                self.expect,
+                lambda: self._baseline,
+                values=values,
+            ),
         )
         jit.agent = harnessed
         jit.dialect = harnessed.dialect
@@ -635,6 +669,10 @@ class FirstRunCompiler:
             "agent": harnessed.ledger.to_dict() if harnessed.ledger else None,
             "harness": harness.stats.to_dict() if harness else None,
             "gates": harness.gate_log if harness else [],
+            "readbacks": [
+                {k: v for k, v in r.items() if k != "at"}
+                for r in (harness.readback_log if harness else [])
+            ],
             "agent_error": harnessed.error,
         }
         trace_data: Optional[dict[str, Any]] = None
@@ -668,6 +706,11 @@ class FirstRunCompiler:
                 if decision == "refused_by_hold"
                 else "refused_wrong_record"
             )
+            stops = [r["outcome"] for r in harness.readback_log]
+            if any(o in ("wrong_record", "duplicate") for o in stops):
+                status = "readback_wrong_record"
+            elif any(o in ("landed_late", "unreadable") for o in stops):
+                status = "readback_refused"
             if jit.candidate() is not None:
                 # An agent that caught the refusal and went on still made a
                 # draft; it must never be admitted.
@@ -1281,6 +1324,7 @@ def compile_first_run(
     allow_origins: Sequence[str] = (),
     constants: Sequence[str] = (),
     write_adapter: Optional[Any] = None,
+    teach_authorization: Optional[Any] = None,
 ) -> CompileResult:
     """Turn an agent's first verified run of ``prompt`` into an admitted program.
 
@@ -1319,6 +1363,9 @@ def compile_first_run(
         write_adapter: The app's
             :class:`~openadapt_flow.teach_scope.WriteAdapter`, so run 1's
             writes are read before they are sent.
+        teach_authorization: A person's signed teach authorization
+            (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). Run
+            1 is scoped by it; without one the draft is refused at admission.
 
     The agent is called once, only when the task has no draft and no
     admitted program.
@@ -1342,6 +1389,7 @@ def compile_first_run(
         allow_origins=allow_origins,
         constants=constants,
         write_adapter=write_adapter,
+        teach_authorization=teach_authorization,
     )
     jit = compiler._jit()
     first: Optional[CompileResult] = None

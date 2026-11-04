@@ -62,7 +62,7 @@ CLOSED_STATUSES = frozenset(
 COMPLETED_STATUSES = frozenset({DONE, DONE_BY_PERSON, CONFIRMED_SAVED})
 
 # The actions a person may take, by what the evidence proves about the save.
-NO_EFFECT_ACTIONS = frozenset({"retry", "skip", "decline", "teach"})
+NO_EFFECT_ACTIONS = frozenset({"retry", "skip", "decline", "teach", "done_by_person"})
 UNCERTAIN_ACTIONS = frozenset({"confirmed_saved", "retry_after_check", "done_by_person"})
 # A save the record check confirmed that still went to a person (the whole
 # run wasn't clean). Running it again would enter it twice.
@@ -246,7 +246,10 @@ def allowed_actions(item: dict) -> list[str]:
         # time; running it again asks again.)
         return ["skip", "decline", "done_by_person"]
     if item.get("nothing_written"):
-        return ["retry", "skip", "decline", "teach"]
+        # "I did it by hand" covers a stop the person resolves in the app
+        # (for example a possible duplicate that turned out to be a different
+        # person): running it again would stop at the same check.
+        return ["retry", "skip", "decline", "teach", "done_by_person"]
     if item.get("result") == DONE_CHECKED:
         return ["confirmed_saved", "done_by_person"]
     return ["confirmed_saved", "retry_after_check", "done_by_person"]

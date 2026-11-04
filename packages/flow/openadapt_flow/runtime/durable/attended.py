@@ -51,6 +51,7 @@ from openadapt_flow.policy import (
     project_step_safety,
 )
 from openadapt_flow.runtime.authorization import RuntimeParamScalar
+from openadapt_flow.runtime.durable import attended_state as _state
 from openadapt_flow.runtime.durable.approval import (
     ApprovalRecord,
     ApprovalRequired,
@@ -148,6 +149,27 @@ def _committed_transition_receipt_digest(
     if program:
         return _digest(program[0].attended_transition)
     return _digest(linear[0])
+
+
+def _refuse_rolled_back(
+    run_dir: Path, capability: "AttendedPauseCapability"
+) -> Optional["AttendedExecutionResult"]:
+    """A run a compensating rollback started undoing is over (docs/ROLLBACK.md):
+    nothing on this pause runs, not even a re-read."""
+    from openadapt_flow.runtime.durable.resume import was_compensated
+
+    if not was_compensated(run_dir):
+        return None
+    return AttendedExecutionResult(
+        status="refused",
+        message=(
+            "this run was rolled back after it stopped: its earlier writes may "
+            "be undone, so it can't be continued. Start a new run."
+        ),
+        report_success=False,
+        resumed_from=capability.step_id,
+        next_transition=capability.expected_next_transition,
+    )
 
 
 def _matches_reconciliation_checkpoint(
@@ -773,8 +795,14 @@ def _attended_step_safety(
 class AttendedActionStore:
     """Capability, single-flight lease, and append-only decision persistence."""
 
-    def __init__(self, run_dir: Path | str) -> None:
+    def __init__(self, run_dir: Path | str, *, key: Optional[str] = None) -> None:
         self.run_dir = Path(run_dir)
+        # The at-rest key for this state: the explicit one, else the configured
+        # key, else the local key (crypto.resolve_key), resolved on first use.
+        # None under the recorded plaintext opt-out.
+        self._explicit_key = key
+        self._resolved_key: Optional[str] = None
+        self._key_resolved = False
         self.capability_path = self.run_dir / CAPABILITY_FILENAME
         self.capability_history_path = self.run_dir / CAPABILITY_HISTORY_FILENAME
         self.key_path = self.run_dir / CAPABILITY_KEY_FILENAME
@@ -815,6 +843,60 @@ class AttendedActionStore:
                 tmp.unlink()
             except FileNotFoundError:
                 pass
+
+    @property
+    def key(self) -> Optional[str]:
+        """The at-rest key the attended state is encrypted under."""
+        if not self._key_resolved:
+            from openadapt_flow import crypto as _crypto
+
+            self._resolved_key = _crypto.resolve_key(self._explicit_key)
+            self._key_resolved = True
+        return self._resolved_key
+
+    # -- attended state on disk ----------------------------------------------
+    #
+    # A sealed run directory encrypts these files through its sealed-set
+    # writer (``_atomic_write``). Elsewhere each file is written as
+    # ``<name>.enc`` under ``key`` (``attended_state``); older plaintext files
+    # still read until the run's first encrypted write converts them.
+
+    def _state_is_file(self, path: Path) -> bool:
+        if _sealed.is_sealed_path(path):
+            return _sealed.is_file(path)
+        return _state.exists(path)
+
+    def _state_read_bytes(self, path: Path) -> bytes:
+        if _sealed.is_sealed_path(path):
+            return _sealed.read_bytes(path)
+        # An older plaintext file needs no key; don't resolve one for it.
+        key = self.key if _state.enc_path(path).is_file() else None
+        return _state.read_bytes(self.run_dir, path, key)
+
+    def _state_read_text(self, path: Path) -> str:
+        return self._state_read_bytes(path).decode("utf-8")
+
+    def _state_write(self, path: Path, payload: bytes) -> None:
+        if _sealed.is_sealed_path(path):
+            self._atomic_write(path, payload)
+            return
+        _state.write_bytes(
+            self.run_dir,
+            path,
+            payload,
+            self.key,
+            lambda target, data: self._atomic_write(target, data),
+        )
+
+    def _state_unlink(self, path: Path) -> None:
+        if _sealed.is_sealed_path(path):
+            _sealed.unlink(path)
+            return
+        _state.unlink(path)
+
+    def read_state_bytes(self, rel: str) -> bytes:
+        """Plaintext of one run-relative attended file, in either form."""
+        return self._state_read_bytes(self.run_dir.joinpath(*Path(rel).parts))
 
     def _key(self, *, create: bool) -> bytes:
         try:
@@ -977,21 +1059,21 @@ class AttendedActionStore:
                 "the attended capability path must not be a symlink"
             )
         capabilities: list[AttendedPauseCapability] = []
-        if _sealed.is_file(self.capability_path):
+        if self._state_is_file(self.capability_path):
             try:
                 capabilities.append(
                     AttendedPauseCapability.model_validate_json(
-                        _sealed.read_text(self.capability_path)
+                        self._state_read_text(self.capability_path)
                     )
                 )
             except ValueError as exc:
                 raise AttendedActionRefused(
                     "the current attended capability is invalid"
                 ) from exc
-        if _sealed.is_file(self.capability_history_path):
+        if self._state_is_file(self.capability_history_path):
             try:
                 raw_history = json.loads(
-                    _sealed.read_text(self.capability_history_path)
+                    self._state_read_text(self.capability_history_path)
                 )
                 if not isinstance(raw_history, list):
                     raise ValueError("history is not a list")
@@ -1193,14 +1275,14 @@ class AttendedActionStore:
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if os.name != "nt":
             os.chmod(path.parent, 0o700)
-        if _sealed.is_file(path):
+        if self._state_is_file(path):
             existing = self.read_reconciliation_receipt(sealed.pause_id)
             if existing != sealed:
                 raise AttendedActionRefused(
                     "a different reconciliation receipt already exists for this pause"
                 )
             return existing
-        self._atomic_write(path, sealed.model_dump_json(indent=2).encode("utf-8"))
+        self._state_write(path, sealed.model_dump_json(indent=2).encode("utf-8"))
         return sealed
 
     def read_reconciliation_receipt(
@@ -1213,7 +1295,7 @@ class AttendedActionStore:
             )
         try:
             receipt = AttendedReconciliationReceipt.model_validate_json(
-                _sealed.read_text(path)
+                self._state_read_text(path)
             )
         except (FileNotFoundError, ValueError) as exc:
             raise AttendedActionRefused(
@@ -1258,7 +1340,7 @@ class AttendedActionStore:
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if os.name != "nt":
             os.chmod(path.parent, 0o700)
-        if _sealed.is_file(path):
+        if self._state_is_file(path):
             existing = self.read_program_receipt(sealed.pause_id)
             if existing != sealed:
                 raise AttendedActionRefused(
@@ -1266,7 +1348,7 @@ class AttendedActionStore:
                     "this pause"
                 )
             return existing
-        self._atomic_write(path, sealed.model_dump_json(indent=2).encode("utf-8"))
+        self._state_write(path, sealed.model_dump_json(indent=2).encode("utf-8"))
         return sealed
 
     def read_program_receipt(self, pause_id: str) -> ProgramTransitionReceipt:
@@ -1278,7 +1360,7 @@ class AttendedActionStore:
             )
         try:
             receipt = ProgramTransitionReceipt.model_validate_json(
-                _sealed.read_text(path)
+                self._state_read_text(path)
             )
         except (FileNotFoundError, ValueError) as exc:
             raise AttendedActionRefused(
@@ -1362,7 +1444,7 @@ class AttendedActionStore:
             delivery_state,
         )
         event_sequence = 1
-        if _sealed.is_file(self.capability_path):
+        if self._state_is_file(self.capability_path):
             existing = self.read()
             if (
                 existing.pause_digest == pause_digest
@@ -1386,10 +1468,10 @@ class AttendedActionStore:
             # an append-only history and let the engine issue the new pause;
             # browser callers still present the exact current digest.
             history: list[dict[str, Any]] = []
-            if _sealed.is_file(self.capability_history_path):
+            if self._state_is_file(self.capability_history_path):
                 try:
                     raw_history = json.loads(
-                        _sealed.read_text(self.capability_history_path)
+                        self._state_read_text(self.capability_history_path)
                     )
                     if isinstance(raw_history, list):
                         history = [
@@ -1400,12 +1482,12 @@ class AttendedActionStore:
                         "the attended capability history is invalid"
                     ) from None
             history.append(existing.model_dump(mode="json"))
-            self._atomic_write(
+            self._state_write(
                 self.capability_history_path,
                 json.dumps(history, indent=2, sort_keys=True).encode("utf-8"),
             )
             event_sequence = existing.event_sequence + 1
-        elif _sealed.is_file(self.capability_history_path):
+        elif self._state_is_file(self.capability_history_path):
             historical = self._signed_capabilities()
             event_sequence = max(item.event_sequence for item in historical) + 1
         now = _now()
@@ -1441,7 +1523,7 @@ class AttendedActionStore:
             allowed_actions=allowed_actions,
         )
         capability.signature = self._sign(capability, create_key=False)
-        self._atomic_write(
+        self._state_write(
             self.capability_path,
             capability.model_dump_json(indent=2).encode("utf-8"),
         )
@@ -1455,14 +1537,14 @@ class AttendedActionStore:
         must not remain visible as the current operator action surface.
         """
 
-        if not _sealed.is_file(self.capability_path):
+        if not self._state_is_file(self.capability_path):
             return
         existing = self.read()
         history: list[dict[str, Any]] = []
-        if _sealed.is_file(self.capability_history_path):
+        if self._state_is_file(self.capability_history_path):
             try:
                 raw_history = json.loads(
-                    _sealed.read_text(self.capability_history_path)
+                    self._state_read_text(self.capability_history_path)
                 )
                 if not isinstance(raw_history, list) or not all(
                     isinstance(item, dict) for item in raw_history
@@ -1476,17 +1558,17 @@ class AttendedActionStore:
         existing_payload = existing.model_dump(mode="json")
         if existing_payload not in history:
             history.append(existing_payload)
-            self._atomic_write(
+            self._state_write(
                 self.capability_history_path,
                 json.dumps(history, indent=2, sort_keys=True).encode("utf-8"),
             )
-        _sealed.unlink(self.capability_path)
+        self._state_unlink(self.capability_path)
         self._fsync_parent(self.capability_path)
 
     def read(self) -> AttendedPauseCapability:
         try:
             capability = AttendedPauseCapability.model_validate_json(
-                _sealed.read_text(self.capability_path)
+                self._state_read_text(self.capability_path)
             )
         except (FileNotFoundError, ValueError) as exc:
             raise AttendedActionRefused(
@@ -1574,17 +1656,17 @@ class AttendedActionStore:
                 CheckpointStore(self.run_dir),
             )
             snapshot, head = authority.read_attended_snapshot(
-                expected_run_id=capability.run_id
+                expected_run_id=capability.run_id, key=self.key
             )
         except DurableAuthorityBusy as exc:
             raise AttendedActionRefused(
                 "the external attended decision journal is unavailable or invalid"
             ) from exc
         if snapshot is None:
-            if _sealed.is_file(self.decisions_path):
+            if self._state_is_file(self.decisions_path):
                 try:
                     local = AttendedDecisionLog.model_validate_json(
-                        _sealed.read_text(self.decisions_path)
+                        self._state_read_text(self.decisions_path)
                     )
                 except (OSError, ValueError) as exc:
                     raise AttendedActionRefused(
@@ -1605,16 +1687,16 @@ class AttendedActionStore:
         payload = snapshot.encode("utf-8")
         try:
             local_matches = (
-                _sealed.is_file(self.decisions_path)
+                self._state_is_file(self.decisions_path)
                 and not self.decisions_path.is_symlink()
-                and _sealed.read_bytes(self.decisions_path) == payload
+                and self._state_read_bytes(self.decisions_path) == payload
             )
         except OSError:
             local_matches = False
         if not local_matches:
             # The JSON file is a recoverable local projection. The append-only,
             # HMAC-chained SQLite journal outside the run directory is authority.
-            self._atomic_write(self.decisions_path, payload)
+            self._state_write(self.decisions_path, payload)
         return log, head
 
     def _append_log_snapshot(
@@ -1640,12 +1722,13 @@ class AttendedActionStore:
                 expected_run_id=capability.run_id,
                 expected_head_digest=expected_head,
                 snapshot_json=payload,
+                key=self.key,
             )
         except DurableAuthorityBusy as exc:
             raise AttendedActionRefused(
                 "the external attended decision journal changed or is unavailable"
             ) from exc
-        self._atomic_write(self.decisions_path, payload.encode("utf-8"))
+        self._state_write(self.decisions_path, payload.encode("utf-8"))
 
     def prior(self, request: AttendedActionRequest) -> Optional[AttendedDecision]:
         request_digest = _digest(request)
@@ -2144,7 +2227,7 @@ def issue_attended_capability(
             "the durable manifest has no stable run identity; cannot issue "
             "an attended mutation capability"
         )
-    return AttendedActionStore(run_dir).issue(
+    return AttendedActionStore(run_dir, key=store.key).issue(
         manifest=manifest,
         pending=pending,
         workflow=workflow,
@@ -2365,7 +2448,7 @@ def execute_attended_action(
             "the durable run identity or canonical path changed"
         ) from exc
 
-    actions = AttendedActionStore(run_dir)
+    actions = AttendedActionStore(run_dir, key=key)
     prior = actions.prior(request)
     if prior is not None:
         if prior.status in {"delivery_started", "delivery_uncertain"}:
@@ -2872,7 +2955,7 @@ def checkpoint_human_completed_step(
         raise AttendedActionRefused(
             "the human-completed step's independent effect was not confirmed"
         )
-    authenticated = AttendedActionStore(run_dir).signed_capability_for_digest(
+    authenticated = AttendedActionStore(run_dir, key=key).signed_capability_for_digest(
         capability.digest
     )
     if authenticated != capability:
@@ -3039,9 +3122,9 @@ class BoundAttendedExecutor:
             raise AttendedActionRefused(
                 "workflow identity changed after attended capability issuance"
             )
-        authenticated = AttendedActionStore(run_dir).signed_capability_for_digest(
-            capability.digest
-        )
+        authenticated = AttendedActionStore(
+            run_dir, key=self.key
+        ).signed_capability_for_digest(capability.digest)
         if authenticated != capability:
             raise AttendedActionRefused(
                 "the attended executor did not receive the signed pause capability"
@@ -3131,7 +3214,9 @@ class BoundAttendedExecutor:
                 "workflow identity changed after attended capability issuance"
             )
         if (
-            AttendedActionStore(run_dir).signed_capability_for_digest(capability.digest)
+            AttendedActionStore(run_dir, key=self.key).signed_capability_for_digest(
+                capability.digest
+            )
             != capability
         ):
             raise AttendedActionRefused(
@@ -3175,7 +3260,7 @@ class BoundAttendedExecutor:
             raise AttendedActionRefused(
                 "the completed durable transition does not bind this reconciliation"
             )
-        AttendedActionStore(run_dir).write_reconciliation_receipt(
+        AttendedActionStore(run_dir, key=self.key).write_reconciliation_receipt(
             AttendedReconciliationReceipt(
                 pause_id=capability.pause_id,
                 capability_digest=capability.digest,
@@ -3447,7 +3532,7 @@ class BoundAttendedExecutor:
             cursor_digest=cursor_digest,
             created_at=capability.issued_at,
         )
-        action_store = AttendedActionStore(run_dir)
+        action_store = AttendedActionStore(run_dir, key=self.key)
         receipt = action_store.seal_program_receipt(receipt)
         attended_effects = effects_for_actuation(state.step, "gui")
         retained_result = _validated_attended_result(
@@ -3652,7 +3737,9 @@ class BoundAttendedExecutor:
             + [item.decision_index for item in pending.program_exception_evidence_delta]
         )
         receipt_path = action_store._receipt_path(receipt.pause_id)
-        receipt_sha256 = hashlib.sha256(_sealed.read_bytes(receipt_path)).hexdigest()
+        receipt_sha256 = hashlib.sha256(
+            action_store._state_read_bytes(receipt_path)
+        ).hexdigest()
         control_payload = json.dumps(
             [frame.model_dump(mode="json") for frame in pending.program_frames],
             sort_keys=True,
@@ -3675,13 +3762,13 @@ class BoundAttendedExecutor:
             raise AttendedActionRefused(
                 "the attended transition control path leaves the run directory"
             )
-        if _sealed.is_file(control_path):
-            if _sealed.read_bytes(control_path) != control_payload:
+        if action_store._state_is_file(control_path):
+            if action_store._state_read_bytes(control_path) != control_payload:
                 raise AttendedActionRefused(
                     "the attended transition control digest has other bytes"
                 )
         else:
-            action_store._atomic_write(control_path, control_payload)
+            action_store._state_write(control_path, control_payload)
         scope = [
             ProgramExecutionScopeFrame(
                 graph_id=frame.graph_id,
@@ -3777,6 +3864,9 @@ class BoundAttendedExecutor:
         capability: AttendedPauseCapability,
         approval: ApprovalRecord,
     ) -> AttendedExecutionResult:
+        refused = _refuse_rolled_back(run_dir, capability)
+        if refused is not None:
+            return refused
         try:
             with self._exclusive_live_session():
                 return self._continue_run_locked(run_dir, capability, approval)
@@ -3807,7 +3897,7 @@ class BoundAttendedExecutor:
             store, manifest, workflow = self._load(run_dir, capability)
             replayer = self.replayer_factory(manifest)
             self._bind_authorization(replayer, manifest)
-            attended_store = AttendedActionStore(run_dir)
+            attended_store = AttendedActionStore(run_dir, key=self.key)
             if workflow.program is not None:
                 pending, state, params = self._program_context(
                     store, workflow, capability
@@ -3913,6 +4003,9 @@ class BoundAttendedExecutor:
     ) -> AttendedExecutionResult:
         """Re-read a possibly completed action without delivering it again."""
 
+        refused = _refuse_rolled_back(run_dir, capability)
+        if refused is not None:
+            return refused
         try:
             with self._exclusive_live_session():
                 return self._reconcile_run_locked(
@@ -3978,7 +4071,7 @@ class BoundAttendedExecutor:
                 )
             replayer = self.replayer_factory(manifest)
             self._bind_authorization(replayer, manifest)
-            attended_store = AttendedActionStore(run_dir)
+            attended_store = AttendedActionStore(run_dir, key=self.key)
             if workflow.program is not None:
                 pending, state, params = self._program_context(
                     store, workflow, capability
@@ -4121,6 +4214,9 @@ class BoundAttendedExecutor:
         capability: AttendedPauseCapability,
         approval: ApprovalRecord,
     ) -> AttendedExecutionResult:
+        refused = _refuse_rolled_back(run_dir, capability)
+        if refused is not None:
+            return refused
         try:
             with self._exclusive_live_session():
                 return self._skip_run_locked(run_dir, capability, approval)

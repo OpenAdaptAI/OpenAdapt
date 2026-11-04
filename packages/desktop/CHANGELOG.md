@@ -1,6 +1,76 @@
 # CHANGELOG
 
 
+## v0.26.0 (2026-11-03)
+
+### Features
+
+- show a notice when Flow logs a recording or run record stored without encryption
+
+## v0.25.1 (2026-11-04)
+
+### Bug Fixes
+
+- Keep review choices responsive when a card first appears.
+
+
+
+## v0.25.0 (2026-10-28)
+
+### Features
+
+- **desktop**: an administrator can pin the approver root for this computer with `openadapt-desktop approver-pin ROOT` (with sudo, or from an elevated prompt on Windows). The pin lives in a file only an administrator can write: `/Library/Application Support/OpenAdapt` (macOS), `/etc/openadapt` (Linux) or `ProgramData\OpenAdapt` (Windows). Desktop trusts it only when no one else can change it or the folders that lead to it: it checks owners, permissions, access lists and links. On Windows and Linux it is the only pin.
+
+### Bug Fixes
+
+- **desktop**: a Mac reads its Keychain approver root with Keychain prompts turned off, so an item another program planted or rewrote counts as no root instead of a prompt someone might allow. A Keychain root that disagrees with the administrator's pin is refused.
+- **desktop**: the stop-review screen says when no approver root is pinned, since answers can't count until one is.
+- **desktop**: bundles openadapt-flow 2.4.1, which reads a pinned deployment config as exact bytes on Windows, so a config with Windows line endings matches its pinned digest.
+
+
+
+## v0.24.1 (2026-10-25)
+
+### Bug Fixes
+
+- **desktop**: governed runs and approvals work again. Desktop bundles openadapt-flow 2.4.0, which accepts every option Desktop sends: the pinned run configuration, the approver root and roster head, and the approver signature from the app or from a key file. 0.23.0 and 0.24.0 bundled a Flow without them, so governed runs couldn't start and a person's answers couldn't be recorded. Every command line Desktop builds is now checked against the bundled Flow, both in CI and against the installer's own binary.
+
+
+
+## v0.24.0 (2026-10-24)
+
+### Features
+
+- **desktop**: set up the approver key in the app, behind Touch ID
+- **desktop**: review stops as one-tap cards with the evidence side by side,
+  on the computer (keys 1-9, batches of similar stops) or a paired phone; every
+  answer is signed with the approver key
+- **desktop**: re-arm "only ask about problems" from a stop card with one
+  Touch ID
+
+### Bug Fixes
+
+- **desktop**: a locked Mac isn't a Mac without a Secure Enclave
+- **desktop**: the Touch ID setup signs the approver roster's root behind its one prompt and pins that root for Desktop's runs; a key rotation is signed by the old key, and a roster this Mac didn't start needs an approver to add the key
+- **desktop**: re-register a stored approver key only after it opens behind Touch ID
+- **desktop**: Flow checks each run's config against the digest Desktop computed (--config-sha256); Run it answers carry the Keychain's head; staged-config folders that are symlinks are refused; only the Keychain names Desktop's approver root (not OPENADAPT_APPROVER_ROOT, not a user-writable file); with no Keychain pin, no person's answer counts
+- **desktop**: each run's deployment config also carries the Keychain's roster head and is staged outside the run directory; Run it answers name this Mac's pin with --approver-root
+- **desktop**: the Keychain's approver pin wins over OPENADAPT_APPROVER_ROOT (a different value is refused); each run's deployment config carries the pin; the roster head is kept in the Keychain and an older roster put back is refused
+- **desktop**: a Mac that can keep the key behind Touch ID never falls back to a terminal-made key
+- **desktop**: a stop card that changes during the Touch ID prompt changes nothing
+- **desktop**: a stop where nothing was written also offers "I did it by hand"
+
+
+
+## v0.23.0 (2026-10-24)
+
+### Bug Fixes
+
+- a person's approval needs the signature of a key on the signed approver roster, whose root the run pins from the deployment config's `approvers.root_public_key` (a governed run takes it from nowhere else, so an environment variable can't pin it). Set the key up from a terminal (`jit keygen`, then `jit approver init`); every later approver is added with an approver's signature (`jit approver add`). An approval from a key not on the pinned roster is refused.
+- security updates to locked dependencies (pillow 13.0.0, certifi, setuptools, rustls-webpki, webpki-root-certs)
+
+
+
 ## v0.22.0 (2026-10-19)
 
 0.21.1 was never published: its release stopped before PyPI, because the release check accepted only Python packages and refused the Desktop installers. This release ships the 0.21.1 and 0.21.0 changes below together with these.

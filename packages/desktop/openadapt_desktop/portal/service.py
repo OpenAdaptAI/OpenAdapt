@@ -269,8 +269,12 @@ class PortalService:
         *,
         popen: Callable[..., Any] = subprocess.Popen,
         clock: Callable[[], float] = time.monotonic,
+        stops: Any = None,
     ) -> None:
         self.config = config
+        # The stop-review queue the phone may read and answer
+        # (:mod:`openadapt_desktop.portal.stops`), or None.
+        self._stops = stops
         self._popen = popen
         self._clock = clock
         self._lock = threading.Lock()
@@ -348,7 +352,9 @@ class PortalService:
             pairings = DevicePairingStore(
                 runner_id=self.runner_id(), clock=self._clock
             )
-            server = PortalServer(PortalApp(ingress, pairings, flow))
+            server = PortalServer(
+                PortalApp(ingress, pairings, flow, stops=self._stops)
+            )
             try:
                 port = server.start()
             except OSError as exc:
@@ -537,6 +543,12 @@ class PortalService:
                 expected_runner_id=remote_decision_runner_id,
             )
             command.extend(["--remote-decisions", "--remote-decision-host", host])
+        # The console signs the phone's answer to a save with the portal's
+        # approver key; without it Flow records no such answer. The passphrase
+        # goes only into the child's environment.
+        from openadapt_desktop.approver_key import portal_approver_environment
+
+        env.update(portal_approver_environment())
         process = self._popen(
             command,
             stdout=subprocess.PIPE,

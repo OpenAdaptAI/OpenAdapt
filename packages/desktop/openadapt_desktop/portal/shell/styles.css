@@ -87,6 +87,7 @@ button { font: inherit; color: inherit; }
 }
 
 .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; flex: none; }
+.top-link { color: var(--accent); font-size: 14px; text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; margin-left: auto; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
 .mark { width: 18px; height: 18px; border-radius: 6px; background: var(--text); position: relative; }
 .mark::after { content: ""; position: absolute; inset: 5px; border-radius: 2px; background: var(--bg); }
