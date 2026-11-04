@@ -22,6 +22,7 @@ import random
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional
 from urllib.parse import urlsplit, urlunsplit
@@ -61,6 +62,10 @@ ActionKind = Literal[
 MAX_ELEMENTS = 80
 MAX_TEXT = 4000
 MAX_WAIT_S = 5.0
+#: A step or reset that takes longer ends the episode: the client gets a final
+#: observation (reward 0) instead of waiting forever on a stuck browser.
+STEP_TIMEOUT_S = 120.0
+RESET_TIMEOUT_S = 180.0
 #: Separates iframe hops in a selector: ``iframe[name="pat"] >>> #form_fname``.
 FRAME_SEP = " >>> "
 VIEWPORT = {"width": 1280, "height": 800}
@@ -300,12 +305,35 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._attempted = False
         self._records_stop: Optional[Callable[[], None]] = None
 
-    def _on_worker(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    def _on_worker(
+        self,
+        fn: Callable[..., Any],
+        *args: Any,
+        _timeout: Optional[float] = None,
+        **kwargs: Any,
+    ) -> Any:
         if self._worker is None:
             self._worker = ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="rl-env"
             )
-        return self._worker.submit(fn, *args, **kwargs).result()
+        return self._worker.submit(fn, *args, **kwargs).result(timeout=_timeout)
+
+    def _abandon_worker(self) -> None:
+        """Drop a stuck worker and its browser; the next reset starts afresh.
+
+        Playwright objects can only be closed on the thread that made them,
+        and that thread is stuck, so they are left to it. The app copy and
+        its store are kept: the next reset restores them.
+        """
+        if self._worker is not None:
+            self._worker.shutdown(wait=False)
+        self._worker = None
+        self._pw = self._browser = self._context = self._page = None
+        if self._judge is not None:
+            self._judge.close()
+        self._judge = None
+        self._task = None
+        self._state.done = True
 
     # -- task discovery (OpenEnv TaskProvider) ------------------------------
     def list_splits(self) -> list[str]:
@@ -406,10 +434,36 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
 
     # -- OpenEnv API --------------------------------------------------------
     def reset(self, *args: Any, **kwargs: Any) -> WebObservation:
-        return self._on_worker(self._reset, *args, **kwargs)
+        try:
+            return self._on_worker(
+                self._reset, *args, _timeout=RESET_TIMEOUT_S, **kwargs
+            )
+        except FutureTimeout:
+            self._abandon_worker()
+            raise RuntimeError(f"reset took longer than {RESET_TIMEOUT_S:.0f} s")
 
     def step(self, *args: Any, **kwargs: Any) -> WebObservation:
-        return self._on_worker(self._step, *args, **kwargs)
+        task = self._task
+        try:
+            return self._on_worker(self._step, *args, _timeout=STEP_TIMEOUT_S, **kwargs)
+        except FutureTimeout:
+            self._abandon_worker()
+            return WebObservation(
+                done=True,
+                reward=0.0,
+                metadata={
+                    "env": self.env.manifest.name,
+                    "judgement": {"verdict": "INDETERMINATE", "error": "step timeout"},
+                },
+                instruction=task.instruction if task else "",
+                step=self._state.step_count,
+                max_steps=self.env.manifest.agent.max_steps,
+                last_action_error=(
+                    f"the step took longer than {STEP_TIMEOUT_S:.0f} s; "
+                    "the episode ended with reward 0"
+                ),
+                verdict="INDETERMINATE",
+            )
 
     @property
     def state(self) -> WebState:
