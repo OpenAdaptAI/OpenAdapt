@@ -549,7 +549,12 @@ def _subprocess_env() -> dict[str, str]:
     # commands from --approver-root. Drop any inherited value so no Flow
     # version or helper can read one.
     env.pop("OPENADAPT_APPROVER_ROOT", None)
-    return env
+    # Flow encrypts at rest by default; Desktop's own encryption covers
+    # certified workflows, so Flow runs under its recorded opt-out here, and
+    # each plaintext write it records shows as a notice in the window.
+    from openadapt_desktop.at_rest_notice import flow_env
+
+    return flow_env(env)
 
 
 def _safe_command_for_log(cmd: list[str]) -> str:

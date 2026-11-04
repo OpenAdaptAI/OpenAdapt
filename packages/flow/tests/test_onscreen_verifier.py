@@ -310,3 +310,21 @@ def test_single_glyph_difference_is_refuted_same_surface() -> None:
     v = _verifier([_Line("Saved note for patient 8")], min_ratio=0.9)
     verdict = v.read_back("Saved note for patient 3")
     assert verdict.verdict is Verdict.REFUTED
+
+
+def test_null_value_does_not_fall_back_to_the_selector() -> None:
+    """A field_equals whose value has no text reads nothing on screen.
+
+    The record's id is on screen, but that doesn't show the field holds the
+    value, so the check can't confirm.
+    """
+    v = _verifier([_Line("REC-7")])
+    effect = Effect(
+        kind=EffectKind.FIELD_EQUALS,
+        field="note",
+        value={"param": "note_text"},
+        match={"id": "REC-7"},
+    )
+    for params in ({"note_text": None}, {}):
+        verdict = v.verify(effect, v.capture_pre_state(), context=params)
+        assert verdict.verdict is Verdict.INDETERMINATE

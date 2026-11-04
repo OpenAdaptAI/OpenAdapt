@@ -486,6 +486,7 @@ def _program_action_trace(
     attended_transition_evidence: list[Any] | None = None,
     business_decision_evidence: list[Any] | None = None,
     transition_evidence_root: Path | None = None,
+    transition_evidence_key: str | None = None,
     transition_predicate_vision: Any | None = None,
     governed_runtime_inputs_digest: str | None = None,
     run_id_sha256: str | None = None,
@@ -549,7 +550,9 @@ def _program_action_trace(
             return None
         from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
 
-        manifest = CheckpointStore(transition_evidence_root).read_manifest()
+        manifest = CheckpointStore(
+            transition_evidence_root, key=transition_evidence_key
+        ).read_manifest()
         if manifest is None:
             return None
         trace_base_params = dict(manifest.params)
@@ -652,7 +655,11 @@ def _program_action_trace(
             raise ValueError("transition evidence decision rows disagree")
         return group
 
-    def _verified_inventory_bytes(ref: str, expected_sha256: str) -> bytes:
+    def _verified_inventory_bytes(
+        ref: str, expected_sha256: str, *, attended: bool = False
+    ) -> bytes:
+        if attended:
+            return _verified_attended_bytes(ref, expected_sha256)
         if transition_evidence_root is None:
             raise ValueError("visual transition evidence has no local evidence root")
         root = transition_evidence_root.resolve()
@@ -679,6 +686,52 @@ def _program_action_trace(
             payload = path.read_bytes()
         except OSError as exc:
             raise ValueError("transition frame evidence is unreadable") from exc
+        if hashlib.sha256(payload).hexdigest() != expected_sha256:
+            raise ValueError("transition evidence digest does not match")
+        return payload
+
+    def _verified_attended_bytes(ref: str, expected_sha256: str) -> bytes:
+        """Plaintext of an attended receipt or control file, which may be
+        encrypted at rest as ``<ref>.enc`` (``attended_state``)."""
+        from openadapt_flow import crypto as _crypto
+        from openadapt_flow.runtime.durable import attended_state as _state
+
+        if transition_evidence_root is None:
+            raise ValueError("visual transition evidence has no local evidence root")
+        from openadapt_flow import sealed_set as _sealed
+
+        root = transition_evidence_root.resolve()
+        encrypted = root.joinpath(*PurePosixPath(ref + _state.ENC_SUFFIX).parts)
+        if _sealed.is_sealed_path(root):
+            # A sealed run directory's files are the sealed-set writer's.
+            return _verified_inventory_bytes(ref, expected_sha256)
+        if not (encrypted.exists() or encrypted.is_symlink()):
+            if (root / _state.MARKER_FILENAME).exists():
+                raise ValueError("attended evidence is plaintext where encrypted")
+            return _verified_inventory_bytes(ref, expected_sha256)
+        parts = PurePosixPath(ref + _state.ENC_SUFFIX).parts
+        cursor_path = root
+        for part in parts:
+            cursor_path /= part
+            if cursor_path.is_symlink():
+                raise ValueError("transition frame path contains a symlink")
+        try:
+            path = encrypted.resolve(strict=True)
+            path.relative_to(root)
+            container = path.read_bytes()
+        except (OSError, ValueError) as exc:
+            raise ValueError("attended transition evidence is unreadable") from exc
+        try:
+            payload = _state.open_file(
+                root,
+                root.joinpath(*PurePosixPath(ref).parts),
+                container,
+                _crypto.resolve_key(transition_evidence_key),
+            )
+        except _state.AttendedStateUnreadable as exc:
+            raise ValueError("attended transition evidence does not decrypt") from exc
+        import hashlib
+
         if hashlib.sha256(payload).hexdigest() != expected_sha256:
             raise ValueError("transition evidence digest does not match")
         return payload
@@ -835,6 +888,7 @@ def _program_action_trace(
         payload = _verified_inventory_bytes(
             item.receipt_inventory_ref,
             item.receipt_sha256,
+            attended=True,
         )
         from openadapt_flow.runtime.durable.attended import (
             AttendedActionRefused,
@@ -854,9 +908,11 @@ def _program_action_trace(
         try:
             parsed = ProgramTransitionReceipt.model_validate_json(payload)
             authenticated = AttendedActionStore(
-                transition_evidence_root
+                transition_evidence_root, key=transition_evidence_key
             ).read_program_receipt(item.receipt_pause_id)
-            manifest = CheckpointStore(transition_evidence_root).read_manifest()
+            manifest = CheckpointStore(
+                transition_evidence_root, key=transition_evidence_key
+            ).read_manifest()
         except (OSError, ValueError, AttendedActionRefused) as exc:
             raise ValueError("attended transition receipt does not verify") from exc
         if (
@@ -895,6 +951,7 @@ def _program_action_trace(
         control_payload = _verified_inventory_bytes(
             item.control_frames_inventory_ref,
             item.control_frames_sha256,
+            attended=True,
         )
         try:
             control_frames = [
@@ -970,8 +1027,12 @@ def _program_action_trace(
         )
 
         try:
-            store = BusinessDecisionStore(transition_evidence_root)
-            manifest = CheckpointStore(transition_evidence_root).read_manifest()
+            store = BusinessDecisionStore(
+                transition_evidence_root, checkpoint_key=transition_evidence_key
+            )
+            manifest = CheckpointStore(
+                transition_evidence_root, key=transition_evidence_key
+            ).read_manifest()
             if manifest is None:
                 raise ValueError("business decision has no durable manifest")
             expected_bundle = bundle_version(manifest.bundle_dir)
@@ -1449,6 +1510,7 @@ def classify_execution_outcome(
     transition_evidence_root: Path | None = None,
     transition_predicate_vision: Any | None = None,
     _qualification_fault_target_step_id: str | None = None,
+    transition_evidence_key: str | None = None,
 ) -> ExecutionOutcome:
     """Classify a completed report without changing legacy ``success``.
 
@@ -1651,6 +1713,7 @@ def classify_execution_outcome(
             attended_transition_evidence=(report.attended_program_transition_evidence),
             business_decision_evidence=report.business_decision_evidence,
             transition_evidence_root=transition_evidence_root,
+            transition_evidence_key=transition_evidence_key,
             transition_predicate_vision=transition_predicate_vision,
             governed_runtime_inputs_digest=report.governed_runtime_inputs_digest,
             run_id_sha256=report.run_id_sha256,
@@ -2207,8 +2270,12 @@ def stamp_execution_outcome(
     runtime_worklists: Mapping[str, list[dict[str, str]]] | None = None,
     transition_evidence_root: Path | None = None,
     transition_predicate_vision: Any | None = None,
+    transition_evidence_key: str | None = None,
 ) -> ExecutionOutcome:
-    """Write the profile and precise outcome into ``report``."""
+    """Write the profile and precise outcome into ``report``.
+
+    ``transition_evidence_key`` is the passphrase the run sealed its attended
+    state under; when it is ``None`` the usual key resolution applies."""
 
     resolved = resolve_execution_profile(profile)
     report.external_network_calls = _external_network_call_state(report)
@@ -2224,6 +2291,7 @@ def stamp_execution_outcome(
         runtime_worklists=runtime_worklists,
         transition_evidence_root=transition_evidence_root,
         transition_predicate_vision=transition_predicate_vision,
+        transition_evidence_key=transition_evidence_key,
     )
     report.execution_profile = resolved.value
     report.execution_outcome = outcome.value

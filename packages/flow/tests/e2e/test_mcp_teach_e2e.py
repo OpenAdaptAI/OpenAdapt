@@ -46,6 +46,7 @@ from openadapt_flow.agent.runner import RunnerConfig  # noqa: E402
 from openadapt_flow.agent.teach import TeachBridge, TeachConfig  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
 from openadapt_flow.tutorial import _http_json, _records  # noqa: E402
+from tests._teach_authorization_support import mockmed_note
 
 TASK = (
     "Open the referral for Jane Sample, start a Triage encounter, and save "
@@ -139,6 +140,16 @@ def _server(
             key_dir=tmp_path / "keys",
             admitter=admitter,
             reset=_reset(base),
+            # The operator's signed teach authorization: what run 1 may do.
+            teach_authorization=mockmed_note(
+                tmp_path / "keys",
+                tmp_path / "teach-authorization",
+                "taught.triage_note",
+                base,
+                note=NOTE,
+                record={"patient_id": "p1", "type": "Triage"},
+                constants=["Jane Sample", "MRN P1"],
+            ),
         ),
         workflows=workflows,
     )

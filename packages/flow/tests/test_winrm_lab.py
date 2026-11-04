@@ -128,3 +128,22 @@ def test_clixml_stderr_becomes_text():
     )
     assert lab_mod._clixml_text(raw).strip() == "Access is denied."
     assert lab_mod._clixml_text("plain") == "plain"
+
+
+def test_app_python_is_the_console_interpreter_beside_the_agents(monkeypatch):
+    monkeypatch.setenv("OAFLOW_WINLAP_HOST", "10.0.0.2")
+    monkeypatch.setenv("OAFLOW_WINLAP_USER", "user")
+    monkeypatch.setenv("OAFLOW_WINLAP_SSH_KEY", "/k")
+    monkeypatch.setenv("OAFLOW_WINLAP_PYTHON", r"C:\Python312\pythonw.exe")
+    lab = lab_mod.WinRMLab(profile="winlap")
+    assert lab.resolve_app_python() == r"C:\Python312\python.exe"
+    monkeypatch.setenv("OAFLOW_WINLAP_APP_PYTHON", r"D:\py\python.exe")
+    assert (
+        lab_mod.WinRMLab(profile="winlap").resolve_app_python() == r"D:\py\python.exe"
+    )
+
+
+def test_lab_harnesses_name_no_interpreter_path():
+    desktop = _PATH.parent
+    for script in desktop.glob("qualify_lab_*.py"):
+        assert "Python312-arm64" not in script.read_text(), script.name

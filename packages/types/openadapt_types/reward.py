@@ -117,6 +117,13 @@ class RewardOutcomeV1(str, Enum):
     or a forbidden effect.  Zero or the declared penalty.  This is the silent
     wrong action the certificate bounds."""
 
+    ESCALATED_AFTER_EFFECT = "escalated_after_effect"
+    """Every required effect is in the system of record exactly as declared
+    and no forbidden effect is, but the policy halted, refused, or was
+    rejected instead of declaring the task done.  Partial credit: the
+    contract's ``escalated_after_effect_reward``, at least zero and below the
+    verified reward."""
+
     RECONCILIATION_REQUIRED = "reconciliation_required"
     """Delivery or effect is uncertain.  UNSCORED.  Never 0.0."""
 
@@ -128,6 +135,7 @@ class RewardOutcomeV1(str, Enum):
 class RewardScoringClassV1(str, Enum):
     ADMITTED_POSITIVE = "admitted_positive"
     ZERO_OR_PENALTY = "zero_or_penalty"
+    PARTIAL_CREDIT = "partial_credit"
     UNSCORED = "unscored"
 
 
@@ -137,6 +145,7 @@ REWARD_SCORING_CLASS: Mapping[RewardOutcomeV1, RewardScoringClassV1] = {
     RewardOutcomeV1.REFUSED: RewardScoringClassV1.ZERO_OR_PENALTY,
     RewardOutcomeV1.REJECTED_POLICY: RewardScoringClassV1.ZERO_OR_PENALTY,
     RewardOutcomeV1.WRONG_EFFECT: RewardScoringClassV1.ZERO_OR_PENALTY,
+    RewardOutcomeV1.ESCALATED_AFTER_EFFECT: RewardScoringClassV1.PARTIAL_CREDIT,
     RewardOutcomeV1.RECONCILIATION_REQUIRED: RewardScoringClassV1.UNSCORED,
     RewardOutcomeV1.FAILED_PLATFORM: RewardScoringClassV1.UNSCORED,
 }
@@ -249,6 +258,16 @@ class RewardScoringPolicyV1(_StrictContract):
 
     Uncertain episodes and platform failures are fixed to ``unscored`` in
     this version.  A contract cannot declare them to be zero.
+
+    ``escalated_after_effect_reward`` is the credit for an episode that did
+    the work and then asked a person instead of declaring it done.  It sets
+    the confidence a policy needs before it declares done rather than asks:
+    with verified reward ``v``, wrong-effect reward ``w`` and this value
+    ``x``, declaring done pays more in expectation only when the policy is
+    more than ``(x - w) / (v - w)`` sure the effect is right.  With the
+    defaults (1, -1, 0.5) that is 75%.  Zero gives no credit for asking; a
+    value at or above the verified reward is refused, because asking would
+    then pay as much as finishing.
     """
 
     verified_reward: StrictFloat = Field(
@@ -281,8 +300,22 @@ class RewardScoringPolicyV1(_StrictContract):
         le=0.0,
         allow_inf_nan=False,
     )
+    escalated_after_effect_reward: StrictFloat = Field(
+        default=0.5,
+        ge=0.0,
+        lt=1.0,
+        allow_inf_nan=False,
+    )
     uncertain_episodes: Literal["unscored"] = "unscored"
     platform_failures: Literal["unscored"] = "unscored"
+
+    @model_validator(mode="after")
+    def _partial_credit_below_verified(self) -> RewardScoringPolicyV1:
+        if self.escalated_after_effect_reward >= self.verified_reward:
+            raise ValueError(
+                "escalated_after_effect_reward must be below verified_reward"
+            )
+        return self
 
     def scalar_for(self, outcome: RewardOutcomeV1) -> float | None:
         """Return the declared scalar, or ``None`` for an unscored outcome."""
@@ -293,6 +326,9 @@ class RewardScoringPolicyV1(_StrictContract):
             RewardOutcomeV1.REFUSED: self.refused_reward,
             RewardOutcomeV1.REJECTED_POLICY: self.rejected_policy_reward,
             RewardOutcomeV1.WRONG_EFFECT: self.wrong_effect_reward,
+            RewardOutcomeV1.ESCALATED_AFTER_EFFECT: (
+                self.escalated_after_effect_reward
+            ),
         }
         return declared.get(RewardOutcomeV1(outcome))
 
@@ -667,14 +703,24 @@ class RewardEvidenceReceiptV1(_StrictContract):
             if scoring_class is RewardScoringClassV1.ADMITTED_POSITIVE:
                 if self.scalar_reward <= 0.0:
                     raise ValueError("a verified reward must be positive")
+            elif scoring_class is RewardScoringClassV1.PARTIAL_CREDIT:
+                if self.scalar_reward < 0.0:
+                    raise ValueError(
+                        f"{self.reward_outcome.value} yields zero or partial credit"
+                    )
             elif self.scalar_reward > 0.0:
                 raise ValueError(
                     f"{self.reward_outcome.value} yields zero or a declared penalty"
                 )
 
-        if self.reward_outcome is RewardOutcomeV1.VERIFIED:
+        if self.reward_outcome in (
+            RewardOutcomeV1.VERIFIED,
+            RewardOutcomeV1.ESCALATED_AFTER_EFFECT,
+        ):
             if self.uncertainty is not RewardUncertaintyStateV1.NONE:
-                raise ValueError("a verified reward cannot carry uncertainty")
+                raise ValueError(
+                    f"{self.reward_outcome.value} cannot carry uncertainty"
+                )
         if self.reward_outcome is RewardOutcomeV1.RECONCILIATION_REQUIRED:
             if self.uncertainty is RewardUncertaintyStateV1.NONE:
                 raise ValueError(

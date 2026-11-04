@@ -43,6 +43,7 @@ import datetime as _dt
 import hashlib
 import json
 import math
+import re
 import sys
 import threading
 import time
@@ -185,14 +186,15 @@ def record_bodies(shadow: Any) -> Any:
     agent's requests sent (``episode.sent_fields``), so a column the agent
     sets is never learned as the app's own: each write's body fields, and
     the query-string parameter names of every request through the shadow,
-    of any method, up to the episode's check. A body the shadow can't parse
-    leaves the episode with no record (nothing is learned from it)."""
+    of any method, through the episode's verification reads. A body the
+    shadow can't parse leaves the episode with no record (nothing is
+    learned from it)."""
 
     from openadapt_flow.shadow import _body_doc
 
     observe = shadow._observe
     forward = shadow._forward
-    check = shadow._check
+    notify = shadow._notify
     #: Query parameter names of every request so far (names only).
     queries: set[str] = set()
     lock = threading.Lock()
@@ -213,17 +215,19 @@ def record_bodies(shadow: Any) -> Any:
             queries.update(query_fields(path))
         return forward(method, path, headers, body)
 
-    def _check(episode: Any) -> Any:
+    def _notify(episode: Any, result: Any) -> Any:
+        # Reads may forward a GET too: snapshot names after them, before
+        # the collector records the episode.
         if not getattr(episode, "bodies_unreadable", False):
             with lock:
                 seen = set(queries)
             prior = getattr(episode, "sent_fields", None) or set()
             episode.sent_fields = set(prior) | seen
-        return check(episode)
+        return notify(episode, result)
 
     shadow._observe = _observe
     shadow._forward = _forward
-    shadow._check = _check
+    shadow._notify = _notify
     return shadow
 
 
@@ -380,10 +384,14 @@ def relation_of(move: Mapping[str, Any], users: Optional[Users]) -> tuple[str, s
 
 
 def _names(text: str) -> set[str]:
-    """A name and its last dotted segment, lower-cased (``a.b`` -> b)."""
+    """A name and its dotted/bracketed segments, lower-cased.
+
+    Parent keys count too, as they do in a nested JSON body: any of them
+    may name a column the app stores, so none is learned as bookkeeping.
+    """
 
     low = text.lower()
-    return {low, low.rsplit(".", 1)[-1]}
+    return {low, *(part for part in re.split(r"[.\[\]]+", low) if part)}
 
 
 def agent_set(eps: Sequence[Mapping[str, Any]]) -> tuple[set[str], bool]:

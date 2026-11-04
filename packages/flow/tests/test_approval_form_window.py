@@ -217,6 +217,7 @@ def test_a_run_forgets_the_windows_an_earlier_run_captured(monkeypatch, tmp_path
     backend, _sent = _windows_backend({"s1": (7, 10)}, ("s2",))
     replayer = object.__new__(Replayer)
     replayer.backend = backend
+    replayer.checkpoint_key = b"k" * 32  # set by __init__, which this skips
     monkeypatch.setattr(Replayer, "_run_unsealed", lambda self, *a, **k: "ran")
     assert (
         replayer.run(None, bundle_dir=tmp_path / "b", run_dir=tmp_path / "r") == "ran"
