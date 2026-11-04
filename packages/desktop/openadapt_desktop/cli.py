@@ -505,6 +505,62 @@ def cmd_cleanup(args: argparse.Namespace, engine: types.SimpleNamespace) -> None
     print(f"  Freed:    {_format_bytes(actions['bytes_freed'])}")
 
 
+def cmd_approver_key(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
+    """Create this computer's approver key and print how to register it."""
+    from openadapt_desktop.approver_key import ApproverKeyError, setup_approver_key
+
+    labels = {"desktop": "Run it", "portal": "the paired phone (decision portal)"}
+    root = None
+    for route in ("desktop", "portal"):
+        try:
+            setup = setup_approver_key(route)
+        except ApproverKeyError as exc:
+            print(f"Approver key setup failed: {exc}")
+            sys.exit(1)
+        state = "Created" if setup.created else "Found"
+        print(f"{state} the approver key for {labels[route]}: {setup.key_path}")
+        print(f"  Public key: {setup.public_key}")
+        principal = args.principal if route == "desktop" else None
+        print(f"  Put it on the roster: {setup.register_command(principal, root=root)}")
+        engine.audit.log("approver_key_setup", route=route, created=setup.created)
+        if route == "desktop":
+            root = setup
+    print(
+        "A person runs these commands (with OPENADAPT_JIT_KEY_PASSPHRASE set to "
+        "the key's passphrase). Then an administrator pins the root for "
+        "Desktop on this computer: `sudo openadapt-desktop approver-pin "
+        f"{root.public_key if root else '<root>'}` (on Windows, from an "
+        "elevated prompt, without sudo). Until then, Flow refuses answers "
+        "from Desktop."
+    )
+
+
+def cmd_approver_pin(args: argparse.Namespace) -> int:
+    """Pin (or show) the approver root in the administrator-owned anchor."""
+    from openadapt_desktop.approver_anchor import (
+        AnchorError,
+        anchor_path,
+        read_anchor,
+        write_anchor,
+    )
+
+    try:
+        if args.show or not args.root:
+            pinned = read_anchor()
+            print(f"{anchor_path()}: {pinned or 'no approver root pinned'}")
+            return 0 if (pinned or args.show) else 2
+        path = write_anchor(args.root)
+    except AnchorError as exc:
+        print(f"Approver pin refused ({exc.code}): {exc}")
+        return 1
+    print(f"Pinned approver root {args.root.strip().lower()} in {path}.")
+    print(
+        "Desktop on this computer now counts a person's answer only when it is "
+        "signed by a key on the roster this root started."
+    )
+    return 0
+
+
 def cmd_config(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """Show current configuration."""
     print(engine.config.model_dump_json(indent=2))
@@ -868,6 +924,7 @@ _COMMANDS = {
     "config": cmd_config,
     "capabilities": cmd_capabilities,
     "doctor": cmd_doctor,
+    "approver-key": cmd_approver_key,
 }
 
 
@@ -1008,7 +1065,31 @@ def main(argv: list[str] | None = None) -> None:
     # doctor
     subparsers.add_parser("doctor", help="Check dependencies and configuration")
 
+    # approver-key
+    p = subparsers.add_parser(
+        "approver-key",
+        help="Set up the key that signs a person's answers to saves",
+    )
+    p.add_argument("action", choices=["setup"])
+    p.add_argument(
+        "--principal",
+        default="desktop-approver",
+        help="The approver name to show in the register command",
+    )
+
+    # approver-pin
+    p = subparsers.add_parser(
+        "approver-pin",
+        help="Pin this computer's approver root (administrator only)",
+    )
+    p.add_argument("root", nargs="?", help="The roster's root public key (64 hex digits)")
+    p.add_argument("--show", action="store_true", help="Show the pinned root and exit")
+
     args = parser.parse_args(argv)
+
+    if args.command == "approver-pin":
+        # Runs elevated: touch nothing in any user's data folder.
+        sys.exit(cmd_approver_pin(args))
 
     config = EngineConfig()
 

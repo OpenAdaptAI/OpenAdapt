@@ -1876,7 +1876,7 @@ def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
             mark("goto")
 
     class Browser:
-        def new_page(self, *, viewport):
+        def new_page(self, *, viewport, **_options):
             assert viewport == {"width": 1280, "height": 800}
             mark("new-page")
             return Page()

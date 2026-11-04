@@ -24,6 +24,7 @@ Usage:
     openadapt doctor
 """
 
+import json
 import os
 import platform
 import re
@@ -848,9 +849,9 @@ def _warn_about_launcher_conflicts() -> None:
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
-# Launcher 1.18 requires Flow 2.2: the quickstart uses its offline Seals,
-# shared browser and OCR prewarm.
-_SUPPORTED_FLOW_RANGE = ">=2.2.0,<3.0.0"
+# Launcher 1.19 requires Flow 2.5: `openadapt shadow` forwards to its shadow
+# command, and `openadapt verify serve` offers its recheck.
+_SUPPORTED_FLOW_RANGE = ">=2.5.0,<3.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -860,7 +861,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (2, 2, 0) <= parsed < (3, 0, 0)
+    return parsed is not None and (2, 5, 0) <= parsed < (3, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
@@ -1168,6 +1169,294 @@ def pull(command_ctx: click.Context) -> None:
     _run_flow(["pull", *command_ctx.args])
 
 
+FIRST_TOOL_GUIDE = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/FIRST_TOOL.md"
+
+
+@main.command("setup")
+@click.option(
+    "--dry-run", is_flag=True, help="List what setup would change, and change nothing."
+)
+@click.option("--undo", is_flag=True, help="Reverse what earlier setup runs changed.")
+@click.option(
+    "--client",
+    "only",
+    multiple=True,
+    type=click.Choice(["claude", "cursor", "codex", "gemini"]),
+    help="Set up only this client (repeat for more). Default: every one found.",
+)
+def setup(dry_run: bool, undo: bool, only: tuple[str, ...]) -> None:
+    """Add OpenAdapt to Claude Code, Cursor, Codex and Gemini CLI.
+
+    For each one installed, register the OpenAdapt MCP server and install a
+    skill that tells the agent how to turn a browser task into a tool it can
+    call again. Prints every change. Running it again changes nothing that is
+    already set up.
+    """
+    from openadapt.setup_clients import CLIENTS, Setup, server_command
+
+    _require_supported_python()
+    clients = [c for c in CLIENTS if not only or c.key in only]
+    run = Setup(
+        home=Path.home(), command=server_command(), say=click.echo, dry_run=dry_run
+    )
+    if undo:
+        run.undo()
+        sys.exit(1 if run.failures else 0)
+    found = run.install(clients)
+    if not found:
+        click.echo(
+            "No supported agent found. Install Claude Code, Cursor, Codex or "
+            "Gemini CLI, then run openadapt setup again."
+        )
+        sys.exit(1)
+    if dry_run:
+        sys.exit(1 if run.failures else 0)
+    click.echo(
+        "\nNext: restart your agent so it loads OpenAdapt. To try it on a "
+        "local example app, run:\n"
+        "  openadapt agent example-app\n"
+        f"and follow {FIRST_TOOL_GUIDE}\n"
+        "Undo with: openadapt setup --undo"
+    )
+    sys.exit(1 if run.failures else 0)
+
+
+@main.group("bench")
+def bench() -> None:
+    """Public benchmarks you can rerun with your own agent."""
+
+
+def _flow_checkout() -> Optional[Path]:
+    """``packages/flow`` of the OpenAdapt checkout this runs from, if any.
+
+    The benchmarks need their compose files and case sets, which live in the
+    repository, not in the installed package.
+    """
+    here = Path(__file__).resolve().parents[1]
+    for root in (here, *Path.cwd().resolve().parents, Path.cwd().resolve()):
+        flow = root / "packages" / "flow"
+        if (flow / "benchmark" / "fhir_medplum" / "public" / "run.py").is_file():
+            return flow
+    return None
+
+
+@bench.command(
+    "medplum",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    add_help_option=False,
+)
+@click.pass_context
+def bench_medplum(ctx: click.Context) -> None:
+    """Your agent writes to a local Medplum; OpenAdapt checks every write.
+
+    Options go to the runner; `openadapt bench medplum --help` lists them.
+    Needs Docker and an OpenAdapt checkout (see
+    packages/flow/benchmark/fhir_medplum/public/README.md).
+    """
+    import subprocess
+
+    _require_supported_python()
+    flow = _flow_checkout()
+    if flow is None:
+        click.echo(
+            "Error: run this from an OpenAdapt checkout "
+            "(git clone https://github.com/OpenAdaptAI/OpenAdapt).",
+            err=True,
+        )
+        sys.exit(1)
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            p for p in (str(flow), os.environ.get("PYTHONPATH", "")) if p
+        ),
+    }
+    cmd = [sys.executable, "-m", "benchmark.fhir_medplum.public.run", *ctx.args]
+    sys.exit(subprocess.run(cmd, env=env).returncode)
+
+
+@main.group("verify")
+def verify() -> None:
+    """Verify writes against the system of record, for any agent.
+
+    Around each write your agent makes, it gets a verified receipt or a
+    refusal, never an unverified success. Python agents use the SDK
+    (`from openadapt.verify import ...`); any MCP client uses `openadapt
+    verify serve`.
+    """
+
+
+@verify.command("serve")
+@click.option(
+    "--contracts",
+    "contracts",
+    required=True,
+    type=click.Path(file_okay=False),
+    help="Folder of write contracts (<name>.yaml, openadapt.verify/v1).",
+)
+@click.option(
+    "--state",
+    "state",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Where baselines and receipts go (default ~/.openadapt/verify).",
+)
+def verify_serve(contracts: str, state: Optional[str]) -> None:
+    """Serve verify_contracts, verify_begin, verify_check and verify_recheck
+    over MCP (stdio)."""
+    _require_supported_python()
+    try:
+        from openadapt_flow.agent.cli import main as agent_main
+    except ImportError:
+        click.echo("Error: the OpenAdapt engine is not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        sys.exit(1)
+    argv = ["serve", "--verify", contracts]
+    if state:
+        argv += ["--verify-state", state]
+    sys.exit(int(agent_main(argv) or 0))
+
+
+def _write_ledger(folder: Optional[str]):
+    """The uncertain-write ledger (default ~/.openadapt/ledger)."""
+    _require_supported_python()
+    try:
+        from openadapt_flow.write_ledger import FileLedger, Ledger, default_ledger
+    except ImportError:
+        click.echo("Error: the OpenAdapt engine is not installed.", err=True)
+        sys.exit(1)
+    return Ledger(FileLedger(folder)) if folder else default_ledger()
+
+
+_LEDGER_OPTION = click.option(
+    "--ledger",
+    "ledger_dir",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Ledger folder (default: OPENADAPT_LEDGER_DIR or ~/.openadapt/ledger).",
+)
+
+
+@verify.group("ledger")
+def verify_ledger() -> None:
+    """Writes whose outcome isn't known yet, held so they aren't sent twice.
+
+    Every verified write goes through the ledger. A write that may have
+    landed, or was refuted, is held: no worker sends it again until a
+    read-back resolves it (`reconcile`) or a person checks the record
+    (`release`). The ledger holds no record values.
+    """
+
+
+@verify_ledger.command("list")
+@_LEDGER_OPTION
+def verify_ledger_list(ledger_dir: Optional[str]) -> None:
+    """Show held and open writes: key, state, when it began, outcome."""
+    ledger = _write_ledger(ledger_dir)
+    rows = ledger.unresolved()
+    if not rows:
+        click.echo("No held or open writes.")
+        return
+    for key, attempt in rows:
+        outcome = (attempt.resolved or {}).get("outcome", "-")
+        state = "review" if attempt.review else ledger.state(attempt)
+        click.echo(
+            f"{key}  {state:<11}  began {attempt.begun.get('at')}  "
+            f"outcome {outcome}  by {attempt.begun.get('actor_kind')}:"
+            f"{attempt.begun.get('actor_id')}"
+        )
+
+
+@verify_ledger.command("reconcile")
+@click.option(
+    "--contracts",
+    "contracts",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="Folder of write contracts (<name>.yaml) the writes were made under.",
+)
+@click.argument("key", required=False)
+@_LEDGER_OPTION
+def verify_ledger_reconcile(
+    contracts: str, key: Optional[str], ledger_dir: Optional[str]
+) -> None:
+    """Read held writes back and resolve the ones the store now settles."""
+    from openadapt_flow.verifier import Contract, VerifierError, reconcile
+
+    ledger = _write_ledger(ledger_dir)
+    by_digest = {}
+    for path in sorted(Path(contracts).glob("*.y*ml")):
+        try:
+            contract = Contract.load(path)
+        except VerifierError as exc:
+            click.echo(f"Error: contract {path.name}: {exc}", err=True)
+            sys.exit(2)
+        by_digest[contract.identity] = contract
+    rows = [(k, a) for k, a in ledger.unresolved() if key is None or k == key]
+    if key is not None and not rows:
+        click.echo(f"Error: no held or open write with key {key}", err=True)
+        sys.exit(2)
+    for k, attempt in rows:
+        contract = by_digest.get(str(attempt.begun.get("contract")))
+        if contract is None:
+            click.echo(f"{k}  skipped: its contract isn't in {contracts}")
+            continue
+        try:
+            state = reconcile(contract, k, ledger=ledger)
+        except VerifierError as exc:
+            click.echo(f"{k}  skipped: {exc}")
+            continue
+        click.echo(f"{k}  {state}")
+
+
+@verify_ledger.command("release")
+@click.argument("key")
+@click.option("--by", "by", required=True, help="Who checked the record.")
+@click.option("--reason", "reason", required=True, help="What they found.")
+@click.option(
+    "--found",
+    "found",
+    required=True,
+    type=click.Choice(["absent", "landed"]),
+    help="absent: the write isn't in the store, so it may be sent again. "
+    "landed: it is, so it is never sent again.",
+)
+@_LEDGER_OPTION
+def verify_ledger_release(
+    key: str, by: str, reason: str, found: str, ledger_dir: Optional[str]
+) -> None:
+    """Release a held write after a person checked the record."""
+    from openadapt_flow.write_ledger import LedgerError
+
+    ledger = _write_ledger(ledger_dir)
+    try:
+        ledger.release(key, by=by, reason=reason, found=found)
+    except LedgerError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(2)
+    click.echo(f"{key}  released by {by} (found {found})")
+
+
+@main.command(
+    "shadow",
+    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+)
+@click.pass_context
+def shadow(command_ctx: click.Context) -> None:
+    """Check each write your agent makes against the system of record.
+
+    Never blocks or changes a write; writes report.html and report.json.
+    Every argument passes to `openadapt flow shadow`; its options are listed
+    by `openadapt flow shadow --help`.
+    """
+    if "shadow" not in _flow_verbs():
+        click.echo(
+            "Error: the installed openadapt-flow has no shadow command.", err=True
+        )
+        click.echo("Upgrade with: pip install --upgrade openadapt", err=True)
+        sys.exit(2)
+    _run_flow(["shadow", *command_ctx.args])
+
+
 @main.command(
     "agent",
     context_settings={
@@ -1211,12 +1500,15 @@ def seal(command_ctx: click.Context) -> None:
 
     A folder is a run folder (or a folder of them, such as the quickstart's)
     signed on this computer; each run's report is checked against its
-    `seal.json`. Also `openadapt seal keys pin` to pin Cloud's Seal keys after
-    a person confirms them. Every other argument passes to `openadapt-agent
-    seal` unchanged.
+    `seal.json`. `openadapt seal view RUN_DIR` writes the run's Seal as one
+    offline page (`RUN_DIR/seal.html`) and opens it. Also `openadapt seal keys
+    pin` to pin Cloud's Seal keys after a person confirms them. Every other
+    argument passes to `openadapt-agent seal` unchanged.
     """
     _require_supported_python()
     args = list(command_ctx.args)
+    if args[:1] == ["view"]:
+        sys.exit(_view_sealed_runs(args[1:]))
     if len(args) >= 2 and args[0] == "verify" and Path(args[1]).is_dir():
         sys.exit(_verify_sealed_runs(Path(args[1]), args[2:]))
     try:
@@ -1235,6 +1527,81 @@ def seal(command_ctx: click.Context) -> None:
         click.echo("Upgrade with: pip install --upgrade openadapt-agent", err=True)
         sys.exit(1)
     sys.exit(int(agent_main(["seal", *command_ctx.args]) or 0))
+
+
+def _view_sealed_runs(argv: list[str]) -> int:
+    """`openadapt seal view RUN_DIR`: write each sealed run's offline Seal page."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="openadapt seal view",
+        description=(
+            "Write a sealed run's Seal as one offline page, RUN_DIR/seal.html, and "
+            "open it. The page checks the Ed25519 signature over the run's report "
+            "in the browser, replays the run over its program map, and makes no "
+            "network requests. A folder of runs (such as the quickstart's) gets "
+            "one page per sealed run."
+        ),
+    )
+    parser.add_argument(
+        "run_dir", type=Path, help="a sealed run folder, or a folder of them"
+    )
+    parser.add_argument(
+        "--keys",
+        type=Path,
+        default=None,
+        help="the Seal key registry to trust (default: this computer's Seal key)",
+    )
+    parser.add_argument(
+        "--bundle",
+        type=Path,
+        default=None,
+        help="the run's compiled bundle, for the program map (default: found next to the run)",
+    )
+    parser.add_argument("--no-open", action="store_true", help="write the page only")
+    options = parser.parse_args(argv)
+    folder = options.run_dir
+    runs = _sealed_run_dirs(folder) if folder.is_dir() else []
+    if not runs:
+        click.echo(f"no sealed run in {folder} (no seal.json)", err=True)
+        return 1
+    try:
+        from openadapt.seal_view import SealViewError, open_page, write_seal_page
+    except ImportError:  # pragma: no cover - the viewer ships with the launcher
+        click.echo("This install has no Seal viewer.", err=True)
+        return 1
+    keys = None
+    if options.keys is not None:
+        try:
+            keys = json.loads(options.keys.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            click.echo(f"can't read the key registry {options.keys}: {exc}", err=True)
+            return 1
+    pages = []
+    for run in runs:
+        try:
+            page = write_seal_page(
+                run,
+                keys=keys,
+                bundle_dir=options.bundle,
+                commands=_hint(f"seal verify {_shell_quote(run)}"),
+            )
+        except (SealViewError, ImportError) as exc:
+            click.echo(f"  {run.name}  no page: {exc}", err=True)
+            continue
+        except Exception as exc:  # noqa: BLE001 - e.g. no Seal key on this computer
+            click.echo(f"  {run.name}  no page: {type(exc).__name__}: {exc}", err=True)
+            continue
+        pages.append(page)
+        click.echo(f"Seal: {page}")
+    if not pages:
+        return 1
+    if not options.no_open:
+        from openadapt.quickstart.engine import display_available
+
+        if display_available():
+            open_page(pages[0])
+    return 0 if len(pages) == len(runs) else 1
 
 
 def _sealed_run_dirs(folder: Path) -> list[Path]:

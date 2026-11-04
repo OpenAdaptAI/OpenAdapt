@@ -12,8 +12,15 @@ from pathlib import Path
 
 import pytest
 
-WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
-RELEASES = ["desktop-release.yml", "release-package.yml", "release-and-publish.yml"]
+GITHUB = Path(__file__).resolve().parents[1] / ".github"
+RELEASES = [
+    "workflows/desktop-release.yml",
+    "workflows/release-package.yml",
+    "workflows/release-and-publish.yml",
+    "workflows/signpath-test-sign.yml",
+    # The Windows build that desktop-release.yml and signpath-test-sign.yml share.
+    "actions/build-desktop-windows-installers/action.yml",
+]
 
 
 def _steps(text: str) -> list[tuple[str, str]]:
@@ -38,7 +45,7 @@ def _steps(text: str) -> list[tuple[str, str]]:
 
 @pytest.mark.parametrize("name", RELEASES)
 def test_release_workflow_restores_no_cache(name: str) -> None:
-    text = (WORKFLOWS / name).read_text(encoding="utf-8")
+    text = (GITHUB / name).read_text(encoding="utf-8")
     for uses, block in _steps(text):
         assert not re.match(r"(actions/cache|Swatinem/rust-cache)@", uses), (name, uses)
         assert not re.search(r"^\s+cache: ", block, re.MULTILINE), (name, uses, block)
@@ -46,3 +53,11 @@ def test_release_workflow_restores_no_cache(name: str) -> None:
             assert re.search(r"package-manager-cache: false", block), (name, uses)
         if uses.startswith("astral-sh/setup-uv@"):
             assert re.search(r"enable-cache: false", block), (name, uses)
+
+
+@pytest.mark.parametrize("name", RELEASES)
+def test_local_actions_a_release_uses_are_checked_too(name: str) -> None:
+    text = (GITHUB / name).read_text(encoding="utf-8")
+    for uses, _ in _steps(text):
+        if uses.startswith("./.github/"):
+            assert f"{uses.removeprefix('./.github/')}/action.yml" in RELEASES, (name, uses)

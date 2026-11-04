@@ -48,6 +48,7 @@ import struct
 import threading
 import time
 import uuid
+from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -85,6 +86,8 @@ from openadapt_flow.backend import (
     RemoteFrameContractBackend,
     RichPointerActionBackend,
     SelectOptionBackend,
+    StructuralBackend,
+    StructuralElementNotActionable,
     StructuralResolutionRefused,
     SubmitBindingBackend,
 )
@@ -102,6 +105,7 @@ from openadapt_flow.ir import (
     CheckToClickRecheck,
     EffectVerificationEvidence,
     ExecutionTargetKind,
+    FormIdentity,
     FreshActuationEvent,
     HaltObservation,
     HoverLook,
@@ -113,6 +117,7 @@ from openadapt_flow.ir import (
     LoopIterationBinding,
     LoopSpec,
     ObservedSurfaceEnvironment,
+    ParamKind,
     PixelIdentityEvidence,
     Point,
     Postcondition,
@@ -159,6 +164,7 @@ from openadapt_flow.run_gate import is_consequential
 from openadapt_flow.runtime import heal as heal_mod
 from openadapt_flow.runtime import healing as healing_mod
 from openadapt_flow.runtime import identity as identity_mod
+from openadapt_flow.runtime import identity_census as census_mod
 from openadapt_flow.runtime import identity_looks as looks_mod
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
@@ -228,6 +234,9 @@ _MAX_FRESH_ACTUATION_REACQUISITIONS = 2
 # is refused, and how much a pixel must change to count (remote encoders
 # shift colours by a few levels; a dialog or a new row changes far more).
 _PIXEL_RECHECK_REOBSERVES = 2
+# How far a remote codec moved the same hovered target between frames on real
+# AVC444 sessions (benchmark/rdp_avc_real: one pixel on each axis).
+_REMOTE_HOVER_JITTER_PX = 2
 _PIXEL_RECHECK_LEVEL = 24
 _PIXEL_RECHECK_MIN_PIXELS = 4
 # How long a step that raises a browser dialog waits for it to open.
@@ -388,13 +397,12 @@ PC_TEMPLATE_THRESHOLD = 0.9
 # modal at 0.24, leaving a deliberate margin on both sides.
 PC_STRUCTURAL_TEMPLATE_THRESHOLD = 0.8
 
-# Typed-input verification: size of the "field region" diffed/OCRed around
-# the focusing click point after a TYPE action. Generous on purpose — the
-# typed text renders at the field's own left edge / first line, not at the
-# click point — and clamped to the viewport. When no focusing click is
-# known (keyboard-only focus moves, e.g. Tab between fields), the whole
-# frame is used instead.
-FIELD_REGION_SIZE = (640, 240)
+# Typed-input verification: height of the visual readback band around the
+# focusing click after TYPE. Without structural field bounds, read the full
+# viewport width: a centered crop can hide the value's beginning or suffix.
+# With no focusing click (e.g. Tab between fields), use the whole frame.
+FIELD_REGION_HEIGHT = 240
+MASKED_FIELD_REGION_WIDTH = 640
 FIELD_REGION_PAD = 16
 
 # Typed-input verification, secret-only diff acceptance: when a SECRET typed
@@ -642,8 +650,19 @@ class EgressNotPermitted(RuntimeError):
 #: scroll counts it as ready.
 SCROLL_POSITION_SLACK_FRACTION = 0.25
 
+
 #: Rungs that show the target itself on screen: what closed-loop scroll
 #: readiness accepts, and all a step accepts after its scroll missed it.
+class _NotActionableError(str):
+    """The error ``_resolve_step`` returns when the structural rung found
+    exactly one candidate but it is covered or off-viewport.
+
+    A ``str`` so it travels as any resolution error; its type marks it. The
+    step polls on it like any miss, and halts with ``target_not_actionable``
+    when it times out or when the fresh re-resolution before input finds it.
+    """
+
+
 _DIRECT_TARGET_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
 
 #: Steps that own the halt when the closed-loop scroll before them never found
@@ -732,6 +751,50 @@ class _WebFormApprovalView:
     rows: list[tuple[str, str]]
     png: bytes
     ref: Any
+
+
+# The pixel census's OCR tie-break: a place the pixels do not rule out is
+# distinguishable only when OCR reads both crops with every line at or above
+# this confidence, neither text contains the other, and the two texts are less
+# similar than this ratio. One label read two ways measured 0.82-0.95
+# ("Smith, John" / "Smith, S John" / "Smith, 10 lohn"); sibling tab labels
+# ("Contact" / "Stats") measure 0.5 or less.
+PIXEL_CENSUS_OCR_MIN_CONFIDENCE = 0.8
+PIXEL_CENSUS_OCR_MAX_SIMILARITY = 0.6
+
+
+#: How long after a create-new form's save the replayer keeps watching its
+#: submit guard before the next step (a script may submit after the click).
+_FORM_GUARD_SETTLE_S = 2.0
+
+
+def _within_hover_jitter(
+    fresh: tuple[int, int],
+    prepared: tuple[int, int],
+    fresh_region: Optional[Region],
+) -> bool:
+    """Whether a re-resolved point may be the prepared one moved by codec jitter.
+
+    Both points must lie inside the fresh match's own box and differ by at
+    most :data:`_REMOTE_HOVER_JITTER_PX` on each axis. With no box there is
+    nothing to bind the prepared point to. A True answer only permits one
+    re-preparation at the fresh point; the click still needs an exact match.
+    """
+    if fresh_region is None:
+        return False
+    x, y, w, h = fresh_region
+    if w <= 0 or h <= 0:
+        return False
+
+    def inside(point: tuple[int, int]) -> bool:
+        return x <= point[0] < x + w and y <= point[1] < y + h
+
+    return (
+        abs(int(fresh[0]) - int(prepared[0])) <= _REMOTE_HOVER_JITTER_PX
+        and abs(int(fresh[1]) - int(prepared[1])) <= _REMOTE_HOVER_JITTER_PX
+        and inside(fresh)
+        and inside(prepared)
+    )
 
 
 class Replayer:
@@ -1140,6 +1203,11 @@ class Replayer:
         self.api_steps_off_reason: Optional[str] = None
         self.web_form_actuator = web_form_actuator
         self._web_form_span_active = False
+        #: Set by a durable _run_web_form_span: persists the span's write-ahead
+        #: checkpoint right before its first request is sent.
+        self._web_form_write_ahead: Optional[Callable[[], None]] = None
+        self._web_form_folded_checkpointed = False
+        self._web_form_write_ahead_pause = ""
         self._web_form_fallback_reason: Optional[str] = None
         # (step id, reason) set when a closed-loop scroll used up its budget
         # because the next step's target never resolved. That step then
@@ -1567,14 +1635,35 @@ class Replayer:
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
+        from openadapt_flow import at_rest
+
         bundle_path = Path(bundle_dir)
-        if (
-            not (
-                _sealed.is_sealed(bundle_path)
-                or _sealed.active_writer(bundle_path) is not None
+        bundle_sealed = (
+            _sealed.is_sealed(bundle_path)
+            or _sealed.active_writer(bundle_path) is not None
+        )
+        # A sealed bundle always runs into a sealed run directory, whatever
+        # the mode or opt-out: encrypted input never yields plaintext output.
+        # Strict mode seals the run of a plaintext bundle too. Otherwise the
+        # plaintext run directory is named on stderr and in the ledger
+        # (docs/phi_at_rest.md).
+        seal_run = at_rest.strict() or bundle_sealed
+        if save_healed_to is not None and seal_run:
+            # The healed copy is written as a plaintext bundle: hold it back
+            # before anything runs rather than decrypt a sealed bundle to disk.
+            raise at_rest.AtRestRefused(
+                f"Not writing a healed bundle at {save_healed_to}: it would be a "
+                "plaintext copy of an encrypted run. Nothing was executed."
             )
-            or _sealed.active_writer(Path(run_dir)) is not None
-        ):
+        if not seal_run or _sealed.active_writer(Path(run_dir)) is not None:
+            if _sealed.active_writer(Path(run_dir)) is None:
+                if not at_rest.plaintext_allowed("a run directory"):
+                    at_rest.unsealed_write("a run directory", run_dir)
+                if self.checkpoint_key is None:
+                    # Durable checkpoints can still be encrypted here.
+                    from openadapt_flow import crypto as _crypto
+
+                    self.checkpoint_key = _crypto.resolve_key(None)
             return self._run_unsealed(
                 workflow,
                 params=params,
@@ -1605,9 +1694,9 @@ class Replayer:
             # Refuse before anything is actuated or written: these stores
             # keep their own plaintext state files in the run directory.
             raise _sealed.SealedSetError(
-                f"a sealed bundle cannot run with {unsupported} yet, because "
-                "that state is written to the run directory in plaintext. "
-                "Nothing was executed."
+                f"a sealed run keeps {unsupported} outside the sealed set, so "
+                "it is held back. Nothing was executed. Run a plaintext bundle "
+                "outside OPENADAPT_FLOW_AT_REST=strict to use it (recorded)."
             )
         if self.checkpoint_key is None:
             # A sealed bundle's run keeps its durable state under the same key.
@@ -1881,6 +1970,9 @@ class Replayer:
         # iteration scope from the exact loop cursor below. Hashing ``params``
         # inside a loop would count each row twice and reject valid runs.
         self._governed_base_params = dict(params)
+        # The run's own parameters, for postconditions that compare the screen
+        # with a value (a program run also tracks them per state).
+        self._run_params: dict[str, RuntimeParamScalar] = dict(params)
         # Preserve the exact caller-owned worklist object for last-common-point
         # authorization checks.  A callback that mutates it after admission
         # must invalidate the authorization before any reacquired input edge.
@@ -2322,6 +2414,28 @@ class Replayer:
             report.total_ms = (time.monotonic() - t_run) * 1000.0
             return self._finalize_report(report, workflow, run_dir)
 
+        # A typed date parameter must be a canonical ISO date before any step
+        # runs: a date written another way (03/14/1990) would otherwise be
+        # typed into the form and saved as whatever the app makes of it.
+        malformed = self._malformed_date_params(workflow, params)
+        if malformed:
+            report.results.append(
+                StepResult(
+                    step_id="<params>",
+                    intent="validate typed workflow parameters",
+                    ok=False,
+                    failure_category="governed_refusal",
+                    error=(
+                        "Typed workflow parameter(s) are not valid: "
+                        + "; ".join(malformed)
+                        + " — refusing to run; nothing was typed; run aborted"
+                    ),
+                )
+            )
+            report.success = False
+            report.total_ms = (time.monotonic() - t_run) * 1000.0
+            return self._finalize_report(report, workflow, run_dir)
+
         if self._approval_refusal is not None:
             # Approval modes take values only from the caller: an input the
             # run would fill from the recording is refused before any step.
@@ -2376,6 +2490,9 @@ class Replayer:
             report.model_calls = max(
                 report.model_calls,
                 sum(self._result_model_calls(result) for result in resumed_results),
+            )
+            report.local_model_calls = sum(
+                self._result_local_model_calls(result) for result in resumed_results
             )
 
         if workflow.program is not None:
@@ -2450,6 +2567,7 @@ class Replayer:
                             bundle_dir=bundle_dir,
                             run_dir=run_dir,
                             new_crops=new_crops,
+                            durable_run=durable_run,
                         )
                         if batch is None:
                             why_not = self._web_form_fallback_reason
@@ -2475,6 +2593,11 @@ class Replayer:
                 # so a resume runs the whole span again.
                 save_result = batch[-1]
                 checkpoint_folded = save_result.ok or save_result.delivery_attempted
+                # The write-ahead checkpoint (before the first request) already
+                # holds the folded steps.
+                already = len(batch) > 1 and getattr(
+                    self, "_web_form_folded_checkpointed", False
+                )
                 for offset, result in enumerate(batch):
                     folded = offset < len(batch) - 1
                     stop_run = self._record_linear_result(
@@ -2485,17 +2608,29 @@ class Replayer:
                         step=workflow.steps[step_index + offset],
                         params=params,
                         durable_run=(
-                            None if folded and not checkpoint_folded else durable_run
+                            None
+                            if folded and (already or not checkpoint_folded)
+                            else durable_run
                         ),
                     )
                     if stop_run:
                         break
+                if (
+                    already
+                    and durable_run is not None
+                    and save_result.ok
+                    and not stop_run
+                ):
+                    # The save's own checkpoint is persisted: the write-ahead
+                    # pause has done its job (unless something replaced it).
+                    durable_run.consume_pause(self._web_form_write_ahead_pause)
                 if stop_run:
                     break
 
             report.success = len(report.results) == len(workflow.steps) and all(
                 result.ok for result in report.results
             )
+            self._halt_on_late_form_submit(report)
         report.total_ms = (time.monotonic() - t_run) * 1000.0
 
         # Emit the structured HALT record on any unsuccessful run, so the
@@ -2713,7 +2848,10 @@ class Replayer:
         the API step may run. None when no API step starts here.
         """
 
-        from openadapt_flow.runtime.actuators.web_form import folded_checks_digest
+        from openadapt_flow.runtime.actuators.web_form import (
+            folded_checks_digest,
+            web_form_effects,
+        )
 
         first = workflow.steps[step_index].id
         for end_index in range(step_index, len(workflow.steps)):
@@ -2760,7 +2898,7 @@ class Replayer:
                     "step names no right-record contract (openadapt-flow api "
                     "admit --identity)"
                 )
-            elif list(binding.effects) != list(save.effects):
+            elif list(binding.effects) != web_form_effects(workflow.steps, save):
                 reason = (
                     "the save step's record check differs from the one admitted "
                     "with the API step (openadapt-flow api admit)"
@@ -2932,6 +3070,7 @@ class Replayer:
         bundle_dir: Path,
         run_dir: Path,
         new_crops: dict[str, bytes],
+        durable_run: Optional[Any] = None,
     ) -> Optional[list[StepResult]]:
         """Run the API step for steps ``start_index..end_index``.
 
@@ -2940,28 +3079,41 @@ class Replayer:
         stopped after sending. Returns None when the save was not sent, with
         the reason in ``self._web_form_fallback_reason``; the caller then runs
         the GUI steps.
+
+        An earlier save's wire check that refused a request halts the run at
+        the span's first step, before anything is sent. A check without a
+        refusal stays armed through the span: the span's requests go through
+        the context's APIRequestContext (``context.request``), which context
+        routes never intercept, so the check can't block them and still
+        aborts a stray submit from the live page. Don't route them.
         """
 
         save = workflow.steps[end_index]
-        self._web_form_span_active = True
-        try:
-            result = self._run_step(
-                save,
-                workflow=workflow,
-                step_index=end_index,
-                params=params,
-                bundle_dir=bundle_dir,
-                run_dir=run_dir,
-                new_crops=new_crops,
-            )
-        finally:
-            self._web_form_span_active = False
-            self._web_form_approval.clear()
-        if result.api_fallback is not None:
-            self._web_form_fallback_reason = result.api_fallback
-            return None
         router = getattr(self, "_surface_router", None)
         surface = router.active_id if router is not None else None
+        backend = self.backend
+        if getattr(backend, "form_submit_guard_armed", False):
+            # Read, never disarm: see the docstring.
+            late = backend.form_submit_guard_refusal()  # type: ignore[attr-defined]
+            if late is not None:
+                first = workflow.steps[start_index]
+                # Never None here: None runs the GUI steps instead.
+                return [
+                    StepResult(
+                        step_id=first.id,
+                        intent=first.intent,
+                        ok=False,
+                        safety_halt=True,
+                        failure_category="safety_halt",
+                        actuation="api",
+                        delivery_attempted=False,
+                        surface=surface,
+                        error=(
+                            f"Step '{first.id}' ({first.intent}): after the "
+                            f"previous save, {late} — run aborted"
+                        ),
+                    )
+                ]
         folded = [
             StepResult(
                 step_id=s.id,
@@ -2977,6 +3129,81 @@ class Replayer:
             )
             for s in workflow.steps[start_index:end_index]
         ]
+        # A resumed leg already has its write-ahead: the continuation guard
+        # moves the attempt to delivery_started before the first request, and
+        # a restart then reconciles. A first leg gets one here.
+        if durable_run is not None and self._durable_continuation_guard is None:
+
+            def write_ahead() -> None:
+                # What a resume reads if the process stops while the span's
+                # requests are going out: the folded steps are done, and the
+                # save is paused as delivery-uncertain. A resume then starts at
+                # the save and only reconciles it; it never sends a write of
+                # the sequence again. The save's own outcome replaces this
+                # pause, and the run's completion consumes it.
+                observations = router.observations if router is not None else None
+                self._web_form_folded_checkpointed = True
+                for offset, item in enumerate(folded):
+                    durable_run.record(
+                        start_index + offset,
+                        workflow.steps[start_index + offset],
+                        item,
+                        dict(params),
+                        workflow=workflow,
+                        active_surface=surface,
+                        surface_observations=observations,
+                    )
+                provisional = StepResult(
+                    step_id=save.id,
+                    intent=save.intent,
+                    ok=False,
+                    safety_halt=True,
+                    failure_category="safety_halt",
+                    actuation="api",
+                    delivery_attempted=True,
+                    surface=surface,
+                    risk=save.risk,
+                    risk_explanation=save.risk_explanation,
+                    risk_review_required=save.risk_review_required,
+                    error=(
+                        f"Step '{save.id}' ({save.intent}): the API step began "
+                        "sending its requests and the run stopped before it "
+                        "finished; they may have written. Resume never sends "
+                        "them again; reconcile by reading the records back"
+                    ),
+                )
+                durable_run.record(
+                    end_index,
+                    save,
+                    provisional,
+                    dict(params),
+                    workflow=workflow,
+                    active_surface=surface,
+                    surface_observations=observations,
+                )
+                self._web_form_write_ahead_pause = durable_run.pause_digest()
+
+            self._web_form_write_ahead = write_ahead
+        self._web_form_folded_checkpointed = False
+        self._web_form_write_ahead_pause = ""
+        self._web_form_span_active = True
+        try:
+            result = self._run_step(
+                save,
+                workflow=workflow,
+                step_index=end_index,
+                params=params,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                new_crops=new_crops,
+            )
+        finally:
+            self._web_form_span_active = False
+            self._web_form_write_ahead = None
+            self._web_form_approval.clear()
+        if result.api_fallback is not None:
+            self._web_form_fallback_reason = result.api_fallback
+            return None
         return [*folded, result]
 
     def _lookup_capability_refusal(
@@ -3752,6 +3979,7 @@ class Replayer:
                 or step.anchor.structured_identity
                 or step.anchor.identity_template
                 or step.anchor.identifier_crop
+                or step.anchor.form_identity
             ):
                 report.identity_armed_steps += 1
             else:
@@ -3878,6 +4106,7 @@ class Replayer:
         # accounting).
         if account_model_calls:
             report.model_calls += Replayer._result_model_calls(result)
+            report.local_model_calls += Replayer._result_local_model_calls(result)
         if result.heal is not None:
             report.heal_count += 1
 
@@ -3891,9 +4120,19 @@ class Replayer:
                     result.ok
                     and result.resolution is not None
                     and result.resolution.rung == "grounder"
+                    and result.resolution.grounder_model != "local"
                 )
                 else 0
             )
+        )
+
+    @staticmethod
+    def _result_local_model_calls(result: StepResult) -> int:
+        return int(
+            result.ok
+            and result.resolution is not None
+            and result.resolution.rung == "grounder"
+            and result.resolution.grounder_model == "local"
         )
 
     def _initial_external_network_calls(
@@ -4083,6 +4322,9 @@ class Replayer:
                 report.model_calls = max(
                     report.model_calls,
                     sum(self._result_model_calls(result) for result in resumed_results),
+                )
+                report.local_model_calls = sum(
+                    self._result_local_model_calls(result) for result in resumed_results
                 )
             else:
                 # A fresh program run must not import state from its output
@@ -5883,7 +6125,11 @@ class Replayer:
             condition
             for condition in conditions
             if condition.kind
-            not in {PostconditionKind.LOCAL_EDIT, PostconditionKind.FIELD_VALUE}
+            not in {
+                PostconditionKind.LOCAL_EDIT,
+                PostconditionKind.FIELD_VALUE,
+                PostconditionKind.FOCUS_ON,
+            }
         ]
         if not conditions:
             return
@@ -8144,6 +8390,22 @@ class Replayer:
                 resolution, matched_region, error = self._resolve_step_target(
                     step, before_png, bundle_dir, workflow, target_missed
                 )
+            if (
+                error is not None
+                and resolution is None
+                and isinstance(error, _NotActionableError)
+            ):
+                # The one candidate stayed covered or off-viewport for the
+                # whole step timeout. No visual rung ran on it.
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.error = error
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="target_resolution",
+                    code="target_not_actionable",
+                    detector_input_sha256=sha256_bytes(last_frame),
+                )
             if resolution is not None and matched_region is not None:
                 assert step.anchor is not None
                 resolution = self._retain_visual_resolution_evidence(
@@ -9062,7 +9324,11 @@ class Replayer:
             )
             result.safety_refusal_evidence = SafetyRefusalEvidence(
                 stage="target_resolution",
-                code="target_ambiguous",
+                code=(
+                    "target_not_actionable"
+                    if isinstance(exc, StructuralElementNotActionable)
+                    else "target_ambiguous"
+                ),
                 detector_input_sha256=sha256_bytes(last_frame),
             )
         except Exception as exc:  # defensive: report, don't crash the run
@@ -9570,6 +9836,55 @@ class Replayer:
         # request delivery, not against state captured earlier during
         # authorization or verifier setup.
         start_state = self._structural_state()
+        # A durable API span persists its write-ahead checkpoint (the folded
+        # steps, delivery attempted) before its first request leaves, so a
+        # crash anywhere in its sequence of writes resumes at the save, which
+        # is only ever reconciled, never sent again (_run_web_form_span).
+        write_ahead = getattr(self, "_web_form_write_ahead", None)
+        if (
+            write_ahead is not None
+            and send_prepared is None
+            and callable(getattr(api_actuator, "prepare", None))
+            and callable(getattr(api_actuator, "send", None))
+        ):
+            # Prepare first (reads only), so a save that can't be sent falls
+            # back to the GUI without a write-ahead checkpoint.
+            from openadapt_flow.runtime.actuators.api import (
+                ApiActuationResult as _Receipt,
+            )
+
+            try:
+                early = api_actuator.prepare(binding, runtime_params_for_gui(params))
+            except Exception as exc:  # noqa: BLE001 - reads only, nothing sent
+                early = None
+                result.ok = False
+                result.error = (
+                    f"Step '{step.id}' ({step.intent}): preparing the API request "
+                    f"failed ({type(exc).__name__}); nothing was sent"
+                )
+                return True
+            if isinstance(early, _Receipt):
+                # UNAVAILABLE: nothing was sent, as on the actuate path below.
+                result.effect_results.append(f"[api] {early.reason}")
+                del result.effect_contract_hashes[api_hash_start:]
+                if binding.on_unavailable == "halt":
+                    self._set_api_unavailable_refusal(step, result, reason=early.reason)
+                    return True
+                return False
+            send_prepared = early
+        if write_ahead is not None and send_prepared is not None:
+            try:
+                write_ahead()
+            except Exception as exc:  # noqa: BLE001 - nothing has been sent
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.error = (
+                    f"Step '{step.id}' ({step.intent}): the durable run could not "
+                    f"persist its write-ahead checkpoint ({type(exc).__name__}); "
+                    "nothing was sent"
+                )
+                return True
         # This transition is the explicit delivery boundary. Set it BEFORE the
         # call because an exception/timeout may occur after the request left the
         # process but before the actuator can return a receipt-like outcome.
@@ -10587,10 +10902,11 @@ class Replayer:
                     or step.anchor.structured_identity
                     or step.anchor.identity_template
                     or step.anchor.identifier_crop
+                    or step.anchor.form_identity
                 )
             )
         ):
-            return None
+            return self._unarmed_row_pick_error(step, resolution, workflow, result)
         # A hover check needs an anchor too (see _hover_check).
         assert step.anchor is not None
 
@@ -10633,6 +10949,19 @@ class Replayer:
                     observed="exact local pixel evidence could not be retained",
                 )
         result.identity = check
+        if check.status == "verified":
+            # Let a backend remember which top-level window this verified
+            # record was in. Self-repair later asks it whether the app's own
+            # dialog covers a following step's band (owned_window_over). It
+            # grants nothing here; a backend without the hook is unaffected.
+            remember = getattr(self.backend, "record_verified_window", None)
+            if callable(remember):
+                try:
+                    remember(
+                        step.id, int(resolution.point[0]), int(resolution.point[1])
+                    )
+                except Exception:  # noqa: BLE001 - no capture means no pinned window
+                    pass
         # Under a governed run, an armed step needs a verified identity before
         # it acts, whether or not the authorization lists it: the durable
         # checkpoint demands the same (step.identity_armed), and it only runs
@@ -10688,6 +11017,35 @@ class Replayer:
                 "target, the screen answered differently from the recording "
                 f"({reason}) — refusing to click; run aborted"
             )
+        elif check.ambiguity_halt is not None:
+            teach_twin = bool(
+                step.anchor is not None
+                and step.anchor.identity_template is not None
+                and step.anchor.identity_template.teach_ambiguous
+            )
+            if check.ambiguity_halt == "identical_candidates" and teach_twin:
+                why = (
+                    "teach time saw another row with the same identity and no "
+                    "record id between them (it may be out of view now)"
+                )
+            elif check.ambiguity_halt == "identical_candidates":
+                why = (
+                    f"{check.candidate_count} shown rows carry the same "
+                    "identity and no recorded record id tells them apart"
+                )
+            elif check.ambiguity_halt == "identity_uncounted":
+                why = (
+                    "this surface cannot count the rows that might share it, "
+                    "and a consequential write follows (identity_uncounted)"
+                )
+            else:
+                why = "the rows that could share its identity could not all be counted"
+            error = (
+                f"Step '{step.id}' ({step.intent}) matched the recorded "
+                f"identity, but {why} (rung '{resolution.rung}') — acting "
+                "could open another record; refusing to act"
+            )
+            result.safety_halt = True
         elif check.mode == "hover":
             # Hover evidence only adds a stop. A step that had no identity
             # check before keeps going when the response is absent or cannot
@@ -10735,6 +11093,63 @@ class Replayer:
         if error is not None and (governed or signal_quorum):
             result.safety_halt = True
         return error
+
+    def _unarmed_row_pick_error(
+        self,
+        step: Step,
+        resolution: Resolution,
+        workflow: Workflow,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Halt a click with no identity evidence on a row nothing can count.
+
+        A click on "Open" in a worklist whose rows show no readable identity
+        (every row's own label reads the same) carries no identity evidence
+        at all, so the identity check never runs and the click lands on
+        whichever row now sits there. When the backend's census reports such
+        a row and a consequential write follows, the step halts before input.
+        """
+        if step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
+            return None
+        getter = getattr(self.backend, "identity_candidates_at", None)
+        if getter is None:
+            return None
+        try:
+            census = getter(int(resolution.point[0]), int(resolution.point[1]))
+        except Exception:
+            return None
+        if not isinstance(census, Mapping):
+            return None
+        uncountable = census.get("uncountable") is True
+        # Teach saw no row here, but the live page shows one, and the clicked
+        # control's name repeats in other rows: the click cannot be tied to
+        # the recorded record.
+        unrecorded_row = (
+            census.get("row") is not False
+            and bool(census.get("candidates"))
+            and census.get("label_repeats") is True
+        )
+        if not (uncountable or unrecorded_row):
+            return None
+        if not self._leads_into_consequential(step, workflow):
+            return None
+        result.identity = IdentityCheck(
+            status="abstain",
+            mode="structured",
+            ambiguity_halt="identity_uncounted",
+        )
+        result.safety_halt = True
+        why = (
+            "whose identity cannot be read (every row's own label reads the same)"
+            if uncountable
+            else "that teach time did not record as a row, and other rows show "
+            "the same control"
+        )
+        return (
+            f"Step '{step.id}' ({step.intent}) clicks a control in a repeated "
+            f"row {why}, and a consequential write follows (identity_uncounted) "
+            "— acting could open another record; refusing to act"
+        )
 
     @staticmethod
     def _retain_pixel_identity_evidence(
@@ -10965,6 +11380,7 @@ class Replayer:
             or anchor.structured_identity
             or anchor.identity_template
             or anchor.identifier_crop
+            or anchor.form_identity
         )
 
     def _unbound_submit_refusal(
@@ -11357,15 +11773,47 @@ class Replayer:
             and resolution is not None
             and not arm_keyboard
         )
-        if (
-            pointer_edge_pending
-            and resolution is not None
-            and isinstance(self.backend, RemoteActuationBackend)
-            and isinstance(self.backend, PreparedPointerActuationBackend)
-        ):
-            prepared_pointer = resolution.point
+        # A remote codec can re-render the hovered target a pixel or two from
+        # where it matched before the hover. Re-prepare once at the fresh point
+        # and require an exact match there; every point stays reproducible.
+        pointer_target = resolution.point if resolution is not None else None
+        for jitter_attempt in range(2):
+            if (
+                pointer_edge_pending
+                and resolution is not None
+                and isinstance(self.backend, RemoteActuationBackend)
+                and isinstance(self.backend, PreparedPointerActuationBackend)
+            ):
+                prepared_pointer = pointer_target or resolution.point
+                try:
+                    self.backend.prepare_pointer_actuation(*prepared_pointer)
+                except Exception as exc:  # noqa: BLE001 - backend boundary must halt
+                    if self.governed_authorization is not None:
+                        result.safety_halt = True
+                    detail = _scrub_phi(str(exc)) or type(exc).__name__
+                    return (
+                        resolution,
+                        matched_region,
+                        before_png,
+                        "Pointer preflight HALTED before final target resolution for "
+                        f"step '{step.id}' ({step.intent}): {detail}",
+                    )
             try:
-                self.backend.prepare_pointer_actuation(*prepared_pointer)
+                fresh_png = (
+                    self.backend.acquire_actuation_frame()
+                    if isinstance(self.backend, RemoteActuationBackend)
+                    else (
+                        cast(
+                            GuardedKeyboardActionBackend, self.backend
+                        ).guarded_keyboard_frame()
+                        if (
+                            guarded_keyboard_backend
+                            or guarded_type_pointer_backend
+                            or guarded_click_pointer_backend
+                        )
+                        else self.backend.screenshot()
+                    )
+                )
             except Exception as exc:  # noqa: BLE001 - backend boundary must halt
                 if self.governed_authorization is not None:
                     result.safety_halt = True
@@ -11374,70 +11822,64 @@ class Replayer:
                     resolution,
                     matched_region,
                     before_png,
-                    "Pointer preflight HALTED before final target resolution for "
-                    f"step '{step.id}' ({step.intent}): {detail}",
+                    "Actuation preflight HALTED before input for step "
+                    f"'{step.id}' ({step.intent}): {detail}",
                 )
-        try:
-            fresh_png = (
-                self.backend.acquire_actuation_frame()
-                if isinstance(self.backend, RemoteActuationBackend)
-                else (
-                    cast(
-                        GuardedKeyboardActionBackend, self.backend
-                    ).guarded_keyboard_frame()
-                    if (
-                        guarded_keyboard_backend
-                        or guarded_type_pointer_backend
-                        or guarded_click_pointer_backend
-                    )
-                    else self.backend.screenshot()
-                )
-            )
-        except Exception as exc:  # noqa: BLE001 - backend boundary must halt
-            if self.governed_authorization is not None:
-                result.safety_halt = True
-            detail = _scrub_phi(str(exc)) or type(exc).__name__
-            return (
-                resolution,
-                matched_region,
-                before_png,
-                "Actuation preflight HALTED before input for step "
-                f"'{step.id}' ({step.intent}): {detail}",
-            )
 
-        try:
-            fresh_resolution, fresh_region, error = self._resolve_step(
-                step,
-                fresh_png,
-                bundle_dir,
-                workflow,
-                # Opening an opaque select control can repeat its current value
-                # in the option popup. That text is valid target evidence before
-                # the focusing click, but it is no longer unique afterward. The
-                # second phase therefore requires the retained template or
-                # independent relational landmarks.
-                allow_target_ocr=not (
-                    arm_keyboard and step.action is ActionKind.SELECT_OPTION
-                ),
-            )
-        except (OcrResolutionRefused, StructuralResolutionRefused) as exc:
-            result.safety_halt = True
-            result.safety_refusal_evidence = SafetyRefusalEvidence(
-                stage="actuation_revalidation",
-                code="actuation_observation_changed",
-                detector_input_sha256=sha256_bytes(fresh_png),
-            )
-            return (
-                None,
-                None,
-                fresh_png,
-                "Actuation preflight HALTED because the fresh target was "
-                f"ambiguous for step '{step.id}' ({step.intent}): {exc}",
-            )
-        if error is not None:
-            if self.governed_authorization is not None:
+            try:
+                fresh_resolution, fresh_region, error = self._resolve_step(
+                    step,
+                    fresh_png,
+                    bundle_dir,
+                    workflow,
+                    # Opening an opaque select control can repeat its current value
+                    # in the option popup. That text is valid target evidence before
+                    # the focusing click, but it is no longer unique afterward. The
+                    # second phase therefore requires the retained template or
+                    # independent relational landmarks.
+                    allow_target_ocr=not (
+                        arm_keyboard and step.action is ActionKind.SELECT_OPTION
+                    ),
+                )
+            except (OcrResolutionRefused, StructuralResolutionRefused) as exc:
                 result.safety_halt = True
-            return fresh_resolution, fresh_region, fresh_png, error
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="actuation_revalidation",
+                    code="actuation_observation_changed",
+                    detector_input_sha256=sha256_bytes(fresh_png),
+                )
+                return (
+                    None,
+                    None,
+                    fresh_png,
+                    "Actuation preflight HALTED because the fresh target was "
+                    f"ambiguous for step '{step.id}' ({step.intent}): {exc}",
+                )
+            if isinstance(error, _NotActionableError):
+                # Something covered the target between resolution and input.
+                result.safety_halt = True
+                result.safety_refusal_evidence = SafetyRefusalEvidence(
+                    stage="actuation_revalidation",
+                    code="target_not_actionable",
+                    detector_input_sha256=sha256_bytes(fresh_png),
+                )
+                return None, None, fresh_png, error
+            if error is not None:
+                if self.governed_authorization is not None:
+                    result.safety_halt = True
+                return fresh_resolution, fresh_region, fresh_png, error
+            if (
+                jitter_attempt == 0
+                and prepared_pointer is not None
+                and fresh_resolution is not None
+                and fresh_resolution.point != prepared_pointer
+                and _within_hover_jitter(
+                    fresh_resolution.point, prepared_pointer, fresh_region
+                )
+            ):
+                pointer_target = fresh_resolution.point
+                continue
+            break
         if (
             prepared_pointer is not None
             and fresh_resolution is not None
@@ -11664,7 +12106,11 @@ class Replayer:
         )
         if resolution is not None and resolution.rung in _DIRECT_TARGET_RUNGS:
             return resolution, region, error
-        if resolution is None and step.anchor is None:
+        if resolution is None and (
+            step.anchor is None or isinstance(error, _NotActionableError)
+        ):
+            # A target still covered when the scroll gave up keeps its own
+            # refusal, so the step halts with ``target_not_actionable``.
             return resolution, region, error
         return (
             None,
@@ -11729,17 +12175,28 @@ class Replayer:
             if self.use_structural and hasattr(self.backend, "locate_structural")
             else None
         )
-        resolved = resolve(
-            step.anchor,
-            screen_png,
-            self.vision,
-            self.grounder if allow_grounder else None,
-            step.intent,
-            template_png=template_png,
-            viewport=_frame_viewport(screen_png),
-            structural=structural,
-            allow_target_ocr=allow_target_ocr,
-        )
+        try:
+            resolved = resolve(
+                step.anchor,
+                screen_png,
+                self.vision,
+                self.grounder if allow_grounder else None,
+                step.intent,
+                template_png=template_png,
+                viewport=_frame_viewport(screen_png),
+                structural=structural,
+                allow_target_ocr=allow_target_ocr,
+            )
+        except StructuralElementNotActionable as exc:
+            return (
+                None,
+                None,
+                _NotActionableError(
+                    f"Target for step '{step.id}' ({step.intent}) is not "
+                    f"actionable: its one structural candidate is covered or "
+                    f"off-viewport ({exc})"
+                ),
+            )
         if resolved is None:
             return (
                 None,
@@ -11750,6 +12207,9 @@ class Replayer:
                 ),
             )
         resolution, matched_region = resolved
+        resolution, matched_region = self._retarget_by_record_key(
+            step, resolution, matched_region
+        )
 
         if step.risk == "irreversible" and is_below_ocr(resolution.rung):
             return (
@@ -12874,6 +13334,79 @@ class Replayer:
         is confirmed closed. Every other step leaves such a report uncertain.
         """
 
+        guarded = step.anchor is not None and step.anchor.form_identity is not None
+        backend = self.backend
+        result = kwargs.get("result")
+
+        def halt(message: str) -> str:
+            if result is not None:
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+            return message
+
+        # A create-new form's save armed a guard that cancels any submit that
+        # isn't exactly the checked one (ir.FormIdentity). It stays armed
+        # after its click; the next step reads what it cancelled since, then
+        # disarms it so that step can submit its own forms.
+        if not guarded and getattr(backend, "form_submit_guard_armed", False):
+            late = backend.cancel_form_submit_guard()  # type: ignore[attr-defined]
+            if late is not None:
+                return halt(
+                    f"Step '{step.id}' ({step.intent}): after the previous save, "
+                    f"{late} — run aborted"
+                )
+        error = self._act_closing_surface(step, resolution, params, **kwargs)
+        refusal_of = getattr(backend, "form_submit_guard_refusal", None)
+        if not guarded or not callable(refusal_of):
+            return error
+        # A script may submit after the click returns (setTimeout): watch the
+        # guard through a short settle window.
+        wait = getattr(backend, "wait_form_submit_guard", None)
+        refusal = refusal_of()
+        deadline = time.monotonic() + _FORM_GUARD_SETTLE_S
+        while refusal is None and error is None and time.monotonic() < deadline:
+            # The wire guard runs only while the browser connection is
+            # serviced: wait through the backend, not with a bare sleep.
+            if callable(wait):
+                wait(100)
+            else:
+                time.sleep(0.1)
+            refusal = refusal_of()
+        if refusal is not None and error is None:
+            return halt(f"Step '{step.id}' ({step.intent}): {refusal} — run aborted")
+        return error
+
+    def _halt_on_late_form_submit(self, report: RunReport) -> None:
+        """A create-new form's submit guard still armed when the run ends
+        (the save was the last step): fail the run if it cancelled anything.
+        It stays armed, so a submission a script sends later is still
+        cancelled; the next step or run on this page reads it."""
+
+        backend = self.backend
+        if not getattr(backend, "form_submit_guard_armed", False):
+            return
+        late = backend.form_submit_guard_refusal()  # type: ignore[attr-defined]
+        if late is None or not report.results:
+            return
+        last = report.results[-1]
+        last.ok = False
+        last.safety_halt = True
+        # Keep an earlier halt's reason and category (for example a reconcile
+        # or a refuted record check): add the late refusal, don't replace it.
+        last.failure_category = last.failure_category or "safety_halt"
+        if not last.error:
+            last.error = f"after an earlier save, {late} — run aborted"
+        elif late not in last.error:
+            last.error = f"{last.error}; also after an earlier save, {late}"
+        report.success = False
+
+    def _act_closing_surface(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        params: Mapping[str, RuntimeParamScalar],
+        **kwargs: Any,
+    ) -> Optional[str]:
         expect = (
             getattr(self.backend, "expect_page_close", None)
             if step.closes_surface
@@ -13568,7 +14101,14 @@ class Replayer:
                             structural_handle,
                         ),
                     )
-                    result.actuation = "uia"
+                    # A physical click (macOS, a Linux fallback) is not a
+                    # native UIA action; label it as the CLICK branch does.
+                    result.actuation = (
+                        "uia"
+                        if result.delivery_receipt is not None
+                        and result.delivery_receipt.native
+                        else "dom"
+                    )
                 else:
                     if (
                         requires_atomic_identity
@@ -14861,8 +15401,12 @@ class Replayer:
         ``anchor_resolves`` runs the resolution ladder with NO grounder,
         ``text_present`` / ``text_absent`` use the tolerant OCR presence check,
         ``param_equals`` is a string compare, and ``and`` / ``or`` / ``not``
-        compose. An unknown kind fails safe (does not hold).
+        compose. An unknown kind fails safe (does not hold). An exact
+        ``text_present`` uses :meth:`_exact_text_holds` (OCR, then the DOM).
         """
+        kind = pred.kind.value if hasattr(pred.kind, "value") else pred.kind
+        if kind == "text_present" and pred.exact:
+            return bool(pred.text and self._exact_text_holds(pred.text, frame_png))
         return evaluate_program_predicate(
             pred,
             frame_png,
@@ -14888,7 +15432,8 @@ class Replayer:
             )
             return f"anchor_resolves({label!r})"
         if kind in ("text_present", "text_absent"):
-            return f"{kind}({pred.text!r})"
+            exact = ", exact" if pred.exact else ""
+            return f"{kind}({pred.text!r}{exact})"
         if kind == "param_equals":
             return f"param_equals({pred.param!r}=={pred.value!r})"
         if kind in ("and", "or", "not"):
@@ -15388,7 +15933,7 @@ class Replayer:
                 identity_policy is not None
                 and identity_policy.enforcement.value == "signal_quorum"
             ):
-                return self._verify_signal_quorum(
+                quorum = self._verify_signal_quorum(
                     step=step,
                     resolution=resolution,
                     before_png=before_png,
@@ -15397,6 +15942,20 @@ class Replayer:
                     bundle_dir=bundle_dir,
                     policy=identity_policy,
                 )
+                # An operator's quorum policy and a create-new form's identity
+                # must both hold.
+                if quorum.status == "verified" and anchor.form_identity is not None:
+                    form = self._verify_form_identity(
+                        step, resolution, anchor.form_identity
+                    )
+                    if form.status != "verified":
+                        return form
+                return quorum
+        if anchor.form_identity is not None:
+            # A create-new form's save: the record is what this run typed into
+            # the form, so the form is checked, in the DOM (see
+            # ir.FormIdentity).
+            return self._verify_form_identity(step, resolution, anchor.form_identity)
 
         def structured_tier() -> Optional[IdentityCheck]:
             # PHI-free bundles carry a salted-hash identity_template instead of
@@ -15518,9 +16077,385 @@ class Replayer:
                 step, resolution, before_png, params, workflow
             )
 
-        return identity_mod.run_identity_ladder(
+        check = identity_mod.run_identity_ladder(
             [structured_tier, pixel_tier, vlm_tier, ocr_tier]
         )
+        return self._apply_candidate_census(
+            step, resolution, check, before_png, params, workflow, bundle_dir
+        )
+
+    def _structured_census(self, step: Step, point: Point) -> census_mod.CensusDecision:
+        """The DOM/a11y candidate census at ``point`` (see identity_census)."""
+
+        anchor = step.anchor
+        assert anchor is not None
+        getter = getattr(self.backend, "identity_candidates_at", None)
+        if getter is None:
+            return census_mod.CensusDecision("cannot_count")
+        try:
+            census = getter(int(point[0]), int(point[1]))
+        except Exception:
+            census = None
+        tmpl = anchor.identity_template
+        recorded = tmpl if tmpl is not None and tmpl.record_key else None
+        from openadapt_flow.runtime import identity_template as itmpl
+
+        return census_mod.decide(
+            census,
+            has_recorded_key=recorded is not None,
+            key_matches=lambda key: (
+                recorded is not None and itmpl.record_key_matches(recorded, key)
+            ),
+        )
+
+    def _ocr_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+    ) -> census_mod.CensusDecision:
+        """Count the frame's OCR rows that verify as the recorded identity.
+
+        The pixel-only counterpart of :meth:`_structured_census`: every text
+        row of the frame is read the way the OCR tier reads the target's row
+        (the same band height, the target's own crop excluded at the same
+        offset, volatile lines dropped) and checked against the recorded band.
+        """
+        anchor = step.anchor
+        assert anchor is not None
+        tmpl = anchor.identity_template
+        if not (anchor.context_text or (tmpl is not None and tmpl.tokens)):
+            return census_mod.CensusDecision("cannot_count")
+        today = date.today()
+        try:
+            lines = [
+                line
+                for line in self.vision.ocr(before_png, region=None)
+                if line.text.strip()
+                and not identity_mod.is_volatile_line(line.text, reference_date=today)
+            ]
+        except Exception:
+            return census_mod.CensusDecision("cannot_count")
+        viewport = self.backend.viewport
+        px, py = int(resolution.point[0]), int(resolution.point[1])
+        ex, ey = (
+            anchor.region[0] - anchor.click_point[0],
+            anchor.region[1] - (anchor.click_point[1]),
+        )
+        run_params = runtime_params_for_gui(params)
+
+        def row_text(y: int) -> str:
+            band = identity_mod.band_region((px, y), anchor.region[3], viewport)
+            exclude = (px + ex, y + ey, anchor.region[2], anchor.region[3])
+            kept = [
+                line
+                for line in lines
+                if identity_mod.regions_intersect(line.region, band)
+                and not identity_mod.regions_intersect(line.region, exclude)
+            ]
+            return " ".join(
+                line.text.strip() for line in identity_mod.lines_near_point(kept, y)
+            )
+
+        def verifies(text: str) -> bool:
+            if tmpl is not None and tmpl.tokens:
+                from openadapt_flow.runtime import identity_template as itmpl
+
+                verdict = itmpl.verify_template_identity(
+                    tmpl, text, params=run_params, param_examples=workflow.params
+                )
+            else:
+                assert anchor.context_text is not None
+                verdict = identity_mod.verify_target_identity(
+                    anchor.context_text,
+                    text,
+                    params=run_params,
+                    param_examples=workflow.params,
+                )
+            return verdict.status == "verified"
+
+        target_lines = identity_mod.lines_near_point(lines, py)
+        heights = sorted(line.region[3] for line in target_lines) or [16]
+        same_row_px = max(4, heights[len(heights) // 2])
+        centers: list[int] = []
+        for line in sorted(lines, key=lambda item: item.region[1]):
+            center = line.region[1] + line.region[3] // 2
+            if not centers or center - centers[-1] > 3:
+                centers.append(center)
+        rows = [(y, row_text(y)) for y in centers]
+        count = census_mod.count_matching_rows(
+            rows, target_y=py, verifies=verifies, same_row_px=same_row_px
+        )
+        if count > 1:
+            return census_mod.CensusDecision("ambiguous", count)
+        return census_mod.CensusDecision("unique", count)
+
+    def _apply_candidate_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        check: IdentityCheck,
+        before_png: bytes,
+        params: Mapping[str, RuntimeParamScalar],
+        workflow: Workflow,
+        bundle_dir: Optional[Path] = None,
+    ) -> IdentityCheck:
+        """Keep ``verified`` only when the identity picks one shown record.
+
+        A verified ladder verdict says the target reads like the recorded
+        row. When another shown row reads the same, the verdict cannot tell
+        them apart, whichever rung resolved the point. The census
+        (:mod:`openadapt_flow.runtime.identity_census`) then decides: the
+        recorded record id picks the row, or the step halts.
+        """
+        if check.status != "verified" or check.mode not in (
+            "structured",
+            "pixel",
+            "vlm",
+            "context",
+            "param",
+        ):
+            return check
+        teach_role = census_mod.teach_time_role(step)
+        tmpl = step.anchor.identity_template if step.anchor is not None else None
+        teach_twin = bool(tmpl is not None and tmpl.teach_ambiguous)
+        if check.mode == "structured":
+            decision = self._structured_census(step, resolution.point)
+        else:
+            decision = self._ocr_census(step, resolution, before_png, params, workflow)
+            if decision.verdict == "cannot_count" and check.mode in ("pixel", "vlm"):
+                # No OCR band to read: count the places the identifier crop
+                # itself verifies instead.
+                decision = self._pixel_census(
+                    step, resolution, before_png, workflow, bundle_dir
+                )
+        if teach_twin and self._leads_into_consequential(step, workflow):
+            # Teach time already saw a look-alike row with no record id
+            # between them. Its twin may be out of view now (a virtualized
+            # list), so a unique live count proves nothing.
+            return check.model_copy(
+                update={
+                    "status": "abstain",
+                    "ambiguity_halt": "identical_candidates",
+                    "candidate_count": decision.candidate_count,
+                }
+            )
+        if decision.verdict == "cannot_count" and teach_role == "control":
+            # Teach time recorded a form field or a control, and no census can
+            # count here. A census that can count always decides.
+            decision = census_mod.CensusDecision("not_a_row")
+        if decision.verdict == "not_a_row":
+            return check.model_copy(update={"census_status": "not_a_row"})
+        if decision.verdict == "cannot_count":
+            if not self._leads_into_consequential(step, workflow):
+                return check.model_copy(update={"census_status": "cannot_count"})
+            return check.model_copy(
+                update={"status": "abstain", "ambiguity_halt": "identity_uncounted"}
+            )
+        if decision.verdict == "unique":
+            return check.model_copy(
+                update={"candidate_count": decision.candidate_count}
+            )
+        if decision.verdict in ("wrong_record", "retarget"):
+            return check.model_copy(
+                update={
+                    "status": "mismatch",
+                    "coverage": 0.0,
+                    "expected": "<recorded record id>",
+                    "candidate_count": decision.candidate_count,
+                }
+            )
+        return check.model_copy(
+            update={
+                "status": "abstain",
+                "candidate_count": decision.candidate_count,
+                "ambiguity_halt": (
+                    "candidates_uncounted"
+                    if decision.verdict == "uncounted"
+                    else "identical_candidates"
+                ),
+            }
+        )
+
+    def _pixel_census(
+        self,
+        step: Step,
+        resolution: Resolution,
+        before_png: bytes,
+        workflow: Workflow,
+        bundle_dir: Optional[Path],
+    ) -> census_mod.CensusDecision:
+        """Count the places on the frame that could show the identifier crop.
+
+        For a pixel identity with no OCR band (a remote display): every place
+        the recorded identifier crop matches is cut from the frame and checked
+        with the ladder's pixel verifier. A clear ``mismatch`` rules a place
+        out, and so does its own text when OCR reads both crops and the text
+        differs (sibling tabs share their chrome, not their label). A verify,
+        an abstain (drift, the uncertain band, verify turned off) or no verdict
+        with the same or unreadable text counts it as a look-alike. The census is
+        ``uncounted`` when the frame has too many places, when a place cannot
+        be cut, or when the target's own place is not among them (the frame
+        renders at another scale than the recorded crop). A featureless crop
+        (a blank band, a ruled line) cannot count at all: ``cannot_count``.
+        """
+        from openadapt_flow.vision.match import (
+            AMBIGUITY_SUSPICION_SCORE,
+            crop_is_featureless,
+            template_peaks,
+        )
+
+        anchor = step.anchor
+        assert anchor is not None
+        recorded, live = self._identifier_crops(
+            anchor, resolution, before_png, bundle_dir, workflow=workflow
+        )
+        if recorded is None or live is None or anchor.identifier_region is None:
+            return census_mod.CensusDecision("cannot_count")
+        try:
+            if crop_is_featureless(recorded):
+                # A blank band or a ruled line matches everywhere along it: it
+                # cannot count rows (cannot_count, not "ambiguous").
+                return census_mod.CensusDecision("cannot_count")
+            peaks = template_peaks(
+                before_png, recorded, threshold=AMBIGUITY_SUSPICION_SCORE
+            )
+        except Exception:
+            return census_mod.CensusDecision("cannot_count")
+        if peaks is None:
+            return census_mod.CensusDecision("uncounted")
+        rx, ry, rw, rh = anchor.identifier_region
+        dx, dy = self._identifier_displacement(
+            anchor, resolution, before_png, bundle_dir, workflow=workflow
+        )
+        target = (rx + dx, ry + dy)
+
+        def is_target(x: int, y: int) -> bool:
+            return abs(x - target[0]) < max(1, rw // 2) and abs(y - target[1]) < max(
+                1, rh // 2
+            )
+
+        if not any(is_target(x, y) for x, y in peaks):
+            return census_mod.CensusDecision("uncounted")
+
+        def crop_text(png: bytes) -> str:
+            """The crop's own text, squashed; empty when OCR reads nothing."""
+            try:
+                lines = self.vision.ocr(png, region=None)
+            except Exception:
+                return ""
+            # A low-confidence fragment ("S", "10", "lohn") is a misread, not
+            # evidence: the whole crop then counts as unreadable.
+            if any(
+                float(getattr(line, "confidence", 0.0) or 0.0)
+                < PIXEL_CENSUS_OCR_MIN_CONFIDENCE
+                for line in lines
+            ):
+                return ""
+            return identity_mod.squash(
+                " ".join(str(getattr(line, "text", "") or "") for line in lines)
+            )
+
+        def texts_differ(a: str, b: str) -> bool:
+            """Clearly different labels, not one label read two ways."""
+            import difflib
+
+            if a in b or b in a:
+                return False  # a dropped or clipped word, not another label
+            ratio = difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
+            return ratio < PIXEL_CENSUS_OCR_MAX_SIMILARITY
+
+        target_text: Optional[str] = None
+        count = 1
+        for x, y in peaks:
+            if is_target(x, y):
+                continue
+            crop = identity_mod.crop_region(before_png, (x, y, rw, rh))
+            if crop is None:
+                return census_mod.CensusDecision("uncounted")
+            verdict = identity_mod.verify_pixel_identity(
+                recorded, crop, enable_verify=self.pixel_verify_enabled
+            )
+            if verdict is not None and verdict.status == "mismatch":
+                continue
+            # The pixels do not rule this place out. Sibling controls that
+            # share their chrome (section tabs, toggle buttons) look alike;
+            # their own text still tells them apart. Only when OCR reads both
+            # crops and the text differs is the place distinguishable.
+            if target_text is None:
+                target_text = crop_text(live)
+            other_text = crop_text(crop)
+            if target_text and other_text and texts_differ(target_text, other_text):
+                continue
+            count += 1
+        if count > 1:
+            return census_mod.CensusDecision("ambiguous", count)
+        return census_mod.CensusDecision("unique", count)
+
+    def _leads_into_consequential(
+        self, step: Step, workflow: Optional[Workflow]
+    ) -> bool:
+        """Whether this step or any step after it is a consequential write.
+
+        A step that picks a record (opening a chart) is not itself a write, but
+        the write that follows lands on whatever it opened. Program graphs and
+        steps not found in the linear list count every step of the workflow.
+        """
+
+        if workflow is None:
+            return is_consequential(step, None)
+        steps = list(workflow.steps)
+        index = next((i for i, item in enumerate(steps) if item.id == step.id), None)
+        following = steps[index:] if index is not None else steps
+        return self._step_is_consequential(step, workflow) or any(
+            self._step_is_consequential(item, workflow) for item in following
+        )
+
+    def _retarget_by_record_key(
+        self,
+        step: Step,
+        resolution: Resolution,
+        matched_region: Region,
+    ) -> tuple[Resolution, Region]:
+        """Move a visual resolution onto the row with the recorded record id.
+
+        When rows read identically, a template or text rung lands on whichever
+        row now sits where the recorded one was. The recorded record id names
+        the right row; move the point (and matched region) by that row's
+        offset. A structural resolution names one exact element and is never
+        moved: if it is the wrong record, the identity check refuses it.
+        """
+        anchor = step.anchor
+        if (
+            anchor is None
+            or resolution.structural_handle is not None
+            or anchor.identity_template is None
+            or not anchor.identity_template.record_key
+        ):
+            return resolution, matched_region
+        decision = self._structured_census(step, resolution.point)
+        if decision.verdict != "retarget" or decision.offset is None:
+            return resolution, matched_region
+        dx, dy = (int(round(v)) for v in decision.offset)
+        x, y = resolution.point[0] + dx, resolution.point[1] + dy
+        width, height = self.backend.viewport
+        if not (0 <= x < width and 0 <= y < height):
+            return resolution, matched_region
+        moved = resolution.model_copy(
+            update={
+                "point": (x, y),
+                # The retained visual evidence reproduces the old point.
+                "visual_evidence": None,
+                "resolution_evidence_regions": tuple(
+                    (rx + dx, ry + dy, rw, rh)
+                    for rx, ry, rw, rh in resolution.resolution_evidence_regions
+                ),
+            }
+        )
+        rx, ry, rw, rh = matched_region
+        return moved, (rx + dx, ry + dy, rw, rh)
 
     def _identifier_displacement(
         self,
@@ -15632,6 +16567,39 @@ class Replayer:
         )
         live_png = identity_mod.crop_region(before_png, live_region)
         return recorded_png, live_png
+
+    def _verify_form_identity(
+        self, step: Step, resolution: Resolution, identity: FormIdentity
+    ) -> IdentityCheck:
+        """Verify a create-new form's save against what this run typed.
+
+        ``verified`` only when the backend can read the form and the control
+        at the resolved point belongs to the form holding exactly the fields
+        this run typed into, each with the value typed. A backend that cannot
+        read the page leaves identity ``unreadable``, which halts an armed
+        step like any other unreadable identity.
+        """
+
+        expected = (
+            f"the form holding the {identity.filled_fields} field(s) this run "
+            "typed, with the values typed"
+        )
+        check = getattr(self.backend, "form_identity_at", None)
+        if not callable(check):
+            return IdentityCheck(
+                status="unreadable",
+                mode="form",
+                expected=expected,
+                observed="this backend cannot read the form's fields",
+            )
+        reason = check(int(resolution.point[0]), int(resolution.point[1]), identity)
+        if reason is None:
+            return IdentityCheck(
+                status="verified", mode="form", expected=expected, observed=expected
+            )
+        return IdentityCheck(
+            status="mismatch", mode="form", expected=expected, observed=reason
+        )
 
     def _verify_identity_ocr(
         self,
@@ -15948,6 +16916,7 @@ class Replayer:
             or anchor.structured_identity
             or anchor.identity_template
             or anchor.identifier_crop
+            or anchor.form_identity
         ):
             return None
         hover = getattr(self.backend, "hover", None)
@@ -16237,15 +17206,40 @@ class Replayer:
         baseline = self.__dict__.get("_hover_frames", {}).get(step.id) or checked_png
         current = resolution
         region = self._active_delivery_region
+        # Every frame the target and identity were confirmed on, with that
+        # check. A screen that flips between confirmed states of one layout (a
+        # blinking caret inside the identity band) settles on one of them. An
+        # older frame counts only when its target is where the latest check
+        # put it: a list that keeps swapping two rows never settles.
+        confirmed: list[
+            tuple[bytes, Resolution, Optional[Region], Optional[IdentityCheck]]
+        ] = [(baseline, current, region, result.identity)]
         for attempt in range(_PIXEL_RECHECK_REOBSERVES + 1):
             fresh = self.backend.screenshot()
-            changed = self._changed_regions(
-                baseline, fresh, self._check_regions(step, current, region)
-            )
-            if not changed:
-                if current is not resolution:
-                    result.resolution = current
-                return current
+            latest = confirmed[-1]
+            eligible = [latest] + [
+                entry
+                for entry in reversed(confirmed[:-1])
+                if entry[1].point == latest[1].point and entry[2] == latest[2]
+            ]
+            # Against the latest confirmed frame first; its changes are the ones
+            # reported if no confirmed frame matches.
+            changes = [
+                self._changed_regions(
+                    known, fresh, self._check_regions(step, known_res, known_region)
+                )
+                for known, known_res, known_region, _ in eligible
+            ]
+            for (_, known_res, _, known_identity), known_changed in zip(
+                eligible, changes
+            ):
+                if not known_changed:
+                    if known_res is not resolution:
+                        result.resolution = known_res
+                    # The step's identity evidence is the check on this frame.
+                    result.identity = known_identity
+                    return known_res
+            changed = changes[0]
             what = ", ".join(changed)
             if attempt == _PIXEL_RECHECK_REOBSERVES:
                 result.check_to_click.append(
@@ -16282,6 +17276,7 @@ class Replayer:
                 CheckToClickRecheck(changed=changed, outcome="reobserved")  # type: ignore[arg-type]
             )
             current, region, baseline = fresh_resolution, fresh_region, fresh
+            confirmed.append((fresh, current, region, result.identity))
         result.safety_halt = True
         result.failure_category = "safety_halt"
         return (
@@ -16482,6 +17477,8 @@ class Replayer:
         self,
         field_point: Optional[Point],
         structural_region: Optional[Region] = None,
+        *,
+        masked: bool = False,
     ) -> Optional[Region]:
         """Region to observe for typed input, or None for the whole frame."""
         vw, vh = self.backend.viewport
@@ -16495,8 +17492,8 @@ class Replayer:
                 return (x, y, right - x, bottom - y)
         if field_point is None:
             return None
-        w = min(FIELD_REGION_SIZE[0], vw)
-        h = min(FIELD_REGION_SIZE[1], vh)
+        w = min(MASKED_FIELD_REGION_WIDTH, vw) if masked else vw
+        h = min(FIELD_REGION_HEIGHT, vh)
         x = min(max(0, field_point[0] - w // 2), max(0, vw - w))
         y = min(max(0, field_point[1] - h // 2), max(0, vh - h))
         return (x, y, w, h)
@@ -16563,14 +17560,14 @@ class Replayer:
         """Did the just-typed ``text`` visibly land?
 
         Exact structural readback is authoritative when the backend exposes
-        it. Otherwise, for an OCR-able value (>=
-        ``identity.MIN_PARAM_CHARS`` squashed chars), a contiguous squashed
-        run of the value (retried at 2x resolution) must be readable in the
-        field region. Pixel-only acceptance is restricted to steps declared
-        ``secret``: masked password dots may render no readable text. A dialog
+        it. Otherwise the complete lowercased, whitespace-squashed value must
+        match the field's new OCR text (retried at 2x resolution), including
+        short values.
+        Whole unchanged context lines may be excluded. Pixel-only acceptance
+        is restricted to steps declared ``secret``: masked password dots may
+        render no readable text. A dialog
         painting over the region or an unreadable ordinary field must never
-        count as "input landed". Values too short for OCR to arbitrate retain
-        the legacy diff fallback.
+        count as "input landed".
 
         Returns:
             ``(landed, changed)`` — the verdict, and whether the field
@@ -16578,7 +17575,9 @@ class Replayer:
             retyping is only safe when nothing changed).
         """
         after_png = self._settle_seeded()
-        region = self._field_region(field_point, field_region)
+        # Masked input has no readable value: keep its pixel-only change
+        # evidence local, so an unrelated change elsewhere cannot confirm it.
+        region = self._field_region(field_point, field_region, masked=allow_masked)
         if baseline_field_value is not None:
             expected = baseline_field_value + text
             after_at_point = (
@@ -16633,21 +17632,45 @@ class Replayer:
                 == identity_mod.squash(text).casefold()
             ):
                 return True, True
+        if not changed:
+            return False, False
         needle = identity_mod.squash(text)
-        if len(needle) < identity_mod.MIN_PARAM_CHARS:
-            return changed, changed  # too short for OCR to arbitrate
-        need = identity_mod.required_run(len(needle))
-        after_hay = self._ocr_squashed(after_png, region)
-        if identity_mod.longest_run(needle, after_hay) >= need:
+
+        def exact_ocr_value(
+            before: bytes, after: bytes, crop: Optional[Region]
+        ) -> bool:
+            observed = [
+                identity_mod.squash(line.text)
+                for line in self.vision.ocr(after, region=crop)
+                if identity_mod.squash(line.text)
+            ]
+            if needle and "".join(observed) == needle:
+                return True
+            if allow_masked or not needle:
+                return False
+            # The readback window may include unchanged labels beside the
+            # field. Remove whole unchanged OCR lines, with multiplicity;
+            # every remaining character must belong to the complete value.
+            previous = Counter(
+                identity_mod.squash(line.text)
+                for line in self.vision.ocr(before, region=crop)
+            )
+            added = []
+            for value in observed:
+                if previous[value]:
+                    previous[value] -= 1
+                else:
+                    added.append(value)
+            return "".join(added) == needle
+
+        if exact_ocr_value(baseline_png, after_png, region):
             return True, changed
         if region is not None:
             upscaled = identity_mod.upscale_crop(after_png, region)
-            if upscaled is not None:
-                up_hay = self._ocr_squashed(upscaled, None)
-                if identity_mod.longest_run(needle, up_hay) >= need:
+            before_upscaled = identity_mod.upscale_crop(baseline_png, region)
+            if upscaled is not None and before_upscaled is not None:
+                if exact_ocr_value(before_upscaled, upscaled, None):
                     return True, changed
-        if not changed:
-            return False, False
         # Pixels changed but the value is unreadable: masked rendering is
         # the only acceptable explanation, and masked rendering adds no
         # confidently readable alphanumeric text (dot glyphs OCR as
@@ -16683,10 +17706,10 @@ class Replayer:
     ) -> Optional[str]:
         """Verify a TYPE action landed; one guarded refocus-and-retype retry.
 
-        The retry only fires when exact readback or pixels prove the first
-        attempt changed NOTHING in the field (keystrokes fell on a
-        non-rendering target): re-click
-        the field (when its point is known), select-all so a false-negative
+        A retry needs a browser surface, structural browser observations and
+        exact field readback proving no change. An opaque or native surface
+        cannot prove where the first input went and must halt. For a browser,
+        re-click the field (when its point is known), select-all so a false-negative
         first attempt is replaced rather than duplicated, retype. When the
         region DID change but the value cannot be read (a dialog over the
         field, an unexpected re-render), retyping is not safe — select-all
@@ -16716,12 +17739,32 @@ class Replayer:
                 "or instead of the input) — retyping is unsafe in this "
                 "state; run aborted"
             )
-        if not allow_retry:
+        can_retry = (
+            allow_retry
+            and workflow.surface in (None, "web")
+            and isinstance(self.backend, StructuralBackend)
+            and bool(self.backend.url)
+            and baseline_field_value is not None
+        )
+        if not can_retry:
             result.input_verified = False
+            # This is a halt, not a new delivery edge: recheck authority
+            # without consuming a durable fence or an approval permit.
+            refusal = self._fresh_actuation_authorization_refusal(
+                workflow, params, step
+            )
+            if refusal is not None:
+                result.safety_halt = True
+                result.failure_category = (
+                    "governed_refusal"
+                    if self.governed_authorization is not None
+                    else "safety_halt"
+                )
+                return refusal
             return (
                 f"Typed input could not be verified for step '{step.id}' "
-                f"({step.intent}): the identity-bound browser field showed no "
-                "confirmed change; refusing an unleased refocus/retype retry"
+                f"({step.intent}): the target field showed no confirmed change; "
+                "refusing an unleased refocus/retype retry after possibly stray input"
             )
         result.input_retried = True
         retry_resolution = resolution
@@ -17127,11 +18170,13 @@ class Replayer:
                 viewport=_frame_viewport(frame_png),
                 structural=structural,
             )
-        except OcrResolutionRefused:
+        except (OcrResolutionRefused, StructuralElementNotActionable):
             # Readiness is a bounded, non-actuating probe. An ambiguous OCR
-            # candidate means that the target is not ready yet, so the scroll
-            # loop must continue. The later target action runs the full
-            # resolver again and still halts on the same ambiguity.
+            # candidate, or a unique structural candidate that is still
+            # covered (a sticky header) or off-viewport, means the target is
+            # not ready yet, so the scroll loop must continue. The later
+            # target action runs the full resolver again and still halts on
+            # the same refusal. Structural ambiguity is not caught here.
             return miss("unresolved")
         if resolved is None:
             return miss("unresolved")
@@ -17154,6 +18199,12 @@ class Replayer:
         check = self._verify_identity(
             step, resolution, frame_png, params, workflow, bundle_dir
         )
+        if check.status != "verified" and check.ambiguity_halt is not None:
+            # The target is in view and its identity matched, but the census
+            # refused it. Scrolling cannot change that; the scroll loop stops
+            # and reports this instead of spending its budget.
+            self._scroll_census_refusal = (step.id, check)
+            return miss("census")
         return check.status == "verified" or miss("identity")
 
     def _act_scroll(
@@ -17259,9 +18310,41 @@ class Replayer:
                 workflow=workflow,
             )
 
+        def census_refusal() -> Optional[str]:
+            """The halt for a target in view whose census refused it."""
+
+            refusal = self.__dict__.pop("_scroll_census_refusal", None)
+            if not misses or misses[-1] != "census" or refusal is None:
+                return None
+            target_id, check = refusal
+            why = {
+                "identical_candidates": (
+                    f"{check.candidate_count} shown rows carry the same identity "
+                    "and no recorded record id tells them apart"
+                ),
+                "identity_uncounted": (
+                    "this surface cannot count the rows that might share it, "
+                    "and a consequential write follows"
+                ),
+            }.get(
+                check.ambiguity_halt or "",
+                "the rows that could share its identity could not all be counted",
+            )
+            result.safety_halt = True
+            return (
+                f"Step '{step.id}' ({step.intent}): the target of step "
+                f"'{target_id}' is in view and its identity matched, but {why} "
+                f"({check.ambiguity_halt}); scrolling cannot change that, so "
+                "the scroll stops here and no input was sent for it"
+            )
+
+        self.__dict__.pop("_scroll_census_refusal", None)
         holds = readiness_holds(before_png)
         if self._governed_asset_mutation is not None:
             return self._governed_asset_mutation
+        stop = census_refusal()
+        if stop is not None:
+            return stop
         if holds:
             # Target already in view; nothing to scroll and no input sent.
             # Record why, only for the next-target readiness check, so the
@@ -17300,6 +18383,9 @@ class Replayer:
                     return scroll_error
                 if readiness_holds(fresh_scroll_frame):
                     return None
+                stop = census_refusal()
+                if stop is not None:
+                    return stop
             remote_preflight_error = self._prepare_remote_scroll_input(step, result)
             if remote_preflight_error is not None:
                 return remote_preflight_error
@@ -17322,6 +18408,9 @@ class Replayer:
             holds = readiness_holds(frame)
             if self._governed_asset_mutation is not None:
                 return self._governed_asset_mutation
+            stop = census_refusal()
+            if stop is not None:
+                return stop
             if holds:
                 return None
 
@@ -17665,6 +18754,130 @@ class Replayer:
                 return False
         return True
 
+    def _focus_on_held(self, pc: Any) -> bool:
+        """The focused element has the recorded identity, and only it does.
+
+        Fail closed: a postcondition with no specific identity, a backend
+        that can't read the focus, nothing focused, a different element, or
+        a second element with the same identity all fail. With
+        ``focus_active_option`` an option of the focused control must also
+        be active.
+        """
+
+        from openadapt_flow.ir import focus_identity_is_specific
+
+        if not focus_identity_is_specific(pc):
+            return False
+        reader = getattr(self.backend, "focus_identity", None)
+        if not callable(reader):
+            return False
+        try:
+            seen = reader()
+        except Exception:  # noqa: BLE001 - unobservable is a failure
+            return False
+        if not isinstance(seen, dict) or seen.get("none") is not False:
+            return False
+        if tuple(seen.get("frame_path") or ()) != tuple(pc.focus_frame_path or ()):
+            return False
+        if pc.focus_by in ("testid", "id"):
+            held = (
+                seen.get(pc.focus_by) == pc.focus_value
+                and seen.get(f"{pc.focus_by}_count") == 1
+            )
+            if held and pc.focus_role and pc.focus_name:
+                # Recorded with a role and name too: both must still hold.
+                held = (
+                    seen.get("role") == pc.focus_role
+                    and seen.get("name") == pc.focus_name
+                )
+        else:
+            held = (
+                seen.get("role") == pc.focus_role
+                and seen.get("name") == pc.focus_name
+                and seen.get("role_name_count") == 1
+            )
+        if held and pc.focus_active_option:
+            held = seen.get("active_option") is True
+        return bool(held)
+
+    @staticmethod
+    def _malformed_date_params(workflow: Workflow, params: dict[str, Any]) -> list[str]:
+        """Why each supplied ``date`` parameter is not a canonical ISO date.
+
+        The same check hosted dispatch applies (``runner.inputs``). An empty
+        optional value is left to the required-parameter check.
+        """
+
+        from openadapt_flow.runner.inputs import AdmittedInputError, _validate_value
+
+        problems: list[str] = []
+        for name, spec in sorted(workflow.param_specs.items()):
+            if spec.type is not ParamKind.DATE or name not in params:
+                continue
+            value = params[name]
+            if value == "" and not spec.required:
+                continue
+            try:
+                _validate_value(spec, value)
+            except AdmittedInputError as exc:
+                problems.append(str(exc))
+        return problems
+
+    def _no_duplicate_candidate(self, pc: Any, frame_png: bytes) -> bool:
+        """The app's possible-duplicate list has loaded and names no candidate.
+
+        A row is a candidate when its words include every word of this run's
+        value of any ``pc.candidate_params`` parameter (case-insensitive). A
+        value that is an ISO date is also compared as a date: every date the
+        row shows, in any format intake reads (``Apr 20, 1944``,
+        ``20.04.1944``, ``04/20/1944``), is normalized and compared, and a
+        row date that reads either way counts when either reading matches.
+        Fails closed: an unreadable list, a missing or empty parameter, or an
+        empty list without its "no matches" marker all fail the check.
+        """
+
+        params = (
+            getattr(self, "_current_params", None)
+            or getattr(self, "_run_params", None)
+            or {}
+        )
+        names = tuple(pc.candidate_params or ())
+        if not pc.candidate_rows or not names or not pc.text:
+            return False
+        reader = getattr(self.backend, "element_texts", None)
+        if not callable(reader):
+            return False
+        rows = reader(pc.candidate_rows, tuple(pc.candidate_frame_path or ()))
+        if rows is None:
+            return False
+
+        def words(value: str) -> list[str]:
+            return re.findall(r"[0-9a-z]+", value.casefold())
+
+        wanted = []
+        wanted_dates: set[str] = set()
+        for name in names:
+            text = runtime_param_text(params[name]) if name in params else ""
+            value = words(text)
+            if not value:
+                return False
+            wanted.append(value)
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text.strip()):
+                wanted_dates.add(text.strip())
+        if not rows:
+            # Nothing listed: only the list's own "no matches" marker shows
+            # the search finished.
+            if self._dom_text_visible(pc.text):
+                return True
+            return self.vision.text_present(frame_png, pc.text)
+        for row in rows:
+            row_words = set(words(row))
+            if any(all(w in row_words for w in value) for value in wanted):
+                return False
+            if wanted_dates and wanted_dates & _row_dates(row):
+                return False
+        return True
+
     def _field_value_shown(self, pc: Any) -> bool:
         """The focused field shows this run's value of ``pc.param``.
 
@@ -17702,10 +18915,22 @@ class Replayer:
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
         if kind == "local_edit":
             return "local_edit (URL, title, page count and focus unchanged)"
+        if kind == "focus_on":
+            who = (
+                f"{pc.focus_role} {pc.focus_name!r}"
+                if pc.focus_by == "role_name"
+                else f"{pc.focus_by} {pc.focus_value!r}"
+            )
+            option = " with an option active" if pc.focus_active_option else ""
+            return f"focus_on (the focus is on {who}{option})"
         if kind == "field_value":
             return f"field_value (the focused field shows {{{pc.param}}})"
+        if kind == "no_duplicate_candidate":
+            names = ", ".join(pc.candidate_params or ())
+            return f"no_duplicate_candidate (no listed row has this run's {names})"
         if kind in ("text_present", "text_absent"):
-            return f"{kind} {pc.text!r}"
+            exact = " (exact)" if getattr(pc, "exact", False) else ""
+            return f"{kind}{exact} {pc.text!r}"
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             return f"{kind} (vs. the step's start state)"
         return f"{kind} region={tuple(pc.region) if pc.region else None}"
@@ -17752,8 +18977,12 @@ class Replayer:
         kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
         if kind == "local_edit":
             return self._local_edit_held(pc, start_state or {})
+        if kind == "focus_on":
+            return self._focus_on_held(pc)
         if kind == "field_value":
             return self._field_value_shown(pc)
+        if kind == "no_duplicate_candidate":
+            return self._no_duplicate_candidate(pc, frame_png)
         if kind in ("url_changed", "title_changed", "new_tab_opened"):
             key = {
                 "url_changed": "url",
@@ -17779,6 +19008,8 @@ class Replayer:
             # or split it across boxes — see vision.ocr.text_present.
             if pc.text is None:
                 return False
+            if getattr(pc, "exact", False):
+                return self._exact_text_holds(pc.text, frame_png)
             # Page-structure first: the DOM can PROVE the text is rendered,
             # visible and uncovered (exact normalized substring, stricter
             # than the fuzzy OCR match). It can never prove absence, so a DOM
@@ -17885,6 +19116,25 @@ class Replayer:
                 self._pc_scaled_match = True
                 return True
         return False
+
+    def _exact_text_holds(self, text: str, frame_png: bytes) -> bool:
+        """An exact text check (``Postcondition.exact``, ``Predicate.exact``).
+
+        OCR must read ``text`` exactly once, as a whole line or wrapped lines
+        (``vision.exact_text_count``); a near miss such as "2 matches were
+        found" never passes, and two copies (two result sections) do not
+        either. When OCR reads it nowhere, the DOM may still prove it visibly
+        rendered (an exact normalized substring of one element's text, hit
+        tested). A vision without the exact counter fails closed.
+        """
+
+        counter = getattr(self.vision, "exact_text_count", None)
+        if not callable(counter):
+            return False
+        count = counter(frame_png, text)
+        if count == 1:
+            return True
+        return count == 0 and self._dom_text_visible(text)
 
     def _dom_text_visible(self, text: str) -> bool:
         """True only when the backend proves ``text`` is visibly rendered.
@@ -18298,3 +19548,52 @@ class Replayer:
         rel = f"steps/{step_id}_{suffix}.png"
         _sealed.write_bytes(Path(run_dir) / rel, _scrub_png(png))
         return rel
+
+
+#: Date-looking text in a listed row: ISO or Y/M/D, numeric with / . or -,
+#: and a spelled-out month either side of the day.
+_ROW_DATE_PATTERNS = (
+    r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b",
+    r"\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b",
+    r"\b\d{1,2}\s+[A-Za-z]{3,9}\.?,?\s+\d{4}\b",
+    r"\b[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}\b",
+)
+
+
+def _row_dates(row: str) -> set[str]:
+    """Every ISO date a listed row could be showing.
+
+    Each date-looking substring is read the way intake reads a date
+    (``intake.extract.normalize_date``). One that reads either way (03/04/1970)
+    contributes both readings; one that isn't a date contributes nothing.
+    """
+
+    from datetime import date as _date
+
+    from openadapt_flow.intake.extract import normalize_date
+
+    found: set[str] = set()
+    for pattern in _ROW_DATE_PATTERNS:
+        for match in re.finditer(pattern, row):
+            text = match.group(0)
+            ymd = re.fullmatch(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})", text)
+            if ymd:
+                try:
+                    found.add(
+                        _date(
+                            int(ymd.group(1)), int(ymd.group(2)), int(ymd.group(3))
+                        ).isoformat()
+                    )
+                except ValueError:
+                    pass
+                continue
+            text = re.sub(r"(\d)\.(?=\d)", r"\1/", text).replace(".", "")
+            iso, error, _ = normalize_date(text)
+            if iso is not None:
+                found.add(iso)
+            elif error and "ambiguous" in error:
+                for order in ("MM/DD/YYYY", "DD/MM/YYYY"):
+                    reading = normalize_date(text, order)[0]
+                    if reading is not None:
+                        found.add(reading)
+    return found

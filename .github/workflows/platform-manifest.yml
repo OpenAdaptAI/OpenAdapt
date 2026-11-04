@@ -6,6 +6,8 @@ name: Platform manifest and source boundary
 
 on:
   pull_request:
+    # Drafts run nothing (each job checks `draft`); marking one ready runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - '**'
   # The merge queue tests each group before it lands on main.
@@ -52,16 +54,18 @@ on:
     types: [component-released]
 
 concurrency:
-  group: >-
-    platform-manifest-${{ github.event_name }}-${{
-      github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A pull request's newer push cancels its older run. Every other event (the
+  # merge queue, main, schedules, dispatches) gets a group of its own, so it
+  # is never cancelled or replaced.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
   validate-platform-manifest:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -90,9 +94,16 @@ jobs:
 
       - name: Set up Python
         if: steps.scope.outputs.run == 'true'
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+
+      - name: Install uv
+        if: steps.scope.outputs.run == 'true'
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
 
       # Cheapest decisive check first: structure, signature honesty, and
       # repo agreement need no network and cannot be flaky.
@@ -113,7 +124,7 @@ jobs:
         # remote drift probe, so scheduled checks stay fast and network-light.
         if: steps.scope.outputs.run == 'true' && (github.event_name == 'pull_request' || github.event_name == 'push')
         run: |
-          python -m pip install --quiet 'pytest>=8.0.0'
+          python scripts/ci/locked_install.py --lock .github/ci-tools:test
           python -m pytest \
             tests/test_platform_manifest_drift.py \
             tests/test_platform_version_display.py -q
@@ -152,15 +163,22 @@ jobs:
           fi
 
   check-source-boundary:
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
 
       # The guard reads its rules from source-policy.public.json (rendered from
       # the canonical private manifest) and fails closed when that file is
@@ -173,5 +191,5 @@ jobs:
       - name: Prove the boundary guard fails when it should
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         run: |
-          python -m pip install --quiet 'pytest>=8.0.0'
+          python scripts/ci/locked_install.py --lock .github/ci-tools:test
           python -m pytest tests/test_source_boundary.py -q

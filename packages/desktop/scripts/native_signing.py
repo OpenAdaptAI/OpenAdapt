@@ -12,7 +12,15 @@ The release workflow reads two facts from this script:
   NSIS installers, submits a signing request, and waits for the signed files.
 
 Every credential set is complete-or-absent: a partial set fails the build
-instead of silently falling back to an unsigned artifact. With no set, the
+instead of silently falling back to an unsigned artifact.
+
+A complete SignPath set enables signing in a release only when its policy is
+exactly ``release-signing``; any other policy, ``test-signing`` included,
+fails the build. A test certificate is not trusted, so its signature must never
+ship or be labelled ``authenticode``. Test-signed builds come from
+``.github/workflows/signpath-test-sign.yml`` in the ``signpath-test``
+environment, which publishes nothing; ``test-sign-preflight`` refuses there
+unless the policy is exactly ``test-signing``. With no set, the
 release ships ``adhoc`` (macOS) or ``unsigned`` (Windows) artifacts, labelled
 as such in every file name, the website manifest, and the release notes.
 ``--require-mode`` still refuses a plan below a required trust mode.
@@ -23,11 +31,13 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 # SignPath: an API token for a submitter, the organization, and the project and
 # signing policy the request is submitted to. The four are configured together
-# in the ``native-release`` environment, or not at all.
+# in an environment, or not at all: ``native-release`` with release-signing,
+# ``signpath-test`` with test-signing.
 WINDOWS_SIGNPATH_CREDENTIALS = (
     "SIGNPATH_API_TOKEN",
     "SIGNPATH_ORGANIZATION_ID",
@@ -52,6 +62,10 @@ CREDENTIALS = {
         "LINUX_GPG_FINGERPRINT",
     ),
 }
+# The SignPath policy slugs, see .signpath/policies/OpenAdapt/.
+SIGNPATH_TEST_POLICY = "test-signing"
+SIGNPATH_RELEASE_POLICY = "release-signing"
+
 UNSIGNED_MODES = {"macos": "adhoc", "windows": "unsigned", "linux": "unsigned"}
 SIGNED_MODES = {
     "macos": "developer-id-notarized",
@@ -60,7 +74,7 @@ SIGNED_MODES = {
 
 
 def _complete_or_partial(
-    names: tuple[str, ...], environment: dict[str, str], *, label: str
+    names: tuple[str, ...], environment: Mapping[str, str], *, label: str
 ) -> None:
     """Raise if a credential set is present but incomplete."""
 
@@ -69,17 +83,46 @@ def _complete_or_partial(
         raise ValueError(f"partial {label} signing credentials; missing: {', '.join(missing)}")
 
 
-def windows_plan(environ: dict[str, str] | None = None) -> tuple[str, str]:
-    """Return ``(mode, method)`` for Windows from complete-or-absent secrets."""
+def windows_plan(environ: Mapping[str, str] | None = None) -> tuple[str, str]:
+    """Return ``(mode, method)`` for a Windows release from complete-or-absent secrets.
+
+    No set plans ``unsigned``; a partial set fails. A complete set signs
+    through SignPath only when its policy is exactly ``release-signing``. Any
+    other policy, ``test-signing`` included, fails the build: a test
+    certificate must never ship or be labelled ``authenticode``, and a release
+    must not quietly fall back to unsigned when signing was configured.
+    """
 
     environment = os.environ if environ is None else environ
-    if any(environment.get(name) for name in WINDOWS_SIGNPATH_CREDENTIALS):
-        _complete_or_partial(WINDOWS_SIGNPATH_CREDENTIALS, environment, label="SignPath")
-        return "authenticode", "signpath"
-    return "unsigned", "unsigned"
+    if not any(environment.get(name) for name in WINDOWS_SIGNPATH_CREDENTIALS):
+        return "unsigned", "unsigned"
+    _complete_or_partial(WINDOWS_SIGNPATH_CREDENTIALS, environment, label="SignPath")
+    policy = environment["SIGNPATH_SIGNING_POLICY_SLUG"]
+    if policy != SIGNPATH_RELEASE_POLICY:
+        raise ValueError(
+            f"SignPath signing policy {policy!r} is not allowed in a release; the "
+            f"native-release environment must name {SIGNPATH_RELEASE_POLICY!r}, or hold no "
+            f"SignPath secrets to ship Windows unsigned. Test-sign with "
+            f"{SIGNPATH_TEST_POLICY!r} through signpath-test-sign.yml in the signpath-test "
+            f"environment."
+        )
+    return "authenticode", "signpath"
 
 
-def signing_mode(platform: str, environ: dict[str, str] | None = None) -> str:
+def require_test_signing(environ: Mapping[str, str] | None = None) -> None:
+    """Refuse a test-sign run unless the complete SignPath set names test-signing."""
+
+    environment = os.environ if environ is None else environ
+    _complete_or_partial(WINDOWS_SIGNPATH_CREDENTIALS, environment, label="SignPath")
+    policy = environment["SIGNPATH_SIGNING_POLICY_SLUG"]
+    if policy != SIGNPATH_TEST_POLICY:
+        raise ValueError(
+            f"the test-sign workflow signs only with the {SIGNPATH_TEST_POLICY!r} policy; "
+            f"configured policy is {policy!r}"
+        )
+
+
+def signing_mode(platform: str, environ: Mapping[str, str] | None = None) -> str:
     environment = os.environ if environ is None else environ
     if platform == "windows":
         return windows_plan(environment)[0]
@@ -96,7 +139,7 @@ def signing_mode(platform: str, environ: dict[str, str] | None = None) -> str:
     return SIGNED_MODES[platform]
 
 
-def signing_method(platform: str, environ: dict[str, str] | None = None) -> str:
+def signing_method(platform: str, environ: Mapping[str, str] | None = None) -> str:
     """How the signed artifact is produced, for workflow step dispatch."""
 
     environment = os.environ if environ is None else environ
@@ -111,7 +154,7 @@ def signing_method(platform: str, environ: dict[str, str] | None = None) -> str:
 def require_signing_mode(
     platform: str,
     required_mode: str,
-    environ: dict[str, str] | None = None,
+    environ: Mapping[str, str] | None = None,
 ) -> tuple[str, str]:
     """Return the signing plan or refuse a release without the required trust."""
 
@@ -138,6 +181,10 @@ def main() -> int:
     preflight.add_argument("--platform", choices=sorted(CREDENTIALS), required=True)
     preflight.add_argument("--require-mode")
     preflight.add_argument("--github-output", type=Path)
+    subparsers.add_parser(
+        "test-sign-preflight",
+        help="require a complete SignPath set whose policy is test-signing",
+    )
     args = parser.parse_args()
 
     try:
@@ -150,6 +197,9 @@ def main() -> int:
             if args.github_output:
                 write_github_output(args.github_output, mode, method)
             print(f"{mode} ({method})")
+        elif args.command == "test-sign-preflight":
+            require_test_signing()
+            print(f"SignPath policy {SIGNPATH_TEST_POLICY}")
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

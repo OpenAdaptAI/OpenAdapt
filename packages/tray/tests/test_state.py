@@ -67,6 +67,11 @@ class TestAppState:
         state = AppState(state=TrayState.IDLE)
         assert state.can_start_recording() is True
 
+    def test_can_start_recording_after_an_error(self):
+        """An error is terminal, so it must not disable Start until restart."""
+        state = AppState(state=TrayState.ERROR)
+        assert state.can_start_recording() is True
+
     def test_cannot_start_recording_when_recording(self):
         """Test that recording cannot start when already recording."""
         state = AppState(state=TrayState.RECORDING)

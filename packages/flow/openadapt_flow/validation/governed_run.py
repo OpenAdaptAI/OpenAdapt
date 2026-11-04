@@ -114,6 +114,14 @@ class _Backend:
     def structured_text_at(self, x: int, y: int) -> str | None:
         return self.structured_identity
 
+    def identity_candidates_at(self, x: int, y: int) -> dict[str, object]:
+        # One record row on this screen (IdentityCandidatesBackend).
+        return {
+            "record_key": None,
+            "incomplete": False,
+            "candidates": [{"self": True, "record_key": None, "dx": 0, "dy": 0}],
+        }
+
 
 class _Vision:
     @staticmethod

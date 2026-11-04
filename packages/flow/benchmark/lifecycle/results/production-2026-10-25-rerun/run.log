@@ -1,0 +1,83 @@
+COMMIT 38fc21afbfff08275d77fd8f61972ad49c28cbf4
+saved $LIFECYCLE_OPENEMR_STATE/fresh-oauth-keys.sql
+[openadapt-production-relabel] resetting the app to its baseline
+[openadapt-production-relabel] setup
+[openadapt-production-relabel]    1 ref-00001 clean                  claimed=done    oracle=correct   -> correct       final=correct   164.9s load=94.9
+[openadapt-production-relabel]    2 ref-00002 clean                  claimed=done    oracle=correct   -> correct       final=correct   125.5s load=57.9
+[openadapt-production-relabel]    3 ref-00003 clean                  claimed=done    oracle=correct   -> correct       final=correct   131.3s load=15.8
+[openadapt-production-relabel]    4 ref-00004 clean                  claimed=done    oracle=correct   -> correct       final=correct   146.1s load=16.3
+[openadapt-production-relabel]    5 ref-00005 shared_dob             claimed=done    oracle=correct   -> correct       final=correct   131.2s load=10.5
+[openadapt-production-relabel]    6 ref-00006 malformed_dob          claimed=done    oracle=correct   -> correct       final=correct   132.6s load=8.8
+[openadapt-production-relabel]    7 ref-00007 clean                  claimed=done    oracle=correct   -> correct       final=correct   131.1s load=69.9
+[openadapt-production-relabel]    8 ref-00008 missing_required       claimed=stopped oracle=correct   -> right_stop    final=correct    10.1s load=15.6
+[openadapt-production-relabel]    9 ref-00009 clean                  claimed=done    oracle=correct   -> correct       final=correct   126.1s load=14.5
+[openadapt-production-relabel]   10 ref-00010 clean                  claimed=done    oracle=correct   -> correct       final=correct   127.4s load=7.6
+[openadapt-production-relabel]   11 ref-00011 clean                  claimed=done    oracle=correct   -> correct       final=correct   126.1s load=45.0
+[openadapt-production-relabel]   12 ref-00012 concurrent_same        claimed=stopped oracle=correct   -> right_stop    final=correct   249.6s load=11.4
+[openadapt-production-relabel]   13 ref-00013 concurrent_other       claimed=done    oracle=correct   -> correct       final=correct   126.7s load=8.5
+[openadapt-production-relabel]   14 ref-00014 clean                  claimed=done    oracle=correct   -> correct       final=correct   127.5s load=6.7
+[openadapt-production-relabel]   15 ref-00015 clean                  claimed=done    oracle=correct   -> correct       final=correct   125.8s load=6.8
+[openadapt-production-relabel]   16 ref-00016 clean                  claimed=done    oracle=correct   -> correct       final=correct   126.7s load=7.5
+[openadapt-production-relabel]   17 ref-00017 clean                  claimed=done    oracle=correct   -> correct       final=correct   126.1s load=8.1
+[openadapt-production-relabel]   18 ref-00018 clean                  claimed=done    oracle=correct   -> correct       final=correct   148.1s load=34.1
+[openadapt-production-relabel]   19 ref-00019 malformed_dob          claimed=stopped oracle=absent    -> data_stop     final=correct    11.3s load=11.4
+[openadapt-production-relabel]   20 ref-00020 clean                  claimed=stopped oracle=absent    -> false_stop    final=correct   157.9s load=11.3
+[openadapt-production-relabel]   21 ref-00021 dup_resend             claimed=stopped oracle=correct   -> right_stop    final=correct   241.0s load=10.5
+[openadapt-production-relabel]   22 ref-00022 clean                  claimed=done    oracle=correct   -> correct       final=correct   122.3s load=6.9
+[openadapt-production-relabel]   23 ref-00023 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.4s load=8.4
+[openadapt-production-relabel]   24 ref-00024 ambiguous_same_person  claimed=stopped oracle=correct   -> right_stop    final=correct   297.2s load=12.2
+[openadapt-production-relabel]   25 ref-00025 clean                  claimed=done    oracle=correct   -> correct       final=correct   124.4s load=21.3
+[openadapt-production-relabel] day 4: UI change 'relabel_save' from item 26
+{"case_id": "representative", "trial": 1, "expected": "VERIFIED", "execution_outcome": "VERIFIED", "transaction_outcome": "VERIFIED", "execution_profile": "standard", "production_eligible": false, "success": true, "model_calls": 0, "total_ms": 105993.0564169772, "failed_step_id": null, "failed_error": null, "oracle": "exact_record", "trial_wall_s": 114.3, "fault_declined": null}
+{"case_id": "fault-ambiguity", "trial": 1, "expected": "HALTED", "execution_outcome": "HALTED", "transaction_outcome": "HALTED_BEFORE_EFFECT", "execution_profile": "standard", "production_eligible": false, "success": false, "model_calls": 0, "total_ms": 107118.46779240295, "failed_step_id": "step_040", "failed_error": "OCR safety refusal for step 'step_040' (click 'Save new patient'): 2 OCR target candidates remain after retained-evidence disambiguation \u2014 no action was admitted", "oracle": "no_mutation", "trial_wall_s": 116.2, "fault_declined": null}
+{"case_id": "fault-wrong-identity", "trial": 1, "expected": "HALTED", "execution_outcome": "HALTED", "transaction_outcome": "REJECTED_POLICY", "execution_profile": "standard", "production_eligible": false, "success": false, "model_calls": 0, "total_ms": 105054.26554195583, "failed_step_id": "step_040", "failed_error": "Identity check failed for step 'step_040' (click 'Save new patient'): a target was found positionally (rung 'structural', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected '<structured identity template>', observed '{\"form_path\":\"/interface/new/new_comprehensive.php\",\"label\":\"Merge Into Existing Record\",\"target_id\":\"confirm_create\",\"target_kind\":\"action\"}' (coverage 0.00) \u2014 refusing to act; run aborted", "oracle": "no_mutation", "trial_wall_s": 114.2, "fault_declined": null}
+{"case_id": "fault-stale-identity", "trial": 1, "expected": "HALTED", "execution_outcome": "HALTED", "transaction_outcome": "HALTED_BEFORE_EFFECT", "execution_profile": "standard", "production_eligible": false, "success": false, "model_calls": 0, "total_ms": 105835.64783399925, "failed_step_id": "step_040", "failed_error": "Could not resolve target for step 'step_040' (click 'Save new patient'): all resolution rungs failed", "oracle": "no_mutation", "trial_wall_s": 114.6, "fault_declined": null}
+{"case_id": "fault-weak-effect", "trial": 1, "expected": "HALTED", "execution_outcome": "HALTED", "transaction_outcome": "HALTED_BEFORE_EFFECT", "execution_profile": "standard", "production_eligible": false, "success": false, "model_calls": 0, "total_ms": 104456.41754195094, "failed_step_id": "step_040", "failed_error": "Effect verifier strength changed after admission: immediate_screen evidence cannot satisfy the required qualified effect tier \u2014 refusing to actuate; run aborted", "oracle": "no_mutation", "trial_wall_s": 113.1, "fault_declined": null}
+{"case_id": "fault-missing-effect", "trial": 1, "expected": "HALTED", "execution_outcome": "HALTED", "transaction_outcome": "HALTED_BEFORE_EFFECT", "execution_profile": "standard", "production_eligible": false, "success": false, "model_calls": 0, "total_ms": 104748.88883298263, "failed_step_id": "step_040", "failed_error": "Step 'step_040' (click 'Save new patient') declares 12 system-of-record effect(s) but no EffectVerifier is configured for this run \u2014 refusing to perform an unverifiable consequential write (deployment/configuration error); run aborted", "oracle": "no_mutation", "trial_wall_s": 113.3, "fault_declined": null}
+{"pixels_only": true, "case_id": "representative", "trial": 1, "passed": false, "failure": "StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path"}
+{"pixels_only": true, "case_id": "fault-ambiguity", "trial": 1, "passed": false, "failure": "StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path"}
+{"pixels_only": true, "case_id": "fault-wrong-identity", "trial": 1, "passed": false, "failure": "StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path"}
+{"pixels_only": true, "case_id": "fault-stale-identity", "trial": 1, "passed": false, "failure": "StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path"}
+{"pixels_only": true, "case_id": "fault-weak-effect", "trial": 1, "passed": false, "failure": "StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path"}
+{"pixels_only": true, "case_id": "fault-missing-effect", "trial": 1, "passed": false, "failure": "StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path"}
+pixels-only pass (informational): 0/6 (0%) trials behaved as required with structure lookups disabled; most common failure: StateDiverged: refusing a durable checkpoint with invalid action evidence: production action lacks a closed runtime actuation path
+qualified lookups: structure on a local surface
+PASS: qualification for 'openemr-create-synthetic-patient'
+  identity coverage 1/1; effect coverage 1/1; cases 6/6
+qualification-result/v1 aa579696dcbf3c1b: passed=True silent_incorrect_success=0 over_halt=0 executor_model_calls=0 verifier_model_calls=0
+no admission envelope: the qualification-admission/v1 envelope needs at least 3 trials per case; this campaign ran 1
+[openadapt-production-relabel]   26 ref-00026 malformed_case         claimed=stopped oracle=correct   -> stopped_saved final=correct  1024.5s load=43.5
+[openadapt-production-relabel]   27 ref-00027 common_surname         claimed=done    oracle=correct   -> correct       final=correct   122.3s load=15.4
+[openadapt-production-relabel]   28 ref-00028 clean                  claimed=done    oracle=correct   -> correct       final=correct   123.3s load=10.2
+[openadapt-production-relabel]   29 ref-00029 concurrent_same        claimed=stopped oracle=correct   -> right_stop    final=correct   242.2s load=10.7
+[openadapt-production-relabel]   30 ref-00030 common_surname         claimed=done    oracle=correct   -> correct       final=correct   122.6s load=7.1
+[openadapt-production-relabel]   31 ref-00031 clean                  claimed=done    oracle=correct   -> correct       final=correct   122.1s load=8.6
+[openadapt-production-relabel]   32 ref-00032 missing_optional       claimed=stopped oracle=absent    -> data_stop     final=correct    10.4s load=6.1
+[openadapt-production-relabel]   33 ref-00033 common_surname         claimed=done    oracle=correct   -> correct       final=correct   122.5s load=5.9
+[openadapt-production-relabel]   34 ref-00034 dup_existing           claimed=stopped oracle=correct   -> right_stop    final=correct   241.6s load=9.0
+[openadapt-production-relabel]   35 ref-00035 clean                  claimed=done    oracle=correct   -> correct       final=correct   122.0s load=6.9
+[openadapt-production-relabel]   36 ref-00036 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.8s load=9.8
+[openadapt-production-relabel]   37 ref-00037 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.1s load=7.1
+wait_settled: screen did not settle within 3.0s (0/2 stable frames); proceeding with the most recent frame
+[openadapt-production-relabel]   38 ref-00038 slow_save              claimed=done    oracle=correct   -> correct       final=correct   126.8s load=6.6
+[openadapt-production-relabel]   39 ref-00039 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.3s load=9.3
+[openadapt-production-relabel]   40 ref-00040 shared_dob             claimed=done    oracle=correct   -> correct       final=correct   122.2s load=8.6
+[openadapt-production-relabel]   41 ref-00041 shared_dob             claimed=done    oracle=correct   -> correct       final=correct   121.1s load=11.2
+[openadapt-production-relabel]   42 ref-00042 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.2s load=11.1
+[openadapt-production-relabel]   43 ref-00043 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.1s load=9.3
+[openadapt-production-relabel]   44 ref-00044 dup_resend             claimed=stopped oracle=correct   -> right_stop    final=correct     9.6s load=10.3
+[openadapt-production-relabel]   45 ref-00045 dup_existing           claimed=stopped oracle=correct   -> right_stop    final=correct   241.6s load=10.1
+[openadapt-production-relabel]   46 ref-00046 session_expiry         claimed=done    oracle=correct   -> correct       final=correct   123.3s load=40.1
+[openadapt-production-relabel]   47 ref-00047 clean                  claimed=done    oracle=correct   -> correct       final=correct   123.0s load=67.8
+[openadapt-production-relabel]   48 ref-00048 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.6s load=95.2
+[openadapt-production-relabel]   49 ref-00049 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.3s load=45.4
+[openadapt-production-relabel]   50 ref-00050 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.5s load=11.9
+[openadapt-production-relabel]   51 ref-00051 clean                  claimed=done    oracle=correct   -> correct       final=correct   121.5s load=7.4
+[openadapt-production-relabel]   52 ref-00052 dup_existing           claimed=stopped oracle=correct   -> right_stop    final=correct   240.5s load=9.0
+[openadapt-production-relabel]   53 ref-00053 missing_optional       claimed=stopped oracle=absent    -> data_stop     final=correct    10.3s load=9.0
+[openadapt-production-relabel]   54 ref-00054 common_surname         claimed=done    oracle=correct   -> correct       final=correct   123.3s load=9.9
+[openadapt-production-relabel]   55 ref-00055 missing_required       claimed=stopped oracle=correct   -> right_stop    final=correct     9.9s load=10.4
+RUN EXIT 0
+down
+Machine "openadapt-benchmark" stopped successfully
+RELEASED Sun Oct 25 04:07:03 EDT 2026

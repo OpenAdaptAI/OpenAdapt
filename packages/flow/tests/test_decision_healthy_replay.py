@@ -54,7 +54,9 @@ def _replay(tmp_path: Path):
         replayer = Replayer(
             WritingBackend(url),
             vision=_vision_that_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         )
         return replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)

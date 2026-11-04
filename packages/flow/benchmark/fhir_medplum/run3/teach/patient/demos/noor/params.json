@@ -1,0 +1,12 @@
+{
+ "given": "Noor",
+ "family": "Haddad",
+ "birthDate": "1972-03-09",
+ "gender": "female",
+ "line": "9 Elm Court",
+ "city": "Lowell",
+ "state": "MA",
+ "postalCode": "01852",
+ "phone": "978-555-0121",
+ "email": "noor.haddad@example.org"
+}

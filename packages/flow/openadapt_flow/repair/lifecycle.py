@@ -32,11 +32,12 @@ Hard rules enforced here:
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -637,6 +638,64 @@ class RepairStore:
                 f"found {actual[:16] if actual else '<none>'}...)"
             )
 
+    def teach_authorization_dir(self, sha256: str) -> Path:
+        """Where the store keeps a teach authorization's statement, by digest."""
+
+        if not re.fullmatch(r"[0-9a-f]{64}", str(sha256)):
+            raise RepairLifecycleError("refused: not a statement digest")
+        return self.root / "teach-authorizations" / sha256
+
+    def keep_teach_authorization(
+        self, verification: Any, statement: Path
+    ) -> dict[str, Any]:
+        """Keep a verified teach authorization's statement; return its record."""
+
+        from openadapt_flow import teach_authorization as ta
+
+        record = ta.record(verification)
+        ta.copy_into(statement, self.teach_authorization_dir(record["sha256"]))
+        return record
+
+    def _require_teach_authorization(self, candidate: RepairCandidate) -> None:
+        """A fix a calling agent demonstrated needs a person's teach authorization.
+
+        The provenance names the authorization (purpose ``repair``) the fix
+        was taught under; it must name this workflow as its task, and its
+        statement, kept in this store, must verify
+        against the approver roster as it is now (``$OPENADAPT_JIT_KEY_DIR``
+        and ``OPENADAPT_APPROVER_ROOT``), and the calling agent may not be the
+        signer. Without one the approval is refused.
+        """
+
+        from openadapt_flow import teach_authorization as ta
+
+        provenance = candidate.provenance
+        if provenance is None or provenance.repaired_by != "calling_agent":
+            return
+        recorded = provenance.teach_authorization
+        try:
+            key_dir, root = ta.pinned_trust()
+            sha = str((recorded or {}).get("sha256") or "")
+            statement = (
+                self.teach_authorization_dir(sha) / ta.STATEMENT_FILE
+                if re.fullmatch(r"[0-9a-f]{64}", sha)
+                else None
+            )
+            ta.check_admission(
+                recorded,
+                statement,
+                key_dir=key_dir,
+                root=root,
+                purpose="repair",
+                task_id=candidate.workflow_name,
+                not_signed_by=provenance.agent_id,
+            )
+        except ta.TeachAuthorizationError as exc:
+            raise RepairLifecycleError(
+                "refused: a fix a calling agent demonstrated needs a person's "
+                f"signed teach authorization that covers repair ({exc.code}): {exc}"
+            ) from exc
+
     def approve(
         self,
         candidate_id: str,
@@ -667,6 +726,7 @@ class RepairStore:
                 "replay and fault campaigns"
             )
         self._reverify_invariants(candidate)
+        self._require_teach_authorization(candidate)
         candidate.approval = ApprovalRecord(
             approved_by=actor.id,
             non_interactive=non_interactive,

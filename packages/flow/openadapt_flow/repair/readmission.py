@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -220,6 +221,11 @@ def requalify(
         from openadapt_flow.qualify.campaign import qualify
 
         run = qualify
+    # Each case run's authorization id is its run id, and a process refuses an
+    # authorization id it has already consumed. The parent was qualified with
+    # the campaign's own run ids, possibly in this same process, so a
+    # re-qualification names its runs afresh.
+    run_id_prefix = f"requalify-{uuid.uuid4().hex[:16]}"
     try:
         result = run(
             Path(candidate_bundle),
@@ -229,6 +235,7 @@ def requalify(
             trials=requalification.trials,
             certify=provenance.policy_name,
             hooks=requalification.hooks,
+            run_id_prefix=run_id_prefix,
         )
     except Exception as exc:  # noqa: BLE001 - every campaign failure refuses
         raise ReadmissionRefused(

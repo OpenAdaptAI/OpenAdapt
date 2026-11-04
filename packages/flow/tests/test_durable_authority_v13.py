@@ -793,10 +793,13 @@ def test_synthetic_marker_short_pipe_write_never_changes_a_permitted_delivery(
     class PipeStatus:
         st_mode = stat.S_IFIFO
 
+    real_fstat = os.fstat
     monkeypatch.setattr(
         durable_authority_module.os,
         "fstat",
-        lambda _fd: PipeStatus(),
+        # os is process-global: pytest's output capture also fstats its own
+        # files, so only the observer descriptor is faked.
+        lambda fd: PipeStatus() if fd == 3 else real_fstat(fd),
     )
     monkeypatch.setattr(
         durable_authority_module.os, "set_blocking", lambda *_args: None
@@ -825,6 +828,7 @@ def test_synthetic_marker_uses_only_the_fixed_nonblocking_capability(
         st_mode = stat.S_IFIFO
 
     calls: list[tuple[object, ...]] = []
+    real_fstat = os.fstat
     monkeypatch.setenv(SYNTHETIC_DELIVERY_MARKER_ENABLED_ENV, "1")
     # This legacy-shaped value must have no effect. Flow has no output-path
     # configuration for this observer.
@@ -832,7 +836,9 @@ def test_synthetic_marker_uses_only_the_fixed_nonblocking_capability(
     monkeypatch.setattr(
         durable_authority_module.os,
         "fstat",
-        lambda fd: calls.append(("fstat", fd)) or PipeStatus(),
+        lambda fd: (
+            calls.append(("fstat", fd)) or PipeStatus() if fd == 3 else real_fstat(fd)
+        ),
     )
     monkeypatch.setattr(
         durable_authority_module.os,

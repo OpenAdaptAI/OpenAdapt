@@ -1,0 +1,5136 @@
+[
+  {
+    "trial": 1,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3000heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          360,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.991,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          261
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3000heal",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 115.23,
+    "first_frame_sha256": "52f4c1d7f58a8a83cf28ca457d198d0e29132eeadb4f74f2d6c3a40708e5a7ec",
+    "frame_sha256": [
+      "57f7bf61a60421a2235de93522d10ae7411d0ca4dcd424a9e0bab1d4e24abf19",
+      "52f4c1d7f58a8a83cf28ca457d198d0e29132eeadb4f74f2d6c3a40708e5a7ec",
+      "012b48fa2bb31fcd2633949872cbd7f6e61da7b603d806d61849f9416b0be8a4",
+      "57f7bf61a60421a2235de93522d10ae7411d0ca4dcd424a9e0bab1d4e24abf19",
+      "31feda3d6550a76d8d2be1f46ea4a80f6589aab7f100cf2238830986cd0468c1",
+      "1194d95a1bcbded92be35c73f442dc2dfe7181060d3384aa42e359496a070185",
+      "31c6f385f10a20c0ef9ec6df52e0414bebe80bd6fc00bc14e4ce29b6387abc7d",
+      "31feda3d6550a76d8d2be1f46ea4a80f6589aab7f100cf2238830986cd0468c1",
+      "a2b11ca024f128a911a807dbd3d0592c95d1f25cd97e740521eec2ac611bdc77",
+      "31c6f385f10a20c0ef9ec6df52e0414bebe80bd6fc00bc14e4ce29b6387abc7d",
+      "35210a4da11e93e2ff79eb8da4453aafbfcc9b514c3f93e8b05646195cf857af",
+      "7f8ec25c8363c0a559b7503fe76e9edb316b02c3d997461b90241ffd5ba7c4bf",
+      "c0a777e0ad853bf68033b97b121da40bc9f27e604c13608b603816a47f754c44",
+      "35210a4da11e93e2ff79eb8da4453aafbfcc9b514c3f93e8b05646195cf857af",
+      "cf3045be79945d3c62a4f9d2c3dc32558ab75eaa28f9344d4dae9160c67564cd",
+      "9ad22aac15c13dab8b0ece3c334919ba22c61d7c5f2a593dac2a43b8b1e3e700",
+      "5133b8c80e0d0661d15882080254e469dfc89ff86398b533428e1b9697e75da4",
+      "ba68f1464cbb5bd0cfcf70652a8614804c1d8709e6cabf864990ec7ac8bc563a",
+      "ad607c3e329a8245ea3808e55ced5c8bc0a82f8af43eced720224479567ffecd",
+      "069f5dd2b2ab4076074f452e935a40c4873d72be4847ecee72b5d324db2017a1",
+      "dd5d9ee787e273ffa263918a8022ba5c9d341cccee0026d512789fe21b665a9d",
+      "2985df0416a805f7bc8200d2df9b2aa66f075aaf1e095e71cf7e785c81e1f46e",
+      "37484b5e57b28e03e6f724124791cb891b65f236eed18e92278c2bde7288d04b",
+      "dd5d9ee787e273ffa263918a8022ba5c9d341cccee0026d512789fe21b665a9d",
+      "84f16d44de2f4c81c38d7a8882d48da957ba953d342d8195b4bf7a33fefa9788",
+      "219dbf9ff917babb96d8e390d790c7d37079754e72de58f5ddf31434997aaddf",
+      "d96bee174d56912ef687374bfbe6a7141cbb62b9cb5135281f433467eda7d7d8",
+      "84f16d44de2f4c81c38d7a8882d48da957ba953d342d8195b4bf7a33fefa9788",
+      "79b637bd45ab3bd4da1fb660482457293664d29adaa010fb956141c7411085e3",
+      "d96bee174d56912ef687374bfbe6a7141cbb62b9cb5135281f433467eda7d7d8",
+      "db337a394c452188564a4d94563791eb7c4263bec3f833726412f4ae490b06f9",
+      "79b637bd45ab3bd4da1fb660482457293664d29adaa010fb956141c7411085e3",
+      "af25ab5453c12dbb5543b6d0b79c687be9071d1778d7f89b59f8fb64347fd38b",
+      "db337a394c452188564a4d94563791eb7c4263bec3f833726412f4ae490b06f9",
+      "c913af4901f0b8e18e49d02327afa470615724a5955956671d2164d8d6f06d45",
+      "af25ab5453c12dbb5543b6d0b79c687be9071d1778d7f89b59f8fb64347fd38b",
+      "60ea940ba6a4f00b974bed142457c998333499ab46fc43e00ffb9345a49c4e99",
+      "c913af4901f0b8e18e49d02327afa470615724a5955956671d2164d8d6f06d45",
+      "89e0a0c11668a6f1d20f4053383104e9bd1973c28bc7aa992c73c01fb6087f7c",
+      "279b5d564c3a663ee80785c6052a75e791de2d49fb6f7f6ba71f2b989e9c1ef1",
+      "cd2152c059ed589043a9b54b5618b36b79b955aa6291e5c21ee113fb648077a2",
+      "c7a30ba1dc60651aaaa3a8f9975f8d0f4d003c435e51376a98670b9a9f9d4a96"
+    ],
+    "first_frame": {
+      "file": "emr_healthy_first.png",
+      "sha256": "52f4c1d7f58a8a83cf28ca457d198d0e29132eeadb4f74f2d6c3a40708e5a7ec",
+      "size": [
+        1280,
+        800
+      ]
+    }
+  },
+  {
+    "trial": 2,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3001heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          261
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3001heal",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 96.78,
+    "first_frame_sha256": "04b7f9c33d383368eb0347dc1e48d5320455f86af33ce654573f316fa78153b6",
+    "frame_sha256": [
+      "659a6d517ac5b287186d5e04d334e2b14dc50600f8ca6483d02c0e9b153e4bdd",
+      "04b7f9c33d383368eb0347dc1e48d5320455f86af33ce654573f316fa78153b6",
+      "674c236e2bb1b546c2b70e8ef739dff2306f33949d3d5f9b8456d5b8c6485aee",
+      "659a6d517ac5b287186d5e04d334e2b14dc50600f8ca6483d02c0e9b153e4bdd",
+      "1d4fcfd842300542e401cc577a7fddbbc25cfec75a405d52a857d3ae2763fb48",
+      "674c236e2bb1b546c2b70e8ef739dff2306f33949d3d5f9b8456d5b8c6485aee",
+      "079f090f8efbd2671949a951e8f3fbf669366078aa752b76edd85300bf0620b5",
+      "1d4fcfd842300542e401cc577a7fddbbc25cfec75a405d52a857d3ae2763fb48",
+      "6ccfaf5363e3fe42e042d0f31647d467e246757d39502c074fdd9abbf25efac2",
+      "9c8f43964098ba10782673514dc6763b6fe56f81e51d8e8444d12609acc379ba",
+      "3e891ba89da7ec6082a6685205818276a3ea552b384193e2924c21cbac763ac1",
+      "d570fb6e5d07ad71e0500e033024c19feeeebcd68511c8512409a27bb8ae40cb",
+      "31078aaaf6d2dc955ea4ee9e33b30116cd97137619919a8c99d5ac6eb3e2eb97",
+      "3e891ba89da7ec6082a6685205818276a3ea552b384193e2924c21cbac763ac1",
+      "89c14217456d1a80b13dfae436661234585bc839765328d76b4a5fdeb8b7b5c1",
+      "81ef6430272d027a8a181f9d6efcb7ace0f82c843ae0213db3cacbadd4d52b7e",
+      "7e485524276560a223e1cd89edec5cb60c18795c29651dd09b1db7d8c5f28ac7",
+      "80adb2547305e3f46d63884016bbcd3c31f8b4792bd652c75bc6a4795de192cd",
+      "3ce9ebf7bfdac315176605209fe5d76ff69317dc8ad3a053962b639d9f7ae820",
+      "9a4375191c91716799b2a769584bdb42dc1cdd59505bef993de651742d6a81be",
+      "f758c55c00a740e883595c700509216bb135aad2c7b62d0b01d91732fe3e0ef1",
+      "3ce9ebf7bfdac315176605209fe5d76ff69317dc8ad3a053962b639d9f7ae820",
+      "a615b430dedad4fc9a7957e0bc76878d1f140ea2b91198a81bf60f1adfbc3d9f",
+      "f758c55c00a740e883595c700509216bb135aad2c7b62d0b01d91732fe3e0ef1",
+      "f426c187b26b1fee34891b66baa682d2c2733cc39410fe7277933e36d42bee6e",
+      "64fdf165367a2e3e7c3fbe8d62fd35686fac1856e4dbba346b97f2ac5f9abc79",
+      "c1a332ef30197113f7ad7684a66e605a1124caf8d51b84a81af4ee7782f0557a",
+      "c1a332ef30197113f7ad7684a66e605a1124caf8d51b84a81af4ee7782f0557a",
+      "315bc41d353275e2446c50dda371ec3df31c3f6b7c77c8e3ec70b08e22889f56",
+      "d9ae2c9a5e00b7f15d7f53f749b1246a73c4571417bec4976ce19f2f4573fbf1",
+      "97925ba68e923aba494ddc93b9ee9c6ad078191749d6e29b56ee36460a99ffec",
+      "aaae668005d748afd5bf7e94eae155fe7fd27257e55d10aa2501cd43f1b23f9c",
+      "3e3a3487b8f6a40943c4164b34e6d9c09ee696c4b4774ce386a3bbcb09e1ab11",
+      "97925ba68e923aba494ddc93b9ee9c6ad078191749d6e29b56ee36460a99ffec",
+      "9475ce04a8aec2fbdb569d7d4e6caec7b7e12630d04ef99357ff5b323184e03d",
+      "3e3a3487b8f6a40943c4164b34e6d9c09ee696c4b4774ce386a3bbcb09e1ab11",
+      "7ac81c595a36ee666d6762d210f4feb80021caceee7a3152ee05ff3d208da9e9",
+      "9475ce04a8aec2fbdb569d7d4e6caec7b7e12630d04ef99357ff5b323184e03d",
+      "66bb031de2e0d57be97e3746ea3baf2a69f9925a4169a2c70db853eadec31e7c",
+      "8588b9450b30822f250eda050c015cc9bb4b4d464c0e9c2a87e771704d2f47d6",
+      "d5dd0a1df84f9dfd2487dbc777a94eeea81412a06f831fa9dc6efa437bbdcd4d",
+      "852e0b0ea69bd79ea6fd7d9dac7b1b144b489f3f9923220da28f4a8c9f0d184a"
+    ]
+  },
+  {
+    "trial": 3,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3002heal",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 6
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_009",
+      "intent": "click 'First Name'",
+      "reason": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "OpenEMR",
+        "Calendar Finder Flow Recalls Messages Patient Fees Modules Procedures Admin Reports Miscellaneous Popups",
+        "Search by any demograpl",
+        "Calendar",
+        "X",
+        "Message Center",
+        "Search orAdd Patient",
+        "Search orAddPatient",
+        "Who",
+        "Title:",
+        "Unassigned",
+        "Name:",
+        "First Name",
+        "Middle N\u03b5",
+        "Avclab",
+        "Name Sufi",
+        "Preferred Name:",
+        "Patient preferred name or namepatier",
+        "Birth Name:",
+        "Birth First Name",
+        "Middle N",
+        "Birth Last Name",
+        "DOB:",
+        "Sex:",
+        "Gender Identity:",
+        "Sexual Orientation:",
+        "External ID:",
+        "S.S.:",
+        "License/ID:",
+        "Marital Status:",
+        "User Defined:",
+        "Billing Note:",
+        "Previous Names:",
+        "Add",
+        "ActivateWindows",
+        "Go toSettings toactivateWindows.",
+        "ontact",
+        "8",
+        "O Type here to search",
+        "4:05 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click 'ername'",
+        "type <username>",
+        "click recorded visual target",
+        "type <password>",
+        "click 'Login'",
+        "click recorded visual target",
+        "click 'New/Search'",
+        "click 'Last Name'",
+        "type 'Avclab'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "rows": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "halted_before_effect",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 49.64,
+    "first_frame_sha256": "e775922ab2f938ff8eb346d88aeeacaa48099c0db1d1d54ad071eead9fc903bd",
+    "frame_sha256": [
+      "aa5b04d34173f69830f6455975d67b9dd091bb9df626484501cb26f2024f9842",
+      "e775922ab2f938ff8eb346d88aeeacaa48099c0db1d1d54ad071eead9fc903bd",
+      "6ee8a46d3e7e0df6d50bb071438c7d202a1bc6f274b04e15c748f51e5b92c5e8",
+      "aa5b04d34173f69830f6455975d67b9dd091bb9df626484501cb26f2024f9842",
+      "1f304f3e1ccb43573c9489ea05dad4eb3b5c5305af49243dcebe1b941f6a739a",
+      "6ee8a46d3e7e0df6d50bb071438c7d202a1bc6f274b04e15c748f51e5b92c5e8",
+      "820fd1d5e42f5b4052cd320d0c9ebcfbe0d3e3be4dbd81331c6a660afdf59aad",
+      "1f304f3e1ccb43573c9489ea05dad4eb3b5c5305af49243dcebe1b941f6a739a",
+      "a38a6264c4294e1fdf956b1834d2544d4a38c810da9e567f505b1e04ad563782",
+      "4da51b12ae0b9aee633ed68e2580e4262a09a86609958ca3ec17aa8b7ff22c7c",
+      "400b3e7b99074a0f33313d31e0b74e610553b2d86263664c86c1711f4ecccc73",
+      "85052a49e9b2e61578761424edaee86553422ddc6e784894b37b3c993b659eda",
+      "1a5bf5370756c7cb2b5e3b7202de58a838a0a2d81c155fd72e78df94a62bb172",
+      "400b3e7b99074a0f33313d31e0b74e610553b2d86263664c86c1711f4ecccc73",
+      "30b761ff0507fb35df2433bab052ec79f84850bff373bb5afda4d06182580944",
+      "a16c2f9baea2f99beb2db457784a4d2c7821e6847f2c84793bad29df6966e099",
+      "6609908f003607f83e12e9ba2bdb144853db84488843cd746beb22de8c1acafa",
+      "4c041802503e5f73824a514d958ae3a8ae5d64a6afd56ab14bbe87933423052a",
+      "ace04ea2245b772e5f3966700c7081618bb795b24e15bb664d7c0e821cfe7285",
+      "ace04ea2245b772e5f3966700c7081618bb795b24e15bb664d7c0e821cfe7285"
+    ]
+  },
+  {
+    "trial": 4,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3003heal",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 6
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_009",
+      "intent": "click 'First Name'",
+      "reason": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "OpenEMR",
+        "X",
+        "Calendar Finder Flow Recalls Messages Patient Fees Modules Procedures Admin Reports Miscellaneous Popups",
+        "Search by any demograpl",
+        "Calendar",
+        "Message Center",
+        "Search orAdd Patient",
+        "Search orAddPatient",
+        "Who",
+        "Title:",
+        "Unassigned",
+        "Name:",
+        "First Name",
+        "Middle N\u03b5",
+        "Avclab",
+        "Name Sufi",
+        "Preferred Name:",
+        "Patient preferred name or namepatier",
+        "Birth Name:",
+        "Birth First Name",
+        "Middle Ne",
+        "Birth Last Name",
+        "DOB:",
+        "Sex:",
+        "Gender Identity:",
+        "Sexual Orientation:",
+        "External ID:",
+        "S.S.:",
+        "License/ID:",
+        "Marital Status:",
+        "User Defined:",
+        "Billing Note:",
+        "Previous Names:",
+        "Add",
+        "ActivateWindows",
+        "Go toSettings toactivateWindows.",
+        "ontact",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "4:07 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click 'ername'",
+        "type <username>",
+        "click recorded visual target",
+        "type <password>",
+        "click 'Login'",
+        "click recorded visual target",
+        "click 'New/Search'",
+        "click 'Last Name'",
+        "type 'Avclab'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "rows": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "halted_before_effect",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 55.55,
+    "first_frame_sha256": "fe971029859dabd4854a7ce6d40e573973f47090bffc045b5706c164fe4c9528",
+    "frame_sha256": [
+      "b905b05722a1bd0e49277fa028852ad9c5ac98ec9d575c5d793747945ecbe618",
+      "fe971029859dabd4854a7ce6d40e573973f47090bffc045b5706c164fe4c9528",
+      "f17f9cca6136cf17ff15a78ff2af28666ca5ae90a8239ebadab9555110377c6b",
+      "b905b05722a1bd0e49277fa028852ad9c5ac98ec9d575c5d793747945ecbe618",
+      "c34dc963d1df28155fddd859de2e2057fcce882140abe1bc8109bf0dd9a01361",
+      "f17f9cca6136cf17ff15a78ff2af28666ca5ae90a8239ebadab9555110377c6b",
+      "d833780aeb304a9b76f4d69aa893ddfb9d277f915c1974719c0969f8a7ead9ff",
+      "c34dc963d1df28155fddd859de2e2057fcce882140abe1bc8109bf0dd9a01361",
+      "621a19143a228a6a82b287f2cd7e76bce200cbd2ac5ffad755d7c958250ab988",
+      "fdfa92e7665490a5c7ef89a49bf9edb1fbbdae74bf38ac8cf9978c04d8b9ae6a",
+      "d1b75ffff8b383965acf3d43baf47955993c245d0c6224825fa1b151e5bfc08f",
+      "af520f4daf28fb779f50c5a77d880c1c0fe7a0f24c964f19e5181f8896a02651",
+      "db93263252baadb502d3d2a3c0bd156f158f031ff0d0a33462a44ff35cf4fc53",
+      "d1b75ffff8b383965acf3d43baf47955993c245d0c6224825fa1b151e5bfc08f",
+      "21ed5cf2c0701420f280edbf9e0bba443022b2403392460dd0f9b9384aec449f",
+      "b2f18b930589913d47e70f61d40778cecb6ee570fe4b733dad35afd3a299a5ad",
+      "42f3ea7cbc5f8b8959efaab42b24721fb47b313b6fb5a40cc9916a85ddabee8b",
+      "d7bb62debe1eafc8853307d0941e3a357c1e06c0dfe90048de903cbc858ed71b",
+      "cc43aedeaf4110870fc94d1630aa244df7139f61e35c0c1288107f4a1b0fa944",
+      "cc43aedeaf4110870fc94d1630aa244df7139f61e35c0c1288107f4a1b0fa944"
+    ]
+  },
+  {
+    "trial": 5,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3004heal",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 7
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": false,
+        "skipped": false,
+        "rung": "geometry",
+        "confidence": 0.9,
+        "point": [
+          454,
+          349
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Identity check failed for step 'step_011' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Preferred Name: Patient preferred name or namepatier' (coverage 0.00) \u2014 refusing to act; run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_011",
+      "intent": "click recorded visual target",
+      "reason": "Identity check failed for step 'step_011' (click recorded visual target): a target was found positionally (rung 'geometry', confidence 0.90) but its surrounding text does not match the recorded target's \u2014 expected '<identity template>', observed 'Preferred Name: Patient preferred name or namepatier' (coverage 0.00) \u2014 refusing to act; run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "OpenEMR",
+        "Calendar Finder Flow Recalls Messages Patient Fees Modules Procedures Admin Reports Miscellaneous Popups",
+        "Search by any demograpl",
+        "Calendar",
+        "X",
+        "Message Center",
+        "Search orAdd Patient",
+        "Search or Add Patient",
+        "Who",
+        "Title:",
+        "Unassigned",
+        "Name:",
+        "Oaun3004heal",
+        "\u2460",
+        "Middle Ne",
+        "Avclab",
+        "Name Sufi",
+        "Preferred Name:",
+        "Patient preferred name or namepatier",
+        "Birth Name:",
+        "Birth First Name",
+        "Middle N\u03b5",
+        "Birth Last Name",
+        "DOB:",
+        "Sex:",
+        "Gender Identity:",
+        "Sexual Orientation:",
+        "External ID:",
+        "S.S.:",
+        "License/ID:",
+        "Marital Status:",
+        "User Defined:",
+        "Billing Note:",
+        "Previous Names:",
+        "Add",
+        "ActivateWindows",
+        "Go toSettings toactivateWindows.",
+        "ontact",
+        "8",
+        "O Type here to search",
+        "4:08 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click 'ername'",
+        "type <username>",
+        "click recorded visual target",
+        "type <password>",
+        "click 'Login'",
+        "click recorded visual target",
+        "click 'New/Search'",
+        "click 'Last Name'",
+        "type 'Avclab'",
+        "click 'First Name'",
+        "type <first_name>"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "rows": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "halted_before_effect",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 55.8,
+    "first_frame_sha256": "4dbf59452ed73dc99aa679332ad28fed6ab8724e3b16580685d2fb278a1413db",
+    "frame_sha256": [
+      "c21c07c89b0c0587cc4b961d4eb61f73af9632d4b3dfcc5a1d32f7bf7acc9381",
+      "4dbf59452ed73dc99aa679332ad28fed6ab8724e3b16580685d2fb278a1413db",
+      "eaa5e1b4622fda95a83df37f3e98a82bc59f5a47865e50d7be6606e368607e60",
+      "c21c07c89b0c0587cc4b961d4eb61f73af9632d4b3dfcc5a1d32f7bf7acc9381",
+      "93b47267eb9dd5c53b33cc4f845a705c15bc180c05fba6e9521c7401c47abefa",
+      "eaa5e1b4622fda95a83df37f3e98a82bc59f5a47865e50d7be6606e368607e60",
+      "e1fa4345b487285034b593a37d23a7a5d40e95052ec16f210e0c86a5b06ced1b",
+      "93b47267eb9dd5c53b33cc4f845a705c15bc180c05fba6e9521c7401c47abefa",
+      "4ea3bfaa1554513f6777e984980bd5a3609f9bad606b94827eb97efe8aef88a4",
+      "e1fa4345b487285034b593a37d23a7a5d40e95052ec16f210e0c86a5b06ced1b",
+      "a0377b3e4392ff84fc2a8092250aa0aa070dc8b07d9057b86b04bab1834a091e",
+      "d784bac3131088acaef349b2e6c945e8aa8e113e60eba3238247485cde2c006b",
+      "fafc3b4b577e5fda2de07b8fe3c01f1447c3882c1021c7167bd1c37467c6362e",
+      "bd91f1b593c02e2d9385644c42b647ac3f2cd427e4699616c39757df2d55a228",
+      "a6d9541463bd28e63d91595673925cf27a99ab3a72e10dab404dd7a8afcb5898",
+      "f1e2f6fa66b3a7e0044d43e18c7039143fdc3962527becea749bdd310a5c7abc",
+      "9de0c1e82ec6242635b2766a6d4534208f0dcf7d2940f7337cf7caff8f4cae72",
+      "e715a3e1e27220ea18e68a723925a59bf70764cd67fbc8d95568efc8e5dd852c",
+      "8227c1086d79181978e619bc60a4e73c3357d414bb2d71cd12eff873c22d7f05",
+      "f952092235c3fef281fba0a4288755300b0c6c56e0f474958624ef3938430d57",
+      "774ef1eac39750d343d5586448f3dc721599942efff47a621b7c81facb4fa363",
+      "8227c1086d79181978e619bc60a4e73c3357d414bb2d71cd12eff873c22d7f05",
+      "454664df26fecce5ab7a6fed231f0bccf351727462dc351feee0f3e062784940",
+      "454664df26fecce5ab7a6fed231f0bccf351727462dc351feee0f3e062784940",
+      "0ed7d930631b0d2c807c0f598c249e8f28226fa073355cca9445f454528fb53b"
+    ]
+  },
+  {
+    "trial": 6,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3005heal",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 6
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_009",
+      "intent": "click 'First Name'",
+      "reason": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "OpenEMR",
+        "X",
+        "Calendar Finder Flow Recalls Messages Patient Fees Modules Procedures Admin Reports Miscellaneous Popups",
+        "Search by any demograpl",
+        "Calendar",
+        "Message Center",
+        "Search orAdd Patient",
+        "Search orAddPatient",
+        "Who",
+        "Title:",
+        "Unassigned",
+        "Name:",
+        "First Name",
+        "Middle N\u03b5",
+        "Avclab",
+        "Name Sufi",
+        "Preferred Name:",
+        "Patient preferred name or namepatier",
+        "Birth Name:",
+        "Birth First Name",
+        "Middle Ne",
+        "Birth Last Name",
+        "DOB:",
+        "Sex:",
+        "Gender Identity:",
+        "Sexual Orientation:",
+        "External ID:",
+        "S.S.:",
+        "License/ID:",
+        "Marital Status:",
+        "User Defined:",
+        "Billing Note:",
+        "Previous Names:",
+        "Add",
+        "ActivateWindows",
+        "Go toSettings toactivateWindows.",
+        "ontact",
+        "8",
+        "O Type here to search",
+        "\u8425",
+        "4:10 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click 'ername'",
+        "type <username>",
+        "click recorded visual target",
+        "type <password>",
+        "click 'Login'",
+        "click recorded visual target",
+        "click 'New/Search'",
+        "click 'Last Name'",
+        "type 'Avclab'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "rows": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "halted_before_effect",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 51.78,
+    "first_frame_sha256": "28cda8b10c780e8ed1250bfdf0e5ae8313631081fded6762da3d8ccb36ff264e",
+    "frame_sha256": [
+      "25fdbf948128a68301f2883c1a4da88c6e7d0d8279acdd3a60fc720cd064804d",
+      "28cda8b10c780e8ed1250bfdf0e5ae8313631081fded6762da3d8ccb36ff264e",
+      "30080c7491b391e890b1603c69d0f7288b12e9bdcb9f490e3e42a56dbedfd314",
+      "25fdbf948128a68301f2883c1a4da88c6e7d0d8279acdd3a60fc720cd064804d",
+      "aa1823195ca32c842775bf3cb3a45e9cec2d6c42ab76ef1d3217a85836671af2",
+      "30080c7491b391e890b1603c69d0f7288b12e9bdcb9f490e3e42a56dbedfd314",
+      "3571766eb9e623fff826597dd516357070c923ef41d1faa829ec73f3d0ae4dfc",
+      "aa1823195ca32c842775bf3cb3a45e9cec2d6c42ab76ef1d3217a85836671af2",
+      "dbc34bbed40fc999dd908c760d8e31e0653be79ffb8f48e95e8eec11eb425afe",
+      "3571766eb9e623fff826597dd516357070c923ef41d1faa829ec73f3d0ae4dfc",
+      "3d2a6cc8ba502804edd6f68ead410e683516d390a61af1533a943dae7c7fd831",
+      "5be78a771122241ed9718c6401014243fddcedbfc6407bfa732ec5cbf45cf2f9",
+      "f55054591cb0ccf9b5c45dc744aef752d5f5a62b22bfe2813ad26aac5930543d",
+      "3d2a6cc8ba502804edd6f68ead410e683516d390a61af1533a943dae7c7fd831",
+      "434c394b30b3a6ee65062e5385c1675a8d5c4149018e631f2d8fd4bac0be1ea9",
+      "bae064ec893c40fcea27dd4bfd8cf118d36e5ea1b9b2cac7080c721ed25cc1f8",
+      "3174ec0a7fe2e326618fce5e3f6a3f8b954f6ccb520f01351d399e3d0d821866",
+      "3cfd6a0a6a9bef33f5fa05bf37ffb71a0f383dc412b92537a7ec4637bd0cc509",
+      "1719600aba62218a4dc4eeb5fc7b7cbdae370862b16bd54459b0296891917b26",
+      "1719600aba62218a4dc4eeb5fc7b7cbdae370862b16bd54459b0296891917b26"
+    ]
+  },
+  {
+    "trial": 7,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3006heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.993,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          261
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3006heal",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 92.67,
+    "first_frame_sha256": "4f8afc01f8efef99779e323d1834651033283a3225805ce320341d542b901141",
+    "frame_sha256": [
+      "91aee97fc6f6422d2c2d91ca0347f510b8f3dedeae652a5f4225a92ef5e47b1e",
+      "4f8afc01f8efef99779e323d1834651033283a3225805ce320341d542b901141",
+      "f57f5186883a156aa3d1c43e378dcbe5fcb96dc31f380edf284da10ed4e2d321",
+      "91aee97fc6f6422d2c2d91ca0347f510b8f3dedeae652a5f4225a92ef5e47b1e",
+      "72b6dc2a068731b8c4993712024d667984dbcee857ed087aeadc2f89de9e006b",
+      "f57f5186883a156aa3d1c43e378dcbe5fcb96dc31f380edf284da10ed4e2d321",
+      "f41b1cfd817e68a5f8799d330a6c7f715cae91912b9f6c624fd6328436dca46a",
+      "72b6dc2a068731b8c4993712024d667984dbcee857ed087aeadc2f89de9e006b",
+      "51088df886236b699233bf54660faafc1ac87229d7abb57989f34196bfc211f4",
+      "8f6d2629a73d3b122998695a9cb50cf6e0cc4709d5021b57c2306ab52a05e318",
+      "6c3fae709fd10c9aef840e1fd3ee45817593b7cd41a17d280f06c8408f4026c1",
+      "78f6b981ab21dc225adf8f0a75bec0c4920238c2ea33d9e1be02c8640e124413",
+      "4457d6e7a5a1d96f389024eb3ff7adf35b92dd355c86d79b9cfc351ef53443dc",
+      "6c3fae709fd10c9aef840e1fd3ee45817593b7cd41a17d280f06c8408f4026c1",
+      "8e7c28ee1eeaaa760bb5563dc4a6c83ac01eccf2e9ee6dbfc704d43fdcd6ae77",
+      "1cc6a4d0eaaa37df34b175d46451fa5560c20a1376b5d8ef72542f74c299eeef",
+      "e25e6c8be4e8ad176c34c7dfc0350fc7466a8873b7affbd8063dde22d4e2786e",
+      "eae27588bf0c8a36e13e6a8f47583b1c9e3a0d1c75cadad90e0d3e19e1bb451a",
+      "94becda2aa47ec937d4523b27ba5a4030263174b0ea4cc3335c29821ee1e84f7",
+      "843f5d17532b4b577577e3c458ef63241160bff26001b1036963d25f1c3e8270",
+      "a31b7df9a889162a570ba162ab79459e4da55aada2ef915f93d0d85ec95b4f60",
+      "94becda2aa47ec937d4523b27ba5a4030263174b0ea4cc3335c29821ee1e84f7",
+      "3a0134d84c5742e37e7b618343298d9662efc64c1da2556b80f1a5748747ade3",
+      "a31b7df9a889162a570ba162ab79459e4da55aada2ef915f93d0d85ec95b4f60",
+      "a4d90d36a45df96cfbad3375c69595f6284d8f936e7afa41372d4e814f6fbef1",
+      "43830b0cb05c54e95a13cdaaffb9265f6514c7aa53b436519c0c2f7c0a10eb9d",
+      "16ef4591f949fd311acb2cc935c5f6dcd26402b2da6a1b5d338a4a6310877b11",
+      "a4d90d36a45df96cfbad3375c69595f6284d8f936e7afa41372d4e814f6fbef1",
+      "4d88d33bc7d9688d99bad4bf52068efae23ce18a131821ebd7ae25a6d48db387",
+      "16ef4591f949fd311acb2cc935c5f6dcd26402b2da6a1b5d338a4a6310877b11",
+      "80b1d42715a562a3525b08b95d8d8543b1ee5bd0f4737b1088febaa2dd000f49",
+      "4d88d33bc7d9688d99bad4bf52068efae23ce18a131821ebd7ae25a6d48db387",
+      "d8dde810d393dbfcb067e49d1460db336a7c07308d28355e4249d3a359cf204e",
+      "80b1d42715a562a3525b08b95d8d8543b1ee5bd0f4737b1088febaa2dd000f49",
+      "0feb4297acf6e92e6fd28d6edc2899372a16961dce905d79840e70db13672113",
+      "d8dde810d393dbfcb067e49d1460db336a7c07308d28355e4249d3a359cf204e",
+      "d41659300898a60cd1c905ec8c7517f88fa8407b8bd3361a52f942b9cfb4c762",
+      "0feb4297acf6e92e6fd28d6edc2899372a16961dce905d79840e70db13672113",
+      "4f4173421c5cbdd245f1b89ece5d8c25818003bdbada700bc172835b183503fd",
+      "379074669e896fe4fb4614b1917094531503e1f1fd17adc7044a85f83801b83c",
+      "b338177a2bdd67f0e5dceeea1405ab1370a8404e23b42a1c2544d2eface68565",
+      "214dfa8343dfdc1f36332b60e752f785555ec07b87935c1bd0f80b5826bc484b"
+    ]
+  },
+  {
+    "trial": 8,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3007heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.989,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          261
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3007heal",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 101.17,
+    "first_frame_sha256": "32b8aea202009f66b836643e629418b0767406636ab7bf26239aa2544123ca45",
+    "frame_sha256": [
+      "4d3521fe61d59d8a9fa2edeca24d928655d6f593b32a13c8c6173b6d9e53fe76",
+      "32b8aea202009f66b836643e629418b0767406636ab7bf26239aa2544123ca45",
+      "34a7bae747771eed385bc760e5dc206efe5438bbadf45312ee78ef07cdc14354",
+      "4d3521fe61d59d8a9fa2edeca24d928655d6f593b32a13c8c6173b6d9e53fe76",
+      "991df1d435c9b1d210f7d2ccfd7c91e1798249be5313b3c9a5eb5d8237984584",
+      "34a7bae747771eed385bc760e5dc206efe5438bbadf45312ee78ef07cdc14354",
+      "0ccd826c4a89f5c55c607b656eab56f3700da25ada614f9fb7a75f0945c5d4be",
+      "991df1d435c9b1d210f7d2ccfd7c91e1798249be5313b3c9a5eb5d8237984584",
+      "2dc8971a5c7cd49cb3b9d0738720c4a09b6eca50f560e6977bcd391fe427f8af",
+      "a4d35398577467f4f0611287f80f1a5aa69b09eb027cd009963b1a567f273210",
+      "31bf4a7edbc85eb944b638e26e0f54ba05faabeb681b695ea84ca77426605be4",
+      "c3fcdeca5e156f1ab3cd188470a3aa2e815aff1f0969afd96d92e87318fb4707",
+      "168563a5892118eb1b4fbe3704330f5db03915ffaf3d2e8cd5eae560671a6acd",
+      "31bf4a7edbc85eb944b638e26e0f54ba05faabeb681b695ea84ca77426605be4",
+      "05c97dfde8ce6c3edd4116a3e421f593058cd78b606a650d5ecf0909528bc303",
+      "af3f3c4cdce755b0202f4ef977c0a5145737eae1fd931483f15ef10c17cc1589",
+      "699dae0576059bde466cfcca4504c51f045e37b13516d2203d6a236c3e3e3423",
+      "83133b303e6433d0a8a26c890a8b85a94222106f896c5e3e7dc5c211984a35bc",
+      "b9ae258559eaa6cae54238bb3b58fb5408d3df341c5f465dab1b7ac26da1f04c",
+      "cbac5e44f0a199551fe0bbf4d39e2abad18581a80d7c69f8c900cdaa032856ac",
+      "3a77b382fa69a073c6c5d4df741ed5710f9e46c31503e5901ec81905a6328555",
+      "b9ae258559eaa6cae54238bb3b58fb5408d3df341c5f465dab1b7ac26da1f04c",
+      "f29b9a1701d63f7075074c78f20911d3cbb11d61e0a3979f4f4452185382c865",
+      "3a77b382fa69a073c6c5d4df741ed5710f9e46c31503e5901ec81905a6328555",
+      "9a62690c813ebd4b0eec08e66449c35e3b865a0e866f366f83dcae1d97cafd60",
+      "fd27ea7dad58d3e2da63b9e0dac5f6678118b2dd01eed5c16d166a1b22538255",
+      "ccfa591336bca708bd6712bb8a4ca8c77e5ae18e7d2be69fb22466bf6c2035e2",
+      "9a62690c813ebd4b0eec08e66449c35e3b865a0e866f366f83dcae1d97cafd60",
+      "6e5fc3f52d96ec5a1177d4b5b3f001cc7bacd4175483ab32c7452a69c5e10bba",
+      "ccfa591336bca708bd6712bb8a4ca8c77e5ae18e7d2be69fb22466bf6c2035e2",
+      "3ba7b78ef195f3293db4c2369dd55bb6251e1029eaebcf3a535a8d560426cc7f",
+      "6e5fc3f52d96ec5a1177d4b5b3f001cc7bacd4175483ab32c7452a69c5e10bba",
+      "71957a84e4036c1dfedbe1bc33407dc05d8f0bc93e94f2ec4d0fc287e3877a4e",
+      "3ba7b78ef195f3293db4c2369dd55bb6251e1029eaebcf3a535a8d560426cc7f",
+      "42a33c9b2d97eaf976231f4238d3e6d4e56b1fec271d6de0cec3b114919d19d4",
+      "71957a84e4036c1dfedbe1bc33407dc05d8f0bc93e94f2ec4d0fc287e3877a4e",
+      "576bc2f16d169f659a6d753e374a6b083ffa9bdbbf533fea63c954173ff0d28b",
+      "42a33c9b2d97eaf976231f4238d3e6d4e56b1fec271d6de0cec3b114919d19d4",
+      "d730026913cac72c55fc2f073fb6195c427ff034e0fc4dc3e4b4db4ec996b8ef",
+      "e9e92dc766d66c6342ae56d9f3cf2dae3764afffcab49915e6c4a59075b943b4",
+      "28bb3ccee4e6a59f77bb766f74ccb642c7e5a61c07eaa17c93b9ec339e519cf5",
+      "e8ab3150069f5b736b1d767050fa7a3b26b063139c200eb95e8a3827336c33f1"
+    ]
+  },
+  {
+    "trial": 9,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3008heal",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          261
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3008heal",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 94.33,
+    "first_frame_sha256": "19a4020444b486483da3901f0e8519f34bf61b63d2cae546a7ecfcaf359c1a54",
+    "frame_sha256": [
+      "c6d4dae09477dc3c1b2dda8cf7f858cacbb170835d23f9220149308d04e3f267",
+      "19a4020444b486483da3901f0e8519f34bf61b63d2cae546a7ecfcaf359c1a54",
+      "2509eee68d88c3dd619fcefdfbcac642b6856bfcdb5ddc481868ad69a96de18f",
+      "c6d4dae09477dc3c1b2dda8cf7f858cacbb170835d23f9220149308d04e3f267",
+      "349833914e269df189d8de9e3d0bb38b09e9a9c7b563f296a1c8436495df4435",
+      "2509eee68d88c3dd619fcefdfbcac642b6856bfcdb5ddc481868ad69a96de18f",
+      "6375fda0fcf46becea336288dd6afdf100ed76e40e0c2342729462e898e50881",
+      "349833914e269df189d8de9e3d0bb38b09e9a9c7b563f296a1c8436495df4435",
+      "d13f00a48d101741a7328c96a27016ebef672160818966ca1c778613832b5f57",
+      "6375fda0fcf46becea336288dd6afdf100ed76e40e0c2342729462e898e50881",
+      "c599c4092c43a03c78c60c750affabfa27de7005e78c3282ad0222546d792a2e",
+      "b13f597d7287e7faf4897734da06c0bc712c8b64382016f1fbc6a1cfddf0004c",
+      "58acbd38d30fa6606efcf7986c2a1950ce23d276e39d5ea967b231560f8ccb84",
+      "c599c4092c43a03c78c60c750affabfa27de7005e78c3282ad0222546d792a2e",
+      "1a4ec057aed3e88934f40aa598d4e11e9b55a326eb907c8e4dd444fda6032355",
+      "71e65d1dc5981c40f0c6b87fbedab0c7747b129587c7970fa6f439d478296a31",
+      "91db549735af61b93835e65fb7cb72307687064b17c54cc17ba108ada9b13db8",
+      "be69186573622dae2408cb38199c4e90e0c56c8742f35037f830214ec5332e40",
+      "366fea65cbae02a4f47db8d8781cac115c60144975d81e85a1927efde1e4da92",
+      "7e611823449cde5a35ccb2054ebdbb6b1dca27192cc8a73434db4977692f2a22",
+      "293d22b314714c9f9c0793fbc348bdd99dac5459aa47724178857f7c1b63ff79",
+      "366fea65cbae02a4f47db8d8781cac115c60144975d81e85a1927efde1e4da92",
+      "f750ad366386554fd0079a6aa5412f82ef01f95bde5c343838f855747b7bb9fd",
+      "293d22b314714c9f9c0793fbc348bdd99dac5459aa47724178857f7c1b63ff79",
+      "64eb89c92db09a57ab66070429c1287c220c684002328b13483350a57478a59d",
+      "ed892db69cb01aeedded28e313fcd5d309ad01ceed3bd768b957c5a46659f1cb",
+      "ba54d62123c31507758cc0dafeb9ab2e2ae748c9424773978e61cf82f53001c1",
+      "ba54d62123c31507758cc0dafeb9ab2e2ae748c9424773978e61cf82f53001c1",
+      "0edbdb5d29f590a6c59fd313213c4d8351bd4d377bce8eea6afc1497e8dffe99",
+      "63a0bc1988d48e44feb8b4db05a51aa4cfb45b4f5854738a346030cd1da088c2",
+      "6bacf31b22d3a2fcdf19570b93d640d28b293da6112ef071e7465d8561d3a41b",
+      "0edbdb5d29f590a6c59fd313213c4d8351bd4d377bce8eea6afc1497e8dffe99",
+      "b95db5efabef25aea4e1f90e0efa79691189b3fc0b206e590faea94cfd7d2987",
+      "6bacf31b22d3a2fcdf19570b93d640d28b293da6112ef071e7465d8561d3a41b",
+      "4681d2319c69510121de29bbbc0307eaf6c374bc2d67502079513cf0eace01ce",
+      "b95db5efabef25aea4e1f90e0efa79691189b3fc0b206e590faea94cfd7d2987",
+      "81c9403734f61b66093757400b608f7aa18e633e47fe9468da5bd8a406dca43b",
+      "4681d2319c69510121de29bbbc0307eaf6c374bc2d67502079513cf0eace01ce",
+      "8b75b5949ff1c8a6ed1ccc4cd14afff7321d31580cf24bf1b871b26e1c42b156",
+      "2ddafd3db25ed866e8233497c9e127e38a063d33299e4cf30bae00b15982191a",
+      "a4ba82f60bca3fe019983ea2b9380155107856289f433ce60afa4cda2d770547",
+      "1e1705221806917d2a703091e36eb560c58b75581026c6df8643d917474253c0"
+    ]
+  },
+  {
+    "trial": 10,
+    "condition": "healthy",
+    "drift": "none",
+    "bpp": 32,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3009heal",
+    "success": false,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 6
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": false,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": true,
+        "failure_category": "safety_halt",
+        "detail": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted"
+      }
+    ],
+    "execution_outcome": "HALTED",
+    "heal_count": 0,
+    "halt": {
+      "state_id": "step_009",
+      "intent": "click 'First Name'",
+      "reason": "Step 'step_009' (click 'First Name'): the screen kept changing at the identity region between the check and the click \u2014 click not delivered; run aborted",
+      "outcome": "halt",
+      "observed_texts": [
+        "OpenEMR",
+        "Calendar Finder Flow Recalls Messages Patient Fees Modules Procedures Admin Reports Miscellaneous Popups",
+        "Search by any demograpl",
+        "Calendar",
+        "X",
+        "Message Center",
+        "Search orAdd Patient",
+        "Search orAddPatient",
+        "Who",
+        "Title:",
+        "Unassigned",
+        "Name:",
+        "First Name",
+        "Middle N\u03b5",
+        "Avclab",
+        "Name Sufi",
+        "Preferred Name:",
+        "Patient preferred name or namepatier",
+        "Birth Name:",
+        "Birth First Name",
+        "Middle Ne",
+        "Birth Last Name",
+        "DOB:",
+        "Sex:",
+        "Gender Identity:",
+        "Sexual Orientation:",
+        "External ID:",
+        "S.S.:",
+        "License/ID:",
+        "Marital Status:",
+        "User Defined:",
+        "Billing Note:",
+        "Previous Names:",
+        "Add",
+        "ActivateWindows",
+        "Go toSettings toactivateWindows.",
+        "ontact",
+        "8",
+        "O Type here to search",
+        "4:17 AM",
+        "10/29/2026"
+      ],
+      "completed_intents": [
+        "click 'ername'",
+        "type <username>",
+        "click recorded visual target",
+        "type <password>",
+        "click 'Login'",
+        "click recorded visual target",
+        "click 'New/Search'",
+        "click 'Last Name'",
+        "type 'Avclab'"
+      ]
+    },
+    "render_scale": null,
+    "db_outcome": "no_write",
+    "record_detail": {
+      "rows": [],
+      "record_check": {
+        "effect_verdict": "REFUTED",
+        "outcome": "halted_before_effect",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "false_stop",
+    "must_save": true,
+    "elapsed_s": 57.73,
+    "first_frame_sha256": "7e7ac19890f418a06a0923e812302afd1792590cabbe0bc9f92aa921b293c4a4",
+    "frame_sha256": [
+      "638bab7350ec3b1952945e11aaf76c22a914454eabe4928074f0147df3dbec5f",
+      "7e7ac19890f418a06a0923e812302afd1792590cabbe0bc9f92aa921b293c4a4",
+      "b5d21485260c9b3396ae0350ade4cedeb84eac5adf70377576cd88d9a61cd90d",
+      "638bab7350ec3b1952945e11aaf76c22a914454eabe4928074f0147df3dbec5f",
+      "73a24642ef46183bd17f9afd7246787254642e55df586924f16efc782e5b2a1a",
+      "b5d21485260c9b3396ae0350ade4cedeb84eac5adf70377576cd88d9a61cd90d",
+      "f5c1f57fb633fb7518fbe420e7ce7efc9db97ebf2ade9e6f8ad75ebae50d73d3",
+      "73a24642ef46183bd17f9afd7246787254642e55df586924f16efc782e5b2a1a",
+      "bf2eeeff5a700ab5a49e7c9d295e6deecfa4678374a4bd5e145422ddf5d13270",
+      "f5c1f57fb633fb7518fbe420e7ce7efc9db97ebf2ade9e6f8ad75ebae50d73d3",
+      "a0a75fa41249cd024f454046a4098975108b62589d65bb3607915f8d61e6d34e",
+      "93d7608f56df35ec05643ea02ecf809c5d8dfc1700417a130df1b36eca3efedb",
+      "54787b76d6e2741da57f726c6f14ebe4da6cf5c7277be1a6a2af375eaee65fb1",
+      "4f633529ce781d4ea3496382742f9389a645c56bdc31b414f36c660007866c71",
+      "7e3cdfaca132e88aac5559b5d49db6a4affcf6669cfc3ef94f996aefc23dec27",
+      "6e8cfad67a59658930510d055ce79a6e4db7c650572a0e26236408d46a1f636b",
+      "328272efad5dcb78d072d99cd2dffa6259380b0b6fa91291bc316abe944a3c73",
+      "94c7034880e52635e1866fc4102be74ac9135d51b125e9bb44b64c51f1d81a23",
+      "5fa7143f6aef5435313ecc84b14c77ff917554e0d160d13cd52303f76905ecc1",
+      "d15e053b7526190031bc131bc30f9abc1405908c27e8e78ba29395148c6d4812",
+      "d15e053b7526190031bc131bc30f9abc1405908c27e8e78ba29395148c6d4812"
+    ]
+  },
+  {
+    "trial": 11,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3010bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.988,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          260
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3010bpp1",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 100.83,
+    "first_frame_sha256": "2ffdfe3b20e89465f73786b17fff77def1b119237cecd429e072675c8ecda04c",
+    "frame_sha256": [
+      "929d877e695e463482bf5bd234a87fea2b16c67e1cdfb625e9ccba75a0176604",
+      "2ffdfe3b20e89465f73786b17fff77def1b119237cecd429e072675c8ecda04c",
+      "6db28f36bae04caab0453b0d0ca0e528aa2c25836abfc048699ed13b3de86c4c",
+      "929d877e695e463482bf5bd234a87fea2b16c67e1cdfb625e9ccba75a0176604",
+      "8157fa9ddbb85974ff40c64c01eff7f88a39d2234025e57773ce8ae16a4f7d2d",
+      "6db28f36bae04caab0453b0d0ca0e528aa2c25836abfc048699ed13b3de86c4c",
+      "d78996c09fec788532e291d2fa2b43765ebeb33b3a42de2ff8e515c3132816d9",
+      "8157fa9ddbb85974ff40c64c01eff7f88a39d2234025e57773ce8ae16a4f7d2d",
+      "dfa46d5da41df44075d43e8b461c83051aedb40ee09145804a42b2f3d5afce67",
+      "d78996c09fec788532e291d2fa2b43765ebeb33b3a42de2ff8e515c3132816d9",
+      "582ab47023d4a0c243f3b8a72684795b83458811e60a779421a224e42e99f972",
+      "40b3ba6371bf1ea151244841930e361191bcee343ae7beab62e14365c213db5c",
+      "b3df7eaae0018df48ca0d15ec84e71d945dd806b8ffa07c5f9162c2c9e4f9319",
+      "582ab47023d4a0c243f3b8a72684795b83458811e60a779421a224e42e99f972",
+      "f99f09b6f30f1c1f5a6f573752f6e614c7cd3919483c4d2041217ead984ccad9",
+      "a3e48f46f66b1bfe3755988035a9886dc256d5c0cb9bec6a0090173b2ccec906",
+      "0bd926d6a8616872a5be28c4c1cb449539fd80b5672c537d4aebab7964803795",
+      "953ad3308d32186aa2b04352c3c6b8040782504ccf660d0033c35e0472cd2bf1",
+      "6f729402e771648aef5813b41db6951eefe7c4fe9edc7f9ca19e95d812157090",
+      "572c5971d1dd6b603d46d624628f247da50638843cd531a25862c78e10cbeb47",
+      "d49e9e4688b3de984a7aad2f41f3f6bda14a9cbc2da3bdc5d1cfc6a5231263d5",
+      "6f729402e771648aef5813b41db6951eefe7c4fe9edc7f9ca19e95d812157090",
+      "b06c7430c580490a3726ad55d2e749730eff8dcaed00cc2189607b418edd815f",
+      "d49e9e4688b3de984a7aad2f41f3f6bda14a9cbc2da3bdc5d1cfc6a5231263d5",
+      "4608f6462193ccabb506d4d22607e20dfb7e39d822d1a3a1c53545c4cf7aef3c",
+      "d43b869b8be5eff489489690d5f7fadb018faa0001d798bfc33eeb1a7a12dcf6",
+      "3f7c580fa2a17e6c51969f08112cfffbfb3d654e7c6f54d197e3334b9eeeff43",
+      "4608f6462193ccabb506d4d22607e20dfb7e39d822d1a3a1c53545c4cf7aef3c",
+      "63cdc8b8fdf03324cfba5f65f552e64f8ffcd2f8ec5ed04c87b2e801246e9727",
+      "3f7c580fa2a17e6c51969f08112cfffbfb3d654e7c6f54d197e3334b9eeeff43",
+      "6761960a16ee043135df3a9c7e7c00df2b5b7dffcfc43f131ad1a9ec4a6d197c",
+      "63cdc8b8fdf03324cfba5f65f552e64f8ffcd2f8ec5ed04c87b2e801246e9727",
+      "2a06efe8d0f839aa3a67dc6fc19f2c246b119a7aba79c8fbdd93085912c81ad4",
+      "6761960a16ee043135df3a9c7e7c00df2b5b7dffcfc43f131ad1a9ec4a6d197c",
+      "46248def00cc4688504f0784e414cd5eea0cbe315f89058a5ed1ab2ac3c72fd5",
+      "2a06efe8d0f839aa3a67dc6fc19f2c246b119a7aba79c8fbdd93085912c81ad4",
+      "45411386a1eb7dee06bf155a70cfa7238bd78d74aea6a06080a30018c0c78efa",
+      "46248def00cc4688504f0784e414cd5eea0cbe315f89058a5ed1ab2ac3c72fd5",
+      "e2b035c2a561379d244b1b9883d64cf940a4329e29d4e4353245752642e56b33",
+      "800f6829c16537600bfbc38c66574e94b9f3950772809c3cd28e0742ac4c6ebf",
+      "1a90abcfad97e3984fe5d1735ee31a5727e823cbeed022faaf66ec226c8fbfad",
+      "251af80edf78f37b9a45ee3998d047b3038235b8850e0aa19b6b080ec3d22981"
+    ],
+    "first_frame": {
+      "file": "emr_bpp16_first.png",
+      "sha256": "2ffdfe3b20e89465f73786b17fff77def1b119237cecd429e072675c8ecda04c",
+      "size": [
+        1280,
+        800
+      ]
+    }
+  },
+  {
+    "trial": 12,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3011bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.989,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          260
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3011bpp1",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 87.25,
+    "first_frame_sha256": "9bfe1420c9617b5395f22f7f91112f4642bdfa48acc5968c089169a7470926c5",
+    "frame_sha256": [
+      "891aadd85230d14360db43d1eff7b14f24da21cf72f18cf9175ef4039983c539",
+      "9bfe1420c9617b5395f22f7f91112f4642bdfa48acc5968c089169a7470926c5",
+      "19ad56b11bab1f436a45eba64977648933c8ef96f556cdccccd761d3341e9e10",
+      "891aadd85230d14360db43d1eff7b14f24da21cf72f18cf9175ef4039983c539",
+      "eb172dde398573e9790a683d9121c6ab6f049a10778ec538e295d753f4e4ee29",
+      "19ad56b11bab1f436a45eba64977648933c8ef96f556cdccccd761d3341e9e10",
+      "27402e209a66a66328e7623f6a661f67cd2b90ab859c88b37d1fa684487eb988",
+      "eb172dde398573e9790a683d9121c6ab6f049a10778ec538e295d753f4e4ee29",
+      "e11ec79013ce38096436b2dc916ee51411f323b4cf3114c5fc6d54950ffa71d8",
+      "27402e209a66a66328e7623f6a661f67cd2b90ab859c88b37d1fa684487eb988",
+      "374d40cd0fc929500313380011569aaec15f0661aad520f89c2765a57089ea0f",
+      "e4107a0c5bedcf93f9e34ad88f7f4a603831ee1c2b41d9afdbe78662dc7f7513",
+      "bcb5c644933fb09761083f7d1fa7bcfa7308d6772a50238c2841ee9885d77ffd",
+      "374d40cd0fc929500313380011569aaec15f0661aad520f89c2765a57089ea0f",
+      "4093baf3214ae110368cfa4fdb322369e77f09dcb0693262746e12f9813193f1",
+      "bcb5c644933fb09761083f7d1fa7bcfa7308d6772a50238c2841ee9885d77ffd",
+      "448251b9621536abdc888c858f9fee3413876fe924badaf106b890cccb911848",
+      "58c6cdcefa431d1e1aa7e05a0ccfc051ca39ecbe954bdb2d2dc3451f82854b92",
+      "a90e9d833e2246ac6068ac523e5e1e469c0ef053c127d23d69d1746ee58fc228",
+      "b5820fd29de2ded28baad891957f72acafdbf2eb688a9906eb506747029a8b6c",
+      "e2fec035726554ffd6a6820f6b3b43e092835524985b5b0fb9a9622ced31f781",
+      "4882e36173ba72958fcf348e58a93030d3299294318adf1600e5002d4cb97c63",
+      "c19291c7cad20ac44c608bc043c34dfaef4cf77d065e7cf256237aad5e1deff4",
+      "e2fec035726554ffd6a6820f6b3b43e092835524985b5b0fb9a9622ced31f781",
+      "8cd7634d8f2cb8009bd9d2c6adf79608efd833078875db37f1b15ddbb140f06c",
+      "6ce6b96bcabbe1b407009453390a865336aade92d2d57daec890db7ed8ee767e",
+      "64ce0f2a90d441d35ba17f61f4c154b394533e32af3fa80c25e033f74ec75477",
+      "64ce0f2a90d441d35ba17f61f4c154b394533e32af3fa80c25e033f74ec75477",
+      "d9efb2e3e8142e27bce6ba204f1fa8d009a2bbee592e77932d073fb25b933fad",
+      "ea933f37f52a481a0e45e724854d9e98daf2edd283938267d226c0ec2ea5dd1f",
+      "4ee6159ad24e1fe8ebcc3fb7827f8871f7b5c66e000a2ebdcde788fbd6df6dc7",
+      "d9efb2e3e8142e27bce6ba204f1fa8d009a2bbee592e77932d073fb25b933fad",
+      "ecd5f569376b3a326069dbb866c0519ef8a2e842a4ea07125a5a3a584994a8fb",
+      "4ee6159ad24e1fe8ebcc3fb7827f8871f7b5c66e000a2ebdcde788fbd6df6dc7",
+      "cc7bdcabd2a33b2aeefb19523d5c947630c87537756676a5a87aa70e17ce2a2b",
+      "ecd5f569376b3a326069dbb866c0519ef8a2e842a4ea07125a5a3a584994a8fb",
+      "283395972dd27b88a59c7e92163284b94766fa3933af529fcc4beb583594e5c8",
+      "cc7bdcabd2a33b2aeefb19523d5c947630c87537756676a5a87aa70e17ce2a2b",
+      "d0d852d753db4e02642cfb206d70f3223b3892f6f1ae563d85340e464c882e77",
+      "cc1019a7e9aed4ad90281749ba444a2aa6f140fab0dfd78b9e055f87201f6000",
+      "53135622821b20239f910c182d51f1bdf681f90aec607de84c3c3d44d9441717",
+      "7a24aea9c8e728c22fb442a50dda437e2f0605dfedb36663d6de61806179fede"
+    ]
+  },
+  {
+    "trial": 13,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3012bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.989,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          260
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3012bpp1",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 81.02,
+    "first_frame_sha256": "baa3347fc450a49855e6f924aebb2c8a895c80c14bf223376fcfb98c688676d0",
+    "frame_sha256": [
+      "6d0f9a957e6898e290ea6e41ea461c23c05fe04ed7c3607aa5341018a8633828",
+      "baa3347fc450a49855e6f924aebb2c8a895c80c14bf223376fcfb98c688676d0",
+      "bc1ebd1e7e5b3e0c270e9e95098f77f028f2b52bc0bf48cbf909dd7454bd1534",
+      "6d0f9a957e6898e290ea6e41ea461c23c05fe04ed7c3607aa5341018a8633828",
+      "193be49597200c5f1922e1cb2bab319f7e5672f4ced08d81449933f751be6937",
+      "4bec76d55ff2e41787bece646a99f473695fc5e958caa64c57a3596a6a77e4fd",
+      "1eff87eaddc48d6c5040a79085cf69fb465458c4b54f0b3c554bfcd7e89a0fd1",
+      "193be49597200c5f1922e1cb2bab319f7e5672f4ced08d81449933f751be6937",
+      "5c649bbf5c3af84b08dcf7d2924a1f7f01609da939789ac38df6e5a5f821b566",
+      "016ee30257a1f15c55bcfae5b3868200cb4c84056af11463eb886481f9c82d3e",
+      "afff0b7a26d73a3429030edf6e96b6c02aa077fdb0fcc838c3f0ea44b7f77fc9",
+      "89e99907911bdeb918fb1b51d9ff30da818c251186ffd0f430fef9a7e9465163",
+      "02125fa0126769fcd55de6c26e62bbf3efafcbc2fd5511ff15f4ba4473040948",
+      "afff0b7a26d73a3429030edf6e96b6c02aa077fdb0fcc838c3f0ea44b7f77fc9",
+      "15de16efd23d9e5f1979a61059ce1dd91fe36c65d0567980981ec4ed0315586b",
+      "02125fa0126769fcd55de6c26e62bbf3efafcbc2fd5511ff15f4ba4473040948",
+      "0579126d1ad2c285c2220405b5f9b4dd8ddddcc8014d2e561e35c7decfe15d9c",
+      "96cd3c0af56e2c3b2890f3adfdf57cff002f1d6aad4c1d69c3c27b570da9d250",
+      "c7515c5681278dd02a702986adef3b92c09cdd40bfcaa84538fd0299d40f59ca",
+      "8422c22781c043031c9c7937740e5ef353eed38887be5f174cc54dde45019a63",
+      "e8d5f428c7c97f5ed20ed138ab910785aa36a33dcac7dfd88a3bbd879b776ca1",
+      "c3f2d8419768fc1c904a49abc5bd42e7d47efafaa231d2d99c6eed4e797b4ace",
+      "b90006401a8468eadfd81e5b24cd96084ef4c71bf3bb27c05d34a2e932143da5",
+      "e8d5f428c7c97f5ed20ed138ab910785aa36a33dcac7dfd88a3bbd879b776ca1",
+      "6e771380cd46d3ed85bc73307383c92f7fd1341a999ab3cbc00565f0ecd865a5",
+      "5f3b9c838900c2f35a5d01f651daf7ea7129b310b0a2ea8267e543431699a346",
+      "74bcac136aeeca81c28450692f5bcb242fa763789bf5a558b5dcaa842a5df7ca",
+      "74bcac136aeeca81c28450692f5bcb242fa763789bf5a558b5dcaa842a5df7ca",
+      "f9e3db7a00100d385262262d001522027e8091655256b92dac030fc4ea724032",
+      "9adb4fbb016dde4ce4209e4b82488ec7f95bdb53dfb11e8116dcfb962dd8b08e",
+      "133d8fde4d6dfe1314a63eb119b73861dbdbbb6345d89a51397552525bee6efb",
+      "f9e3db7a00100d385262262d001522027e8091655256b92dac030fc4ea724032",
+      "f6cf8cfc2808c7fe1113db40a7006640d744b6cd4795c4fcd166117b5259fc8e",
+      "133d8fde4d6dfe1314a63eb119b73861dbdbbb6345d89a51397552525bee6efb",
+      "360b80a2687adfd3e9b351534c7166b8dd51771439bc2348591c04d01af0a36f",
+      "f6cf8cfc2808c7fe1113db40a7006640d744b6cd4795c4fcd166117b5259fc8e",
+      "46645ea7b5052f3fd49b9bc1a011054763c30ed4648e2fd7cb6e06dc2cc096ac",
+      "360b80a2687adfd3e9b351534c7166b8dd51771439bc2348591c04d01af0a36f",
+      "d7b3b1eb024b9489317e2c6121f0ba8d3de63a05429a4133537cc1d8e88b3941",
+      "a2ce6eb3e4b5a2364c101516a53eed94c7d96c34c669720214136a79e0b81e57",
+      "69fc219823a8ea7a1df2fe404350c7b760cab43aca40e82c6562dfaf489af1ef",
+      "d85dcf96f0a34fab4403d9b9ecc2942aef54a71049042a945a6aa54bd51a0684"
+    ]
+  },
+  {
+    "trial": 14,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3013bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.997,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.988,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          260
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3013bpp1",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 96.01,
+    "first_frame_sha256": "8e36bef9dfb48d78e56d0e6ff9b38340d325010e01b26e9f587f3c25fe8addc7",
+    "frame_sha256": [
+      "7d42c859677cbbc047acaacabb0b5f1cbae367850daaa52d4afeecfe2be1e0af",
+      "8e36bef9dfb48d78e56d0e6ff9b38340d325010e01b26e9f587f3c25fe8addc7",
+      "917b38665d60be0d22aaae02c872029e3062798152df219b92339c6096c40e6d",
+      "e40ffdcad627feb6833f434f0eda79561fb48781ed342ef3c706cc073726d0fc",
+      "73d4a532e0c619db77f2c34beb982f42693ee03e16c2f4b913a35c5ad8cc5f9f",
+      "917b38665d60be0d22aaae02c872029e3062798152df219b92339c6096c40e6d",
+      "c6e182ca2fed61ff89e3735ea0ff280d931af6d705ce254e9aa947f12c4f3e75",
+      "73d4a532e0c619db77f2c34beb982f42693ee03e16c2f4b913a35c5ad8cc5f9f",
+      "7d8c765cd1b35d7a277bbcfc47926125bb9d7f75b8404964298091028ec1c5dd",
+      "c6e182ca2fed61ff89e3735ea0ff280d931af6d705ce254e9aa947f12c4f3e75",
+      "9c4693c17fe564f3198b7c1338ecb5b3de3892d78c45b15a9cb7b90c65b9c536",
+      "913eebb57e94f5b724ce71d2021bfbbf184c299f2cc994e2dae4b7b6614d290c",
+      "dd9a73c761dffd289b2123d5cea0e347aa1454423c717fe532d86b97b2a9d0d0",
+      "9c4693c17fe564f3198b7c1338ecb5b3de3892d78c45b15a9cb7b90c65b9c536",
+      "e39a589548131f912101b4fa23ec55084e8ab985373b68a9b9c4504b22f48dcb",
+      "dd9a73c761dffd289b2123d5cea0e347aa1454423c717fe532d86b97b2a9d0d0",
+      "af9a993ca4dddf66d9962b09afcf677d6ef7b319fb83c413c5fe71bc744d4948",
+      "bf9a9e94979f54e9ba07162d0a2ac175f67cf04c39f389bac2b85dc5a0bfa536",
+      "970ea76add9df7ab8c16662143d1622cd6e1eec0da3f6594eb021a514b864cbd",
+      "361b322492ca5ac34bfbc07535fd041a8ac4f0eaf8da459cc783f13fb3e82c73",
+      "9d6bb691b3c87d4fae6d94e10ed6db4329edd988277ba60199cd98c078ce07fd",
+      "693cbaa35a289d723149ce4837a365bd2bd711a13bc9c7516bc6fddbc2f07e47",
+      "5c3a505cd7316913e362b682b912e291ebf198ab8ebaa7a07659d77de878d356",
+      "9d6bb691b3c87d4fae6d94e10ed6db4329edd988277ba60199cd98c078ce07fd",
+      "9b85c5cdf2d5770005740b2dad83382635959aba91df3cf4208f0ac4d4b01fca",
+      "d9278aa60ba3595d8a839457fefad6393f9b61c2ccdcc70f08b133d6971dbd22",
+      "df24a1e2e9f94af08b6ccf02b74250bd97cec54924c5514a66b588181d36b129",
+      "9b85c5cdf2d5770005740b2dad83382635959aba91df3cf4208f0ac4d4b01fca",
+      "db8cba004691cd99426ca2ed9b6bbbba5240c5e4a8e7f17f1f559cd57a0aa556",
+      "77b55cee3d5a6fe9b1f32d779dd18377d148589861450b6c84f999d0b62ba28c",
+      "30bc17a4279301f94459b3b8de4ef4b86334ebc833aba106d403aad5403ad4e2",
+      "db8cba004691cd99426ca2ed9b6bbbba5240c5e4a8e7f17f1f559cd57a0aa556",
+      "cdd959860c468cf2c14a027ee1691b48e97d3a283b292baf01cfaf76e8508457",
+      "30bc17a4279301f94459b3b8de4ef4b86334ebc833aba106d403aad5403ad4e2",
+      "918229909665c2f1971fc4ebb282b8ded7dd1824e90d5da54943210fdaaf0dad",
+      "cdd959860c468cf2c14a027ee1691b48e97d3a283b292baf01cfaf76e8508457",
+      "d7958547a7189bbd1a48a02bdb1ead83aac867ccce62998fa941e6f3f9faad00",
+      "918229909665c2f1971fc4ebb282b8ded7dd1824e90d5da54943210fdaaf0dad",
+      "0251422a8b63d4a6dc61d78c6e56a261a236d2b5f496bd73f794e78df077097d",
+      "730a250c23af938c39e7c3731c90d8afe95b891511789b55b162ba3027d36942",
+      "0b2bf01c417f830546a9c3565535162a2dd5762c8dd3d5998e6e5fa77b6c0f18",
+      "cceff5cbe838ee55acec73d653f6f43b6ea9b19e7db11c25c835451bcba6840f"
+    ]
+  },
+  {
+    "trial": 15,
+    "condition": "bpp16",
+    "drift": "none",
+    "bpp": 16,
+    "desktop": [
+      1280,
+      800
+    ],
+    "token": "Oaun3014bpp1",
+    "success": true,
+    "terminal_outcome": null,
+    "error": null,
+    "model_calls": 0,
+    "rung_counts": {
+      "template": 12
+    },
+    "steps": [
+      {
+        "step_id": "step_000",
+        "intent": "click 'ername'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          705,
+          396
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_001",
+        "intent": "type <username>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_002",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          684,
+          450
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_003",
+        "intent": "type <password>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_004",
+        "intent": "click 'Login'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          640,
+          558
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_005",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          361,
+          43
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_006",
+        "intent": "click 'New/Search'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          378,
+          71
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_007",
+        "intent": "click 'Last Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          706,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_008",
+        "intent": "type 'Avclab'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_009",
+        "intent": "click 'First Name'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.996,
+        "point": [
+          445,
+          311
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_010",
+        "intent": "type <first_name>",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_011",
+        "intent": "click recorded visual target",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.988,
+        "point": [
+          429,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_012",
+        "intent": "type '2001-01-01'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_013",
+        "intent": "press escape",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_014",
+        "intent": "click 'Unassigned'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.998,
+        "point": [
+          965,
+          423
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_015",
+        "intent": "type 'F'",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_016",
+        "intent": "press enter",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_017",
+        "intent": "click 'Billing Note:'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 0.999,
+        "point": [
+          146,
+          599
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_018",
+        "intent": "press end",
+        "ok": true,
+        "skipped": false,
+        "rung": null,
+        "confidence": null,
+        "point": null,
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_019",
+        "intent": "click 'Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          272,
+          733
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      },
+      {
+        "step_id": "step_020",
+        "intent": "click 'Confirm Create New Patient'",
+        "ok": true,
+        "skipped": false,
+        "rung": "template",
+        "confidence": 1.0,
+        "point": [
+          600,
+          260
+        ],
+        "safety_halt": false,
+        "failure_category": null,
+        "detail": null
+      }
+    ],
+    "execution_outcome": "COMPLETED_UNVERIFIED",
+    "heal_count": 0,
+    "halt": null,
+    "render_scale": null,
+    "db_outcome": "correct",
+    "record_detail": {
+      "rows": [
+        {
+          "pid": "1",
+          "fname": "Oaun3014bpp1",
+          "lname": "Avclab",
+          "DOB": "2001-01-01",
+          "sex": "Female"
+        }
+      ],
+      "record_check": {
+        "effect_verdict": "CONFIRMED",
+        "outcome": "verified",
+        "verification_tier": "independent_readback",
+        "checked_how": "system_of_record"
+      }
+    },
+    "class": "verified_save",
+    "must_save": true,
+    "elapsed_s": 90.36,
+    "first_frame_sha256": "ce778ede6adbee0d0fd66b603e652d32588982b3d6f03536438abe5d03668b11",
+    "frame_sha256": [
+      "be6ee76a419f3483d837ec42850c010f3c605fd1c1f9f00c9423af447f5feaa7",
+      "ce778ede6adbee0d0fd66b603e652d32588982b3d6f03536438abe5d03668b11",
+      "00c476babebb54d3921ccd7e4990a5d65c565f43c1bc6b8adfc0badd61703dd6",
+      "e705e0163e87e2ad1dbb00c04976a7196e66820fc9ecf35f76a25d15ada583d6",
+      "fbb87d93a15682f1cd5508a7efa78663d21373979ff86525042f50de431a327a",
+      "00c476babebb54d3921ccd7e4990a5d65c565f43c1bc6b8adfc0badd61703dd6",
+      "d57529c016349a2904e3c22dc96b0e48e7f80ca4f38865c0dc605de6cb1c17b8",
+      "fbb87d93a15682f1cd5508a7efa78663d21373979ff86525042f50de431a327a",
+      "c122b1a17681c47f9a02aebe4a72afc0516b79807aa80e50e443b0a61d9c7fad",
+      "d57529c016349a2904e3c22dc96b0e48e7f80ca4f38865c0dc605de6cb1c17b8",
+      "e39000ec05fc5ced81ccd154252195f5abe377ee6d4002f6c612dd02b0ef4bab",
+      "93210024359906fa82297fc13700db33864b1b3a14a7663e2f34a557e6cb46e8",
+      "d4c2a461d54f98ea052ee2e63c2abd4d3baf805f160d70065bfbf9d9beacc5cf",
+      "2c13e0ebc72b997d650f68c4b1d1acc471dde38cfebdca188f903d6d2ec24d97",
+      "954dd830a67120a2bcdc85851f0f3778c9d33fec85ef32600064d49f1d10345f",
+      "d4c2a461d54f98ea052ee2e63c2abd4d3baf805f160d70065bfbf9d9beacc5cf",
+      "778f52455b565e442cd99dc37a9d5a4656e56c07636bdef43875a5add3c53c08",
+      "09f26715c091c4e3e1c9c43357ce15bc560ca3946b12249b604d4a1592c0fffc",
+      "44081faa5c19bc1fc27f84ebe9706cd78d1ea184d1a064487b124b423e7575a2",
+      "19477c9118baa2ec5ece74018f1f3c2a028515b35e1160d681f6d0c2984e9686",
+      "f16d7dbd882d5f9e63cfb891946b9f641775274235b15a1f6885b30a2d739871",
+      "44081faa5c19bc1fc27f84ebe9706cd78d1ea184d1a064487b124b423e7575a2",
+      "5f8b1014765bc214486eb2ba4c90c105682787bacf9329b446b5d19a80281b3f",
+      "f16d7dbd882d5f9e63cfb891946b9f641775274235b15a1f6885b30a2d739871",
+      "caa192b1f23f734691c9bd80338049041cac8790396d90badfe1ba571690db9c",
+      "e8c7ae15a8903848c5598c08f930bf873dd9f04dd5d850e0bebda410e5121316",
+      "cf22ac47f5ed84e1bb97914c2b4bccda686ba3e0ce6e3e8300dbd83881f10e9d",
+      "cf22ac47f5ed84e1bb97914c2b4bccda686ba3e0ce6e3e8300dbd83881f10e9d",
+      "b4e9e0d6adbc3fcf4a9e27dc42a4d2fdaa8707ec82dd33a4d8b4e652d96294c6",
+      "8ac4411f4f77061af92139144a6f30395eee4eb8909201226323b1c02f1373d5",
+      "c3d337a9b25cb9d71fcc4a1026111fbb78098998a9be19eb9414e32bc6288208",
+      "b4e9e0d6adbc3fcf4a9e27dc42a4d2fdaa8707ec82dd33a4d8b4e652d96294c6",
+      "3f48df3f326a7ae5fc20ddc48c2a7f9e03fdc531db160803ad0187099c5ad100",
+      "c3d337a9b25cb9d71fcc4a1026111fbb78098998a9be19eb9414e32bc6288208",
+      "a6e8dcc66a003c861e8a2d37a369551b5cef0d2d594ffd35e223f3abe17d4a2b",
+      "3f48df3f326a7ae5fc20ddc48c2a7f9e03fdc531db160803ad0187099c5ad100",
+      "a76389fac137a631cfd8dab8872e2a11c0e4686763f678309ca8020e46dcadf9",
+      "a6e8dcc66a003c861e8a2d37a369551b5cef0d2d594ffd35e223f3abe17d4a2b",
+      "5a2eb763d3fb8c71882ca59800efd2b8bad0fe6dcae61223fefa1f002bd9874e",
+      "d01d3b4886538c6304c3147f12aa8a5e4ddfa6b8ce6fa5c9fb506d872c7290e8",
+      "2fb6a38f8bf2299695ad0ab4e04d1d7980a204589e3ad9e1c9b0e5a8f0c48525",
+      "11cb99c5229f3ffb03cd41fb69fa929c76cca3921e212084522f7d97fbe0e3cb"
+    ]
+  }
+]

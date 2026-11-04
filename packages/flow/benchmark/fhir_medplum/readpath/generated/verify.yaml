@@ -1,0 +1,104 @@
+schema_version: openadapt.verify/v1
+verifier:
+  kind: fhir
+  base_url: http://localhost:9410/fhir/R4
+  resource_type: Patient
+  search_params:
+    _count: '200'
+  access_token_env: MEDPLUM_RECORD_TOKEN
+  field_paths:
+    address.city: address.city
+    address.line: address.line
+    address.postalCode: address.postalCode
+    address.state: address.state
+    birthDate: birthDate
+    gender: gender
+    id: id
+    meta.versionId: meta.versionId
+    name.family: name.family
+    name.given: name.given
+    resourceType: resourceType
+    telecom.system: telecom.system
+    telecom.value: telecom.value
+effects:
+- kind: record_written
+  match: &id001
+    address.line:
+      param: street
+  expected_count: 1
+  count_new_only: true
+  probe: exactly one new patient registration record with the task's values
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: address.city
+  value:
+    param: city
+  probe: patient registration field 'address.city' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: address.postalCode
+  value:
+    param: postal_code
+  probe: patient registration field 'address.postalCode' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: address.state
+  value:
+    param: state_label
+  probe: patient registration field 'address.state' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: birthDate
+  value:
+    param: DOB
+  probe: patient registration field 'birthDate' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: gender
+  value:
+    param: sex
+  probe: patient registration field 'gender' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: name.family
+  value:
+    param: lname
+  probe: patient registration field 'name.family' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: name.given
+  value:
+    param: fname
+  probe: patient registration field 'name.given' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: resourceType
+  value:
+    literal: Patient
+  probe: patient registration field 'resourceType' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: telecom.system
+  value:
+    literal: phone
+  probe: patient registration field 'telecom.system' read back
+  timeout_s: 5.0
+- kind: field_equals
+  match: *id001
+  field: telecom.value
+  value:
+    param: phone_home
+  probe: patient registration field 'telecom.value' read back
+  timeout_s: 5.0
+frame:
+  identity_field: id
+  ignore_fields: []

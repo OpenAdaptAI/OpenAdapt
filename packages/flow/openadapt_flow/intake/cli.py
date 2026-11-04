@@ -40,6 +40,20 @@ def _parse_aliases(pairs: list[str]) -> dict[str, list[str]]:
     return out
 
 
+def _parse_date_formats(pairs: list[str]) -> dict[str, str]:
+    from openadapt_flow.intake.extract import DATE_ORDERS
+
+    out: dict[str, str] = {}
+    for pair in pairs:
+        name, sep, fmt = pair.partition("=")
+        if not sep or fmt.upper() not in DATE_ORDERS:
+            raise SystemExit(
+                f"--date-format expects NAME=MM/DD/YYYY or NAME=DD/MM/YYYY, got {pair!r}"
+            )
+        out[name.strip()] = fmt.upper()
+    return out
+
+
 def _prompt(result: IntakeResult) -> None:
     for name in result.needs_confirmation():
         f = result.fields[name]
@@ -65,7 +79,11 @@ def cmd_intake(args: argparse.Namespace) -> int:
         result = apply_agent_response(doc, specs, response, threshold=args.threshold)
     else:
         result = extract_fields(
-            doc, specs, aliases=_parse_aliases(args.alias), threshold=args.threshold
+            doc,
+            specs,
+            aliases=_parse_aliases(args.alias),
+            threshold=args.threshold,
+            date_formats=_parse_date_formats(args.date_format),
         )
     for name in args.accept:
         result.confirm(name)
@@ -122,6 +140,17 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         type=float,
         default=0.9,
         help="Fields below this confidence need confirmation",
+    )
+    p.add_argument(
+        "--date-format",
+        action="append",
+        default=[],
+        metavar="NAME=MM/DD/YYYY",
+        help=(
+            "How the source writes a date parameter's numeric dates "
+            "(MM/DD/YYYY or DD/MM/YYYY). Without it, a date such as 03/04/1970 "
+            "that could be read either way needs a person (repeatable)"
+        ),
     )
     p.add_argument("--no-input", action="store_true", help="Never prompt")
     p.add_argument(

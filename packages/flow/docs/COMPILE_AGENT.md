@@ -26,6 +26,13 @@ openadapt-flow compile-agent run .openadapt-compile-agent/<task key> \
 (`claude-opus-5-5`) on your own key from `ANTHROPIC_API_KEY`; OpenAdapt holds
 no key. `--agent steps.json` runs a scripted agent with no model calls.
 
+Run 1 compares whole records between reads. A FHIR `field_paths` mapping to
+`meta.lastUpdated`, `meta.versionId`, or the whole `meta` object is refused
+before recording unless its output key is in `verifier.records_drop_fields`.
+For example, `field_paths: {revision: meta.versionId}` also needs
+`records_drop_fields: [revision]`. The refusal names the field and the fix;
+no field is dropped automatically.
+
 ## What happens
 
 1. **Run 1, in the harness.** The agent does the task while
@@ -112,14 +119,18 @@ except for the values the operator put in the task: the parameters, the
 `--expect` values and the `--on-screen` identity. The agent needs those to
 find the right row.
 
-`--vision every_turn` is the baseline for comparison: Claude's computer
-toolset (`computer_toolset_20260801`) with a screenshot after every action.
+The default is `--vision code` on `claude-sonnet-5-5`: the agent gets one
+terminal-style tool and writes short scripts that read the structure, act by
+role and name, read back, and keep notes in a sandboxed working directory,
+with a screenshot only when it asks. Every action becomes a structured step
+that is checked against the compiled program, and every save the gate
+detects is read back from the system of record before the agent goes on. See
+[CODE_AS_ACTION.md](CODE_AS_ACTION.md).
 
-`--vision code` gives the agent one terminal-style tool instead: it writes
-short scripts that read the structure, act by role and name, read back, and
-keep notes in a sandboxed working directory, with a screenshot only when it
-asks. Every action becomes a structured step that is checked against the
-compiled program. See [CODE_AS_ACTION.md](CODE_AS_ACTION.md).
+`--vision selective` gives the structural listing after every action (the
+earlier default, on `claude-opus-5-5`). `--vision every_turn` is the baseline
+for comparison: Claude's computer toolset (`computer_toolset_20260801`) with a
+screenshot after every action.
 
 ### The save gate
 
@@ -186,17 +197,17 @@ result = compile_first_run(
     on_screen=["Jane Sample", "MRN P1"],
     agent=ClaudeAgent(vision="selective"),
     model_key=load_customer_model_key("anthropic"),
-    confirm_checks="dana@clinic.example",     # or a callback that shows them to a person
+    confirm_checks="dana@clinic.example",  # or a callback that shows them to a person
     drop_fields=["key"],
     canary_params=[{"note": "Canary test note"}],  # a real save; choose safe values
-    admitter=agent_principal,                  # principal_from_key(...)
+    admitter=agent_principal,  # principal_from_key(...)
 )
-result.status          # "admitted"
-result.run1["agent"]   # model calls, tokens, cost, seconds
-result.emitted         # {"skill": ..., "mcp_server": ..., "cli": ...}
+result.status  # "admitted"
+result.run1["agent"]  # model calls, tokens, cost, seconds
+result.emitted  # {"skill": ..., "mcp_server": ..., "cli": ...}
 
 later = run_compiled(result.dir, note="Recheck knee in ten days")
-later.verified, later.model_calls, later.receipt_outcome   # True, 0, "VERIFIED"
+later.verified, later.model_calls, later.receipt_outcome  # True, 0, "VERIFIED"
 ```
 
 `FirstRunCompiler` exposes the same steps one at a time (`record`,
