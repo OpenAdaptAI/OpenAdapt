@@ -42,6 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Reads the launcher's newest green run on main.
+      actions: read
 
     steps:
       - name: Checkout the exact launcher candidate
@@ -49,11 +51,19 @@ jobs:
         with:
           ref: ${{ github.ref }}
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
+
+      - name: Require the newest green main run for the launcher
+        # The same rule every package releases by: the newest commit on main
+        # that changed the launcher must have a passed Python CI push run.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/newest_green.py launcher --tip HEAD
 
       - name: Verify the pinned Flow and agent releases against PyPI
         run: python scripts/verify_release_components.py
@@ -100,7 +110,7 @@ jobs:
           token: ${{ steps.release-app.outputs.token }}
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -125,9 +135,10 @@ jobs:
           fi
 
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          current_main="$(git rev-parse refs/remotes/origin/main)"
-          if [ "$current_main" != "$GITHUB_SHA" ]; then
-            echo "The dispatched commit is stale. main=$current_main dispatch=$GITHUB_SHA." >&2
+          # The merge queue keeps moving main, so the dispatched commit only has
+          # to be on main's history. The tag still names this exact commit.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "The dispatched commit $GITHUB_SHA is not on main's history." >&2
             exit 1
           fi
 
@@ -191,9 +202,8 @@ jobs:
           git config user.email "openadapt-release[bot]@users.noreply.github.com"
 
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          current_main="$(git rev-parse refs/remotes/origin/main)"
-          if [ "$current_main" != "$GITHUB_SHA" ]; then
-            echo "main advanced before the tag push. main=$current_main candidate=$GITHUB_SHA." >&2
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "The candidate $GITHUB_SHA left main's history before the tag push." >&2
             exit 1
           fi
 
@@ -220,7 +230,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -289,7 +299,7 @@ jobs:
             --launcher-candidate
 
       - name: Install uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: "0.11.29"
           enable-cache: false
@@ -336,7 +346,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -405,7 +415,7 @@ jobs:
             --poll-seconds 10
 
       - name: Publish to PyPI with Trusted Publishing
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           skip-existing: true
 
@@ -438,7 +448,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -524,14 +534,15 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --tag "$RELEASE_TAG"
 
-          release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
-          release_status="$(curl --silent --show-error \
-            --output /tmp/github-release.json \
-            --write-out '%{http_code}' \
-            --header "Accept: application/vnd.github+json" \
-            --header "Authorization: Bearer $GH_TOKEN" \
-            --header "X-GitHub-Api-Version: 2026-03-10" \
-            "$release_url")"
+          # GitHub's get-by-tag endpoint never returns a draft, so the release
+          # is found in the release list, which includes drafts for this token.
+          fetch_release() {
+            "$GH_CLI" api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq "[.[] | select(.tag_name == \"$RELEASE_TAG\")] | first // empty" \
+              > /tmp/github-release.json
+            if [ -s /tmp/github-release.json ]; then echo 200; else echo 404; fi
+          }
+          release_status="$(fetch_release)"
 
           if [ "$release_status" = "404" ]; then
             "$GH_CLI" release create "$RELEASE_TAG" \
@@ -541,13 +552,7 @@ jobs:
               --verify-tag \
               --title "$RELEASE_TAG" \
               --notes-file /tmp/release-notes.md
-            release_status="$(curl --silent --show-error \
-              --output /tmp/github-release.json \
-              --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "$release_url")"
+            release_status="$(fetch_release)"
           fi
           if [ "$release_status" != "200" ]; then
             echo "GitHub returned HTTP $release_status for the exact release." >&2
@@ -589,13 +594,7 @@ jobs:
                 --repo "$GITHUB_REPOSITORY"
             done < /tmp/missing-release-assets.txt
 
-            release_status="$(curl --silent --show-error \
-              --output /tmp/github-release.json \
-              --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "$release_url")"
+            release_status="$(fetch_release)"
             if [ "$release_status" != "200" ]; then
               echo "GitHub returned HTTP $release_status for the completed draft." >&2
               exit 1
@@ -617,13 +616,7 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --draft=false
 
-            release_status="$(curl --silent --show-error \
-              --output /tmp/github-release.json \
-              --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "$release_url")"
+            release_status="$(fetch_release)"
             if [ "$release_status" != "200" ]; then
               echo "GitHub returned HTTP $release_status after publication." >&2
               exit 1
@@ -680,7 +673,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 

@@ -33,7 +33,10 @@ from openadapt_flow.runtime.durable import (  # noqa: E402
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind  # noqa: E402
 from openadapt_flow.runtime.replayer import Replayer  # noqa: E402
-from tests.test_durable_runtime import FakeSoRVerifier, _approval  # noqa: E402
+from tests.test_durable_runtime import (  # noqa: E402
+    FakeSoRVerifier,
+    _retry_approval,
+)
 
 pytestmark = pytest.mark.timeout(600)
 
@@ -126,7 +129,7 @@ def test_resume_rebinds_surfaces_by_identity(bundle, app_url, browser, tmp_path)
         with pytest.raises(ApprovalRequired):
             resume(run_dir, fresh, approval=None)
 
-        resumed = resume(run_dir, fresh, approval=_approval(bundle_dir, run_dir))
+        resumed = resume(run_dir, fresh, approval=_retry_approval(bundle_dir, run_dir))
         assert resumed.success, _e2e._summary(resumed)
         assert resumed.model_calls == 0
         by_id = {r.step_id: r for r in resumed.results}
@@ -153,7 +156,7 @@ def test_ambiguous_rebind_on_resume_halts(bundle, app_url, browser, tmp_path):
             PlaywrightBackend(page), effect_verifier=verifier, poll_interval_s=0.05
         )
         with pytest.raises(StateDiverged, match="2 open browser pages pass"):
-            resume(run_dir, fresh, approval=_approval(bundle_dir, run_dir))
+            resume(run_dir, fresh, approval=_retry_approval(bundle_dir, run_dir))
         # Neither report tab, nor the main page, was driven.
         assert extra.locator("#ack").inner_text() == ""
         assert page.locator("#done").inner_text() == ""
@@ -176,7 +179,7 @@ def test_page_routing_mismatch_halts(bundle, app_url, browser, tmp_path):
             PlaywrightBackend(page), effect_verifier=verifier, poll_interval_s=0.05
         )
         with pytest.raises(StateDiverged, match="no open browser page passes"):
-            resume(run_dir, fresh, approval=_approval(bundle_dir, run_dir))
+            resume(run_dir, fresh, approval=_retry_approval(bundle_dir, run_dir))
         assert page.locator("#done").inner_text() == ""
     finally:
         page.context.close()

@@ -431,3 +431,60 @@ def test_outcome_words_are_identical_with_and_without_the_gate(tmp_path, answer)
     without = plain.run(gate=False)
     assert with_gate.transaction_outcome == without.transaction_outcome
     assert with_gate.execution_outcome == without.execution_outcome
+
+
+@pytest.mark.usefixtures("approver")
+def test_a_switched_off_mode_asks_a_person_when_an_approval_store_is_wired(tmp_path):
+    """Switched off, problems_only waits for a person as each_item does.
+
+    The switch check (P1) runs at the save, after the last point a person can
+    be asked. With an approval store wired, the gate must ask there instead of
+    stopping every later item unasked.
+    """
+
+    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+    from tests.test_approval_mode_each_item import APPROVE, FormBackend, Person
+
+    person = Person([APPROVE])
+    store = ItemApprovalStore(tmp_path / "run")
+    person.store = store
+    item = Item(
+        tmp_path,
+        approval_store=store,
+        approval_wait_s=30.0,
+        approval_poll_s=1.0,
+        sleep=person.sleep,
+        monotonic=person.monotonic,
+    )
+    item.backend = FormBackend()
+    turn_off(item.log, OffReason.TURNED_OFF)
+    report = item.run()
+
+    assert len(person.seen) == 1  # one request, answered by the person
+    assert _save_delivered(item.backend)
+    assert report.transaction_outcome == "VERIFIED"
+    assert [a.decision for a in report.approval.approvals] == ["approved"]
+
+
+def test_a_switched_off_mode_without_an_answer_still_saves_nothing(tmp_path):
+    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+    from tests.test_approval_mode_each_item import FormBackend, Person
+
+    person = Person([None])  # nobody answers
+    store = ItemApprovalStore(tmp_path / "run")
+    person.store = store
+    item = Item(
+        tmp_path,
+        approval_store=store,
+        approval_wait_s=5.0,
+        approval_poll_s=1.0,
+        sleep=person.sleep,
+        monotonic=person.monotonic,
+    )
+    item.backend = FormBackend()
+    turn_off(item.log, OffReason.TURNED_OFF)
+    report = item.run()
+
+    assert not _save_delivered(item.backend)
+    assert report.transaction_outcome == "HALTED_BEFORE_EFFECT"
+    assert report.approval.needs_person

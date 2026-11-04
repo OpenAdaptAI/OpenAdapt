@@ -22,6 +22,10 @@ Flow of :func:`qualify`::
        pixels-only pass); a gate when the target surface is pixels only
     -> record results and the lookups they used, certify under the policy
        (optional)
+    -> when certifying, run each business-rule case from verify.yaml on the
+       certified bundle (seed the conflicting record, run on the rule's
+       inputs, require HALTED_BEFORE_EFFECT and no new or changed record);
+       one failed trial withdraws the certification
     -> optionally run the certified bundle once on new inputs
 
 The keys are per-campaign local test keys (:mod:`openadapt_flow.qualify.keys`).
@@ -48,7 +52,13 @@ from openadapt_flow.lookup_capabilities import (
     resolve_deployment_surface,
     surface_offers_structure,
 )
-from openadapt_flow.qualify.config import CASE_IDS, QualifyConfigError, VerifyConfig
+from openadapt_flow.qualify.config import (
+    CASE_IDS,
+    RULE_CASE_PREFIX,
+    BusinessRuleCase,
+    QualifyConfigError,
+    VerifyConfig,
+)
 from openadapt_flow.qualify.environment import (
     WEB_OBSERVER_CONTRACT_SHA256,
     WEB_OBSERVER_ID,
@@ -81,8 +91,23 @@ class QualifyError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
+def _evidence_bytes(path: Path) -> bytes:
+    """A file's bytes; a file inside a sealed run directory is decrypted.
+
+    Runs of a sealed bundle write a sealed run directory, whose report is
+    ``report.json`` only by its logical name. Its evidence digest is over the
+    plaintext; the sealed set authenticates the ciphertext on disk.
+    """
+
+    if path.is_file():
+        return path.read_bytes()
+    from openadapt_flow import sealed_set
+
+    return sealed_set.read_bytes(path)
+
+
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashlib.sha256(_evidence_bytes(path)).hexdigest()
 
 
 def write_json(path: Path, value: Any) -> Path:
@@ -155,10 +180,34 @@ def record_effects(config: VerifyConfig) -> list[Any]:
         probe=f"exactly {record.expected_count} {record.name} record(s) written",
         timeout_s=record.timeout_s,
     )
-    if record.duplicate_key is not None:
+    if isinstance(record.duplicate_key, str):
         written.idempotency_key = record.expr(record.duplicate_key)
         written.key_field = record.duplicate_key
+    elif record.duplicate_key:
+        written.composite_key = {
+            name: record.expr(name) for name in record.duplicate_key
+        }
     effects = [written]
+    if record.exact_new_set:
+        # Exactly these records were added since the snapshot before the
+        # save, and nothing else, read by every declared field.
+        selector_all = {
+            name: record.expr(name) for name in [*record.match, *record.fields]
+        }
+        effects.append(
+            Effect(
+                kind=EffectKind.EXACT_NEW_SET,
+                new_records=[dict(selector_all)] * record.expected_count,
+                expected_count=record.expected_count,
+                identity_field=record.identity_field,
+                risk="reversible",
+                probe=(
+                    f"exactly {record.expected_count} new {record.name} record(s) "
+                    "added, and nothing else"
+                ),
+                timeout_s=record.timeout_s,
+            )
+        )
     for name in record.fields:
         if name in record.match:
             continue
@@ -209,11 +258,30 @@ def apply_verify_config(
             }
         )
     elif config.record.duplicate_key is not None:
+        key = config.record.duplicate_key
         for effect in save.effects:
-            if effect.kind.value == "record_written" and effect.idempotency_key is None:
-                effect.idempotency_key = ValueExpr(param=config.record.duplicate_key)
-                effect.key_field = config.record.duplicate_key
-                notes.append({"change": "duplicate_key", "step": save.id})
+            if (
+                effect.kind.value != "record_written"
+                or effect.idempotency_key is not None
+                or effect.composite_key
+            ):
+                continue
+            if isinstance(key, str):
+                effect.idempotency_key = ValueExpr(param=key)
+                effect.key_field = key
+            else:
+                # The compiled check names its fields in ``match``; a key
+                # field it does not name is a typo or a field it cannot read.
+                missing = [name for name in key if name not in effect.match]
+                if missing:
+                    raise QualifyConfigError(
+                        f"record.duplicate_key names {missing}, which the record "
+                        f"check on {save.id} does not select by "
+                        f"({sorted(effect.match)}); give record.fields, or name "
+                        "fields the check selects by"
+                    )
+                effect.composite_key = {name: effect.match[name] for name in key}
+            notes.append({"change": "duplicate_key", "step": save.id})
     if (
         config.minimum_readback is not None
         and workflow.minimum_readback != config.minimum_readback
@@ -286,6 +354,13 @@ def check_ready(
             problems.append(
                 f"record.fields.{name} uses parameter {expr.param!r}, which has no input"
             )
+    from openadapt_flow.runtime.target_param import (
+        UNQUALIFIED_SELECTION_REASON,
+        record_selecting_steps,
+    )
+
+    for step in record_selecting_steps(workflow):
+        problems.append(f"step {step.id} {UNQUALIFIED_SELECTION_REASON}")
     if save.anchor is None or not save.identity_armed:
         problems.append(f"save step {save.id} has no armed identity check")
     if not save.effects:
@@ -297,13 +372,17 @@ def check_ready(
         problems.append(
             f"save step {save.id} has an unconfirmed placeholder record check"
         )
+    structural = save.anchor.structural if save.anchor is not None else None
     if save.anchor is not None and (
-        save.anchor.structural is None or not save.anchor.structural.selector
+        structural is None
+        or not (structural.selector or (structural.role and structural.name))
     ):
         problems.append(
-            f"save step {save.id} has no structural selector: the web fault "
-            "driver needs it for the ambiguity and identity faults"
+            f"save step {save.id} has no structural locator (a selector, or a "
+            "role and a name): the web fault driver needs it for the ambiguity "
+            "and identity faults"
         )
+    problems.extend(business_rule_problems(workflow, config, save, params))
     return problems
 
 
@@ -372,9 +451,21 @@ def configure_project(
         runtime_version=FLOW_VERSION,
         required_capabilities=capabilities,
     )
+    # Re-qualifying a bundle that already has a project (a sealed copy, a
+    # repaired copy, or one certified before) replaces the project with a new
+    # revision of it: the same project id, revision + 1, linked to the prior
+    # revision's digest. Every case runs again; nothing carries over.
+    prior = workflow.qualification
     project = init_project(
-        workflow, environment=boundary, minimum_effect_tier=minimum_effect_tier
+        workflow,
+        environment=boundary,
+        minimum_effect_tier=minimum_effect_tier,
+        replace=prior is not None,
     )
+    if prior is not None:
+        project.project_id = prior.project_id
+        project.revision = prior.revision + 1
+        project.previous_revision_sha256 = prior.revision_digest()
     record = config.record.name
     for step in workflow.steps:
         irreversible = step.risk == "irreversible"
@@ -469,6 +560,21 @@ def _records_reader(
     return None
 
 
+def _same_field(record: Mapping[str, Any], key: str, want: Any) -> bool:
+    """Whether ``record[key]`` equals ``want``, by text.
+
+    A null equals only a field that is there and null: ``str(None)`` is
+    ``"None"``, which would match the text ``"None"`` or a missing field.
+    """
+
+    if key not in record:
+        return False
+    have = record[key]
+    if have is None or want is None:
+        return have is None and want is None
+    return str(have) == str(want)
+
+
 def _canon(record: Mapping[str, Any]) -> str:
     return json.dumps(record, sort_keys=True, default=str)
 
@@ -495,6 +601,11 @@ class RecordReadback:
     def snapshot(self) -> None:
         if self._read is not None:
             self.before = self._read()
+
+    def records(self) -> Optional[list[dict[str, Any]]]:
+        """The records as they are now, or None without an independent read."""
+
+        return self._read() if self._read is not None else None
 
     def judge(self, oracle_kind: str, report: RunReport) -> dict[str, Any]:
         base = {
@@ -527,7 +638,7 @@ class RecordReadback:
         }
 
         def matches(rec: Mapping[str, Any], sel: Mapping[str, Any]) -> bool:
-            return all(str(rec.get(k)) == str(v) for k, v in sel.items())
+            return all(_same_field(rec, k, v) for k, v in sel.items())
 
         matched = [rec for rec in after if selector and matches(rec, selector)]
         after_set = {_canon(rec) for rec in after}
@@ -537,7 +648,7 @@ class RecordReadback:
             if effect.kind.value != "field_equals" or effect.field is None:
                 continue
             want = effect.value.literal if effect.value is not None else None
-            ok = len(matched) == 1 and str(matched[0].get(effect.field)) == str(want)
+            ok = len(matched) == 1 and _same_field(matched[0], effect.field, want)
             field_checks.append({"field": effect.field, "match": ok})
         expected = written.expected_count if written else 1
         exact = (
@@ -695,6 +806,12 @@ def _run(
                 for s in workflow.steps
             ),
         )
+        if workflow.encrypted:
+            # An encrypted bundle's runs keep their durable checkpoints under
+            # the same key (Standard and Regulated require them encrypted).
+            from openadapt_flow import crypto
+
+            kwargs["checkpoint_key"] = crypto.resolve_key(None)
         if hooks.replayer_kwargs is not None:
             kwargs.update(hooks.replayer_kwargs(ctx))
         # The signed lookup settings win over any hook, so a hook can't turn
@@ -788,10 +905,19 @@ def case_result(
     if project is None:
         raise QualifyError("the workflow's qualification project disappeared")
     run_dir = trial_dir / "run"
+    from openadapt_flow import sealed_set
+
+    # A sealed bundle's run directory is a sealed set: its files are bound by
+    # their logical names and plaintext digests, as the run report names them.
+    run_files = (
+        sealed_set.list_files(run_dir)
+        if sealed_set.is_sealed_path(run_dir)
+        else [path for path in run_dir.rglob("*") if path.is_file()]
+    )
     run_artifacts = [
         _evidence_ref(root, path, "other")
-        for path in sorted(run_dir.rglob("*"))
-        if path.is_file() and path.name != "report.json"
+        for path in sorted(run_files)
+        if path.name != "report.json"
     ]
     faults = (
         [
@@ -1086,7 +1212,7 @@ class QualifyResult:
         A partial run is a development check, never a qualification.
         """
 
-        return len({row["case_id"] for row in self.rows}) < len(CASES)
+        return not set(CASE_IDS) <= {row["case_id"] for row in self.rows}
 
 
 def _default_hooks(config: VerifyConfig, hooks: Optional[QualifyHooks]) -> QualifyHooks:
@@ -1157,16 +1283,28 @@ def qualify(
     if (out / "cases").exists() or (out.exists() and not in_place):
         raise QualifyError(f"output already exists: {out}")
     selected = list(cases or config.campaign.cases)
-    unknown = [c for c in selected if c not in CASE_IDS]
+    known = config.all_case_ids()
+    unknown = [c for c in selected if c not in known]
     if unknown:
-        raise QualifyConfigError(f"unknown case(s) {unknown}; known: {list(CASE_IDS)}")
+        raise QualifyConfigError(f"unknown case(s) {unknown}; known: {known}")
     n_trials = trials or config.campaign.trials
     if certify is not None:
         load_policy(certify)  # fail before any run on an unknown policy
-        if set(selected) != set(CASE_IDS):
+        if not set(CASE_IDS) <= set(selected):
             raise QualifyConfigError(
                 "--certify needs all six cases; certification refuses a partial campaign"
             )
+        named_rules = {c for c in selected if c.startswith(RULE_CASE_PREFIX)}
+        if named_rules and named_rules != {
+            rule.case_id for rule in config.business_rules
+        }:
+            raise QualifyConfigError(
+                "--certify runs every business rule; name all of them or none"
+            )
+    elif any(c.startswith(RULE_CASE_PREFIX) for c in selected):
+        raise QualifyConfigError(
+            "business-rule cases run on the certified bundle; pass --certify"
+        )
     campaign_id = (
         campaign_id or config.campaign.id or f"qualify-{bundle_src.name}-{int(t0)}"
     )
@@ -1517,6 +1655,36 @@ def qualify(
         )
     else:
         qreport = evaluate_qualification(workflow, evidence_root=root)
+    if certify is not None and qreport.passed and config.business_rules:
+        # The application's own rules run on the certified bundle, as the
+        # runs it will make; a single failed trial withdraws certification.
+        _run_business_rules(
+            workflow=workflow,
+            bundle_dir=bundle_dir,
+            config=config,
+            hooks=hooks,
+            setup=setup,
+            out=out,
+            n_trials=n_trials,
+            params=params,
+            save_id=save.id,
+            policy=certify,
+            run_id_prefix=run_id_prefix or campaign_id,
+            lookup=lookup_kwargs,
+            verifier_tier=verifier_tier,
+            verifier_substrate=getattr(probe_verifier, "substrate", None),
+            rows=rows,
+            case_entries=case_entries,
+            write_campaign_files=write_campaign_files,
+            log=log,
+            fail_result=lambda: build_result(
+                report=qreport,
+                verify_sha256=verify_sha,
+                verifier_identity=verifier_id,
+                fault_driver_version=setup.driver.contract_sha256[:16],
+                cases=case_entries,
+            ),
+        )
     write_json(out / "qualification" / "report.json", qreport.model_dump(mode="json"))
     qresult = build_result(
         report=qreport,
@@ -1637,6 +1805,386 @@ def qualify(
         write_json(out / "timing.json", timing)
         write_summary_markdown(result)
     return result
+
+
+def _all_steps(workflow: Workflow) -> list[Any]:
+    """The linear steps and every program-graph step."""
+
+    graphs = [
+        *([workflow.program] if workflow.program is not None else []),
+        *workflow.subflows.values(),
+    ]
+    return [
+        *workflow.steps,
+        *(
+            state.step
+            for graph in graphs
+            for state in graph.states.values()
+            if state.step is not None
+        ),
+    ]
+
+
+def _dialog_guard_texts(workflow: Workflow) -> dict[str, str]:
+    """``{confirm step id: text key}`` of each exact halt guard on a Confirm
+    click of a confirmation dialog (the checks ``empty_result_guard`` mines)."""
+
+    from openadapt_flow.ir import PredicateKind
+    from openadapt_flow.risk import is_confirm_click
+    from openadapt_flow.vision.ocr import text_key
+
+    out: dict[str, str] = {}
+    for step in _all_steps(workflow):
+        guard = step.guard
+        if (
+            guard is not None
+            and guard.on_unmet == "halt"
+            and guard.predicate.kind is PredicateKind.TEXT_PRESENT
+            and guard.predicate.exact
+            and guard.predicate.text
+            and is_confirm_click(step)
+        ):
+            out[step.id] = text_key(guard.predicate.text)
+    return out
+
+
+def rule_halt_steps(
+    workflow: Workflow, rule: BusinessRuleCase, save_id: str
+) -> set[str]:
+    """The steps a rule's run may halt at (``BusinessRuleCase.halt_at``)."""
+
+    from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
+    from openadapt_flow.ir import PostconditionKind
+    from openadapt_flow.vision.ocr import text_key
+
+    ids = [step.id for step in workflow.steps]
+    if rule.halt_at == "empty_result_guard":
+        # The compiler's exact checks on a confirmation dialog (in any
+        # language), and an empty-result text check a bundle compiled before
+        # them carries (added by hand after compiling).
+        guards = _dialog_guard_texts(workflow)
+        return {
+            step.id
+            for step in _all_steps(workflow)
+            if step.id in guards
+            or any(
+                pc.kind is PostconditionKind.TEXT_PRESENT
+                and bool(pc.text)
+                and (
+                    is_empty_result_statement(pc.text or "")
+                    or (pc.exact and text_key(pc.text or "") in guards.values())
+                )
+                for pc in step.expect
+            )
+        }
+    if rule.halt_at == "before_save":
+        # The save step itself only before its action (its guard or identity
+        # check); HALTED_BEFORE_EFFECT is required separately.
+        return set(ids[: ids.index(save_id) + 1]) if save_id in ids else set()
+    return {rule.halt_at} if rule.halt_at in ids else set()
+
+
+def business_rule_problems(
+    workflow: Workflow, config: VerifyConfig, save: Any, params: Mapping[str, str]
+) -> list[str]:
+    """What keeps the business-rule cases from running, found before any run."""
+
+    from openadapt_flow.compiler.empty_result_guard import is_empty_result_statement
+
+    problems: list[str] = []
+    # A dialog check in other words than the English vocabulary was mined
+    # because every demonstration showed it, not because of what it says. A
+    # run on a record the search finds must halt at it before it counts.
+    dialog_guards = _dialog_guard_texts(workflow)
+    unworded = sorted(
+        step.id
+        for step in _all_steps(workflow)
+        if step.id in dialog_guards
+        and step.guard is not None
+        and not is_empty_result_statement(step.guard.predicate.text or "")
+    )
+    if unworded and not any(
+        rule.halt_at == "empty_result_guard" for rule in config.business_rules
+    ):
+        problems.append(
+            f"steps {unworded} check a dialog line the demonstrations agreed "
+            "on; add a business_rules case (halt_at: empty_result_guard) whose "
+            "search finds a record, so a run proves the check halts"
+        )
+    for rule in config.business_rules:
+        unknown = sorted(set(rule.params) - set(params))
+        if unknown:
+            problems.append(
+                f"business rule {rule.id!r} sets inputs the workflow does not "
+                f"take: {unknown}"
+            )
+        if save is not None and not rule_halt_steps(workflow, rule, save.id):
+            problems.append(
+                f"business rule {rule.id!r}: halt_at {rule.halt_at!r} names no "
+                "step of this workflow"
+                + (
+                    " (the compiler mined no empty search result; see the "
+                    "bundle's compile_notes.json)"
+                    if rule.halt_at == "empty_result_guard"
+                    else ""
+                )
+            )
+    return problems
+
+
+def rule_params(rule: BusinessRuleCase, params: Mapping[str, str]) -> dict[str, str]:
+    """The campaign's inputs with the rule's values in place."""
+
+    unknown = sorted(set(rule.params) - set(params))
+    if unknown:
+        raise QualifyConfigError(
+            f"business rule {rule.id!r} sets inputs the workflow does not take: "
+            f"{unknown}"
+        )
+    return {**params, **rule.params}
+
+
+def business_rule_trial(
+    *,
+    workflow: Workflow,
+    bundle_dir: Path,
+    config: VerifyConfig,
+    hooks: QualifyHooks,
+    setup: CampaignSetup,
+    rule: BusinessRuleCase,
+    params: dict[str, str],
+    trial: int,
+    trial_dir: Path,
+    run_id: str,
+    policy: str,
+    lookup: Optional[Mapping[str, Any]] = None,
+    verifier_tier: Optional[VerificationTier] = None,
+    verifier_substrate: Optional[str] = None,
+) -> tuple[dict[str, Any], dict[str, Any], Optional[str]]:
+    """One trial of a business-rule case on the certified bundle.
+
+    Reset, run the rule's seed (the conflicting record), read the system of
+    record, then run the bundle as a Standard-profile run on the rule's
+    inputs. Returns the campaign row, the ``cases[]`` entry, and why the trial
+    failed (``None`` when it passed): the run must halt before the save
+    (``HALTED_BEFORE_EFFECT``) and the read-back must show no new or changed
+    record.
+    """
+
+    from openadapt_flow.qualify.result import case_entry
+    from openadapt_flow.qualify.session import step_runner
+    from openadapt_flow.run_gate import build_runtime_authorization, evaluate_run_gate
+
+    trial_dir.mkdir(parents=True)
+    t0 = time.time()
+    if hooks.reset is not None:
+        hooks.reset()
+    save = next(s for s in workflow.steps if s.risk == "irreversible" and s.effects)
+    assert hooks.make_verifier is not None
+    readback = RecordReadback(hooks.make_verifier(params), save, params)
+    # The seed must be seen to create the conflicting record: read before and
+    # after it. A trial that cannot show that is not a test of the rule.
+    pre_seed = readback.records()
+    step_runner(rule.seed, f"business rule {rule.id!r} seed")()
+    readback.snapshot()
+    if pre_seed is None or readback.before is None:
+        raise QualifyError(
+            f"{rule.case_id} trial {trial}: the verifier cannot read the records, "
+            "so the seed cannot be shown to have created the conflicting record"
+        )
+    known = {_canon(rec) for rec in pre_seed}
+    seeded = [rec for rec in readback.before if _canon(rec) not in known]
+    if not seeded:
+        raise QualifyError(
+            f"{rule.case_id} trial {trial}: the seed created no record "
+            f"({len(pre_seed)} records before it and {len(readback.before)} after)"
+        )
+    write_json(trial_dir / "seed.json", {"records_created": len(seeded)})
+    ctx = TrialContext(
+        case_id=rule.case_id,
+        expected="HALTED",
+        oracle_kind=rule.readback,
+        trial=trial,
+        trial_dir=trial_dir,
+        run_dir=trial_dir / "run",
+        run_id=run_id,
+        params=dict(params),
+        certified_run=True,
+        state={"policy": policy},
+    )
+    if hooks.before_trial is not None:
+        hooks.before_trial(ctx)
+
+    def authorize(_verifier: Any, gate_kwargs: dict[str, Any]) -> Any:
+        gate = evaluate_run_gate(workflow, **gate_kwargs)
+        write_json(trial_dir / "run-gate.json", gate.model_dump(mode="json"))
+        if not gate.passed:
+            raise QualifyError(gate.render())
+        return build_runtime_authorization(workflow, gate, params=dict(params))
+
+    marks: dict[str, float] = {"start": time.time()}
+    report, _ = _run(
+        workflow=workflow,
+        bundle_dir=bundle_dir,
+        config=config,
+        hooks=hooks,
+        ctx=ctx,
+        setup=setup,
+        authorize=authorize,
+        fault_driver=None,
+        marks=marks,
+        lookup=lookup,
+    )
+    judged = _judge_trial(hooks=hooks, ctx=ctx, report=report, readback=readback)
+    oracle = judged["oracle"]
+    entry = case_entry(
+        case_id=rule.case_id,
+        trial=trial,
+        report=report,
+        oracle=oracle,
+        verifier_tier=verifier_tier,
+        report_path=ctx.run_dir / "report.json",
+        verifier_substrate=verifier_substrate,
+    )
+    row = {
+        "case_id": rule.case_id,
+        "trial": trial,
+        "expected": "HALTED",
+        **report_summary(report),
+        "oracle": oracle.get("observed"),
+        "trial_wall_s": round(time.time() - t0, 1),
+        **{f"{n}_passed": bool(r.get("passed")) for n, r in judged["extra"].items()},
+    }
+    failed_steps = [r.step_id for r in report.results if not r.ok]
+    halted_at = failed_steps[0] if failed_steps else None
+    halt_reason = (
+        report.halt.reason
+        if report.halt is not None and getattr(report.halt, "reason", None)
+        else next((r.error or "" for r in report.results if not r.ok), "")
+    )
+    allowed = rule_halt_steps(workflow, rule, save.id)
+    row["halted_at"] = halted_at
+    failure: Optional[str] = None
+    if report.transaction_outcome != rule.expect:
+        failure = (
+            f"observed {report.execution_outcome}/{report.transaction_outcome}, "
+            f"expected HALTED/{rule.expect}"
+        )
+    elif report.execution_outcome != "HALTED":
+        failure = f"observed {report.execution_outcome}, expected HALTED"
+    elif halted_at not in allowed:
+        failure = (
+            f"halted at {halted_at}, not where the rule stops it "
+            f"({rule.halt_at}: {sorted(allowed)})"
+        )
+    elif rule.halt_reason and rule.halt_reason not in (halt_reason or ""):
+        failure = f"the halt does not name {rule.halt_reason!r}"
+    elif report.model_calls != 0:
+        failure = "a business-rule run called a model"
+    elif report.screenshots_may_leave_box:
+        failure = "a business-rule run let screenshots leave this computer"
+    elif not oracle.get("passed") or oracle.get("silent_incorrect_success"):
+        failure = f"read-back {oracle.get('observed')}"
+    elif not entry["passed"]:
+        failure = (
+            f"read-back verdict {entry['observed_verdict']} at "
+            f"{entry['verification_tier']}, expected REFUTED at "
+            "independent_readback"
+        )
+    else:
+        bad = [n for n, r in judged["extra"].items() if not r.get("passed")]
+        if bad:
+            failure = f"extra check(s) failed: {bad}"
+    if failure is not None:
+        entry["passed"] = False
+    return row, entry, failure
+
+
+#: Where the certified copy the business-rule trials run lives, under ``out``.
+RULE_BUNDLE_DIR = "business-rule-bundle"
+
+
+def _run_business_rules(
+    *,
+    workflow: Workflow,
+    bundle_dir: Path,
+    config: VerifyConfig,
+    hooks: QualifyHooks,
+    setup: CampaignSetup,
+    out: Path,
+    n_trials: int,
+    params: Mapping[str, str],
+    save_id: str,
+    policy: str,
+    run_id_prefix: str,
+    lookup: Mapping[str, Any],
+    verifier_tier: Optional[VerificationTier],
+    verifier_substrate: Optional[str],
+    rows: list[dict[str, Any]],
+    case_entries: list[dict[str, Any]],
+    write_campaign_files: bool,
+    log: Callable[[str], None],
+    fail_result: Callable[[], dict[str, Any]],
+) -> None:
+    """Run every business-rule case ``n_trials`` times on the certified bundle.
+
+    ``workflow`` has just been certified in memory. The trials run a certified
+    copy of the bundle (``out/business-rule-bundle``, removed afterwards)
+    through the ordinary run gate; ``bundle_dir`` is not written while they
+    run, so it is certified only when the caller saves it after every rule
+    passed. A failed trial, or anything that raises (a seed or reset error, a
+    run-gate refusal, a crash, Ctrl-C), withdraws the certification in memory,
+    saves ``bundle_dir`` uncertified, writes the failed result and re-raises.
+    """
+
+    from openadapt_flow.qualification import (
+        _invalidate_certification,
+        save_qualified_workflow,
+    )
+
+    rule_dir = out / RULE_BUNDLE_DIR
+    try:
+        shutil.copytree(bundle_dir, rule_dir)
+        save_qualified_workflow(workflow, rule_dir)
+        certified = Workflow.load(rule_dir)
+        for rule in config.business_rules:
+            inputs = rule_params(rule, params)
+            for trial in range(1, n_trials + 1):
+                row, entry, failure = business_rule_trial(
+                    workflow=certified,
+                    bundle_dir=rule_dir,
+                    config=config,
+                    hooks=hooks,
+                    setup=setup,
+                    rule=rule,
+                    params=inputs,
+                    trial=trial,
+                    trial_dir=out / "cases" / rule.case_id / f"trial-{trial:02d}",
+                    run_id=f"{run_id_prefix}-{rule.case_id}-trial-{trial:02d}",
+                    policy=policy,
+                    lookup=lookup,
+                    verifier_tier=verifier_tier,
+                    verifier_substrate=verifier_substrate,
+                )
+                rows.append(row)
+                case_entries.append(entry)
+                if write_campaign_files:
+                    write_json(out / "campaign-summary.json", rows)
+                log(json.dumps(row, default=str))
+                if failure is not None:
+                    raise QualifyError(
+                        f"{rule.case_id} trial {trial}: {failure}; certification "
+                        f"withdrawn (save step {save_id})"
+                    )
+    except BaseException:
+        _invalidate_certification(workflow)
+        save_qualified_workflow(workflow, bundle_dir)
+        result = dict(fail_result())
+        result["passed"] = False
+        write_json(out / "qualification" / "result.json", result)
+        raise
+    finally:
+        shutil.rmtree(rule_dir, ignore_errors=True)
 
 
 def certified_run(
@@ -1789,6 +2337,8 @@ __all__ = [
     "RecordReadback",
     "TrialContext",
     "apply_verify_config",
+    "business_rule_problems",
+    "business_rule_trial",
     "case_result",
     "certified_run",
     "check_ready",
@@ -1801,6 +2351,8 @@ __all__ = [
     "report_summary",
     "resolve_inputs",
     "resolve_save_step",
+    "rule_halt_steps",
+    "rule_params",
     "summarize_pixels_only",
     "write_json",
 ]

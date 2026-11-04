@@ -167,3 +167,45 @@ def test_network_error_fails_closed(tmp_path: Path) -> None:
         raise OSError("offline")
 
     assert _run(tmp_path, broken) == 1
+
+
+def test_monorepo_release_provenance_passes(tmp_path: Path) -> None:
+    document, _, _, fetch = _setup(tmp_path)
+    for role, (package, _dist, _repository) in MODULE.COMPONENTS.items():
+        version = document["components"][role]["version"]
+        document["components"][role]["provenance"] = {
+            "repository": "OpenAdaptAI/OpenAdapt",
+            "release_ref": f"{package}-v{version}",
+            "commit": "e" * 40,
+            "source_root": f"packages/{role}",
+        }
+    (tmp_path / "platform-manifest.json").write_text(json.dumps(document))
+    assert _run(tmp_path, fetch) == 0
+
+
+@pytest.mark.parametrize(
+    "provenance",
+    [
+        # The monorepo tag in the standalone repository.
+        {
+            "repository": "OpenAdaptAI/openadapt-flow",
+            "release_ref": "openadapt-flow-v2.0.0",
+        },
+        # A monorepo release without its package directory.
+        {"repository": "OpenAdaptAI/OpenAdapt", "release_ref": "openadapt-flow-v2.0.0"},
+        # Another package's directory.
+        {
+            "repository": "OpenAdaptAI/OpenAdapt",
+            "release_ref": "openadapt-flow-v2.0.0",
+            "source_root": "packages/agent",
+        },
+    ],
+)
+def test_mismatched_monorepo_provenance_fails(
+    tmp_path: Path, provenance: dict, capsys
+) -> None:
+    document, _, _, fetch = _setup(tmp_path)
+    document["components"]["flow"]["provenance"] = {**provenance, "commit": "e" * 40}
+    (tmp_path / "platform-manifest.json").write_text(json.dumps(document))
+    assert _run(tmp_path, fetch) == 1
+    assert "flow provenance does not bind" in capsys.readouterr().err

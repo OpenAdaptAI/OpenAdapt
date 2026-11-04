@@ -1,0 +1,36 @@
+{
+  "schema": "openadapt.halt-cleanup-measurement/v1",
+  "app": "openemr",
+  "mode": "live (pinned OpenEMR fixture, real browser)",
+  "bundle": "scoreboard openemr_referral program bundle (New Patient)",
+  "measured_at": "2026-10-29T07:15:48-0400",
+  "host": "macOS-15.7.3-arm64-arm-64bit",
+  "load_1m": 7.23,
+  "seconds": 118.9,
+  "rows": {
+    "fresh_session": {
+      "start_check": "passed",
+      "reason": null,
+      "seconds": 2.5
+    },
+    "dialog_open": {
+      "dialog_open_before_cleanup": true,
+      "dialog_open_after_cleanup": false,
+      "form_empty_after_cleanup": true,
+      "session": "clean",
+      "dirty_reason": null,
+      "patient_rows_before_cleanup": 0,
+      "patient_rows_after_cleanup": 0,
+      "records_changed_by_cleanup": null,
+      "cleanup_steps": 0,
+      "cleanup_seconds": 2.0,
+      "next_item_first_steps_ok": true,
+      "next_item_stopped_at": null,
+      "model_calls": 0
+    },
+    "wrong_screen": {
+      "session": "dirty",
+      "dirty_reason": "the start screen isn't showing"
+    }
+  }
+}

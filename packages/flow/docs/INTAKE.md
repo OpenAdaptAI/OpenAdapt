@@ -20,12 +20,30 @@ openadapt-flow run ./new-referral --params-file params.json
    `Insurance No:` and `Insurance Number:`. Add more labels with
    `--alias insurance_no="Member ID"`.
 3. Validates each value against the parameter's type (`date`, `number`,
-   `boolean`, `enum`, `string`) and normalizes it (dates become `YYYY-MM-DD`).
+   `boolean`, `enum`, `string`) and normalizes it. Dates become `YYYY-MM-DD`
+   only when their order can be told:
+   - an ISO date, a spelled-out month (`25 Dec 1970`) or `YYYY/MM/DD`;
+   - a numeric date with a part over 12 (`12/25/1970`), or equal parts;
+   - a numeric date whose order you declare with
+     `--date-format DOB=MM/DD/YYYY` (or `DD/MM/YYYY`).
+
+   A numeric date that could be read either way (`03/04/1970`) with no
+   declared format, or a date that doesn't exist (`1970-02-30`), needs a
+   person. A converted value records its original text and the conversion in
+   the provenance file (`raw_value`, `conversion`). The run checks again that
+   every `date` parameter is an ISO date before its first step.
 4. Holds back any field that is missing, invalid, ambiguous (two different
    values), or below the confidence threshold (default 0.9). On a terminal it
    asks you to confirm or correct each one. Otherwise it prints the pending
    fields, writes nothing, and exits with code 2. Pass `--accept NAME` after
    you have checked a value.
+
+5. Writes `params.provenance.json` beside `params.json`
+   (`openadapt.param-provenance/v1`): for each value, the SHA-256 of the
+   document's bytes, the line it was read from, the label, and who read it
+   (`intake:local`, `intake:agent`, or `person` for a value you typed). A
+   later check uses it to compare the saved record with the document itself
+   ([`VERIFICATION_COVERAGE.md`](VERIFICATION_COVERAGE.md)).
 
 Confidence is a fixed score from the kind of match, not a probability. An
 exact label match scores 0.95; a match on only the last word of the name (for

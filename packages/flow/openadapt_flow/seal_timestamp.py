@@ -16,17 +16,17 @@ What is sent: one 32-byte SHA-256 imprint and a random nonce, nothing else.
   ``canonical_json({"run_authorization_sha256": ..., "signature_sha256": ...})``,
   which covers the statement and the person's signature together.
 
-The token is stored as ``seal.tsa.json`` next to ``seal.json``
-(``NAME.seal.tsa.json`` next to ``NAME.seal.json``), or
-``run-authorization.tsa.json`` next to the statement
-(``openadapt.record-timestamp/v1``). Before it is written, the token is
+The token is stored in its standard binary form, DER, as ``seal.tsr`` next
+to ``seal.json`` (``run-authorization.tsr`` next to the statement). A small
+JSON file beside it, ``seal.tsa.json`` / ``run-authorization.tsa.json``
+(``openadapt.record-timestamp/v1``), names the record's digests, the imprint,
+the TSA, the token file and the token's SHA-256. Before it is written, the token is
 checked offline against the pinned TSA certificate: the Sigstore TSA root
 shipped with OpenAdapt, unless the caller pins another.
 """
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -73,6 +73,28 @@ def default_trusted() -> list[Any]:
     return load_pem_certificates(sigstore_tsa_root_pem())
 
 
+def token_path(timestamp_file: Path) -> Path:
+    """``seal.tsa.json`` -> ``seal.tsr``: the DER TimeStampToken stored beside it."""
+    timestamp_file = Path(timestamp_file)
+    name = timestamp_file.name
+    stem = name[: -len(".tsa.json")] if name.endswith(".tsa.json") else name
+    return timestamp_file.with_name(stem + ".tsr")
+
+
+def _token_file(data: Mapping[str, Any], path: Path) -> Path:
+    """The token file the JSON names: a bare file name beside it, nothing else."""
+    name = str(data["tsr_file"])
+    if (
+        not name
+        or "/" in name
+        or "\\" in name
+        or name in (".", "..")
+        or not name.endswith(".tsr")
+    ):
+        raise ValueError("tsr_file must be a .tsr file name beside the JSON")
+    return Path(path).with_name(name)
+
+
 def verify_record_timestamp(
     fields: Mapping[str, str], path: Path, trusted: Optional[Sequence[Any]] = None
 ) -> Any:
@@ -97,11 +119,27 @@ def verify_record_timestamp(
         expected = imprint(fields)
         if data.get("imprint_sha256") != expected.hex():
             return TimestampVerification(False, "timestamp_mismatch")
-        token = base64.b64decode(str(data["token"]), validate=True)
+        token_file = _token_file(data, Path(path))
+        want_sha = str(data["tsr_sha256"])
     except (KeyError, TypeError, ValueError, AttributeError, RecordTimestampError):
         return TimestampVerification(False, "timestamp_malformed")
+    try:
+        token = token_file.read_bytes()
+    except FileNotFoundError:
+        return TimestampVerification(False, "timestamp_token_missing")
+    except OSError:
+        return TimestampVerification(False, "timestamp_malformed")
+    if hashlib.sha256(token).hexdigest() != want_sha:
+        return TimestampVerification(False, "timestamp_token_mismatch")
     pinned = list(trusted) if trusted is not None else default_trusted()
     return verify_timestamp_token(token, expected, pinned)
+
+
+def _write_atomic(path: Path, data: bytes, mode: int = 0o644) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
 
 
 def timestamp_record(
@@ -112,10 +150,15 @@ def timestamp_record(
     trusted: Optional[Sequence[Any]] = None,
     env: Optional[Mapping[str, str]] = None,
 ) -> dict[str, Any]:
-    """Get one token for ``fields`` from ``authority`` and write ``out``. Idempotent."""
+    """Get one token for ``fields`` from ``authority``; write ``out`` and its ``.tsr``.
+
+    The token is stored as-is (DER CMS ``TimeStampToken``) in ``<name>.tsr``;
+    the JSON names that file and its SHA-256. Idempotent.
+    """
     from openadapt_flow import no_outbound
 
     out = Path(out)
+    tsr = token_path(out)
     if out.exists():
         existing = verify_record_timestamp(fields, out, trusted)
         if existing.ok:
@@ -130,26 +173,25 @@ def timestamp_record(
         token = bytes(authority.timestamp(digest))
     except Exception as exc:  # unreachable TSA, bad answer: a closed reason
         raise RecordTimestampError("timestamp_failed", str(exc)) from exc
+    pinned = list(trusted) if trusted is not None else default_trusted()
+    from openadapt_flow.countersign.tsa import verify_timestamp_token
+
+    result = verify_timestamp_token(token, digest, pinned)
+    if not result.ok:
+        raise RecordTimestampError("timestamp_invalid", str(result.reason))
     record = {
         "schema": SCHEMA,
         **fields,
         "imprint_sha256": digest.hex(),
         "tsa": str(getattr(authority, "name", "unknown")),
-        "token": base64.b64encode(token).decode("ascii"),
+        "tsr_file": tsr.name,
+        "tsr_sha256": hashlib.sha256(token).hexdigest(),
+        "gen_time": result.gen_time,
     }
-    tmp = out.with_name(out.name + ".tmp")
-    tmp.write_text(
-        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write_atomic(tsr, token)
+    _write_atomic(
+        out, (json.dumps(record, indent=2, sort_keys=True) + "\n").encode("utf-8")
     )
-    result = verify_record_timestamp(fields, tmp, trusted)
-    if not result.ok:
-        tmp.unlink()
-        raise RecordTimestampError("timestamp_invalid", str(result.reason))
-    record["gen_time"] = result.gen_time
-    tmp.write_text(
-        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    os.replace(tmp, out)
     return record
 
 

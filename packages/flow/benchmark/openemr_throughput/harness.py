@@ -82,9 +82,14 @@ def synthetic_referrals(n: int) -> list[dict[str, str]]:
         sex = "Female" if i % 2 == 0 else "Male"
         fname = FIRST[sex][(i // 2) % 16]
         last = LAST[(i // 32) % 8] + ("" if i < 256 else str(i // 256))
+        # Use the global index: A..Z, AA..AZ, ... instead of wrapping at 26.
+        name_index, suffix = i + 1, ""
+        while name_index:
+            name_index, letter_index = divmod(name_index - 1, 26)
+            suffix = chr(65 + letter_index) + suffix
         out.append(dict(
             title="Ms." if sex == "Female" else "Mr.", fname=fname,
-            lname=f"{last}{chr(65 + (i % 26))}",
+            lname=f"{last}{suffix}",
             dob=f"19{50 + (i % 45):02d}-{1 + (i % 12):02d}-{1 + (i % 27):02d}", sex=sex,
             street=f"{10 + i} {STREETS[i % 4]}", city="EXAMPLETON", state="MA",
             state_label="Massachusetts", postal_code="02139",
@@ -232,7 +237,7 @@ def _demo_module() -> Any:
 def build_worker(user: str, opts: dict[str, Any]) -> Any:
     """One worker signed in as ``user``. Module-level so a child process can
     build it (``ProcessWorker``); ``opts`` holds only plain values."""
-    from openadapt_flow.benchmark.openemr_local import (
+    from benchmark.harness.openemr_local import (
         OpenEMRPatientOracle,
         SyntheticPatientSpec,
     )
@@ -340,7 +345,7 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
 
 def run(a: argparse.Namespace) -> dict[str, Any]:
     from openadapt_flow._browser_setup import ensure_chromium_installed
-    from openadapt_flow.benchmark.openemr_local import (
+    from benchmark.harness.openemr_local import (
         SyntheticPatientSpec,
     )
     from openadapt_flow.ir import Workflow

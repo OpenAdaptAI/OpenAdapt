@@ -1,0 +1,1029 @@
+[
+ {
+  "resourceType": "SearchParameter",
+  "id": "293591c3-738d-4238-b370-9dc84724f499",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-actor",
+  "version": "4.0.1",
+  "name": "actor",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Any one of the individuals participating in the appointment",
+  "code": "actor",
+  "base": [
+   "Appointment"
+  ],
+  "type": "reference",
+  "expression": "Appointment.participant.actor",
+  "xpath": "f:Appointment/f:participant/f:actor",
+  "xpathUsage": "normal",
+  "target": [
+   "Practitioner",
+   "Device",
+   "Patient",
+   "HealthcareService",
+   "PractitionerRole",
+   "RelatedPerson",
+   "Location"
+  ],
+  "meta": {
+   "versionId": "b210a54f-effc-4c0b-8d5b-8daf7942b987",
+   "lastUpdated": "2026-10-30T02:05:36.808Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "a93dc7d8-c11f-4265-9743-d2ab08724aca",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-appointment-type",
+  "version": "4.0.1",
+  "name": "appointment-type",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The style of appointment or patient that has been booked in the slot (not service type)",
+  "code": "appointment-type",
+  "base": [
+   "Appointment"
+  ],
+  "type": "token",
+  "expression": "Appointment.appointmentType",
+  "xpath": "f:Appointment/f:appointmentType",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "681c5634-148d-4e6f-8d84-d81076d49055",
+   "lastUpdated": "2026-10-30T02:05:36.808Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "37463d27-f045-4c65-b637-f444c708c1da",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-based-on",
+  "version": "4.0.1",
+  "name": "based-on",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The service request this appointment is allocated to assess",
+  "code": "based-on",
+  "base": [
+   "Appointment"
+  ],
+  "type": "reference",
+  "expression": "Appointment.basedOn",
+  "xpath": "f:Appointment/f:basedOn",
+  "xpathUsage": "normal",
+  "target": [
+   "ServiceRequest"
+  ],
+  "meta": {
+   "versionId": "a03b8d42-56cd-4f7d-813e-e94a6e71c2af",
+   "lastUpdated": "2026-10-30T02:05:36.809Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "3667b39b-e99c-4dc2-b0b4-4f057e6c3615",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-date",
+  "version": "4.0.1",
+  "name": "date",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Appointment date/time.",
+  "code": "date",
+  "base": [
+   "Appointment"
+  ],
+  "type": "date",
+  "expression": "Appointment.start",
+  "xpath": "f:Appointment/f:start",
+  "xpathUsage": "normal",
+  "comparator": [
+   "eq",
+   "ne",
+   "gt",
+   "ge",
+   "lt",
+   "le",
+   "sa",
+   "eb",
+   "ap"
+  ],
+  "meta": {
+   "versionId": "2bd2b962-862c-4060-8a70-7433373bb8b8",
+   "lastUpdated": "2026-10-30T02:05:36.810Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "a25cd2ce-8290-4fe2-b46e-1de29b9ffdf6",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-identifier",
+  "version": "4.0.1",
+  "name": "identifier",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "An Identifier of the Appointment",
+  "code": "identifier",
+  "base": [
+   "Appointment"
+  ],
+  "type": "token",
+  "expression": "Appointment.identifier",
+  "xpath": "f:Appointment/f:identifier",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "ee7119b9-b333-45e0-977c-080490c53df6",
+   "lastUpdated": "2026-10-30T02:05:36.811Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "4eee6fe9-ee36-4ba7-b26d-f4799e140511",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-location",
+  "version": "4.0.1",
+  "name": "location",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "This location is listed in the participants of the appointment",
+  "code": "location",
+  "base": [
+   "Appointment"
+  ],
+  "type": "reference",
+  "expression": "Appointment.participant.actor.where(resolve() is Location)",
+  "xpath": "f:Appointment/f:participant/f:actor",
+  "xpathUsage": "normal",
+  "target": [
+   "Location"
+  ],
+  "meta": {
+   "versionId": "a7d5e13e-2200-43e6-be23-7c0e130a218c",
+   "lastUpdated": "2026-10-30T02:05:36.811Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "d30baa7d-9b56-40b4-854d-ebfb44213bf9",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-part-status",
+  "version": "4.0.1",
+  "name": "part-status",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The Participation status of the subject, or other participant on the appointment. Can be used to locate participants that have not responded to meeting requests.",
+  "code": "part-status",
+  "base": [
+   "Appointment"
+  ],
+  "type": "token",
+  "expression": "Appointment.participant.status",
+  "xpath": "f:Appointment/f:participant/f:status",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "a8d76132-2b6e-4f9b-a29f-5967388bed89",
+   "lastUpdated": "2026-10-30T02:05:36.812Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "8277d59e-1209-443e-81e5-b8b5dd24e8c8",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-patient",
+  "version": "4.0.1",
+  "name": "patient",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "One of the individuals of the appointment is this patient",
+  "code": "patient",
+  "base": [
+   "Appointment"
+  ],
+  "type": "reference",
+  "expression": "Appointment.participant.actor.where(resolve() is Patient)",
+  "xpath": "f:Appointment/f:participant/f:actor",
+  "xpathUsage": "normal",
+  "target": [
+   "Patient"
+  ],
+  "meta": {
+   "versionId": "d620b278-c535-4998-82e7-887ab221bdf4",
+   "lastUpdated": "2026-10-30T02:05:36.813Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "dd90b579-55a1-4e76-9d3a-74bd05b0b5b1",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-practitioner",
+  "version": "4.0.1",
+  "name": "practitioner",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "One of the individuals of the appointment is this practitioner",
+  "code": "practitioner",
+  "base": [
+   "Appointment"
+  ],
+  "type": "reference",
+  "expression": "Appointment.participant.actor.where(resolve() is Practitioner)",
+  "xpath": "f:Appointment/f:participant/f:actor",
+  "xpathUsage": "normal",
+  "target": [
+   "Practitioner"
+  ],
+  "meta": {
+   "versionId": "a24a8428-6b32-451c-b5e0-81c42e3651b3",
+   "lastUpdated": "2026-10-30T02:05:36.814Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "f3dee65e-17be-4f31-ab27-b95c000234c2",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-reason-code",
+  "version": "4.0.1",
+  "name": "reason-code",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Coded reason this appointment is scheduled",
+  "code": "reason-code",
+  "base": [
+   "Appointment"
+  ],
+  "type": "token",
+  "expression": "Appointment.reasonCode",
+  "xpath": "f:Appointment/f:reasonCode",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "4f50a507-d11e-4bd2-b07d-2b55850a0a9d",
+   "lastUpdated": "2026-10-30T02:05:36.815Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "b598bfa6-51ef-4996-b36a-81aa8bf4a213",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-reason-reference",
+  "version": "4.0.1",
+  "name": "reason-reference",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Reason the appointment is to take place (resource)",
+  "code": "reason-reference",
+  "base": [
+   "Appointment"
+  ],
+  "type": "reference",
+  "expression": "Appointment.reasonReference",
+  "xpath": "f:Appointment/f:reasonReference",
+  "xpathUsage": "normal",
+  "target": [
+   "Condition",
+   "Observation",
+   "Procedure",
+   "ImmunizationRecommendation"
+  ],
+  "meta": {
+   "versionId": "db7eefbe-bf88-4ff5-aa36-56740da244d7",
+   "lastUpdated": "2026-10-30T02:05:36.815Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "f3dff115-9772-448e-8c1f-694bb8f3bf41",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-service-category",
+  "version": "4.0.1",
+  "name": "service-category",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "A broad categorization of the service that is to be performed during this appointment",
+  "code": "service-category",
+  "base": [
+   "Appointment"
+  ],
+  "type": "token",
+  "expression": "Appointment.serviceCategory",
+  "xpath": "f:Appointment/f:serviceCategory",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "6dc53f52-1375-4ef2-8a6c-b8456de72ae4",
+   "lastUpdated": "2026-10-30T02:05:36.816Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "cc93e15c-cc57-41a0-81a7-f50ce93fa5d8",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-service-type",
+  "version": "4.0.1",
+  "name": "service-type",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The specific service that is to be performed during this appointment",
+  "code": "service-type",
+  "base": [
+   "Appointment"
+  ],
+  "type": "token",
+  "expression": "Appointment.serviceType",
+  "xpath": "f:Appointment/f:serviceType",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "3c3e76df-19be-472e-b639-787ae859cb60",
+   "lastUpdated": "2026-10-30T02:05:36.817Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "3d2fbe2c-822d-4a76-89ef-2676312e198a",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-slot",
+  "version": "4.0.1",
+  "name": "slot",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The slots that this appointment is filling",
+  "code": "slot",
+  "base": [
+   "Appointment"
+  ],
+  "type": "reference",
+  "expression": "Appointment.slot",
+  "xpath": "f:Appointment/f:slot",
+  "xpathUsage": "normal",
+  "target": [
+   "Slot"
+  ],
+  "meta": {
+   "versionId": "01c0ae5b-9592-4d34-93e7-398674848ec5",
+   "lastUpdated": "2026-10-30T02:05:36.818Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "708db90a-231d-4027-bdd0-753362e41446",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-specialty",
+  "version": "4.0.1",
+  "name": "specialty",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The specialty of a practitioner that would be required to perform the service requested in this appointment",
+  "code": "specialty",
+  "base": [
+   "Appointment"
+  ],
+  "type": "token",
+  "expression": "Appointment.specialty",
+  "xpath": "f:Appointment/f:specialty",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "37582487-d710-42b8-9d61-ad95a828f077",
+   "lastUpdated": "2026-10-30T02:05:36.819Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "77c35d70-e73f-4b65-b141-c4b571249929",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-status",
+  "version": "4.0.1",
+  "name": "status",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "The overall status of the appointment",
+  "code": "status",
+  "base": [
+   "Appointment"
+  ],
+  "type": "token",
+  "expression": "Appointment.status",
+  "xpath": "f:Appointment/f:status",
+  "xpathUsage": "normal",
+  "meta": {
+   "versionId": "b7fd79a8-fe49-46af-8c52-2e5cba54df06",
+   "lastUpdated": "2026-10-30T02:05:36.819Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "3997e04c-17ef-4a89-a160-612f96459bf9",
+  "extension": [
+   {
+    "url": "http://hl7.org/fhir/StructureDefinition/structuredefinition-standards-status",
+    "valueCode": "trial-use"
+   }
+  ],
+  "url": "http://hl7.org/fhir/SearchParameter/Appointment-supporting-info",
+  "version": "4.0.1",
+  "name": "supporting-info",
+  "status": "draft",
+  "experimental": false,
+  "date": "2019-11-01T09:29:23+11:00",
+  "publisher": "Health Level Seven International (Patient Administration)",
+  "contact": [
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://hl7.org/fhir"
+     }
+    ]
+   },
+   {
+    "telecom": [
+     {
+      "system": "url",
+      "value": "http://www.hl7.org/Special/committees/pafm/index.cfm"
+     }
+    ]
+   }
+  ],
+  "description": "Additional information to support the appointment",
+  "code": "supporting-info",
+  "base": [
+   "Appointment"
+  ],
+  "type": "reference",
+  "expression": "Appointment.supportingInformation",
+  "xpath": "f:Appointment/f:supportingInformation",
+  "xpathUsage": "normal",
+  "target": [
+   "Account",
+   "ActivityDefinition",
+   "AdverseEvent",
+   "AllergyIntolerance",
+   "Appointment",
+   "AppointmentResponse",
+   "AuditEvent",
+   "Basic",
+   "Binary",
+   "BiologicallyDerivedProduct",
+   "BodyStructure",
+   "Bundle",
+   "CapabilityStatement",
+   "CarePlan",
+   "CareTeam",
+   "CatalogEntry",
+   "ChargeItem",
+   "ChargeItemDefinition",
+   "Claim",
+   "ClaimResponse",
+   "ClinicalImpression",
+   "CodeSystem",
+   "Communication",
+   "CommunicationRequest",
+   "CompartmentDefinition",
+   "Composition",
+   "ConceptMap",
+   "Condition",
+   "Consent",
+   "Contract",
+   "Coverage",
+   "CoverageEligibilityRequest",
+   "CoverageEligibilityResponse",
+   "DetectedIssue",
+   "Device",
+   "DeviceDefinition",
+   "DeviceMetric",
+   "DeviceRequest",
+   "DeviceUseStatement",
+   "DiagnosticReport",
+   "DocumentManifest",
+   "DocumentReference",
+   "EffectEvidenceSynthesis",
+   "Encounter",
+   "Endpoint",
+   "EnrollmentRequest",
+   "EnrollmentResponse",
+   "EpisodeOfCare",
+   "EventDefinition",
+   "Evidence",
+   "EvidenceVariable",
+   "ExampleScenario",
+   "ExplanationOfBenefit",
+   "FamilyMemberHistory",
+   "Flag",
+   "Goal",
+   "GraphDefinition",
+   "Group",
+   "GuidanceResponse",
+   "HealthcareService",
+   "ImagingStudy",
+   "Immunization",
+   "ImmunizationEvaluation",
+   "ImmunizationRecommendation",
+   "ImplementationGuide",
+   "InsurancePlan",
+   "Invoice",
+   "Library",
+   "Linkage",
+   "List",
+   "Location",
+   "Measure",
+   "MeasureReport",
+   "Media",
+   "Medication",
+   "MedicationAdministration",
+   "MedicationDispense",
+   "MedicationKnowledge",
+   "MedicationRequest",
+   "MedicationStatement",
+   "MedicinalProduct",
+   "MedicinalProductAuthorization",
+   "MedicinalProductContraindication",
+   "MedicinalProductIndication",
+   "MedicinalProductIngredient",
+   "MedicinalProductInteraction",
+   "MedicinalProductManufactured",
+   "MedicinalProductPackaged",
+   "MedicinalProductPharmaceutical",
+   "MedicinalProductUndesirableEffect",
+   "MessageDefinition",
+   "MessageHeader",
+   "MolecularSequence",
+   "NamingSystem",
+   "NutritionOrder",
+   "Observation",
+   "ObservationDefinition",
+   "OperationDefinition",
+   "OperationOutcome",
+   "Organization",
+   "OrganizationAffiliation",
+   "Patient",
+   "PaymentNotice",
+   "PaymentReconciliation",
+   "Person",
+   "PlanDefinition",
+   "Practitioner",
+   "PractitionerRole",
+   "Procedure",
+   "Provenance",
+   "Questionnaire",
+   "QuestionnaireResponse",
+   "RelatedPerson",
+   "RequestGroup",
+   "ResearchDefinition",
+   "ResearchElementDefinition",
+   "ResearchStudy",
+   "ResearchSubject",
+   "RiskAssessment",
+   "RiskEvidenceSynthesis",
+   "Schedule",
+   "SearchParameter",
+   "ServiceRequest",
+   "Slot",
+   "Specimen",
+   "SpecimenDefinition",
+   "StructureDefinition",
+   "StructureMap",
+   "Subscription",
+   "Substance",
+   "SubstanceNucleicAcid",
+   "SubstancePolymer",
+   "SubstanceProtein",
+   "SubstanceReferenceInformation",
+   "SubstanceSourceMaterial",
+   "SubstanceSpecification",
+   "SupplyDelivery",
+   "SupplyRequest",
+   "Task",
+   "TerminologyCapabilities",
+   "TestReport",
+   "TestScript",
+   "ValueSet",
+   "VerificationResult",
+   "VisionPrescription"
+  ],
+  "meta": {
+   "versionId": "85ac5fff-3cde-4319-92f3-cc359ad93454",
+   "lastUpdated": "2026-10-30T02:05:36.820Z"
+  }
+ },
+ {
+  "resourceType": "SearchParameter",
+  "id": "1c8dfa10-318c-4c32-b205-4d3a8f088eb4",
+  "url": "https://medplum.com/fhir/SearchParameter/Appointment-end",
+  "version": "4.0.1",
+  "name": "end",
+  "status": "draft",
+  "publisher": "Medplum",
+  "description": "The end time of the Appointment",
+  "code": "end",
+  "base": [
+   "Appointment"
+  ],
+  "type": "date",
+  "expression": "Appointment.end",
+  "target": [
+   "Appointment"
+  ],
+  "meta": {
+   "versionId": "638e0f70-ec8a-449f-bc7a-5016319c0635",
+   "lastUpdated": "2026-10-30T02:05:38.167Z"
+  }
+ }
+]

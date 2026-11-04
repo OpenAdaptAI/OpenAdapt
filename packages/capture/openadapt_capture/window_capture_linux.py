@@ -209,6 +209,65 @@ class X11CompositeClient(AbstractContextManager["X11CompositeClient"]):
         values = _u32_values(payload) if value_format == 32 else []
         return values[0] if len(values) == 1 else 0
 
+    def window_pid(self, window_id: int) -> int | None:
+        """Return the ``_NET_WM_PID`` of one window, or ``None`` when absent."""
+        try:
+            pid = self._pid(window_id)
+        except Exception:
+            return None
+        return pid or None
+
+    def active_window(self) -> int | None:
+        """Return the EWMH ``_NET_ACTIVE_WINDOW`` client, or ``None``."""
+        value_format, payload = self._property(self._root, "_NET_ACTIVE_WINDOW", length=1)
+        values = _u32_values(payload) if value_format == 32 else []
+        return values[0] if len(values) == 1 and values[0] else None
+
+    def client_window_at(self, x: int, y: int) -> int | None:
+        """Return the client inside the topmost viewable root child at a point.
+
+        Root children are window-manager frames (or unmanaged windows) in
+        bottom-to-top stacking order. The EWMH client inside the topmost frame
+        that contains the point is returned in the same identifier space as
+        the resolver. An unmanaged window, such as an override-redirect popup,
+        is returned as itself, so it never compares equal to the target.
+        """
+        children = list(self._conn.core.QueryTree(self._root).reply().children)
+        frame = None
+        for child in reversed(children):
+            try:
+                attributes = self._conn.core.GetWindowAttributes(child).reply()
+                if int(attributes.map_state) != self._xproto.MapState.Viewable:
+                    continue
+                if int(attributes._class) != self._xproto.WindowClass.InputOutput:
+                    continue
+                geometry = self._conn.core.GetGeometry(child).reply()
+            except Exception:
+                continue
+            border = int(geometry.border_width)
+            left, top = int(geometry.x), int(geometry.y)
+            width = int(geometry.width) + 2 * border
+            height = int(geometry.height) + 2 * border
+            if left <= x < left + width and top <= y < top + height:
+                frame = int(child)
+                break
+        if frame is None:
+            return None
+        clients = set(self.window_ids())
+        pending = [(frame, 0)]
+        while pending:
+            window_id, depth = pending.pop(0)
+            if window_id in clients:
+                return window_id
+            if depth >= 3:
+                continue
+            try:
+                nested = self._conn.core.QueryTree(window_id).reply().children
+            except Exception:
+                continue
+            pending.extend((int(child), depth + 1) for child in nested)
+        return frame
+
     def window_record(self, window_id: int) -> X11WindowRecord | None:
         """Read one viewability, identity, and root-pixel geometry snapshot."""
         try:
@@ -500,19 +559,29 @@ def resolve_window_linux(
     client_factory: Callable[[], AbstractContextManager[_X11ClientProtocol]] | None = None,
     process_identity: Callable[[int], tuple[str, float]] | None = None,
 ) -> "TargetWindow | None":
-    """Resolve the largest matching, fully on-screen EWMH client window."""
+    """Resolve the one matching, fully on-screen EWMH client window.
+
+    An exact owner/title match wins over substring matches. More than one
+    remaining candidate raises ``WindowCaptureAmbiguousError``, as on macOS.
+
+    With ``target.window_id`` set (a pinned window) only that exact X11
+    window matches and the title is ignored.
+    """
     _require_x11_session()
-    from openadapt_capture.window_capture import TargetWindow
+    from openadapt_capture.window_capture import TargetWindow, _unique_window_match
 
     factory = client_factory or X11CompositeClient
     identity_reader = process_identity or _default_process_identity
     owner_text = target.owner.casefold() if target.owner else None
-    title_text = target.title.casefold() if target.title else None
-    matches: list[tuple[int, TargetWindow]] = []
+    pinned_id = target.window_id
+    title_text = target.title.casefold() if target.title and pinned_id is None else None
+    matches: list[TargetWindow] = []
     try:
         with factory() as client:
             root_bounds = client.root_bounds
-            for stacking_index, window_id in enumerate(client.window_ids()):
+            for window_id in client.window_ids():
+                if pinned_id is not None and window_id != pinned_id:
+                    continue
                 record = client.window_record(window_id)
                 if (
                     record is None
@@ -530,18 +599,15 @@ def resolve_window_linux(
                 if not owner or owner_text is not None and owner_text not in owner.casefold():
                     continue
                 matches.append(
-                    (
-                        stacking_index,
-                        TargetWindow(
-                            window_id=record.window_id,
-                            owner=owner,
-                            title=record.title,
-                            pid=record.pid,
-                            bounds=tuple(float(value) for value in record.bounds),
-                            on_screen=True,
-                            process_start_time=process_start_time,
-                            coordinate_source="x11-root-physical-pixels",
-                        ),
+                    TargetWindow(
+                        window_id=record.window_id,
+                        owner=owner,
+                        title=record.title,
+                        pid=record.pid,
+                        bounds=tuple(float(value) for value in record.bounds),
+                        on_screen=True,
+                        process_start_time=process_start_time,
+                        coordinate_source="x11-root-physical-pixels",
                     )
                 )
     except LinuxWindowCaptureError:
@@ -550,13 +616,7 @@ def resolve_window_linux(
         raise LinuxWindowCaptureError("X11 window resolution failed") from exc
     if not matches:
         return None
-    return max(
-        matches,
-        key=lambda item: (
-            item[1].bounds[2] * item[1].bounds[3],
-            item[0],
-        ),
-    )[1]
+    return _unique_window_match(matches, target, title_text is not None)
 
 
 def capture_window_linux(

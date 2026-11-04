@@ -1,0 +1,32 @@
+spec_version: 1
+name: openadapt-win-claims-desk
+version: 0.1.0
+type: space
+runtime: fastapi
+app: openadapt_flow.rl_env.desktop:build_app
+port: 8000
+validation:
+  reward:
+    range: [0.0, 1.0]
+    oracle_tolerance: 0.0
+    floor_margin: 0.1
+  resources:
+    cpu: 1.0
+    memory_mb: 2048
+    disk_mb: 2048
+    episode_timeout_s: 300.0
+  network:
+    # The server reaches one Windows guest (RDP/WinRM/agent port); the agent
+    # has no network action.
+    mode: guest-only
+  capabilities:
+    verifier:
+      kind: reward_channel
+    oracle:
+      form: script
+      location: tasks/public.jsonl (each task's solution)
+    task_api: true
+    declared_task_count:
+      public: 24
+  types:
+    tags: [computer-use, windows, ui-automation, effect-verification, insurance, claims]

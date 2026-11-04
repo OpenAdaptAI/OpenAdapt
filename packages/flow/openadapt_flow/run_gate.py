@@ -49,7 +49,7 @@ is refused, not repaired.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Callable, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -318,6 +318,7 @@ def evaluate_run_gate(
     require_encryption: bool = True,
     pinned_content_digest: Optional[str] = None,
     pinned_compiler_version: Optional[str] = None,
+    pinned_lineage: Optional[Callable[[str, str], Optional[str]]] = None,
     profile_contract: Optional[ExecutionProfileContract] = None,
     effective_durable: Optional[bool] = None,
     effective_require_settled: Optional[bool] = None,
@@ -352,6 +353,12 @@ def evaluate_run_gate(
         pinned_content_digest / pinned_compiler_version: Optional version pins
             (gate 7); a supplied pin that does not match the sealed manifest
             refuses the run.
+        pinned_lineage: ``(pinned, actual) -> refusal`` for a bundle that
+            is not the pinned one. A repaired version of the pinned bundle,
+            re-qualified and re-admitted with signed lineage
+            (:func:`openadapt_flow.repair.readmission.lineage_check`), passes
+            the pin; any other bundle, or a lineage that doesn't verify, is
+            refused.
     """
     bundle = Path(bundle_dir)
     policy_name = (
@@ -488,7 +495,11 @@ def evaluate_run_gate(
                 ),
             ),
             _gate_manifest(
-                workflow, bundle, pinned_content_digest, pinned_compiler_version
+                workflow,
+                bundle,
+                pinned_content_digest,
+                pinned_compiler_version,
+                pinned_lineage,
             ),
         ]
     )
@@ -656,6 +667,18 @@ def _gate_identity(
     certifying_policy: Optional[Policy],
 ) -> GateResult:
     """Gate 2: every entity-sensitive / consequential action is identity-armed."""
+    from openadapt_flow.runtime.target_param import UNQUALIFIED_SELECTION_REASON
+
+    selecting = [step.id for step in steps if step.target_param is not None]
+    if selecting:
+        # Whatever the certifying policy: not admitted until qualification
+        # covers a record-selecting click.
+        return _result(
+            GATE_IDENTITY,
+            False,
+            f"{len(selecting)} step(s) {UNQUALIFIED_SELECTION_REASON}",
+            selecting,
+        )
     must_arm = [
         step
         for step in steps
@@ -1357,6 +1380,7 @@ def _gate_manifest(
     bundle: Path,
     pinned_content_digest: Optional[str],
     pinned_compiler_version: Optional[str],
+    pinned_lineage: Optional[Callable[[str, str], Optional[str]]] = None,
 ) -> GateResult:
     """Gate 7: sealed integrity manifest re-verifies + version pins match."""
     from openadapt_flow.bundle_validation import (
@@ -1387,13 +1411,24 @@ def _gate_manifest(
             False,
             f"manifest integrity FAILED (bundle modified after sealing): {e}",
         )
+    lineage_note = ""
     if pinned_content_digest and pinned_content_digest != manifest.content_digest:
-        return _result(
-            GATE_MANIFEST,
-            False,
-            "bundle content digest does not match the pinned digest "
-            f"(pinned {pinned_content_digest[:16]}..., bundle "
-            f"{manifest.content_digest[:16]}...)",
+        refusal = (
+            pinned_lineage(pinned_content_digest, manifest.content_digest)
+            if pinned_lineage is not None
+            else "no repair lineage was checked"
+        )
+        if refusal is not None:
+            return _result(
+                GATE_MANIFEST,
+                False,
+                "bundle content digest does not match the pinned digest "
+                f"(pinned {pinned_content_digest[:16]}..., bundle "
+                f"{manifest.content_digest[:16]}...; {refusal})",
+            )
+        lineage_note = (
+            f"; a re-qualified repair of the pinned {pinned_content_digest[:16]}..., "
+            "re-admitted with signed lineage"
         )
     version = manifest.provenance.compiler_version
     if pinned_compiler_version and pinned_compiler_version != version:
@@ -1411,5 +1446,5 @@ def _gate_manifest(
         True,
         f"integrity-sealed manifest re-verified "
         f"(digest {manifest.content_digest[:16]}..., compiler "
-        f"{version or 'unstamped'}){pin_note}",
+        f"{version or 'unstamped'}){pin_note}{lineage_note}",
     )

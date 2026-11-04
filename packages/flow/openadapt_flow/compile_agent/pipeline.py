@@ -45,6 +45,7 @@ from openadapt_flow.compile_agent.harness import (
     Harness,
     SaveGate,
     SurfaceHarness,
+    record_readback,
 )
 from openadapt_flow.jit import lifecycle
 from openadapt_flow.jit.compile_agent import (
@@ -79,6 +80,9 @@ CONFIRMED_FILE = "verify.yaml"
 CHECKS_FILE = "record_checks.json"
 TRACE_FILE = "code_action_trace.json"
 AGENT_READS_FILE = "agent_reads.json"
+#: Salted digests of run 1's input values, never the values. ``admit`` uses
+#: them to refuse canaries that repeat run 1's values.
+RUN1_VALUES_FILE = "run1_values.json"
 
 _PLACEHOLDER_RE = re.compile(r"{([A-Za-z_][A-Za-z0-9_]*)}")
 
@@ -233,7 +237,8 @@ class CompileResult:
     ``status`` is ``admitted`` (later runs make no model calls), ``draft``
     (run 1 passed; checks or admission wait for a person), ``needs_person``
     (outside the agent's admission policy), or why nothing can be admitted:
-    ``refused_wrong_record``, ``refused_by_hold``, ``record_check_failed``,
+    ``refused_wrong_record``, ``refused_by_hold``, ``readback_wrong_record``
+    (a save landed on a record the task does not name), ``record_check_failed``,
     ``canary_failed``, ``capture_failed``, ``unsupported``, ``scope_refused``
     (run 1 went outside the task's declared scope), ``readback_refused``
     (the system of record did not show exactly the declared write).
@@ -297,8 +302,11 @@ class _HarnessedAgent:
         keep: Sequence[str],
         evidence_dir: Path,
         principal_id: Optional[str],
+        readback: Optional[Callable[[], Any]] = None,
     ) -> None:
         self.inner = inner
+        #: Read after every save that goes through the gate (harness module).
+        self.readback = readback
         self.dialect = str(inner.dialect)
         self.gate = gate
         self.keep = list(keep)
@@ -317,9 +325,17 @@ class _HarnessedAgent:
         # window, an RDP or Citrix client window) gets the surface harness.
         harness_type = Harness if computer.page is not None else SurfaceHarness
         self.harness = harness_type(
-            computer, self.gate, keep=self.keep, evidence_dir=self.evidence_dir
+            computer,
+            self.gate,
+            keep=self.keep,
+            evidence_dir=self.evidence_dir,
+            readback=self.readback,
         )
         try:
+            if self.readback is not None:
+                from openadapt_flow.compile_agent.harness import _start_readback
+
+                _start_readback(self.harness)
             self.ledger = self.inner.drive(request, self.harness)
         except BaseException as exc:
             self.error = f"{type(exc).__name__}: {exc}"
@@ -361,6 +377,7 @@ class FirstRunCompiler:
         allow_origins: Sequence[str] = (),
         constants: Sequence[str] = (),
         write_adapter: Optional[Any] = None,
+        teach_authorization: Optional[Any] = None,
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
@@ -409,12 +426,19 @@ class FirstRunCompiler:
         self.headless = headless
         self.on_warning = on_warning
         self.model_key = model_key
-        self.observer, self.verifier_section = load_observer(self.verify_path)
+        self.observer, self.verifier_section = load_observer(
+            self.verify_path, for_run1=True
+        )
         #: Run 1's teach scope (see :meth:`teach_scope`): more app origins,
         #: more text the agent may type, and the app's write adapter.
         self.allow_origins = [str(o) for o in allow_origins]
         self.constants = [str(c) for c in constants if str(c)]
         self.write_adapter = write_adapter
+        #: A person's signed teach authorization
+        #: (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). Run 1
+        #: is scoped by it (the flags may only narrow it); without one the
+        #: draft is refused at admission.
+        self.teach_authorization = teach_authorization
         self._baseline: Optional[list[dict[str, Any]]] = None
         self._pending: Optional[tuple[Any, dict[str, str], Path]] = None
         self._receipt_baseline: Optional[Path] = None
@@ -464,7 +488,12 @@ class FirstRunCompiler:
             model_key=self.model_key,
             key_dir=self.key_dir,
             on_warning=self.on_warning,
-            teach_scope=self.teach_scope,
+            # A signed authorization is the whole scope: the person who
+            # signed it named the origins, record, fields and typeable text.
+            teach_scope=None
+            if self.teach_authorization is not None
+            else self.teach_scope,
+            teach_authorization=self.teach_authorization,
         )
 
     def teach_scope(self, params: Mapping[str, Any]) -> Any:
@@ -600,6 +629,7 @@ class FirstRunCompiler:
         # earlier draft must not carry over to it.
         for stale in (
             AGENT_READS_FILE,
+            RUN1_VALUES_FILE,
             PROPOSED_FILE,
             CONFIRMED_FILE,
             CHECKS_FILE,
@@ -607,6 +637,7 @@ class FirstRunCompiler:
             "emitted.json",
         ):
             (self.out_dir / stale).unlink(missing_ok=True)
+        _write_run1_values(self.out_dir / RUN1_VALUES_FILE, values)
         attempt = self.dir / "attempts" / _stamp()
         harnessed = _HarnessedAgent(
             agent,
@@ -614,6 +645,14 @@ class FirstRunCompiler:
             keep=[*self.on_screen, *values.values(), *self.expect.values()],
             evidence_dir=attempt / "gates",
             principal_id=principal_id or getattr(agent, "principal_id", None),
+            # Every save in run 1 is read back from the system of record and
+            # compared with the read taken when run 1 started.
+            readback=record_readback(
+                lambda: self.observer.system_of_record,
+                self.expect,
+                lambda: self._baseline,
+                values=values,
+            ),
         )
         jit.agent = harnessed
         jit.dialect = harnessed.dialect
@@ -630,6 +669,10 @@ class FirstRunCompiler:
             "agent": harnessed.ledger.to_dict() if harnessed.ledger else None,
             "harness": harness.stats.to_dict() if harness else None,
             "gates": harness.gate_log if harness else [],
+            "readbacks": [
+                {k: v for k, v in r.items() if k != "at"}
+                for r in (harness.readback_log if harness else [])
+            ],
             "agent_error": harnessed.error,
         }
         trace_data: Optional[dict[str, Any]] = None
@@ -663,6 +706,11 @@ class FirstRunCompiler:
                 if decision == "refused_by_hold"
                 else "refused_wrong_record"
             )
+            stops = [r["outcome"] for r in harness.readback_log]
+            if any(o in ("wrong_record", "duplicate") for o in stops):
+                status = "readback_wrong_record"
+            elif any(o in ("landed_late", "unreadable") for o in stops):
+                status = "readback_refused"
             if jit.candidate() is not None:
                 # An agent that caught the refusal and went on still made a
                 # draft; it must never be admitted.
@@ -1014,6 +1062,9 @@ class FirstRunCompiler:
                 "pass canary values: each canary saves them on the record "
                 f"{self.expect}, so choose values that are safe to write there",
             )
+        repeated = _repeats_run1(self.out_dir / RUN1_VALUES_FILE, self.task, rows)
+        if repeated is not None:
+            return self._result("draft", repeated)
         if admitter is not None:
             policy = getattr(admitter, "policy", None)
             count = policy.policy.min_clean_canaries if policy is not None else 1
@@ -1190,6 +1241,62 @@ def _confirmer(confirm: PersonOrCallback, compiler: FirstRunCompiler) -> Optiona
     return confirm(compiler.proposed())
 
 
+def _value_digest(salt: str, name: str, value: Any) -> str:
+    payload = json.dumps([salt, name, str(value)], ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _write_run1_values(path: Path, values: Mapping[str, Any]) -> None:
+    salt = uuid.uuid4().hex
+    _write_json(
+        path,
+        {
+            "salt": salt,
+            "digests": {
+                name: _value_digest(salt, name, value)
+                for name, value in sorted(values.items())
+            },
+        },
+    )
+
+
+def _repeats_run1(
+    path: Path, task: Any, rows: Sequence[Mapping[str, Any]]
+) -> Optional[str]:
+    """Why these canary rows can't prove the program, or None when they can.
+
+    A canary with run 1's values passes even when the program types the
+    demonstrated text as a constant, so it proves nothing about parameters.
+    Every parameter in every row must differ from run 1's value.
+    """
+
+    if not getattr(task, "params", None):
+        return None
+    if not path.is_file():
+        return (
+            "run 1's input digests are missing, so canary values can't be "
+            "checked against run 1's; record run 1 again"
+        )
+    data = json.loads(path.read_text())
+    salt, digests = data.get("salt"), data.get("digests") or {}
+    if not isinstance(salt, str) or not isinstance(digests, dict):
+        return "run 1's input digests are unreadable; record run 1 again"
+    for number, row in enumerate(rows, start=1):
+        values = task.validate(row)
+        same = sorted(
+            name
+            for name, value in values.items()
+            if name in digests and digests[name] == _value_digest(salt, name, value)
+        )
+        if same:
+            return (
+                f"canary {number} uses run 1's value for {', '.join(same)}; a "
+                "canary with run 1's values passes even when the program types "
+                "the demonstrated text, so choose different values"
+            )
+    return None
+
+
 def compile_first_run(
     prompt: str,
     *,
@@ -1217,6 +1324,7 @@ def compile_first_run(
     allow_origins: Sequence[str] = (),
     constants: Sequence[str] = (),
     write_adapter: Optional[Any] = None,
+    teach_authorization: Optional[Any] = None,
 ) -> CompileResult:
     """Turn an agent's first verified run of ``prompt`` into an admitted program.
 
@@ -1255,6 +1363,9 @@ def compile_first_run(
         write_adapter: The app's
             :class:`~openadapt_flow.teach_scope.WriteAdapter`, so run 1's
             writes are read before they are sent.
+        teach_authorization: A person's signed teach authorization
+            (:class:`~openadapt_flow.teach_authorization.TeachAuthority`). Run
+            1 is scoped by it; without one the draft is refused at admission.
 
     The agent is called once, only when the task has no draft and no
     admitted program.
@@ -1278,6 +1389,7 @@ def compile_first_run(
         allow_origins=allow_origins,
         constants=constants,
         write_adapter=write_adapter,
+        teach_authorization=teach_authorization,
     )
     jit = compiler._jit()
     first: Optional[CompileResult] = None

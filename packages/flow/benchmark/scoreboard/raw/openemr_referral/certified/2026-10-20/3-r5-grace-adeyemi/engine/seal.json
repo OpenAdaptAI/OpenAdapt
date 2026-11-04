@@ -1,13 +1,15 @@
 {
   "algorithm": "ed25519",
-  "issued_at": "2026-10-20T04:20:06Z",
+  "authorization_sha256": "bdfda160138f89a708caa122904af6fec66b29ad41c2d8cb25e458e2da5104d3",
+  "issued_at": "2026-10-20T15:53:27Z",
   "issuer": "local",
   "key_id": "seal-ed25519-ca08dd7f42a4be01",
   "outcome": "VERIFIED",
   "public_key": "UQOSlj3iCypSdSwrUYYOcLbS6yy25yM6syjHVnqcHBg=",
   "run_id": "engine",
   "schema": "openadapt.local-seal/v1",
-  "signature": "2bOwc2FEywo0QaCr7T/IXc7osuTOOFIDA/I6lKFOjbsb10mOaJOFPl3in1wnItqRXPQWGigLbYKgTadO4k7xAA==",
+  "scope_item": "r5",
+  "signature": "lLxvy+9N5iJfKfu0hIVTWr2hu1z+vFUFdZB6M9bluu0uTRRabWby+m1TbYw1XtTpbXIkMY6RVqbyI7eAWrbTBw==",
   "subject_kind": "run-report",
   "subject_sha256": "c77e8d47fab15a16286f7c06b05e3c29353e853448695bb68c8d9bd5031dfaa0"
 }

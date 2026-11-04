@@ -94,6 +94,7 @@ answer `score()` gave.
 | `refused` | zero or penalty | `refused_reward` (default 0.0) |
 | `rejected_policy` | zero or penalty | `rejected_policy_reward` (default 0.0) |
 | `wrong_effect` | zero or penalty | `wrong_effect_reward` (default -1.0) |
+| `escalated_after_effect` | partial credit | `escalated_after_effect_reward` (default 0.5) |
 | `reconciliation_required` | unscored | none |
 | `failed_platform` | unscored | none |
 
@@ -102,6 +103,31 @@ refuses a `scalar_reward`, and the contract cannot declare
 `uncertain_episodes` or `platform_failures` as anything but `unscored`. A
 trainer that folds those into 0.0 is training on platform noise, which is the
 failure this contract exists to stop.
+
+### Asking after the work is done
+
+`escalated_after_effect` is an episode where every required effect is in the
+system of record exactly as declared and no forbidden effect is, but the policy
+halted, refused, or was rejected instead of declaring the task done. It earns
+`escalated_after_effect_reward`, default 0.5. The value must be at least 0 and
+below 1, and below `verified_reward`; anything else, including NaN and
+infinity, makes the contract refuse to load.
+
+The value sets how sure a policy has to be before it declares done rather
+than asks a person. Declaring done earns `verified_reward` (v) when the effect
+is right and `wrong_effect_reward` (w) when it is wrong; asking earns x. Done
+pays more in expectation only when the policy's confidence p satisfies
+p * v + (1 - p) * w > x, that is p > (x - w) / (v - w). With v = 1, w = -1 and
+the default x = 0.5, the threshold is 75%. With x = 0 it is 50%, and with
+x = 0.25 it is 62.5%. A higher x makes the policy ask more often.
+
+An effect that is present but not as declared (a duplicate or a wrong value)
+after the policy stopped is still `reconciliation_required` and unscored, and a
+forbidden effect is `wrong_effect` whatever the policy signalled.
+
+The value is part of the contract, so it is part of the contract digest.
+Contracts digested before this field existed get a new digest, and a
+certificate that names the old digest no longer certifies them.
 
 ## Tier to certification
 

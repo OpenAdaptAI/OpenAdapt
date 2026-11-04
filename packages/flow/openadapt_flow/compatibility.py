@@ -131,22 +131,24 @@ FEATURES: tuple[Feature, ...] = (
     ),
 )
 
-API_QUALIFIED = (
-    "a production qualification admission doesn't cover API steps yet, so the "
-    "qualified GUI path runs"
-)
-API_MANAGED = "a managed dispatch doesn't bind API steps yet"
-DURABLE_INLINE = "durable runs verify inline"
 POOL_LOCAL_ONLY = (
     "--workers and --readback-window apply to local runs, not a managed dispatch "
     "or a qualification case"
 )
-REPAIR_PINNED = "--pin-digest pins the original bundle"
 REPAIR_QUALIFIED = (
-    "a signed qualification admission binds the original bundle; the approved "
-    "bundle needs its own admission"
+    "a production qualification admission is signed by the qualification "
+    "authority, so a repaired bundle waits for that authority's signature"
 )
-REPAIR_MANAGED = "a managed dispatch binds the original bundle"
+REPAIR_MANAGED = (
+    "a managed dispatch is Cloud's authorization for one bundle, so a repaired "
+    "bundle runs only on a new dispatch from Cloud"
+)
+_READMISSION_EVIDENCE = (
+    "tests/test_repair_readmission.py::test_a_repair_is_requalified_and_readmitted_with_lineage",
+    "tests/test_repair_readmission.py::test_a_pin_accepts_only_a_verified_descendant",
+    "tests/test_repair_readmission.py::test_a_repair_that_fails_requalification_is_refused",
+    "tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says",
+)
 
 _REPAIR_EVIDENCE = (
     "tests/test_self_repair.py::test_renamed_button_is_repaired_approved_on_the_phone_and_verified",
@@ -198,19 +200,25 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "api_step",
         "qualified",
-        "refused",
-        reason=API_QUALIFIED,
+        "works",
+        note=(
+            "when the signed admission's qualified effect contract names the "
+            "save's API path; otherwise the qualified GUI path runs and says why"
+        ),
         evidence=(
-            "tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says",
+            "tests/test_api_step_qualified.py::test_the_api_step_runs_when_the_admission_qualified_its_path",
+            "tests/test_api_step_qualified.py::test_a_gui_only_qualification_keeps_the_qualified_gui_path",
+            "tests/test_api_step_qualified.py::test_a_qualification_case_runs_the_path_its_contract_names",
         ),
     ),
     Cell(
         "api_step",
         "managed",
-        "refused",
-        reason=API_MANAGED,
+        "works",
+        note="Cloud's authorization names the API step, and each send still needs Cloud's delivery permit",
         evidence=(
-            "tests/test_compatibility_matrix.py::test_api_step_refuses_where_the_matrix_says",
+            "tests/test_api_step_managed.py::test_the_api_step_runs_when_clouds_authorization_admits_it",
+            "tests/test_api_step_managed.py::test_without_clouds_admission_the_gui_steps_run_and_say_why",
         ),
     ),
     # -- pipelined read-back ------------------------------------------------------
@@ -228,20 +236,22 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "pipelined_readback",
         "durable",
-        "refused",
-        reason=DURABLE_INLINE,
-        note="the record check runs before the next item",
+        "works",
+        note="the durable pause holds the deferred check, so a crash resumes the check and never resends",
         evidence=(
+            "tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it",
+            "tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends",
             "tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says",
         ),
     ),
     Cell(
         "pipelined_readback",
         "governed",
-        "refused",
-        reason=DURABLE_INLINE,
-        note="Standard and Regulated are durable",
+        "works",
+        note="the last step's record check, with an encrypted checkpoint store",
         evidence=(
+            "tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it",
+            "tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends",
             "tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says",
         ),
     ),
@@ -249,7 +259,6 @@ CELLS: tuple[Cell, ...] = (
         "pipelined_readback",
         "pinned",
         "works",
-        note="when the run isn't durable",
         evidence=(
             "tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says",
         ),
@@ -257,10 +266,11 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "pipelined_readback",
         "qualified",
-        "refused",
-        reason=DURABLE_INLINE,
-        note="Standard and Regulated are durable",
+        "works",
+        note="as governed",
         evidence=(
+            "tests/test_durable_pipelined_readback.py::test_a_durable_run_defers_its_last_record_check_and_settles_it",
+            "tests/test_durable_pipelined_readback.py::test_a_crash_mid_window_resumes_the_check_and_never_resends",
             "tests/test_compatibility_matrix.py::test_pipelined_readback_where_the_matrix_says",
         ),
     ),
@@ -300,11 +310,14 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "self_repair",
         "pinned",
-        "refused",
-        reason=REPAIR_PINNED,
+        "works",
+        note=(
+            "needs repair.requalify: the fix is re-qualified on a test copy and "
+            "re-admitted with signed lineage, and the pin accepts that new version"
+        ),
         evidence=(
             "tests/test_self_repair_cli.py::test_run_self_repair_refuses_a_pinned_bundle",
-            "tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says",
+            *_READMISSION_EVIDENCE,
         ),
     ),
     Cell(
@@ -350,11 +363,9 @@ CELLS: tuple[Cell, ...] = (
     Cell(
         "standard_changes",
         "pinned",
-        "refused",
-        reason=REPAIR_PINNED,
-        evidence=(
-            "tests/test_compatibility_matrix.py::test_self_repair_where_the_matrix_says",
-        ),
+        "works",
+        note="needs repair.requalify, as self-repair",
+        evidence=_READMISSION_EVIDENCE,
     ),
     Cell(
         "standard_changes",
@@ -433,7 +444,7 @@ CELLS: tuple[Cell, ...] = (
         "multi_surface",
         "default",
         "works",
-        note="an API step inside it runs on the GUI (below)",
+        note="an API step inside it runs on its surface (below)",
         evidence=(
             "tests/test_multi_surface_governed.py::test_governed_durable_multi_surface_run_reaches_verified",
         ),
@@ -484,7 +495,6 @@ CELLS: tuple[Cell, ...] = (
 )
 
 #: The API step combined with the other features, in one run.
-API_MULTI_SURFACE = "a run across several windows or tabs uses the GUI steps"
 API_REPAIR_PROBE = (
     "self-repair's probes and resumed run exercise the repaired GUI step, and "
     "the person approved that step, so its API step doesn't run"
@@ -504,7 +514,7 @@ COMBINATIONS: tuple[Cell, ...] = (
         "api_step",
         "pipelined_readback",
         "works",
-        note="when the run isn't durable",
+        note="durable runs too, where the API save is the last step",
         evidence=(
             "tests/test_api_step_readback_repair.py::test_an_api_save_reads_back_while_the_next_item_runs",
         ),
@@ -532,10 +542,12 @@ COMBINATIONS: tuple[Cell, ...] = (
     Cell(
         "api_step",
         "multi_surface",
-        "refused",
-        reason=API_MULTI_SURFACE,
+        "works",
+        note="the steps it replaces stay on one browser surface, on its origin",
         evidence=(
-            "tests/test_compatibility_matrix.py::test_api_step_refuses_in_a_multi_surface_run",
+            "tests/test_api_step_multi_surface.py::test_the_api_step_runs_on_its_surface_in_a_governed_multi_surface_run",
+            "tests/test_api_step_multi_surface.py::test_the_session_must_be_on_the_surfaces_origin",
+            "tests/test_api_step_multi_surface.py::test_a_span_that_leaves_its_surface_runs_on_the_gui",
         ),
     ),
 )
@@ -586,8 +598,9 @@ def render_markdown() -> str:
         "workers, using the API step for an admitted save, is the combination",
         "where the most work together: each worker's item sends one request a",
         "person approved, checks it with the system-of-record read-back, and",
-        "reads `VERIFIED`. In that run the read-back runs inline (durable), and",
-        "self-repair runs through the Python API under the Standard contract.",
+        "reads `VERIFIED`. Its record check runs alongside the next item, held",
+        "in the durable pause until it settles, and self-repair runs through",
+        "the Python API under the Standard contract.",
         "Under a signed qualification admission (what `openadapt-flow run`",
         "requires for Standard and Regulated actuation) the API step and",
         "self-repair are still refused, each with its reason below.",

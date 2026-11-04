@@ -30,6 +30,7 @@ import { Onboarding } from "./screens/Onboarding";
 import { Welcome } from "./screens/Welcome";
 import { Tasks } from "./screens/Tasks";
 import { NeedsYou } from "./screens/NeedsYou";
+import { Stops } from "./screens/Stops";
 import { Results } from "./screens/Results";
 import { CheckIt } from "./screens/CheckIt";
 import { RunIt } from "./screens/RunIt";
@@ -55,6 +56,7 @@ import {
 type Route =
   | { name: "tasks" }
   | { name: "needs" }
+  | { name: "stops" }
   | { name: "results" }
   | { name: "sample" }
   | { name: "check"; id: string; firstWorkflow?: boolean }
@@ -111,6 +113,7 @@ function tabFor(route: Route): "tasks" | "needs" | "results" | null {
     case "teach":
       return "tasks";
     case "needs":
+    case "stops":
       return "needs";
     case "results":
       return "results";
@@ -217,6 +220,13 @@ function DesktopEntryShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+type AtRestStatus = {
+  strict: boolean;
+  unencrypted_writes: number;
+  latest_purpose: string;
+  ledger: string;
+};
+
 export default function App() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [checkedAuth, setCheckedAuth] = useState(false);
@@ -254,6 +264,7 @@ export default function App() {
     allowed?: boolean;
     coach_only?: boolean;
   } | null>(null);
+  const [atRest, setAtRest] = useState<AtRestStatus | null>(null);
   const [authoringUrl, setAuthoringUrl] = useState("");
   const [firstRunPersistencePending, setFirstRunPersistencePending] =
     useState(false);
@@ -381,6 +392,9 @@ export default function App() {
         if (authoringStatus?.status && authoringStatus.status !== "idle") {
           setAuthoring(authoringStatus);
         }
+        setAtRest(
+          await engineTry<AtRestStatus | null>(CMD.AT_REST_STATUS, {}, null),
+        );
       } finally {
         setCheckedAuth(true);
       }
@@ -487,6 +501,23 @@ export default function App() {
       )}
     </div>
   ) : null;
+  // Flow records every write of patient data it can't encrypt yet; say so in
+  // the window, not only on stderr (openadapt_desktop/at_rest_notice.py).
+  const atRestNotice =
+    atRest && atRest.unencrypted_writes > 0 ? (
+      <div className="pairing-notice" role="status">
+        <span>
+          {`OpenAdapt stored ${atRest.unencrypted_writes === 1 ? "1 recording or run record" : `${atRest.unencrypted_writes} recordings or run records`} on this computer without encryption. Keep full-disk encryption on. The list is in ${atRest.ledger}.`}
+        </span>
+        <button
+          type="button"
+          aria-label="Dismiss unencrypted data notice"
+          onClick={() => setAtRest(null)}
+        >
+          ×
+        </button>
+      </div>
+    ) : null;
   const authoringNotice =
     authoring &&
     (authoring.status === "pending_allow" ||
@@ -726,6 +757,7 @@ export default function App() {
       <>
         {pairingNotice}
         {authoringNotice}
+        {atRestNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
           <div className="center-stage"><span className="page-sub">Loading…</span></div>
@@ -739,6 +771,7 @@ export default function App() {
       <>
         {pairingNotice}
         {authoringNotice}
+        {atRestNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
           <Login
@@ -761,6 +794,7 @@ export default function App() {
       <>
         {pairingNotice}
         {authoringNotice}
+        {atRestNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
           <EngineOffline busy={entryRetrying} onRetry={() => void retryEntry()} />
@@ -776,6 +810,7 @@ export default function App() {
       <>
         {pairingNotice}
         {authoringNotice}
+        {atRestNotice}
         {firstWorkflowStageNotice}
         <DesktopEntryShell>
           <Welcome
@@ -821,6 +856,7 @@ export default function App() {
     <>
       {pairingNotice}
       {authoringNotice}
+      {atRestNotice}
       {firstWorkflowStageNotice}
       <ItemApprovalDialog />
       <div className="app">
@@ -928,6 +964,15 @@ export default function App() {
           <NeedsYou
             onTeach={(id) => setRoute({ name: "teach", id })}
             onChanged={() => void refreshAttention()}
+            onReviewStops={() => setRoute({ name: "stops" })}
+          />
+        )}
+        {route.name === "stops" && (
+          <Stops
+            onDone={() => {
+              void refreshAttention();
+              setRoute({ name: "needs" });
+            }}
           />
         )}
         {route.name === "results" && (

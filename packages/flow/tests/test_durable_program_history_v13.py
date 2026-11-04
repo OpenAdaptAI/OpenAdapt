@@ -25,7 +25,11 @@ from tests.test_attended_actions import (
     _request,
     _run_attended_program_to_pause,
 )
-from tests.test_durable_program import _approval, _run_branch_loop_to_pause
+from tests.test_durable_program import (
+    _approval,
+    _retry_approval,
+    _run_branch_loop_to_pause,
+)
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
 
@@ -99,7 +103,7 @@ def test_direct_resume_extends_the_pause_history_without_repeating_it(tmp_path):
             effect_verifier=verifier,
             poll_interval_s=0.0,
         ),
-        approval=_approval(bundle),
+        approval=_retry_approval(bundle),
     )
 
     assert resumed.success is True
@@ -131,7 +135,7 @@ def test_restart_after_post_pause_checkpoint_uses_latest_history_boundary(
 ):
     _report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
     verifier.refute.clear()
-    approval = _approval(bundle)
+    approval = _retry_approval(bundle)
 
     class CrashBeforeSecondResumedAction(Replayer):
         resumed_actions = 0

@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -255,8 +256,33 @@ class GateVerdict:
         return f"{ITEM_APPROVAL_PAUSE_MARKER}{detail}. Nothing was retried."
 
 
+#: Items whose save passed every pre-check and whose record check still runs
+#: alongside the next item (pipelined read-back): run reference to the
+#: monotonic deadline of its check. The next item's gate does not read such an
+#: open item as interrupted. Process-local: after a restart the map is empty,
+#: so an item that never finished reads as interrupted and the switch turns
+#: off.
+_READBACK_IN_FLIGHT: dict[str, float] = {}
+_READBACK_IN_FLIGHT_LOCK = threading.Lock()
+
+#: How many held record checks the exemption may cover: the read-back
+#: pipeline holds one hand-off at a time. More held items than this means
+#: something outside the window is running, so none of them is exempt.
+READBACK_WINDOW = 1
+
+
 class ApprovalGate:
     """Pre-save gate and post-run finish for one item under an approval mode."""
+
+    #: Rollback on (``rollback.enabled``): a save without an approved
+    #: compensation goes to a person first (:meth:`_check_undo_or_person`).
+    undo_or_person: bool = False
+    #: Whether a ``delete`` compensation counts as an undo here
+    #: (``rollback.allow_delete``).
+    undo_allows_delete: bool = False
+    #: Whether only an API-only compensation can run here (an attached
+    #: browser gets no fresh session for a screen compensation).
+    undo_api_only: bool = False
 
     def __init__(
         self,
@@ -280,6 +306,7 @@ class ApprovalGate:
         approver_policy: Optional["ApproverPolicyV1"] = None,
         approver: Optional["Approver"] = None,
         policy_name: Optional[str] = None,
+        pinned_approver_keys: Optional[Mapping[str, str]] = None,
     ) -> None:
         self.mode = resolve_approval_mode(mode)
         if approval_store is None or isinstance(approval_store, ItemApprovalStore):
@@ -308,6 +335,18 @@ class ApprovalGate:
         else:
             self.log = SwitchLog(log)
         self._pinned_keys = dict(pinned_status_keys or {})
+        # Approver keys a person's signed re-arm may be signed with: the ones
+        # given here (key id to a raw Ed25519 public key, hex or base64), or
+        # by default the approvers on the signed approver roster that the
+        # run's pinned root vouches for (#1486). That default is deliberate:
+        # the roster is signed down from a root a person pins, and lists only
+        # people. With none, a switch that turned off stays off.
+        if pinned_approver_keys is not None:
+            self._approver_keys = dict(pinned_approver_keys)
+        else:
+            from openadapt_flow.approval_mode.switch import registry_approver_keys
+
+            self._approver_keys = registry_approver_keys()
         self._fetch_status = fetch_status
         self._environment_digest = environment_digest
         self._runner_id = runner_id
@@ -553,11 +592,32 @@ class ApprovalGate:
         if self.mode is ApprovalMode.EACH_ITEM:
             return True
         if self.mode is ApprovalMode.PROBLEMS_ONLY:
-            return self._item_fallback is not None or (
-                self._decision is not None
-                and self._decision.kind is ItemDecisionKind.APPROVAL_REQUIRED
+            return (
+                self._item_fallback is not None
+                or (
+                    self._decision is not None
+                    and self._decision.kind is ItemDecisionKind.APPROVAL_REQUIRED
+                )
+                or self._switch_reads_off()
             )
         return False
+
+    def _switch_reads_off(self) -> bool:
+        """The local switch log already reads off (P1 would fail at the save).
+
+        A switched-off mode waits for a person to approve the item, as in
+        ``each_item``. P1 runs at the save, after the last point a person can
+        be asked, so the ask happens here; without this, every item after the
+        switch turned off stopped at the save and nobody was asked. A missing
+        or unreadable log reads as off, as P1 does.
+        """
+
+        if self.record is None or self.log is None:
+            return True
+        try:
+            return bool(self.log.state(approver_keys=self._approver_keys).is_off)
+        except (SwitchLogError, OSError):
+            return True
 
     def _before_step(self, ctx: StepContext) -> GateVerdict:
         if not self._began:
@@ -804,6 +864,17 @@ class ApprovalGate:
                 return GateVerdict(
                     proceed=False, decision=failure, checks=tuple(checks)
                 )
+        if self.undo_or_person:
+            # Rollback on: a save no approved compensation can undo goes to a
+            # person first. Recorded only when it does, so the evidence of an
+            # undoable save is the same as without rollback.
+            check, failure = self._check_undo_or_person(ctx)
+            if failure is not None:
+                checks.append(check)
+                self._halt(ctx, failure, checks)
+                return GateVerdict(
+                    proceed=False, decision=failure, checks=tuple(checks)
+                )
         # Every pre-check passed. Record that a save without a person is about
         # to start, so an interrupted item is found by the next one.
         if not self._item_started_logged:
@@ -888,17 +959,47 @@ class ApprovalGate:
         self._pre_checks.append(check)
         return GateVerdict(proceed=True, decision=None, checks=(check,))
 
-    @staticmethod
-    def _is_save(ctx: SaveContext | StepContext) -> bool:
-        """Whether this step is a consequential save (the static classifier).
+    def _certifying_policy(self) -> Any:
+        """The policy the bundle is certified under, when the gate names one."""
 
-        The same fail-closed classifier the record-check coverage uses for its
-        windows, so the gate and coverage agree on which steps are saves.
+        if not self._policy_name:
+            return None
+        cached = getattr(self, "_policy_cache", None)
+        if cached is None:
+            from openadapt_flow.policy import load_policy
+
+            try:
+                cached = load_policy(self._policy_name)
+            except Exception:  # noqa: BLE001 - an unknown policy proves nothing
+                cached = False
+            self._policy_cache = cached
+        return cached or None
+
+    def _is_consequential(self, step: Any, workflow: Any) -> bool:
+        """The run gate's fail-closed consequential-step classifier.
+
+        Given the certifying policy, an operator's qualified risk
+        classification counts only while the bundle's certification under
+        that policy is current, exactly as in the run gate. Without it the
+        conservative heuristic decides, so a step the qualification
+        classified as reversible can still be treated as a save.
         """
 
         from openadapt_flow.run_gate import is_consequential
 
-        return is_consequential(ctx.step, ctx.workflow)
+        return is_consequential(
+            step, workflow, certifying_policy=self._certifying_policy()
+        )
+
+    def _is_save(self, ctx: SaveContext | StepContext) -> bool:
+        """Whether this step is a consequential save.
+
+        The same classifier the run gate uses, which the record-check coverage
+        uses for its windows too, so the gate and coverage agree on which
+        steps are saves.
+        """
+
+        return self._is_consequential(ctx.step, ctx.workflow)
 
     # -- P1 --------------------------------------------------------------------
     def _check_switch_on(
@@ -924,7 +1025,7 @@ class ApprovalGate:
         if record is None or self.log is None:
             return fail("no_switch_record")
         try:
-            state = self.log.state()
+            state = self.log.state(approver_keys=self._approver_keys)
         except (SwitchLogError, OSError):
             return fail("switch_log_unreadable")
         if (
@@ -934,13 +1035,24 @@ class ApprovalGate:
             return fail("switch_log_for_other_record")
         if state.is_off:
             return fail("switched_off")
+        now = time.monotonic()
+        with _READBACK_IN_FLIGHT_LOCK:
+            # A check past its deadline is not exempt, and neither is any held
+            # item when more are held than the window allows.
+            in_flight = {
+                ref for ref, deadline in _READBACK_IN_FLIGHT.items() if deadline > now
+            }
+            if len(_READBACK_IN_FLIGHT) > READBACK_WINDOW:
+                in_flight = set()
         if any(
-            ref != self._run_ref or not self._item_started_logged
+            (ref != self._run_ref or not self._item_started_logged)
+            and ref not in in_flight
             for ref in state.open_items
         ):
             # An item started without a person and never finished. Only this
             # gate's own ``item_started`` may be open: a run that reuses an
-            # interrupted run's id must not hide it.
+            # interrupted run's id must not hide it. An earlier item of this
+            # process whose record check is still running is not interrupted.
             return fail("interrupted_item", OffReason.UNCERTAIN_RESULT)
         if self._runner_id is None:
             # A caller that didn't say which runner this is proves nothing.
@@ -1039,7 +1151,7 @@ class ApprovalGate:
         if self._off_logged is not None:
             return
         try:
-            state = self.log.state()
+            state = self.log.state(approver_keys=self._approver_keys)
             if not state.is_off:
                 self.log.append("switched_off", reason=reason.value)
             self._off_logged = reason
@@ -1180,6 +1292,59 @@ class ApprovalGate:
         )
 
     # -- P5 --------------------------------------------------------------------
+    def _check_undo_or_person(
+        self, ctx: SaveContext
+    ) -> tuple[CheckOutcome, Optional[ItemDecision]]:
+        """With rollback on, a save no approved compensation can undo waits
+        for a person (docs/ROLLBACK.md): undo, or a person, before the write.
+
+        It is reported as an each-item save (code ``each_item``), so Desktop
+        and the phone card show it as one; the detail names the cause.
+        """
+
+        if not self.undo_or_person:
+            return (
+                CheckOutcome(
+                    code="each_item",
+                    passed=True,
+                    detail="off",
+                    step_id=ctx.step.id,
+                ),
+                None,
+            )
+        from openadapt_flow.rollback import undoable
+
+        if undoable(
+            ctx.workflow,
+            ctx.step.id,
+            allow_delete=self.undo_allows_delete,
+            api_only=self.undo_api_only,
+        ):
+            return (
+                CheckOutcome(
+                    code="each_item",
+                    passed=True,
+                    detail="undoable",
+                    step_id=ctx.step.id,
+                ),
+                None,
+            )
+        return (
+            CheckOutcome(
+                code="each_item",
+                passed=False,
+                detail="no_approved_compensation",
+                step_id=ctx.step.id,
+            ),
+            ItemDecision(
+                kind=ItemDecisionKind.APPROVAL_REQUIRED,
+                reason="each_item",
+                needs_person=True,
+                counts_toward_problems=False,
+                switch_off=None,
+            ),
+        )
+
     def _check_record_check_ready(
         self, ctx: SaveContext
     ) -> tuple[CheckOutcome, Optional[ItemDecision]]:
@@ -1221,7 +1386,11 @@ class ApprovalGate:
             ctx.step
         ):
             return fail("approved_unverified_write")
-        coverage = save_coverage(ctx.workflow, ctx.step)
+        coverage = save_coverage(
+            ctx.workflow,
+            ctx.step,
+            is_save=lambda step: self._is_consequential(step, ctx.workflow),
+        )
         if not coverage.covered:
             return fail(coverage.problems[0])
         contract = save_contract_problems(ctx.step)
@@ -1251,7 +1420,30 @@ class ApprovalGate:
         )
 
     # -- after the run -----------------------------------------------------------
+    def hold_for_readback(self, deadline_s: float) -> None:
+        """The item's save passed and its record check runs alongside the next item.
+
+        The item stays open in the switch log until :meth:`finish_item` decides
+        it from the settled record check. Until then, and for at most
+        ``deadline_s`` seconds, the next item's gate doesn't read it as
+        interrupted.
+        """
+
+        if self._run_ref is not None and self._item_started_logged:
+            with _READBACK_IN_FLIGHT_LOCK:
+                _READBACK_IN_FLIGHT[self._run_ref] = time.monotonic() + deadline_s
+
     def finish_item(self, report: "RunReport") -> ApprovalModeItemEvidence:
+        """Decide the item; see :meth:`_finish_item`."""
+
+        try:
+            return self._finish_item(report)
+        finally:
+            if self._run_ref is not None:
+                with _READBACK_IN_FLIGHT_LOCK:
+                    _READBACK_IN_FLIGHT.pop(self._run_ref, None)
+
+    def _finish_item(self, report: "RunReport") -> ApprovalModeItemEvidence:
         """Decide the item, write the switch log, and return the evidence block.
 
         Safe to call again for the same run (for example after a late
@@ -1427,9 +1619,10 @@ class ApprovalGate:
                 continue
             step = steps.get(result.step_id)
             if step is not None and workflow is not None:
-                from openadapt_flow.run_gate import is_consequential
-
-                consequential = is_consequential(step, workflow)
+                # The same classifier as the gate's own saves, with the
+                # certifying policy: a step the certified qualification
+                # classified as not saving is not an unapproved save.
+                consequential = self._is_consequential(step, workflow)
             else:
                 from openadapt_flow.approval_mode.post import _consequential
 
@@ -1520,12 +1713,14 @@ class ApprovalGate:
                     ),
                 )
                 if reason == "save_not_approved":
+                    # A save was delivered that no person approved: a program
+                    # problem, so the switch turns off.
                     decision = ItemDecision(
                         kind=ItemDecisionKind.PROBLEM,
                         reason=reason,
                         needs_person=True,
                         counts_toward_problems=True,
-                        switch_off=decision.switch_off,
+                        switch_off=decision.switch_off or OffReason.UNCERTAIN_RESULT,
                     )
         recorded, off = self._log_finish(decision)
         evidence = ApprovalModeItemEvidence(
@@ -1568,7 +1763,7 @@ class ApprovalGate:
             # Only a counted problem can tip the problem rate.
             return True, off
         try:
-            state = self.log.state()
+            state = self.log.state(approver_keys=self._approver_keys)
             if not state.is_off and too_many_problems(
                 state.finished, self.record.thresholds
             ):

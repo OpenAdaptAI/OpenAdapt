@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.jit import (
@@ -294,15 +296,17 @@ def _bundle(tmp_path: Path, texts: list[str]) -> Path:
 
 
 def test_lift_proposes_inputs_typed_whole_in_one_step(tmp_path: Path) -> None:
-    bundle = _bundle(tmp_path, ["Jane", "Follow up", "x Follow up x", "dup", "dup"])
+    bundle = _bundle(tmp_path, ["Jane", "Follow up", "x Follow up y", "dup", "dup"])
     report = lift_params(
-        bundle, {"name": "Jane", "note": "Follow up", "code": "dup", "missing": "zz"}
+        bundle,
+        {"name": "Jane", "note": "Follow up", "code": "dup", "missing": "zz"},
     )
-    assert [(p.name, p.step_id) for p in report.lifted] == [
-        ("name", "step_000"),
-        ("note", "step_001"),
-    ]
+    assert [(p.name, p.step_id) for p in report.lifted] == [("name", "step_000")]
     assert report.unlifted == {
+        "note": (
+            "typed whole in step_001 and inside longer text in step_002; the "
+            "longer text would repeat the demonstrated value"
+        ),
         "code": (
             "typed in 2 steps (step_003, step_004); no mined record check shows "
             "which field kept it"
@@ -310,10 +314,7 @@ def test_lift_proposes_inputs_typed_whole_in_one_step(tmp_path: Path) -> None:
         "missing": "not typed in any step",
     }
     proposals = json.loads((bundle / "param_proposals.json").read_text())["proposals"]
-    assert {p["name"]: p["source"] for p in proposals} == {
-        "name": "task_input",
-        "note": "task_input",
-    }
+    assert {p["name"]: p["source"] for p in proposals} == {"name": "task_input"}
     assert all("Jane" not in json.dumps(p) for p in proposals)  # masked only
 
 
@@ -324,8 +325,54 @@ def test_lift_reports_text_typed_inside_longer_text(tmp_path: Path) -> None:
     assert not (bundle / "param_proposals.json").exists()
 
 
+def test_lift_refuses_a_value_also_echoed_inside_longer_text(tmp_path: Path) -> None:
+    """A name typed into its field and again into a note is not lifted.
+
+    Lifting only the field would leave the note typing the demonstrated name
+    on every later run. The note is a constant, so every check accepts it.
+    """
+
+    bundle = _bundle(tmp_path, ["John Smith", "Called John Smith re: refill"])
+    report = lift_params(bundle, {"patient_name": "John Smith"})
+    assert report.lifted == []
+    assert "inside longer text in step_001" in report.unlifted["patient_name"]
+    assert not (bundle / "param_proposals.json").exists()
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    value=st.text(alphabet="abcXYZ 19", min_size=1, max_size=6),
+    texts=st.lists(st.text(alphabet="abcXYZ 19", max_size=12), max_size=6),
+)
+def test_lift_never_leaves_an_input_inside_a_lifted_workflow_literal(
+    tmp_path_factory: pytest.TempPathFactory, value: str, texts: list[str]
+) -> None:
+    """Property: once an input is lifted, no other typed step still contains it.
+
+    Every typed step whose text contains the value is either the lifted step
+    or the input is reported unlifted, so a person sees the leftover literal.
+    """
+
+    tmp = tmp_path_factory.mktemp("lift")
+    bundle = _bundle(tmp, texts)
+    report = lift_params(bundle, {"v": value})
+    for lifted in report.lifted:
+        others = [
+            f"step_{i:03d}"
+            for i, text in enumerate(texts)
+            if value in text and f"step_{i:03d}" != lifted.step_id
+        ]
+        assert all(sid in lifted.also_typed_in for sid in others), others
+        assert all(texts[int(sid[5:])] == value for sid in lifted.also_typed_in)
+    if not report.lifted:
+        assert "v" in report.unlifted
+
+
 def _detour_bundle(
-    tmp_path: Path, labels: list[str], record: dict[str, str] | None
+    tmp_path: Path,
+    labels: list[str],
+    record: dict[str, Any] | None,
+    text: str = "Female",
 ) -> Path:
     """Two typed steps of one value, then a save whose mined check holds
     ``record`` (OpenAdaptAI/OpenAdapt#1328, synthetic values)."""
@@ -337,7 +384,7 @@ def _detour_bundle(
             id=f"step_{i:03d}",
             intent="type",
             action=ActionKind.TYPE,
-            text="Female",
+            text=text,
             field_label=label,
         )
         for i, label in enumerate(labels)
@@ -347,7 +394,10 @@ def _detour_bundle(
         effects.append(
             Effect(
                 kind=EffectKind.RECORD_WRITTEN,
-                match={k: ValueExpr(literal=v) for k, v in record.items()},
+                match={
+                    k: v if isinstance(v, ValueExpr) else ValueExpr(literal=v)
+                    for k, v in record.items()
+                },
             )
         )
     steps.append(
@@ -428,6 +478,91 @@ def test_lift_ignores_a_placeholder_record_check(tmp_path: Path) -> None:
     workflow.save(bundle)
     report = lift_params(bundle, {"sex": "Female"})
     assert "no mined record check" in report.unlifted["sex"]
+
+
+def test_lift_applies_record_field_check_to_single_matches(tmp_path: Path) -> None:
+    # 1. Single match where step field matches record field -> lifted
+    bundle1 = _detour_bundle(
+        tmp_path / "b1", ["form_sex"], {"fname": "Testa", "sex": "Female"}
+    )
+    report1 = lift_params(bundle1, {"sex": "Female"})
+    assert report1.unlifted == {}
+    assert len(report1.lifted) == 1
+    assert report1.lifted[0].step_id == "step_000"
+
+    # 2. Single match where saved record holds value in no field -> refused
+    bundle2 = _detour_bundle(
+        tmp_path / "b2", ["form_sex"], {"fname": "Testa", "sex": "Male"}
+    )
+    report2 = lift_params(bundle2, {"sex": "Female"})
+    assert report2.lifted == []
+    assert report2.unlifted == {
+        "sex": "typed in step_000; the saved record holds it in no field"
+    }
+
+    # 3. Single match where step field is not a record field holding the value -> refused
+    bundle3 = _detour_bundle(
+        tmp_path / "b3",
+        ["refills"],
+        {"fname": "Testa", "quantity": "1"},
+        text="1",
+    )
+    report3 = lift_params(bundle3, {"quantity": "1"})
+    assert report3.lifted == []
+    assert report3.unlifted == {
+        "quantity": "typed in step_000; its field is not a record field that holds it (quantity)"
+    }
+
+
+def test_lift_needs_a_named_field_for_a_short_value_two_fields_hold(
+    tmp_path: Path,
+) -> None:
+    record = {"fname": "Testa", "quantity": "1", "refills": "1"}
+    named = _detour_bundle(tmp_path / "named", ["quantity"], record, text="1")
+    report = lift_params(named, {"quantity": "1"})
+    assert [item.step_id for item in report.lifted] == ["step_000"]
+
+    other = _detour_bundle(tmp_path / "other", ["refills"], record, text="1")
+    report = lift_params(other, {"qty": "1"})
+    assert report.lifted == []
+    assert report.unlifted["qty"] == (
+        "typed in step_000; a short value, number or flag is lifted only at a "
+        "record field named 'qty' that holds it (held by quantity, refills)"
+    )
+
+    # Typed only into refills, and only refills holds it: still not quantity.
+    wrong = _detour_bundle(
+        tmp_path / "wrong",
+        ["refills"],
+        {"fname": "Testa", "quantity": "30", "refills": "1"},
+        text="1",
+    )
+    report = lift_params(wrong, {"quantity": "1"})
+    assert report.lifted == []
+
+
+def test_lift_never_moves_a_short_value_off_its_param_bound_field(
+    tmp_path: Path,
+) -> None:
+    # The quantity field's check is already a parameter, so only refills
+    # holds "1" as a literal. The value must not be lifted at refills.
+    from openadapt_flow.runtime.effects import ValueExpr
+
+    record = {"quantity": ValueExpr(param="qty"), "refills": "1"}
+    bundle = _detour_bundle(tmp_path, ["quantity", "refills"], record, text="1")
+    report = lift_params(bundle, {"quantity": "1"})
+    assert report.lifted == []
+
+
+def test_lift_goes_to_the_field_a_check_already_binds_to_the_input(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.runtime.effects import ValueExpr
+
+    record = {"sex": ValueExpr(param="sex"), "sex_identified": "Female"}
+    bundle = _detour_bundle(tmp_path, ["sex", "sex_identified"], record)
+    report = lift_params(bundle, {"sex": "Female"})
+    assert [item.step_id for item in report.lifted] == ["step_000"]
 
 
 # -- the gates (no browser) --------------------------------------------------

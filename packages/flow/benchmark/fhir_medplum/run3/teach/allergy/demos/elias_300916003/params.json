@@ -1,0 +1,9 @@
+{
+ "patient": "Patient/b2aa245a-07b6-4710-ace9-f4befc0f84a6",
+ "code_system": "http://snomed.info/sct",
+ "code": "300916003",
+ "criticality": "low",
+ "clinical_status": "active",
+ "verification_status": "confirmed",
+ "display": "Latex allergy"
+}

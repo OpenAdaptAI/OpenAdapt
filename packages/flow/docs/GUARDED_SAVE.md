@@ -84,17 +84,19 @@ guarded = GuardedSave.from_file("verify.yaml", "runs/guarded", approval="each_it
 task = load_task("tasks/referral-task-01.json")
 
 try:
-    guard = guarded.begin(task, screen_text=harness.open_record_text(), agent_id="cua-01")
+    guard = guarded.begin(
+        task, screen_text=harness.open_record_text(), agent_id="cua-01"
+    )
     step = guard.commit(screenshot_png=harness.screenshot())
     while step.status == "waiting_for_approval":
-        step = guard.commit(wait_s=30)   # a person approves on Desktop or a phone
+        step = guard.commit(wait_s=30)  # a person approves on Desktop or a phone
 except GuardRefused as refused:
-    stop(refused.code)                  # nothing was written
+    stop(refused.code)  # nothing was written
 
-harness.click_save()                    # once
+harness.click_save()  # once
 result = guard.confirm()
-result.verdict                          # GuardVerdict.VERIFIED, REFUTED, or RECONCILIATION_REQUIRED
-result.receipt_path                     # runs/guarded/<guard_id>/effect-receipt.json
+result.verdict  # GuardVerdict.VERIFIED, REFUTED, or RECONCILIATION_REQUIRED
+result.receipt_path  # runs/guarded/<guard_id>/effect-receipt.json
 ```
 
 - `begin(task, screen_text=..., agent_id=...)` checks identity and reads the
@@ -149,13 +151,44 @@ openadapt-flow item-approval show runs/guarded/<guard_id>
 ```
 
 ```bash
-openadapt-flow item-approval approve runs/guarded/<guard_id> --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated
+openadapt-flow item-approval approve runs/guarded/<guard_id> --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated --approver-key <approver-key.pem>
 ```
+
+The answer counts only because the person's registered approver key signs
+it (`OPENADAPT_JIT_KEY_PASSPHRASE` holds the key's passphrase; see
+[`APPROVAL_MODES.md`](APPROVAL_MODES.md#the-approver-key)). `GuardedSave`
+reads registered keys from `key_dir`, or from `$OPENADAPT_JIT_KEY_DIR`.
 
 If `--guard-state` is the runs folder the console watches, or a folder
 directly inside it, the paired phone also shows the request. The receipt binds the approval: its
 `evidence.authorization.approver` names a person, and `self_approved` is
 `false`.
+
+## Values with a source document
+
+A task can say where its values came from. Add `provenance` (the
+`params.provenance.json` intake writes, as an object) and `sources` (paths to
+the documents it cites, relative to the task file):
+
+```json
+{
+  "schema_version": "openadapt.guard-task/v1",
+  "task_id": "referral-0001",
+  "expected_record": {"patient_id": "p1"},
+  "intended_fields": {"note": "Referral to orthopedics for knee pain"},
+  "provenance": {"schema_version": "openadapt.param-provenance/v1", "params": {"note": {"value": "Referral to orthopedics for knee pain", "source": {"kind": "document", "sha256": "sha256:...", "line": 3, "label": "Note"}, "extractor": "intake:agent"}}},
+  "sources": ["referral.pdf"]
+}
+```
+
+`begin` reads each source a second time with the deterministic label parse.
+If that reading does not confirm a value (a different value, no value, or a
+value that the label parse itself produced, which is not a second reading),
+the save goes to a person under any approval mode, and the approval request
+names the fields. `confirm` then compares the saved record with the source
+document, not only with the task, so a misread value that was saved
+correctly is still refuted. A task whose values differ from its own
+provenance is refused.
 
 ## The receipt
 
@@ -175,8 +208,10 @@ second commit.
 
 ## Try it
 
+From `packages/flow` in a source checkout:
+
 ```bash
-python -m openadapt_flow.guard_demo
+python -m benchmark.harness.guard_demo
 ```
 
 The demo starts MockMed on localhost. A fake agent signs in to the chart

@@ -30,8 +30,11 @@ FHIR/REST API, a document store), never the screen.
 ```python
 class EffectVerifier(Protocol):
     substrate: str
+
     def capture_pre_state(self, context) -> EffectState: ...
-    def verify(self, expected: Effect, before: EffectState, context) -> EffectVerdict: ...
+    def verify(
+        self, expected: Effect, before: EffectState, context
+    ) -> EffectVerdict: ...
 ```
 
 - **`Effect`** is the RFC's typed effect. Kinds: `record_written` (a record
@@ -77,7 +80,7 @@ the note-as-Observation write the fake models cannot be created over FHIR on a
 stock OpenEMR; the property the live test establishes is the one the fake
 could not — the verdicts are correct against a **real FHIR server**, not a
 fake. CI still runs vision-only against the **public demo**
-(`openadapt_flow/benchmark/openemr_benchmark.py`, `scripts/openemr_demo.py`);
+(`benchmark/harness/openemr_benchmark.py`, `scripts/openemr_demo.py`);
 the live FHIR test is gated behind `OPENEMR_FHIR_BASE_URL` and skipped
 otherwise. See `benchmark/openemr_live/README.md` for the one-command
 bring-up.

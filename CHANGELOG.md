@@ -2,6 +2,71 @@
 
 <!-- version list -->
 
+## v1.19.0 (2026-11-02)
+
+### Breaking Changes
+
+- Require openadapt-flow 2.5 (`>=2.5.0,<3.0.0`). `openadapt shadow` forwards
+  to Flow's shadow command, and `openadapt verify serve` offers its recheck;
+  neither is in Flow 2.4 or earlier. `openadapt doctor` and `openadapt deploy`
+  report an older Flow as unsupported.
+
+### Features
+
+- `openadapt shadow` runs beside an agent you already have, as a loopback
+  pass-through proxy. It checks each write the agent makes against the
+  system of record, checks each confirmed write again later, and writes
+  `report.html` and `report.json`. It never blocks, changes or resends a write
+  ([#1678](https://github.com/OpenAdaptAI/OpenAdapt/pull/1678)).
+- `openadapt verify` checks any agent's writes against a contract you own
+  and returns `CONFIRMED`, `REFUTED` or `UNCERTAIN`. `openadapt verify serve`
+  offers the same check to any MCP client, recheck included, and `openadapt
+  verify ledger` lists, reconciles and releases writes whose outcome isn't
+  known yet ([#1589](https://github.com/OpenAdaptAI/OpenAdapt/pull/1589),
+  [#1628](https://github.com/OpenAdaptAI/OpenAdapt/pull/1628),
+  [#1669](https://github.com/OpenAdaptAI/OpenAdapt/pull/1669)).
+- `openadapt bench medplum` runs the public Medplum write benchmark with your
+  own agent ([#1652](https://github.com/OpenAdaptAI/OpenAdapt/pull/1652)).
+- `openadapt setup` adds the OpenAdapt MCP server and a skill to Claude Code,
+  Cursor, Codex and Gemini CLI, so the agent can turn a read-only browser
+  task into a tool it calls again. It prints every change, and `--dry-run`
+  and `--undo` are there.
+
+## v1.18.0 (2026-10-20)
+
+### Breaking Changes
+
+- Require openadapt-flow 2.2 (`>=2.2.0,<3.0.0`). The quickstart uses Flow's
+  offline Seals, shared browser and OCR prewarm, and `openadapt pull` uses
+  `openadapt-flow pull`; none of these are in Flow 2.0 or 2.1. `openadapt
+  doctor` and `openadapt deploy` report an older Flow as unsupported.
+
+### Features
+
+- `openadapt quickstart` is three short acts: show the task in the synthetic
+  clinic app and compile it, run the program on five new notes at once, then
+  make one save fail silently and watch the run stop. It ends with one receipt
+  card, the command to check its Seal, and two next steps
+  ([#1408](https://github.com/OpenAdaptAI/OpenAdapt/pull/1408)).
+- When an older `openadapt` comes first on PATH, the quickstart names it and
+  gives the fix. Under `uvx` it also says how to keep the installed version
+  ([#1408](https://github.com/OpenAdaptAI/OpenAdapt/pull/1408)).
+- `openadapt pull` downloads a packaged workflow from the registry, and
+  `openadapt pull --list` shows what is available
+  ([#1173](https://github.com/OpenAdaptAI/OpenAdapt/pull/1173)).
+
+### Fixes
+
+- Next-step hints repeat the `uvx` form when the launcher runs from a uvx
+  environment, so they reach the same version
+  ([#1404](https://github.com/OpenAdaptAI/OpenAdapt/pull/1404)).
+- The quickstart describes the failing run as a save that didn't reach the
+  record ([#1236](https://github.com/OpenAdaptAI/OpenAdapt/pull/1236)), and
+  `openadapt agent serve` help shows `--bundles DIR --mode production`
+  ([#1238](https://github.com/OpenAdaptAI/OpenAdapt/pull/1238)).
+- CLI help and built-in links point at the docs glossary and the monorepo
+  ([#1200](https://github.com/OpenAdaptAI/OpenAdapt/pull/1200)).
+
 ## v1.17.0 (2026-10-15)
 
 ### Breaking Changes

@@ -174,7 +174,9 @@ def _dirs(tmp_path):
     return bundle, tmp_path / "run"
 
 
-def _approval(bundle, run_dir=None) -> ApprovalRecord:
+def _approval(
+    bundle, run_dir=None, *, authorize_uncertain_retry: bool = False
+) -> ApprovalRecord:
     """An authenticated approval for the given bundle (P0-5): resume now REQUIRES
     one, so every legitimate resume in these tests carries an operator identity,
     a chosen resolution, and the bundle version it was granted against."""
@@ -191,7 +193,18 @@ def _approval(bundle, run_dir=None) -> ApprovalRecord:
         run_id=manifest.run_id,
         workflow_name=manifest.workflow_name,
         run_dir=run_dir,
+        authorize_uncertain_retry=authorize_uncertain_retry,
     )
+
+
+def _retry_approval(bundle, run_dir=None) -> ApprovalRecord:
+    """An approval that explicitly authorizes one uncertain-delivery retry.
+
+    A halted save may already have landed, so an ordinary approval cannot
+    repeat it. These tests model an operator who checked the system of record,
+    found the record missing, and chose to retry.
+    """
+    return _approval(bundle, run_dir, authorize_uncertain_retry=True)
 
 
 def _three_step_workflow(*, with_effects: bool) -> Workflow:
@@ -290,7 +303,12 @@ def test_halt_midway_writes_pending_and_checkpoints_prior(tmp_path):
     assert "refuted" in pending.reason.lower()
     # It proposes operator options and points at the last verified checkpoint.
     assert pending.proposed_options  # non-empty
-    assert any("RESUME" in opt for opt in pending.proposed_options)
+    # The save was delivered and its record check refuted it, so it may still
+    # have landed: an ordinary resume is not offered and cannot repeat it.
+    assert pending.delivery_uncertainty is not None
+    assert pending.delivery_uncertainty.cause_type == "post_delivery_unverified"
+    assert not any("RESUME" in opt for opt in pending.proposed_options)
+    assert any("Reconcile" in opt for opt in pending.proposed_options)
     assert pending.resume_from_index == 2  # continue after s1 (index 1)
     assert pending.resume_from_step_id == "s1"
     # The run's parameter bindings are captured for an identical re-bind.
@@ -302,11 +320,35 @@ def test_halt_midway_writes_pending_and_checkpoints_prior(tmp_path):
 # -- resume: continue from the last checkpoint, not from step 0 -------------
 
 
+def test_resume_never_repeats_a_delivered_save_without_authorization(tmp_path):
+    """The default approval never presses a save that may already have landed."""
+
+    report, run_dir, bundle, _orig_backend, verifier = _run_to_halt(tmp_path)
+    assert report.success is False
+    verifier.refute.clear()
+    resume_backend = FakeBackend()
+
+    with pytest.raises(ApprovalRequired, match="may already have actuated"):
+        resume(
+            run_dir,
+            Replayer(
+                resume_backend,
+                vision=_vision_ok(),
+                effect_verifier=verifier,
+                poll_interval_s=0.01,
+            ),
+            approval=_approval(bundle),
+        )
+    assert ("press", "C") not in resume_backend.actions
+    assert CheckpointStore(run_dir).read_pending() is not None
+
+
 def test_resume_continues_from_last_checkpoint(tmp_path):
     report, run_dir, bundle, _orig_backend, verifier = _run_to_halt(tmp_path)
     assert report.success is False
 
-    # The operator resolves the cause (the record now exists): s2 will confirm.
+    # The operator checked the system of record, found s2's record missing,
+    # and authorized one retry: s2 will now confirm.
     verifier.refute.clear()
     # A FRESH backend for the resumed leg (a new run against the live system);
     # its recorded actions reveal exactly which steps re-executed.
@@ -318,7 +360,7 @@ def test_resume_continues_from_last_checkpoint(tmp_path):
         poll_interval_s=0.01,
     )
 
-    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
 
     assert resumed.success is True
     # The already-verified steps were NOT re-executed on the resumed backend...
@@ -378,7 +420,7 @@ def test_resume_egress_posture_stays_sticky_across_a_second_resume(tmp_path):
             effect_verifier=verifier,
             poll_interval_s=0.01,
         ),
-        approval=_approval(bundle),
+        approval=_retry_approval(bundle),
     )
     assert first_resume.success is False
     assert first_resume.screenshots_may_leave_box is True
@@ -395,7 +437,7 @@ def test_resume_egress_posture_stays_sticky_across_a_second_resume(tmp_path):
             effect_verifier=verifier,
             poll_interval_s=0.01,
         ),
-        approval=_approval(bundle),
+        approval=_retry_approval(bundle),
     )
     assert second_resume.success is True
     assert second_resume.screenshots_may_leave_box is True
@@ -435,7 +477,7 @@ def test_resume_persists_new_egress_posture_before_an_early_exit(tmp_path):
                 effect_verifier=verifier,
                 poll_interval_s=0.01,
             ),
-            approval=_approval(bundle),
+            approval=_retry_approval(bundle),
         )
 
     retained = store.read_manifest()
@@ -487,7 +529,7 @@ def test_durable_resume_projection_failure_keeps_fail_closed_terminal_evidence(
             idempotency_ledger=ledger,
             poll_interval_s=0.01,
         ),
-        approval=_approval(bundle),
+        approval=_retry_approval(bundle),
     )
 
     # The resumed action is delivered once. The failed projection does not
@@ -558,7 +600,7 @@ def test_durable_pause_defers_ledger_outcome_until_resume_verifies(tmp_path):
             idempotency_ledger=ledger,
             poll_interval_s=0.01,
         ),
-        approval=_approval(bundle),
+        approval=_retry_approval(bundle),
     )
     assert resumed.success is True
     # This fixture uses the Demo profile, so its correct terminal taxonomy is
@@ -924,7 +966,7 @@ def test_resume_revalidates_but_does_not_repeat_confirmed_steps(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
-    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
 
     manifest = CheckpointStore(run_dir).read_manifest()
     assert manifest is not None
@@ -982,7 +1024,7 @@ def test_halt_on_first_step_resumes_from_zero(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.01,
     )
-    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle))
+    resumed = resume(run_dir, resume_replayer, approval=_retry_approval(bundle))
     assert resumed.success is True
     assert ("press", "A") in resume_backend.actions
     assert [c.step_index for c in store.checkpoints()] == [0, 1, 2]

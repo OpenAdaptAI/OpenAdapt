@@ -910,6 +910,100 @@ def test_consequential_remote_hover_target_movement_halts_before_input(bundle, r
     assert "target moved before actuation" in report.results[0].error
 
 
+def _remote_hover_run(bundle, run_dir, *regions):
+    backend = RemoteLeaseBackend(
+        initial_frame=make_png(color=(240, 240, 240)),
+        fresh_frame=make_png(color=(239, 240, 240)),
+    )
+    vision = FakeVision()
+    # The resolver places the click at the match box plus the recorded offset
+    # (10, 5), so each box below is one resolved point.
+    vision.template_results = [
+        Match(point=(0, 0), region=region, confidence=0.95) for region in regions
+    ]
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[click_step(risk="reversible")]),
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    return backend, report
+
+
+def test_remote_hover_codec_jitter_reprepares_and_clicks_the_exact_point(
+    bundle, run_dir
+):
+    """A one-pixel re-match inside the same box gets one exact second look.
+
+    Measured on real AVC444 frames (benchmark/rdp_avc_real): Save Note matched
+    at (560, 489) before the hover and (561, 490) after it, in 10 of 10 runs.
+    """
+    backend, report = _remote_hover_run(
+        bundle,
+        run_dir,
+        (100, 100, 50, 20),
+        (101, 101, 50, 20),
+        (101, 101, 50, 20),
+    )
+
+    assert report.success is True, report.results[0].error
+    assert backend.prepared_pointer_points == [(110, 105), (111, 106)]
+    assert backend.actions == [("click", 111, 106, False)]
+
+
+def test_remote_hover_jitter_that_keeps_moving_halts(bundle, run_dir):
+    backend, report = _remote_hover_run(
+        bundle,
+        run_dir,
+        (100, 100, 50, 20),
+        (101, 101, 50, 20),
+        (100, 100, 50, 20),
+    )
+
+    assert report.success is False
+    assert backend.prepared_pointer_points == [(110, 105), (111, 106)]
+    assert backend.actions == []
+    assert report.results[0].safety_halt is True
+    assert "target moved before actuation" in report.results[0].error
+
+
+@pytest.mark.parametrize(
+    "fresh_region",
+    [
+        (103, 100, 50, 20),  # three pixels right: beyond codec jitter
+        (100, 103, 50, 20),  # three pixels down
+        (98, 97, 50, 20),  # three pixels up
+    ],
+)
+def test_remote_hover_movement_beyond_jitter_still_halts(bundle, run_dir, fresh_region):
+    backend, report = _remote_hover_run(
+        bundle, run_dir, (100, 100, 50, 20), fresh_region
+    )
+
+    assert report.success is False
+    assert backend.prepared_pointer_points == [(110, 105)]
+    assert backend.actions == []
+    assert report.results[0].safety_halt is True
+    assert "target moved before actuation" in report.results[0].error
+
+
+@pytest.mark.parametrize(
+    ("fresh", "prepared", "region", "same"),
+    [
+        ((111, 106), (110, 105), (101, 101, 50, 20), True),
+        ((112, 103), (110, 105), (100, 100, 50, 20), True),
+        ((113, 105), (110, 105), (100, 100, 50, 20), False),
+        ((101, 101), (100, 100), (101, 101, 50, 20), False),  # prepared outside
+        ((150, 105), (149, 105), (100, 100, 50, 20), False),  # fresh on the edge
+        ((111, 106), (110, 105), None, False),
+        ((111, 106), (110, 105), (101, 101, 0, 20), False),
+    ],
+)
+def test_within_hover_jitter(fresh, prepared, region, same):
+    from openadapt_flow.runtime.replayer import _within_hover_jitter
+
+    assert _within_hover_jitter(fresh, prepared, region) is same
+
+
 def test_consequential_remote_anchored_type_reacquires_after_focus_click(
     bundle, run_dir
 ):
@@ -1458,7 +1552,7 @@ def test_typed_recovery_refuses_inputs_changed_during_verification(bundle, run_d
     result = report.results[0]
     assert report.success is False
     assert backend.actions == [("type", "hello")]
-    assert result.input_retried is True
+    assert result.input_retried is False
     assert result.input_verified is False
     assert "authorization no longer matches the current runtime inputs" in (
         result.error or ""
@@ -1518,7 +1612,11 @@ def test_remote_preedge_retry_refuses_a_changed_identity(bundle, run_dir):
         Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
         for _ in range(3)
     ]
+    # Each verified read is followed by the candidate census's whole-frame
+    # read (runtime.identity_census); one row each time.
     vision.ocr_results = [
+        [OcrLine("Jane Sample Knee pain referral High")],
+        [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Taylor Duplicate Knee pain referral High")],
@@ -2698,6 +2796,9 @@ def test_consequential_remote_reruns_identity_on_fresh_frame(bundle, run_dir):
     ]
     vision.ocr_results = [
         [OcrLine("Jane Sample Knee pain referral High")],
+        # The candidate census reads the whole frame once the first read
+        # verifies (runtime.identity_census); one row, so it stays verified.
+        [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Taylor Duplicate Knee pain referral High")],
     ]
     step = context_click_step(
@@ -2728,6 +2829,9 @@ def test_fresh_pre_actuation_identity_loss_has_typed_refusal_and_zero_input(
         Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99),
     ]
     vision.ocr_results = [
+        [OcrLine("Jane Sample Knee pain referral High")],
+        # The candidate census reads the whole frame once the first read
+        # verifies (runtime.identity_census); one row, so it stays verified.
         [OcrLine("Jane Sample Knee pain referral High")],
         [OcrLine("Taylor Duplicate Knee pain referral High")],
     ]
@@ -2762,6 +2866,38 @@ def test_identity_verified_clicks_normally(bundle, run_dir):
     assert ("click", 110, 105, False) in backend.actions
     assert report.results[0].identity.status == "verified"
     assert report.results[0].identity.mode == "context"
+
+
+def test_a_verified_identity_lets_the_backend_remember_its_window(bundle, run_dir):
+    """#1724: the backend records the verified record's window, nothing else."""
+
+    class Remembering(FakeBackend):
+        def __init__(self):
+            super().__init__()
+            self.remembered = []
+
+        def record_verified_window(self, step_id, x, y):
+            self.remembered.append((step_id, x, y))
+            return True
+
+    vision = resolving_vision()
+    vision.ocr_lines = [OcrLine("Jane Sample Knee pain referral High")]
+    backend = Remembering()
+    step = context_click_step("Jane Sample Knee pain referral High")
+    report = Replayer(backend, vision=vision).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is True
+    # The gate runs again just before input; the capture is the same.
+    assert set(backend.remembered) == {(step.id, 110, 105)}
+
+    mismatched = Remembering()
+    vision = resolving_vision()
+    vision.ocr_lines = [OcrLine("Taylor Duplicate Knee pain referral High")]
+    Replayer(mismatched, vision=vision).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir / "b"
+    )
+    assert mismatched.remembered == []
 
 
 def test_consequential_identity_click_refuses_raw_local_coordinates(bundle, run_dir):
@@ -3677,6 +3813,7 @@ def test_visual_click_crop_does_not_narrow_following_type_verification(bundle, r
         Match(point=(210, 150), region=(20, 20, 12, 8), confidence=0.95)
     ]
     vision.pixels_changed_results = [True]
+    vision.ocr_lines = [OcrLine("MA")]
     backend = FakeBackend(text_value_supported=False)
     workflow = Workflow(
         name="wf",
@@ -3774,6 +3911,65 @@ def test_type_verification_prefers_exact_structural_field_region() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "rendered,verified",
+    [
+        ([(20, "7")], True),
+        ([(20, "X"), (900, "7")], False),
+        ([(900, "7"), (1400, "X")], False),
+    ],
+)
+def test_visual_input_readback_cannot_hide_text_outside_a_centered_crop(
+    rendered, verified
+):
+    before = make_png((1600, 800))
+    after = make_png((1600, 800), color=(220, 220, 220))
+
+    class CroppedVision(FakeVision):
+        def ocr(self, png, *, region=None):
+            if png == before or region is None:
+                return []
+            x, _y, width, _height = region
+            text = "".join(value for left, value in rendered if x <= left < x + width)
+            return [OcrLine(text)] if text else []
+
+    backend = FakeBackend(frame=after, viewport=(1600, 800), text_value_supported=False)
+    landed, changed = Replayer(backend, vision=CroppedVision())._typed_input_landed(
+        "7", (900, 500), before
+    )
+    assert landed is verified
+    assert changed is True
+    assert backend.actions == []
+
+
+@pytest.mark.parametrize("changed_x,expected", [(50, False), (900, True)])
+def test_masked_input_needs_a_change_near_the_target(changed_x, expected):
+    from PIL import ImageDraw
+
+    from openadapt_flow.vision import pixels_changed
+
+    before = make_png((1600, 800))
+    image = Image.open(io.BytesIO(before))
+    ImageDraw.Draw(image).rectangle(
+        (changed_x - 40, 450, changed_x + 40, 550), fill="black"
+    )
+    stream = io.BytesIO()
+    image.save(stream, format="PNG")
+    after = stream.getvalue()
+
+    class PixelVision(FakeVision):
+        def pixels_changed(self, before, after, *, region=None, **kwargs):
+            return pixels_changed(before, after, region=region)
+
+    backend = FakeBackend(frame=after, viewport=(1600, 800), text_value_supported=False)
+    landed, changed = Replayer(backend, vision=PixelVision())._typed_input_landed(
+        "secret", (900, 500), before, allow_masked=True
+    )
+    assert landed is expected
+    assert changed is expected
+    assert backend.actions == []
+
+
 def test_type_verification_refocuses_and_retypes_once(bundle, run_dir):
     """Focus theft: the first attempt lands nowhere visible; the retry
     re-clicks the field, selects all (replace, never append), retypes, and
@@ -3782,7 +3978,7 @@ def test_type_verification_refocuses_and_retypes_once(bundle, run_dir):
     vision.template_results = [
         Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
     ]
-    backend = FakeBackend(type_accept_results=[False, True])
+    backend = StructuralFakeBackend(type_accept_results=[False, True])
     workflow = Workflow(
         name="wf",
         steps=[
@@ -3815,7 +4011,7 @@ def test_type_verification_failure_halts_run(bundle, run_dir):
     vision.template_results = [
         Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.95)
     ]
-    backend = FakeBackend(type_accept_results=[False, False])
+    backend = StructuralFakeBackend(type_accept_results=[False, False])
     workflow = Workflow(
         name="wf",
         steps=[
@@ -3872,6 +4068,180 @@ def test_type_verification_ocr_reads_the_value(bundle, run_dir):
     )
     assert report.success is True
     assert report.results[1].input_verified is True
+    assert report.results[1].input_retried is False
+
+
+@pytest.mark.parametrize(
+    "value,observed",
+    [
+        ("1234567890", "12345678"),
+        ("A", "Wrong"),
+        ("12", "17"),
+        ("123", "Unrelated"),
+        ("alpha", "alphaX"),
+        ("alpha", "Xalpha"),
+        ("hello world", "hello worl"),
+    ],
+)
+def test_typed_input_requires_the_exact_ocr_value(bundle, run_dir, value, observed):
+    vision = _type_vision()
+    vision.ocr_lines = [OcrLine(observed)]
+    backend = FakeBackend(text_value_supported=False)
+    report = Replayer(backend, vision=vision).run(
+        _type_workflow(),
+        params={"note": value},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is False
+    result = report.results[1]
+    assert result.input_verified is False
+    assert result.input_retried is False
+    assert backend.actions.count(("type", value)) == 1
+    assert ("press", "ControlOrMeta+a") not in backend.actions
+
+
+@pytest.mark.parametrize("value,observed", [("7", "7"), ("Hello world", "hello WORLD")])
+def test_exact_ocr_input_including_short_values_is_verified(
+    bundle, run_dir, value, observed
+):
+    vision = _type_vision()
+    vision.ocr_lines = [OcrLine(observed)]
+    backend = FakeBackend(text_value_supported=False)
+    report = Replayer(backend, vision=vision).run(
+        _type_workflow(),
+        params={"note": value},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is True
+    assert report.results[1].input_verified is True
+    assert report.results[1].input_retried is False
+
+
+@pytest.mark.parametrize("exact_readback", [False, True])
+def test_opaque_typing_never_retries_an_unconfirmed_delivery(
+    bundle, run_dir, exact_readback
+):
+    vision = _type_vision()
+    vision.pixels_changed_results = [False, False]
+    backend = FakeBackend(
+        text_value_supported=exact_readback, type_accept_results=[False, True]
+    )
+
+    class CountingDeliveryGuard:
+        before_calls = 0
+        acknowledgments = 0
+
+        def before_delivery(self):
+            self.before_calls += 1
+
+        def acknowledge_delivery(self):
+            self.acknowledgments += 1
+
+    guard = CountingDeliveryGuard()
+    replayer = Replayer(backend, vision=vision)
+    replayer._durable_continuation_guard = guard
+    report = replayer.run(
+        _type_workflow(),
+        params={"note": "hello world"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is False
+    result = report.results[1]
+    assert result.input_verified is False
+    assert result.input_retried is False
+    assert backend.actions == [("click", 110, 105, False), ("type", "hello world")]
+
+    assert guard.before_calls == guard.acknowledgments == len(backend.actions) == 2
+    assert replayer._active_delivery_acknowledgers == ()
+
+
+def test_unavailable_browser_context_does_not_authorize_a_typing_retry(bundle, run_dir):
+    vision = _type_vision()
+    backend = StructuralFakeBackend(url=None, type_accept_results=[False, True])
+    report = Replayer(backend, vision=vision).run(
+        _type_workflow(),
+        params={"note": "hello world"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is False
+    assert report.results[1].input_retried is False
+    assert backend.actions == [("click", 110, 105, False), ("type", "hello world")]
+
+
+def test_an_opaque_surface_cannot_opt_into_browser_typing_recovery(bundle, run_dir):
+    from openadapt_flow.ir import StepResult
+
+    backend = StructuralFakeBackend()
+    workflow = _type_workflow()
+    workflow.surface = "rdp"
+    result = StepResult(step_id="t1", intent="type note", ok=False)
+    error = Replayer(backend, vision=FakeVision())._verify_typed_input(
+        workflow.steps[1],
+        "hello world",
+        (110, 105),
+        backend.screenshot(),
+        result,
+        workflow=workflow,
+        params={"note": "hello world"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+        resolution=None,
+        baseline_field_value="",
+        allow_retry=True,
+    )
+    assert error is not None
+    assert result.input_verified is False
+    assert result.input_retried is False
+    assert backend.actions == []
+
+
+@pytest.mark.parametrize(
+    "observed,verified",
+    [
+        (["Open field", "hello world"], True),
+        (["Open field", "hello", "world"], True),
+        (["Open field", "hello worl"], False),
+        (["Open field", "hello world", "extra"], False),
+        (["Open field", "extra hello world"], False),
+    ],
+)
+def test_ocr_context_never_excuses_a_partial_or_extra_value(
+    bundle, run_dir, observed, verified
+):
+    vision = _type_vision()
+    after = [OcrLine(value) for value in observed]
+    before = [OcrLine("Open field")]
+    vision.ocr_results = [after, before, after, before]
+    backend = FakeBackend(text_value_supported=False)
+    report = Replayer(backend, vision=vision).run(
+        _type_workflow(),
+        params={"note": "hello world"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is verified
+    assert report.results[1].input_verified is verified
+    assert report.results[1].input_retried is False
+    assert backend.actions.count(("type", "hello world")) == 1
+
+
+def test_unchanged_pixels_cannot_verify_an_existing_ocr_value(bundle, run_dir):
+    vision = _type_vision()
+    vision.ocr_lines = [OcrLine("hello world")]
+    vision.pixels_changed_results = [False]
+    backend = FakeBackend(text_value_supported=False, type_accept_results=[False])
+    report = Replayer(backend, vision=vision).run(
+        _type_workflow(),
+        params={"note": "hello world"},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    assert report.success is False
+    assert report.results[1].input_verified is False
     assert report.results[1].input_retried is False
 
 
@@ -4002,8 +4372,8 @@ def test_type_masked_dots_reading_as_noise_still_accepts(bundle, run_dir, monkey
 
 def test_type_without_known_field_diffs_full_frame_and_cannot_refocus(bundle, run_dir):
     """A TYPE step not preceded by a click (keyboard-only focus moves) has
-    no field point: verification diffs the whole frame, and the retry
-    retypes without a refocus click."""
+    no field point or structural browser readback: verification cannot
+    prove where input went, so it halts without a second delivery."""
     vision = FakeVision()
     vision.pixels_changed_results = [False, False]
     backend = FakeBackend(
@@ -4020,8 +4390,8 @@ def test_type_without_known_field_diffs_full_frame_and_cannot_refocus(bundle, ru
     )
     assert report.success is False
     assert vision.pixels_changed_calls[0] is None  # full-frame diff
-    # Retry typed again but never clicked or selected-all.
-    assert backend.actions == [("type", "North"), ("type", "North")]
+    assert report.results[0].input_retried is False
+    assert backend.actions == [("type", "North")]
 
 
 # -- structural postconditions (URL/title change, new tab) --------------------

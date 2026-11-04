@@ -43,7 +43,9 @@ def _run(tmp_path, *, pipeline, durable=False, verifier_url=None):
         report = Replayer(
             EnterWritesBackend(url),
             vision=FakeVision(),
-            effect_verifier=RestRecordVerifier(verifier_url or url),
+            effect_verifier=RestRecordVerifier(
+                verifier_url or url, records_path="/api/db", records_key="records"
+            ),
             web_form_actuator=actuator,
             poll_interval_s=0.01,
             readback_pipeline=pipeline,
@@ -72,7 +74,7 @@ def test_an_api_save_reads_back_while_the_next_item_runs(tmp_path):
     assert saved["success"] is True
 
 
-def test_a_durable_api_save_reads_back_inline_and_says_why(tmp_path):
+def test_a_durable_api_save_without_an_encrypted_store_reads_back_inline(tmp_path):
     pipeline = ReadbackPipeline()
     try:
         report, settled, actuator, records = _run(
@@ -83,7 +85,10 @@ def test_a_durable_api_save_reads_back_inline_and_says_why(tmp_path):
 
     assert settled is None and report.success is True
     assert report.results[-1].effect_verified is True
-    assert pipeline.inline_reason == "durable runs verify inline"
+    assert pipeline.inline_reason == (
+        "a durable run without an encrypted checkpoint store verifies inline "
+        "(the deferred check keeps record rows)"
+    )
 
 
 def test_self_repair_runs_a_repaired_bundle_on_the_gui(tmp_path):
@@ -109,7 +114,9 @@ def test_a_probe_or_resumed_run_never_sends_the_api_step(tmp_path):
         backend = EnterWritesBackend(url)
         target = ReplayTarget(
             lambda _fault: _Session(backend),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             policy="permissive",
             profile="demo",
             replayer_kwargs={
@@ -143,7 +150,9 @@ def test_a_standard_change_test_record_run_is_gui_only(tmp_path):
         backend = EnterWritesBackend(url)
         target = ReplayTarget(
             lambda _fault: _Session(backend),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             policy="permissive",
             profile="demo",
             replayer_kwargs={

@@ -127,6 +127,136 @@ class WindowInfo:
     on_screen: bool = True
 
 
+def _ax_top_level(element: Any) -> Any:
+    """The window or sheet an AX element is in, or None.
+
+    ``AXTopLevelUIElement`` when the element reports it. Some toolkits (Qt's
+    item views and their inline editors) report none; the answer is then the
+    nearest ``AXWindow`` or ``AXSheet`` up the ``AXParent`` chain, within 32
+    levels. None on any read failure or when the chain reaches the
+    application first, so callers keep failing closed.
+    """
+    from ApplicationServices import (
+        AXUIElementCopyAttributeValue,
+        kAXTopLevelUIElementAttribute,
+    )
+
+    error, top = AXUIElementCopyAttributeValue(
+        element, kAXTopLevelUIElementAttribute, None
+    )
+    if error == 0 and top is not None:
+        return top
+    from ApplicationServices import kAXParentAttribute, kAXRoleAttribute
+
+    node = element
+    for _ in range(32):
+        error, node = AXUIElementCopyAttributeValue(node, kAXParentAttribute, None)
+        if error != 0 or node is None:
+            return None
+        _error, role = AXUIElementCopyAttributeValue(node, kAXRoleAttribute, None)
+        if str(role or "") in ("AXWindow", "AXSheet"):
+            return node
+        if str(role or "") == "AXApplication":
+            return None
+    return None
+
+
+def _ax_write_selected_text(element: Any, text: str) -> bool:
+    """Replace the selection in one AX text element; True only when delivered.
+
+    The selection is replaced through ``AXSelectedText`` when the element
+    allows it. Some toolkits (Qt's line edits) allow only ``AXValue``: the new
+    value is then the current value with ``text`` spliced over the selected
+    range (``AXSelectedTextRange``; an empty field needs none), and it counts
+    as delivered only when ``AXValue`` reads back exactly that. Setting
+    ``AXValue`` is a programmatic edit (in Qt it fires ``textChanged``, not
+    ``textEdited``), so the record check stays the authority on the save.
+    Anything else is False: a range that can't be read on a non-empty field,
+    characters outside the Basic Multilingual Plane (AX ranges count UTF-16
+    units), or a field that changed between the read and the write.
+    """
+    from ApplicationServices import (
+        AXUIElementIsAttributeSettable,
+        AXUIElementSetAttributeValue,
+        kAXSelectedTextAttribute,
+    )
+
+    settable_error, settable = AXUIElementIsAttributeSettable(
+        element, kAXSelectedTextAttribute, None
+    )
+    if settable_error == 0 and settable:
+        return (
+            AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute, text) == 0
+        )
+    from ApplicationServices import (
+        AXUIElementCopyAttributeValue,
+        AXValueCreate,
+        AXValueGetValue,
+        kAXSelectedTextRangeAttribute,
+        kAXValueAttribute,
+        kAXValueCFRangeType,
+    )
+
+    value_error, value_settable = AXUIElementIsAttributeSettable(
+        element, kAXValueAttribute, None
+    )
+    if value_error != 0 or not value_settable:
+        return False
+
+    def read() -> Optional[tuple[str, int, int]]:
+        current_error, current = AXUIElementCopyAttributeValue(
+            element, kAXValueAttribute, None
+        )
+        if current_error != 0 or not isinstance(current, str):
+            return None
+        # AX ranges count UTF-16 units; Python indexes code points. They
+        # agree only without characters outside the Basic Multilingual Plane.
+        if any(ord(character) > 0xFFFF for character in current):
+            return None
+        range_error, raw_range = AXUIElementCopyAttributeValue(
+            element, kAXSelectedTextRangeAttribute, None
+        )
+        if range_error == 0 and raw_range is not None:
+            ok, selected = AXValueGetValue(raw_range, kAXValueCFRangeType, None)
+            if not ok:
+                return None
+            try:
+                start, length = (int(part) for part in selected)
+            except TypeError:
+                start, length = int(selected.location), int(selected.length)
+            if start < 0 or length < 0 or start + length > len(current):
+                return None
+            return current, start, length
+        return (current, 0, 0) if current == "" else None
+
+    if any(ord(character) > 0xFFFF for character in text):
+        return False
+    before = read()
+    if before is None:
+        return False
+    current, start, length = before
+    expected = current[:start] + text + current[start + length :]
+    # The whole value is replaced: refuse if the field changed since it was
+    # read, so nothing typed or completed meanwhile is overwritten.
+    if read() != before:
+        return False
+    if AXUIElementSetAttributeValue(element, kAXValueAttribute, expected) != 0:
+        return False
+    read_error, delivered = AXUIElementCopyAttributeValue(
+        element, kAXValueAttribute, None
+    )
+    if read_error != 0 or delivered != expected:
+        return False
+    # Typing leaves the caret after the inserted text; so does this. The
+    # delivery is already proved, so a field that ignores the caret is fine.
+    try:
+        caret = AXValueCreate(kAXValueCFRangeType, (start + len(text), 0))
+        AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute, caret)
+    except Exception:  # noqa: BLE001 - the caret is cosmetic once delivered
+        pass
+    return True
+
+
 def _macos_ax_title_matches(window: WindowInfo, ax_title: object) -> bool:
     """Match one CG title to AX without widening beyond known Chrome suffixes."""
 
@@ -242,6 +372,20 @@ _MAC_KEYCODES = {
     "down": 0x7D,
     "left": 0x7B,
     "right": 0x7C,
+    # function keys (macOS virtual key codes; F2 edits the current cell in
+    # many item views)
+    "f1": 0x7A,
+    "f2": 0x78,
+    "f3": 0x63,
+    "f4": 0x76,
+    "f5": 0x60,
+    "f6": 0x61,
+    "f7": 0x62,
+    "f8": 0x64,
+    "f9": 0x65,
+    "f10": 0x6D,
+    "f11": 0x67,
+    "f12": 0x6F,
     # single letters used inside chords (e.g. Ctrl+A select-all)
     "a": 0x00,
     "c": 0x08,
@@ -611,6 +755,9 @@ class RemoteDisplayBackend:
             )
         self._session_identity_observer = session_identity_observer
         self._window: Optional[WindowInfo] = None
+        # The window the owner/title selectors matched first. Later lookups
+        # find this exact window id, whatever its title becomes.
+        self._pinned_window: Optional[WindowInfo] = None
         self._viewport: Optional[tuple[int, int]] = None
         self._scale: float = 1.0
         self._scale_x: float = 1.0
@@ -632,16 +779,66 @@ class RemoteDisplayBackend:
 
     # -- window resolution ---------------------------------------------------
 
+    def _target_candidates(self, client: Any) -> list[WindowInfo]:
+        """Return the windows that can be the target, pinned after one match.
+
+        The owner/title selectors choose the window once. Later lookups find
+        that exact window id by owner and ignore the title: an application
+        (a browser above all) retitles its window as its content changes,
+        and a title lookup would lose the window or find another window that
+        now carries the old title.
+        """
+        pinned = self._pinned_window
+        if pinned is None:
+            return client.find_windows(self._owner_substr, self._title_substr)
+        # A client that tracks a unique input target (the Win32 client) needs
+        # the lookup itself to be by id: an owner-only query would see every
+        # window of a multi-window client (RemoteApp seamless windows, a
+        # browser) and refuse input as ambiguous.
+        find_pinned = getattr(client, "find_pinned_window", None)
+        if find_pinned is not None:
+            return list(find_pinned(self._owner_substr, pinned.window_id))
+        return [
+            window
+            for window in client.find_windows(self._owner_substr, None)
+            if window.window_id == pinned.window_id
+        ]
+
+    def _pin_target(
+        self, window: WindowInfo, error: type[RemoteDisplayError]
+    ) -> WindowInfo:
+        """Pin the first unique match; refuse a different owning process."""
+        pinned = self._pinned_window
+        if pinned is None:
+            self._pinned_window = window
+        elif window.window_id != pinned.window_id or window.pid != pinned.pid:
+            raise error(
+                "the process that owns the pinned target window exited or "
+                "restarted; refusing input to a window it did not bind"
+            )
+        self._window = window
+        return window
+
+    def _pinned_window_closed(self, error: type[RemoteDisplayError]) -> None:
+        """Fail closed when the pinned target window is gone."""
+        if self._pinned_window is not None:
+            raise error(
+                "the pinned target window closed or is no longer listed; "
+                "refusing to rebind to another window"
+            )
+
     def _resolve_window(self, *, refresh: bool = False) -> WindowInfo:
         """Locate (and cache) the target client window.
 
         Raises:
-            RemoteDisplayError: If no matching window is on screen.
+            RemoteDisplayError: If no matching window is on screen, or the
+                pinned window closed or its process restarted.
         """
         if self._window is not None and not refresh:
             return self._window
-        matches = self._client.find_windows(self._owner_substr, self._title_substr)
+        matches = self._target_candidates(self._client)
         if not matches:
+            self._pinned_window_closed(RemoteDisplayError)
             raise RemoteDisplayError(
                 "no window exactly matching the configured remote-display "
                 "target; is the client window open and visible?"
@@ -652,8 +849,7 @@ class RemoteDisplayBackend:
                 f"match, found {len(matches)}; target identities are withheld "
                 "because window titles can contain sensitive record data"
             )
-        self._window = matches[0]
-        return matches[0]
+        return self._pin_target(matches[0], RemoteDisplayError)
 
     def ensure_foreground(self, *, retries: int = 10, settle_s: float = 0.4) -> None:
         """Un-hide + activate the client window and wait until it is on screen.
@@ -699,6 +895,11 @@ class RemoteDisplayBackend:
         assert self._viewport is not None
         return self._viewport
 
+    def _capture_window(self, win: WindowInfo) -> tuple[bytes, int, int]:
+        """The target window's pixels; a subclass may add windows it owns."""
+
+        return self._client.capture(win.window_id)
+
     @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return the client window's current pixels as PNG bytes.
@@ -717,11 +918,12 @@ class RemoteDisplayBackend:
             # user moves, resizes, zooms, or reopens a remote-display window.
             win = self._resolve_window(refresh=True)
             try:
-                png, px_w, px_h = self._client.capture(win.window_id)
+                png, px_w, px_h = self._capture_window(win)
             except RemoteDisplayError:
-                # The window id may be stale (window reopened); re-resolve once.
+                # Retry a transient capture failure once. The lookup stays
+                # pinned, so a reopened window fails closed here.
                 win = self._resolve_window(refresh=True)
-                png, px_w, px_h = self._client.capture(win.window_id)
+                png, px_w, px_h = self._capture_window(win)
             if not png or px_w <= 0 or px_h <= 0:
                 raise RemoteDisplayError("client-window capture returned no pixels")
             # Validate and record the frame's true pixel size.
@@ -1477,7 +1679,7 @@ class RemoteDisplayBackend:
             # Check current pixels without replacing the resolver's coordinate
             # lease. This detects a lock/disconnect or content change after the
             # runtime re-resolved the fresh actuation frame.
-            png, px_w, px_h = self._client.capture(current.window_id)
+            png, px_w, px_h = self._capture_window(current)
             if _png_size(png) != self._viewport or (px_w, px_h) != self._viewport:
                 self._actuation_lease_state = _LEASE_INVALIDATED
                 raise RemoteDisplayError(
@@ -1638,7 +1840,7 @@ class RemoteDisplayBackend:
             return None
         try:
             current = self._resolve_window(refresh=True)
-            png, px_w, px_h = self._client.capture(current.window_id)
+            png, px_w, px_h = self._capture_window(current)
             size = _png_size(png)
             if size != (int(px_w), int(px_h)):
                 self._invalidate_actuation_lease()
@@ -1885,6 +2087,14 @@ class MacWindowClient:
             )
         return matches
 
+    def find_pinned_window(self, owner: str, window_id: int) -> list[WindowInfo]:
+        """Return the one window with ``window_id``, whatever its title now is."""
+        return [
+            window
+            for window in self.find_windows(owner, None)
+            if window.window_id == window_id
+        ]
+
     def find_window(self, owner: str, title: Optional[str]) -> Optional[WindowInfo]:
         """Compatibility helper over the exact, ambiguity-visible candidate API."""
         best: Optional[WindowInfo] = None
@@ -2056,7 +2266,6 @@ class MacWindowClient:
                 kAXFocusedWindowAttribute,
                 kAXMainAttribute,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
                 kAXWindowsAttribute,
             )
 
@@ -2096,10 +2305,8 @@ class MacWindowClient:
             )
             if focused_error != 0 or focused is None:
                 return None
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                focused, kAXTopLevelUIElementAttribute, None
-            )
-            if top_error != 0 or top_level is None or top_level != target:
+            top_level = _ax_top_level(focused)
+            if top_level is None or top_level != target:
                 return None
             top_title_error, top_title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
@@ -2131,7 +2338,6 @@ class MacWindowClient:
                 AXUIElementCreateApplication,
                 kAXParentAttribute,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
             )
 
             app = AXUIElementCreateApplication(int(window.pid))
@@ -2143,12 +2349,8 @@ class MacWindowClient:
             )
             if hit_error != 0 or hit is None:
                 return None
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                hit,
-                kAXTopLevelUIElementAttribute,
-                None,
-            )
-            if top_error != 0 or top_level is None:
+            top_level = _ax_top_level(hit)
+            if top_level is None:
                 return None
             title_error, title = AXUIElementCopyAttributeValue(
                 top_level,
@@ -2210,12 +2412,6 @@ class MacWindowClient:
         switch cannot redirect the write to a different control.
         """
         try:
-            from ApplicationServices import (
-                AXUIElementIsAttributeSettable,
-                AXUIElementSetAttributeValue,
-                kAXSelectedTextAttribute,
-            )
-
             focused = self._focused_element_for_window(window)
             if (
                 focused is None
@@ -2223,15 +2419,7 @@ class MacWindowClient:
                 or focused != expected_focused_element
             ):
                 return False
-            settable_error, settable = AXUIElementIsAttributeSettable(
-                focused, kAXSelectedTextAttribute, None
-            )
-            if settable_error != 0 or not settable:
-                return False
-            return (
-                AXUIElementSetAttributeValue(focused, kAXSelectedTextAttribute, text)
-                == 0
-            )
+            return _ax_write_selected_text(focused, text)
         except Exception:  # noqa: BLE001 - unsupported AX is a safe refusal
             return False
 
@@ -2252,14 +2440,10 @@ class MacWindowClient:
             from ApplicationServices import (
                 AXUIElementCopyAttributeValue,
                 AXUIElementCreateApplication,
-                AXUIElementIsAttributeSettable,
-                AXUIElementSetAttributeValue,
                 kAXFocusedUIElementAttribute,
                 kAXFocusedWindowAttribute,
                 kAXMainAttribute,
-                kAXSelectedTextAttribute,
                 kAXTitleAttribute,
-                kAXTopLevelUIElementAttribute,
                 kAXWindowsAttribute,
             )
 
@@ -2299,10 +2483,8 @@ class MacWindowClient:
             )
             if focused_error != 0 or focused is None:
                 return False
-            top_error, top_level = AXUIElementCopyAttributeValue(
-                focused, kAXTopLevelUIElementAttribute, None
-            )
-            if top_error != 0 or top_level is None:
+            top_level = _ax_top_level(focused)
+            if top_level is None:
                 return False
             top_title_error, top_title = AXUIElementCopyAttributeValue(
                 top_level, kAXTitleAttribute, None
@@ -2312,15 +2494,7 @@ class MacWindowClient:
             if top_level != target:
                 return False
 
-            settable_error, settable = AXUIElementIsAttributeSettable(
-                focused, kAXSelectedTextAttribute, None
-            )
-            if settable_error != 0 or not settable:
-                return False
-            return (
-                AXUIElementSetAttributeValue(focused, kAXSelectedTextAttribute, text)
-                == 0
-            )
+            return _ax_write_selected_text(focused, text)
         except Exception:  # noqa: BLE001 - unsupported AX is a safe refusal
             return False
 
@@ -2369,7 +2543,6 @@ class MacWindowClient:
 
     def capture(self, window_id: int) -> tuple[bytes, int, int]:
         import Quartz
-        from PIL import Image
 
         img_ref = Quartz.CGWindowListCreateImage(
             Quartz.CGRectNull,
@@ -2381,6 +2554,220 @@ class MacWindowClient:
             raise RemoteDisplayError(
                 f"CGWindowListCreateImage returned None for {window_id}"
             )
+        return self._png_of(img_ref)
+
+    def capture_stack(
+        self, window_ids: list[int], bounds: tuple[float, float, float, float]
+    ) -> tuple[bytes, int, int]:
+        """Capture exactly ``window_ids`` (front first) composited over ``bounds``.
+
+        Used for a window and the sheet attached to it: no other window's
+        pixels are included, whatever overlaps.
+        """
+        import Quartz
+
+        img_ref = Quartz.CGWindowListCreateImageFromArray(
+            Quartz.CGRectMake(*bounds),
+            [int(i) for i in window_ids],
+            Quartz.kCGWindowImageBoundsIgnoreFraming,
+        )
+        if img_ref is None:
+            raise RemoteDisplayError(
+                f"CGWindowListCreateImageFromArray returned None for {window_ids}"
+            )
+        return self._png_of(img_ref)
+
+    def attached_sheet(
+        self, window: WindowInfo
+    ) -> Optional[tuple[int, tuple[float, float, float, float]]]:
+        """The one sheet attached to ``window``: its CG window id and bounds.
+
+        A sheet is a separate CoreGraphics window. It counts only when the
+        window's own AX element lists exactly one ``AXSheet`` child, and
+        exactly one on-screen, normal-layer window of the same process has
+        that sheet's bounds and lies inside the window. None otherwise.
+        """
+        try:
+            import Quartz
+            from ApplicationServices import (
+                AXUIElementCopyAttributeValue,
+                AXUIElementCreateApplication,
+                AXValueGetValue,
+                kAXChildrenAttribute,
+                kAXPositionAttribute,
+                kAXRoleAttribute,
+                kAXSizeAttribute,
+                kAXTitleAttribute,
+                kAXValueCGPointType,
+                kAXValueCGSizeType,
+                kAXWindowsAttribute,
+            )
+
+            app = AXUIElementCreateApplication(int(window.pid))
+            error, ax_windows = AXUIElementCopyAttributeValue(
+                app, kAXWindowsAttribute, None
+            )
+            if error != 0 or ax_windows is None:
+                return None
+            targets = [
+                w
+                for w in ax_windows
+                if _macos_ax_title_matches(
+                    window, AXUIElementCopyAttributeValue(w, kAXTitleAttribute, None)[1]
+                )
+            ]
+            if len(targets) != 1:
+                return None
+            error, children = AXUIElementCopyAttributeValue(
+                targets[0], kAXChildrenAttribute, None
+            )
+            sheets = [
+                child
+                for child in children or []
+                if str(AXUIElementCopyAttributeValue(child, kAXRoleAttribute, None)[1])
+                == "AXSheet"
+            ]
+            if len(sheets) != 1:
+                return None
+            _e, pos = AXUIElementCopyAttributeValue(
+                sheets[0], kAXPositionAttribute, None
+            )
+            _e, size = AXUIElementCopyAttributeValue(sheets[0], kAXSizeAttribute, None)
+            ok_p, point = AXValueGetValue(pos, kAXValueCGPointType, None)
+            ok_s, extent = AXValueGetValue(size, kAXValueCGSizeType, None)
+            if not ok_p or not ok_s:
+                return None
+            ax = (
+                float(point.x),
+                float(point.y),
+                float(extent.width),
+                float(extent.height),
+            )
+            wx, wy, ww, wh = window.bounds
+            if not (
+                ax[2] > 0
+                and ax[3] > 0
+                and ax[0] >= wx
+                and ax[1] >= wy
+                and ax[0] + ax[2] <= wx + ww + 0.5
+                and ax[1] + ax[3] <= wy + wh + 0.5
+            ):
+                return None
+            # The sheet sits directly above its window: only the window
+            # immediately above it in the window server's order may match.
+            above = list(
+                Quartz.CGWindowListCopyWindowInfo(
+                    Quartz.kCGWindowListOptionOnScreenAboveWindow,
+                    int(window.window_id),
+                )
+                or []
+            )
+            found = []
+            for info in above[-1:]:
+                number = int(info.get("kCGWindowNumber", 0) or 0)
+                if (
+                    int(info.get("kCGWindowOwnerPID", -1)) != int(window.pid)
+                    or int(info.get("kCGWindowLayer", 0) or 0) != 0
+                    or number in (0, window.window_id)
+                ):
+                    continue
+                b = dict(info.get("kCGWindowBounds") or {})
+                cg = (
+                    float(b.get("X", -1)),
+                    float(b.get("Y", -1)),
+                    float(b.get("Width", -1)),
+                    float(b.get("Height", -1)),
+                )
+                if all(abs(a - c) <= 0.5 for a, c in zip(ax, cg)):
+                    found.append((number, cg))
+            return found[0] if len(found) == 1 else None
+        except Exception:  # noqa: BLE001 - no proof of a sheet means no sheet
+            return None
+
+    def window_owner_pid(self, window_id: int) -> Optional[int]:
+        """The pid owning on-screen window ``window_id``, or None."""
+        try:
+            import Quartz
+
+            for info in (
+                Quartz.CGWindowListCopyWindowInfo(
+                    Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID
+                )
+                or []
+            ):
+                if int(info.get("kCGWindowNumber", 0) or 0) == int(window_id):
+                    return int(info.get("kCGWindowOwnerPID", -1))
+        except Exception:  # noqa: BLE001
+            return None
+        return None
+
+    def exact_window_or_sheet_focused(self, window: WindowInfo) -> bool:
+        """``exact_window_focused_main``, or its one attached sheet focused instead.
+
+        True when the AX focused window is the one ``AXSheet`` child of the one
+        exact AX window (the sheet ``attached_sheet`` matched), and that window
+        is still main. Every AX read must succeed.
+        """
+        if self.exact_window_focused_main(window):
+            return True
+        try:
+            from ApplicationServices import (
+                AXUIElementCopyAttributeValue,
+                AXUIElementCreateApplication,
+                kAXChildrenAttribute,
+                kAXFocusedWindowAttribute,
+                kAXMainAttribute,
+                kAXRoleAttribute,
+                kAXTitleAttribute,
+                kAXWindowsAttribute,
+            )
+            from CoreFoundation import CFEqual
+
+            app = AXUIElementCreateApplication(int(window.pid))
+            error, focused = AXUIElementCopyAttributeValue(
+                app, kAXFocusedWindowAttribute, None
+            )
+            if error != 0 or focused is None:
+                return False
+            error, ax_windows = AXUIElementCopyAttributeValue(
+                app, kAXWindowsAttribute, None
+            )
+            if error != 0:
+                return False
+            targets = [
+                w
+                for w in ax_windows or []
+                if _macos_ax_title_matches(
+                    window, AXUIElementCopyAttributeValue(w, kAXTitleAttribute, None)[1]
+                )
+            ]
+            if len(targets) != 1:
+                return False
+            error, children = AXUIElementCopyAttributeValue(
+                targets[0], kAXChildrenAttribute, None
+            )
+            if error != 0:
+                return False
+            sheets = [
+                c
+                for c in children or []
+                if str(AXUIElementCopyAttributeValue(c, kAXRoleAttribute, None)[1])
+                == "AXSheet"
+            ]
+            if len(sheets) != 1 or not CFEqual(sheets[0], focused):
+                return False
+            error, is_main = AXUIElementCopyAttributeValue(
+                targets[0], kAXMainAttribute, None
+            )
+            return error == 0 and bool(is_main)
+        except Exception:  # noqa: BLE001 - missing proof must fail closed
+            return False
+
+    @staticmethod
+    def _png_of(img_ref: Any) -> tuple[bytes, int, int]:
+        import Quartz
+        from PIL import Image
+
         w = int(Quartz.CGImageGetWidth(img_ref))
         h = int(Quartz.CGImageGetHeight(img_ref))
         if w <= 0 or h <= 0:
@@ -2396,10 +2783,29 @@ class MacWindowClient:
         img.convert("RGB").save(out, format="PNG")
         return out.getvalue(), w, h
 
+    @staticmethod
+    def _drain_workspace_updates() -> None:
+        """Apply NSWorkspace's pending updates before reading it.
+
+        ``frontmostApplication`` is updated by notifications the current run
+        loop delivers. A process that never runs one (a Python run, a test
+        harness) keeps reading the app that was frontmost when it first asked,
+        even after that app exited. One non-blocking pass applies them.
+        """
+        try:
+            from Foundation import NSDate, NSDefaultRunLoopMode, NSRunLoop
+
+            NSRunLoop.currentRunLoop().runMode_beforeDate_(
+                NSDefaultRunLoopMode, NSDate.date()
+            )
+        except Exception:  # noqa: BLE001 - a stale read then fails the focus check
+            pass
+
     def frontmost_pid(self) -> Optional[int]:
         try:
             from AppKit import NSWorkspace
 
+            self._drain_workspace_updates()
             app = NSWorkspace.sharedWorkspace().frontmostApplication()
             return int(app.processIdentifier()) if app is not None else None
         except Exception:  # noqa: BLE001
@@ -2457,6 +2863,7 @@ class MacWindowClient:
             options = (
                 NSApplicationActivateIgnoringOtherApps | NSApplicationActivateAllWindows
             )
+            self._drain_workspace_updates()
             source = NSWorkspace.sharedWorkspace().frontmostApplication()
             transfer = getattr(app, "activateFromApplication_options_", None)
             transferred = False

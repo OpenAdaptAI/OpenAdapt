@@ -26,7 +26,7 @@ from openadapt_flow.runtime.durable import (
 )
 from openadapt_flow.runtime.effects import Effect, EffectKind
 from openadapt_flow.runtime.replayer import Replayer
-from tests.test_durable_runtime import FakeSoRVerifier, _approval
+from tests.test_durable_runtime import FakeSoRVerifier, _approval, _retry_approval
 from tests.test_replayer import FakeBackend, FakeVision, Match
 
 
@@ -135,7 +135,7 @@ def test_program_resume_revalidates_retained_text_absent_before_input(tmp_path):
                 effect_verifier=verifier,
                 poll_interval_s=0.0,
             ),
-            approval=_approval(bundle),
+            approval=_retry_approval(bundle),
         )
 
     assert backend.actions == []
@@ -157,7 +157,7 @@ def test_linear_resume_revalidates_retained_text_absent_before_input(tmp_path):
                 effect_verifier=verifier,
                 poll_interval_s=0.0,
             ),
-            approval=_approval(bundle),
+            approval=_retry_approval(bundle),
         )
 
     assert backend.actions == []
@@ -175,7 +175,7 @@ def test_resume_rechecks_bundle_inside_admission_before_input(tmp_path):
         effect_verifier=verifier,
         poll_interval_s=0.0,
     )
-    approved = _approval(bundle)
+    approved = _retry_approval(bundle)
     admit = replayer._admit_durable_resume
 
     def mutate_bundle_then_admit(*args, **kwargs):

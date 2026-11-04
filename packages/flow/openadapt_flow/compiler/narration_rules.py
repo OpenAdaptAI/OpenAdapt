@@ -278,12 +278,12 @@ class AnthropicNarrationInterpreter:
         if client is None:
             import anthropic
 
-            from openadapt_flow.benchmark.agent_baseline import load_api_key
+            from openadapt_flow.anthropic_defaults import load_api_key
 
             client = anthropic.Anthropic(api_key=load_api_key())
         model = self._model
         if model is None:
-            from openadapt_flow.benchmark.agent_baseline import MODEL
+            from openadapt_flow.anthropic_defaults import MODEL
 
             model = MODEL
         prompt = (

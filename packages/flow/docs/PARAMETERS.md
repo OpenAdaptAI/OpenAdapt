@@ -28,6 +28,12 @@ one config.
 To fill parameters from a referral PDF, fax image, or email, see
 [`INTAKE.md`](INTAKE.md).
 
+A parameter declared as a `date` (`ParamSpec.type`) must be a canonical ISO
+date (`1990-03-14`) before a run starts. A date written another way, such as
+`03/14/1990`, refuses the run before any step, so it is never typed into a
+form and saved as whatever the app makes of it. Hosted dispatch applies the
+same check to every typed parameter.
+
 ## Choose an execution profile
 
 Select `--profile regulated` for encrypted, fail-closed production execution,

@@ -1,5 +1,5 @@
 {
-  "total_usd": 12.543253,
+  "total_usd": 12.975542,
   "entries": [
     {
       "usd": 0.577,
@@ -1234,6 +1234,136 @@
       "usd": 0.042055,
       "note": "openemr_referral code_agent 2026-10-19-timed item 725 (run from the claude/scoreboard-arm7 checkout)",
       "at": 1792435252.3616168
+    },
+    {
+      "usd": 0.009192,
+      "note": "mockmed code_agent 2026-10-25-rb item 21",
+      "at": 1792899281.865619
+    },
+    {
+      "usd": 0.009232,
+      "note": "mockmed code_agent 2026-10-25-rb item 22",
+      "at": 1792899302.969949
+    },
+    {
+      "usd": 0.009192,
+      "note": "mockmed code_agent 2026-10-25-rb item 23",
+      "at": 1792899328.5665998
+    },
+    {
+      "usd": 0.009232,
+      "note": "mockmed code_agent 2026-10-25-rb item 24",
+      "at": 1792899351.1901581
+    },
+    {
+      "usd": 0.009192,
+      "note": "mockmed code_agent 2026-10-25-rb item 25",
+      "at": 1792899367.119232
+    },
+    {
+      "usd": 0.009125,
+      "note": "mockmed code_agent 2026-10-25-rb item 26",
+      "at": 1792899382.452783
+    },
+    {
+      "usd": 0.009125,
+      "note": "mockmed code_agent 2026-10-25-rb item 27",
+      "at": 1792899400.154708
+    },
+    {
+      "usd": 0.009205,
+      "note": "mockmed code_agent 2026-10-25-rb item 28",
+      "at": 1792899416.541518
+    },
+    {
+      "usd": 0.009152,
+      "note": "mockmed code_agent 2026-10-25-rb item 29",
+      "at": 1792899432.968076
+    },
+    {
+      "usd": 0.011763,
+      "note": "mockmed code_agent 2026-10-25-rb item 30",
+      "at": 1792899456.0796869
+    },
+    {
+      "usd": 0.01042,
+      "note": "mockmed code_agent 2026-10-25-rb item 31",
+      "at": 1792899468.9014761
+    },
+    {
+      "usd": 0.009205,
+      "note": "mockmed code_agent 2026-10-25-rb item 32",
+      "at": 1792899488.583463
+    },
+    {
+      "usd": 0.009245,
+      "note": "mockmed code_agent 2026-10-25-rb item 33",
+      "at": 1792899522.400672
+    },
+    {
+      "usd": 0.009232,
+      "note": "mockmed code_agent 2026-10-25-rb item 34",
+      "at": 1792899556.2135549
+    },
+    {
+      "usd": 0.009192,
+      "note": "mockmed code_agent 2026-10-25-rb item 35",
+      "at": 1792899577.582444
+    },
+    {
+      "usd": 0.009205,
+      "note": "mockmed code_agent 2026-10-25-rb item 36",
+      "at": 1792899598.211006
+    },
+    {
+      "usd": 0.009205,
+      "note": "mockmed code_agent 2026-10-25-rb item 37",
+      "at": 1792899620.2384691
+    },
+    {
+      "usd": 0.009192,
+      "note": "mockmed code_agent 2026-10-25-rb item 38",
+      "at": 1792899649.332273
+    },
+    {
+      "usd": 0.009232,
+      "note": "mockmed code_agent 2026-10-25-rb item 39",
+      "at": 1792899670.250988
+    },
+    {
+      "usd": 0.007228,
+      "note": "mockmed code_agent 2026-10-25-rb item 40",
+      "at": 1792899692.904334
+    },
+    {
+      "usd": 0.038506,
+      "note": "openemr_referral code_agent 2026-10-25-rb item 1",
+      "at": 1792900146.4762108
+    },
+    {
+      "usd": 0.039309,
+      "note": "openemr_referral code_agent 2026-10-25-rb item 2",
+      "at": 1792900377.1045408
+    },
+    {
+      "usd": 0.043528,
+      "note": "openemr_referral code_agent 2026-10-25-rb item 3",
+      "at": 1792900562.074008
+    },
+    {
+      "usd": 0.035493,
+      "note": "openemr_referral code_agent 2026-10-25-rb item 4",
+      "at": 1792900722.0964842
+    },
+    {
+      "usd": 0.049921,
+      "note": "openemr_referral code_agent 2026-10-25-rb item 5",
+      "at": 1792900928.3733308
+    },
+    {
+      "usd": 0.039766,
+      "note": "openemr_referral code_agent 2026-10-25-rb-admit item 6",
+      "at": 1792901346.200465
     }
   ]
 }

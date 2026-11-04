@@ -4,7 +4,7 @@
 // where the run stopped, and offers only the choices the evidence allows. A
 // retry is offered only when the run proved nothing was written; a possible
 // save first needs a person to look at the record.
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import { attentionCopy } from "../lib/attention";
 import {
@@ -43,8 +43,22 @@ interface Notice {
 
 const FIELD_ACRONYMS = new Set(["dob", "dos", "mrn", "ssn", "npi", "id", "icd", "cpt", "zip"]);
 
+// Short field names apps often use, in the words a person reads.
+const FIELD_NAMES: Record<string, string> = {
+  fname: "First name",
+  lname: "Last name",
+  mname: "Middle name",
+  dob: "DOB",
+  phone_home: "Home phone",
+  postal_code: "ZIP",
+  state_label: "State",
+  country_code: "Country",
+};
+
 /** "dob" reads "DOB", "first_name" reads "First name". */
 export function fieldLabel(field: string): string {
+  const known = FIELD_NAMES[field.toLowerCase()];
+  if (known) return known;
   const words = field.replace(/[_-]+/g, " ").trim();
   if (!words) return field;
   return words
@@ -107,7 +121,7 @@ function AttentionCard({
   const [screen, setScreen] = useState<AttentionScreenshot | null>(null);
   const [recordChecked, setRecordChecked] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setScreen(null);
     setRecordChecked(false);
     if (item.source !== "item") return;
@@ -277,9 +291,12 @@ function AttentionCard({
 export function NeedsYou({
   onTeach,
   onChanged,
+  onReviewStops,
 }: {
   onTeach: (workflowId: string) => void;
   onChanged: () => void;
+  /** Open the one-card-at-a-time queue (Review stops). */
+  onReviewStops?: () => void;
 }) {
   const [items, setItems] = useState<AttentionItem[] | null>(null);
   const [switches, setSwitches] = useState<SwitchSummary[]>([]);
@@ -379,6 +396,13 @@ export function NeedsYou({
           onlyProblems
             ? `With “${SWITCH_LABEL}” on, only problems come here. Items that passed every check were saved and read back from the record without you.`
             : "OpenAdapt stopped on these items and is waiting for a person. None of them runs again until you decide."
+        }
+        action={
+          onReviewStops && items && items.length > 0 ? (
+            <button type="button" className="btn btn-primary" onClick={onReviewStops}>
+              Review one by one
+            </button>
+          ) : undefined
         }
       />
       {switchedOff.map((entry) => (

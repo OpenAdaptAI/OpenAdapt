@@ -61,6 +61,7 @@ from openadapt_flow.ir import (
     ProgramExceptionEvidence,
     ProgramTransitionEvidence,
     Resolution,
+    StepResult,
     SurfaceObservation,
 )
 from openadapt_flow.runtime.authorization import (
@@ -274,6 +275,36 @@ class RunCheckpoint(BaseModel):
         return data
 
 
+class DeferredReadback(BaseModel):
+    """A save's record check that runs while the next item starts.
+
+    Under a durable run, pipelined read-back (``--readback-window``) writes
+    the pending check into the durable pause before it hands the check to the
+    side thread. The save was sent, so the pause carries
+    ``delivery_uncertainty`` and an ordinary resume never repeats it. A
+    resume re-runs only this check, against the snapshot of the system of
+    record taken before the save, and then either records the save as
+    verified or leaves a reconciliation pause. It never sends the save again.
+
+    The snapshot holds record rows, so the durable store must be encrypted
+    (the runtime refuses to defer otherwise).
+    """
+
+    #: The save step, and the actuation path whose record check this is
+    #: (``gui`` or ``api``).
+    step_index: int
+    step_id: str
+    actuation: Literal["gui", "api"]
+    #: ``EffectState`` captured before the save, in its JSON form.
+    before: dict
+    #: The save's result when it was sent, before the verdict.
+    result: StepResult
+    #: Multi-surface runs only: the surface active after the save and each
+    #: surface's last-seen identity observation, for the save's checkpoint.
+    active_surface: Optional[str] = None
+    surface_observations: dict[str, SurfaceObservation] = Field(default_factory=dict)
+
+
 class PendingEscalation(BaseModel):
     """A durable pause: the run HALTED for an operator instead of dying.
 
@@ -361,7 +392,18 @@ class PendingEscalation(BaseModel):
     #: must not re-enter it automatically: a human-completed verification
     #: checkpoint or a fresh explicit uncertain-retry authorization is needed.
     delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
+    #: A save whose record check was deferred (pipelined read-back) and had
+    #: not settled when this pause was written. Omitted when unset, so every
+    #: other pause serializes exactly as before.
+    deferred_readback: Optional[DeferredReadback] = None
     created_at: str = Field(default_factory=_now)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler):  # type: ignore[no-untyped-def]
+        data = handler(self)
+        if isinstance(data, dict) and data.get("deferred_readback") is None:
+            data.pop("deferred_readback", None)
+        return data
 
 
 #: Suffix appended to a durable artifact's filename when it is encrypted at
@@ -477,6 +519,15 @@ class CheckpointStore:
             return json.loads(path.read_text())  # type: ignore[no-any-return]
         return None
 
+    def _attended_key(self) -> Optional[str]:
+        """The key attended state is read with: this store's key, else the
+        one the attended store resolves by default."""
+        if self.key:
+            return self.key
+        from openadapt_flow import crypto as _crypto
+
+        return _crypto.resolve_key(None)
+
     @staticmethod
     def model_digest(model: Optional[BaseModel]) -> str:
         """Return one stable digest for an exact logical durable artifact."""
@@ -514,18 +565,23 @@ class CheckpointStore:
         except (OSError, ValueError):
             claim = None
 
+        from openadapt_flow.runtime.durable import attended_state as _state
+
         def file_digest(path: Path) -> Optional[str]:
-            if not path.is_file():
+            # Attended state may be encrypted (``<name>.enc``); the digest is
+            # over its plaintext, so it doesn't change when a file is sealed.
+            sealed = _state.enc_path(path).is_file()
+            key = self._attended_key() if sealed else None
+            data = _state.digest_bytes(self.run_dir, path, key)
+            if data is None:
                 return None
-            return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            return "sha256:" + hashlib.sha256(data).hexdigest()
 
         receipts_dir = self.run_dir / ".attended_program_receipts"
-        receipts = []
-        if receipts_dir.is_dir():
-            receipts = [
-                {"name": path.name, "sha256": file_digest(path)}
-                for path in sorted(receipts_dir.glob("*.json"))
-            ]
+        receipts = [
+            {"name": name, "sha256": file_digest(receipts_dir / name)}
+            for name in sorted(_state.logical_names(receipts_dir))
+        ]
         payload = {
             "manifest": (
                 manifest.model_dump(mode="json") if manifest is not None else None
@@ -621,6 +677,7 @@ class CheckpointStore:
             self.run_dir / ".attended_decisions.lock",
             self.run_dir / ".attended_action.lease",
             self.run_dir / ".attended_program_receipts",
+            self.run_dir / ".attended_state.encrypted",
         )
         for path in candidates:
             if path.exists() or path.with_name(path.name + ENC_SUFFIX).exists():

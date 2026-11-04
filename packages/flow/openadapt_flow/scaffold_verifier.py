@@ -43,7 +43,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow import artifacts as _artifacts
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
 
 BUNDLE_MARKERS = ("workflow.json", "workflow.json.enc")
 RECORDING_MARKER = "events.jsonl"
@@ -161,6 +163,7 @@ def _candidate_from_record(
     record: dict[str, Any],
     *,
     demonstrated_values: tuple[str, ...],
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
 ) -> WriteCandidate:
     """Split one observed new record into identity vs payload fields.
 
@@ -169,7 +172,6 @@ def _candidate_from_record(
     exclusion, same selector rules, same demonstrated-value payload split).
     """
     from openadapt_flow.compiler.effect_mining import (
-        IDEMPOTENCY_KEY_FIELD,
         _match_selector,
         _param_value_fields,
     )
@@ -177,13 +179,14 @@ def _candidate_from_record(
     payload = _param_value_fields(record, demonstrated_values)
     selector = _match_selector(record, set(payload))
     idempotency = None
-    raw_key = record.get(IDEMPOTENCY_KEY_FIELD)
-    if raw_key not in (None, ""):
-        idempotency = (IDEMPOTENCY_KEY_FIELD, str(raw_key))
+    # The app's at-most-once key field, when the caller names one.
+    raw_key = record.get(idempotency_key_field) if idempotency_key_field else None
+    if idempotency_key_field and raw_key not in (None, ""):
+        idempotency = (idempotency_key_field, str(raw_key))
         # The at-most-once key is surfaced separately (it must be bound to a
         # per-run param, never the frozen demo literal), so it never doubles
         # as an identity selector.
-        selector.pop(IDEMPOTENCY_KEY_FIELD, None)
+        selector.pop(idempotency_key_field, None)
     return WriteCandidate(
         step_id=step_id,
         action=action,
@@ -195,7 +198,11 @@ def _candidate_from_record(
     )
 
 
-def candidates_from_recording(recording_dir: Path) -> list[WriteCandidate]:
+def candidates_from_recording(
+    recording_dir: Path,
+    *,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
+) -> list[WriteCandidate]:
     """Write-shaped candidates straight from ``events.jsonl`` evidence."""
     import json
 
@@ -244,6 +251,7 @@ def candidates_from_recording(recording_dir: Path) -> list[WriteCandidate]:
                         label,
                         new_records[0],
                         demonstrated_values=demonstrated_values,
+                        idempotency_key_field=idempotency_key_field,
                     )
                 )
                 continue
@@ -518,6 +526,7 @@ def build_record_check(
     recording: Optional[Path] = None,
     bundle: Optional[Path] = None,
     complete_read: bool = False,
+    fault_gate: bool = False,
 ) -> Optional[RecordCheckResult]:
     """Build, fault-test and write a proposed record check.
 
@@ -525,6 +534,11 @@ def build_record_check(
     ``recording`` / ``bundle`` (a bundle alone holds no reads, and identity
     coverage needs both). Returns ``None`` when no read returns the saved
     record, so the caller can fall back to the TODO draft.
+
+    ``fault_gate`` with ``db`` runs the fault gate on a copy of the database
+    (``openadapt_flow/fault_gate.py``): the faults are written to the copy and
+    the check reads them through its own read. A fault it misses keeps the
+    check a draft. Either way ``check_coverage.json`` is written.
     """
 
     import tempfile
@@ -567,7 +581,11 @@ def build_record_check(
             )
     try:
         proposal = rcs.synthesize(
-            recording_dir, db_path=db, verifier=section, complete_read=complete_read
+            recording_dir,
+            db_path=db,
+            verifier=section,
+            complete_read=complete_read,
+            fault_gate=fault_gate,
         )
     except rcs.SynthesisError as exc:
         if db is None and section is None:
@@ -665,9 +683,9 @@ def _pending_decision(run_dir: Path) -> tuple[Optional[Path], Optional[str]]:
     encrypted_path = run_dir / (PENDING_FILENAME + ENC_SUFFIX)
     path = (
         plain_path
-        if plain_path.is_file()
+        if _artifacts.is_file(plain_path)
         else encrypted_path
-        if encrypted_path.is_file()
+        if _artifacts.is_file(encrypted_path)
         else None
     )
     if path is None:
@@ -697,13 +715,13 @@ def explain_run(run_dir: Path) -> str:
     from openadapt_flow.plain_outcome import plain_result
 
     report_path = run_dir / "report.json"
-    if not report_path.is_file():
+    if not _artifacts.is_file(report_path):
         raise SystemExit(
             f"explain: {run_dir} holds no report.json -- nothing to explain "
             "(is this a completed run directory?)"
         )
     try:
-        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+        report = RunReport.model_validate_json(_artifacts.read_text(report_path))
     except (OSError, ValueError) as exc:
         raise SystemExit(
             f"explain: {report_path} could not be read as a run report: {exc}"
@@ -730,7 +748,7 @@ def explain_run(run_dir: Path) -> str:
             "Why this is safe: every declared effect was independently confirmed "
             "in a system of record before the run claimed success."
         )
-        if receipt.is_file():
+        if _artifacts.is_file(receipt):
             lines.append(f"Shareable receipt: {receipt}")
     elif outcome == "HALTED":
         lines.append(f"Why this is safe: {_halt_check_line(report)}.")
@@ -808,6 +826,6 @@ def explain_run(run_dir: Path) -> str:
                 f"record is checked, approve with {command('approve ' + quoted)}, "
                 f"then continue with {command('resume ' + quoted)}."
             )
-    if report_md.is_file():
+    if _artifacts.is_file(report_md):
         lines.append(f"Plain-language evidence: {report_md}")
     return "\n".join(lines)

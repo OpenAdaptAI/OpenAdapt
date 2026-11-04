@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import queue
 import sqlite3
 import threading
@@ -46,6 +47,11 @@ QUEUE_FILENAME = "worklist_queue.sqlite3"
 #: How long a worker waits for one pipelined read-back before it treats the
 #: item as an error (whether the save landed is then unknown) and stops.
 READBACK_WAIT_S = 600.0
+# A process worker: how long the child gets to close its real worker, to exit
+# after that, and between checks that its parent is still alive.
+_CHILD_CLOSE_S = 120.0
+_CHILD_EXIT_S = 10.0
+_PARENT_POLL_S = 2.0
 POOL_REPORT_FILENAME = "worklist_pool.json"
 POOL_REPORT_MD = "WORKLIST.md"
 
@@ -408,6 +414,52 @@ def _stops_run(state: str, detail: Mapping[str, Any], on_halt: str) -> bool:
     return True
 
 
+def _cleans_after(state: str, detail: Mapping[str, Any], on_halt: str) -> bool:
+    """Clean up only when this session will take another item: the item
+    halted before any write and that doesn't stop the run. After a stop, or
+    after any other outcome, the screen is left as it is (it is the evidence
+    a person needs)."""
+    return state not in SUCCESS_STATES and not _stops_run(state, detail, on_halt)
+
+
+def _clean_after_halt(
+    worker: Any, item_dir: Path
+) -> tuple[Optional[str], Optional[str]]:
+    """Run the worker's halt cleanup: ``(dirty, record_changed)``.
+
+    ``dirty`` is why the session can't take another item (None when clean).
+    ``record_changed`` is set when the records changed during the cleanup, or
+    whether they did is unknown: the item's write is then uncertain. A worker
+    without a cleanup keeps today's behavior (the next item re-enters from
+    the entry page). A cleanup that raises leaves the session dirty and the
+    write uncertain.
+    """
+    clean = getattr(worker, "clean_after_halt", None)
+    if not callable(clean):
+        return None, None
+    try:
+        result: Any = clean(item_dir / "halt-cleanup")
+    except Exception as exc:  # noqa: BLE001 - a failed cleanup is a dirty session
+        reason = f"the cleanup raised {type(exc).__name__}"
+        return reason, f"{reason}; whether it changed the records is unknown"
+    if result is None or isinstance(result, str):
+        return result, None
+    return getattr(result, "dirty", None), getattr(result, "record_changed", None)
+
+
+def _check_start(worker: Any, check_dir: Path) -> Optional[str]:
+    """The worker's start check on its fresh session; None when it passes or
+    the worker has none."""
+    check = getattr(worker, "check_start", None)
+    if not callable(check):
+        return None
+    try:
+        reason: Optional[str] = check(check_dir)
+    except Exception as exc:  # noqa: BLE001 - a failed check refuses the pool
+        return f"the start check raised {type(exc).__name__}"
+    return reason
+
+
 @dataclass
 class WorkerSummary:
     name: str
@@ -416,6 +468,12 @@ class WorkerSummary:
     busy_s: float = 0.0
     open_s: float = 0.0
     error: Optional[str] = None
+    #: Why this worker's session took no more items after a halt: the
+    #: cleanup didn't bring back the start screen, or it changed the records
+    #: (docs/HALT_CLEANUP.md).
+    dirty: Optional[str] = None
+    #: Why the start screen didn't show on this worker's fresh session.
+    start_check: Optional[str] = None
 
 
 @dataclass
@@ -504,6 +562,8 @@ class PoolReport:
             states = ", ".join(f"{k} {v}" for k, v in sorted(w.states.items())) or "-"
             if w.error:
                 states += f" (worker error: {w.error})"
+            if w.dirty:
+                states += f" (dirty: {w.dirty})"
             lines.append(
                 f"| {w.name} | {len(w.items)} | {states} | {w.busy_s:.1f} | {w.open_s:.1f} |"
             )
@@ -525,6 +585,9 @@ class PoolReport:
 
     def save(self, run_dir: Path) -> Path:
         run_dir.mkdir(parents=True, exist_ok=True)
+        from openadapt_flow import at_rest as _at_rest
+
+        _at_rest.unsealed_write("a worklist report", run_dir, refuse=False)
         path = run_dir / POOL_REPORT_FILENAME
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self.to_json(), indent=1, default=str))
@@ -549,6 +612,9 @@ def run_worklist_pool(
     workers share a session.
     """
 
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.hold_back_in_strict("a worklist pool report")
     refusal = policy.refusal()
     if refusal is None and len(workers) != policy.workers:
         refusal = f"{policy.workers} workers requested but {len(workers)} configured"
@@ -576,6 +642,7 @@ def run_worklist_pool(
     go = threading.Event()
     abort = threading.Event()
     fingerprints: dict[str, Optional[str]] = {}
+    dirty_workers: set[str] = set()
 
     def stop(reason: str, worker: str, idx: Optional[int]) -> None:
         queue.request_stop(reason, worker=worker, idx=idx)
@@ -597,7 +664,7 @@ def run_worklist_pool(
             s.states[state] = s.states.get(state, 0) + 1
         say(f"{worker.name}: item {idx} {state}")
 
-    def worker_main(worker: PoolWorker) -> None:
+    def run_worker(worker: PoolWorker) -> None:
         summary = summaries[worker.name]
         t0 = time.monotonic()
         try:
@@ -606,6 +673,15 @@ def run_worklist_pool(
         except Exception as exc:  # noqa: BLE001 - recorded, run aborted
             summary.error = f"sign-in failed: {type(exc).__name__}"
             abort.set()
+        else:
+            if policy.on_halt == ON_HALT_SKIP_UNWRITTEN:
+                # The session will be cleaned and checked after a halted item;
+                # a start screen that doesn't show on a fresh session would
+                # leave every worker dirty mid-run. Refuse before any item.
+                reason = _check_start(worker, run_dir / "start-check" / worker.name)
+                if reason is not None:
+                    summary.start_check = reason
+                    abort.set()
         summary.open_s = time.monotonic() - t0
         try:
             opened.wait()
@@ -695,7 +771,56 @@ def run_worklist_pool(
                     fut.add_done_callback(_stop_early)
                     pending.append((idx, fut, []))
                 else:
-                    finish(worker, idx, out.state, detail)
+                    dirty: Optional[str] = None
+                    if _cleans_after(out.state, detail, policy.on_halt) and (
+                        queue.stop_reason() is None
+                    ):
+                        # The item halted before any write and this session
+                        # takes the next one: close what it left open and
+                        # confirm the start screen first. The cleanup runs
+                        # before the item is recorded, so a cleanup that
+                        # saved (a "Close" that autosaves) changes the
+                        # outcome: the write is uncertain, never "unwritten".
+                        dirty, changed = _clean_after_halt(worker, item_dir)
+                        if changed is not None:
+                            detail = {
+                                **detail,
+                                "transaction_outcome": "RECONCILIATION_REQUIRED",
+                                "uncertainty": "effect_uncertain",
+                                "halt_reason": (
+                                    f"item {idx}: the records changed during the "
+                                    f"halt cleanup ({changed}); the write is "
+                                    "uncertain, so the item must not be retried "
+                                    "before a person reconciles it"
+                                ),
+                                "halt_cleanup": {"record_changed": changed},
+                            }
+                            state = RECONCILIATION_REQUIRED
+                        else:
+                            state = out.state
+                            if dirty is not None:
+                                detail = {**detail, "halt_cleanup": {"dirty": dirty}}
+                        finish(worker, idx, state, detail)
+                    else:
+                        finish(worker, idx, out.state, detail)
+                    if dirty is not None:
+                        summary.dirty = dirty
+                        say(
+                            f"{worker.name}: session dirty after item {idx} "
+                            f"({dirty}); it takes no more items"
+                        )
+                        with lock:
+                            dirty_workers.add(worker.name)
+                            last = len(dirty_workers) == len(workers)
+                        if last and any(i["state"] == PENDING for i in queue.items()):
+                            stop(
+                                "every worker's session is dirty after a halted "
+                                f"item (last: {dirty}); the remaining items "
+                                "were not run",
+                                worker.name,
+                                idx,
+                            )
+                        break
             while pending:
                 settle(pending.popleft())
         except Exception as exc:  # noqa: BLE001 - never leave peers running blind
@@ -703,6 +828,12 @@ def run_worklist_pool(
             stop(f"worker {worker.name} crashed", worker.name, None)
             while pending:
                 settle(pending.popleft())
+
+    def worker_main(worker: PoolWorker) -> None:
+        # Close the worker however the run goes, even when it is interrupted
+        # before the first claim: a process worker's child must not outlive it.
+        try:
+            run_worker(worker)
         finally:
             try:
                 worker.close()
@@ -734,6 +865,15 @@ def run_worklist_pool(
         for t in threads:
             t.join()
         failed = [s.name for s in summaries.values() if s.error]
+        unchecked = [s for s in summaries.values() if s.start_check]
+        if not failed and unchecked:
+            raise PoolRefusal(
+                "the start screen isn't showing on a fresh session ("
+                + "; ".join(f"{s.name}: {s.start_check}" for s in unchecked)
+                + "). With on_halt: skip_unwritten each worker must reach the "
+                "bundle's start screen from its entry page; set worklist.entry_url "
+                "or entry_bundle, or use on_halt: stop. Nothing was executed"
+            )
         raise PoolRefusal(
             f"sign-in failed for {', '.join(failed)}; nothing was executed"
         )
@@ -836,10 +976,31 @@ class FunctionWorker:
 # across processes).
 
 
-def _child_main(conn: Any, factory: str, kwargs: dict[str, Any]) -> None:
+def _exit_when_orphaned(parent_pid: int) -> None:
+    """Exit this child process when its parent is gone.
+
+    A closed pipe normally ends the child, but a parent killed outright (or a
+    pipe end inherited by another process) can leave it running for good.
+    """
+    while True:
+        time.sleep(_PARENT_POLL_S)
+        if os.getppid() != parent_pid:
+            os._exit(0)
+
+
+def _child_main(
+    conn: Any,
+    factory: str,
+    kwargs: dict[str, Any],
+    parent_pid: Optional[int] = None,
+) -> None:
     import importlib
     import uuid
 
+    if parent_pid is not None:
+        threading.Thread(
+            target=_exit_when_orphaned, args=(parent_pid,), daemon=True
+        ).start()
     module, _, attr = factory.partition(":")
     lock = threading.Lock()
 
@@ -950,9 +1111,12 @@ class ProcessWorker:
             else:
                 self._replies.put(msg)
 
-    def _call(self, *cmd: Any) -> tuple[Any, ...]:
+    def _call(self, *cmd: Any, timeout: Optional[float] = None) -> tuple[Any, ...]:
         self._conn.send(cmd)
-        reply = self._replies.get()
+        try:
+            reply = self._replies.get(timeout=timeout)
+        except queue.Empty:
+            raise RuntimeError(f"worker {self.name}: no reply to {cmd[0]!r}") from None
         if reply[0] == "error":
             raise RuntimeError(f"worker {self.name}: {reply[1]}")
         return reply
@@ -964,14 +1128,20 @@ class ProcessWorker:
         self._conn, child = ctx.Pipe()
         self._proc = ctx.Process(
             target=_child_main,
-            args=(child, self._factory, self._kwargs),
+            args=(child, self._factory, self._kwargs, os.getpid()),
             name=f"worklist-{self.name}",
             daemon=True,
         )
         self._proc.start()
         child.close()
         threading.Thread(target=self._read, daemon=True).start()
-        self._fingerprint = self._call("open")[1]
+        try:
+            self._fingerprint = self._call("open")[1]
+        except BaseException:
+            # The pool does not close a worker whose open failed, so end the
+            # child here rather than leave it running.
+            self._reap()
+            raise
 
     def session_fingerprint(self) -> Optional[str]:
         return self._fingerprint
@@ -982,13 +1152,30 @@ class ProcessWorker:
         pending = reply[4] if len(reply) > 4 else None
         return ItemRun(state=state, detail=detail, pending_readback=pending)
 
+    def _reap(self) -> None:
+        """End the child process whatever state it is in, and wait for it."""
+        proc, self._proc = self._proc, None
+        if proc is None:
+            return
+        try:
+            proc.join(timeout=_CHILD_EXIT_S)
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=_CHILD_EXIT_S)
+            if proc.is_alive():
+                proc.kill()
+                proc.join()
+        finally:
+            try:
+                self._conn.close()
+            except OSError:  # pragma: no cover
+                pass
+
     def close(self) -> None:
         if self._proc is None:
             return
         try:
             if self._proc.is_alive():
-                self._call("close")
+                self._call("close", timeout=_CHILD_CLOSE_S)
         finally:
-            self._proc.join(timeout=60)
-            if self._proc.is_alive():
-                self._proc.kill()
+            self._reap()

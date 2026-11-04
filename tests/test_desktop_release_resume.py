@@ -67,8 +67,10 @@ def test_a_dispatch_always_reaches_the_release_state_check() -> None:
     # With the workflow_run gate, the state step runs only for a candidate; a
     # dispatch is always one, so a resume never depends on the subject.
     run = _steps("gate")["Choose the commit whose checks decide the release"]["run"]
-    dispatch = run.split("\nelse\n", 1)[1]
-    assert "candidate=false" not in dispatch
+    # The only non-candidate is a history with no Desktop commit at all, which
+    # has nothing to resume.
+    assert run.count("candidate=false") == 1
+    assert "no commit on main changes packages/desktop" in run
     assert run.rstrip().endswith('echo "candidate=true" >> "${GITHUB_OUTPUT}"')
     state = _steps("gate")[STATE]
     assert state["if"] == "steps.subject.outputs.candidate == 'true'"
@@ -156,7 +158,7 @@ def test_a_resume_is_bound_to_the_tag_not_to_mains_current_tree() -> None:
         "Require that commit's Packages run and its desktop jobs to have passed",
         "Require that main has not changed Desktop since that commit",
     ):
-        assert gate[name]["if"] == "steps.state.outputs.release == 'true'", name
+        assert gate[name]["if"].startswith("steps.state.outputs.release == 'true'"), name
     # A resume leaves the release output empty, so nothing builds.
     assert _jobs()["gate"]["outputs"]["release"] == "${{ steps.fresh.outputs.release }}"
     branch = _resume_branch()

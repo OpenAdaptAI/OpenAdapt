@@ -110,6 +110,11 @@ class WindowCaptureStateV2(BaseModel):
     content_rect: tuple[int, int, int, int]
     fit_scale: float = Field(gt=0)
     on_screen: bool
+    # The window is pinned by id, so its title can change during recording
+    # (a browser retitles on navigation). Recordings made before pinning
+    # omit both fields.
+    pinned_title: str | None = None
+    title_change: dict[Literal["from", "to"], str] | None = None
 
     @model_validator(mode="after")
     def _closed_geometry(self) -> "WindowCaptureStateV2":

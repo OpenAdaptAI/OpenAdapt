@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "generated_for": "OpenAdapt skills registry: Odoo 18 Community, create a contact (synthetic data)",
+  "license": "LGPL-3.0 (Odoo Community); images pulled at run time, never stored in this repository",
+  "services": {
+    "odoo": "odoo:18.0@sha256:9668abacd894276ed009e8db7db1d1ffb8068af6982f76a3400ed0d68e40432d",
+    "postgres": "postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c"
+  },
+  "platforms": "both images publish linux/arm64 and linux/amd64",
+  "project": "openadapt-si-odoo",
+  "database": "oa"
+}

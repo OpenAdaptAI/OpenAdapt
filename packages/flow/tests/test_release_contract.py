@@ -69,10 +69,39 @@ def _stamped_manifest_bytes() -> bytes:
                 "path": path,
                 "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest(),
             }
-            for path in reviewed["artifacts"]
+            for path in sorted(set(reviewed["artifacts"]) | _approved_artifact_paths())
         ],
     }
     return (json.dumps(stamped, indent=2) + "\n").encode()
+
+
+def _approved_artifact_paths() -> set[str]:
+    """Tracked artifacts in approved folders, which the release stamp also lists."""
+    import subprocess
+
+    from scripts.check_release_consistency import (
+        PUBLIC_ARTIFACT_APPROVED_DIRECTORIES,
+        _artifact_inventory_candidate,
+    )
+
+    tracked = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(ROOT),
+            "ls-files",
+            "-z",
+            "--",
+            *PUBLIC_ARTIFACT_APPROVED_DIRECTORIES,
+        ],
+        check=True,
+        capture_output=True,
+    ).stdout.decode("utf-8")
+    return {
+        path
+        for path in tracked.split("\0")
+        if path and _artifact_inventory_candidate(path)
+    }
 
 
 SOURCE_BOUNDARY_EXCLUDES = {
@@ -84,6 +113,7 @@ SOURCE_BOUNDARY_EXCLUDES = {
     "/docs/validation/identity_roc.json",
     "/docs/validation/identity_roc.png",
     "/openadapt_flow/benchmark/reliability_corpus.py",
+    "/benchmark/harness/reliability_corpus.py",
     "/openadapt_flow/validation/adversary_corpus.py",
     "/openadapt_flow/validation/adversary_corpus_v2.py",
     "/openadapt_flow/validation/adversary_corpus_v3.py",
@@ -111,6 +141,7 @@ GENERATED_BENCHMARK_EXCLUDES = {
     "/benchmark/**/outputs",
     "/benchmark/**/recording-live*",
     "/benchmark/**/results-*",
+    "/benchmark/**/RESULTS-*",
     "/benchmark/**/state",
     "/benchmark/**/work",
     "/benchmark/**/_bundle",
@@ -1344,3 +1375,28 @@ def test_release_workflow_stamps_and_validates_flow_archives() -> None:
     build = workflow.index('python -m build "packages/$PACKAGE"')
     validate = workflow.index("check_release_consistency.py --validate-dist-dir")
     assert stamp < build < validate
+
+
+def test_approved_folders_pass_without_rows_and_are_still_stamped(
+    tmp_path: Path,
+) -> None:
+    """New evidence in an approved folder needs no row; elsewhere it still does."""
+    from scripts.check_release_consistency import build_release_artifact_inventory
+
+    write_public_artifact_inventory(tmp_path)
+    evidence = tmp_path / "benchmark/scoreboard/raw/run-1/seal.json"
+    evidence.parent.mkdir(parents=True)
+    evidence.write_text("{}\n")
+    validate_public_source_tree(tmp_path)
+
+    stamped = build_release_artifact_inventory(tmp_path)["artifacts"]
+    assert {
+        "path": "benchmark/scoreboard/raw/run-1/seal.json",
+        "sha256": hashlib.sha256(b"{}\n").hexdigest(),
+    } in stamped
+
+    stray = tmp_path / "benchmark/new_study/rows.json"
+    stray.parent.mkdir(parents=True)
+    stray.write_text("{}\n")
+    with pytest.raises(ValueError, match="unregistered"):
+        validate_public_source_tree(tmp_path)

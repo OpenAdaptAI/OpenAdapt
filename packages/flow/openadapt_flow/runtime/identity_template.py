@@ -97,6 +97,13 @@ def _signal_hash(salt: bytes, text: str) -> str:
     return hmac.new(salt, text.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+def salted_digest(salt_hex: str, text: str) -> str:
+    """Full salted digest of ``text`` under a stored salt (the env salt wins),
+    for identity evidence that is compared whole rather than per token."""
+
+    return _signal_hash(_salt_bytes(salt_hex), text)
+
+
 def new_salt_hex() -> str:
     """Fresh per-bundle salt (hex). Empty when an external env salt is set, so
     the bundle stores no salt and the hashes are one-way without the secret."""
@@ -217,6 +224,9 @@ def build_identity_template(
     structured_identity: Optional[str] = None,
     param_examples: Optional[dict[str, str]] = None,
     salt_hex: Optional[str] = None,
+    record_key: Optional[str] = None,
+    structured_row: Optional[bool] = None,
+    structured_ambiguous: bool = False,
 ) -> Optional[IdentityTemplate]:
     """Build a PHI-free identity template from the recorded plaintext band.
 
@@ -228,6 +238,15 @@ def build_identity_template(
         param_examples: ``workflow.params`` (param name -> demo value), used to
             mark which band tokens were a parameter value (param-mode re-anchor).
         salt_hex: Reuse an existing per-bundle salt; a fresh one otherwise.
+        record_key: The stable record id of the target's row at record time
+            (``IdentityCandidatesBackend``). Hashed in only when the
+            structured identity embeds no parameter: a parameterized row is a
+            different record on every run, so the demonstrated id is not the
+            run's.
+        structured_row: Whether the structured identity came from a record
+            row at teach time (None: unknown).
+        structured_ambiguous: Teach time saw a look-alike row no record id
+            separated.
 
     Returns:
         An :class:`IdentityTemplate`, or None when there is neither a usable
@@ -252,6 +271,10 @@ def build_identity_template(
             param_examples=param_examples,
             names=structured_params,
         )
+        if record_key and not structured_params:
+            tmpl.record_key = record_key_hash(salt, record_key)
+        tmpl.structured_row = structured_row
+        tmpl.teach_ambiguous = bool(structured_ambiguous)
 
     # Mirror the compiler's context_from_lines gate: a band shorter than
     # MIN_CONTEXT_CHARS is too generic to discriminate and is never stored (any
@@ -358,6 +381,22 @@ def build_identity_template(
 # ---------------------------------------------------------------------------
 
 
+def record_key_hash(salt: bytes, record_key: str) -> str:
+    """Full-width salted hash of a row's stable record id."""
+
+    return _signal_hash(salt, "record_key|" + record_key)
+
+
+def record_key_matches(tmpl: IdentityTemplate, live_key: Optional[str]) -> bool:
+    """Whether a live row's record id is the one the template recorded."""
+
+    if tmpl.record_key is None or not live_key:
+        return False
+    return hmac.compare_digest(
+        tmpl.record_key, record_key_hash(_salt_bytes(tmpl.salt), live_key)
+    )
+
+
 def _keyfn(salt: bytes):
     def canon(squashed: str) -> str:
         return _hash(salt, _id.ocr_canonical(squashed))
@@ -399,21 +438,49 @@ def _match_tokens_template(
         ):
             suspect_evidence[i] = True
 
-    # single-token equivalence
+    # single-token equivalence; a digit-bearing recorded token takes one
+    # observed copy of its own (parity with identity._match_tokens).
+    digit_used: set[int] = set()
     for i, t in enumerate(toks):
+        if not t.digit:
+            continue
         for j in range(no):
-            if t.c == obs_c[j]:
+            if t.r == obs_r[j] and j not in digit_used:
                 mark(i, obs_r[j], obs[j])
                 explained[j] = True
+                digit_used.add(j)
+                break
+    for i, t in enumerate(toks):
+        if t.digit and matched[i]:
+            continue
+        for j in range(no):
+            if t.c != obs_c[j] or (t.digit and j in digit_used):
+                continue
+            if (
+                not t.digit
+                and _id._has_digit(obs[j])
+                and not _id._alpha_dominated(obs[j])
+            ):
+                continue
+            mark(i, obs_r[j], obs[j])
+            explained[j] = True
+            if t.digit:
+                digit_used.add(j)
+                break
 
     # split: consecutive recorded tokens -> one observed token
+    digit_glued: set[int] = set()
     for ct in tmpl.concats:
         if all(matched[ct.i : ct.i + ct.size]):
             continue
+        window = toks[ct.i : ct.i + ct.size]
+        glued = any(a.digit and b.digit for a, b in zip(window, window[1:]))
         for j in range(no):
             if obs_c[j] == ct.c:
                 rawok = ct.r == obs_r[j]
                 for m in range(ct.i, ct.i + ct.size):
+                    if glued:
+                        digit_glued.add(m)
                     matched[m] = True
                     if rawok:
                         raw_matched[m] = True
@@ -433,6 +500,8 @@ def _match_tokens_template(
                 concat_raw = "".join(obs[j : j + size])
                 if canon(concat_raw) == t.c:
                     mark(i, raw(concat_raw), concat_raw)
+                    if _id._glues_digits(obs[j : j + size]):
+                        digit_glued.add(i)
                     for m in range(j, j + size):
                         explained[m] = True
                     done = True
@@ -443,6 +512,8 @@ def _match_tokens_template(
     # Unified glyph-vulnerable-identifier flag (raw match + recorded glyph shape)
     for i, t in enumerate(toks):
         if raw_matched[i] and t.glyph:
+            glyph_ambiguous_id[i] = True
+        if i in digit_glued:
             glyph_ambiguous_id[i] = True
     return matched, explained, raw_matched, suspect_evidence, glyph_ambiguous_id
 
@@ -478,7 +549,7 @@ def _contradicted_template(
     toks = tmpl.tokens
     contradicted = [False] * len(toks)
     unexplained_alpha = any(
-        not explained[j] and len(o) >= _id.MIN_BLOCK and _id._alpha_dominated(o)
+        not explained[j] and len(o) >= 2 and _id._alpha_dominated(o)
         for j, o in enumerate(obs)
     )
     unexplained_ident = any(
@@ -487,10 +558,19 @@ def _contradicted_template(
     obs_suffix_unexplained = any(
         not explained[j] and _id._is_generational_suffix(o) for j, o in enumerate(obs)
     )
+    unexplained_digit = any(
+        not explained[j] and _id._has_digit(o) for j, o in enumerate(obs)
+    )
     for i, t in enumerate(toks):
         if matched[i]:
             continue
         if t.gen:
+            contradicted[i] = True
+            continue
+        if t.digit and unexplained_digit:
+            # Parity with identity._contradicted: an unmatched digit-bearing
+            # recorded token (id, date, age) of any length, with another
+            # digit-bearing token unexplained in the live band.
             contradicted[i] = True
             continue
         if t.n < _id.MIN_BLOCK:
@@ -585,13 +665,26 @@ def _band_match_template(tmpl: IdentityTemplate, observed_text: str) -> _id.Band
         if not explained[j] and _id._name_shaped(raw_tok, obs[j])
     )
 
-    evidence_short = _id.identity_evidence_shortfall(
-        [_template_identity_kind(t, canon) for t in toks],
-        matched,
-        raw_matched,
-        # No plaintext to inspect: every token counts as look-alike, the
-        # conservative side of identity_evidence_shortfall's rule.
-        [True] * len(toks),
+    evidence_short = (
+        _id.identity_evidence_shortfall(
+            [_template_identity_kind(t, canon) for t in toks],
+            matched,
+            raw_matched,
+            # No plaintext to inspect: every token counts as look-alike, the
+            # conservative side of identity_evidence_shortfall's rule.
+            [True] * len(toks),
+        )
+        or any(not m and t.digit for t, m in zip(toks, matched))
+        or (
+            any(t.digit for t in toks)
+            and any(not explained[j] and _id._has_digit(o) for j, o in enumerate(obs))
+        )
+        or (
+            any(not m and t.alpha for t, m in zip(toks, matched))
+            and any(
+                not explained[j] and _id._alpha_dominated(o) for j, o in enumerate(obs)
+            )
+        )
     )
 
     return _id.BandMatch(

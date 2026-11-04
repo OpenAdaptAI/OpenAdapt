@@ -38,6 +38,9 @@ COMPONENTS = {
     "flow": ("openadapt-flow", "openadapt_flow", "OpenAdaptAI/openadapt-flow"),
     "agent": ("openadapt-agent", "openadapt_agent", "OpenAdaptAI/openadapt-agent"),
 }
+# Releases from before the fold are tagged v<version> in the standalone
+# repository above; later ones <package>-v<version> here, under packages/<dir>.
+MONOREPO_REPOSITORY = "OpenAdaptAI/OpenAdapt"
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 STABLE_VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
@@ -106,11 +109,19 @@ def load_component(manifest_path: Path, launcher_version: str, role: str) -> Com
     if entry.get("package") != package or entry.get("source") != "pypi":
         raise ValueError(f"{role} component is not the canonical published package")
     provenance = _object(entry.get("provenance"), f"{role} provenance")
-    tag = f"v{version}"
     commit = provenance.get("commit")
+    bound = (
+        provenance.get("repository"),
+        provenance.get("release_ref"),
+        provenance.get("source_root", ""),
+    )
+    releases = {
+        (MONOREPO_REPOSITORY, f"{package}-v{version}", f"packages/{role}"),
+        (repository, f"v{version}", ""),
+    }
+    tag = str(provenance.get("release_ref"))
     if (
-        provenance.get("repository") != repository
-        or provenance.get("release_ref") != tag
+        bound not in releases
         or not isinstance(commit, str)
         or HEX40.fullmatch(commit) is None
     ):

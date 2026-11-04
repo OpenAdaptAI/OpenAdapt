@@ -8,6 +8,12 @@ manifest.  Approval binds the complete derivative content and manifest hashes.
 The built-in local reviewer binds only to loopback and serves no remote assets.
 It is intentionally small: deployments can replace it with a richer desktop UI
 while retaining the manifest and approval contracts in this module.
+
+A sealed source (an encrypted recording or bundle), or any source in strict
+mode, gets a sealed derivative: a sealed set of kind ``sanitized``
+(:mod:`openadapt_flow.sealed_set`) whose files are decrypted in memory for the
+rescan, the review page and the upload, and an approved archive encrypted
+beside it. The scrubbing and approval checks are the same for both forms.
 """
 
 from __future__ import annotations
@@ -31,6 +37,7 @@ import zipfile
 from datetime import datetime, timezone
 from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from pathlib import Path, PurePosixPath
 from typing import Any, Optional
 from urllib.parse import parse_qs
@@ -40,7 +47,7 @@ try:  # Python 3.10 compatibility
 except ModuleNotFoundError:  # pragma: no cover - exercised on 3.10 CI
     import tomli as tomllib
 
-from openadapt_flow import privacy
+from openadapt_flow import artifacts, crypto, privacy, sealed_set
 
 MANIFEST_NAME = ".openadapt-sanitization.json"
 APPROVAL_NAME = ".openadapt-approval.json"
@@ -82,7 +89,50 @@ def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+#: Associated data of a sealed derivative's encrypted approved archive.
+_ARCHIVE_AAD = b"openadapt-flow/sanitized-archive"
+
+
+def _read(path: Path) -> bytes:
+    """An artifact file's bytes, decrypted in memory when it is sealed."""
+    return artifacts.open_read(path)
+
+
+def _read_text(path: Path) -> str:
+    """An artifact file's text, with the newline translation of
+    :meth:`pathlib.Path.read_text` for sealed files too."""
+    if not artifacts.is_sealed(path):
+        return path.read_text(encoding="utf-8")
+    text = artifacts.read_text(path)
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _write(path: Path, data: bytes) -> None:
+    """Write a derivative file: encrypted inside a sealed derivative."""
+    if not artifacts.is_sealed(path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    sealed_set.write_bytes(path, data)
+
+
+def _seals_derivative(source: Path) -> bool:
+    """A sealed source, or strict mode, makes a sealed derivative."""
+    from openadapt_flow import at_rest
+
+    return artifacts.is_sealed(source) or at_rest.strict()
+
+
+def _derivative_key(destination: Path) -> str:
+    passphrase = sealed_set.passphrase_for("sanitized")
+    if not passphrase:
+        raise SanitizationError(
+            sealed_set.missing_key_message(destination, "sanitized")
+        )
+    return passphrase
+
+
 def _sha256_file(path: Path) -> str:
+    if artifacts.is_sealed(path):
+        return _sha256_bytes(_read(path))
     digest = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
@@ -111,6 +161,13 @@ def _scrubber_version() -> str:
 def _source_files(src: Path) -> list[Path]:
     if not src.is_dir():
         raise SanitizationError(f"Artifact is not a directory: {src}")
+    if sealed_set.is_sealed(src):
+        # Logical names from the authenticated index; content decrypts later.
+        base = Path(os.path.abspath(src))
+        sealed_files = [src / p.relative_to(base) for p in artifacts.list_files(base)]
+        if not sealed_files:
+            raise SanitizationError(f"Artifact has no files: {src}")
+        return sealed_files
     files: list[Path] = []
     for path in sorted(src.rglob("*")):
         if path.is_symlink():
@@ -244,6 +301,7 @@ _RECORDING_STRUCTURAL_JSON_KEYS = frozenset(
         "pages_before",
         "param",
         "params",
+        "record_key",
         "role",
         "secret",
         "secret_params",
@@ -253,6 +311,8 @@ _RECORDING_STRUCTURAL_JSON_KEYS = frozenset(
         "source",
         "structural",
         "structured_identity",
+        "structured_ambiguous",
+        "structured_row",
         "t",
         "task_description",
         "text",
@@ -545,7 +605,7 @@ def _scrub_text_file(
     known_paths: set[str],
 ) -> tuple[bytes, list[dict[str, Any]]]:
     try:
-        raw = source.read_text(encoding="utf-8")
+        raw = _read_text(source)
     except UnicodeDecodeError as exc:
         raise SanitizationError(f"Text artifact is not valid UTF-8: {rel}") from exc
     if "\x00" in raw:
@@ -614,8 +674,11 @@ def _validate_structured_text(suffix: str, text: str, rel: str) -> None:
 
 
 def _forbidden_binary_type(path: Path) -> Optional[str]:
-    with path.open("rb") as fh:
-        head = fh.read(512)
+    if artifacts.is_sealed(path):
+        head = _read(path)[:512]
+    else:
+        with path.open("rb") as fh:
+            head = fh.read(512)
     signatures = (
         (b"SQLite format 3\x00", "SQLite database"),
         (b"PK\x03\x04", "ZIP/archive"),
@@ -645,7 +708,7 @@ def _scrub_image_file(
     *,
     preserve_stable_bytes: bool = False,
 ) -> tuple[bytes, list[dict[str, Any]]]:
-    original = source.read_bytes()
+    original = _read(source)
     first = privacy.scrub_image_bytes(original, force=True)
     first, applied = _redact_image_rectangles(first, redactions, rel)
     second = privacy.scrub_image_bytes(first, force=True)
@@ -703,16 +766,25 @@ def _image_metadata_free(data: bytes) -> bool:
 
 
 def _write_manifest(dest: Path, manifest: dict[str, Any]) -> None:
-    (dest / MANIFEST_NAME).write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write(
+        dest / MANIFEST_NAME,
+        (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8"),
     )
+
+
+def _derivative_files(dest: Path) -> list[Path]:
+    """Every file of a derivative, sorted; logical names when it is sealed."""
+    if artifacts.is_sealed(dest):
+        base = Path(os.path.abspath(dest))
+        return sorted(dest / p.relative_to(base) for p in artifacts.list_files(base))
+    return sorted(path for path in dest.rglob("*") if path.is_file())
 
 
 def _tree_rows(dest: Path) -> list[tuple[str, str]]:
     return [
         (str(path.relative_to(dest)), _sha256_file(path))
-        for path in sorted(dest.rglob("*"))
-        if path.is_file() and path.name not in _SYSTEM_FILES
+        for path in _derivative_files(dest)
+        if path.name not in _SYSTEM_FILES
     ]
 
 
@@ -732,8 +804,8 @@ def _reseal_sanitized_bundle(bundle: Path) -> None:
         provenance.expires_at = None
     workflow.save(bundle)
     workflow_py = bundle / "workflow.py"
-    if workflow_py.is_file():
-        workflow_py.write_text(render_workflow_py(workflow), encoding="utf-8")
+    if artifacts.is_file(workflow_py):
+        _write(workflow_py, render_workflow_py(workflow).encode("utf-8"))
 
 
 _RECORDING_FRAME_PATH = re.compile(
@@ -778,13 +850,13 @@ def sanitize_artifact(
     if source == destination or source in destination.parents:
         raise SanitizationError("Destination must not be the source or inside it")
     files = _source_files(source)
-    if kind == "bundle" and (source / "workflow.py").is_file():
+    if kind == "bundle" and artifacts.is_file(source / "workflow.py"):
         try:
             from openadapt_flow.compiler.codegen import render_workflow_py
             from openadapt_flow.ir import Workflow
 
             expected = render_workflow_py(Workflow.load(source))
-            actual = (source / "workflow.py").read_text(encoding="utf-8")
+            actual = _read_text(source / "workflow.py")
         except Exception as exc:  # noqa: BLE001 - normalize bundle validation
             raise SanitizationError(
                 f"Cannot validate generated workflow.py: {exc}"
@@ -794,7 +866,7 @@ def sanitize_artifact(
                 "workflow.py is not the deterministic rendering of workflow.json"
             )
     canonical_bundle = kind == "bundle" and all(
-        (source / name).is_file()
+        artifacts.is_file(source / name)
         for name in ("workflow.json", "workflow.py", "manifest.json")
     )
     scrubber = privacy.get_scrubber()
@@ -808,8 +880,26 @@ def sanitize_artifact(
             raise SanitizationError(f"Destination already exists: {destination}")
         shutil.rmtree(destination)
     redactions = _load_redactions(redactions_file)
-    staging = Path(tempfile.mkdtemp(prefix="openadapt-sanitize-")) / "artifact"
-    staging.mkdir(parents=True)
+    sealed = _seals_derivative(source)
+    writer: Optional[sealed_set.SealedSetWriter] = None
+    if sealed:
+        # A sealed derivative is staged beside its destination as a sealed
+        # set (0700), so only ciphertext reaches the disk, then renamed.
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        staging_root = Path(
+            tempfile.mkdtemp(
+                prefix=f".{destination.name}.", dir=str(destination.parent)
+            )
+        )
+        staging = staging_root / "artifact"
+        writer = sealed_set.SealedSetWriter(
+            staging, "sanitized", _derivative_key(destination)
+        )
+        sealed_set.register_writer(writer)
+    else:
+        staging_root = Path(tempfile.mkdtemp(prefix="openadapt-sanitize-"))
+        staging = staging_root / "artifact"
+        staging.mkdir(parents=True)
     entries: list[dict[str, Any]] = []
     semantics = "preserved"
     try:
@@ -849,7 +939,7 @@ def sanitize_artifact(
                 # Both files are deterministic derivatives of workflow.json.
                 # Preserve them byte-for-byte when workflow data is unchanged;
                 # a load-bearing transform reseals/regenerates them below.
-                output, manual = path.read_bytes(), []
+                output, manual = _read(path), []
                 handler = "utf8-text"
             elif suffix in _TEXT_SUFFIXES:
                 output, manual = _scrub_text_file(
@@ -876,9 +966,7 @@ def sanitize_artifact(
                     "archive, encrypted, executable, and unknown files require a "
                     "deployment-specific sanitizer and remain local."
                 )
-            target = staging / safe_rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(output)
+            _write(staging / safe_rel, output)
             source_hash = _sha256_file(path)
             derivative_hash = _sha256_bytes(output)
             changed = renamed or source_hash != derivative_hash
@@ -943,14 +1031,19 @@ def sanitize_artifact(
             ],
         }
         _write_manifest(staging, manifest)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(staging), str(destination))
+        if writer is not None:
+            writer.finalize()
+            sealed_set.unregister_writer(writer)
+            writer = None
+            os.rename(staging, destination)
+        else:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(staging), str(destination))
         return manifest
-    except Exception:
-        shutil.rmtree(staging.parent, ignore_errors=True)
-        raise
     finally:
-        shutil.rmtree(staging.parent, ignore_errors=True)
+        if writer is not None:
+            sealed_set.unregister_writer(writer)
+        shutil.rmtree(staging_root, ignore_errors=True)
 
 
 def load_and_verify_derivative(destination: Path) -> dict[str, Any]:
@@ -962,10 +1055,10 @@ def load_and_verify_derivative(destination: Path) -> dict[str, Any]:
                 f"Derivative contains an unreviewed symlink: {path.relative_to(destination)}"
             )
     manifest_path = destination / MANIFEST_NAME
-    if not manifest_path.is_file():
+    if not artifacts.is_file(manifest_path):
         raise SanitizationError(f"No {MANIFEST_NAME} in {destination}")
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(_read_text(manifest_path))
     except json.JSONDecodeError as exc:
         raise SanitizationError(f"Invalid sanitization manifest: {exc}") from exc
     if manifest.get("schema_version") != SCHEMA_VERSION:
@@ -1003,7 +1096,7 @@ def _rescan_derivative(destination: Path) -> dict[str, Any]:
     for entry in manifest["files"]:
         path = destination / entry["path"]
         if entry["handler"] == "utf8-text":
-            current_text = path.read_text(encoding="utf-8")
+            current_text = _read_text(path)
             if manifest["kind"] == "bundle" and entry["path"] in {
                 "workflow.py",
                 "manifest.json",
@@ -1048,7 +1141,7 @@ def _rescan_derivative(destination: Path) -> dict[str, Any]:
                     f"Approval rescan found a remaining identifier in {entry['path']}"
                 )
         elif entry["handler"] == "image-ocr-redaction":
-            current_bytes = path.read_bytes()
+            current_bytes = _read(path)
             rescanned_bytes = privacy.scrub_image_bytes(current_bytes, force=True)
             if not _image_pixels_equal(rescanned_bytes, current_bytes):
                 raise SanitizationError(
@@ -1066,15 +1159,35 @@ def approved_archive_path(destination: Path) -> Path:
     return destination.parent / f"{destination.name}.approved.zip"
 
 
-def _write_deterministic_archive(destination: Path) -> Path:
-    """Freeze the reviewed bytes with stable names, order, metadata, and time."""
+def read_approved_archive(destination: Path) -> bytes:
+    """The approved archive's bytes, decrypted in memory for a sealed
+    derivative. These are the bytes the approval hashes and push uploads."""
+    destination = Path(destination)
+    raw = approved_archive_path(destination).read_bytes()
+    if not sealed_set.is_sealed(destination):
+        return raw
+    if not crypto.is_encrypted(raw):
+        raise SanitizationError(
+            "The approved archive of an encrypted derivative is not encrypted"
+        )
+    try:
+        return crypto.decrypt_bytes(raw, _derivative_key(destination), aad=_ARCHIVE_AAD)
+    except crypto.CryptoError as exc:
+        raise SanitizationError(f"Approved archive cannot be opened: {exc}") from exc
+
+
+def _write_deterministic_archive(destination: Path) -> bytes:
+    """Freeze the reviewed bytes with stable names, order, metadata, and time.
+
+    The zip is built in memory. A sealed derivative's archive is encrypted
+    before it is written; the approval hashes the zip bytes either way."""
     archive = approved_archive_path(destination)
-    tmp = archive.with_suffix(".zip.tmp")
+    buffer = BytesIO()
     with zipfile.ZipFile(
-        tmp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+        buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
     ) as zf:
-        for path in sorted(destination.rglob("*")):
-            if not path.is_file() or path.name == APPROVAL_NAME:
+        for path in _derivative_files(destination):
+            if path.name == APPROVAL_NAME:
                 continue
             rel = path.relative_to(destination).as_posix()
             info = zipfile.ZipInfo(rel, date_time=(1980, 1, 1, 0, 0, 0))
@@ -1083,12 +1196,20 @@ def _write_deterministic_archive(destination: Path) -> Path:
             info.create_system = 3
             zf.writestr(
                 info,
-                path.read_bytes(),
+                _read(path),
                 compress_type=zipfile.ZIP_DEFLATED,
                 compresslevel=9,
             )
+    data = buffer.getvalue()
+    stored = data
+    if sealed_set.is_sealed(destination):
+        stored = crypto.encrypt_bytes(
+            data, _derivative_key(destination), aad=_ARCHIVE_AAD
+        )
+    tmp = archive.with_suffix(".zip.tmp")
+    tmp.write_bytes(stored)
     os.replace(tmp, archive)
-    return archive
+    return data
 
 
 def approve_derivative(
@@ -1128,8 +1249,8 @@ def approve_derivative(
         }
         manifest["approval_verification"] = existing_verification
         _write_manifest(destination, manifest)
-    archive = _write_deterministic_archive(destination)
-    archive_hash = _sha256_file(archive)
+    archive_bytes = _write_deterministic_archive(destination)
+    archive_hash = _sha256_bytes(archive_bytes)
     approval = {
         "schema_version": SCHEMA_VERSION,
         "approved_at": _utc_now(),
@@ -1139,7 +1260,7 @@ def approve_derivative(
         "manifest_sha256": _manifest_hash(manifest),
         "derivative_tree_sha256": manifest["derivative_tree_sha256"],
         "approved_derivative_sha256": archive_hash,
-        "approved_archive_size_bytes": archive.stat().st_size,
+        "approved_archive_size_bytes": len(archive_bytes),
         "verification": {
             "verified_at": existing_verification["verified_at"],
             "method": "full-stable-rescan",
@@ -1148,8 +1269,9 @@ def approve_derivative(
             "unresolved": 0,
         },
     }
-    approval_path(destination).write_text(
-        json.dumps(approval, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    _write(
+        approval_path(destination),
+        (json.dumps(approval, indent=2, sort_keys=True) + "\n").encode("utf-8"),
     )
     return approval
 
@@ -1158,7 +1280,7 @@ def load_valid_approval(destination: Path) -> dict[str, Any]:
     destination = Path(destination)
     manifest = load_and_verify_derivative(destination)
     path = approval_path(destination)
-    if not path.is_file():
+    if not artifacts.is_file(path):
         archive = approved_archive_path(destination)
         if archive.is_file():
             # The approval binds the archive's SHA-256, so `approve-sanitized`
@@ -1177,7 +1299,7 @@ def load_valid_approval(destination: Path) -> dict[str, Any]:
             "locally, then approve it."
         )
     try:
-        approval = json.loads(path.read_text(encoding="utf-8"))
+        approval = json.loads(_read_text(path))
     except json.JSONDecodeError as exc:
         raise SanitizationError(f"Invalid approval: {exc}") from exc
     if approval.get("manifest_sha256") != _manifest_hash(manifest):
@@ -1187,9 +1309,10 @@ def load_valid_approval(destination: Path) -> dict[str, Any]:
     archive = approved_archive_path(destination)
     if not archive.is_file():
         raise SanitizationError("Approved immutable archive is missing")
-    if approval.get("approved_derivative_sha256") != _sha256_file(archive):
+    archive_bytes = read_approved_archive(destination)
+    if approval.get("approved_derivative_sha256") != _sha256_bytes(archive_bytes):
         raise SanitizationError("Approved immutable archive changed")
-    if approval.get("approved_archive_size_bytes") != archive.stat().st_size:
+    if approval.get("approved_archive_size_bytes") != len(archive_bytes):
         raise SanitizationError("Approved immutable archive size changed")
     return approval
 
@@ -1538,7 +1661,7 @@ def build_ingest_manifest(destination: Path) -> dict[str, Any]:
 def _update_entry(destination: Path, rel: str, redaction: dict[str, Any]) -> None:
     manifest_path = destination / MANIFEST_NAME
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(_read_text(manifest_path))
     except (OSError, json.JSONDecodeError) as exc:
         raise SanitizationError(f"Cannot update sanitization manifest: {exc}") from exc
     entry = next((item for item in manifest["files"] if item["path"] == rel), None)
@@ -1558,7 +1681,7 @@ def _update_entry(destination: Path, rel: str, redaction: dict[str, Any]) -> Non
     manifest["runtime_semantics_validated"] = False
     manifest["trusted_boundary_required_at_runtime"] = True
     manifest.pop("approval_verification", None)
-    approval_path(destination).unlink(missing_ok=True)
+    sealed_set.unlink(approval_path(destination), missing_ok=True)
     approved_archive_path(destination).unlink(missing_ok=True)
     _write_manifest(destination, manifest)
 
@@ -1580,7 +1703,7 @@ def _authorized_review_path(
     if entry is None:
         raise SanitizationError(f"File is not an authorized {handler} artifact: {rel}")
     path = (destination / entry["path"]).resolve()
-    if destination not in path.parents or not path.is_file():
+    if destination not in path.parents or not artifacts.is_file(path):
         raise SanitizationError(f"Review path escapes the derivative: {rel}")
     return path, entry
 
@@ -1592,11 +1715,11 @@ def add_manual_text_redaction(
         raise SanitizationError("Manual text redaction cannot be empty")
     destination = Path(destination)
     path, _ = _authorized_review_path(destination, rel, handler="utf8-text")
-    text = path.read_text(encoding="utf-8")
+    text = _read_text(path)
     count = text.count(literal)
     if count == 0:
         raise SanitizationError(f"Manual redaction text was not found in {rel}")
-    path.write_text(text.replace(literal, replacement), encoding="utf-8")
+    _write(path, text.replace(literal, replacement).encode("utf-8"))
     _update_entry(
         destination,
         rel,
@@ -1616,11 +1739,11 @@ def add_manual_image_redaction(
     destination = Path(destination)
     path, _ = _authorized_review_path(destination, rel, handler="image-ocr-redaction")
     output, applied = _redact_image_rectangles(
-        path.read_bytes(),
+        _read(path),
         [{"file": rel, "x": x, "y": y, "width": width, "height": height}],
         rel,
     )
-    path.write_bytes(output)
+    _write(path, output)
     redaction = dict(applied[0])
     redaction["reviewer_added"] = True
     _update_entry(destination, rel, redaction)
@@ -1645,8 +1768,8 @@ def render_review_html(source: Path, destination: Path, csrf_token: str) -> str:
         sanitized = destination / entry["path"]
         rel = html.escape(entry["path"])
         if entry["handler"] == "utf8-text":
-            before = html.escape(original.read_text(encoding="utf-8")[:200_000])
-            after = html.escape(sanitized.read_text(encoding="utf-8")[:200_000])
+            before = html.escape(_read_text(original)[:200_000])
+            after = html.escape(_read_text(sanitized)[:200_000])
             preview = f"<div class='pair'><pre>{before}</pre><pre>{after}</pre></div>"
             form = f"""
               <form method='post' action='/redact-text'>
@@ -1658,8 +1781,8 @@ def render_review_html(source: Path, destination: Path, csrf_token: str) -> str:
               </form>"""
         else:
             mime = mimetypes.guess_type(sanitized.name)[0] or "image/png"
-            before = base64.b64encode(original.read_bytes()).decode("ascii")
-            after = base64.b64encode(sanitized.read_bytes()).decode("ascii")
+            before = base64.b64encode(_read(original)).decode("ascii")
+            after = base64.b64encode(_read(sanitized)).decode("ascii")
             preview = (
                 "<div class='pair'>"
                 f"<img src='data:{mime};base64,{before}' alt='original {rel}'>"

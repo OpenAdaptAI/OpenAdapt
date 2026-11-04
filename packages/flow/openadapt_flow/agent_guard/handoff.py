@@ -242,8 +242,10 @@ def handoff(
 
     from openadapt_flow.compile_agent.pipeline import (
         PROPOSED_FILE,
+        RUN1_VALUES_FILE,
         FirstRunCompiler,
         _write_json,
+        _write_run1_values,
         check_run_record,
     )
     from openadapt_flow.compiler.compile import compile_recording
@@ -296,6 +298,9 @@ def handoff(
     shutil.copytree(source, kept)
     for stale in (PROPOSED_FILE, "verify.yaml", "record_checks.json", "admission.json"):
         (compiler.out_dir / stale).unlink(missing_ok=True)
+    # The guarded run is run 1: admission refuses canaries that repeat its
+    # input values, so keep their salted digests as compile-agent's run 1 does.
+    _write_run1_values(compiler.out_dir / RUN1_VALUES_FILE, values)
 
     # 1. Compile, as compile-agent does: distilled, effects mined from the
     # record reads the recording kept.
