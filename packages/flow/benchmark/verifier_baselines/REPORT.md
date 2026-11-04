@@ -14,20 +14,21 @@ ledger are run-level evidence and are kept in the private corpus
   both fault sets.** On effect_e2e's 72 bad saves, a port of Microsoft's
   Universal Verifier flagged 18 when it saw what the run saw, and 44 when it
   was also shown the patient's chart page. Our whole-database verifier flagged
-  all 72. On the Medplum agent runs the judge flagged 22 of 61 bad saves; ours
-  flagged 60.
-- **API read-back catches wrong values as well as we do, and with no false
-  stops.** On Medplum's wrong-value saves, read-back flagged 10 of 10 bad ones
-  and confirmed every good one; our verifier also flagged 10 of 10 but stopped
-  29 good ones. Read-back misses everything off the record it reads:
-  writes to other records, duplicates, a record that landed despite an error,
-  and late writes (1 of 51 such bad saves on Medplum, against our 50; 0 of 9 on
-  effect_e2e).
-- **Our verifier's problem on Medplum is false stops, not misses.** It
-  confirmed 47 of 140 good saves (34%). Read-back confirmed 140. The
-  operation-semantics contracts from the verifier-specificity work raise this
-  only to 49 of 140 on these runs. Until specificity improves, the
-  verifier is a coarse alarm in a web app like Medplum.
+  all 72. On the Medplum agent runs the judge flagged 22 of 61 bad saves and
+  ours 55; the two confirmed good saves at similar rates (97 and 103 of 140).
+- **API read-back catches wrong values as well as we do, and with fewer
+  false stops.** On Medplum's wrong-value saves, read-back flagged 10 of 10
+  bad ones and confirmed all 37 good ones; our verifier also flagged 10 of 10
+  but stopped 11 good ones. Read-back misses everything off the record it
+  reads: writes to other records, duplicates, a record that landed despite an
+  error, and wrong patient (1 of 45 such bad saves on Medplum, against our
+  45; 0 of 9 on effect_e2e).
+- **Our verifier stops 37 of 140 good Medplum saves (74% confirmed); read-back
+  stops none.** That is the price of the off-record catches. Most of the 37
+  are wrong-value, wrong-patient, duplicate and lost-response cases where the
+  end state was acceptable, plus 6 clean runs. The exploratory "either"
+  operations rule from the verifier-specificity study confirms 121 of 140
+  with the same 55 catches.
 
 ## The three checks
 
@@ -49,9 +50,9 @@ ledger are run-level evidence and are kept in the private corpus
 3. **OpenAdapt's verifier.** On effect_e2e, the public `verify_write` API
    with a frame over the whole SQLite database. On Medplum, the
    `ensure_record` contract with the whole-store frame, replayed offline on
-   each run's frozen server state (verifier-specificity commit 2fe6b6e98),
-   because 163 of the 222 recorded verdicts were "unreadable: HTTP 401" from
-   an expired read token (DEVIATIONS.md 3).
+   each run's frozen server state (verifier-specificity commit debdfe351,
+   PR #1795), because 163 of the 222 recorded verdicts were "unreadable:
+   HTTP 401" from an expired read token (DEVIATIONS.md 3 and 6).
 
 ## effect_e2e: 72 bad saves, 18 good
 
@@ -96,16 +97,27 @@ and are not scored. Intervals are case-clustered bootstrap, 95%.
 
 | Check | Bad saves flagged | Good saves confirmed |
 |---|---|---|
-| OpenAdapt verifier (replayed) | **60/61** = 98% (95–100) | 47/140 = 34% (25–41) |
+| OpenAdapt verifier (contracts main, replayed) | **55/61** = 90% (69–100) | 103/140 = 74% (60–85) |
 | API read-back | 11/61 = 18% (5–38) | **140/140** = 100% |
 | UV-class judge | 22/61 = 36% (23–49) | 97/140 = 69% (59–79) |
-| OpenAdapt verifier, operation-semantics contracts | 60/61 | 49/140 = 35% (26–44) |
+
+Other columns of our verifier, all with the same 55/61 catches:
+operations contracts as pre-registered by the verifier-specificity study,
+97/140 confirmed; its exploratory "either" rule, 121/140. The replay as
+first registered, before that study's replay fixes (DEVIATIONS.md 6), gave
+60/61 and 47/140; the recorded field, broken by the expired token, 60/61 and
+28/140.
+
+All 6 of our misses are late_collateral: a stray write that the harness
+makes after the check finishes, which a single check cannot see by design.
+The first-registered replay "caught" 5 of them only because its window ran
+past the harness's next step.
 
 Paired, exact McNemar: on bad saves our verifier was right where read-back
-was wrong 49 times and never the other way (p < 1e-6); against the judge,
-39 to 1 (p < 1e-6). On good saves read-back was right where we were wrong
-93 times, the judge 68 times; we were right where the judge was wrong 18
-times.
+was wrong 44 times and never the other way (p < 1e-6); against the judge,
+36 to 3 (p < 1e-6). On good saves read-back was right where we were wrong
+37 times (p < 1e-6). Against the judge on good saves, 34 to 28 our way
+(p = 0.53): no detectable difference.
 
 ### By fault class
 
@@ -114,36 +126,41 @@ times.
 | collateral (another record changed) | 24/24 | 24 | 0 | 9 |
 | duplicate | 11/18 | 17 | 0 | 4 |
 | lost_response (landed despite an error) | 8/12 | 12 | 0 | 2 |
-| late_collateral (stray write after the check) | 6/6 | 5 | 0 | 3 |
+| late_collateral (stray write after the check) | 6/6 | 0 | 0 | 3 |
 | wrong_patient | 2/11 | 11 | 1 | 5 |
-| wrong_value | 10/47 | 39 | 10 | 15 |
-| clean | 0/60 | 33 | 0 | 17 |
-| other_user (another user's legitimate edit) | 0/17 | 8 | 0 | 10 |
-| refused_write | 0/6 | 4 | 0 | 0 |
+| wrong_value | 10/47 | 21 | 10 | 15 |
+| clean | 0/60 | 6 | 0 | 17 |
+| other_user (another user's legitimate edit) | 0/17 | 0 | 0 | 10 |
+| refused_write | 0/6 | 1 | 0 | 0 |
 
 "Flagged" counts every run flagged in the class, good and bad; in a class
 with no bad runs every flag is a false stop.
 
 - **Where read-back matches us: wrong values.** Both flag all 10 bad
-  wrong-value saves. Read-back stops none of the 37 good ones; we stop 29.
+  wrong-value saves. Read-back stops none of the 37 good ones; we stop 11.
   If the buyer's risk is "the record says the wrong thing", read-back is as
-  sensitive as our verifier here and far more specific.
-- **Where only we catch it: anything off the named record.** Writes to
-  another record, duplicates, saves that landed after an error, and stray
-  late writes. Read-back flagged 1 of these 51 bad saves, the judge 18, and
-  we flagged 50 (the miss is a late write that landed after the check, as
-  designed).
+  sensitive as our verifier here and more specific.
+- **Where only we catch it: harm off the named record that has landed by the
+  check.** Writes to another record, duplicates, saves that landed after an
+  error, and the wrong patient: read-back flagged 1 of these 45 bad saves,
+  the judge 15, and we flagged all 45.
+- **Late writes need a second look.** No check here caught a write that lands
+  after it; the judge flagged 3 of 6 only from the agents' own replies.
 - **Off the record, the judge catches some harm and read-back almost none.**
   It flagged 9 of 24 collateral saves. It can also ignore a plain warning: in
   claude r1 P09 the agent said another patient's "Last Updated" time had
   changed and it could not explain why; the judge's reasoning does not
   mention it, and it confirmed the run (rubric 0.93, no side-effect
   penalty).
-- **Our false stops are in clean, wrong-value, other-user and duplicate
-  cases** (93 of 140 good saves flagged). The verifier-specificity session
-  is working on the cause (Medplum's forms save a new record as a create
-  followed by updates); its first operation-semantics contracts confirm a net 2
-  more good saves.
+- **Our 37 false stops:** wrong_value 11, wrong_patient 9, duplicate 6,
+  clean 6, lost_response 4, refused_write 1. Outside the clean runs they have
+  two causes. In 22, the agent noticed the fault and corrected its record
+  afterwards, so the end state is right but a version in between was not;
+  the contract refuses any wrong intermediate version. In 9, the agent
+  created a second record (the duplicate or lost-response fault) and the
+  oracle accepts the end state. Whether a corrected or deduplicated record
+  should pass is a policy choice, not a reading error. The judge's 43 false
+  stops are clean 17, wrong_value 11, other_user 10 and wrong_patient 5.
 
 ## What this means for the product
 
@@ -154,10 +171,13 @@ with no bad runs every flag is a false stop.
 2. **Against screen and trajectory judges the gain is broad.** A judge
    cannot see what the screen does not show; given the chart page it still
    misread a blank field and could not see deletions or other tables.
-3. **Specificity is the gap to close on real web apps.** 34% of good saves
-   confirmed on Medplum would bury a reviewer. effect_e2e's 100% (oracle
-   only) shows the frame itself can be specific when the app writes one row
-   per save; Medplum's multi-request saves are the problem.
+3. **Specificity is the cost to keep shrinking.** On Medplum we confirm 74%
+   of good saves, against read-back's 100%: a quarter of good agent saves
+   would still reach a person. The exploratory "either" operations rule
+   reaches 86% with no lost catches; effect_e2e's 100% (oracle only) shows
+   the frame can be fully specific when the app writes one row per save.
+4. **A single check misses late writes.** All our Medplum misses are writes
+   after the check; a scheduled re-read closes that.
 
 ## Limits
 
@@ -194,5 +214,6 @@ python -m benchmark.verifier_baselines.score
 ```
 
 The Medplum verifier column comes from
-`benchmark.fhir_medplum.leaderboard_rescore.rescore` at 2fe6b6e98
-(`medplum/verifier_rescore_*.json` in the corpus folder).
+`benchmark.fhir_medplum.leaderboard_rescore` at debdfe351 (PR #1795):
+its `results/rescore-*.json`, copied to `medplum/verifier_rescore_*.json` in
+the corpus folder.

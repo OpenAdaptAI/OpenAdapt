@@ -56,51 +56,59 @@ Runs not scored (went to a person under every check): {'claude:not_done': 11, 'o
 
 | Check | Sensitivity (bad saves flagged) | Specificity (good saves confirmed) |
 |---|---|---|
-| OpenAdapt verifier (contracts main, replayed) | 60/61 = 98.4% (94.8–100.0) | 47/140 = 33.6% (25.0–41.3) |
+| OpenAdapt verifier (contracts main, replayed) | 55/61 = 90.2% (69.0–100.0) | 103/140 = 73.6% (59.9–84.9) |
 | API read-back | 11/61 = 18.0% (4.6–38.2) | 140/140 = 100.0% (100.0–100.0) |
 | UV-class judge | 22/61 = 36.1% (23.2–49.0) | 97/140 = 69.3% (59.0–79.4) |
+| OpenAdapt verifier (contracts operations, replayed) | 55/61 = 90.2% (69.0–100.0) | 97/140 = 69.3% (51.8–85.0) |
+| OpenAdapt verifier (operations rule 'either', exploratory) | 55/61 = 90.2% (69.0–100.0) | 121/140 = 86.4% (74.2–96.4) |
+| OpenAdapt verifier, replay as first registered (window too long) | 60/61 = 98.4% (94.8–100.0) | 47/140 = 33.6% (25.0–41.3) |
 | OpenAdapt verifier as recorded (401 fault) | 60/61 = 98.4% (94.8–100.0) | 28/140 = 20.0% (14.6–25.6) |
-| OpenAdapt verifier (contracts operations, replayed) | 60/61 = 98.4% (94.8–100.0) | 49/140 = 35.0% (25.5–44.4) |
 
 ### claude
 
 | Check | Sensitivity (bad saves flagged) | Specificity (good saves confirmed) |
 |---|---|---|
-| OpenAdapt verifier (contracts main, replayed) | 28/28 = 100.0% (100.0–100.0) | 14/72 = 19.4% (11.8–27.3) |
+| OpenAdapt verifier (contracts main, replayed) | 25/28 = 89.3% (67.9–100.0) | 46/72 = 63.9% (46.9–78.9) |
 | API read-back | 8/28 = 28.6% (5.0–55.6) | 72/72 = 100.0% (100.0–100.0) |
 | UV-class judge | 4/28 = 14.3% (3.7–25.9) | 67/72 = 93.1% (84.9–100.0) |
+| OpenAdapt verifier (contracts operations, replayed) | 25/28 = 89.3% (67.9–100.0) | 55/72 = 76.4% (60.0–89.6) |
+| OpenAdapt verifier (operations rule 'either', exploratory) | 25/28 = 89.3% (67.9–100.0) | 64/72 = 88.9% (77.6–97.4) |
+| OpenAdapt verifier, replay as first registered (window too long) | 28/28 = 100.0% (100.0–100.0) | 14/72 = 19.4% (11.8–27.3) |
 | OpenAdapt verifier as recorded (401 fault) | 28/28 = 100.0% (100.0–100.0) | 7/72 = 9.7% (4.0–16.2) |
-| OpenAdapt verifier (contracts operations, replayed) | 28/28 = 100.0% (100.0–100.0) | 22/72 = 30.6% (21.6–39.7) |
 
 ### openai
 
 | Check | Sensitivity (bad saves flagged) | Specificity (good saves confirmed) |
 |---|---|---|
-| OpenAdapt verifier (contracts main, replayed) | 32/33 = 97.0% (90.9–100.0) | 33/68 = 48.5% (36.8–59.4) |
+| OpenAdapt verifier (contracts main, replayed) | 30/33 = 90.9% (72.7–100.0) | 57/68 = 83.8% (67.2–97.1) |
 | API read-back | 3/33 = 9.1% (0.0–27.3) | 68/68 = 100.0% (100.0–100.0) |
 | UV-class judge | 18/33 = 54.5% (33.3–75.8) | 30/68 = 44.1% (26.9–60.9) |
+| OpenAdapt verifier (contracts operations, replayed) | 30/33 = 90.9% (72.7–100.0) | 42/68 = 61.8% (40.3–80.6) |
+| OpenAdapt verifier (operations rule 'either', exploratory) | 30/33 = 90.9% (72.7–100.0) | 57/68 = 83.8% (67.2–97.1) |
+| OpenAdapt verifier, replay as first registered (window too long) | 32/33 = 97.0% (90.9–100.0) | 33/68 = 48.5% (36.8–59.4) |
 | OpenAdapt verifier as recorded (401 fault) | 32/33 = 97.0% (90.9–100.0) | 21/68 = 30.9% (24.6–36.8) |
-| OpenAdapt verifier (contracts operations, replayed) | 32/33 = 97.0% (90.9–100.0) | 27/68 = 39.7% (25.8–53.7) |
 
 ### By fault class (both agents)
 
-| Class | Runs | Bad | OpenAdapt verifier (contracts main, replayed) flagged | API read-back flagged | UV-class judge flagged | OpenAdapt verifier as recorded (401 fault) flagged | OpenAdapt verifier (contracts operations, replayed) flagged |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| clean | 60 | 0 | 33 | 0 | 17 | 43 | 31 |
-| collateral | 24 | 24 | 24 | 0 | 9 | 24 | 24 |
-| duplicate | 18 | 11 | 17 | 0 | 4 | 18 | 14 |
-| late_collateral | 6 | 6 | 5 | 0 | 3 | 5 | 5 |
-| lost_response | 12 | 8 | 12 | 0 | 2 | 12 | 10 |
-| other_user | 17 | 0 | 8 | 0 | 10 | 14 | 8 |
-| refused_write | 6 | 0 | 4 | 0 | 0 | 5 | 3 |
-| wrong_patient | 11 | 2 | 11 | 1 | 5 | 11 | 11 |
-| wrong_value | 47 | 10 | 39 | 10 | 15 | 40 | 45 |
+| Class | Runs | Bad | OpenAdapt verifier (contracts main, replayed) flagged | API read-back flagged | UV-class judge flagged | OpenAdapt verifier (contracts operations, replayed) flagged | OpenAdapt verifier (operations rule 'either', exploratory) flagged | OpenAdapt verifier, replay as first registered (window too long) flagged | OpenAdapt verifier as recorded (401 fault) flagged |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| clean | 60 | 0 | 6 | 0 | 17 | 1 | 1 | 33 | 43 |
+| collateral | 24 | 24 | 24 | 0 | 9 | 24 | 24 | 24 | 24 |
+| duplicate | 18 | 11 | 17 | 0 | 4 | 11 | 11 | 17 | 18 |
+| late_collateral | 6 | 6 | 0 | 0 | 3 | 0 | 0 | 5 | 5 |
+| lost_response | 12 | 8 | 12 | 0 | 2 | 8 | 8 | 12 | 12 |
+| other_user | 17 | 0 | 0 | 0 | 10 | 0 | 0 | 8 | 14 |
+| refused_write | 6 | 0 | 1 | 0 | 0 | 0 | 0 | 4 | 5 |
+| wrong_patient | 11 | 2 | 11 | 1 | 5 | 11 | 11 | 11 | 11 |
+| wrong_value | 47 | 10 | 21 | 10 | 15 | 43 | 19 | 39 | 40 |
 
 ### Paired against ours (exact McNemar)
 
 | Baseline | Bad saves: only ours right / only baseline right, p | Good saves: only ours / only baseline, p |
 |---|---|---|
-| API read-back | 49 / 0, p<1e-6 | 0 / 93, p<1e-6 |
-| UV-class judge | 39 / 1, p<1e-6 | 18 / 68, p<1e-6 |
-| OpenAdapt verifier as recorded (401 fault) | 0 / 0, p=1 | 19 / 0, p=4e-06 |
-| OpenAdapt verifier (contracts operations, replayed) | 0 / 0, p=1 | 7 / 9, p=0.804 |
+| API read-back | 44 / 0, p<1e-6 | 0 / 37, p<1e-6 |
+| UV-class judge | 36 / 3, p<1e-6 | 34 / 28, p=0.526 |
+| OpenAdapt verifier (contracts operations, replayed) | 0 / 0, p=1 | 24 / 18, p=0.441 |
+| OpenAdapt verifier (operations rule 'either', exploratory) | 0 / 0, p=1 | 0 / 18, p=8e-06 |
+| OpenAdapt verifier, replay as first registered (window too long) | 0 / 5, p=0.0625 | 56 / 0, p<1e-6 |
+| OpenAdapt verifier as recorded (401 fault) | 0 / 5, p=0.0625 | 75 / 0, p<1e-6 |

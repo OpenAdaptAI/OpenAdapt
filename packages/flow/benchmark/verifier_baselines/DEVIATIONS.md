@@ -37,3 +37,14 @@
    ledger are committed there
    (`paid_agent_evidence/2026-11-03-verifier-baselines/`); aggregates,
    rubrics and the synthetic effect_e2e judge views stay here.
+6. **The Medplum verifier column moved from the first replay to the
+   corrected one.** The first version of this report used the replay at
+   verifier-specificity commit 2fe6b6e98 (47/140 good saves confirmed). That
+   replay let the store run past the harness's next step after the check, so
+   in the 163 token-expired runs it saw the harness's own read-back and the
+   proxy's post-check writes as unexplained; it also misread one retried
+   run's seed. Both are logged as deviations 1 and 2 in that study's
+   PREREGISTRATION.md, and fixed at debdfe351 with the fidelity gate still
+   59/59 against the live verdicts. The primary column is now debdfe351's
+   contracts-main result (103/140); the first replay is kept as a labelled
+   column.

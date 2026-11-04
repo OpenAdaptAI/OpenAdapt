@@ -213,15 +213,21 @@ def medplum() -> dict[str, Any]:
     from benchmark.verifier_baselines import medplum_views
 
     jdir = DATA / "medplum" / "judge"
-    # Our verifier, replayed offline on each run's frozen server state
-    # (DEVIATIONS.md 3); the recorded field is kept only to show the 401 fault.
-    # (verifier-specificity commit 2fe6b6e98): contracts `main` is the primary
-    # column, contracts `operations` the secondary one.
-    replay = json.loads((DATA / "medplum" / "verifier_rescore_main.json").read_text())[
-        "rows"
-    ]
-    ops_path = DATA / "medplum" / "verifier_rescore_operations.json"
-    ops = json.loads(ops_path.read_text())["rows"] if ops_path.exists() else None
+
+    # Our verifier, replayed offline on each run's frozen server state by the
+    # verifier-specificity study (commit debdfe351; DEVIATIONS.md 3 and 6).
+    # The recorded field is kept only to show the expired-token fault.
+    def load(name: str) -> Optional[dict[str, Any]]:
+        f = DATA / "medplum" / f"verifier_rescore_{name}.json"
+        return json.loads(f.read_text())["rows"] if f.exists() else None
+
+    columns = {
+        "verifier": load("main"),
+        "verifier_operations": load("operations"),
+        "verifier_operations_v2": load("operations_v2"),
+        "verifier_as_registered": load("main_as_registered"),
+    }
+    columns = {k: v for k, v in columns.items() if v is not None}
     units, not_scored = [], defaultdict(int)
     for run in medplum_views.runs():
         row = run["row"]
@@ -240,20 +246,21 @@ def medplum() -> dict[str, Any]:
             "case": row["id"],
             "cls": row["class"],
             "bad": row["oracle"]["verdict"] != "correct",
-            "verifier": replay[f"{run['agent']}/runs/{run['run']}"]["outcome"]
-            in CONFIRMED,
             "verifier_recorded": row["verifier"]["outcome"] in CONFIRMED,
             "readback": bool((row.get("readback") or {}).get("holds")),
             "judge": judge,
         }
-        if ops is not None:
-            u["verifier_operations"] = (
-                ops[f"{run['agent']}/runs/{run['run']}"]["outcome"] in CONFIRMED
-            )
+        key = f"{run['agent']}/runs/{run['run']}"
+        for name, rows in columns.items():
+            u[name] = rows[key]["outcome"] in CONFIRMED
         units.append(u)
-    arms = ["verifier", "readback", "judge", "verifier_recorded"] + (
-        ["verifier_operations"] if ops else []
-    )
+    arms = [
+        "verifier",
+        "readback",
+        "judge",
+        *[c for c in columns if c != "verifier"],
+        "verifier_recorded",
+    ]
     out = {
         "said_done": len(units),
         "bad_saves": sum(u["bad"] for u in units),
@@ -271,6 +278,8 @@ def medplum() -> dict[str, Any]:
 LABELS = {
     "frame": "OpenAdapt whole-database verifier",
     "verifier": "OpenAdapt verifier (contracts main, replayed)",
+    "verifier_operations_v2": "OpenAdapt verifier (operations rule 'either', exploratory)",
+    "verifier_as_registered": "OpenAdapt verifier, replay as first registered (window too long)",
     "verifier_operations": "OpenAdapt verifier (contracts operations, replayed)",
     "verifier_recorded": "OpenAdapt verifier as recorded (401 fault)",
     "readback": "API read-back",
