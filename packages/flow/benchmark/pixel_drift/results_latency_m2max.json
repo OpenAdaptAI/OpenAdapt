@@ -1,0 +1,42 @@
+{
+  "schema": "openadapt.local-grounding-latency.v1",
+  "generated_at": "2026-11-04T22:35:07+00:00",
+  "host": {
+    "machine": "arm64",
+    "system": "Darwin",
+    "processor": "arm",
+    "cpu_count": 12,
+    "load_1m": 13.44091796875
+  },
+  "onnxruntime": "1.31.1",
+  "provider": "CPUExecutionProvider",
+  "threads": 4,
+  "repeats": 5,
+  "weights_sha256": "dfce54a839b491f395c516350ebb4a78f947e9170a6beac0f2bc5638e0f09d61",
+  "summary": {
+    "controls": {
+      "queries": 85,
+      "frame_sizes": [
+        [
+          1920,
+          1080
+        ]
+      ],
+      "p50_ms": 616.0,
+      "p95_ms": 1085.3,
+      "mean_ms": 697.6
+    },
+    "avc444": {
+      "queries": 405,
+      "frame_sizes": [
+        [
+          1280,
+          800
+        ]
+      ],
+      "p50_ms": 247.0,
+      "p95_ms": 571.3,
+      "mean_ms": 300.2
+    }
+  }
+}

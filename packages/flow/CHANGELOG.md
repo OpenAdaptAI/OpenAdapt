@@ -19,6 +19,8 @@
 
 ### Fixes
 
+- On a screen-only surface (Citrix, RDP, VNC), the template, OCR and local model rungs no longer click a look-alike near where the target was recorded when the target itself has moved or changed state. Before, a dense list's next-row button or a toggled neighbour checkbox within 48 px was taken as the target: 202 wrong clicks across the drift, controls and live RDP suites in `benchmark/pixel_drift`, 0 after. Those targets are now refused or missed.
+
 - The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
 
 ## v2.6.0 (2026-11-04)

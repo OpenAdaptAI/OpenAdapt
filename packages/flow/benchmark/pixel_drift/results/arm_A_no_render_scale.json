@@ -1,0 +1,3918 @@
+{
+  "schema": "openadapt.pixel-drift-arms.v1",
+  "arm": "A",
+  "local_grounding": false,
+  "commit": "f55800815",
+  "generated_at": "2026-11-04T21:44:48+00:00",
+  "host": {
+    "machine": "arm64",
+    "system": "Darwin"
+  },
+  "summary": {
+    "avc444": {
+      "correct": 80,
+      "wrong": 0,
+      "refused": 1,
+      "miss": 0,
+      "n": 81,
+      "by_condition": {
+        "emr/bpp16": {
+          "correct": 33,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        },
+        "emr/healthy": {
+          "correct": 28,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        },
+        "pn/bpp16": {
+          "correct": 5,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        },
+        "pn/decoy": {
+          "correct": 2,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        },
+        "pn/healthy": {
+          "correct": 5,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        },
+        "pn/reorder": {
+          "correct": 5,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        },
+        "pn/siblings": {
+          "correct": 2,
+          "wrong": 0,
+          "refused": 1,
+          "miss": 0
+        }
+      },
+      "median_ms": 373.0
+    },
+    "controls": {
+      "correct": 58,
+      "wrong": 19,
+      "refused": 0,
+      "miss": 25,
+      "n": 102,
+      "by_condition": {
+        "dark": {
+          "correct": 9,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 8
+        },
+        "jpeg50": {
+          "correct": 17,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        },
+        "scale125": {
+          "correct": 4,
+          "wrong": 4,
+          "refused": 0,
+          "miss": 9
+        },
+        "scale150": {
+          "correct": 0,
+          "wrong": 9,
+          "refused": 0,
+          "miss": 8
+        },
+        "toggled": {
+          "correct": 11,
+          "wrong": 6,
+          "refused": 0,
+          "miss": 0
+        },
+        "unchanged": {
+          "correct": 17,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        }
+      },
+      "median_ms": 205.9
+    },
+    "drift21": {
+      "correct": 6,
+      "wrong": 10,
+      "refused": 5,
+      "miss": 0,
+      "n": 21,
+      "by_condition": {
+        "drifted": {
+          "correct": 0,
+          "wrong": 10,
+          "refused": 5,
+          "miss": 0
+        },
+        "unchanged": {
+          "correct": 6,
+          "wrong": 0,
+          "refused": 0,
+          "miss": 0
+        }
+      },
+      "median_ms": 65.2
+    }
+  },
+  "rows": [
+    {
+      "suite": "drift21",
+      "condition": "unchanged",
+      "target": "open-p0",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        132,
+        82
+      ],
+      "refusal": null,
+      "truth_box": [
+        90,
+        70,
+        84,
+        24
+      ],
+      "ms": 335.8
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p1",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        82
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        104,
+        84,
+        24
+      ],
+      "ms": 192.4
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p2",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "AmbiguousOcrMatchError",
+      "truth_box": [
+        560,
+        138,
+        84,
+        24
+      ],
+      "ms": 6329.3
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p3",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        218
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        172,
+        84,
+        24
+      ],
+      "ms": 86.5
+    },
+    {
+      "suite": "drift21",
+      "condition": "unchanged",
+      "target": "open-p4",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        132,
+        218
+      ],
+      "refusal": null,
+      "truth_box": [
+        90,
+        206,
+        84,
+        24
+      ],
+      "ms": 54.3
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p5",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        218
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        240,
+        84,
+        24
+      ],
+      "ms": 41.1
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p6",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "AmbiguousOcrMatchError",
+      "truth_box": [
+        560,
+        274,
+        84,
+        24
+      ],
+      "ms": 586.3
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p7",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        354
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        308,
+        84,
+        24
+      ],
+      "ms": 34.1
+    },
+    {
+      "suite": "drift21",
+      "condition": "unchanged",
+      "target": "open-p8",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        132,
+        354
+      ],
+      "refusal": null,
+      "truth_box": [
+        90,
+        342,
+        84,
+        24
+      ],
+      "ms": 37.9
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p9",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        354
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        376,
+        84,
+        24
+      ],
+      "ms": 29.9
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p10",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "AmbiguousOcrMatchError",
+      "truth_box": [
+        560,
+        410,
+        84,
+        24
+      ],
+      "ms": 355.5
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p11",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        490
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        444,
+        84,
+        24
+      ],
+      "ms": 48.3
+    },
+    {
+      "suite": "drift21",
+      "condition": "unchanged",
+      "target": "open-p12",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        132,
+        490
+      ],
+      "refusal": null,
+      "truth_box": [
+        90,
+        478,
+        84,
+        24
+      ],
+      "ms": 29.4
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p13",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        490
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        512,
+        84,
+        24
+      ],
+      "ms": 34.7
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p14",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "AmbiguousOcrMatchError",
+      "truth_box": [
+        560,
+        546,
+        84,
+        24
+      ],
+      "ms": 726.8
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p15",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        626
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        580,
+        84,
+        24
+      ],
+      "ms": 72.8
+    },
+    {
+      "suite": "drift21",
+      "condition": "unchanged",
+      "target": "open-p16",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        132,
+        626
+      ],
+      "refusal": null,
+      "truth_box": [
+        90,
+        614,
+        84,
+        24
+      ],
+      "ms": 81.3
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p17",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        626
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        648,
+        84,
+        24
+      ],
+      "ms": 65.2
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p18",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "AmbiguousOcrMatchError",
+      "truth_box": [
+        560,
+        682,
+        84,
+        24
+      ],
+      "ms": 569.0
+    },
+    {
+      "suite": "drift21",
+      "condition": "drifted",
+      "target": "open-p19",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        132,
+        762
+      ],
+      "refusal": null,
+      "truth_box": [
+        560,
+        716,
+        84,
+        24
+      ],
+      "ms": 61.0
+    },
+    {
+      "suite": "drift21",
+      "condition": "unchanged",
+      "target": "open-p20",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        132,
+        762
+      ],
+      "refusal": null,
+      "truth_box": [
+        90,
+        750,
+        84,
+        24
+      ],
+      "ms": 30.6
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "tool-circle",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        56,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.7
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "tool-square",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        100,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        81.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.5
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "tool-triangle",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        144,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        125.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.5
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "tool-plus",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        188,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        169.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 24.0
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "tool-cross",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        232,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        213.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.9
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "tool-bars",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        276,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        257.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.3
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "tool-arrow",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        320,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        301.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.2
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "tool-dots",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        364,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        345.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 22.3
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "row-0",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        216,
+        120
+      ],
+      "refusal": null,
+      "truth_box": [
+        197.0,
+        101.0,
+        38.0,
+        38.0
+      ],
+      "ms": 26.0
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "row-1",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        216,
+        164
+      ],
+      "refusal": null,
+      "truth_box": [
+        197.0,
+        145.0,
+        38.0,
+        38.0
+      ],
+      "ms": 25.1
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "chk-0",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        47,
+        238
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        228.0,
+        21.0,
+        21.0
+      ],
+      "ms": 24.0
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "chk-1",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        47,
+        268
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        258.0,
+        21.0,
+        21.0
+      ],
+      "ms": 23.5
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "chk-2",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        47,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        288.0,
+        21.0,
+        21.0
+      ],
+      "ms": 24.0
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "chk-3",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        47,
+        328
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        318.0,
+        21.0,
+        21.0
+      ],
+      "ms": 23.4
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "rad-0",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        307,
+        238
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        228.0,
+        21.0,
+        21.0
+      ],
+      "ms": 25.1
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "rad-1",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        307,
+        268
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        258.0,
+        21.0,
+        21.0
+      ],
+      "ms": 27.7
+    },
+    {
+      "suite": "controls",
+      "condition": "unchanged",
+      "target": "rad-2",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        307,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        288.0,
+        21.0,
+        21.0
+      ],
+      "ms": 23.8
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "tool-circle",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        46.2,
+        33.8,
+        47.5,
+        47.5
+      ],
+      "ms": 283.8
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "tool-square",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        101.2,
+        33.8,
+        47.5,
+        47.5
+      ],
+      "ms": 345.6
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "tool-triangle",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        156.2,
+        33.8,
+        47.5,
+        47.5
+      ],
+      "ms": 265.5
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "tool-plus",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        211.2,
+        33.8,
+        47.5,
+        47.5
+      ],
+      "ms": 264.2
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "tool-cross",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        266.2,
+        33.8,
+        47.5,
+        47.5
+      ],
+      "ms": 1708.8
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "tool-bars",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        321.2,
+        33.8,
+        47.5,
+        47.5
+      ],
+      "ms": 419.8
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "tool-arrow",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        376.2,
+        33.8,
+        47.5,
+        47.5
+      ],
+      "ms": 374.4
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "tool-dots",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        431.2,
+        33.8,
+        47.5,
+        47.5
+      ],
+      "ms": 292.1
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "row-0",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        235,
+        150
+      ],
+      "refusal": null,
+      "truth_box": [
+        246.2,
+        126.2,
+        47.5,
+        47.5
+      ],
+      "ms": 1788.6
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "row-1",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        236,
+        205
+      ],
+      "refusal": null,
+      "truth_box": [
+        246.2,
+        181.2,
+        47.5,
+        47.5
+      ],
+      "ms": 401.0
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "chk-0",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        70,
+        299
+      ],
+      "refusal": null,
+      "truth_box": [
+        46.2,
+        285.0,
+        26.2,
+        26.2
+      ],
+      "ms": 310.9
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "chk-1",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        66,
+        335
+      ],
+      "refusal": null,
+      "truth_box": [
+        46.2,
+        322.5,
+        26.2,
+        26.2
+      ],
+      "ms": 301.5
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "chk-2",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        74,
+        373
+      ],
+      "refusal": null,
+      "truth_box": [
+        46.2,
+        360.0,
+        26.2,
+        26.2
+      ],
+      "ms": 300.8
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "chk-3",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        67,
+        410
+      ],
+      "refusal": null,
+      "truth_box": [
+        46.2,
+        397.5,
+        26.2,
+        26.2
+      ],
+      "ms": 309.5
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "rad-0",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        398,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        371.2,
+        285.0,
+        26.2,
+        26.2
+      ],
+      "ms": 324.0
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "rad-1",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        393,
+        335
+      ],
+      "refusal": null,
+      "truth_box": [
+        371.2,
+        322.5,
+        26.2,
+        26.2
+      ],
+      "ms": 362.6
+    },
+    {
+      "suite": "controls",
+      "condition": "scale125",
+      "target": "rad-2",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        371.2,
+        360.0,
+        26.2,
+        26.2
+      ],
+      "ms": 346.6
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "tool-circle",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        55.5,
+        40.5,
+        57.0,
+        57.0
+      ],
+      "ms": 472.1
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "tool-square",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        121.5,
+        40.5,
+        57.0,
+        57.0
+      ],
+      "ms": 465.8
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "tool-triangle",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        187.5,
+        40.5,
+        57.0,
+        57.0
+      ],
+      "ms": 464.7
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "tool-plus",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        253.5,
+        40.5,
+        57.0,
+        57.0
+      ],
+      "ms": 439.7
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "tool-cross",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        319.5,
+        40.5,
+        57.0,
+        57.0
+      ],
+      "ms": 377.6
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "tool-bars",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        385.5,
+        40.5,
+        57.0,
+        57.0
+      ],
+      "ms": 383.2
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "tool-arrow",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        451.5,
+        40.5,
+        57.0,
+        57.0
+      ],
+      "ms": 404.3
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "tool-dots",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        517.5,
+        40.5,
+        57.0,
+        57.0
+      ],
+      "ms": 430.3
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "row-0",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        253,
+        180
+      ],
+      "refusal": null,
+      "truth_box": [
+        295.5,
+        151.5,
+        57.0,
+        57.0
+      ],
+      "ms": 2616.1
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "row-1",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        255,
+        245
+      ],
+      "refusal": null,
+      "truth_box": [
+        295.5,
+        217.5,
+        57.0,
+        57.0
+      ],
+      "ms": 534.4
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "chk-0",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        96,
+        358
+      ],
+      "refusal": null,
+      "truth_box": [
+        55.5,
+        342.0,
+        31.5,
+        31.5
+      ],
+      "ms": 449.0
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "chk-1",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        101,
+        402
+      ],
+      "refusal": null,
+      "truth_box": [
+        55.5,
+        387.0,
+        31.5,
+        31.5
+      ],
+      "ms": 430.5
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "chk-2",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        96,
+        446
+      ],
+      "refusal": null,
+      "truth_box": [
+        55.5,
+        432.0,
+        31.5,
+        31.5
+      ],
+      "ms": 468.8
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "chk-3",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        102,
+        492
+      ],
+      "refusal": null,
+      "truth_box": [
+        55.5,
+        477.0,
+        31.5,
+        31.5
+      ],
+      "ms": 485.7
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "rad-0",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        486,
+        358
+      ],
+      "refusal": null,
+      "truth_box": [
+        445.5,
+        342.0,
+        31.5,
+        31.5
+      ],
+      "ms": 434.9
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "rad-1",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        495,
+        403
+      ],
+      "refusal": null,
+      "truth_box": [
+        445.5,
+        387.0,
+        31.5,
+        31.5
+      ],
+      "ms": 456.7
+    },
+    {
+      "suite": "controls",
+      "condition": "scale150",
+      "target": "rad-2",
+      "outcome": "wrong",
+      "rung": "geometry",
+      "point": [
+        491,
+        447
+      ],
+      "refusal": null,
+      "truth_box": [
+        445.5,
+        432.0,
+        31.5,
+        31.5
+      ],
+      "ms": 460.7
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "tool-circle",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 212.0
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "tool-square",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        81.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 237.3
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "tool-triangle",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        125.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 340.7
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "tool-plus",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        169.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 238.3
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "tool-cross",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        213.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 437.2
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "tool-bars",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        257.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 460.4
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "tool-arrow",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        301.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 227.8
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "tool-dots",
+      "outcome": "miss",
+      "rung": null,
+      "point": null,
+      "refusal": null,
+      "truth_box": [
+        345.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 197.5
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "row-0",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        216,
+        120
+      ],
+      "refusal": null,
+      "truth_box": [
+        197.0,
+        101.0,
+        38.0,
+        38.0
+      ],
+      "ms": 1047.0
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "row-1",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        217,
+        164
+      ],
+      "refusal": null,
+      "truth_box": [
+        197.0,
+        145.0,
+        38.0,
+        38.0
+      ],
+      "ms": 358.8
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "chk-0",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        48,
+        238
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        228.0,
+        21.0,
+        21.0
+      ],
+      "ms": 206.0
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "chk-1",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        58,
+        268
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        258.0,
+        21.0,
+        21.0
+      ],
+      "ms": 210.3
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "chk-2",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        40,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        288.0,
+        21.0,
+        21.0
+      ],
+      "ms": 210.4
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "chk-3",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        56,
+        329
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        318.0,
+        21.0,
+        21.0
+      ],
+      "ms": 205.8
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "rad-0",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        307,
+        238
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        228.0,
+        21.0,
+        21.0
+      ],
+      "ms": 224.5
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "rad-1",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        318,
+        269
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        258.0,
+        21.0,
+        21.0
+      ],
+      "ms": 197.9
+    },
+    {
+      "suite": "controls",
+      "condition": "dark",
+      "target": "rad-2",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        317,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        288.0,
+        21.0,
+        21.0
+      ],
+      "ms": 256.3
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "tool-circle",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        56,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 21.4
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "tool-square",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        100,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        81.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.2
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "tool-triangle",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        144,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        125.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.7
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "tool-plus",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        188,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        169.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.5
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "tool-cross",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        232,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        213.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.7
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "tool-bars",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        276,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        257.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 22.5
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "tool-arrow",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        320,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        301.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 22.7
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "tool-dots",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        364,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        345.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 22.7
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "row-0",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        216,
+        120
+      ],
+      "refusal": null,
+      "truth_box": [
+        197.0,
+        101.0,
+        38.0,
+        38.0
+      ],
+      "ms": 25.6
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "row-1",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        216,
+        164
+      ],
+      "refusal": null,
+      "truth_box": [
+        197.0,
+        145.0,
+        38.0,
+        38.0
+      ],
+      "ms": 24.5
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "chk-0",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        47,
+        238
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        228.0,
+        21.0,
+        21.0
+      ],
+      "ms": 23.5
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "chk-1",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        47,
+        268
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        258.0,
+        21.0,
+        21.0
+      ],
+      "ms": 1043.2
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "chk-2",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        47,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        288.0,
+        21.0,
+        21.0
+      ],
+      "ms": 27.8
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "chk-3",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        47,
+        328
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        318.0,
+        21.0,
+        21.0
+      ],
+      "ms": 242.6
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "rad-0",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        309,
+        238
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        228.0,
+        21.0,
+        21.0
+      ],
+      "ms": 198.9
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "rad-1",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        308,
+        268
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        258.0,
+        21.0,
+        21.0
+      ],
+      "ms": 204.6
+    },
+    {
+      "suite": "controls",
+      "condition": "jpeg50",
+      "target": "rad-2",
+      "outcome": "correct",
+      "rung": "geometry",
+      "point": [
+        307,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        288.0,
+        21.0,
+        21.0
+      ],
+      "ms": 220.3
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "tool-circle",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        56,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.4
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "tool-square",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        100,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        81.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 22.5
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "tool-triangle",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        144,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        125.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 22.8
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "tool-plus",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        188,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        169.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 24.7
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "tool-cross",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        232,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        213.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 24.2
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "tool-bars",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        276,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        257.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.4
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "tool-arrow",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        320,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        301.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 23.3
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "tool-dots",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        364,
+        46
+      ],
+      "refusal": null,
+      "truth_box": [
+        345.0,
+        27.0,
+        38.0,
+        38.0
+      ],
+      "ms": 22.3
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "row-0",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        216,
+        120
+      ],
+      "refusal": null,
+      "truth_box": [
+        197.0,
+        101.0,
+        38.0,
+        38.0
+      ],
+      "ms": 24.8
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "row-1",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        216,
+        164
+      ],
+      "refusal": null,
+      "truth_box": [
+        197.0,
+        145.0,
+        38.0,
+        38.0
+      ],
+      "ms": 24.8
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "chk-0",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        47,
+        268
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        228.0,
+        21.0,
+        21.0
+      ],
+      "ms": 21.9
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "chk-1",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        47,
+        238
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        258.0,
+        21.0,
+        21.0
+      ],
+      "ms": 22.8
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "chk-2",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        47,
+        268
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        288.0,
+        21.0,
+        21.0
+      ],
+      "ms": 22.7
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "chk-3",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        47,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        37.0,
+        318.0,
+        21.0,
+        21.0
+      ],
+      "ms": 22.7
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "rad-0",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        307,
+        268
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        228.0,
+        21.0,
+        21.0
+      ],
+      "ms": 22.9
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "rad-1",
+      "outcome": "wrong",
+      "rung": "template",
+      "point": [
+        307,
+        238
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        258.0,
+        21.0,
+        21.0
+      ],
+      "ms": 24.1
+    },
+    {
+      "suite": "controls",
+      "condition": "toggled",
+      "target": "rad-2",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        307,
+        298
+      ],
+      "refusal": null,
+      "truth_box": [
+        297.0,
+        288.0,
+        21.0,
+        21.0
+      ],
+      "ms": 23.2
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/bpp16",
+      "target": "pn-run-3/pn_run_bpp16.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        260,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        236,
+        43,
+        48,
+        24
+      ],
+      "ms": 21.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/bpp16",
+      "target": "pn-run-3/pn_run_bpp16.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        559,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        535,
+        43,
+        48,
+        24
+      ],
+      "ms": 20.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/bpp16",
+      "target": "pn-run-3/pn_run_bpp16.zip/step_003",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        115,
+        145
+      ],
+      "refusal": null,
+      "truth_box": [
+        91,
+        133,
+        48,
+        24
+      ],
+      "ms": 633.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/bpp16",
+      "target": "pn-run-3/pn_run_bpp16.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        311,
+        400
+      ],
+      "refusal": null,
+      "truth_box": [
+        287,
+        388,
+        48,
+        24
+      ],
+      "ms": 31.4
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/bpp16",
+      "target": "pn-run-3/pn_run_bpp16.zip/step_006",
+      "outcome": "correct",
+      "rung": "ocr",
+      "point": [
+        560,
+        489
+      ],
+      "refusal": null,
+      "truth_box": [
+        536,
+        477,
+        48,
+        24
+      ],
+      "ms": 840.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/decoy",
+      "target": "pn-run-3/pn_run_decoy.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        260,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        236,
+        43,
+        48,
+        24
+      ],
+      "ms": 24.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/decoy",
+      "target": "pn-run-3/pn_run_decoy.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        559,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        535,
+        43,
+        48,
+        24
+      ],
+      "ms": 23.2
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/healthy",
+      "target": "pn-run-3/pn_run_healthy.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        260,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        236,
+        43,
+        48,
+        24
+      ],
+      "ms": 23.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/healthy",
+      "target": "pn-run-3/pn_run_healthy.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        559,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        535,
+        43,
+        48,
+        24
+      ],
+      "ms": 23.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/healthy",
+      "target": "pn-run-3/pn_run_healthy.zip/step_003",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        115,
+        145
+      ],
+      "refusal": null,
+      "truth_box": [
+        91,
+        133,
+        48,
+        24
+      ],
+      "ms": 855.4
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/healthy",
+      "target": "pn-run-3/pn_run_healthy.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        311,
+        400
+      ],
+      "refusal": null,
+      "truth_box": [
+        287,
+        388,
+        48,
+        24
+      ],
+      "ms": 33.6
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/healthy",
+      "target": "pn-run-3/pn_run_healthy.zip/step_006",
+      "outcome": "correct",
+      "rung": "ocr",
+      "point": [
+        560,
+        489
+      ],
+      "refusal": null,
+      "truth_box": [
+        536,
+        477,
+        48,
+        24
+      ],
+      "ms": 1028.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/reorder",
+      "target": "pn-run-3/pn_run_reorder.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        260,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        236,
+        43,
+        48,
+        24
+      ],
+      "ms": 159.6
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/reorder",
+      "target": "pn-run-3/pn_run_reorder.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        559,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        535,
+        43,
+        48,
+        24
+      ],
+      "ms": 1279.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/reorder",
+      "target": "pn-run-3/pn_run_reorder.zip/step_003",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        115,
+        145
+      ],
+      "refusal": null,
+      "truth_box": [
+        91,
+        133,
+        48,
+        24
+      ],
+      "ms": 1397.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/reorder",
+      "target": "pn-run-3/pn_run_reorder.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        311,
+        400
+      ],
+      "refusal": null,
+      "truth_box": [
+        287,
+        388,
+        48,
+        24
+      ],
+      "ms": 34.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/reorder",
+      "target": "pn-run-3/pn_run_reorder.zip/step_006",
+      "outcome": "correct",
+      "rung": "ocr",
+      "point": [
+        560,
+        489
+      ],
+      "refusal": null,
+      "truth_box": [
+        536,
+        477,
+        48,
+        24
+      ],
+      "ms": 1175.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/siblings",
+      "target": "pn-run-3/pn_run_siblings.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        260,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        236,
+        43,
+        48,
+        24
+      ],
+      "ms": 29.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/siblings",
+      "target": "pn-run-3/pn_run_siblings.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        559,
+        55
+      ],
+      "refusal": null,
+      "truth_box": [
+        535,
+        43,
+        48,
+        24
+      ],
+      "ms": 27.9
+    },
+    {
+      "suite": "avc444",
+      "condition": "pn/siblings",
+      "target": "pn-run-3/pn_run_siblings.zip/step_003",
+      "outcome": "refused",
+      "rung": null,
+      "point": null,
+      "refusal": "AmbiguousOcrMatchError",
+      "truth_box": [
+        91,
+        177,
+        48,
+        24
+      ],
+      "ms": 1276.6
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        705,
+        396
+      ],
+      "refusal": null,
+      "truth_box": [
+        681,
+        384,
+        48,
+        24
+      ],
+      "ms": 27.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        684,
+        450
+      ],
+      "refusal": null,
+      "truth_box": [
+        660,
+        438,
+        48,
+        24
+      ],
+      "ms": 27.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        640,
+        558
+      ],
+      "refusal": null,
+      "truth_box": [
+        616,
+        546,
+        48,
+        24
+      ],
+      "ms": 26.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_005",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        361,
+        43
+      ],
+      "refusal": null,
+      "truth_box": [
+        337,
+        31,
+        48,
+        24
+      ],
+      "ms": 4948.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_006",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        378,
+        71
+      ],
+      "refusal": null,
+      "truth_box": [
+        354,
+        59,
+        48,
+        24
+      ],
+      "ms": 31.2
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_007",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        706,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        682,
+        299,
+        48,
+        24
+      ],
+      "ms": 2539.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_009",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        445,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        421,
+        299,
+        48,
+        24
+      ],
+      "ms": 2577.9
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_011",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        429,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        405,
+        411,
+        48,
+        24
+      ],
+      "ms": 2730.4
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_014",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        965,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        941,
+        411,
+        48,
+        24
+      ],
+      "ms": 5794.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_017",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        146,
+        599
+      ],
+      "refusal": null,
+      "truth_box": [
+        122,
+        587,
+        48,
+        24
+      ],
+      "ms": 38.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_019",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        272,
+        733
+      ],
+      "refusal": null,
+      "truth_box": [
+        248,
+        721,
+        48,
+        24
+      ],
+      "ms": 33.4
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16.zip/step_020",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        600,
+        261
+      ],
+      "refusal": null,
+      "truth_box": [
+        576,
+        249,
+        48,
+        24
+      ],
+      "ms": 3997.3
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        705,
+        396
+      ],
+      "refusal": null,
+      "truth_box": [
+        681,
+        384,
+        48,
+        24
+      ],
+      "ms": 51.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        684,
+        450
+      ],
+      "refusal": null,
+      "truth_box": [
+        660,
+        438,
+        48,
+        24
+      ],
+      "ms": 35.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        640,
+        558
+      ],
+      "refusal": null,
+      "truth_box": [
+        616,
+        546,
+        48,
+        24
+      ],
+      "ms": 37.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_005",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        361,
+        43
+      ],
+      "refusal": null,
+      "truth_box": [
+        337,
+        31,
+        48,
+        24
+      ],
+      "ms": 23194.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_006",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        378,
+        71
+      ],
+      "refusal": null,
+      "truth_box": [
+        354,
+        59,
+        48,
+        24
+      ],
+      "ms": 47.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_007",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        706,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        682,
+        299,
+        48,
+        24
+      ],
+      "ms": 6098.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_009",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        445,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        421,
+        299,
+        48,
+        24
+      ],
+      "ms": 4644.6
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_011",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        429,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        405,
+        411,
+        48,
+        24
+      ],
+      "ms": 6088.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-2/emr_run_bpp16_false_stop.zip/step_014",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        965,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        941,
+        411,
+        48,
+        24
+      ],
+      "ms": 20531.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        705,
+        396
+      ],
+      "refusal": null,
+      "truth_box": [
+        681,
+        384,
+        48,
+        24
+      ],
+      "ms": 24.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        684,
+        450
+      ],
+      "refusal": null,
+      "truth_box": [
+        660,
+        438,
+        48,
+        24
+      ],
+      "ms": 23.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        640,
+        558
+      ],
+      "refusal": null,
+      "truth_box": [
+        616,
+        546,
+        48,
+        24
+      ],
+      "ms": 25.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_005",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        361,
+        43
+      ],
+      "refusal": null,
+      "truth_box": [
+        337,
+        31,
+        48,
+        24
+      ],
+      "ms": 20759.4
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_006",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        378,
+        71
+      ],
+      "refusal": null,
+      "truth_box": [
+        354,
+        59,
+        48,
+        24
+      ],
+      "ms": 54.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_007",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        706,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        682,
+        299,
+        48,
+        24
+      ],
+      "ms": 11577.2
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_009",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        445,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        421,
+        299,
+        48,
+        24
+      ],
+      "ms": 27227.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_011",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        429,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        405,
+        411,
+        48,
+        24
+      ],
+      "ms": 32332.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-2/emr_run_healthy.zip/step_014",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        965,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        941,
+        411,
+        48,
+        24
+      ],
+      "ms": 35815.4
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        705,
+        396
+      ],
+      "refusal": null,
+      "truth_box": [
+        681,
+        384,
+        48,
+        24
+      ],
+      "ms": 180.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        684,
+        450
+      ],
+      "refusal": null,
+      "truth_box": [
+        660,
+        438,
+        48,
+        24
+      ],
+      "ms": 125.3
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        640,
+        558
+      ],
+      "refusal": null,
+      "truth_box": [
+        616,
+        546,
+        48,
+        24
+      ],
+      "ms": 33.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_005",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        361,
+        43
+      ],
+      "refusal": null,
+      "truth_box": [
+        337,
+        31,
+        48,
+        24
+      ],
+      "ms": 11671.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_006",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        378,
+        71
+      ],
+      "refusal": null,
+      "truth_box": [
+        354,
+        59,
+        48,
+        24
+      ],
+      "ms": 46.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_007",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        706,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        682,
+        299,
+        48,
+        24
+      ],
+      "ms": 15565.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_009",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        445,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        421,
+        299,
+        48,
+        24
+      ],
+      "ms": 21253.7
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_011",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        429,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        405,
+        411,
+        48,
+        24
+      ],
+      "ms": 22130.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_014",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        965,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        941,
+        411,
+        48,
+        24
+      ],
+      "ms": 42269.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_017",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        146,
+        599
+      ],
+      "refusal": null,
+      "truth_box": [
+        122,
+        587,
+        48,
+        24
+      ],
+      "ms": 84.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_019",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        272,
+        733
+      ],
+      "refusal": null,
+      "truth_box": [
+        248,
+        721,
+        48,
+        24
+      ],
+      "ms": 46.3
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/bpp16",
+      "target": "emr-run-3/emr_run_bpp16.zip/step_020",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        600,
+        260
+      ],
+      "refusal": null,
+      "truth_box": [
+        576,
+        248,
+        48,
+        24
+      ],
+      "ms": 18798.2
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        705,
+        396
+      ],
+      "refusal": null,
+      "truth_box": [
+        681,
+        384,
+        48,
+        24
+      ],
+      "ms": 149.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        684,
+        450
+      ],
+      "refusal": null,
+      "truth_box": [
+        660,
+        438,
+        48,
+        24
+      ],
+      "ms": 134.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        640,
+        558
+      ],
+      "refusal": null,
+      "truth_box": [
+        616,
+        546,
+        48,
+        24
+      ],
+      "ms": 150.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_005",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        360,
+        43
+      ],
+      "refusal": null,
+      "truth_box": [
+        336,
+        31,
+        48,
+        24
+      ],
+      "ms": 73089.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_006",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        378,
+        71
+      ],
+      "refusal": null,
+      "truth_box": [
+        354,
+        59,
+        48,
+        24
+      ],
+      "ms": 66.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_007",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        706,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        682,
+        299,
+        48,
+        24
+      ],
+      "ms": 24132.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_009",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        445,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        421,
+        299,
+        48,
+        24
+      ],
+      "ms": 24417.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_011",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        429,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        405,
+        411,
+        48,
+        24
+      ],
+      "ms": 22654.2
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_014",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        965,
+        423
+      ],
+      "refusal": null,
+      "truth_box": [
+        941,
+        411,
+        48,
+        24
+      ],
+      "ms": 60014.4
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_017",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        146,
+        599
+      ],
+      "refusal": null,
+      "truth_box": [
+        122,
+        587,
+        48,
+        24
+      ],
+      "ms": 87.1
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_019",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        272,
+        733
+      ],
+      "refusal": null,
+      "truth_box": [
+        248,
+        721,
+        48,
+        24
+      ],
+      "ms": 48.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy.zip/step_020",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        600,
+        261
+      ],
+      "refusal": null,
+      "truth_box": [
+        576,
+        249,
+        48,
+        24
+      ],
+      "ms": 19867.4
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy_false_stop.zip/step_000",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        705,
+        396
+      ],
+      "refusal": null,
+      "truth_box": [
+        681,
+        384,
+        48,
+        24
+      ],
+      "ms": 373.0
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy_false_stop.zip/step_002",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        684,
+        450
+      ],
+      "refusal": null,
+      "truth_box": [
+        660,
+        438,
+        48,
+        24
+      ],
+      "ms": 166.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy_false_stop.zip/step_004",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        640,
+        558
+      ],
+      "refusal": null,
+      "truth_box": [
+        616,
+        546,
+        48,
+        24
+      ],
+      "ms": 41.2
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy_false_stop.zip/step_005",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        361,
+        43
+      ],
+      "refusal": null,
+      "truth_box": [
+        336,
+        31,
+        48,
+        24
+      ],
+      "ms": 26817.5
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy_false_stop.zip/step_006",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        378,
+        71
+      ],
+      "refusal": null,
+      "truth_box": [
+        354,
+        59,
+        48,
+        24
+      ],
+      "ms": 914.8
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy_false_stop.zip/step_007",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        706,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        682,
+        299,
+        48,
+        24
+      ],
+      "ms": 37660.6
+    },
+    {
+      "suite": "avc444",
+      "condition": "emr/healthy",
+      "target": "emr-run-3/emr_run_healthy_false_stop.zip/step_009",
+      "outcome": "correct",
+      "rung": "template",
+      "point": [
+        445,
+        311
+      ],
+      "refusal": null,
+      "truth_box": [
+        421,
+        299,
+        48,
+        24
+      ],
+      "ms": 29458.0
+    }
+  ]
+}

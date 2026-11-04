@@ -4,6 +4,7 @@
   "visual_ok": 6,
   "structural_ratio": "21/21",
   "visual_ratio": "6/21",
+  "visual_wrong": 0,
   "targets": [
     {
       "id": "open-p0",
@@ -11,6 +12,7 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": true,
+      "visual_wrong": false,
       "visual_rung": "template"
     },
     {
@@ -19,7 +21,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p2",
@@ -27,7 +30,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p3",
@@ -35,7 +39,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p4",
@@ -43,6 +48,7 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": true,
+      "visual_wrong": false,
       "visual_rung": "template"
     },
     {
@@ -51,7 +57,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p6",
@@ -59,7 +66,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p7",
@@ -67,7 +75,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p8",
@@ -75,6 +84,7 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": true,
+      "visual_wrong": false,
       "visual_rung": "template"
     },
     {
@@ -83,7 +93,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p10",
@@ -91,7 +102,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p11",
@@ -99,7 +111,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p12",
@@ -107,6 +120,7 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": true,
+      "visual_wrong": false,
       "visual_rung": "template"
     },
     {
@@ -115,7 +129,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p14",
@@ -123,7 +138,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p15",
@@ -131,7 +147,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p16",
@@ -139,6 +156,7 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": true,
+      "visual_wrong": false,
       "visual_rung": "template"
     },
     {
@@ -147,7 +165,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p18",
@@ -155,7 +174,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p19",
@@ -163,7 +183,8 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": false,
-      "visual_rung": "template"
+      "visual_wrong": false,
+      "visual_rung": null
     },
     {
       "id": "open-p20",
@@ -171,6 +192,7 @@
       "structural_ok": true,
       "structural_rung": true,
       "visual_ok": true,
+      "visual_wrong": false,
       "visual_rung": "template"
     }
   ]
