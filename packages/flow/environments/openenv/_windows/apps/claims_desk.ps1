@@ -154,10 +154,9 @@ $c.searchBox.Add_KeyDown({
     if ($_.Key -eq "Return") { Load-Claims -Filter $c.searchBox.Text; $_.Handled = $true }
 })
 
-$c.claimsGrid.Add_SelectionChanged({
-    $item = $c.claimsGrid.SelectedItem
-    if ($null -eq $item) { return }
-    $p = (Invoke-Db -DbArgs @("cd-get", "$($item.claim_no)")) | ConvertFrom-Json
+function Open-Claim {
+    param([string]$ClaimNo)
+    $p = (Invoke-Db -DbArgs @("cd-get", "$ClaimNo")) | ConvertFrom-Json
     if ($p) {
         Clear-Detail
         $script:current = $p.claim_no
@@ -165,6 +164,24 @@ $c.claimsGrid.Add_SelectionChanged({
         if ($p.last_decision) {
             $c.historyText.Text = "" + $p.decision_count + " decisions on file. Last: " + $p.last_decision.status + " " + $p.last_decision.allowed_amount + " - " + $p.last_decision.note
         } else { $c.historyText.Text = "No decisions on file" }
+    }
+}
+
+$c.claimsGrid.Add_SelectionChanged({
+    $item = $c.claimsGrid.SelectedItem
+    if ($null -ne $item) { Open-Claim $item.claim_no }
+})
+
+# A click on the row that is already selected raises no SelectionChanged;
+# re-open the claim anyway, so its history and an empty form show again.
+$c.claimsGrid.Add_PreviewMouseLeftButtonUp({
+    $node = $_.OriginalSource
+    while ($null -ne $node -and -not ($node -is [System.Windows.Controls.DataGridRow])) {
+        if ($node -is [System.Windows.Media.Visual]) { $node = [System.Windows.Media.VisualTreeHelper]::GetParent($node) }
+        else { $node = $node.Parent }
+    }
+    if ($null -ne $node -and $node.IsSelected -and $null -ne $node.Item) {
+        if ($script:current -eq $node.Item.claim_no) { Open-Claim $node.Item.claim_no }
     }
 })
 
