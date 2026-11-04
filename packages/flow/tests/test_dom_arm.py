@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 import pytest
 
-from openadapt_flow.benchmark.dom_arm import (
+from benchmark.harness.dom_arm import (
     PERTURBATIONS,
     SCHEDULE,
     aggregate_dom_results,
@@ -191,7 +191,7 @@ class TestScheduleAndNotes:
         )
 
     def test_notes_distinct_per_arm_and_slot(self) -> None:
-        from openadapt_flow.benchmark.dom_arm import ARMS
+        from benchmark.harness.dom_arm import ARMS
 
         notes = {
             note_for_slot(arm, slot)
@@ -262,7 +262,7 @@ class TestClassification:
         assert not needs_maintenance(disputed)
 
     def test_verification_dispute(self) -> None:
-        from openadapt_flow.benchmark.dom_arm import verification_dispute
+        from benchmark.harness.dom_arm import verification_dispute
 
         # DOM: every step ran, no error, judge said no -> dispute.
         assert verification_dispute(
@@ -546,7 +546,7 @@ class TestVerifyFinalState:
     exists to measure."""
 
     def test_dom_check_is_the_hybrid_check(self) -> None:
-        from openadapt_flow.benchmark.hybrid_benchmark import (
+        from benchmark.harness.hybrid_benchmark import (
             verify_hybrid_final,
         )
 

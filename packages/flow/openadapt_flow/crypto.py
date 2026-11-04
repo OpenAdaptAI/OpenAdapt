@@ -1,4 +1,4 @@
-"""Opt-in authenticated encryption-at-rest for bundles and durable checkpoints.
+"""Authenticated encryption at rest for bundles and durable checkpoints.
 
 A compiled bundle (``workflow.json`` + its manifest) and the durable
 checkpoints written during a run are **persistent records** produced from a
@@ -29,8 +29,10 @@ Design (see ``docs/phi_at_rest.md`` "Target design"):
 
 This module is deliberately import-light (stdlib + :mod:`cryptography`) and
 brings in no OCR / cv2 / model dependencies, so it is safe to import on every
-bundle load. Encryption is ALWAYS opt-in: nothing here runs unless a caller
-explicitly asks for it, and the default serialization stays plaintext.
+bundle load. When no key is configured, :func:`resolve_key` returns the local
+key from :mod:`openadapt_flow.at_rest`, so callers that encrypt whenever a key
+resolves encrypt by default; ``OPENADAPT_FLOW_PLAINTEXT_AT_REST`` restores the
+plaintext default, loudly.
 """
 
 from __future__ import annotations
@@ -98,12 +100,18 @@ class DecryptionError(CryptoError):
 
 def resolve_key(key: Optional[str]) -> Optional[str]:
     """Return the effective passphrase: the explicit ``key`` if non-empty, else
-    the ``OPENADAPT_BUNDLE_KEY`` environment variable, else ``None`` (no key
-    configured -- the plaintext default)."""
+    the ``OPENADAPT_BUNDLE_KEY`` environment variable, else this machine's
+    local at-rest key (:func:`openadapt_flow.at_rest.default_key`, created on
+    first use). ``None`` only under ``OPENADAPT_FLOW_PLAINTEXT_AT_REST``, the
+    recorded plaintext opt-out."""
     if key:
         return key
     env = os.environ.get(ENV_KEY)
-    return env or None
+    if env:
+        return env
+    from openadapt_flow import at_rest
+
+    return at_rest.default_key()
 
 
 def require_key(key: Optional[str]) -> str:
@@ -118,6 +126,36 @@ def require_key(key: Optional[str]) -> str:
             "no encryption passphrase configured: pass an explicit key or set "
             f"the {ENV_KEY} environment variable. An encrypted bundle/checkpoint "
             "cannot be read (and encryption cannot proceed) without it."
+        )
+    return resolved
+
+
+def resolve_read_key(key: Optional[str]) -> Optional[str]:
+    """Like :func:`resolve_key`, for read-only paths: the explicit key, else
+    ``OPENADAPT_BUNDLE_KEY``, else the local key only if it already exists.
+    Creates no key and adds no ledger line."""
+    if key:
+        return key
+    env = os.environ.get(ENV_KEY)
+    if env:
+        return env
+    from openadapt_flow import at_rest
+
+    return at_rest.existing_key()
+
+
+def require_configured_key(key: Optional[str] = None) -> str:
+    """The explicit ``key`` or ``OPENADAPT_BUNDLE_KEY``, never the local key.
+
+    For commands whose contract is the deployment key (``seal``, a record
+    check bound to an encrypted bundle): a missing key raises
+    :class:`MissingKeyError` instead of silently using this machine's key.
+    """
+    resolved = key or os.environ.get(ENV_KEY)
+    if not resolved:
+        raise MissingKeyError(
+            f"no encryption key configured: set the {ENV_KEY} environment "
+            "variable to the deployment key."
         )
     return resolved
 

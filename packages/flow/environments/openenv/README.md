@@ -65,6 +65,21 @@ selector, a label and its viewport centre) and, if the server runs with
 `OPENADAPT_ENV_SCREENSHOTS=1` or `reset(screenshots=True)`, a PNG screenshot.
 The viewport is 1280x800.
 
+Each observation also carries `computer_state`, an
+`openadapt_types.ComputerState` with one `UINode` per element (`n0`, `n1`...,
+with role, name, bounding box and CSS selector), and `action_result`, the last
+action's `openadapt_types.ActionResult`. An action may be an
+`openadapt_types.Action` instead (`{"computer_action": {"type": "click",
+"target": {"node_id": "n3"}}}`); `done` and `fail` end the episode with a
+success or failure claim.
+
+The same actions are MCP tools, following OpenEnv RFC 003 (still in review):
+`{"type": "list_tools"}` lists `click`, `fill`, `type`, `press`, `select`,
+`scroll`, `goto`, `wait`, `done` and `observe`, and `{"type": "call_tool",
+"tool_name": ..., "arguments": {...}}` runs one through `step()`, so the reward
+arrives on the tool's observation. OpenEnv's separate `/mcp` endpoint skips
+the reward and is not served for these environments.
+
 The agent's browser can reach only the app's origin, minus the manifest's
 `blocked_paths`. For the mock apps that removes the record read path, the
 reset route and the delete route. The real apps' record read runs on a separate

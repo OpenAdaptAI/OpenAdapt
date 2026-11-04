@@ -498,7 +498,7 @@ A scripted agent worked a 30-item synthetic MockMed worklist. The user changes a
 In the middle arm, the agent opens a job and uses each item's `request_id` but keeps its flaws. The ledger stops every rule break, but it can't stop an agent from guessing a value or misreporting its own tally. `close_job` still lists what was verified, so a caller can check the agent's report. The scripted agent stands for a policy, not a model, so these numbers test the mechanism. They aren't a model benchmark. To reproduce them (about 3 seconds):
 
 ```bash
-python -m openadapt_flow.agent.ledger_demo
+python packages/agent/tests/ledger_demo.py
 ```
 
 Results: [docs/task-ledger-measurement.json](docs/task-ledger-measurement.json).

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from openadapt_flow.instrument import (
+from benchmark.harness.instrument import (
     AgentRunResult,
     ArchitectureClassError,
     CostGuard,
@@ -35,7 +35,7 @@ from openadapt_flow.instrument import (
     ensure_architecture_class,
     run_instrument,
 )
-from openadapt_flow.instrument.competitor_drift import render_markdown, write_outputs
+from benchmark.harness.instrument.competitor_drift import render_markdown, write_outputs
 
 # Fault classes a screen-only report is BLIND to: a wrong effect lands while
 # the "saved" banner still paints, so a screen-blind agent claims success.

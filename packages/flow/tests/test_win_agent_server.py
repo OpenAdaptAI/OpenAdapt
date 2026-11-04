@@ -19,6 +19,7 @@ from collections.abc import Iterator
 import pytest
 import requests
 
+from openadapt_flow.backend import StructuralResolutionRefused
 from openadapt_flow.backends.win_agent import AgentConfig, create_server
 from openadapt_flow.backends.win_agent.server import (
     AgentRequestError,
@@ -194,7 +195,9 @@ def test_typed_input_and_uia_receipts_never_claim_outcome(
     assert set(context.json()) == {
         "status",
         "application",
+        "application_version",
         "session",
+        "environment",
         "workflow_state",
     }
     assert "title" not in context.text.casefold()
@@ -513,6 +516,201 @@ def test_windows_context_identity_is_live_bounded_and_authenticated() -> None:
         assert unauthenticated.session_identity() is None
     finally:
         agent.close()
+
+
+def test_windows_qualification_environment_is_one_agent_snapshot() -> None:
+    """A qualification case on Windows observes all four signals in one call."""
+
+    from openadapt_flow.backends import WindowsBackend
+    from openadapt_flow.qualification_environment import (
+        BackendQualificationEnvironmentObserver,
+    )
+
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    calls = []
+
+    def context_fn():
+        calls.append(1)
+        return {"status": "ok", **state, "workflow_state": None}
+
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, token="secret"),
+        context_fn=context_fn,
+    )
+    try:
+        backend = WindowsBackend(agent.url, auth_token="secret")
+        assert backend.qualification_environment_identity() == (
+            "patient-notes",
+            "sha256:" + "c" * 64,
+            "a" * 64,
+            "e" * 64,
+        )
+        assert len(calls) == 1
+        observed = BackendQualificationEnvironmentObserver(backend).observe(
+            backend, "windows"
+        )
+        assert observed.application_version == "sha256:" + "c" * 64
+        assert observed.environment_digest == "e" * 64
+
+        # Every signal must be present and well formed, or the case refuses.
+        for key, bad in (
+            ("environment", None),
+            ("application_version", "1.2.3"),
+            ("application_version", None),
+            ("session", "NOT-A-DIGEST"),
+            ("application", "Patient Alice Example"),
+        ):
+            saved = state[key]
+            state[key] = bad
+            assert backend.qualification_environment_identity() is None, key
+            state[key] = saved
+
+        # An older agent without the environment fields cannot qualify.
+        del state["environment"], state["application_version"]
+        assert backend.qualification_environment_identity() is None
+        assert WindowsBackend(agent.url).qualification_environment_identity() is None
+    finally:
+        agent.close()
+
+
+def test_agent_hashes_the_executable_file_and_notices_a_change(tmp_path) -> None:
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"first build")
+    first = server._image_file_digest(str(image))
+    assert first == "sha256:" + hashlib.sha256(b"first build").hexdigest()
+    image.write_bytes(b"second build, longer")
+    second = server._image_file_digest(str(image))
+    assert second == "sha256:" + hashlib.sha256(b"second build, longer").hexdigest()
+    assert server._image_file_digest(str(tmp_path / "missing.exe")) is None
+
+
+def test_agent_rehashes_a_same_size_file_replaced_with_the_old_times(tmp_path) -> None:
+    import os
+
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"build-A")
+    first = server._image_file_digest(str(image))
+    stat = image.stat()
+    staged = tmp_path / "staged.exe"
+    staged.write_bytes(b"build-B")
+    os.replace(staged, image)
+    os.utime(image, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+    second = server._image_file_digest(str(image))
+    assert second == "sha256:" + hashlib.sha256(b"build-B").hexdigest()
+    assert second != first
+
+
+def test_agent_refuses_a_file_changed_after_the_process_started(
+    tmp_path, monkeypatch
+) -> None:
+    from openadapt_flow.backends.win_agent import server
+
+    image = tmp_path / "app.exe"
+    image.write_bytes(b"running build")
+    changed = max(image.stat().st_mtime_ns, image.stat().st_ctime_ns)
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: changed + 1)
+    assert server._running_image_digest(42, str(image)) is not None
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: changed - 1)
+    assert server._running_image_digest(42, str(image)) is None
+    monkeypatch.setattr(server, "_process_start_ns", lambda pid: None)
+    assert server._running_image_digest(42, str(image)) is None
+
+
+def test_guarded_input_binds_the_executable_digest_and_environment() -> None:
+    from openadapt_flow.backends import WindowsBackend
+
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0),
+        context_fn=lambda: {"status": "ok", **state, "workflow_state": None},
+    )
+    try:
+        backend = WindowsBackend(agent.url)
+        context = backend._guard_context()
+        assert context["application_version"] == "sha256:" + "c" * 64
+        assert context["environment"] == "e" * 64
+        state["application_version"] = "not-a-digest"
+        with pytest.raises(StructuralResolutionRefused):
+            backend._guard_context()
+        del state["application_version"], state["environment"]
+        assert "application_version" not in backend._guard_context()
+    finally:
+        agent.close()
+
+
+def test_guarded_input_refuses_when_the_executable_digest_changes() -> None:
+    """A guarded POST carries the digest; a different executable is refused."""
+
+    from openadapt_flow.backends import WindowsBackend
+
+    frame = _fake_png()
+    state = {
+        "application": "patient-notes",
+        "application_version": "sha256:" + "c" * 64,
+        "session": "a" * 64,
+        "environment": "e" * 64,
+    }
+    delivered = []
+
+    def input_fn(payload):
+        delivered.append(payload)
+        return {
+            "status": "delivered",
+            "receipt_id": "guarded-env",
+            "operation": "physical_click",
+            "native": False,
+            "target_fingerprint": None,
+            "delivered_at": "2026-11-03T00:00:00+00:00",
+            "outcome_verified": False,
+        }
+
+    agent = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0),
+        grab_fn=lambda: frame,
+        input_fn=input_fn,
+        context_fn=lambda: {"status": "ok", **state, "workflow_state": None},
+    )
+    try:
+        backend = WindowsBackend(agent.url)
+        expected = backend._guard_context()
+        body = {
+            "expected_frame_sha256": hashlib.sha256(frame).hexdigest(),
+            "expected_context": expected,
+            "input": {"action": "click", "x": 1, "y": 1},
+        }
+        ok = requests.post(f"{agent.url}/input/guarded", json=body, timeout=5)
+        assert ok.status_code == 200, ok.text
+        assert len(delivered) == 1
+        state["application_version"] = "sha256:" + "d" * 64
+        moved = requests.post(f"{agent.url}/input/guarded", json=body, timeout=5)
+        assert moved.status_code == 409
+        assert moved.json()["code"] == "stale_context"
+        assert len(delivered) == 1
+    finally:
+        agent.close()
+
+
+def test_agent_advertises_the_environment_context() -> None:
+    agent = RunningAgent(AgentConfig(host="127.0.0.1", port=0))
+    try:
+        health = requests.get(f"{agent.url}/health", timeout=5).json()
+    finally:
+        agent.close()
+    assert "context_environment_v1" in health["capabilities"]
 
 
 # -- screenshot ---------------------------------------------------------------

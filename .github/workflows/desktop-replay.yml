@@ -22,6 +22,7 @@ on:
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
       - packages/flow/tests/test_xfreerdp.py
+      - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/benchmark/rdp_pool/**
       - packages/flow/pyproject.toml
       - packages/flow/uv.lock
@@ -68,6 +69,13 @@ jobs:
           python ../../scripts/ci/locked_install.py --lock .github/ci-tools:win-agent
           --lock 'packages/flow[dev]'
           --editable packages/types --editable packages/flow
+      - name: Windows file-system guards (the attempt ledger)
+        # The default temp folder is in the user's profile, where the ledger
+        # must live; the runner's temp drive is not.
+        run: |
+          mkdir -p runs
+          pytest -v -rs -p no:cacheprovider tests/test_windows_attempt_ledger.py \
+            --junitxml=runs/windows-guards-junit.xml
       - name: Record, compile and replay, judged from the record
         env:
           OAFLOW_WINDOWS_HOSTED_E2E: "1"
@@ -81,8 +89,11 @@ jobs:
           python - <<'PY'
           import sys
           import xml.etree.ElementTree as ET
-          suite = ET.parse("runs/windows-replay-junit.xml").getroot()
-          cases = list(suite.iter("testcase"))
+          cases = [
+              case
+              for name in ("windows-guards", "windows-replay")
+              for case in ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase")
+          ]
           skipped = [c for c in cases if c.find("skipped") is not None]
           if not cases or skipped:
               sys.exit(f"windows replay did not run: {len(cases)} cases, {len(skipped)} skipped")

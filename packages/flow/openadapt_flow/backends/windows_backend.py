@@ -73,6 +73,7 @@ SCROLL_PIXELS_PER_NOTCH = 100
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _CONTEXT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
 _SESSION_ID_RE = re.compile(r"^[a-f0-9]{64}$")
+_IMAGE_DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 @dataclass(frozen=True)
@@ -240,6 +241,11 @@ class WindowsBackend:
         session: Optional ``requests.Session`` (injected in tests). When a
             ``pin_fingerprint`` is set the pinning adapter is mounted onto it.
     """
+
+    #: ``element_identity_at`` asks UI Automation for the control under a
+    #: point across every window on the desktop (``ControlFromPoint``), so it
+    #: names whatever is on top there: a dialog, another app, nothing.
+    hit_test_sees_every_window = True
 
     def __init__(
         self,
@@ -587,11 +593,27 @@ class WindowsBackend:
             raise StructuralResolutionRefused(
                 "Windows workflow-state context is invalid for guarded input"
             )
-        return {
+        context = {
             "application": application,
             "session": session,
             "workflow_state": workflow_state,
         }
+        # An agent with ``context_environment_v1`` also binds the executable's
+        # digest and the environment, so a same-named program from another
+        # path cannot take the foreground between the check and the input.
+        for key, pattern in (
+            ("application_version", _IMAGE_DIGEST_RE),
+            ("environment", _SESSION_ID_RE),
+        ):
+            value = payload.get(key)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not pattern.fullmatch(value):
+                raise StructuralResolutionRefused(
+                    f"Windows {key} context is invalid for guarded input"
+                )
+            context[key] = value
+        return context
 
     def application_identity(self) -> Optional[str]:
         """Return the live foreground process id, never its window title."""
@@ -610,6 +632,41 @@ class WindowsBackend:
         if not isinstance(value, str) or not _SESSION_ID_RE.fullmatch(value):
             return None
         return value
+
+    def qualification_environment_identity(
+        self,
+    ) -> Optional[tuple[str, str, str, str]]:
+        """Application, version, session and environment from one agent snapshot.
+
+        The agent reads all four in one ``/context/identity`` call: the
+        foreground executable's basename, the SHA-256 of that same
+        executable file (the host executable: for a script, browser or
+        runtime-hosted app it does not cover the app's own code), the live
+        logon-session digest, and a digest of the machine id and exact OS
+        build, so an OS update requires a new qualification. Any missing or malformed value (an older
+        agent without ``context_environment_v1``, a desktop with no
+        foreground window) returns None, and a qualification case refuses.
+        """
+
+        payload = self._execution_context()
+        if payload is None:
+            return None
+        application = payload.get("application")
+        version = payload.get("application_version")
+        session = payload.get("session")
+        environment = payload.get("environment")
+        if not (
+            isinstance(application, str)
+            and _CONTEXT_ID_RE.fullmatch(application)
+            and isinstance(version, str)
+            and _IMAGE_DIGEST_RE.fullmatch(version)
+            and isinstance(session, str)
+            and _SESSION_ID_RE.fullmatch(session)
+            and isinstance(environment, str)
+            and _SESSION_ID_RE.fullmatch(environment)
+        ):
+            return None
+        return application, version, session, environment
 
     def workflow_state_identity(self) -> Optional[str]:
         """Workflow state requires an explicitly qualified UIA marker."""

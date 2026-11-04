@@ -22,21 +22,29 @@ import random
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from openenv.core.env_server.interfaces import Environment
+from openenv.core.env_server.mcp_types import (
+    CallToolAction,
+    CallToolObservation,
+    ListToolsAction,
+    ListToolsObservation,
+    Tool,
+)
 from openenv.core.env_server.types import (
     Action,
     EnvironmentMetadata,
     Observation,
     State,
 )
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from openadapt_flow.rl_env import CONTRACT_VERSION
+from openadapt_flow.rl_env import CONTRACT_VERSION, typed
 from openadapt_flow.rl_env.reward import EpisodeJudge, Judgement, render_verify_config
 from openadapt_flow.rl_env.tasks import (
     PUBLIC_SPLIT,
@@ -54,6 +62,10 @@ ActionKind = Literal[
 MAX_ELEMENTS = 80
 MAX_TEXT = 4000
 MAX_WAIT_S = 5.0
+#: A step or reset that takes longer ends the episode: the client gets a final
+#: observation (reward 0) instead of waiting forever on a stuck browser.
+STEP_TIMEOUT_S = 120.0
+RESET_TIMEOUT_S = 180.0
 #: Separates iframe hops in a selector: ``iframe[name="pat"] >>> #form_fname``.
 FRAME_SEP = " >>> "
 VIEWPORT = {"width": 1280, "height": 800}
@@ -79,7 +91,8 @@ _ELEMENTS_JS = """
     }
     out.push({tag: el.tagName.toLowerCase(), type: el.type || null,
               selector, label: label.slice(0, 80),
-              x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2)});
+              x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2),
+              w: Math.round(r.width), h: Math.round(r.height)});
     if (out.length >= limit) break;
   }
   return out;
@@ -95,7 +108,10 @@ class WebAction(Action):
     selector and the viewport centre that reach them.
     """
 
-    kind: ActionKind
+    kind: Optional[ActionKind] = None
+    #: An ``openadapt_types.Action`` in place of the fields below; node ids
+    #: refer to the last observation's ``computer_state``.
+    computer_action: Optional[dict[str, Any]] = None
     selector: Optional[str] = None
     x: Optional[int] = None
     y: Optional[int] = None
@@ -113,6 +129,12 @@ class WebAction(Action):
         description="done: did the task's change land in the record?",
     )
 
+    @model_validator(mode="after")
+    def _one_form(self) -> "WebAction":
+        if (self.kind is None) == (self.computer_action is None):
+            raise ValueError("give exactly one of kind or computer_action")
+        return self
+
 
 class WebObservation(Observation):
     contract: str = CONTRACT_VERSION
@@ -125,6 +147,10 @@ class WebObservation(Observation):
     step: int = 0
     max_steps: int = 0
     last_action_error: Optional[str] = None
+    #: ``openadapt_types.ComputerState`` of the page (nodes, URL, viewport).
+    computer_state: dict[str, Any] = Field(default_factory=dict)
+    #: ``openadapt_types.ActionResult`` of the last action.
+    action_result: Optional[dict[str, Any]] = None
     #: Set on the final observation only.
     verdict: Optional[str] = None
 
@@ -233,6 +259,46 @@ def _scalars(body: str) -> set[str]:
     return out
 
 
+def _driver_pid(pw: Any) -> Optional[int]:
+    """The Playwright driver's process id (Chromium runs under it), if known."""
+    try:
+        return int(pw._impl_obj._connection._transport._proc.pid)
+    except Exception:  # noqa: BLE001 - a different Playwright transport
+        return None
+
+
+def _kill_tree(pid: int) -> None:
+    """SIGKILL ``pid`` and every process below it."""
+    import os
+    import signal
+    import subprocess
+
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+        return
+    try:
+        rows = subprocess.run(
+            ["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, check=True
+        ).stdout.split("\n")
+    except (OSError, subprocess.CalledProcessError):
+        rows = []
+    children: dict[int, list[int]] = {}
+    for row in rows:
+        parts = row.split()
+        if len(parts) == 2:
+            children.setdefault(int(parts[1]), []).append(int(parts[0]))
+    tree, todo = [], [pid]
+    while todo:
+        current = todo.pop()
+        tree.append(current)
+        todo.extend(children.get(current, []))
+    for target in tree:
+        try:
+            os.kill(target, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 def _frame_selector(frame: Any) -> Optional[str]:
     """The iframe element's selector in its parent: by name, else by id."""
     if frame.name:
@@ -279,16 +345,53 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._page: Any = None
         self._judgement: Optional[Judgement] = None
         self._worker: Optional[ThreadPoolExecutor] = None
+        self._last_elements: list[dict[str, Any]] = []
+        self._driver_pid: Optional[int] = None
         self._records_url: Optional[str] = None
         self._attempted = False
         self._records_stop: Optional[Callable[[], None]] = None
 
-    def _on_worker(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    def _on_worker(
+        self,
+        fn: Callable[..., Any],
+        *args: Any,
+        _timeout: Optional[float] = None,
+        **kwargs: Any,
+    ) -> Any:
         if self._worker is None:
             self._worker = ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="rl-env"
             )
-        return self._worker.submit(fn, *args, **kwargs).result()
+        return self._worker.submit(fn, *args, **kwargs).result(timeout=_timeout)
+
+    def _abandon_worker(self) -> None:
+        """Drop a stuck worker so it can never touch a later episode.
+
+        Playwright objects can only be closed on the thread that made them,
+        and that thread is stuck, so the browser is killed instead: the
+        Playwright driver and everything it started (Chromium). An in-process
+        app copy is also replaced, so a write that still escapes lands in a
+        store no later episode reads. The next reset starts afresh.
+        """
+        if self._driver_pid is not None:
+            _kill_tree(self._driver_pid)
+        self._driver_pid = None
+        if self.env.manifest.app.kind == "inprocess" and self._app_stop is not None:
+            try:
+                self._app_stop()
+            except Exception:  # noqa: BLE001 - it is being replaced either way
+                pass
+            self._app_stop = None
+            self._app_url = None
+        if self._worker is not None:
+            self._worker.shutdown(wait=False)
+        self._worker = None
+        self._pw = self._browser = self._context = self._page = None
+        if self._judge is not None:
+            self._judge.close()
+        self._judge = None
+        self._task = None
+        self._state.done = True
 
     # -- task discovery (OpenEnv TaskProvider) ------------------------------
     def list_splits(self) -> list[str]:
@@ -363,6 +466,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         from playwright.sync_api import sync_playwright
 
         self._pw = sync_playwright().start()
+        self._driver_pid = _driver_pid(self._pw)
         self._browser = self._pw.chromium.launch(headless=True)
         return self._new_context()
 
@@ -389,10 +493,36 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
 
     # -- OpenEnv API --------------------------------------------------------
     def reset(self, *args: Any, **kwargs: Any) -> WebObservation:
-        return self._on_worker(self._reset, *args, **kwargs)
+        try:
+            return self._on_worker(
+                self._reset, *args, _timeout=RESET_TIMEOUT_S, **kwargs
+            )
+        except FutureTimeout:
+            self._abandon_worker()
+            raise RuntimeError(f"reset took longer than {RESET_TIMEOUT_S:.0f} s")
 
     def step(self, *args: Any, **kwargs: Any) -> WebObservation:
-        return self._on_worker(self._step, *args, **kwargs)
+        task = self._task
+        try:
+            return self._on_worker(self._step, *args, _timeout=STEP_TIMEOUT_S, **kwargs)
+        except FutureTimeout:
+            self._abandon_worker()
+            return WebObservation(
+                done=True,
+                reward=0.0,
+                metadata={
+                    "env": self.env.manifest.name,
+                    "judgement": {"verdict": "INDETERMINATE", "error": "step timeout"},
+                },
+                instruction=task.instruction if task else "",
+                step=self._state.step_count,
+                max_steps=self.env.manifest.agent.max_steps,
+                last_action_error=(
+                    f"the step took longer than {STEP_TIMEOUT_S:.0f} s; "
+                    "the episode ended with reward 0"
+                ),
+                verdict="INDETERMINATE",
+            )
 
     @property
     def state(self) -> WebState:
@@ -437,6 +567,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._judge = None
         self._judgement = None
         self._attempted = False
+        self._last_ms = 0
         self._state = WebState(env_name=self.env.manifest.name, done=True)
         app_url = self._ensure_app()
         self._reset_app(task)
@@ -465,20 +596,73 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         )
         return self._observe(reward=None, done=False)
 
-    def _step(
-        self, action: WebAction, timeout_s: Optional[float] = None, **_: Any
-    ) -> WebObservation:
+    def _step(self, action: Any, timeout_s: Optional[float] = None, **_: Any) -> Any:
+        if isinstance(action, ListToolsAction):
+            return ListToolsObservation(tools=[Tool(**tool) for tool in typed.TOOLS])
+        if isinstance(action, CallToolAction):
+            return self._call_tool(action)
         if self._task is None or self._page is None:
             raise RuntimeError("call reset() before step()")
         if self._state.done:
             return self._observe(reward=0.0, done=True, error="episode is over")
+        if action.computer_action is not None:
+            try:
+                native = typed.native_action(
+                    action.computer_action,
+                    self._last_elements,
+                    (VIEWPORT["width"], VIEWPORT["height"]),
+                )
+            except ValueError as exc:
+                # An action this environment can't take still spends a step.
+                self._state.step_count += 1
+                if self._state.step_count >= self.env.manifest.agent.max_steps:
+                    return self._finish(None, error=str(exc))
+                return self._observe(reward=0.0, done=False, error=str(exc))
+            action = WebAction(**native)
         self._state.step_count += 1
         if action.kind == "done":
             return self._finish(action.claim)
+        started = time.monotonic()
         error = self._act(action)
+        self._last_ms = int(1000 * (time.monotonic() - started))
         if self._state.step_count >= self.env.manifest.agent.max_steps:
             return self._finish(None, error=error)
         return self._observe(reward=0.0, done=False, error=error)
+
+    def _call_tool(self, action: CallToolAction) -> CallToolObservation:
+        """Run one MCP tool call as a step; the observation rides in the result."""
+        from openenv.core.env_server.mcp_types import ToolError, ToolErrorType
+
+        name = action.tool_name
+        if name not in typed.TOOL_NAMES:
+            return CallToolObservation(
+                tool_name=name,
+                error=ToolError(
+                    error_type=ToolErrorType.TOOL_NOT_FOUND, message=f"no tool {name!r}"
+                ),
+            )
+        if name == "observe":
+            if self._task is None:
+                raise RuntimeError("call reset() before step()")
+            obs = self._observe(reward=0.0, done=self._state.done)
+        else:
+            try:
+                web = WebAction(kind=name, **action.arguments)
+            except Exception as exc:  # noqa: BLE001 - bad arguments are the agent's
+                return CallToolObservation(
+                    tool_name=name,
+                    error=ToolError(
+                        error_type=ToolErrorType.INVALID_ARGS, message=str(exc)
+                    ),
+                )
+            obs = self._step(web)
+        return CallToolObservation(
+            tool_name=name,
+            result=obs.model_dump(exclude={"done", "reward", "metadata"}),
+            done=obs.done,
+            reward=obs.reward,
+            metadata=obs.metadata,
+        )
 
     def _close(self) -> None:
         for closer in (
@@ -487,7 +671,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             lambda: self._pw and self._pw.stop(),
             lambda: self._app_stop and self._app_stop(),
             lambda: self._records_stop and self._records_stop(),
-            lambda: self._judge and self._judge.close(),
+            lambda: self._judge.close() if self._judge else None,
         ):
             try:
                 closer()
@@ -661,11 +845,13 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
     ) -> WebObservation:
         assert self._task is not None
         page = self._page
-        text, title, url, elements, shot = "", "", "", [], None
+        elements: list[Any] = []
+        text, title, url, shot = "", "", "", None
         try:
             url = _redact(page.url)
             title = page.title()
             text, elements = self._page_content()
+            self._last_elements = elements
             if self.screenshots:
                 shot = base64.b64encode(page.screenshot(type="png")).decode("ascii")
         except Exception as exc:  # noqa: BLE001 - a page mid-navigation
@@ -684,4 +870,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             max_steps=self.env.manifest.agent.max_steps,
             last_action_error=error,
             verdict=verdict,
+            computer_state=typed.computer_state(
+                url, elements, (VIEWPORT["width"], VIEWPORT["height"])
+            ),
+            action_result=typed.action_result(error, getattr(self, "_last_ms", 0)),
         )
