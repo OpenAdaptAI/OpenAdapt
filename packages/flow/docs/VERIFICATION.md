@@ -454,7 +454,7 @@
 |---|---|---|---|---|
 | `tests/test_linux_backend.py` | test | ci (required PR gate (test)) | supported | Default CI covers exact app/window binding, bounded candidate enumeration, ambiguity and stale-target refusal, native invoke/focus and editable-text delivery, window-scoped capture, physical-input opt-in, and Wayland portal refusal through an injected Linux client. |
 | `tests/test_linux_qualification.py` | test | ci (required PR gate (test)) | supported | Default CI enforces the live qualification's fixed three-trial matrix, independent exact-file and absence oracles, and separate silent-incorrect-success, over-halt, and refusal-failure accounting. |
-| `scripts/qualify_linux_atspi.py` | benchmark | artifact (doc/benchmark) | roadmap | The required linux-atspi-x11 job drives the real GTK3 fixture through AT-SPI on an isolated Xvfb display and session D-Bus, emitting a per-trial JSON evidence artifact. |
+| `scripts/qualify_linux_atspi.py` | benchmark | artifact (doc/benchmark) | roadmap | The root flow-linux-atspi job (packages.yml, post-merge tier) drives the real GTK3 fixture through AT-SPI on an isolated Xvfb display and session D-Bus, emitting a per-trial JSON evidence artifact. |
 | `docs/desktop/LINUX_NATIVE.md` | doc | artifact (doc/benchmark) | roadmap | The operator contract, X11 and Wayland boundaries, configuration, delivery-only receipt semantics, and required real GTK/AT-SPI CI qualification contract. |
 
 **Caveats (honest limits):**
