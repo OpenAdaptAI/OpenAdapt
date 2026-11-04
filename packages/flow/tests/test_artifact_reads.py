@@ -812,6 +812,70 @@ def test_push_in_strict_mode_seals_the_review_copy_of_a_plain_recording(
     _no_plaintext_under(tmp_path)
 
 
+def _bundle_with_a_bad_action(source: Path, out: Path, *, key=None) -> Path:
+    """A copy of ``source`` whose first action is the private marker."""
+    opened = sealed_set.open_set(source, KEY)
+    files = {rel: opened.read_bytes(rel) for rel in opened.files("")}
+    doc = json.loads(files["workflow.json"])
+    doc["steps"][0]["action"] = _MARKER
+    files["workflow.json"] = json.dumps(doc).encode()
+    if key is None:
+        for rel, data in files.items():
+            (out / rel).parent.mkdir(parents=True, exist_ok=True)
+            (out / rel).write_bytes(data)
+        return out
+    with sealed_set.writing(out, "bundle", key):
+        for rel, data in files.items():
+            sealed_set.write_bytes(out / rel, data)
+    return out
+
+
+@pytest.mark.parametrize("strict", [True, False], ids=["strict", "sealed input"])
+def test_push_refusal_on_a_sealed_bundle_never_prints_its_contents(
+    sealed: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    push_env,
+    capsys,
+    strict: bool,
+) -> None:
+    from openadapt_flow import hosted
+
+    monkeypatch.setenv(hosted.AUTO_APPROVE_ENV, "false")
+    if strict:
+        monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    bad = _bundle_with_a_bad_action(sealed, tmp_path / "bad", key=KEY)
+    assert sealed_set.is_sealed(bad)
+    push = ["push", str(bad), "--kind", "bundle", "--host", "https://h.test"]
+    assert main([*push, "--token", "tok"]) == 1
+    captured = capsys.readouterr()
+    assert _MARKER not in captured.out + captured.err
+    assert "push failed: the input was refused (ValidationError)" in captured.out
+    assert "withheld" in captured.out
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert _MARKER.encode() not in path.read_bytes(), path
+
+
+def test_push_refusal_on_a_plain_bundle_keeps_its_details(
+    sealed: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    push_env,
+    capsys,
+) -> None:
+    """Outside strict mode a plaintext input's refusal says what is wrong."""
+    from openadapt_flow import hosted
+
+    monkeypatch.setenv(hosted.AUTO_APPROVE_ENV, "false")
+    bad = _bundle_with_a_bad_action(sealed, tmp_path / "bad")
+    assert not sealed_set.is_sealed(bad)
+    push = ["push", str(bad), "--kind", "bundle", "--host", "https://h.test"]
+    assert main([*push, "--token", "tok"]) == 1
+    out = capsys.readouterr().out
+    assert "Cannot validate generated workflow.py" in out and _MARKER in out
+
+
 def test_a_plaintext_copy_of_a_sealed_bundle_never_loads_as_encrypted(
     sealed: Path, tmp_path: Path
 ) -> None:

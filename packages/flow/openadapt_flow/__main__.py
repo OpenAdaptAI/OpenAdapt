@@ -7821,6 +7821,30 @@ def _print_push_json(document: dict[str, Any]) -> None:
     print(json.dumps(document, sort_keys=True, separators=(",", ":")))
 
 
+def _push_failure_reason(args: argparse.Namespace, error: Exception) -> str:
+    """What ``push`` prints when it fails.
+
+    A failure caused by another error (a validation error, a scrub or
+    sanitization failure) can quote what it read. When the input is sealed or
+    strict mode is on, that text came out of encrypted content, so push names
+    only the kind of error. A failure push raised itself prints as it is.
+    """
+    from openadapt_flow import at_rest, sealed_set
+
+    cause = error.__cause__ or error.__context__
+    if cause is None:
+        return str(error)
+    path = getattr(args, "path", None)
+    if not at_rest.strict() and not (path and sealed_set.is_sealed_path(path)):
+        return str(error)
+    while cause.__cause__ is not None or cause.__context__ is not None:
+        cause = cause.__cause__ or cause.__context__
+    return (
+        f"the input was refused ({type(cause).__name__}). The details are "
+        "withheld because the input is sealed or strict mode is on."
+    )
+
+
 def _cmd_push(args: argparse.Namespace) -> int:
     """Upload the exact approved sanitized archive to ``/api/ingest``.
 
@@ -7865,7 +7889,7 @@ def _cmd_push(args: argparse.Namespace) -> int:
         if args.json:
             _print_push_json(_push_json_failure())
             return 1
-        print(f"push failed: {e}")
+        print(f"push failed: {_push_failure_reason(args, e)}")
         return 1
     if args.json:
         try:
