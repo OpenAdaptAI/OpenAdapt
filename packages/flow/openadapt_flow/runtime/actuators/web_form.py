@@ -576,7 +576,9 @@ class Transport(Protocol):
 
     def get(self, path_and_query: str) -> Response: ...
 
-    def post_form(self, path: str, body: str, *, referer: str) -> Response: ...
+    def post_form(
+        self, path: str, body: str, *, referer: str, content_type: str = ...
+    ) -> Response: ...
 
     # A save encoded as multipart calls ``post_form(..., content_type=...)``
     # with the full ``multipart/form-data; boundary=...`` type; a transport
@@ -707,7 +709,6 @@ def encode_multipart(
             )
     out.append(f"--{boundary}--\r\n")
     return "".join(out), f"multipart/form-data; boundary={boundary}"
-
 
 
 @dataclass(frozen=True)

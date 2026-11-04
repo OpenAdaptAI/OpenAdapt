@@ -280,7 +280,11 @@ def evaluate_form(
             from openadapt_flow.network_capture import parse_multipart
 
             parsed = parse_multipart(body.encode("utf-8"), content_type)
-            body = up.urlencode(parsed[0]) if parsed is not None else None
+            body = (
+                up.urlencode([(k, v) for k, v in parsed[0]])
+                if parsed is not None
+                else None
+            )
             content_type = URLENCODED if parsed is not None else content_type
         what = _summary(req.method, req.url)
         late.append(

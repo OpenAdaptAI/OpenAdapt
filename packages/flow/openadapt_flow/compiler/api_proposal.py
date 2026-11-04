@@ -54,7 +54,7 @@ import re
 import urllib.parse as up
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from openadapt_flow import network_capture as nc
 from openadapt_flow import sealed_set as _sealed
@@ -280,7 +280,9 @@ def _success_pattern(line: dict[str, Any]) -> Optional[str]:
         # the record number alone matches almost anything, so the path is
         # kept, with each number generalized.
         pieces = [
-            "/".join(r"\d+" if seg.isdigit() else re.escape(seg) for seg in path.split("/"))
+            "/".join(
+                r"\d+" if seg.isdigit() else re.escape(seg) for seg in path.split("/")
+            )
         ]
     else:
         pieces = [re.escape(leaf)]
@@ -516,9 +518,11 @@ def _span_writes(
         if up.urlsplit(ln["url"]).query:
             problems.append(f"{from_step} also sent {what} with values in its URL")
             continue
-        if ln.get("form") is None or (
-            ln.get("request_type") or "application/x-www-form-urlencoded"
-        ) != "application/x-www-form-urlencoded":
+        if (
+            ln.get("form") is None
+            or (ln.get("request_type") or "application/x-www-form-urlencoded")
+            != "application/x-www-form-urlencoded"
+        ):
             problems.append(
                 f"{from_step} also sent {what} with a body the API step can't rebuild "
                 f"({ln.get('body_omitted') or ln.get('request_type') or 'not form-encoded'})"
@@ -644,6 +648,7 @@ def propose_api_step(
     if any(v == nc.SECRET for _, v in post["form"]):
         return workflow, None, ["the save sends a secret field; it stays on the GUI"]
     request_type = post.get("request_type") or "application/x-www-form-urlencoded"
+    encoding: Literal["urlencoded", "multipart"]
     if request_type == "multipart/form-data":
         encoding = "multipart"
     elif request_type == "application/x-www-form-urlencoded":
@@ -662,7 +667,9 @@ def propose_api_step(
             and ln.get("status") == 200
             and "<form" in (ln.get("response_text") or "")
         ):
-            found = form_parts(ln["response_text"], _path(post["url"]), _path(ln["url"]))
+            found = form_parts(
+                ln["response_text"], _path(post["url"]), _path(ln["url"])
+            )
             if found is not None:
                 form_line, form = ln, found
     form_action: Optional[str] = None
@@ -688,10 +695,16 @@ def propose_api_step(
             ],
         )
     controls = form["controls"]
-    if encoding == "multipart" and form_action is None and form.get("enctype") != (
-        "multipart/form-data"
+    if (
+        encoding == "multipart"
+        and form_action is None
+        and form.get("enctype") != ("multipart/form-data")
     ):
-        return workflow, None, ["the save is multipart, but the form doesn't post as multipart"]
+        return (
+            workflow,
+            None,
+            ["the save is multipart, but the form doesn't post as multipart"],
+        )
     form_t = float(form_line["t"])
     if _origin(form_line["url"]) != _origin(post["url"]):
         return (
@@ -720,7 +733,9 @@ def propose_api_step(
         return (
             workflow,
             None,
-            ["the save went elsewhere than the form's action, and the page has no script"],
+            [
+                "the save went elsewhere than the form's action, and the page has no script"
+            ],
         )
 
     # Steps the API step stands in for: those recorded on the form page.
@@ -759,7 +774,9 @@ def propose_api_step(
             return (
                 workflow,
                 None,
-                ["the save's file inputs aren't the form's own (a file may have been attached)"],
+                [
+                    "the save's file inputs aren't the form's own (a file may have been attached)"
+                ],
             )
     for name, value in post["form"]:
         ctl = controls.get(name)

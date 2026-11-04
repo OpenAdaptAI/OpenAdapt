@@ -354,7 +354,11 @@ def parse_multipart(
                 return None
             pairs.append([name.group(1), text])
             continue
-        if name.group(3) or text or extra not in ([], ["content-type: application/octet-stream"]):
+        if (
+            name.group(3)
+            or text
+            or extra not in ([], ["content-type: application/octet-stream"])
+        ):
             return None  # a file was attached
         pairs.append([name.group(1), ""])
         files.append(name.group(1))

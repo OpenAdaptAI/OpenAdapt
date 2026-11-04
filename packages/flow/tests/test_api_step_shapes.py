@@ -125,7 +125,9 @@ def app_page(browser):
     app.server.shutdown()
 
 
-def _browser_submit(app: _App, page: Any, subject: str, notes: str) -> tuple[str, bytes]:
+def _browser_submit(
+    app: _App, page: Any, subject: str, notes: str
+) -> tuple[str, bytes]:
     page.goto(app.base + "/new")
     page.fill("#subject", subject)
     page.fill("#notes", notes)
@@ -304,7 +306,9 @@ def test_a_script_sent_save_runs_the_script_first(app_page):
     from openadapt_flow.runtime.actuators.web_form import client_rules, page_scripts
 
     html = app.pages["/tags"].replace("{n}", "1")
-    scripts = page_scripts(html, "/edit", ["action", "nonce", "tag-name"], client_rules(html), "/tags")
+    scripts = page_scripts(
+        html, "/edit", ["action", "nonce", "tag-name"], client_rules(html), "/tags"
+    )
     binding = _script_binding()
     binding.web_form.client_scripts = scripts
     assert spec.form_action == "/edit"
@@ -345,7 +349,11 @@ def test_a_script_that_sends_another_field_keeps_the_save_on_the_gui(app_page):
             "/?p=1&unapproved=7&moderation-hash=0123abcdef4567890abc",
             "/?p=1",
         ),
-        ("/contact/card.php?id=1", "/contact/card.php?id=8", "/contact/card.php?action=create"),
+        (
+            "/contact/card.php?id=1",
+            "/contact/card.php?id=8",
+            "/contact/card.php?action=create",
+        ),
     ],
 )
 def test_success_patterns_generalize_record_numbers_and_hashes(location, good, bad):
