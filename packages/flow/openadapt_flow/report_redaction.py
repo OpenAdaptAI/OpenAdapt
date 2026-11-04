@@ -234,7 +234,7 @@ def is_credential_name(name: str, *, header: bool = False) -> bool:
 
     The name is split into parts on anything but letters and digits; a part
     that is a token, CSRF/XSRF token or session id makes it one
-    (``csrf_token_form``, ``X-Frappe-CSRF-Token``, ``app_sessid``). For a
+    (``csrf_token_form``, ``X-CSRF-Token``, ``app_sessid``). For a
     header (``header=True``) an ``authorization`` part does too
     (``Espo-Authorization``); elsewhere that word names an approval, not a
     credential. A parameter or header named so is redacted in every app and
