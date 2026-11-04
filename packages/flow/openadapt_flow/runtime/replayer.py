@@ -402,6 +402,7 @@ PC_STRUCTURAL_TEMPLATE_THRESHOLD = 0.8
 # viewport width: a centered crop can hide the value's beginning or suffix.
 # With no focusing click (e.g. Tab between fields), use the whole frame.
 FIELD_REGION_HEIGHT = 240
+MASKED_FIELD_REGION_WIDTH = 640
 FIELD_REGION_PAD = 16
 
 # Typed-input verification, secret-only diff acceptance: when a SECRET typed
@@ -17476,6 +17477,8 @@ class Replayer:
         self,
         field_point: Optional[Point],
         structural_region: Optional[Region] = None,
+        *,
+        masked: bool = False,
     ) -> Optional[Region]:
         """Region to observe for typed input, or None for the whole frame."""
         vw, vh = self.backend.viewport
@@ -17489,9 +17492,11 @@ class Replayer:
                 return (x, y, right - x, bottom - y)
         if field_point is None:
             return None
+        w = min(MASKED_FIELD_REGION_WIDTH, vw) if masked else vw
         h = min(FIELD_REGION_HEIGHT, vh)
+        x = min(max(0, field_point[0] - w // 2), max(0, vw - w))
         y = min(max(0, field_point[1] - h // 2), max(0, vh - h))
-        return (0, y, vw, h)
+        return (x, y, w, h)
 
     def _ocr_squashed(self, png: bytes, region: Optional[Region]) -> str:
         """Squashed OCR text of a (region of a) frame."""
@@ -17570,7 +17575,9 @@ class Replayer:
             retyping is only safe when nothing changed).
         """
         after_png = self._settle_seeded()
-        region = self._field_region(field_point, field_region)
+        # Masked input has no readable value: keep its pixel-only change
+        # evidence local, so an unrelated change elsewhere cannot confirm it.
+        region = self._field_region(field_point, field_region, masked=allow_masked)
         if baseline_field_value is not None:
             expected = baseline_field_value + text
             after_at_point = (

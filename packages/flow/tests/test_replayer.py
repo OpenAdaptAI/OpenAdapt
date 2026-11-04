@@ -3942,6 +3942,34 @@ def test_visual_input_readback_cannot_hide_text_outside_a_centered_crop(
     assert backend.actions == []
 
 
+@pytest.mark.parametrize("changed_x,expected", [(50, False), (900, True)])
+def test_masked_input_needs_a_change_near_the_target(changed_x, expected):
+    from PIL import ImageDraw
+
+    from openadapt_flow.vision import pixels_changed
+
+    before = make_png((1600, 800))
+    image = Image.open(io.BytesIO(before))
+    ImageDraw.Draw(image).rectangle(
+        (changed_x - 40, 450, changed_x + 40, 550), fill="black"
+    )
+    stream = io.BytesIO()
+    image.save(stream, format="PNG")
+    after = stream.getvalue()
+
+    class PixelVision(FakeVision):
+        def pixels_changed(self, before, after, *, region=None, **kwargs):
+            return pixels_changed(before, after, region=region)
+
+    backend = FakeBackend(frame=after, viewport=(1600, 800), text_value_supported=False)
+    landed, changed = Replayer(backend, vision=PixelVision())._typed_input_landed(
+        "secret", (900, 500), before, allow_masked=True
+    )
+    assert landed is expected
+    assert changed is expected
+    assert backend.actions == []
+
+
 def test_type_verification_refocuses_and_retypes_once(bundle, run_dir):
     """Focus theft: the first attempt lands nowhere visible; the retry
     re-clicks the field, selects all (replace, never append), retypes, and
