@@ -21,6 +21,7 @@ on:
       - packages/flow/scripts/desktop/pn_db.py
       - packages/flow/scripts/desktop/patient_notes.ps1
       - packages/flow/tests/e2e/test_windows_hosted_replay.py
+      - packages/flow/tests/e2e/test_windows_hosted_governed.py
       - packages/flow/tests/test_xfreerdp.py
       - packages/flow/tests/test_windows_attempt_ledger.py
       - packages/flow/tests/test_approval_form_window.py
@@ -85,6 +86,13 @@ jobs:
           mkdir -p runs
           pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wr" \
             tests/e2e/test_windows_hosted_replay.py --junitxml=runs/windows-replay-junit.xml
+      - name: Governed run (Standard, an approval, a hold and a resume), judged from the record
+        env:
+          OAFLOW_WINDOWS_HOSTED_E2E: "1"
+          OAFLOW_WINDOWS_GOVERNED_EVIDENCE: ${{ runner.temp }}/windows-governed-evidence.json
+        run: |
+          pytest -v -rs -p no:cacheprovider --basetemp="$RUNNER_TEMP/wg" \
+            tests/e2e/test_windows_hosted_governed.py --junitxml=runs/windows-governed-junit.xml
       - name: The replay ran (no skips)
         run: |
           python - <<'PY'
@@ -92,7 +100,7 @@ jobs:
           import xml.etree.ElementTree as ET
           cases = [
               case
-              for name in ("windows-guards", "windows-replay")
+              for name in ("windows-guards", "windows-replay", "windows-governed")
               for case in ET.parse(f"runs/{name}-junit.xml").getroot().iter("testcase")
           ]
           skipped = [c for c in cases if c.find("skipped") is not None]
@@ -106,6 +114,9 @@ jobs:
           name: windows-replay-evidence
           path: |
             ${{ runner.temp }}/windows-replay-evidence.json
+            ${{ runner.temp }}/windows-governed-evidence.json
+            ${{ runner.temp }}/wg/**/report.json
+            ${{ runner.temp }}/wg/**/agent.log
             ${{ runner.temp }}/wr/**/*.png
             ${{ runner.temp }}/wr/**/agent.log
             ${{ runner.temp }}/wr/**/report.json
