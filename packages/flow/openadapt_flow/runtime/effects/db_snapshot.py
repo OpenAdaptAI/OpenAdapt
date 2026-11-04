@@ -1318,9 +1318,27 @@ def _pg_definitions(
             "JOIN pg_language l ON l.oid = p.prolang "
             f"WHERE n.nspname IN {within} ORDER BY 1, 2, 3"
         ),
+        # pg_rules has no enabled state, so ALTER TABLE ... DISABLE RULE
+        # would not show; pg_rewrite.ev_enabled has it. A view's own
+        # _RETURN rule is left out, as pg_rules does (the view is read above).
         s.rows(
-            "SELECT schemaname, tablename, rulename, definition FROM pg_rules "
-            f"WHERE schemaname IN {within} ORDER BY 1, 2, 3"
+            "SELECT n.nspname, c.relname, r.rulename, r.ev_enabled, "
+            "pg_get_ruledef(r.oid) FROM pg_rewrite r "
+            "JOIN pg_class c ON c.oid = r.ev_class "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE r.rulename <> '_RETURN' AND n.nspname IN {within} "
+            "ORDER BY 1, 2, 3"
+        ),
+        # A unique index decides which writes the database accepts, and one
+        # made with CREATE UNIQUE INDEX is not a constraint, so dropping it
+        # would not show in a table's definition.
+        s.rows(
+            "SELECT n.nspname, c.relname, i.relname, x.indisvalid, "
+            "pg_get_indexdef(x.indexrelid) FROM pg_index x "
+            "JOIN pg_class i ON i.oid = x.indexrelid "
+            "JOIN pg_class c ON c.oid = x.indrelid "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            f"WHERE x.indisunique AND n.nspname IN {within} ORDER BY 1, 2, 3"
         ),
         s.rows(
             "SELECT schemaname, tablename, policyname, permissive, roles::text, cmd, "
