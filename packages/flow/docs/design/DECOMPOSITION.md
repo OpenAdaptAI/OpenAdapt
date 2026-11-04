@@ -594,16 +594,16 @@ that:
 <!-- size-ratchet:begin -->
 | File | Line budget |
 |---|---:|
-| `packages/flow/openadapt_flow/runtime/replayer.py` | 19303 |
-| `packages/flow/openadapt_flow/__main__.py` | 12708 |
+| `packages/flow/openadapt_flow/runtime/replayer.py` | 19524 |
+| `packages/flow/openadapt_flow/__main__.py` | 12915 |
 | `packages/flow/openadapt_flow/qualification.py` | 5776 |
-| `packages/flow/openadapt_flow/ir.py` | 6286 |
+| `packages/flow/openadapt_flow/ir.py` | 6352 |
 | `packages/desktop/openadapt_desktop/dispatch.py` | 6404 |
-| `packages/capture/openadapt_capture/recorder.py` | 4792 |
+| `packages/capture/openadapt_capture/recorder.py` | 4823 |
 | `packages/flow/openadapt_flow/interactive_recorder.py` | 4603 |
 | `packages/flow/openadapt_flow/runtime/durable/attended.py` | 4301 |
 | `packages/flow/openadapt_flow/terminal_verification_v2.py` | 3663 |
-| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 5172 |
+| `packages/flow/openadapt_flow/backends/playwright_backend.py` | 5199 |
 <!-- size-ratchet:end -->
 
 ## 7. Coordination with work in flight
