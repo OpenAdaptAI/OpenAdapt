@@ -238,6 +238,46 @@ def _scalars(body: str) -> set[str]:
     return out
 
 
+def _driver_pid(pw: Any) -> Optional[int]:
+    """The Playwright driver's process id (Chromium runs under it), if known."""
+    try:
+        return int(pw._impl_obj._connection._transport._proc.pid)
+    except Exception:  # noqa: BLE001 - a different Playwright transport
+        return None
+
+
+def _kill_tree(pid: int) -> None:
+    """SIGKILL ``pid`` and every process below it."""
+    import os
+    import signal
+    import subprocess
+
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+        return
+    try:
+        rows = subprocess.run(
+            ["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True, check=True
+        ).stdout.split("\n")
+    except (OSError, subprocess.CalledProcessError):
+        rows = []
+    children: dict[int, list[int]] = {}
+    for row in rows:
+        parts = row.split()
+        if len(parts) == 2:
+            children.setdefault(int(parts[1]), []).append(int(parts[0]))
+    tree, todo = [], [pid]
+    while todo:
+        current = todo.pop()
+        tree.append(current)
+        todo.extend(children.get(current, []))
+    for target in tree:
+        try:
+            os.kill(target, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 def _frame_selector(frame: Any) -> Optional[str]:
     """The iframe element's selector in its parent: by name, else by id."""
     if frame.name:
@@ -279,6 +319,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._page: Any = None
         self._judgement: Optional[Judgement] = None
         self._worker: Optional[ThreadPoolExecutor] = None
+        self._driver_pid: Optional[int] = None
         self._records_url: Optional[str] = None
         self._attempted = False
         self._records_stop: Optional[Callable[[], None]] = None
@@ -297,12 +338,24 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         return self._worker.submit(fn, *args, **kwargs).result(timeout=_timeout)
 
     def _abandon_worker(self) -> None:
-        """Drop a stuck worker and its browser; the next reset starts afresh.
+        """Drop a stuck worker so it can never touch a later episode.
 
         Playwright objects can only be closed on the thread that made them,
-        and that thread is stuck, so they are left to it. The app copy and
-        its store are kept: the next reset restores them.
+        and that thread is stuck, so the browser is killed instead: the
+        Playwright driver and everything it started (Chromium). An in-process
+        app copy is also replaced, so a write that still escapes lands in a
+        store no later episode reads. The next reset starts afresh.
         """
+        if self._driver_pid is not None:
+            _kill_tree(self._driver_pid)
+        self._driver_pid = None
+        if self.env.manifest.app.kind == "inprocess" and self._app_stop is not None:
+            try:
+                self._app_stop()
+            except Exception:  # noqa: BLE001 - it is being replaced either way
+                pass
+            self._app_stop = None
+            self._app_url = None
         if self._worker is not None:
             self._worker.shutdown(wait=False)
         self._worker = None
@@ -386,6 +439,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         from playwright.sync_api import sync_playwright
 
         self._pw = sync_playwright().start()
+        self._driver_pid = _driver_pid(self._pw)
         self._browser = self._pw.chromium.launch(headless=True)
         return self._new_context()
 
