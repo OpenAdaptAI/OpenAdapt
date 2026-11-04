@@ -1,0 +1,35 @@
+{
+ "app": "Calculator",
+ "tree_seconds": 0.3,
+ "nodes": 20,
+ "identity_rereads_equal": 20,
+ "roles": [
+  "button"
+ ],
+ "observe_provider": "macos_ax",
+ "observe_nodes": 20,
+ "observe_names": [
+  "Delete",
+  "Change Sign",
+  "Percent",
+  "Divide",
+  "7",
+  "8",
+  "9",
+  "Multiply",
+  "4",
+  "5",
+  "6",
+  "Subtract",
+  "1",
+  "2",
+  "3",
+  "Add",
+  "0",
+  "Point",
+  "Equals",
+  "calculator.fill"
+ ],
+ "window_title_on_payload": true,
+ "note": "macOS Calculator (SwiftUI), read-only: the AX authoring tree and an identity re-read per node. Taken on commit 0dded5a1c, before offscreen nodes were listed; the AX walk itself is unchanged. No click: the desktop was in use."
+}
