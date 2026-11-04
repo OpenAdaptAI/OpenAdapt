@@ -37,6 +37,7 @@ from openadapt_flow.runtime.effects.db_snapshot import (
     KEY,
     Snapshot,
     Table,
+    every_cell_hashed,
     mac_key,
     row_hash,
     row_key_hash,
@@ -443,7 +444,11 @@ def diff_states(
                 # The profile's per-row rules (the acting user's sign-in
                 # bookkeeping, a uuid backfill), exactly as diff_database
                 # applies them. A row with no plain values is never excused.
-                if excuse is None or a.cell_columns != b.cell_columns:
+                if (
+                    excuse is None
+                    or a.cell_columns != b.cell_columns
+                    or not every_cell_hashed(a)
+                ):
                     return True
                 old, new = a.rows.get(k), b.rows.get(k)
                 was = None if old is None else unpack(a.cell_columns, old[1])

@@ -2565,7 +2565,11 @@ def diff_database(
     counters, a uuid backfill) is left out, as the frame leaves it out.
     """
 
-    from openadapt_flow.runtime.effects.db_snapshot import cell_hash, unpack
+    from openadapt_flow.runtime.effects.db_snapshot import (
+        cell_hash,
+        every_cell_hashed,
+        unpack,
+    )
 
     k = key or _PROCESS_KEY
     moved = diff(before, after, key=k, allow_tables=allow_tables)
@@ -2579,7 +2583,14 @@ def diff_database(
     out: dict[str, TableDiff] = {}
     for name, d in moved.items():
         a, b = before.tables.get(name), after.tables.get(name)
-        if d.unread or a is None or b is None or a.cell_columns != b.cell_columns:
+        if (
+            d.unread
+            or a is None
+            or b is None
+            or a.cell_columns != b.cell_columns
+            or not every_cell_hashed(a)
+        ):
+            # A column no cell MAC shows may have moved: no rule judges it.
             out[name] = d
             continue
         hasher = (lambda t: lambda col, v: cell_hash(k, v, t, col))(name)
