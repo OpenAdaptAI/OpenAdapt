@@ -825,6 +825,12 @@ def _resolve_readback(
 # contract cannot claim stronger evidence than the compiler would emit.
 MIN_RENAV_ACTIONS = 2
 
+#: The record field read as an at-most-once key when nothing names another:
+#: :attr:`Effect.key_field`'s default, and the field the effect miner reads
+#: unless its caller names another (or ``None`` for no key). The miner sets a
+#: key only when the observed record carries a value there.
+DEFAULT_IDEMPOTENCY_KEY_FIELD = "key"
+
 
 class Effect(BaseModel):
     """A typed system-of-record effect (RFC ``Effect``, concrete runtime form).
@@ -896,11 +902,10 @@ class Effect(BaseModel):
     #: identity) so the key is PER-RUN, not the frozen demonstration literal
     #: that would collide across unrelated runs (P0-3).
     idempotency_key: Optional[ValueExpr] = None
-    #: Which record field carries the idempotency key. App-specific: the
-    #: contract names it beside ``idempotency_key`` (the effect miner sets it
-    #: only from the field its caller names). The default is kept so effects
-    #: dumped before this note hash the same.
-    key_field: str = "key"
+    #: Which record field carries the idempotency key. The contract names it
+    #: beside ``idempotency_key``; the effect miner sets it from the field its
+    #: caller names (:data:`DEFAULT_IDEMPOTENCY_KEY_FIELD` unless told).
+    key_field: str = DEFAULT_IDEMPOTENCY_KEY_FIELD
     #: ``record_written`` only: a duplicate (idempotency) key made of several
     #: fields, such as OpenEMR's ``{lname, fname, DOB}``. Field -> value, each
     #: a :class:`ValueExpr` like :attr:`match`. The count reads only records

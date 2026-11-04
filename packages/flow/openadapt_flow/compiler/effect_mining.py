@@ -55,6 +55,7 @@ from typing import Any, Mapping, Optional
 
 from openadapt_flow.ir import ActionKind, PostconditionKind, Region, Step
 from openadapt_flow.runtime.effects.effect import (
+    DEFAULT_IDEMPOTENCY_KEY_FIELD,
     MIN_RENAV_ACTIONS,
     Effect,
     EffectKind,
@@ -283,7 +284,7 @@ def _mine_from_sor_delta(
     after: list[dict],
     exclude_texts: tuple[str, ...],
     param_bindings: Optional[Mapping[str, str]] = None,
-    idempotency_key_field: Optional[str] = None,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
 ) -> Optional[StepEffectMining]:
     """Mine real effects from an OBSERVED before/after system-of-record delta.
 
@@ -896,7 +897,7 @@ def mine_step_effects(
     param_bindings: Optional[Mapping[str, str]] = None,
     store_unchanged: Optional[bool] = None,
     write_requests: Optional[bool] = None,
-    idempotency_key_field: Optional[str] = None,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
 ) -> StepEffectMining:
     """Derive candidate system-of-record effects for one compiled step.
 
@@ -944,7 +945,8 @@ def mine_step_effects(
         idempotency_key_field: The record field that carries this app's
             at-most-once key, from the contract or deployment config. Set,
             and present on the observed record, the mined ``record_written``
-            counts records bearing it. ``None``: no key is mined.
+            counts records bearing it. Defaults to
+            :data:`DEFAULT_IDEMPOTENCY_KEY_FIELD`; ``None``: no key is mined.
 
     Returns:
         A :class:`StepEffectMining` describing the decision. ``effects`` is

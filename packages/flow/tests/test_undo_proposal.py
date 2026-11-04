@@ -925,6 +925,7 @@ def test_deployment_test_copy_resets_and_reads_every_record(tmp_path, mockmed):
         "name: copy\n"
         f"backend:\n  kind: web\n  url: {mockmed}/\n"
         f"effects:\n  kind: rest\n  base_url: {mockmed}\n"
+        "  records_path: /api/db\n"
         "test_copy:\n  declared: true\n"
         f"  reset_url: {mockmed}/api/reset\n"
         "  reward_contract: contract\n"

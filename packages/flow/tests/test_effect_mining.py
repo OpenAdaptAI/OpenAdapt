@@ -135,14 +135,24 @@ def test_mines_idempotency_key_only_from_the_named_field_when_observed():
     assert written3.idempotency_key == "req-7"
     assert written3.key_field == "client_request_id"
 
-    # No field named: no key mined, whatever the record holds.
+    # No field named: the "key" convention, the default of Effect.key_field.
     unnamed = mine_step_effects(
         {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(key="idem-abc")]},
         _key_step(),
         exclude_texts=(NOTE,),
     )
     written4 = next(e for e in unnamed.effects if e.kind is EffectKind.RECORD_WRITTEN)
-    assert written4.idempotency_key is None
+    assert written4.idempotency_key == "idem-abc"
+
+    # None: no key mined, whatever the record holds.
+    none = mine_step_effects(
+        {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record(key="idem-abc")]},
+        _key_step(),
+        exclude_texts=(NOTE,),
+        idempotency_key_field=None,
+    )
+    written5 = next(e for e in none.effects if e.kind is EffectKind.RECORD_WRITTEN)
+    assert written5.idempotency_key is None
 
     without = mine_step_effects(
         {SOR_BEFORE_KEY: [], SOR_AFTER_KEY: [_record()]},

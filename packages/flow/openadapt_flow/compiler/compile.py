@@ -74,6 +74,7 @@ from openadapt_flow.risk import (
     is_meaningful_label,
     presumed_commit_step_ids,
 )
+from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
 from openadapt_flow.runtime.identity import (
     band_region,
     context_from_lines,
@@ -2095,7 +2096,7 @@ def _compile_recording(
     mine_effects: bool = False,
     admit_api_bindings: bool = False,
     admission_fixture: Optional["AdmissionFixture"] = None,
-    idempotency_key_field: Optional[str] = None,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
     skill_library_root: Optional[Path | str] = None,
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
@@ -2199,7 +2200,9 @@ def _compile_recording(
             synthesized. Default False keeps the bundle byte-identical.
         idempotency_key_field: With ``mine_effects``, the record field that
             carries this app's at-most-once key (from its contract or
-            deployment config). ``None``: no key is mined.
+            deployment config). Defaults to the ``key`` convention
+            (:data:`~openadapt_flow.compiler.effect_mining.DEFAULT_IDEMPOTENCY_KEY_FIELD`);
+            ``None``: no key is mined.
         admission_fixture: The held-out REST fixture
             (:class:`~openadapt_flow.compiler.binding_admission.AdmissionFixture`:
             base URL, and the app's own read and write paths). Required when
@@ -3555,8 +3558,9 @@ def _compile_recording(
     if bind_effect_params:
         # Recorded only when set, so every existing compile keeps its digest.
         compiler_config["bind_effect_params"] = True
-    if idempotency_key_field:
-        # Recorded only when set, so every existing compile keeps its digest.
+    if idempotency_key_field != DEFAULT_IDEMPOTENCY_KEY_FIELD:
+        # Recorded only when not the default, so every existing compile keeps
+        # its digest.
         compiler_config["idempotency_key_field"] = idempotency_key_field
     if admission_fixture is not None:
         # Added only when set, so a compile without one hashes as before.

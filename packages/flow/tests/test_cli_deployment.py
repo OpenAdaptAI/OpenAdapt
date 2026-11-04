@@ -93,8 +93,20 @@ def test_load_non_mapping_raises(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "kind,kwargs,expected",
     [
-        ("rest", {"base_url": "http://sor"}, "RestRecordVerifier"),
-        ("fhir", {"base_url": "http://sor/fhir"}, "FhirEffectVerifier"),
+        (
+            "rest",
+            {"base_url": "http://sor", "records_path": "/api/db"},
+            "RestRecordVerifier",
+        ),
+        (
+            "fhir",
+            {
+                "base_url": "http://sor/fhir",
+                "resource_type": "Observation",
+                "field_paths": {"value": "valueString"},
+            },
+            "FhirEffectVerifier",
+        ),
         ("document-hash", {"root": "/tmp/store"}, "DocumentHashVerifier"),
     ],
 )

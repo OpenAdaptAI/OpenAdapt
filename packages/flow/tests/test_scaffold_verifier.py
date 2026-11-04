@@ -183,9 +183,9 @@ class TestScaffoldVerifier:
         assert candidate.match == {"patient_id": "p2", "type": "Triage"}
         assert candidate.payload == {"note": "Synthetic follow-up in two weeks"}
         assert candidate.idempotency == ("key", "demo-key-1")
-        # Unnamed, no field is guessed to be the key: it stays an identity
-        # field for a person to review.
-        (plain,) = candidates_from_recording(rec)
+        # None: no field is taken as the key, so it stays an identity field
+        # for a person to review.
+        (plain,) = candidates_from_recording(rec, idempotency_key_field=None)
         assert plain.idempotency is None
         assert plain.match["key"] == "demo-key-1"
 

@@ -270,6 +270,8 @@ def test_identity_of_configs_without_plugin_fields_is_unchanged():
     ):
         legacy_config.pop(name, None)
     legacy_config["candidates"] = []
+    # resource_type had a default then and was always in the dump.
+    legacy_config.setdefault("resource_type", "Observation")
 
     def sanitized(value, *, key=""):  # the identity's own redaction, verbatim
         lowered = key.lower()

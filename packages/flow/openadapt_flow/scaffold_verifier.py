@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from openadapt_flow import sealed_set as _sealed
+from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
 
 BUNDLE_MARKERS = ("workflow.json", "workflow.json.enc")
 RECORDING_MARKER = "events.jsonl"
@@ -161,7 +162,7 @@ def _candidate_from_record(
     record: dict[str, Any],
     *,
     demonstrated_values: tuple[str, ...],
-    idempotency_key_field: Optional[str] = None,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
 ) -> WriteCandidate:
     """Split one observed new record into identity vs payload fields.
 
@@ -197,7 +198,9 @@ def _candidate_from_record(
 
 
 def candidates_from_recording(
-    recording_dir: Path, *, idempotency_key_field: Optional[str] = None
+    recording_dir: Path,
+    *,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
 ) -> list[WriteCandidate]:
     """Write-shaped candidates straight from ``events.jsonl`` evidence."""
     import json
