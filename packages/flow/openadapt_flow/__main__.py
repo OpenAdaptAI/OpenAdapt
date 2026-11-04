@@ -420,6 +420,8 @@ def _deployment_sections(args: argparse.Namespace):
         effects = effects.model_copy(update={"kind": args.effects_kind})
     if getattr(args, "effects_base_url", None):
         effects = effects.model_copy(update={"base_url": args.effects_base_url})
+    if getattr(args, "effects_records_path", None):
+        effects = effects.model_copy(update={"records_path": args.effects_records_path})
     if getattr(args, "effects_root", None):
         effects = effects.model_copy(update={"root": args.effects_root})
 
@@ -8736,15 +8738,21 @@ def _add_deployment_flags(
         default=None,
         help=(
             "System-of-record EffectVerifier to wire so consequential writes "
-            "are verified against the real record (not the screen). The sql/"
-            "file kinds need their config fields (sql_query, root, ...) from "
-            "a --config deployment YAML"
+            "are verified against the real record (not the screen). rest "
+            "needs --effects-records-path; the fhir/sql/file kinds need their "
+            "config fields (resource_type and field_paths, sql_query, root, "
+            "...) from a --config deployment YAML"
         ),
     )
     p.add_argument(
         "--effects-base-url",
         default=None,
         help="Base URL for the rest / fhir effect verifier",
+    )
+    p.add_argument(
+        "--effects-records-path",
+        default=None,
+        help="Path whose GET returns the app's records (rest effect verifier)",
     )
     p.add_argument(
         "--effects-root",

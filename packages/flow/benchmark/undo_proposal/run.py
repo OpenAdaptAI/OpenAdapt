@@ -194,7 +194,7 @@ def _contract(directory: Path, base_url: str, fixture: Fixture, body: dict) -> P
     write_bundle(
         directory,
         contract_id=f"undo_propose_{fixture.name}",
-        oracle={"kind": "rest", "base_url": base_url},
+        oracle={"kind": "rest", "base_url": base_url, "records_path": "/api/db"},
         channel="api",
         key=Ed25519PrivateKey.generate(),
         issuer_key_id="self_signed:benchmark",
@@ -219,7 +219,11 @@ def _deployment(path: Path, fixture: Fixture, base_url: str, contract: Path) -> 
             {
                 "name": f"{fixture.name}-test-copy",
                 "backend": {"kind": "web", "url": base_url + "/" + fixture.query},
-                "effects": {"kind": "rest", "base_url": base_url},
+                "effects": {
+                    "kind": "rest",
+                    "base_url": base_url,
+                    "records_path": "/api/db",
+                },
                 "actuation": {"api": True, "base_url": base_url},
                 "test_copy": {
                     "declared": True,

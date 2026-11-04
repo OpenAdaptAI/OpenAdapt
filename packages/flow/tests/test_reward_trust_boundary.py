@@ -531,3 +531,16 @@ def test_the_calibration_records_which_corpus_it_ran_on(
         calibration["calibration_corpus_digest"]
         == contract["certificate_policy"]["calibration_corpus_digest"]
     )
+
+
+def test_a_rest_recipe_names_its_records_path() -> None:
+    """No app's records path is assumed for a REST oracle."""
+    with pytest.raises(ValueError, match="records_path"):
+        OracleRecipeV1(kind="rest", base_url="http://app.local")
+    recipe = OracleRecipeV1(
+        kind="rest",
+        base_url="http://app.local",
+        records_path="/api/resource/Loan Application",
+        records_key="data",
+    )
+    assert recipe.records_path == "/api/resource/Loan Application"

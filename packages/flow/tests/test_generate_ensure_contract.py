@@ -303,7 +303,7 @@ def test_an_unexplained_element_of_a_told_apart_list_refuses(teach):
     "bad", [{"agent_cannot_write_audit": "false"}, {"audit_lag_max_s": "0.1"}]
 )
 def test_server_facts_of_the_wrong_type_refuse(teach, bad):
-    teach.facts = dict(gen.facts_from_probe(dict(teach.facts)), **bad)
+    teach.facts = dict(gen.server_facts(dict(teach.facts)), **bad)
     out = generate(teach)
     assert any("wrong type" in r for r in out.refusals)
 

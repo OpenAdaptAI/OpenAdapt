@@ -31,18 +31,12 @@
     "openemr": 1,
     "token_main": 1
   },
-  "compiler/binding_admission.py": {
-    "mockmed": 3,
-    "mockmed-records": 1,
-    "mockmed-write": 2
-  },
   "compiler/compile.py": {
-    "mockmed": 3,
+    "mockmed": 2,
     "mockmed-records": 1,
     "openemr": 1
   },
   "compiler/effect_mining.py": {
-    "mockmed": 1,
     "mockmed-records": 1
   },
   "compiler/fixup_passes.py": {
@@ -55,9 +49,9 @@
     "mockloan": 2
   },
   "deployment.py": {
-    "mockmed": 2,
-    "mockmed-records": 2,
-    "openemr": 2,
+    "mockmed": 1,
+    "mockmed-records": 1,
+    "openemr": 1,
     "textedit": 1
   },
   "eligibility/__init__.py": {
@@ -91,14 +85,10 @@
     "mockmed": 1
   },
   "fault_gate.py": {
-    "mockmed-records": 1,
     "openemr": 1
   },
   "generate/demo_analysis.py": {
     "redmine": 1
-  },
-  "generate/ensure_contract.py": {
-    "medplum": 2
   },
   "generate/verify_contract.py": {
     "dolibarr": 1,
@@ -190,9 +180,6 @@
   "reward/bundle.py": {
     "mockmed": 3
   },
-  "reward/models.py": {
-    "mockmed-records": 1
-  },
   "reward/seed.py": {
     "mockmed": 34
   },
@@ -218,36 +205,32 @@
   "runtime/effects/auth.py": {
     "frappe": 1
   },
-  "runtime/effects/compensation.py": {
-    "mockmed-write": 2
-  },
   "runtime/effects/db_snapshot.py": {
     "dolibarr": 1,
     "dolibarr-table": 1
   },
   "runtime/effects/effect.py": {
-    "mockmed": 2,
+    "mockmed": 1,
     "openemr": 5,
     "redmine": 1
   },
   "runtime/effects/fhir.py": {
     "epic": 1,
     "mockmed": 2,
-    "openemr": 8,
-    "openemr-fhir-path": 2
+    "openemr": 5,
+    "openemr-fhir-path": 1
   },
   "runtime/effects/frame.py": {
-    "openemr": 7,
+    "openemr": 6,
     "patient_data": 1,
-    "pnotes": 1,
-    "uuid_registry": 1
+    "pnotes": 1
   },
   "runtime/effects/fresh_session.py": {
     "mockmed": 1
   },
   "runtime/effects/rest.py": {
     "mockmed": 1,
-    "mockmed-records": 2,
+    "mockmed-records": 1,
     "openemr": 1
   },
   "runtime/effects/sql.py": {

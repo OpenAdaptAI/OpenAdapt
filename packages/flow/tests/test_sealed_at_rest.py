@@ -547,7 +547,9 @@ def test_halted_sealed_run_is_undone_without_plaintext(
             report = Replayer(
                 MockMedBackend(url),
                 vision=_vision(),
-                effect_verifier=RestRecordVerifier(url),
+                effect_verifier=RestRecordVerifier(
+                    url, records_path="/api/db", records_key="records"
+                ),
                 poll_interval_s=0.01,
             ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
             assert report.execution_outcome == "HALTED"
