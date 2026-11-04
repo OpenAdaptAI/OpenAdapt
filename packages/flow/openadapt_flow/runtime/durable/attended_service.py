@@ -337,6 +337,10 @@ def _deployment_executor(
             browser = launch_chromium(playwright.chromium, headless=False)
             try:
                 page = browser.new_page(viewport=cast(Any, _VIEWPORT))
+                from openadapt_flow.backends.playwright_backend import prepare_ws_guard
+
+                # Guard the page's WebSockets from its first document (wire check).
+                prepare_ws_guard(page)
                 page.goto(backend_cfg.url)
                 yield bound_executor(build_backend(backend_cfg, page=page))
             finally:

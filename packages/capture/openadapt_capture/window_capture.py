@@ -48,6 +48,12 @@ from typing import TYPE_CHECKING, Callable, Iterator, Optional
 
 from loguru import logger
 
+from openadapt_capture.window_input_focus import (
+    FocusOwner,
+    InputFocusProbe,
+    platform_input_focus_probe,
+)
+
 if TYPE_CHECKING:
     from PIL import Image
 
@@ -138,6 +144,34 @@ class WindowCaptureAmbiguousError(WindowCaptureError):
 
 class WindowCaptureUnavailableError(WindowCaptureError):
     """The exact-window capture provider is not available."""
+
+
+INPUT_KEYBOARD_FOCUS_ELSEWHERE = "keyboard_focus_elsewhere"
+INPUT_KEYBOARD_FOCUS_IN_DIALOG = "keyboard_focus_in_dialog"
+INPUT_KEYBOARD_FOCUS_UNKNOWN = "keyboard_focus_unknown"
+INPUT_POINTER_OVER_OTHER_WINDOW = "pointer_over_other_window"
+INPUT_POINTER_TARGET_UNKNOWN = "pointer_target_unknown"
+INPUT_TARGET_NOT_ON_SCREEN = "target_not_on_screen"
+_NOT_PROBED = object()
+# How an accepted input was shown to reach the target. ``window``: the OS
+# named the target window as the receiver. ``process``: it named only the
+# target's process, which cannot rule out another window of the same app.
+FOCUS_EVIDENCE_WINDOW = "window"
+FOCUS_EVIDENCE_PROCESS = "process"
+
+
+class WindowInputNotOnTarget(WindowCaptureError):
+    """Native input went to a window other than the recorded target.
+
+    This is not a capture failure. The recorder drops the input and records a
+    marker with ``reason``. The exception never carries key identity, text, or
+    an exact point, so another application's input cannot reach a recording.
+    """
+
+    def __init__(self, reason: str) -> None:
+        """Record a stable reason code."""
+        super().__init__(f"native input was not on the target window ({reason})")
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -270,9 +304,15 @@ class WindowCaptureScope:
         resolver: ResolverFn | None = None,
         capturer: CapturerFn | None = None,
         frame_rate: float | None = None,
+        focus_probe: InputFocusProbe | None = None,
     ) -> None:
-        """Initialize the scope for ``target``."""
+        """Initialize the scope for ``target``.
+
+        ``focus_probe`` reports keyboard focus and the topmost window at a
+        point. It defaults to the platform probe; tests inject a fake.
+        """
         self.target = target
+        self._focus_probe = focus_probe or platform_input_focus_probe()
         self._resolver = resolver or resolve_window
         self._capture_provider = None
         if capturer is None and sys.platform == "darwin":
@@ -678,10 +718,86 @@ class WindowCaptureScope:
         px, py, _generation = self.translate_with_generation(x, y)
         return px, py
 
+    def keyboard_focus_at_receipt(self) -> FocusOwner | None:
+        """Read keyboard focus inside a native input hook; ``None`` if unknown."""
+        try:
+            return self._focus_probe.keyboard_focus(at_receipt=True)
+        except Exception:
+            return None
+
+    def assert_input_on_target(
+        self,
+        window: TargetWindow,
+        *,
+        point: tuple[float, float] | None = None,
+        keyboard_focus_at_receipt: object = _NOT_PROBED,
+    ) -> str:
+        """Refuse input that ``window`` did not receive.
+
+        A pointer event (``point`` set) needs ``window`` topmost at the point.
+        A keyboard event needs keyboard focus on ``window``, both at native
+        receipt (when a receipt reading is given) and now. A reading that
+        names a window must name ``window`` itself: another window of the
+        same process (a second browser window, an app's password dialog) is
+        a refusal. Only a reading that names no window can fall back to the
+        process, and a dialog or sheet never counts. An unknown answer or a
+        probe failure is a refusal.
+
+        Returns:
+            ``FOCUS_EVIDENCE_WINDOW`` when some reading named the target
+            window, else ``FOCUS_EVIDENCE_PROCESS`` (weaker evidence).
+
+        Raises:
+            WindowInputNotOnTarget: With a stable reason code.
+        """
+        if point is not None:
+            if not window.on_screen:
+                # A visibility-independent provider can capture a covered
+                # window, but a click there reached another window.
+                raise WindowInputNotOnTarget(INPUT_TARGET_NOT_ON_SCREEN)
+            try:
+                owner = self._focus_probe.window_at(float(point[0]), float(point[1]))
+            except Exception:
+                owner = None
+            if owner is None:
+                raise WindowInputNotOnTarget(INPUT_POINTER_TARGET_UNKNOWN)
+            if owner.window_id != window.window_id:
+                raise WindowInputNotOnTarget(INPUT_POINTER_OVER_OTHER_WINDOW)
+            return FOCUS_EVIDENCE_WINDOW
+        try:
+            live = self._focus_probe.keyboard_focus()
+        except Exception:
+            live = None
+        readings = [live]
+        if keyboard_focus_at_receipt is not _NOT_PROBED:
+            readings.append(keyboard_focus_at_receipt)
+        evidence = FOCUS_EVIDENCE_PROCESS
+        for owner in readings:
+            if not isinstance(owner, FocusOwner):
+                raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_UNKNOWN)
+            if owner.window_id is None and owner.pid is None:
+                raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_UNKNOWN)
+            if owner.dialog:
+                raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_IN_DIALOG)
+            if owner.window_id is not None:
+                if owner.window_id != window.window_id:
+                    raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_ELSEWHERE)
+                evidence = FOCUS_EVIDENCE_WINDOW
+            elif owner.pid != window.pid:
+                raise WindowInputNotOnTarget(INPUT_KEYBOARD_FOCUS_ELSEWHERE)
+        return evidence
+
     def _geometry_for_action(
         self,
+        *,
+        point: tuple[float, float] | None = None,
+        keyboard: bool = False,
     ) -> tuple[TargetWindow, float, float, tuple[int, int, int, int], int]:
-        """Return the published geometry after exact live revalidation."""
+        """Return the published geometry after exact live revalidation.
+
+        With ``point`` or ``keyboard`` set, the input must also have gone to
+        the target (:meth:`assert_input_on_target`).
+        """
         self._assert_display_topology()
         with self._lock:
             window = self._published_window
@@ -706,6 +822,8 @@ class WindowCaptureScope:
                 "the target moved or resized after the last published frame; "
                 "wait for a matching frame before recording input"
             )
+        if point is not None or keyboard:
+            self.assert_input_on_target(live, point=point)
         self._assert_display_topology()
         return window, scale_x, scale_y, content_rect, generation
 
@@ -766,8 +884,8 @@ class WindowCaptureScope:
         )
 
     def generation_for_action(self) -> int:
-        """Bind a non-pointer action to the exact published frame epoch."""
-        return self._geometry_for_action()[4]
+        """Bind a keyboard action to the exact published frame epoch."""
+        return self._geometry_for_action(keyboard=True)[4]
 
     def assert_current(self) -> None:
         """Revalidate the bound process, bounds, and display topology."""
@@ -775,7 +893,9 @@ class WindowCaptureScope:
 
     def translate_with_generation(self, x: float, y: float) -> tuple[float, float, int]:
         """Translate against the exact published frame after revalidation."""
-        window, scale_x, scale_y, content_rect, generation = self._geometry_for_action()
+        window, scale_x, scale_y, content_rect, generation = self._geometry_for_action(
+            point=(x, y)
+        )
         return (
             (x - window.bounds[0]) * scale_x + content_rect[0],
             (y - window.bounds[1]) * scale_y + content_rect[1],
@@ -2100,6 +2220,8 @@ def _resolve_window_windows(target: WindowTarget) -> TargetWindow | None:
             return True
         if not user32.IsWindowVisible(hwnd):
             return True
+        if user32.IsIconic(hwnd) or _window_cloaked(hwnd):
+            return True  # minimized, or hidden by DWM (another virtual desktop)
         length = user32.GetWindowTextLengthW(hwnd)
         buf = ctypes.create_unicode_buffer(length + 1)
         user32.GetWindowTextW(hwnd, buf, length + 1)
@@ -2175,6 +2297,31 @@ def _unique_window_match(
             "provide the complete window title"
         )
     return candidates[0]
+
+
+def _window_cloaked(hwnd: int) -> bool:
+    """Return whether DWM cloaks ``hwnd``; an unreadable state counts as cloaked.
+
+    A cloaked window (on another virtual desktop, or a suspended UWP frame)
+    passes ``IsWindowVisible`` but shows no pixels, so a region grab of its
+    bounds would capture whatever else is on screen there.
+    """
+    import ctypes
+    import ctypes.wintypes as wintypes
+
+    try:
+        dwmapi = ctypes.windll.dwmapi
+    except (AttributeError, OSError):  # pragma: no cover - supported Windows has DWM
+        return True
+    DWMWA_CLOAKED = 14
+    cloaked = wintypes.DWORD()
+    res = dwmapi.DwmGetWindowAttribute(
+        wintypes.HWND(hwnd),
+        wintypes.DWORD(DWMWA_CLOAKED),
+        ctypes.byref(cloaked),
+        ctypes.sizeof(cloaked),
+    )
+    return res != 0 or cloaked.value != 0
 
 
 def _window_rect(hwnd: int) -> tuple[int, int, int, int] | None:

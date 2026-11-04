@@ -8,7 +8,6 @@ import pytest
 
 from openadapt_flow.guard import GuardTask
 from openadapt_flow.jit.adapters import Op
-from openadapt_flow.mockmed.teach_scope import EncounterWrites, encounter_scope
 from openadapt_flow.teach_scope import (
     ScopeViolation,
     TeachGuard,
@@ -17,6 +16,7 @@ from openadapt_flow.teach_scope import (
     origin_of,
     provenance_for,
 )
+from tests._teach_scope import EncounterWrites, encounter_scope
 
 BASE = "http://127.0.0.1:8765"
 
@@ -161,14 +161,8 @@ def _post(body: str, path: str = "/api/encounter") -> _Route:
             None,
         ),
         ('{"patient_id": "p1", "note": "Recheck in two weeks"}', None),
-        (
-            '{"patient_id": "p2", "type": "Triage", "note": "Recheck in two weeks"}',
-            "write_wrong_record",
-        ),
-        (
-            '{"patient_id": "p1", "type": "Consult", "note": "Recheck in two weeks"}',
-            "write_value_not_declared",
-        ),
+        # The wrong-patient and wrong-type writes are blocked in real Chromium
+        # by test_injection_suite.py (write_wrong_record, write_value_not_declared).
         (
             '{"patient_id": "p1", "type": "Triage", "note": "Recheck. Cleared"}',
             "write_value_not_declared",
@@ -242,11 +236,9 @@ ROW = {"id": 1, "patient_id": "p1", "type": "Triage", "note": "Recheck in two we
 @pytest.mark.parametrize(
     ("before", "after", "status", "problems"),
     [
-        ([], [ROW], "verified", ()),
+        # verified, wrong record, wrong value and row count are judged against
+        # a real save in test_injection_suite.py's read-back test.
         ([], [], "missing", ()),
-        ([], [{**ROW, "patient_id": "p2"}], "mismatch", ("readback_wrong_record",)),
-        ([], [{**ROW, "note": ""}], "mismatch", ("readback_wrong_value",)),
-        ([], [ROW, {**ROW, "id": 2}], "mismatch", ("readback_row_count",)),
         (
             [{**ROW, "id": 9, "source": "other"}],
             [ROW],
@@ -357,9 +349,9 @@ def test_a_scope_with_no_origin_lets_a_browser_reach_nothing() -> None:
 def test_write_adapters_load_by_name() -> None:
     from openadapt_flow.teach_scope import load_write_adapter
 
-    adapter = load_write_adapter("openadapt_flow.mockmed.teach_scope:EncounterWrites")
+    adapter = load_write_adapter("tests._teach_scope:EncounterWrites")
     assert isinstance(adapter, EncounterWrites)
     with pytest.raises(ValueError, match="module:attr"):
-        load_write_adapter("openadapt_flow.mockmed.teach_scope")
+        load_write_adapter("tests._teach_scope")
     with pytest.raises(ValueError, match="not a write adapter"):
-        load_write_adapter("openadapt_flow.mockmed.teach_scope:encounter_scope")
+        load_write_adapter("tests._teach_scope:encounter_scope")

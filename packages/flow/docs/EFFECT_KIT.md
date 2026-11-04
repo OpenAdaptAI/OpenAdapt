@@ -1014,6 +1014,8 @@ Two kit-wide conventions:
   ```yaml
   effects:
     kind: rest
+    base_url: https://app.example
+    records_path: /api/records            # required: the app's own records read
     auth:
       bearer_env: SOR_BEARER_TOKEN        # or header+value_env, or basic_env
   ```
@@ -1035,7 +1037,7 @@ Per-kind required fields:
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
 | `desktop_readback` | `desktop_readback` section: `session` (a `backend:`-style config for the read-back session), `search` (`box`, `query`), `ready`, `identity`, `fields` | `credentials` (env-var names), `sign_in`, `search.submit`, `open.results`, `not_found`, per-control `shows` / `region` / `at`, per-field `date_format` / `casefold`, `min_ocr_confidence`, `navigation_timeout_s`, `settle_s` |
 | `deferred_report` | `deferred_report` section: `report` (`format`, and for csv/text its columns or pattern and `accept`), `key`, `deadline_hours`, `ledger` | `report.reject`, `describe` |
-| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `path_params`, `auth`, `records_drop_fields` |
+| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `records_next_path`, `records_total_path`, `path_params`, `auth`, `records_drop_fields` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
 | `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields` |
 | `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env`, `records_drop_fields` |
@@ -1044,6 +1046,31 @@ Per-kind required fields:
 | `document` | `root` | `file_pattern`, `document_format` (`json` \| `text`), `document_field_paths`, `document_text_pattern`, `file_mtime_window_s` |
 | `document-hash` | `root` | `glob` |
 | `surfaces` | `surfaces`: name -> one plain verifier config (any kind above) | each effect's `probe` names its surface (`surface=<name>`); an effect naming none, or an unknown one, halts |
+
+A paged list is read whole or not at all. `fhir` follows the Bundle's `next`
+links. `rest` follows the next page's URL at `records_next_path` (a dotted
+path in the body, such as `links.next`; a relative URL resolves against the
+page it came from). Without `records_next_path` one response is the whole
+read, as before. A next page on another origin, a page that fails, more than
+50 pages, or a FHIR `total` other than the number of matches read (included
+resources don't count) makes the read unreadable (INDETERMINATE), never a
+confirmation or a refutation from the first pages.
+
+REST has no standard total. With `records_total_path` (a dotted path in the
+first page, such as `meta.total`), a read whose record count differs, or a
+first page without the total, is unreadable. Without it, a REST read trusts
+the page chain.
+
+A redirect is a failed read: the configured auth headers never follow it to
+another host. Why a read was unreadable is in the verdict's reason and the
+state's `detail.read_problem`, for example
+`next link origin https://localhost:9300 != base_url http://localhost:9520`.
+
+OpenEMR builds its REST next links from its configured site address
+(`site_addr_oath`), not from the address the request used. Read through a
+mapped port or another host name, every next link names another origin and
+the read is unreadable. Set `base_url` to the site address OpenEMR is
+configured with.
 
 `records_drop_fields` (`rest`, `sql`, `fhir`) removes fields from every record
 before judging. `[id]` compares records by content: a record whose id stayed
@@ -1069,6 +1096,7 @@ effects:
   kind: fhir
   base_url: https://fhir.example.org/r4
   resource_type: Observation
+  field_paths: {id: id, patient: subject.reference, note: valueString}
   smart_backend:
     client_id: my-registered-client
     scope: system/Observation.rs
@@ -1136,7 +1164,27 @@ qualified verifier exists and remains fully compatible with prior deployments.
 The `sql` kind refuses to construct unless `sql_query` passes the read-only
 statement filter (single statement, `SELECT`/`WITH` leading keyword, no
 comments, no mutating/DDL/control keywords or known side-effecting functions,
-values bound only through DB-API parameters). **The filter is defense in
+values bound only through DB-API parameters). The filter reads the query's
+tokens, not its raw text. A string literal or a quoted identifier is never
+read as SQL, so `GROUP_CONCAT(x SEPARATOR ';')`, a table quoted as
+`` `call` `` or `"call"`, a qualified name such as `t.update`, and the
+string function `REPLACE(phone, '-', '')` all pass. A bare keyword is still
+refused (quote a table named `call`), and so is a call to a side-effecting
+function, even quoted or schema qualified. The filter refuses what it can't
+read the same way in every dialect: a backslash anywhere (MySQL reads `\'`
+as an escaped quote, standard SQL as the end of the literal), a
+dollar-quoted string, an unterminated literal, and a comment (`--`, `/*`,
+`#`) outside a literal. When the query has parameters, it also refuses a
+`%` placeholder (`%s`, `%(name)s`) inside a literal or quoted name, because
+pymysql and psycopg2 substitute it without regard to quotes and a parameter
+value could then change the query; write a literal percent sign as `%%`.
+Without parameters no driver formats the query, so `DATE_FORMAT(ts,
+'%H:%i')` and `LIKE '%smith%'` pass. It refuses a row lock (`FOR SHARE`,
+`FOR KEY SHARE`, `LOCK IN SHARE MODE`), and calls that lock, wait, end
+sessions, notify or read files (`get_lock`, `pg_advisory_*`,
+`pg_sleep_for`, `pg_sleep_until`, `master_pos_wait`, `source_pos_wait`,
+`pg_terminate_backend`, `pg_cancel_backend`, `pg_notify`, `load_file`,
+`pg_read_file`, `pg_ls_dir`). **The filter is defense in
 depth, not proof**: on Postgres/MySQL a lexically-clean `SELECT` can still
 call a side-effecting function (a UDF, `nextval`, `dblink`), so **always run
 the SQL verifier under a dedicated read-only database role** — no
@@ -1375,7 +1423,7 @@ Runs against the pinned reference fixture
 README documents the pinned compose bring-up and fixture bootstrap). The
 bundle's effect
 contracts are exactly the ones the reference matrix ships
-(`openadapt_flow/benchmark/frappe_lending.py::loan_application_effects`):
+(`benchmark/harness/frappe_lending.py::loan_application_effects`):
 one `record_written` (at-most-once for the synthetic applicant) plus a
 `field_equals` read-back per entered field, each bound to `{param: ...}`.
 

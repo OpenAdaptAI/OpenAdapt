@@ -28,6 +28,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from openadapt_flow.approval_mode.human_attestation import HumanAttestation
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -114,6 +116,52 @@ class ApprovalRecord(BaseModel):
     #: landed.  This separate, explicit authority is set only after an operator
     #: reconciles the live/system-of-record state and decides one retry is safe.
     authorize_uncertain_retry: bool = False
+    #: A registered approver key's signature over the rest of this record.
+    #: ``openadapt-flow approve`` signs it, and ``resume`` refuses a stored
+    #: approval without a valid one (:func:`stored_approval_refusal`).
+    attestation: Optional[HumanAttestation] = None
+
+    def signed_payload(self) -> dict[str, Any]:
+        """What an approver key signs: the record without its signature."""
+
+        data = self.model_dump(mode="json")
+        data.pop("attestation", None)
+        return data
+
+
+def stored_approval_refusal(
+    approval: "ApprovalRecord",
+    key_dir: Optional[Path],
+    *,
+    root: Optional[str] = None,
+    at_least: Any = None,
+) -> Optional[str]:
+    """Why a stored resume approval isn't a verified person's, or ``None``.
+
+    The approver name on the record is a claim; only a registered approver
+    key's signature over the record, by that same name, proves a person
+    approved. Fails closed when the key directory can't be read.
+    """
+
+    from openadapt_flow.approval_mode.human_attestation import (
+        RESUME_DOMAIN,
+        refusal,
+    )
+
+    code = refusal(
+        approval.attestation,
+        domain=RESUME_DOMAIN,
+        payload=approval.signed_payload(),
+        key_dir=key_dir,
+        root=root,
+        at_least=at_least,
+    )
+    if code is not None:
+        return code
+    assert approval.attestation is not None
+    if approval.attestation.signer != approval.approver:
+        return "approver_name_mismatch"
+    return None
 
 
 def approval_pause_digest(pending: Any) -> str:

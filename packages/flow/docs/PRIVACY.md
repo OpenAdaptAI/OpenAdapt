@@ -53,10 +53,16 @@ Paths this rule does not cover yet are listed under
 
 ## Local posture
 
-Two environment variables control what is written locally. The default is
-**predictable, not maximally private**: `auto` writes plaintext when the extra is absent (so
-the local demo works with no NER model), but it is not silent about it — see
-the plaintext warning below. Pin `on` for a regulated deployment.
+Scrubbing and encryption are separate controls. Durable checkpoints are
+encrypted by default, under a configured key or a locally generated one, and
+`OPENADAPT_FLOW_AT_REST=strict` encrypts every recording, bundle and run
+directory ([phi_at_rest.md](phi_at_rest.md#default-opt-out-and-strict-mode)).
+
+Two environment variables control scrubbing of what is written locally. The
+default is **predictable, not maximally private**: `auto` writes unscrubbed
+text when the extra is absent (so the local demo works with no NER model),
+but it is not silent about it: a warning goes to stderr once per process,
+and see the plaintext warning below. Pin `on` for a regulated deployment.
 
 | Variable | Values | Default | Meaning |
 |---|---|---|---|

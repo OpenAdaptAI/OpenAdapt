@@ -1,0 +1,222 @@
+claude/runs/r1-A01           live created_verified now created_verified created once, every value read back
+claude/runs/r1-A02           live found_existing   now found_existing   one record was already the person
+claude/runs/r1-A03           live created_verified now created_verified created once, every value read back
+claude/runs/r1-A04           live needs_review     now needs_review     the agent created 2 AllergyIntolerance records, not one; the agent wrote 2 other resource(s): AllergyIntoleran
+claude/runs/r1-A05           live needs_review     now needs_review     wrong or missing: code; the created record is not the person; the created record does not come back from a sea
+claude/runs/r1-A06           live created_verified now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r1-A07           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r1-A08           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+claude/runs/r1-A09           live needs_review     now created_verified created once, every value read back
+claude/runs/r1-A10           live needs_review     now created_verified created once, every value read back
+claude/runs/r1-A11           live needs_review     now created_verified created once, every value read back
+claude/runs/r1-A12           live needs_review     now created_verified created once, every value read back
+claude/runs/r1-AP01          live needs_review     now created_verified created once, every value read back
+claude/runs/r1-AP02          live needs_review     now found_existing   one record was already the person
+claude/runs/r1-AP03          live needs_review     now needs_review     wrong or missing: end, start; the created record is not the person; the created record does not come back from
+claude/runs/r1-AP04          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r1-AP05          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+claude/runs/r1-AP06          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+claude/runs/r1-AP07          live needs_review     now needs_review     the agent wrote 1 other resource(s): Appointment
+claude/runs/r1-AP08          live needs_review     now created_verified created once, every value read back
+claude/runs/r1-AP09          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r1-AP10          live needs_review     now needs_review     the agent wrote 1 other resource(s): AllergyIntolerance
+claude/runs/r1-AP11          live needs_review     now needs_review     wrong or missing: patient; the created record is not the person; the created record does not come back from a 
+claude/runs/r1-AP12          live needs_review     now created_verified created once, every value read back
+claude/runs/r1-P01           live created_verified now created_verified created once, every value read back
+claude/runs/r1-P02           live found_existing   now found_existing   one record was already the person
+claude/runs/r1-P03           live needs_review     now needs_review     no record is the person and the agent created none
+claude/runs/r1-P04           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r1-P05           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r1-P06           live created_verified now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r1-P07           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+claude/runs/r1-P08           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+claude/runs/r1-P09           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+claude/runs/r1-P10           live needs_review     now needs_review     2 records were already the person
+claude/runs/r1-P11           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r1-P12           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r1-P13           live needs_review     now needs_review     no record is the person and the agent created none
+claude/runs/r2-A01           live needs_review     now created_verified created once, every value read back
+claude/runs/r2-A02           live needs_review     now found_existing   one record was already the person
+claude/runs/r2-A03           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and its history shows 2 versions where the audit tr
+claude/runs/r2-A04           live needs_review     now needs_review     the agent changed or deleted the record after creating it; the created record can't be read back
+claude/runs/r2-A05           live needs_review     now needs_review     wrong or missing: code; the created record is not the person; the created record does not come back from a sea
+claude/runs/r2-A06           live needs_review     now created_verified created once, every value read back
+claude/runs/r2-A07           live needs_review     now created_verified created once, every value read back
+claude/runs/r2-A08           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+claude/runs/r2-A09           live needs_review     now created_verified created once, every value read back
+claude/runs/r2-A10           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r2-A11           live needs_review     now created_verified created once, every value read back
+claude/runs/r2-A12           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r2-AP01          live needs_review     now created_verified created once, every value read back
+claude/runs/r2-AP02          live needs_review     now found_existing   one record was already the person
+claude/runs/r2-AP03          live needs_review     now needs_review     wrong or missing: end, start; the created record is not the person; the created record does not come back from
+claude/runs/r2-AP04          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r2-AP05          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+claude/runs/r2-AP06          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+claude/runs/r2-AP07          live needs_review     now needs_review     the agent wrote 1 other resource(s): Appointment
+claude/runs/r2-AP08          live needs_review     now created_verified created once, every value read back
+claude/runs/r2-AP09          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r2-AP10          live needs_review     now needs_review     the agent wrote 1 other resource(s): AllergyIntolerance
+claude/runs/r2-AP11          live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r2-AP12          live needs_review     now created_verified created once, every value read back
+claude/runs/r2-P01           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r2-P02           live needs_review     now found_existing   one record was already the person
+claude/runs/r2-P03           live needs_review     now needs_review     no record is the person and the agent created none
+claude/runs/r2-P04           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r2-P05           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r2-P06           live needs_review     now needs_review     not given by the task: deceasedBoolean
+claude/runs/r2-P07           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+claude/runs/r2-P08           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+claude/runs/r2-P09           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient; the agent changed or deleted the record after creating it, and a
+claude/runs/r2-P10           live needs_review     now needs_review     2 records were already the person
+claude/runs/r2-P11           live needs_review     now created_verified created once, every value read back
+claude/runs/r2-P12           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+claude/runs/r2-P13           live needs_review     now needs_review     unreadable: the agent wrote after the window closed
+claude/runs/r3-A01           live needs_review     now created_verified created once, every value read back
+claude/runs/r3-A02           live needs_review     now found_existing   one record was already the person
+claude/runs/r3-A03           live needs_review     now created_verified created once, every value read back
+claude/runs/r3-A04           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r3-A05           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r3-A06           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r3-A07           live needs_review     now needs_review     the agent created 2 AllergyIntolerance records, not one; the agent wrote 2 other resource(s): AllergyIntoleran
+claude/runs/r3-A08           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+claude/runs/r3-A09           live needs_review     now needs_review     the agent changed or deleted the record after creating it; the created record can't be read back
+claude/runs/r3-A10           live needs_review     now created_verified created once, every value read back
+claude/runs/r3-A11           live needs_review     now created_verified created once, every value read back
+claude/runs/r3-A12           live needs_review     now created_verified created once, every value read back
+claude/runs/r3-AP01          live needs_review     now created_verified created once, every value read back
+claude/runs/r3-AP02          live needs_review     now found_existing   one record was already the person
+claude/runs/r3-AP03          live needs_review     now needs_review     wrong or missing: end, start; the created record is not the person; the created record does not come back from
+claude/runs/r3-AP04          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r3-AP05          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+claude/runs/r3-AP06          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+claude/runs/r3-AP07          live needs_review     now needs_review     the agent wrote 1 other resource(s): Appointment
+claude/runs/r3-AP08          live needs_review     now created_verified created once, every value read back
+claude/runs/r3-AP09          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+claude/runs/r3-AP10          live needs_review     now needs_review     the agent wrote 1 other resource(s): AllergyIntolerance
+claude/runs/r3-AP11          live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r3-AP12          live needs_review     now created_verified created once, every value read back
+claude/runs/r3-P01           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r3-P02           live needs_review     now found_existing   one record was already the person
+claude/runs/r3-P03           live needs_review     now needs_review     no record is the person and the agent created none
+claude/runs/r3-P04           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r3-P05           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r3-P06           live needs_review     now needs_review     not given by the task: deceasedBoolean
+claude/runs/r3-P07           live needs_review     now needs_review     the agent created 3 Patient records, not one; the agent wrote 3 other resource(s): Patient
+claude/runs/r3-P08           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+claude/runs/r3-P09           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient; the agent changed or deleted the record after creating it, and a
+claude/runs/r3-P10           live needs_review     now needs_review     2 records were already the person
+claude/runs/r3-P11           live needs_review     now created_verified created once, every value read back
+claude/runs/r3-P12           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+claude/runs/r3-P13           live needs_review     now needs_review     unreadable: the agent wrote after the window closed
+openai/runs/r1-A01           live created_verified now created_verified created once, every value read back
+openai/runs/r1-A02           live found_existing   now found_existing   one record was already the person
+openai/runs/r1-A03           live created_verified now created_verified created once, every value read back
+openai/runs/r1-A04           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r1-A05           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r1-A06           live created_verified now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r1-A07           live needs_review     now needs_review     the agent created 2 AllergyIntolerance records, not one; the agent wrote 2 other resource(s): AllergyIntoleran
+openai/runs/r1-A08           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+openai/runs/r1-A09           live created_verified now created_verified created once, every value read back
+openai/runs/r1-A10           live created_verified now created_verified created once, every value read back
+openai/runs/r1-A11           live created_verified now created_verified created once, every value read back
+openai/runs/r1-A12           live created_verified now created_verified created once, every value read back
+openai/runs/r1-AP01          live created_verified now created_verified created once, every value read back
+openai/runs/r1-AP02          live found_existing   now found_existing   one record was already the person
+openai/runs/r1-AP03          live needs_review     now needs_review     no record is the person and the agent created none
+openai/runs/r1-AP04          live created_verified now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r1-AP05          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+openai/runs/r1-AP06          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+openai/runs/r1-AP07          live needs_review     now needs_review     the agent wrote 1 other resource(s): Appointment
+openai/runs/r1-AP08          live created_verified now created_verified created once, every value read back
+openai/runs/r1-AP09          live created_verified now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r1-AP10          live needs_review     now needs_review     the agent wrote 1 other resource(s): AllergyIntolerance
+openai/runs/r1-AP11          live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r1-AP12          live created_verified now created_verified created once, every value read back
+openai/runs/r1-P01           live created_verified now created_verified created once, every value read back
+openai/runs/r1-P02           live found_existing   now found_existing   one record was already the person
+openai/runs/r1-P03           live needs_review     now needs_review     no record is the person and the agent created none
+openai/runs/r1-P04           live created_verified now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r1-P05           live needs_review     now needs_review     wrong or missing: phone
+openai/runs/r1-P06           live created_verified now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r1-P07           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+openai/runs/r1-P08           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+openai/runs/r1-P09           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+openai/runs/r1-P10           live needs_review     now needs_review     2 records were already the person
+openai/runs/r1-P11           live created_verified now created_verified created once, every value read back
+openai/runs/r1-P12           live created_verified now created_verified created once, every value read back
+openai/runs/r1-P13           live needs_review     now needs_review     no record is the person and the agent created none
+openai/runs/r2-A01           live needs_review     now created_verified created once, every value read back
+openai/runs/r2-A02           live needs_review     now found_existing   one record was already the person
+openai/runs/r2-A03           live needs_review     now created_verified created once, every value read back
+openai/runs/r2-A04           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r2-A05           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r2-A06           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r2-A07           live needs_review     now needs_review     the agent created 2 AllergyIntolerance records, not one; the agent wrote 2 other resource(s): AllergyIntoleran
+openai/runs/r2-A08           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+openai/runs/r2-A09           live needs_review     now created_verified created once, every value read back
+openai/runs/r2-A10           live needs_review     now created_verified created once, every value read back
+openai/runs/r2-A11           live needs_review     now created_verified created once, every value read back
+openai/runs/r2-A12           live needs_review     now created_verified created once, every value read back
+openai/runs/r2-AP01          live needs_review     now created_verified created once, every value read back
+openai/runs/r2-AP02          live needs_review     now found_existing   one record was already the person
+openai/runs/r2-AP03          live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r2-AP04          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r2-AP05          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+openai/runs/r2-AP06          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+openai/runs/r2-AP07          live needs_review     now needs_review     the agent wrote 1 other resource(s): Appointment
+openai/runs/r2-AP08          live needs_review     now created_verified created once, every value read back
+openai/runs/r2-AP09          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r2-AP10          live needs_review     now needs_review     the agent wrote 1 other resource(s): AllergyIntolerance
+openai/runs/r2-AP11          live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r2-AP12          live needs_review     now created_verified created once, every value read back
+openai/runs/r2-P01           live created_verified now created_verified created once, every value read back
+openai/runs/r2-P02           live found_existing   now found_existing   one record was already the person
+openai/runs/r2-P03           live needs_review     now needs_review     no record is the person and the agent created none
+openai/runs/r2-P04           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r2-P05           live needs_review     now needs_review     wrong or missing: phone
+openai/runs/r2-P06           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r2-P07           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+openai/runs/r2-P08           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+openai/runs/r2-P09           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+openai/runs/r2-P10           live needs_review     now needs_review     2 records were already the person
+openai/runs/r2-P11           live needs_review     now created_verified created once, every value read back
+openai/runs/r2-P12           live needs_review     now created_verified created once, every value read back
+openai/runs/r2-P13           live needs_review     now needs_review     unreadable: the agent wrote after the window closed
+openai/runs/r3-A01           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-A02           live needs_review     now found_existing   one record was already the person
+openai/runs/r3-A03           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-A04           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r3-A05           live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r3-A06           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r3-A07           live needs_review     now needs_review     the agent created 2 AllergyIntolerance records, not one; the agent wrote 2 other resource(s): AllergyIntoleran
+openai/runs/r3-A08           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+openai/runs/r3-A09           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-A10           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-A11           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-A12           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-AP01          live needs_review     now created_verified created once, every value read back
+openai/runs/r3-AP02          live needs_review     now found_existing   one record was already the person
+openai/runs/r3-AP03          live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r3-AP04          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r3-AP05          live needs_review     now needs_review     the agent created 2 Appointment records, not one; the agent wrote 2 other resource(s): Appointment
+openai/runs/r3-AP06          live needs_review     now needs_review     the agent created 3 Appointment records, not one; the agent wrote 3 other resource(s): Appointment
+openai/runs/r3-AP07          live needs_review     now needs_review     the agent wrote 1 other resource(s): Appointment
+openai/runs/r3-AP08          live needs_review     now created_verified created once, every value read back
+openai/runs/r3-AP09          live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r3-AP10          live needs_review     now needs_review     the agent wrote 1 other resource(s): AllergyIntolerance
+openai/runs/r3-AP11          live needs_review     now needs_review     the agent changed or deleted the record after creating it, and a version in between was not the person
+openai/runs/r3-AP12          live needs_review     now created_verified created once, every value read back
+openai/runs/r3-P01           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-P02           live needs_review     now found_existing   one record was already the person
+openai/runs/r3-P03           live needs_review     now needs_review     no record is the person and the agent created none
+openai/runs/r3-P04           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r3-P05           live needs_review     now needs_review     wrong or missing: phone
+openai/runs/r3-P06           live needs_review     now created_verified created once and corrected by the agent (2 writes, no other actor read or wrote it between them), every value 
+openai/runs/r3-P07           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+openai/runs/r3-P08           live needs_review     now needs_review     the agent created 2 Patient records, not one; the agent wrote 2 other resource(s): Patient
+openai/runs/r3-P09           live needs_review     now needs_review     the agent wrote 1 other resource(s): Patient
+openai/runs/r3-P10           live needs_review     now needs_review     2 records were already the person
+openai/runs/r3-P11           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-P12           live needs_review     now created_verified created once, every value read back
+openai/runs/r3-P13           live needs_review     now needs_review     unreadable: the agent wrote after the window closed

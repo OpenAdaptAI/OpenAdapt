@@ -84,17 +84,19 @@ guarded = GuardedSave.from_file("verify.yaml", "runs/guarded", approval="each_it
 task = load_task("tasks/referral-task-01.json")
 
 try:
-    guard = guarded.begin(task, screen_text=harness.open_record_text(), agent_id="cua-01")
+    guard = guarded.begin(
+        task, screen_text=harness.open_record_text(), agent_id="cua-01"
+    )
     step = guard.commit(screenshot_png=harness.screenshot())
     while step.status == "waiting_for_approval":
-        step = guard.commit(wait_s=30)   # a person approves on Desktop or a phone
+        step = guard.commit(wait_s=30)  # a person approves on Desktop or a phone
 except GuardRefused as refused:
-    stop(refused.code)                  # nothing was written
+    stop(refused.code)  # nothing was written
 
-harness.click_save()                    # once
+harness.click_save()  # once
 result = guard.confirm()
-result.verdict                          # GuardVerdict.VERIFIED, REFUTED, or RECONCILIATION_REQUIRED
-result.receipt_path                     # runs/guarded/<guard_id>/effect-receipt.json
+result.verdict  # GuardVerdict.VERIFIED, REFUTED, or RECONCILIATION_REQUIRED
+result.receipt_path  # runs/guarded/<guard_id>/effect-receipt.json
 ```
 
 - `begin(task, screen_text=..., agent_id=...)` checks identity and reads the
@@ -149,8 +151,13 @@ openadapt-flow item-approval show runs/guarded/<guard_id>
 ```
 
 ```bash
-openadapt-flow item-approval approve runs/guarded/<guard_id> --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated
+openadapt-flow item-approval approve runs/guarded/<guard_id> --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated --approver-key <approver-key.pem>
 ```
+
+The answer counts only because the person's registered approver key signs
+it (`OPENADAPT_JIT_KEY_PASSPHRASE` holds the key's passphrase; see
+[`APPROVAL_MODES.md`](APPROVAL_MODES.md#the-approver-key)). `GuardedSave`
+reads registered keys from `key_dir`, or from `$OPENADAPT_JIT_KEY_DIR`.
 
 If `--guard-state` is the runs folder the console watches, or a folder
 directly inside it, the paired phone also shows the request. The receipt binds the approval: its
@@ -201,8 +208,10 @@ second commit.
 
 ## Try it
 
+From `packages/flow` in a source checkout:
+
 ```bash
-python -m openadapt_flow.guard_demo
+python -m benchmark.harness.guard_demo
 ```
 
 The demo starts MockMed on localhost. A fake agent signs in to the chart

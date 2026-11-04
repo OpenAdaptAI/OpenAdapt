@@ -534,6 +534,7 @@ def test_surfaces_config_validation_and_identity_unchanged():
         EffectsConfig.model_validate(
             {
                 "kind": "rest",
+                "records_path": "/api/db",
                 "base_url": "http://x",
                 "surfaces": {"a": {"kind": "rest"}},
             }
@@ -546,7 +547,9 @@ def test_surfaces_config_validation_and_identity_unchanged():
     from openadapt_flow.deployment import _identity_config_dump
 
     dumped = _identity_config_dump(
-        EffectsConfig.model_validate({"kind": "rest", "base_url": "http://x"})
+        EffectsConfig.model_validate(
+            {"kind": "rest", "records_path": "/api/db", "base_url": "http://x"}
+        )
     )
     assert "surfaces" not in dumped
 
@@ -984,3 +987,31 @@ def test_a_demonstration_with_no_write_is_refused(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["scaffold-verifier", str(rec), "--complete-read"])
     assert "REFUSED" in str(exc.value.code if exc.value.code is not None else exc.value)
+
+
+def test_a_binary_keyed_table_reads_the_same_in_the_scan_and_the_check(tmp_path):
+    """OpenEMR keys patient_data by uuid binary(16). The scan must see the
+    cells as the generated SQL read returns them, or every such read is
+    reported as returning different rows."""
+
+    import sqlite3
+
+    path = tmp_path / "openemr.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE patient_data (id INTEGER PRIMARY KEY, uuid BLOB, "
+        "fname TEXT, lname TEXT, email TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO patient_data VALUES (1, ?, 'Ada', 'Quill', 'ada.quill@example.test')",
+        (bytes.fromhex("a2f1c3d40e5b4c7a9b1d2e3f40516273"),),
+    )
+    conn.commit()
+    conn.close()
+    proposal = synthesize(
+        None,
+        params={"fname": "Ada", "lname": "Quill", "email": "ada.quill@example.test"},
+        db_path=path,
+    )
+    assert not [p for p in proposal.search.problems if "patient_data" in p]
+    assert any(s.is_target for s in proposal.search.surfaces)

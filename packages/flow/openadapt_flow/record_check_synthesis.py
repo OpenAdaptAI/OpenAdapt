@@ -61,6 +61,7 @@ from openadapt_flow.runtime.effects.effect import (
     Verdict,
     stable_id,
 )
+from openadapt_flow.runtime.effects.sql import read_cell
 from openadapt_flow.runtime.effects.surfaces import surface_probe
 
 #: The network capture ``record --capture-network`` writes. Read here without
@@ -818,7 +819,12 @@ def reads_from_sqlite(
                 )
                 complete = False
                 continue
-            rows = [dict(r) for r in conn.execute(f'SELECT * FROM "{table}"')]
+            # Cells as the check's own SQL read returns them (binary as hex),
+            # so the scan and the generated read compare equal.
+            rows = [
+                {k: read_cell(r[k]) for k in r.keys()}
+                for r in conn.execute(f'SELECT * FROM "{table}"')
+            ]
             best: Optional[tuple[dict[str, Any], dict[str, str]]] = None
             for row in rows:
                 exact, _ = _bind_fields(

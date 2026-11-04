@@ -1,0 +1,132 @@
+{
+  "app": {
+    "entry_url": null,
+    "headless": true,
+    "name": "Odoo 18 Community (local fixture, synthetic contacts)",
+    "reset": {
+      "command": null,
+      "http": null,
+      "python": "qualify_hooks:reset",
+      "timeout_s": 600.0
+    },
+    "session": "qualify_hooks:open_session",
+    "storage_state": null,
+    "surface": null,
+    "target": "web",
+    "url": "http://localhost:9412/",
+    "version": "odoo:18.0 (benchmark/odoo_contacts lock)",
+    "viewport": [
+      1280,
+      800
+    ]
+  },
+  "campaign": {
+    "cases": [
+      "representative",
+      "fault-ambiguity",
+      "fault-wrong-identity",
+      "fault-stale-identity",
+      "fault-weak-effect",
+      "fault-missing-effect"
+    ],
+    "id": "odoo-local-new-contact-v1",
+    "policy": "clinical-write",
+    "trials": 1
+  },
+  "effects": null,
+  "environment_id": "odoo-local-fixture-18.0",
+  "inputs": {
+    "file": null,
+    "params": {},
+    "source": "recorded",
+    "unique": []
+  },
+  "minimum_effect_strength": "independent_system_of_record",
+  "minimum_readback": null,
+  "qualification_id": null,
+  "record": {
+    "duplicate_key": null,
+    "exact_new_set": false,
+    "expected_count": 1,
+    "fields": {
+      "city": "city",
+      "email": "email",
+      "name": "name",
+      "phone": "phone",
+      "street": "street",
+      "zip": "zip"
+    },
+    "identity_field": "id",
+    "match": [
+      "email"
+    ],
+    "name": "contact",
+    "timeout_s": 5.0
+  },
+  "save_step": "step_013",
+  "schema_version": "openadapt.verify/v1",
+  "verifier": {
+    "session": null,
+    "verifier": {
+      "access_token": null,
+      "access_token_env": null,
+      "auth": null,
+      "base_url": null,
+      "candidates": [],
+      "document_field_paths": {},
+      "document_format": "json",
+      "document_text_pattern": null,
+      "evidence_keep_fields": null,
+      "evidence_redact_fields": [],
+      "field_paths": null,
+      "file_content_probe": null,
+      "file_min_size": 1,
+      "file_mtime_window_s": null,
+      "file_pattern": "*",
+      "fresh_session": null,
+      "glob": "*",
+      "graphql_freshness_field": null,
+      "graphql_freshness_window_s": null,
+      "graphql_query": null,
+      "graphql_records_path": "data",
+      "graphql_variables": {},
+      "kind": "sql",
+      "mail_pattern": "*.eml",
+      "option_params": {},
+      "options": {},
+      "path_params": {},
+      "poll_interval_s": 0.2,
+      "readback_min_ratio": 0.9,
+      "readback_region": null,
+      "records_drop_fields": [],
+      "records_key": "records",
+      "records_path": "/api/db",
+      "resource_type": "Observation",
+      "root": null,
+      "search_param_exprs": {},
+      "search_params": {},
+      "secret_env": {},
+      "smart_backend": null,
+      "sql_connect_args": {
+        "dbname": "oa",
+        "host": "127.0.0.1",
+        "port": 9413,
+        "user": "oa_record_check"
+      },
+      "sql_driver": "psycopg2",
+      "sql_password_env": "ODOO_RECORD_PASSWORD",
+      "sql_query": "SELECT id::text AS id, name, email, phone, street, city, zip FROM res_partner WHERE email = %(email)s AND active",
+      "sql_query_params": {
+        "email": {
+          "literal": null,
+          "param": "email"
+        }
+      },
+      "sqlite_database": null,
+      "surfaces": {},
+      "timeout_s": 5.0,
+      "ui_readback": null,
+      "verify_tls": true
+    }
+  }
+}

@@ -8,6 +8,7 @@ Input is a recording directory (``meta.json`` + ``events.jsonl`` +
 
 from __future__ import annotations
 
+import dataclasses
 import difflib
 import hashlib
 import json
@@ -30,11 +31,20 @@ from typing import (
 
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
+    from openadapt_flow.compiler.binding_admission import AdmissionFixture
 
 import numpy as np
 
 from openadapt_flow import sealed_set as _sealed
 from openadapt_flow import volatility
+from openadapt_flow.compiler.empty_result_guard import (
+    MinedGuard,
+    carries_value,
+    dialog_statement,
+    has_text_check,
+    is_empty_result_statement,
+    mine_empty_result_guard,
+)
 from openadapt_flow.ir import (
     ActionKind,
     Anchor,
@@ -63,8 +73,10 @@ from openadapt_flow.risk import (
     confirmation_opener_step_ids,
     infer_step_risk,
     is_meaningful_label,
+    opener_explanation,
     presumed_commit_step_ids,
 )
+from openadapt_flow.runtime.effects.effect import DEFAULT_IDEMPOTENCY_KEY_FIELD
 from openadapt_flow.runtime.identity import (
     band_region,
     context_from_lines,
@@ -752,7 +764,9 @@ def _squash(text: str) -> str:
     return "".join(normalize_text(text).split())
 
 
-def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
+def _contains_excluded(
+    text: str, excluded: tuple[str, ...], *, fragments: bool = True
+) -> bool:
     """True if ``text`` fuzzily contains (or is contained by) an excluded value.
 
     OCR mangles whitespace and the odd character, so exact substring checks
@@ -764,6 +778,7 @@ def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
     Args:
         text: A TEXT_PRESENT candidate (raw OCR line text).
         excluded: Excluded (parameterized) values, raw.
+        fragments: Also count ``text`` that is contained by a value.
 
     Returns:
         True when the candidate must not be asserted.
@@ -775,7 +790,7 @@ def _contains_excluded(text: str, excluded: tuple[str, ...]) -> bool:
         ex = _squash(raw)
         if len(ex) < MIN_EXCLUDE_CHARS:
             continue
-        if ex in hay or hay in ex:
+        if ex in hay or (fragments and hay in ex):
             return True
         matcher = difflib.SequenceMatcher(None, ex, hay)
         matched = sum(block.size for block in matcher.get_matching_blocks())
@@ -796,6 +811,20 @@ def _matches_label(text: str, labels: tuple[str, ...]) -> bool:
         if difflib.SequenceMatcher(None, sq, lsq).ratio() >= LABEL_MATCH_RATIO:
             return True
     return False
+
+
+def _clicked_labels(steps: Sequence[Step]) -> tuple[str, ...]:
+    """The labels of every control the demonstration clicked."""
+
+    labels: list[str] = []
+    for step in steps:
+        if step.anchor is None:
+            continue
+        if step.anchor.ocr_text:
+            labels.append(step.anchor.ocr_text)
+        if step.anchor.structural is not None and step.anchor.structural.name:
+            labels.append(step.anchor.structural.name)
+    return tuple(labels)
 
 
 def _text_carries_phi(text: str) -> bool:
@@ -1125,7 +1154,161 @@ def _structural_postconditions(event: dict) -> list[Postcondition]:
         pcs.append(Postcondition(kind=PostconditionKind.URL_CHANGED))
     elif title_before and title_after and title_before != title_after:
         pcs.append(Postcondition(kind=PostconditionKind.TITLE_CHANGED))
+    if not pcs and event.get("kind") in ("key", "hotkey"):
+        focus = _focus_postcondition(
+            event.get("focus_before"), event.get("focus_after")
+        )
+        if focus is not None:
+            pcs.append(focus)
     return pcs
+
+
+#: Ids a UI framework generates per render: React's useId (``:r2:``,
+#: ``«r2»``), Radix, Headless UI, MUI, Ember, react-select, downshift, Reach,
+#: Mantine, and bare UUIDs or long numeric suffixes.
+_GENERATED_ID = re.compile(
+    # React useId, anywhere in the id: ``:r2:``, ``«r2»``, and React 19.2+'s
+    # ``_r_2_`` / ``_R_2_`` (react-aria's ``react-aria-:r1:`` contains one).
+    r":r[0-9a-z]+:|«r[0-9a-z]+»|_r_[0-9a-z]+_"
+    r"|^(?:radix-|headlessui-|mui-|ember|react-select-|downshift-|reach-|mantine-"
+    r"|mat-|cdk-|rc_select_)"
+    r"|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    r"|\d{4,}$",
+    re.IGNORECASE,
+)
+
+
+def _generated_id(value: str) -> bool:
+    return bool(_GENERATED_ID.search(value))
+
+
+def _focus_postcondition(before: Any, after: Any) -> Optional[Postcondition]:
+    """A ``focus_on`` check for a key that moved the focus, or None.
+
+    Only when the element focused after the key has a specific identity that
+    no other element on the page shared at teach time: a ``data-testid``,
+    then an ``id``, then a role with a non-empty accessible name. A tag, or
+    a role with no name, is not specific, and the step keeps no check. The
+    key must have moved the focus or made an option active; a key that
+    changed neither proves nothing about it.
+    """
+
+    if not isinstance(after, dict) or after.get("none") is not False:
+        return None
+    before = before if isinstance(before, dict) else {}
+
+    def ident(o: dict) -> tuple:
+        return (
+            o.get("tag"),
+            o.get("testid"),
+            o.get("id"),
+            o.get("role"),
+            o.get("name"),
+        )
+
+    moved = ident(before) != ident(after)
+    activated = after.get("active_option") is True and not (
+        not moved and before.get("active_option") is True
+    )
+    if not (moved or activated):
+        return None
+    frame_path = after.get("frame_path")
+    if not isinstance(frame_path, list) or not all(
+        isinstance(f, str) for f in frame_path
+    ):
+        return None
+    common: dict[str, Any] = {
+        "focus_active_option": activated,
+        "focus_frame_path": tuple(frame_path),
+    }
+    testid, ident_id = after.get("testid"), after.get("id")
+    if isinstance(ident_id, str) and _generated_id(ident_id):
+        # A framework-generated id (React useId, Radix, MUI ...) shifts from
+        # run to run, so it names no element; fall back to role and name.
+        ident_id = None
+    role, name = after.get("role"), after.get("name")
+    named = (
+        isinstance(role, str)
+        and role.strip()
+        and isinstance(name, str)
+        and name.strip()
+    )
+    # Every check needs a role and a non-empty name. An id or testid check
+    # binds them too, so an id that moved to another element can't pass: the
+    # generated-id patterns are only a hint, and no list keeps up with every
+    # framework. An element with no name (a bare tabindex div, a host whose
+    # closed shadow root holds the real focus) gets no check, and the step
+    # stays vacuous.
+    if not named:
+        return None
+    pair: dict[str, Any] = {"focus_role": role, "focus_name": name}
+    if isinstance(testid, str) and testid.strip() and after.get("testid_count") == 1:
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="testid",
+            focus_value=testid,
+            **pair,
+            **common,
+        )
+    if isinstance(ident_id, str) and ident_id.strip() and after.get("id_count") == 1:
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="id",
+            focus_value=ident_id,
+            **pair,
+            **common,
+        )
+    if (
+        isinstance(role, str)
+        and role.strip()
+        and isinstance(name, str)
+        and name.strip()
+        and after.get("role_name_count") == 1
+    ):
+        return Postcondition(
+            kind=PostconditionKind.FOCUS_ON,
+            focus_by="role_name",
+            focus_role=role,
+            focus_name=name,
+            **common,
+        )
+    return None
+
+
+def _label_shows_param_value(
+    text: str, values: tuple[str, ...], *, typed_here: tuple[str, ...]
+) -> bool:
+    """True if a click target's label shows a parameter value.
+
+    A label shows a value when it (fuzzily) contains one. A label that is
+    only a fragment of a value counts when that value is ``typed_here``: OCR
+    can split a typed value across lines. Anywhere else such a fragment is a
+    label that shares a word with a value, like the "Triage" button and a
+    note "E2E triage booking ...". Dropping that label left the click with no
+    text to find, and when the buttons swapped places the geometry rung
+    clicked the one now at the recorded spot. A kept label that does vary
+    per run only fails to match; ``lint_param_leakage`` allows the slot.
+
+    Args:
+        text: The OCR label under the click.
+        values: Every parameter (and secret) value in the recording.
+        typed_here: Values that can be the text under this click: those typed
+            earlier into the field the click lands in, and every secret.
+    """
+
+    return _contains_excluded(text, typed_here) or _contains_excluded(
+        text, values, fragments=False
+    )
+
+
+def _point_in_rect(point: Point, rect: object) -> bool:
+    if not isinstance(rect, (list, tuple)) or len(rect) != 4:
+        return False
+    try:
+        x, y, w, h = (int(v) for v in rect)
+    except (TypeError, ValueError):
+        return False
+    return x <= point[0] < x + w and y <= point[1] < y + h
 
 
 def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> list[str]:
@@ -1164,7 +1347,20 @@ def lint_param_leakage(workflow: Workflow, param_values: tuple[str, ...]) -> lis
     violations: list[str] = []
     for step in workflow.steps:
         for pc in step.expect:
-            if pc.text and _contains_excluded(pc.text, values):
+            for focus in (pc.focus_name, pc.focus_value):
+                if focus and _contains_excluded(focus, values):
+                    violations.append(
+                        f"{step.id}: focus_on postcondition {focus!r} embeds a "
+                        "demo parameter value"
+                    )
+            # An empty-result statement is built from a fixed vocabulary, so a
+            # value can only be in it as a whole word; the fuzzy screen would
+            # flag "No matches were found." against a title like "Ms.".
+            if pc.text and (
+                carries_value(pc.text, values)
+                if is_empty_result_statement(pc.text)
+                else _contains_excluded(pc.text, values)
+            ):
                 violations.append(
                     f"{step.id}: {pc.kind.value} postcondition "
                     f"{pc.text!r} embeds a demo parameter value"
@@ -1880,26 +2076,35 @@ def compile_recording(
     set, see :mod:`openadapt_flow.sealed_set`) is read in memory and compiles
     into a sealed bundle: every crop, sidecar and ``workflow.json`` is
     encrypted before it reaches the disk, under ``OPENADAPT_BUNDLE_KEY`` or,
-    when that is unset, the recording's own key. Without a key the compile
-    refuses before reading anything.
+    when that is unset, the recording key. A plaintext recording compiles
+    into a sealed bundle when :func:`openadapt_flow.at_rest.seal_new` says so
+    (``OPENADAPT_FLOW_AT_REST=strict``); otherwise the plaintext bundle is
+    named on stderr and in the ledger.
     """
     recording = Path(recording_dir)
     bundle = Path(out_bundle_dir)
     sealed_input = _sealed.is_sealed(recording)
     sealed_output = _sealed.is_sealed(bundle)
-    if _sealed.active_writer(bundle) is not None or not (sealed_input or sealed_output):
+    if _sealed.active_writer(bundle) is not None:
         return _compile_recording(recording, bundle, name=name, **kwargs)
+    if not (sealed_input or sealed_output):
+        from openadapt_flow import at_rest
+
+        # A plaintext recording (one made before encryption was the default,
+        # or under the opt-out) still compiles to a sealed bundle unless
+        # plaintext is explicitly allowed.
+        if not at_rest.seal_new("a compiled bundle", bundle):
+            return _compile_recording(recording, bundle, name=name, **kwargs)
     if sealed_input:
         # Opening the recording verifies its whole file set before compiling.
         _sealed.open_set(recording)
-    passphrase = _sealed.passphrase_for("bundle") or _sealed.recording_key()
+    passphrase = _sealed.output_bundle_key()
     if not passphrase:
         raise _sealed.SealedSetKeyError(_sealed.missing_key_message(bundle, "bundle"))
     if not sealed_output and bundle.exists() and any(bundle.iterdir()):
         raise _sealed.SealedSetError(
-            f"{bundle} already holds an unencrypted bundle; compile an "
-            "encrypted recording into a new directory so no plaintext is mixed "
-            "into the sealed output"
+            f"{bundle} already holds an unencrypted bundle; compile into a new "
+            "directory so no plaintext is mixed into the sealed output"
         )
     with _sealed.writing(bundle, "bundle", passphrase, resume=sealed_output):
         return _compile_recording(recording, bundle, name=name, **kwargs)
@@ -1915,7 +2120,8 @@ def _compile_recording(
     secret_param_steps: Optional[Iterable[str]] = None,
     mine_effects: bool = False,
     admit_api_bindings: bool = False,
-    admission_fixture_url: Optional[str] = None,
+    admission_fixture: Optional["AdmissionFixture"] = None,
+    idempotency_key_field: Optional[str] = DEFAULT_IDEMPOTENCY_KEY_FIELD,
     skill_library_root: Optional[Path | str] = None,
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
@@ -1923,6 +2129,7 @@ def _compile_recording(
     pixel_verify_enabled: bool = False,
     bind_effect_params: bool = False,
     drop_redundant_keys: bool = False,
+    phi_free_identity: bool = True,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -2013,13 +2220,20 @@ def _compile_recording(
             consequential write whose Effect was mined from an observed
             system-of-record delta, propose a REST binding and copy it onto
             the step only if the same Effect CONFIRMs on the held-out
-            fixture at ``admission_fixture_url``. A refused proposal leaves
+            ``admission_fixture``. A refused proposal leaves
             the step on the GUI ladder. FHIR / MCP / tool bindings are not
             synthesized. Default False keeps the bundle byte-identical.
-        admission_fixture_url: Base URL of the held-out REST fixture
-            (MockMed ``fault_server`` in tests). Required when
-            ``admit_api_bindings`` is True; without it the compiler logs
-            and leaves every step on the GUI ladder.
+        idempotency_key_field: With ``mine_effects``, the record field that
+            carries this app's at-most-once key (from its contract or
+            deployment config). Defaults to the ``key`` convention
+            (:data:`~openadapt_flow.compiler.effect_mining.DEFAULT_IDEMPOTENCY_KEY_FIELD`);
+            ``None``: no key is mined.
+        admission_fixture: The held-out REST fixture
+            (:class:`~openadapt_flow.compiler.binding_admission.AdmissionFixture`:
+            base URL, and the app's own read and write paths). Required when
+            ``admit_api_bindings`` is True; without it the compiler logs and
+            leaves every step on the GUI ladder. Its ``params`` default to the
+            recording's.
         skill_library_root: Optional
             :class:`~openadapt_flow.learning.library.SkillLibrary` root.
             When a binding is admitted, the lifted program is stored with
@@ -2129,6 +2343,13 @@ def _compile_recording(
     # postconditions too, even though it never lands in workflow.params.
     param_values.extend(secret_exclude_values)
     exclude_texts: tuple[str, ...] = tuple(dict.fromkeys(param_values))
+    # Where and when each parameter value is typed, for the click labels
+    # that can show it (_label_shows_param_value).
+    typed_param_at: list[tuple[int, str, object]] = [
+        (int(event["i"]), str(event["text"]), event.get("field_rect"))
+        for event in events
+        if event.get("kind") == "type" and event.get("param") and event.get("text")
+    ]
 
     # The recording date arms the near/far date split in the volatility
     # classifier (a DOB is identity data; "last updated" is chronology).
@@ -2240,7 +2461,18 @@ def _compile_recording(
                 frame_lines,
                 click,
             )
-            if ocr_text and _contains_excluded(ocr_text, exclude_texts):
+            if ocr_text and _label_shows_param_value(
+                ocr_text,
+                exclude_texts,
+                typed_here=(
+                    *(
+                        text
+                        for at, text, rect in typed_param_at
+                        if at < i and _point_in_rect(click, rect)
+                    ),
+                    *secret_exclude_values,
+                ),
+            ):
                 # The text under the click is (part of) a value typed from a
                 # parameter, so it changes every run: never anchor on it.
                 ocr_text = None
@@ -2274,6 +2506,18 @@ def _compile_recording(
             # OCR context band; replay prefers it (no OCR glyph ambiguity) and
             # falls back to the band on pixel-only substrates.
             structured_identity = event.get("structured_identity") or None
+            # The row's stable record id (a DOM data-* id, the row link's
+            # path), captured with the structured identity. Hashed into the
+            # identity template so replay acts only on the row with this id.
+            record_key = (
+                event.get("record_key") or None if structured_identity else None
+            )
+            structured_row = event.get("structured_row")
+            if not structured_identity or not isinstance(structured_row, bool):
+                structured_row = None
+            structured_ambiguous = (
+                bool(event.get("structured_ambiguous")) and bool(structured_identity)
+            ) or None
             # Structural locator (DOM selector / role+name, or UIA identifiers)
             # of the clicked element, captured by the recorder when the
             # recording backend exposed it (StructuralActionBackend). Drives the
@@ -2381,6 +2625,9 @@ def _compile_recording(
                 ocr_text=anchor_ocr_text,
                 context_text=context_text,
                 structured_identity=structured_identity,
+                record_key=record_key,
+                structured_row=structured_row,
+                structured_ambiguous=structured_ambiguous,
                 structural=structural,
                 landmarks=anchor_landmarks,
                 identifier_crop=identifier_crop_rel,
@@ -2854,6 +3101,7 @@ def _compile_recording(
     # Submit-binding observations recorded on click events (unlabeled
     # controls only), attached once every risk decision is final.
     binding_observations: dict[str, object] = {}
+    form_values: dict[str, object] = {}
     for j, (step, step_before, step_after, event) in enumerate(pending):
         steps.append(step)
         if isinstance(event.get("dialog"), dict):
@@ -2863,6 +3111,8 @@ def _compile_recording(
             step.dialog = _dialog_identity(event["dialog"], exclude_texts)
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
+            if event.get("form_values") is not None:
+                form_values[step.id] = event["form_values"]
         if step.action in (ActionKind.SCROLL, ActionKind.READ):
             continue  # see the scroll and read branches in pass 1
         if step.action is ActionKind.SWITCH_SURFACE:
@@ -2969,20 +3219,106 @@ def _compile_recording(
         presumed.risk_explanation = PRESUMED_COMMIT_EXPLANATION
         presumed.risk_review_required = False
 
+    # The submit button of the form the demonstration typed into saves that
+    # form, whatever the screen did after the click (a slow recording can
+    # capture the page before it changes). Explicit risk_overrides below
+    # still win.
+    for step in _form_submit_steps(steps, binding_observations):
+        if step.risk != "irreversible":
+            step.risk = "irreversible"
+            step.risk_explanation = "it submits the form the run typed into"
+            step.risk_review_required = False
+
     # A click that only opens a confirmation dialog is not the save: the
     # dialog's Confirm click is. Explicit risk_overrides below still win.
     by_step_id = {step.id: step for step in steps}
+    frames_by_step_id = {
+        step.id: (before, after, event) for step, before, after, event in pending
+    }
+    guard_notes: list[dict[str, Any]] = []
     for opener_id, confirm_id in confirmation_opener_step_ids(steps):
         opener = by_step_id[opener_id]
         opener.risk = "reversible"
-        opener.risk_explanation = (
-            f"opens a confirmation dialog; the save is the next click ({confirm_id})"
-        )
+        opener.risk_explanation = opener_explanation(confirm_id)
         opener.risk_review_required = False
         confirm = by_step_id[confirm_id]
         confirm.risk_explanation = (
             f"confirms the dialog opened by {opener_id}; this click saves"
         )
+        # The dialog's empty result ("No matches were found.") is what the
+        # person confirmed through: check it after the opener and again right
+        # before the Confirm click. A pair with no such check is noted.
+        opener_before, opener_after, opener_event = frames_by_step_id[opener_id]
+        confirm_before, _, confirm_event = frames_by_step_id[confirm_id]
+        # A line in other words than the English vocabulary: kept as a
+        # candidate for induction, which checks it across demonstrations.
+        dialog_line: Optional[str] = None
+        dialog_line_note = ""
+        if opener_before is None or opener_after is None or confirm_before is None:
+            dialog_check = MinedGuard(note="the recording lacks the dialog's frames")
+        else:
+            dialog_frames = (
+                cached_lines(int(opener_event["i"]), "before", opener_before),
+                cached_lines(int(opener_event["i"]), "after", opener_after),
+                cached_lines(int(confirm_event["i"]), "before", confirm_before),
+            )
+            dialog_check = mine_empty_result_guard(
+                *dialog_frames,
+                reject=lambda text: (
+                    carries_value(text, exclude_texts) or _text_carries_phi(text)
+                ),
+            )
+            section = confirm_event.get("section")
+            if dialog_check.guard is None and "x" in confirm_event:
+                dialog_line, dialog_line_note = dialog_statement(
+                    *dialog_frames,
+                    confirm_point=(int(confirm_event["x"]), int(confirm_event["y"])),
+                    title=(
+                        str(section.get("text") or "")
+                        if isinstance(section, dict) and section.get("kind") == "dialog"
+                        else None
+                    ),
+                    labels=_clicked_labels(steps),
+                    # Not built from a fixed vocabulary: the fuzzy value screen
+                    # too, which also catches a value OCR read without spaces.
+                    reject=lambda text: (
+                        carries_value(text, exclude_texts)
+                        or _contains_excluded(text, exclude_texts)
+                        or _text_carries_phi(text)
+                    ),
+                )
+        if dialog_check.postcondition is not None and dialog_check.guard is not None:
+            if not has_text_check(opener.expect, dialog_check.postcondition.text or ""):
+                opener.expect = [*opener.expect, dialog_check.postcondition]
+            if confirm.guard is None:
+                confirm.guard = dialog_check.guard
+            guard_notes.append(
+                {
+                    "change": "empty_result_guard",
+                    "step": opener_id,
+                    "confirm_step": confirm_id,
+                    "evidence": "exact empty search result in the dialog, "
+                    "checked after the opener and before the Confirm click",
+                }
+            )
+        else:
+            logger.warning(
+                "no empty-result check for the dialog %s opens (confirmed by %s): %s",
+                opener_id,
+                confirm_id,
+                dialog_check.note,
+            )
+            missed: dict[str, Any] = {
+                "change": "no_empty_result_guard",
+                "step": opener_id,
+                "confirm_step": confirm_id,
+                "warning": f"no check that the dialog found nothing: {dialog_check.note}",
+            }
+            if dialog_line is not None:
+                missed["dialog_line"] = dialog_line
+            elif dialog_line_note:
+                missed["dialog_line_note"] = dialog_line_note
+            guard_notes.append(missed)
 
     # Local edits the recording proves stayed local (select-all before
     # typing, Enter on a typed dropdown option, an in-form tab): classified
@@ -3063,16 +3399,46 @@ def _compile_recording(
                 if pvalue:
                     by_value.setdefault(pvalue, []).append(pname)
             bindings = {v: names[0] for v, names in by_value.items() if len(names) == 1}
+        from openadapt_flow.compiler.effect_mining import store_unchanged_through_next
+        from openadapt_flow.compiler.local_edit import _no_write
+
+        events_by_i = {e.get("i"): e for e in events}
+        positions = {e.get("i"): k for k, e in enumerate(events)}
         for step, _sb, _sa, event in pending:
+            # The step wrote nothing when the record store stayed the same
+            # across it and until the next action (a real gap later), and the
+            # network capture, when there is one, shows no write request in
+            # its window (#1377). Effect mining uses it for dismiss-shaped
+            # steps only.
+            unchanged = store_unchanged_through_next(events_by_i, int(event["i"]))
+            write_requests: Optional[bool] = None
+            if unchanged is True and network_lines is not None:
+                position = positions.get(event["i"])
+                no_write = (
+                    None
+                    if position is None
+                    else _no_write(events, position, network_lines)
+                )
+                if no_write is True:
+                    write_requests = False
+                else:
+                    unchanged = None
             mined = mine_step_effects(
                 event,
                 step,
                 exclude_texts=exclude_texts,
                 param_bindings=bindings or None,
+                store_unchanged=unchanged,
+                write_requests=write_requests,
+                idempotency_key_field=idempotency_key_field,
             )
             if mined.effects:
                 step.effects = mined.effects
-            log = logger.info if mined.disposition != "none" else logger.debug
+            log = (
+                logger.info
+                if mined.disposition != "none" or unchanged is True
+                else logger.debug
+            )
             log("effect-mining %s: %s", step.id, mined.reason)
             i_event = int(event["i"])
             if _sa is not None:
@@ -3118,15 +3484,14 @@ def _compile_recording(
 
     if admit_api_bindings:
         from openadapt_flow.compiler.binding_admission import (
-            AdmissionFixture,
             certify_steps_on_fixture,
         )
         from openadapt_flow.learning.library import SkillLibrary
 
-        if not admission_fixture_url:
+        if admission_fixture is None:
             logger.info(
-                "admit_api_bindings requested but admission_fixture_url is "
-                "empty -- leaving every step on the GUI ladder"
+                "admit_api_bindings requested but admission_fixture is "
+                "unset -- leaving every step on the GUI ladder"
             )
         else:
             library = (
@@ -3137,9 +3502,10 @@ def _compile_recording(
             decisions = certify_steps_on_fixture(
                 steps,
                 [event for _step, _sb, _sa, event in pending],
-                fixture=AdmissionFixture(
-                    base_url=admission_fixture_url,
-                    params=dict(params),
+                fixture=(
+                    admission_fixture
+                    if admission_fixture.params
+                    else dataclasses.replace(admission_fixture, params=dict(params))
                 ),
                 exclude_texts=exclude_texts,
                 params=dict(params),
@@ -3174,6 +3540,7 @@ def _compile_recording(
         pixel_verify_enabled=pixel_verify_enabled,
         drop_redundant_keys=drop_redundant_keys,
     )
+    compile_notes = [*compile_notes, *guard_notes]
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 
@@ -3231,7 +3598,9 @@ def _compile_recording(
         ),
         "mine_effects": mine_effects,
         "admit_api_bindings": admit_api_bindings,
-        "admission_fixture_url": admission_fixture_url,
+        "admission_fixture_url": (
+            admission_fixture.base_url if admission_fixture is not None else None
+        ),
         "name": name,
         "param_overrides": dict(sorted((param_overrides or {}).items())),
         "risk_overrides": dict(sorted((risk_overrides or {}).items())),
@@ -3241,6 +3610,21 @@ def _compile_recording(
     if bind_effect_params:
         # Recorded only when set, so every existing compile keeps its digest.
         compiler_config["bind_effect_params"] = True
+    if idempotency_key_field != DEFAULT_IDEMPOTENCY_KEY_FIELD:
+        # Recorded only when not the default, so every existing compile keeps
+        # its digest.
+        compiler_config["idempotency_key_field"] = idempotency_key_field
+    if admission_fixture is not None:
+        # Added only when set, so a compile without one hashes as before.
+        admission: dict[str, Any] = {
+            "records_path": admission_fixture.records_path,
+            "records_key": admission_fixture.records_key,
+            "write_path": admission_fixture.write_path,
+            "write_method": admission_fixture.write_method,
+            "server_fields": sorted(admission_fixture.server_fields),
+            "idempotency_key_field": admission_fixture.idempotency_key_field,
+        }
+        compiler_config["admission_fixture"] = admission
     compiler_config_sha256 = hashlib.sha256(
         json.dumps(
             compiler_config,
@@ -3460,7 +3844,7 @@ def _compile_recording(
     # fields the demonstration filled, or record why it cannot be bound (the
     # replayer refuses that click). Runs after every risk decision, model
     # annotation included, so the binding covers exactly the final writes.
-    _attach_submit_bindings(workflow.steps, binding_observations)
+    _attach_submit_bindings(workflow.steps, binding_observations, form_values)
 
     # PHI-at-rest remediation (audit REM-2): replace the plaintext identity
     # band (``anchor.context_text``) and structured identity on every anchor
@@ -3471,8 +3855,11 @@ def _compile_recording(
     # (openadapt_flow.runtime.identity_template). Runs LAST so param-hygiene
     # lint and optional model annotation still see the plaintext. Backward
     # compatible: bundles compiled before this carry the plaintext fields and
-    # replay unchanged.
-    _phi_free_identity(workflow)
+    # replay unchanged. Multi-trace induction compiles with this off and
+    # hashes the bands itself once the loop's row columns are known
+    # (compiler.induction.phi_free_program_identity).
+    if phi_free_identity:
+        _phi_free_identity(workflow)
 
     # PHI governance manifest (audit REM-1): classify the bundle so an operator
     # inventory and the pre-commit/CI guard can act on it.
@@ -3517,7 +3904,50 @@ def _compile_recording(
     return workflow
 
 
-def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) -> None:
+def _form_submit_steps(
+    steps: list[Step], observations: dict[str, object]
+) -> list[Step]:
+    """Clicks on the labelled submit button of the one form owning every
+    field typed into since the previous such click."""
+
+    found: list[Step] = []
+    typed = False
+    for step in steps:
+        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
+            typed = True
+            continue
+        raw = observations.get(step.id)
+        if (
+            typed
+            and raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and _is_form_save(raw)
+        ):
+            found.append(step)
+            typed = False
+    return found
+
+
+def _is_form_save(raw: object) -> bool:
+    """The observation shows the labelled submit button of the typed form."""
+
+    from openadapt_flow.submit_binding import (
+        _no_form_identity_reason,
+        observation_from_page,
+    )
+
+    try:
+        observation = observation_from_page(raw)
+    except ValueError:
+        return False
+    return observation.labelled and _no_form_identity_reason(observation) is None
+
+
+def _attach_submit_bindings(
+    steps: list[Step],
+    observations: dict[str, object],
+    form_values: Optional[dict[str, object]] = None,
+) -> None:
     """Attach :class:`~openadapt_flow.ir.SubmitBinding` evidence in place.
 
     A binding applies to a consequential CLICK/DOUBLE_CLICK whose target has
@@ -3525,12 +3955,20 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
     carried a submit-binding observation. Each such step gets either a
     binding (every condition in :mod:`openadapt_flow.submit_binding` held in
     the demonstration) or a plain-language reason it could not be bound.
-    Steps without an observation (pixel recordings, labelled controls,
-    recordings made before this capability) are left unchanged.
+
+    A consequential click on a labelled control that compiled with no
+    identity evidence, after fields were typed, and whose observation shows
+    it is a button of the one form owning those fields, gets a
+    :class:`~openadapt_flow.ir.FormIdentity` instead: a create-new form's
+    save. Steps without an observation (pixel recordings, recordings made
+    before this capability) are left unchanged.
     """
 
+    from openadapt_flow.policy import is_identity_armed
     from openadapt_flow.submit_binding import (
+        decide_form_identity,
         decide_submit_binding,
+        form_values_from_record,
         observation_from_page,
     )
 
@@ -3560,6 +3998,32 @@ def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) 
                 )
                 step.submit_binding = binding
                 step.submit_binding_unbound_reason = reason
+        elif (
+            raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and step.risk == "irreversible"
+            and step.anchor is not None
+            and typed_since_commit
+            and not is_identity_armed(step)
+        ):
+            # A labelled save with no record on screen to check: a create-new
+            # form. The record is the one the run typed into the form.
+            try:
+                form_identity, why = decide_form_identity(
+                    observation_from_page(raw),
+                    form_values_from_record((form_values or {}).get(step.id)),
+                )
+            except ValueError:
+                form_identity, why = None, "the recorded form evidence is malformed"
+            if form_identity is not None:
+                step.anchor.form_identity = form_identity
+                step.identity_armed = True
+                step.identity_unarmed_reason = None
+            elif _is_form_save(raw):
+                # The form's own save, but the check can't be armed: say why,
+                # so the refusal names it instead of a generic gap.
+                step.identity_unarmed_reason = f"create-form save not checked: {why}"
+                logger.warning("%s: %s", step.id, step.identity_unarmed_reason)
         if step.risk == "irreversible":
             # A consequential step closes the entry it committed.
             typed_since_commit = []
@@ -3590,9 +4054,15 @@ def _phi_free_identity(workflow: Workflow) -> None:
             structured_identity=anchor.structured_identity,
             param_examples=workflow.params,
             salt_hex=salt,
+            record_key=anchor.record_key,
+            structured_row=anchor.structured_row,
+            structured_ambiguous=bool(anchor.structured_ambiguous),
         )
         if template is None:
             continue
         anchor.identity_template = template
         anchor.context_text = None
         anchor.structured_identity = None
+        anchor.record_key = None
+        anchor.structured_row = None
+        anchor.structured_ambiguous = None

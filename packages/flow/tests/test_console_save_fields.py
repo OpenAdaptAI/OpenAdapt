@@ -21,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from openadapt_flow.approval_mode.human_attestation import portal_signer
 from openadapt_flow.approval_mode.item_approval import (
     MAX_SAVE_FIELDS,
     ItemApprovalRequest,
@@ -105,7 +106,9 @@ def test_the_fields_are_inside_the_request_digest(tmp_path):
     assert detail["task"]["capability_digest"] == with_fields.digest()
 
 
-def test_a_value_changed_after_the_phone_saw_it_makes_the_answer_stale(tmp_path):
+def test_a_value_changed_after_the_phone_saw_it_makes_the_answer_stale(
+    tmp_path, approver
+):
     store, request = _open(tmp_path, FIELDS)
     shown = save_approvals.save_approval_detail(tmp_path, request.request_id)
     path = store.dir / f"request-{request.request_id}.json"
@@ -139,7 +142,7 @@ def test_the_detail_is_served_no_store(tmp_path):
     assert response.json()["presentation"]["fields"][0]["after"] == VALUE
 
 
-def test_the_values_stay_out_of_everything_else(tmp_path):
+def test_the_values_stay_out_of_everything_else(tmp_path, approver):
     store, request = _open(tmp_path, FIELDS)
     client = _client(tmp_path)
     detail = client.get(f"/api/save-approvals/{request.request_id}").json()
@@ -161,6 +164,7 @@ def test_the_values_stay_out_of_everything_else(tmp_path):
         auth_method="none",
         decline_reason=None,
         policy=store.context(),
+        signer=portal_signer(store.key_directory(), root=store.approver_root),
     )
     assert VALUE not in json.dumps(answer.reference(request).model_dump(mode="json"))
     assert VALUE not in json.dumps(answer.model_dump(mode="json"))

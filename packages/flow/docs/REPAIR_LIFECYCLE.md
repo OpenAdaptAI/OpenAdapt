@@ -355,7 +355,9 @@ openadapt-flow teach-branch \
   normal run. Secret and free-text parameters are never used. If no single
   parameter separates them, it refuses.
 - **The same governed learn loop.** All example corrections and the normal runs
-  go through induction, the regression gate and held-out validation together.
+  go through induction, the regression gate and a held-out check together.
+  The held-out check is structural: it compares the program's shape with
+  traces it was not fitted to.
   After promotion, each example and each normal run must still be explained by
   the learned program. Only then is a bundle written.
 - **A candidate, not an active bundle.** The output carries

@@ -13,6 +13,13 @@ from openadapt_flow import registry
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _own_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each test's pull ledger and serials live in its own OPENADAPT_HOME."""
+
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "openadapt-home"))
+
+
 def _local_registry(tmp_path: Path) -> Path:
     dest = tmp_path / "registry"
     shutil.copytree(ROOT / "registry", dest)
@@ -24,6 +31,13 @@ def test_committed_index_is_current() -> None:
 
     build = runpy.run_path(str(ROOT / "scripts/build_registry_index.py"))["build"]
     committed = json.loads((ROOT / "registry/index.json").read_text())
+    # The release workflow adds the signatures, the freshness fields and each
+    # entry's archive.
+    for field in (*registry.INDEX_FRESHNESS_FIELDS, "signature"):
+        committed.pop(field, None)
+    for item in committed["workflows"]:
+        item.pop("signature", None)
+        item.pop("archive", None)
     assert committed == build()
 
 
@@ -34,19 +48,34 @@ def test_no_entry_claims_certified_without_a_record() -> None:
     assert ids["openimis/claim-intake"].status == "planned"
     with pytest.raises(registry.RegistryError, match="certification"):
         registry.validate_index(
-            {"workflows": [{"id": "a/b", "status": "certified", "files": {"x": "0"}}]}
+            {
+                "workflows": [
+                    {
+                        "id": "a/b",
+                        "status": "certified",
+                        "files": {"workflow.json": "0"},
+                    }
+                ]
+            }
         )
 
 
 def test_pull_verifies_and_loads(tmp_path: Path) -> None:
     index = _local_registry(tmp_path)
-    dest = registry.pull("openemr/new-referral", tmp_path / "out", index_url=str(index))
+    dest = registry.pull(
+        "openemr/new-referral",
+        tmp_path / "out",
+        index_url=str(index),
+        allow_unsigned=True,
+    )
     from openadapt_flow.ir import Workflow
 
     wf = Workflow.load(dest)
     assert "fname" in wf.param_specs
     with pytest.raises(registry.RegistryError, match="exists"):
-        registry.pull("openemr/new-referral", dest, index_url=str(index))
+        registry.pull(
+            "openemr/new-referral", dest, index_url=str(index), allow_unsigned=True
+        )
 
 
 def test_pull_refuses_tampered_file(tmp_path: Path) -> None:
@@ -54,16 +83,26 @@ def test_pull_refuses_tampered_file(tmp_path: Path) -> None:
     wf_json = index.parent / "bundles/openemr/new-referral/workflow.json"
     wf_json.write_text(wf_json.read_text().replace("Elena", "Elenx", 1))
     with pytest.raises(registry.RegistryError, match="sha256"):
-        registry.pull("openemr/new-referral", tmp_path / "out", index_url=str(index))
+        registry.pull(
+            "openemr/new-referral",
+            tmp_path / "out",
+            index_url=str(index),
+            allow_unsigned=True,
+        )
     assert not (tmp_path / "out").exists()
 
 
 def test_pull_refuses_planned_and_unknown(tmp_path: Path) -> None:
     index = str(_local_registry(tmp_path))
     with pytest.raises(registry.RegistryError, match="planned"):
-        registry.pull("openimis/claim-intake", tmp_path / "o", index_url=index)
+        registry.pull(
+            "openimis/claim-intake",
+            tmp_path / "o",
+            index_url=index,
+            allow_unsigned=True,
+        )
     with pytest.raises(registry.RegistryError, match="no workflow"):
-        registry.pull("nope/x", tmp_path / "o", index_url=index)
+        registry.pull("nope/x", tmp_path / "o", index_url=index, allow_unsigned=True)
 
 
 def test_unsafe_paths_rejected() -> None:
@@ -85,6 +124,7 @@ def test_cli_list_and_pull(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
             [
                 "pull",
                 "openemr/new-referral",
+                "--allow-unsigned",
                 "--index",
                 index,
                 "--out",

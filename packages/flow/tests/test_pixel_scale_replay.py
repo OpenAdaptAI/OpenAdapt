@@ -90,6 +90,29 @@ def test_canvas_kiosk_at_150_percent_cleartype_off_books_the_right_record(
 
 
 def test_wrong_record_at_a_new_scale_still_halts_before_the_write(
+    tmp_path: Path, bundles: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kiosk = ScaledKiosk(SPECS["canvas_notes"](), RenderProfile(1.25, cleartype=True))
+    verify_input = Replayer._verify_typed_input
+
+    def switch_after_verified_input(self, *args, **kwargs):
+        error = verify_input(self, *args, **kwargs)
+        assert error is None, "the real input check must pass before the identity fault"
+        kiosk.select_patient(1)
+        return error
+
+    # Exercise the next action's identity check independently of the TYPE
+    # check. A switch during readback also changes the field's context and
+    # must already halt there (covered separately below).
+    monkeypatch.setattr(Replayer, "_verify_typed_input", switch_after_verified_input)
+    report = _replay(tmp_path, bundles["canvas_notes"], kiosk)
+    assert not report.success
+    assert kiosk.state.saved == []
+    failure = _first_failure(report)
+    assert failure.identity is not None and failure.identity.status == "mismatch"
+
+
+def test_record_switch_during_typed_readback_halts_without_retry(
     tmp_path: Path, bundles: dict[str, Path]
 ) -> None:
     kiosk = ScaledKiosk(SPECS["canvas_notes"](), RenderProfile(1.25, cleartype=True))
@@ -101,7 +124,10 @@ def test_wrong_record_at_a_new_scale_still_halts_before_the_write(
     assert not report.success
     assert kiosk.state.saved == []
     failure = _first_failure(report)
-    assert failure.identity is not None and failure.identity.status == "mismatch"
+    assert failure.input_verified is False
+    assert failure.input_retried is False
+    assert failure.safety_halt is True
+    assert kiosk.state.values["note"] == sweep.REPLAY["canvas_notes"]["note"]
 
 
 def test_unconfirmable_identity_at_a_new_scale_halts(

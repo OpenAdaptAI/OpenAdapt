@@ -3,7 +3,7 @@
 This is the system of record the end-to-end silent-wrong-effect harness
 (:mod:`benchmark.effect_e2e.run`) writes to THROUGH the governed replay path.
 It exists to break the circularity of the older definitional benchmark
-(``openadapt_flow.benchmark.silent_wrong_action``), whose effect verifier and
+(``benchmark.harness.silent_wrong_action``), whose effect verifier and
 ground-truth judge read the SAME in-process Python object and whose write
 bypassed the :class:`~openadapt_flow.runtime.replayer.Replayer`.
 

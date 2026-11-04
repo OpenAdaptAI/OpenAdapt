@@ -1,0 +1,41 @@
+{
+  "schema": "openadapt.shadow-setup-timing/v1",
+  "steps_s": {
+    "1_read_credential": 0.14,
+    "2_agent_actor_reference": 61.1,
+    "3_config_and_contracts": 0.0,
+    "4_shadow_started": 0.58,
+    "5a_agent_first_task": 0.23,
+    "5b_check_recheck_and_report": 14.4
+  },
+  "machine_total_s": 76.5,
+  "decisions": [
+    "which server the agent writes to (the upstream URL)",
+    "which contracts: the reference Patient, AllergyIntolerance and Appointment contracts, used as they are",
+    "the shadow's read credential and the agent's actor reference"
+  ],
+  "claim": {
+    "status": "done",
+    "id": "Patient/88883a88-d92d-4807-99a1-12dba9fe4732",
+    "note": "created"
+  },
+  "counts": {
+    "REFUTED": 0,
+    "UNCERTAIN": 0,
+    "CONFIRMED": 1,
+    "PENDING": 0
+  },
+  "late": [
+    {
+      "verdict": "CONFIRMED",
+      "reasons": [
+        "since the first check: one record was already the person"
+      ]
+    }
+  ],
+  "shadow_output": [
+    "Checking the last writes...",
+    "1 writes, 1 checks: 1 confirmed, 0 refuted, 0 uncertain. Report: benchmark/fhir_medplum/public/results/shadow/setup/report/report.html"
+  ],
+  "timed": "every step's commands; not the person's reading or deciding"
+}
