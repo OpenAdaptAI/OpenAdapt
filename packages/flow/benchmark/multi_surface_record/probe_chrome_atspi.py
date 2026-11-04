@@ -149,7 +149,44 @@ def read_tree() -> dict[str, Any]:
     return found
 
 
-def launch(url: str) -> subprocess.Popen:
+def point_grid() -> dict[str, Any]:
+    """AT-SPI hit tests over the screen: the recorder's own point query."""
+    import gi
+
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
+
+    seen: dict[str, Any] = {}
+    desktop = Atspi.get_desktop(0)
+    apps = [desktop.get_child_at_index(i) for i in range(desktop.get_child_count())]
+    for app in apps:
+        if app is None or "hrom" not in (app.get_name() or ""):
+            continue
+        frames = [app.get_child_at_index(i) for i in range(app.get_child_count())]
+        seen["frames"] = len(frames)
+        for frame in frames:
+            for y in range(60, 400, 12):
+                for x in range(10, 700, 20):
+                    node = frame
+                    for _ in range(40):
+                        try:
+                            child = node.get_accessible_at_point(
+                                x, y, Atspi.CoordType.SCREEN
+                            )
+                        except Exception:
+                            child = None
+                        if child is None:
+                            break
+                        node = child
+                    try:
+                        key = f"{node.get_role_name()}|{(node.get_name() or '')[:40]}"
+                    except Exception:
+                        key = "error"
+                    seen.setdefault(key, [x, y])
+    return seen
+
+
+def launch(url: str, *extra: str, env: dict | None = None) -> subprocess.Popen:
     profile = tempfile.mkdtemp(prefix="probe-chrome-")
     return subprocess.Popen(
         [
@@ -158,8 +195,10 @@ def launch(url: str) -> subprocess.Popen:
             "--no-first-run",
             "--no-default-browser-check",
             "--no-sandbox",
+            *extra,
             url,
         ],
+        env={**os.environ, **(env or {})},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -181,6 +220,56 @@ def main() -> int:
     proc = launch(url)
     time.sleep(8)
     result["3_launched_with_bus_enabled"] = read_tree()
+    time.sleep(6)
+    result["3b_same_read_again_after_6s"] = read_tree()
+    result["3c_point_queries"] = point_grid()
+    time.sleep(3)
+    result["3d_point_queries_again"] = point_grid()
+    proc.kill()
+    proc.wait()
+    time.sleep(2)
+    proc = launch(url, env={"ACCESSIBILITY_ENABLED": "1"})
+    time.sleep(10)
+    result["4_env_ACCESSIBILITY_ENABLED"] = read_tree()
+    result["4b_points"] = point_grid()
+    proc.kill()
+    proc.wait()
+    time.sleep(2)
+    subprocess.run(
+        [
+            "gsettings",
+            "set",
+            "org.gnome.desktop.interface",
+            "toolkit-accessibility",
+            "true",
+        ],
+        capture_output=True,
+    )
+    subprocess.run(
+        [
+            "gsettings",
+            "set",
+            "org.gnome.desktop.a11y.applications",
+            "screen-reader-enabled",
+            "true",
+        ],
+        capture_output=True,
+    )
+    proc = launch(url)
+    time.sleep(10)
+    result["6_gsettings_toolkit_and_screen_reader"] = read_tree()
+    result["6_gsettings_get"] = subprocess.run(
+        ["gsettings", "get", "org.gnome.desktop.interface", "toolkit-accessibility"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    result["6b_points"] = point_grid()
+    proc.kill()
+    proc.wait()
+    time.sleep(2)
+    proc = launch(url, "--force-renderer-accessibility")
+    time.sleep(10)
+    result["5_force_renderer_accessibility"] = read_tree()
     proc.kill()
     print(json.dumps(result, indent=1))
     return 0
