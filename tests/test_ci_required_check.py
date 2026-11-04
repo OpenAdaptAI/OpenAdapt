@@ -4,7 +4,9 @@ ci.yml runs on pull requests and in the merge queue. It calls packages.yml and
 main.yml, which no longer run on those events themselves, so each pull request
 runs every package job once. Its `ci` job fails unless every called job passed
 or was not selected, and the names branch protection requires today report
-the same result until protection names `ci`.
+the same result until protection names `ci`. All three are skipped (which
+GitHub counts as passing) when every job they need passed, so a green run
+does not wait for a runner to report them.
 """
 
 from __future__ import annotations
@@ -57,25 +59,45 @@ def test_no_other_workflow_reports_a_name_ci_owns() -> None:
         assert not names & owned, (path.name, names & owned)
 
 
+REPORTERS = {
+    "ci": "ci",
+    "legacy-run-ci": "run-ci (ubuntu-latest, 3.12)",
+    "legacy-packages-gate": "packages-gate",
+}
+
+
 def test_ci_requires_every_job_and_always_reports() -> None:
-    job = CI["jobs"]["ci"]
-    assert job["name"] == "ci"
-    assert job["if"] == "always()"
-    assert set(job["needs"]) == {"packages", "launcher", "smoke"}
-    script = next(
-        step["run"] for step in job["steps"] if "RESULTS" in step.get("env", {})
-    )
-    assert 'need["result"] != "success"' in script
-
-
-def test_the_legacy_names_mirror_ci() -> None:
-    names = {}
-    for key in ("legacy-run-ci", "legacy-packages-gate"):
+    for key, name in REPORTERS.items():
         job = CI["jobs"][key]
-        assert job["needs"] == "ci" and job["if"] == "always()"
-        assert job["steps"][-1]["run"] == 'test "$RESULT" = success'
-        names[key] = job["name"]
-    assert set(names.values()) == {"run-ci (ubuntu-latest, 3.12)", "packages-gate"}
+        assert job["name"] == name
+        assert set(job["needs"]) == {"packages", "launcher", "smoke"}, key
+        script = next(
+            step["run"] for step in job["steps"] if "RESULTS" in step.get("env", {})
+        )
+        assert 'need["result"] != "success"' in script
+
+
+def test_the_reporters_skip_only_when_every_need_passed() -> None:
+    # A skipped required check counts as passing, so each reporter must run
+    # (and fail) whenever a need did not pass or the PR is a draft. It is
+    # evaluated after a failure or a cancel (always()).
+    expected = (
+        "always() && (github.event.pull_request.draft == true"
+        " || needs.packages.result != 'success'"
+        " || needs.launcher.result != 'success'"
+        " || needs.smoke.result != 'success')"
+    )
+    for key in REPORTERS:
+        job = CI["jobs"][key]
+        assert job["if"] == expected, key
+        assert job["steps"][0]["if"] == "github.event.pull_request.draft == true"
+
+
+def test_the_legacy_names_report_what_ci_reports() -> None:
+    def body(key: str) -> list:
+        return CI["jobs"][key]["steps"]
+
+    assert body("legacy-run-ci") == body("ci") == body("legacy-packages-gate")
 
 
 def test_its_group_cannot_collide_with_a_called_workflows_group() -> None:
