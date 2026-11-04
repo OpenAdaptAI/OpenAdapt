@@ -17,6 +17,12 @@ c. **No write.** The dismissal runs under the run's write watchers
    (:mod:`openadapt_flow.runtime.effect_watch`): the browser's write fence
    and the system-of-record read-back. A watcher that sees a write, or a run
    with none, halts.
+   The whole interruption is classified, never its button word: the
+   backend reads the full dialog (text, title, owning window), and one
+   that mentions a patient, a record, or saving, applying or changing
+   anything (:data:`BUSINESS_WORDS`) is never benign. A backend that
+   can't read the whole dialog (a pixel surface) can't prove the class,
+   so the run halts.
 d. **The expected screen comes back.** The class's text is gone, and the
    step then goes through its normal identity check; a screen that isn't
    the one the step expects halts there.
@@ -53,6 +59,106 @@ NON_COMMITTING_LABEL = re.compile(
     r"i'?m\s+still\s+here)\s*[.!]?\s*$",
     re.IGNORECASE,
 )
+
+
+#: Words that make an interruption a business question, never a benign one:
+#: it mentions record content, a patient, or saving, applying or changing
+#: something ("Keep my changes?", "Apply template to patient?"). A dialog
+#: whose whole text has one is never cleared automatically, whatever its
+#: button says.
+BUSINESS_WORDS = re.compile(
+    r"\b(?:patients?|records?|charts?|encounters?|orders?|prescri\w*|"
+    r"medications?|claims?|invoices?|payments?|transfers?|templates?|"
+    r"sav(?:e|es|ed|ing)|appl(?:y|ies|ied|ying)|chang(?:e|es|ed|ing)|"
+    r"discard\w*|delet\w*|remov\w*|submit\w*|approv\w*|confirm\w*|"
+    r"overwrit\w*|replac\w*|unsaved|undo|revert\w*)\b",
+    re.IGNORECASE,
+)
+
+#: Text a class's whole dialog may hold beyond its declared texts and its
+#: controls' labels: a short system message, nothing more.
+MAX_RESIDUAL_CHARS = 240
+
+
+def business_words(text: str) -> list[str]:
+    """The business words in ``text`` (see :data:`BUSINESS_WORDS`)."""
+
+    return sorted({m.group(0).lower() for m in BUSINESS_WORDS.finditer(text)})
+
+
+def class_texts(interstitial: "Interstitial") -> list[str]:
+    """The texts a class is detected by (its ``TEXT_PRESENT`` operands)."""
+
+    from openadapt_flow.ir import PredicateKind
+
+    out: list[str] = []
+
+    def walk(pred: Any) -> None:
+        if pred.kind is PredicateKind.TEXT_PRESENT and pred.text:
+            out.append(pred.text)
+        elif pred.kind is PredicateKind.AND:
+            for op in pred.operands:
+                walk(op)
+
+    walk(interstitial.detect)
+    return out
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def whole_interruption_error(
+    interstitial: "Interstitial", found: Optional[Mapping[str, str]]
+) -> Optional[str]:
+    """Why the interruption on screen is not this class, judged on the whole
+    dialog (``found``: its ``text``, ``title`` and ``window`` from the
+    backend's ``interruption_text``), or None when it is.
+
+    The button word never decides. The dialog must show every class text,
+    carry the class's title and window when the class declares them, hold
+    no business word anywhere, and say little beyond the class texts.
+    """
+
+    if found is None:
+        return (
+            "the whole interruption could not be read (its dialog, banner or "
+            "toast, with its title and window), so its class can't be proven"
+        )
+    text = _squash(found.get("text") or "")
+    title = _squash(found.get("title") or "")
+    window = (found.get("window") or "").strip()
+    texts = class_texts(interstitial)
+    missing = [t for t in texts if _squash(t) not in text]
+    if missing:
+        return f"the interruption does not show the class text {missing}"
+    words = business_words(" ".join((text, title)))
+    if words:
+        return (
+            f"the interruption mentions {', '.join(words)}: it is a business "
+            "question, not a benign interruption"
+        )
+    if interstitial.dialog_title and _squash(interstitial.dialog_title) != title:
+        return f"the interruption's title is {title!r}, not the class's"
+    anchor = interstitial.dismiss_anchor
+    want_window = (
+        anchor.structural.window_name
+        if anchor is not None and anchor.structural is not None
+        else None
+    )
+    if want_window and want_window.strip() != window:
+        return "the interruption belongs to a different window than the class's"
+    residual = text
+    labels = [*texts, dismiss_label(interstitial) or ""]
+    for part in sorted({_squash(p) for p in labels if p}, key=len, reverse=True):
+        residual = residual.replace(part, " ")
+    residual = " ".join(residual.split())
+    if len(residual) > MAX_RESIDUAL_CHARS:
+        return (
+            f"the interruption says {len(residual)} characters beyond the "
+            "class's texts, more than a system message"
+        )
+    return None
 
 
 def is_non_committing_label(label: Optional[str]) -> bool:
@@ -99,6 +205,13 @@ def interruption_class_error(interstitial: "Interstitial") -> Optional[str]:
         return (
             "an interruption class must be detected by its text (TEXT_PRESENT), "
             "not only by how it looks or where it is"
+        )
+    words = business_words(" ".join(class_texts(interstitial)))
+    words += business_words(interstitial.dialog_title or "")
+    if words:
+        return (
+            f"an interruption class can't mention {', '.join(sorted(set(words)))}: "
+            "that is a business question, not a benign interruption"
         )
     if interstitial.dismiss_key is not None:
         return None  # Escape only (Interstitial's own validation)
@@ -180,6 +293,7 @@ def interruption_from_data(entry: Mapping[str, Any]) -> "Interstitial":
         else Predicate(kind=PredicateKind.AND, operands=present)
     )
     gone = str(entry.get("gone") or texts[0])
+    title = entry.get("title")
     try:
         return Interstitial(
             name=name,
@@ -190,6 +304,7 @@ def interruption_from_data(entry: Mapping[str, Any]) -> "Interstitial":
             consequential=False,
             clearance=Predicate(kind=PredicateKind.TEXT_ABSENT, text=gone),
             effect_watch=True,
+            dialog_title=str(title) if title else None,
         )
     except Exception as exc:
         raise InterruptionClassError(f"{name}: {exc}") from exc
@@ -221,6 +336,8 @@ def interruption_to_data(interstitial: "Interstitial") -> dict[str, Any]:
             "window": s.window_name,
         }
         entry["dismiss"] = {"control": {k: v for k, v in control.items() if v}}
+    if interstitial.dialog_title:
+        entry["title"] = interstitial.dialog_title
     clearance = interstitial.clearance
     if (
         clearance is not None
@@ -335,6 +452,11 @@ def learn_interruption(
     anchor = interstitial.dismiss_anchor
     assert anchor is not None and anchor.structural is not None
     locator: StructuralLocator = anchor.structural
+    reader = getattr(backend, "interruption_text", None)
+    whole = reader(locator, list(texts)) if callable(reader) else None
+    error = whole_interruption_error(interstitial, whole)
+    if error is not None:
+        raise LearnRefused(error)
     handle = locate(locator)
     if handle is None:
         raise LearnRefused(f"{dismiss_label(interstitial)!r} did not resolve uniquely")

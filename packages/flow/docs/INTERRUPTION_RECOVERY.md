@@ -10,9 +10,25 @@ dismissal is provably read-only. Anything else stops the run as before.
 
 A run clears an interruption only when all four of these hold:
 
-1. **It matches a class by identity.** Every text the class lists is on
-   screen, and the dismiss control is found by its role, accessible name,
-   selector, automation ID or window. Position is never used.
+1. **It matches a class by identity, on the whole dialog.** Every text the
+   class lists is on screen, and the dismiss control is found by its role,
+   accessible name, selector, automation ID or window. Position is never
+   used. The button word never decides: the backend reads the whole
+   interruption (its full text, accessible title and owning window). The
+   run halts unless all of these hold:
+   - the dialog shows every class text;
+   - it carries the class's title and window, if the class declares them;
+   - it holds no business word (`BUSINESS_WORDS`: a patient, a record, a
+     chart, an order, or saving, applying, changing, discarding, deleting
+     or confirming anything);
+   - it says at most 240 characters beyond the class texts and the
+     control's label.
+
+   "Keep my changes? [Yes]" and "Apply template to patient? [OK]" can look
+   like "Stay logged in? [OK]", but they never match a class. A backend
+   that can't read the whole dialog can't prove the class, so the run
+   halts. This applies to pixel surfaces, and to native desktop backends
+   until they implement `interruption_text`.
 2. **The dismissal does not commit anything.** The dismissal is Escape, or a
    control whose label is in a closed set: close, dismiss, not now, maybe
    later, skip, got it, continue session, stay signed in, and similar
@@ -39,6 +55,28 @@ A run clears an interruption only when all four of these hold:
    the step expects, the run stops there.
 
 A run makes at most one dismissal per class per step, and never retries one.
+
+## A popup that steals the click
+
+A toast or modal can appear after the last check and before the click
+lands, so the input reaches the popup instead of the target. On the web,
+every structural click is checked twice:
+
+- **Before the input.** Playwright's actionability trial and the
+  existing target and context checks refuse a covered target before any
+  input is sent.
+- **After the input.** A witness armed just before the click records,
+  from the first moment the page sees each trusted pointer event,
+  whether it reached the verified element. If any part of the click
+  (press, release or click) reached something else, the outcome is
+  reported as delivery uncertainty (`InputLandedElsewhere`). The run then
+  stops and reconciles; it never retries. If the click navigated away,
+  the witness is gone with the old document, and the checks before the
+  input stand alone.
+
+The same check after dispatch on native desktop and RDP/Citrix backends
+(the foreground window, the focused element, and a frame diff of the
+target region) is not built yet.
 
 ## The record
 
@@ -95,6 +133,12 @@ real replayer and OCR, and a local synthetic app that saves with
 | "Update available" banner, "Close" | cleared, save lands | passes |
 | Session warning whose "Stay signed in" POSTs /logout | safety halt; the logout is stopped in the browser, nothing saved | passes |
 | Unknown dialog | halt, no click | passes |
+| Session text plus "Apply template to patient?" behind "Stay signed in" | halt before any input | passes |
+| A popup covers Save as the pointer arrives | refused before any input (pre-dispatch trial) | passes |
+| A popup covers Save between press and release | delivery uncertainty `InputLandedElsewhere`, no retry, nothing written | passes |
+| Dialog mentions "Keep my changes?" or "Unsaved record" | halt before any input | passes |
+| Backend can't read the whole dialog | halt before any input | passes |
+| Dialog says much more than the class texts; title mismatch | halt | passes |
 | Class whose control reads "OK", "Continue", "Accept", "Confirm" | refused at load | passes |
 | Class found only by position | refused at load | passes |
 | Desktop run: Escape, read-back unchanged | cleared (`record` watcher) | passes |
@@ -113,4 +157,6 @@ real replayer and OCR, and a local synthetic app that saves with
 - Consent prompts (cookie "Accept" or "Reject") are decisions, not
   dismissals, so they stay outside the closed set.
 - Session re-authentication, a bounded re-resolve after late page loads,
-  and real-app runs on OpenEMR and Dolibarr are not covered here.
+  the native continuity check after dispatch, and real-app runs on
+  OpenEMR and Dolibarr (including behind a chaos proxy) are not covered
+  here.

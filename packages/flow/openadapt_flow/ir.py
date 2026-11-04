@@ -1412,14 +1412,21 @@ class Interstitial(BaseModel):
         "non-committing one (close, dismiss, not now, continue session).",
     )
 
+    dialog_title: Optional[str] = Field(
+        default=None,
+        description="The interruption's accessible title, when an "
+        "interruption class declares it; the whole dialog must carry it.",
+    )
+
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
-        """Leave ``effect_watch`` out when unset, so every existing
+        """Leave ``effect_watch`` and ``dialog_title`` out when unset, so every existing
         interstitial (and bundle digest) serializes exactly as before."""
 
         data: dict[str, Any] = handler(self)
-        if self.effect_watch is None:
-            data.pop("effect_watch", None)
+        for key in ("effect_watch", "dialog_title"):
+            if data.get(key) is None:
+                data.pop(key, None)
         return data
 
     @model_validator(mode="after")

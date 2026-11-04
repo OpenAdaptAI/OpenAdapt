@@ -13,6 +13,9 @@ interruption   what its control does                            expected
 session        "Stay signed in" removes the dialog (GET ping)   saved
 banner         "Close" removes an "Update available" banner     saved
 committing     "Stay signed in" also POSTs /logout              halt, no write
+disguised      session text + "Apply template to patient?"      halt, no click
+steal-hover    a popup covers Save as the pointer arrives       halt, no write
+steal-press    a popup covers Save between press and release    halt, no write
 unknown        an unlisted dialog                               halt, no click
 =============  ===============================================  ============
 """
@@ -63,6 +66,21 @@ if (kind === 'session') {
 } else if (kind === 'committing') {
   dialog('Your session will expire in 5 minutes', 'Stay signed in',
          () => fetch('/logout', {method: 'POST'}));
+} else if (kind === 'disguised') {
+  dialog('Your session will expire in 5 minutes. Apply template to patient?',
+         'Stay signed in', () => fetch('/apply', {method: 'POST'}));
+} else if (kind === 'steal-hover' || kind === 'steal-press') {
+  // A popup that appears while the click is under way: after every check,
+  // as the pointer arrives (hover) or between press and release (press).
+  const evt = kind === 'steal-hover' ? 'pointerover' : 'pointerdown';
+  document.getElementById('save').addEventListener(evt, () => {
+    const p = document.createElement('div');
+    p.style = 'position:fixed;inset:0;background:#fee;font-size:28px';
+    p.innerHTML = 'New message <button id="accept">Accept</button>';
+    p.querySelector('button').onclick = () => fetch('/accept', {method: 'POST'});
+    p.onclick = () => fetch('/popup-click', {method: 'POST'});
+    document.body.appendChild(p);
+  }, {once: true});
 } else if (kind === 'unknown') {
   dialog('Unexpected error 42 occurred', 'Close', () => {});
 } else if (kind === 'banner') {
@@ -193,3 +211,33 @@ def test_an_unknown_dialog_halts_without_a_click(server: str, tmp_path: Any) -> 
     assert report.success is False
     assert report.results[0].interstitial_actions == []
     assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+def test_a_business_question_in_disguise_halts_without_a_click(
+    server: str, tmp_path: Any
+) -> None:
+    report = _run(server, "disguised", tmp_path)
+    assert report.success is False
+    assert "business question" in (report.results[0].error or "")
+    assert report.results[0].interstitial_actions == []
+    assert not any(seen.startswith("POST") for seen in _Server.seen)
+
+
+@pytest.mark.parametrize("kind", ["steal-hover", "steal-press"])
+def test_a_popup_that_steals_the_click_halts_and_nothing_is_written(
+    server: str, kind: str, tmp_path: Any
+) -> None:
+    report = _run(server, kind, tmp_path)
+    assert report.success is False, _Server.seen
+    result = report.results[0]
+    assert result.safety_halt is True
+    if kind == "steal-press":
+        # Pressed on Save, released on the popup: the click's witness saw
+        # the input land elsewhere. Reconcile, never retry.
+        assert result.delivery_uncertainty is not None
+        assert result.delivery_uncertainty.cause_type == "InputLandedElsewhere"
+    else:
+        # Covered as the pointer arrived: refused before any input.
+        assert "pre-dispatch" in (result.error or "")
+    # Neither the save nor anything on the popup went through.
+    assert not any(seen.startswith("POST") for seen in _Server.seen), _Server.seen

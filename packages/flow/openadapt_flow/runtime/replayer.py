@@ -97,7 +97,11 @@ from openadapt_flow.identity_signals import (
     normalize_signal_text,
     parameterize_identity_text,
 )
-from openadapt_flow.interruptions import dismiss_label
+from openadapt_flow.interruptions import (
+    class_texts,
+    dismiss_label,
+    whole_interruption_error,
+)
 from openadapt_flow.ir import (
     ActionDeliveryUncertainty,
     ActionKind,
@@ -15115,6 +15119,28 @@ class Replayer:
             mutation_error = self._interstitial_declaration_mutation(workflow)
             if mutation_error is not None:
                 return before_png, mutation_error
+            if it.effect_watch:
+                # Classify the whole interruption, never its button word: a
+                # business question dressed as a session prompt halts here,
+                # before any input.
+                reader = getattr(self.backend, "interruption_text", None)
+                locator = (
+                    it.dismiss_anchor.structural
+                    if it.dismiss_anchor is not None
+                    else None
+                )
+                try:
+                    whole = (
+                        reader(locator, class_texts(it)) if callable(reader) else None
+                    )
+                except Exception:  # noqa: BLE001 - unreadable means unproven
+                    whole = None
+                class_error = whole_interruption_error(it, whole)
+                if class_error is not None:
+                    return before_png, (
+                        f"Interruption '{it.name}' was not cleared: {class_error} "
+                        "- refusing to act beneath it; run aborted."
+                    )
             # Append BEFORE delivery: a backend exception can never create an
             # unreported key/click attempt. The event carries the exact admitted
             # policy and expected visual outcome.

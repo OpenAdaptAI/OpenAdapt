@@ -66,8 +66,18 @@ class _Fence:
 class WatchedBackend(FakeBackend):
     """A structural backend with a scripted write fence."""
 
-    def __init__(self, *, fence=True, refusal=None, writes=()):
+    def __init__(
+        self,
+        *,
+        fence=True,
+        refusal=None,
+        writes=(),
+        whole="Your session will expire in 5 minutes. Stay signed in",
+        title="",
+    ):
         super().__init__()
+        self._whole = whole
+        self._title = title
         self._fence = fence
         self._refusal = refusal
         self._writes = list(writes)
@@ -75,6 +85,11 @@ class WatchedBackend(FakeBackend):
         self._up = False
         if not fence:
             self.write_fence = None  # type: ignore[assignment]
+
+    def interruption_text(self, locator, texts):
+        if self._whole is None:
+            return None
+        return {"text": self._whole, "title": self._title, "window": ""}
 
     def locate_structural(self, locator):
         return StructuralHandle(
@@ -383,3 +398,59 @@ def test_watch_needs_a_watcher():
     with watch_effects(object(), None) as report:
         assert report.refusal is not None
     assert not report.held
+
+
+# -- the whole dialog decides, never the button word ------------------------------
+
+
+@pytest.mark.parametrize(
+    "whole",
+    [
+        "Your session will expire. Apply template to patient? Stay signed in",
+        "Your session will expire. Keep my changes? Stay signed in",
+        "Your session will expire. Unsaved record will be discarded. Stay signed in",
+    ],
+)
+def test_a_business_question_in_disguise_halts_before_any_input(bundle, run_dir, whole):
+    backend = WatchedBackend(whole=whole)
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    assert report.success is False
+    assert "business question" in (report.results[0].error or "")
+    assert backend.actions == []
+
+
+def test_a_surface_that_cannot_read_the_whole_dialog_halts(bundle, run_dir):
+    backend = WatchedBackend(whole=None)
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    assert report.success is False
+    assert "can't be proven" in (report.results[0].error or "")
+    assert backend.actions == []
+
+
+def test_a_dialog_with_much_more_to_say_is_not_the_class(bundle, run_dir):
+    backend = WatchedBackend(
+        whole="Your session will expire. " + "Lorem ipsum dolor sit amet. " * 12
+    )
+    report = _run(
+        backend, _vision(), bundle, run_dir, [interruption_from_data(SESSION)]
+    )
+    assert report.success is False
+    assert backend.actions == []
+
+
+def test_a_declared_title_must_match(bundle, run_dir):
+    entry = dict(SESSION, title="Session timeout")
+    backend = WatchedBackend(title="Unsaved changes")
+    report = _run(backend, _vision(), bundle, run_dir, [interruption_from_data(entry)])
+    assert report.success is False
+    assert backend.actions == []
+
+
+def test_a_class_that_mentions_business_content_is_refused():
+    entry = dict(SESSION, texts=["Apply template to patient"])
+    with pytest.raises(InterruptionClassError, match="business question"):
+        interruption_from_data(entry)
