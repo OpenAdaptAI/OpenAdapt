@@ -51,7 +51,6 @@ sys.path.insert(0, str(HERE))
 import winrm_lab  # noqa: E402
 
 GUEST = r"C:\oa"
-PY = r"C:\Program Files\Python312-arm64\python.exe"
 APP = rf"{GUEST}\patient_notes.ps1"
 DB = rf"{GUEST}\patients.db"
 SEARCH = "Neil"
@@ -108,16 +107,18 @@ def _fresh_app(
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
         check=False,
     )
-    lab.run_ps(f"& '{PY}' '{GUEST}\\pn_db.py' seed --drift none")
+    py = lab.resolve_app_python()
+    lab.run_ps(f"& '{py}' '{GUEST}\\pn_db.py' seed --drift none")
     if note:
         b64 = base64.b64encode(note.encode("utf-8")).decode("ascii")
-        lab.run_ps(f"& '{PY}' '{GUEST}\\pn_db.py' save 1 {b64}")
+        lab.run_ps(f"& '{py}' '{GUEST}\\pn_db.py' save 1 {b64}")
     lab.run_ps(
         f"Set-Content -Encoding ascii -Path '{GUEST}\\pn_env.json' "
         '-Value \'{"window": "maximized"}\''
     )
     lab.launch_interactive(
-        f"powershell.exe -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File {APP}",
+        f"powershell.exe -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File {APP} "
+        f'-Python "{py}"',
         name="OAFlowApp",
     )
     time.sleep(settle_s)
