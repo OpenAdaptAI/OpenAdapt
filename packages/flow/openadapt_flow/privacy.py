@@ -15,9 +15,11 @@ via the ``privacy`` extra::
 Posture is controlled by two environment variables, safe by default:
 
 * ``OPENADAPT_FLOW_SCRUB`` — ``auto`` (default) | ``on`` | ``off``
-    - ``auto``: scrub whenever the capability is installed; if it is not, write
-      plaintext (keeps the local demo working). Clearly documented in
-      ``docs/PRIVACY.md``.
+    - ``auto``: scrub whenever the capability is installed. If it is not,
+      text is written unscrubbed, with a warning on stderr once per process.
+      What is written still goes into encrypted recordings, bundles and run
+      directories unless plaintext at rest is allowed
+      (:mod:`openadapt_flow.at_rest`). Documented in ``docs/PRIVACY.md``.
     - ``on``: scrub, and **fail closed** — raise if the capability is missing.
       This is the setting a compliance team pins for a clinical deployment.
     - ``off``: never scrub (e.g. an already-de-identified fixture corpus).
@@ -136,14 +138,36 @@ def get_text_scrubber() -> Optional[TextScrubber]:
         return None
     if _text_scrubber is _UNSET:
         _text_scrubber = _build_provider()
+        if _text_scrubber is None and mode == "auto":
+            _warn_unscrubbed()
     if _text_scrubber is None and mode == "on":
         raise PrivacyNotAvailable(
             "OPENADAPT_FLOW_SCRUB=on but openadapt-privacy is not installed. "
             "Install it with: pip install 'openadapt-flow[privacy]' and "
             "python -m spacy download en_core_web_sm, or set "
-            "OPENADAPT_FLOW_SCRUB=auto to write plaintext locally."
+            "OPENADAPT_FLOW_SCRUB=auto to write unscrubbed text (with a warning)."
         )
     return _text_scrubber  # type: ignore[return-value]
+
+
+_warned_unscrubbed = False
+
+
+def _warn_unscrubbed() -> None:
+    """Say once per process that ``auto`` found no scrubber."""
+    global _warned_unscrubbed
+    if _warned_unscrubbed:
+        return
+    _warned_unscrubbed = True
+    import sys
+
+    print(
+        "WARNING: openadapt-privacy is not installed, so reports and logs are "
+        "not scrubbed of patient data (OPENADAPT_FLOW_SCRUB=auto). Install "
+        "'openadapt-flow[privacy]', or set OPENADAPT_FLOW_SCRUB=on to refuse "
+        "instead.",
+        file=sys.stderr,
+    )
 
 
 def _get_image_scrubber() -> Optional[ImageScrubber]:
@@ -250,6 +274,7 @@ def scrub_text(text: Optional[str]) -> Optional[str]:
                 "scrub text. Install its required models or configure a "
                 "working provider before continuing."
             ) from exc
+        _warn_unscrubbed()
         return text
 
 
@@ -269,6 +294,7 @@ def scrub_params(params: dict[str, str]) -> dict[str, str]:
                 "scrub parameters. Install its required models or configure "
                 "a working provider before continuing."
             ) from exc
+        _warn_unscrubbed()
         return params
 
 
@@ -466,6 +492,7 @@ def set_image_scrubber(scrubber: Optional[ImageScrubber]) -> None:
 
 def reset_scrubbers() -> None:
     """Clear cached scrubbers so the next call rebuilds from the environment."""
-    global _text_scrubber, _image_scrubber
+    global _text_scrubber, _image_scrubber, _warned_unscrubbed
     _text_scrubber = _UNSET
     _image_scrubber = _UNSET
+    _warned_unscrubbed = False

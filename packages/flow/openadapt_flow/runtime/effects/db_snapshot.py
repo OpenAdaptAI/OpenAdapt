@@ -282,6 +282,14 @@ def row_hash(
     return _mac(key, f"r\x1f{table}\x1f{body}")
 
 
+def every_cell_hashed(table: "Table") -> bool:
+    """Does each row keep a cell MAC for every column? A table over
+    ``max_rows`` keeps them only for its reference columns: a row change
+    there may be in a column no cell shows, so no per-column rule (an app
+    profile's) may judge it."""
+    return set(table.cell_columns) == set(table.columns)
+
+
 def unpack(columns: Sequence[str], packed: str) -> dict[str, str]:
     """A stored row's cell MACs by column (stored as one string per row)."""
 
@@ -1524,6 +1532,13 @@ def take_snapshot(
         SnapshotError: the database can't be read as the frame needs it.
     """
 
+    if dialect != "postgresql":
+        # Before any connection: only PostgreSQL has schemas to skip.
+        wildcards = sorted(t for t in (*modes, *optional_modes) if t.endswith(".*"))
+        if wildcards:
+            raise SnapshotError(
+                f"allow-list entry {wildcards[0]!r} ('<schema>.*') is PostgreSQL only"
+            )
     try:
         s = _Session(connect, dialect)
     except Exception as exc:  # noqa: BLE001

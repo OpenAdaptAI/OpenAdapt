@@ -44,12 +44,12 @@ from typing import Optional
 
 import requests
 
+from benchmark.harness.mockloan.demo import record_disbursement_demo
+from openadapt_flow.mockloan.fault_server import serve as fault_serve
 from benchmark.lending_fault_model import faults as F
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.compiler import compile_recording
-from openadapt_flow.demo_driver import record_disbursement_demo
 from openadapt_flow.ir import RunReport, Workflow
-from openadapt_flow.mockloan.fault_server import serve as fault_serve
 from openadapt_flow.runtime import Replayer
 
 HERE = Path(__file__).resolve().parent

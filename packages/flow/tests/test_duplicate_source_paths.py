@@ -31,7 +31,7 @@ from openadapt_flow.runtime.checks.duplicate_record import (
     resolve_duplicate_source,
 )
 from openadapt_flow.runtime.checks.openemr_patient import RestPatientSource
-from openadapt_flow.runtime.effects import FhirEffectVerifier
+from openadapt_flow.runtime.effects import DEFAULT_OBSERVATION_PATHS, FhirEffectVerifier
 from openadapt_flow.runtime.effects.rest import RestRecordVerifier
 
 FLOW = Path(__file__).resolve().parents[1]
@@ -102,7 +102,10 @@ class _Backend:
 
 def _fhir() -> FhirEffectVerifier:
     return FhirEffectVerifier(
-        "https://emr.example.test/apis/default/fhir", access_token="t"
+        "https://emr.example.test/apis/default/fhir",
+        access_token="t",
+        resource_type="Observation",
+        field_paths=dict(DEFAULT_OBSERVATION_PATHS),
     )
 
 
@@ -333,7 +336,9 @@ def test_a_program_can_choose_fhir_beside_an_openemr_rest_check() -> None:
     # Asked for REST with a FHIR check, or FHIR with an unrelated REST read:
     # no source, so a record-pinned program fails closed.
     assert resolve_duplicate_source(_fhir(), pinned_record=True, channel="rest") is None
-    other = RestRecordVerifier("https://x.test", records_path="/api/db")
+    other = RestRecordVerifier(
+        "https://x.test", records_path="/api/db", records_key="records"
+    )
     assert resolve_duplicate_source(other, pinned_record=True, channel="fhir") is None
 
 

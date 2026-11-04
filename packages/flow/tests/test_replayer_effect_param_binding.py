@@ -504,7 +504,9 @@ def test_parameterized_effect_confirmed_against_real_sor(tmp_path):
         replayer = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         )
         report = replayer.run(
@@ -544,7 +546,9 @@ def test_demo_literal_effect_refutes_when_run_writes_different_patient(tmp_path)
         replayer = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         )
         report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)

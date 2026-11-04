@@ -461,6 +461,17 @@ class FrameDatabase(BaseModel):
             raise ValueError("frame.database.read reads every table; drop sql_query")
         return self
 
+    @model_validator(mode="after")
+    def _schema_wildcards_postgresql_only(self) -> "FrameDatabase":
+        if self.dialect != "postgresql":
+            for entry in self.allow_tables:
+                if entry.table.endswith(".*"):
+                    raise ValueError(
+                        f"allow_tables entry {entry.table!r} ('<schema>.*') is "
+                        "PostgreSQL only"
+                    )
+        return self
+
 
 class FrameSpec(BaseModel):
     """``frame:`` in ``verify.yaml``: the slice that must otherwise not move."""
@@ -826,6 +837,7 @@ def judge_frame(
     new_row_defaults: Optional[Mapping[str, Mapping[str, Optional[str]]]] = None,
     unread_changes: Sequence[tuple[str, str]] = (),
     no_record_inserts: Collection[str] = (),
+    no_record_values: Collection[str] = (),
     hashers: Optional[Mapping[str, Callable[[str, Any], str]]] = None,
     clock: tuple[str, str] = ("", ""),
     database_evidence: Optional[dict[str, Any]] = None,
@@ -864,6 +876,9 @@ def judge_frame(
         no_record_inserts: Tables both database reads read as append-only
             whose profile rule marks the acting user's insert entry naming no
             record as the app's bookkeeping (an id map, a link row).
+        no_record_values: Record-field values that name no record in such an
+            entry, besides an empty field (the app profile's
+            ``no_record_values``).
         hashers: Slice -> (column, value) -> the keyed MAC its baseline records hold instead of
             values (database tables). A post-save record is plain; it is
             hashed to compare with the baseline.
@@ -1934,14 +1949,15 @@ def judge_frame(
                     else ""
                 )
                 if (
-                    ref in (None, "", "0", 0)
+                    (ref in (None, "") or str(ref) in no_record_values)
                     and attribution is not None
                     and event in attribution.insert_events
                     and entry_table not in (None, "")
                     and any(same_table(entry_table, t) for t in no_record_inserts)
                 ):
                     # The bot's insert into an id map or link row a save
-                    # makes (OpenEMR's uuid_registry), filed under no chart:
+                    # makes (an id map such as a uuid registry), filed under
+                    # no record:
                     # both reads read the table, which allows the row and
                     # judges every existing row. An update or delete, an
                     # entry naming a record, or any other table still counts.

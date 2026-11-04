@@ -75,11 +75,13 @@ def _write_json(path: Path, value: Any, *, private: bool = False) -> None:
 
 
 def read_lock(bundle_dir: Path | str) -> Optional[dict[str, Any]]:
+    from openadapt_flow import artifacts
+
     path = Path(bundle_dir) / LOCK
-    if not path.is_file():
+    if not artifacts.is_file(path):
         return None
     try:
-        lock = json.loads(path.read_text())
+        lock = json.loads(artifacts.read_text(path))
     except json.JSONDecodeError as exc:
         raise SkillError(f"{path} is not JSON: {exc}") from exc
     if not isinstance(lock, dict) or lock.get("schema") != LOCK_SCHEMA:
@@ -88,10 +90,12 @@ def read_lock(bundle_dir: Path | str) -> Optional[dict[str, Any]]:
 
 
 def read_binding(bundle_dir: Path | str) -> dict[str, str]:
+    from openadapt_flow import artifacts
+
     path = Path(bundle_dir) / BINDING
-    if not path.is_file():
+    if not artifacts.is_file(path):
         return {}
-    data = json.loads(path.read_text())
+    data = json.loads(artifacts.read_text(path))
     if not isinstance(data, dict) or data.get("schema") != BINDING_SCHEMA:
         raise SkillError(f"{path} is not a skill binding ({BINDING_SCHEMA})")
     return {str(k): str(v) for k, v in (data.get("values") or {}).items()}
