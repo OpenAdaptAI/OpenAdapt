@@ -2176,18 +2176,22 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     # bundle case CLI-side keeps induce usable on artifacts the operator
     # already has, without touching the library API.
     from openadapt_flow import sealed_set
+    from openadapt_flow.compiler.fixup_passes import read_compile_notes
     from openadapt_flow.compiler.induction import induce_program, validate_held_out
     from openadapt_flow.ir import Workflow
 
     traces: list = []
+    notes: list = []
     sealed_inputs = False
     for d in args.recording:
         path = Path(d)
         sealed_inputs = sealed_inputs or sealed_set.is_sealed(path)
         if (path / "workflow.json").is_file() or (path / "workflow.json.enc").is_file():
             traces.append(Workflow.load(path))
+            notes.append(read_compile_notes(path))
         else:
             traces.append(path)
+            notes.append(None)
     if sealed_inputs and (args.report or args.probe_on):
         # Both write the induced program (or probe bundles) outside any
         # sealed set; refuse rather than write plaintext.
@@ -2206,7 +2210,7 @@ def _cmd_induce(args: argparse.Namespace) -> int:
             return probed
         result = probed
     else:
-        result = induce_program(traces, **spoken)
+        result = induce_program(traces, compile_notes=notes, **spoken)
     print(result.render())
     if args.report:
         report_path = Path(args.report)

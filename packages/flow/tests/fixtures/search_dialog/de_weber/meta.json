@@ -1,0 +1,14 @@
+{
+  "id": "e9cfdb2df4de4920a277712353a9ba99",
+  "created_at": "2026-11-03T19:49:23.100321+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "coordinate_space": "page",
+  "app_url": "http://records.test/",
+  "params": {
+    "name": "Jonas Weber"
+  },
+  "secret_params": []
+}
