@@ -40,7 +40,7 @@ import re
 import struct
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Sequence
 from urllib.parse import urlparse
 
 import requests
@@ -908,6 +908,70 @@ class WindowsBackend:
             return False
         self._verified_windows[step_id] = capture
         return True
+
+    def approval_form_region(
+        self,
+        exclude_step: Optional[str] = None,
+        points: Sequence[tuple[int, int]] = (),
+    ) -> Optional[tuple[int, int, int, int]]:
+        """The visible frame ``(x, y, w, h)`` of the app window this run's
+        verified steps (apart from ``exclude_step``) were all in, for reading
+        an approval's form state.
+
+        None (and the caller reads the whole screen) when no step was
+        verified, when steps were seen in different windows, when the window
+        is gone, or when the agent cannot say. Never raises.
+        """
+        captures = {
+            capture
+            for step_id, capture in self._verified_windows.items()
+            if step_id != exclude_step
+        }
+        if self._conflicted_windows - {exclude_step}:
+            return None
+        if not captures and points:
+            # A resumed run verified no step in this process: name the window
+            # under the earlier steps' points instead, without keeping it as a
+            # capture. A different window gives a different digest, and the
+            # save halts.
+            captures = {self._root_window_at(x, y) for x, y in points}
+            if None in captures:
+                return None
+        if len(captures) != 1:
+            return None
+        hwnd, pid = next(iter(captures))
+        typed = self._post_typed_read("/window/bounds", {"hwnd": hwnd, "pid": pid})
+        window = typed.payload.get("window") if typed.payload is not None else None
+        if not isinstance(window, dict) or set(window) != {"hwnd", "pid", "bounds"}:
+            return None
+        bounds = window["bounds"]
+        if (
+            window["hwnd"] != hwnd
+            or window["pid"] != pid
+            or not isinstance(bounds, list)
+            or len(bounds) != 4
+            or any(isinstance(v, bool) or not isinstance(v, int) for v in bounds)
+            or bounds[2] <= 0
+            or bounds[3] <= 0
+        ):
+            return None
+        return (bounds[0], bounds[1], bounds[2], bounds[3])
+
+    def _root_window_at(self, x: int, y: int) -> Optional[tuple[int, int]]:
+        typed = self._post_typed_read("/window/root-at", {"x": int(x), "y": int(y)})
+        window = typed.payload.get("window") if typed.payload is not None else None
+        if (
+            not isinstance(window, dict)
+            or set(window) != {"hwnd", "pid"}
+            or not all(
+                isinstance(window[k], int)
+                and not isinstance(window[k], bool)
+                and window[k] > 0
+                for k in ("hwnd", "pid")
+            )
+        ):
+            return None
+        return (window["hwnd"], window["pid"])
 
     def clear_verified_windows(self) -> None:
         """Forget every capture (call between runs: step ids repeat)."""
