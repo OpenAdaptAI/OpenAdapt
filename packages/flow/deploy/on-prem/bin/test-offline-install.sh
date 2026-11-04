@@ -113,9 +113,20 @@ updates:
 YAML
   export OPENADAPT_ONPREM_PY="$py"
   export OPENADAPT_ONPREM_AUDIT_LOG="$root/audit/audit.log"
+  # -I and cd /: import only what the release venv installed, never a source
+  # checkout in the working directory. Prints the installed distribution's
+  # version, and fails unless the module is the one inside the venv.
   engine_version() {
-    "$root/current/venv/bin/python" -c \
-      'import openadapt_flow, presidio_analyzer, openadapt_privacy; print(openadapt_flow.__version__)' 2>&1
+    (cd / && "$root/current/venv/bin/python" -I -c '
+import importlib.metadata, os, sys
+import openadapt_flow, openadapt_privacy, presidio_analyzer
+here = os.path.realpath(openadapt_flow.__file__)
+if not here.startswith(os.path.realpath(sys.prefix) + os.sep):
+    sys.exit("openadapt_flow imported from outside the release venv: " + here)
+version = importlib.metadata.version("openadapt-flow")
+if openadapt_flow.__version__ != version:
+    sys.exit("module says %s, distribution says %s" % (openadapt_flow.__version__, version))
+print(version)' 2>&1)
   }
 
   echo "== offline install, upgrade and rollback ($v1 -> $v2 -> $v1), no network =="
@@ -137,7 +148,8 @@ sys.exit(1)'
   [[ "$rc" -eq 0 ]] || tail -n 40 "$work/install.log"
   check_eq "install: current -> $v1" "$root/releases/$v1" "$(readlink "$root/current")"
   check_eq "install: engine and privacy extra import, version $v1" "$v1" "$(engine_version)"
-  check "install: engine CLI runs" "$root/current/venv/bin/openadapt-flow" --help
+  check_eq "install: engine CLI reports $v1" "openadapt-flow $v1" \
+    "$(cd / && "$root/current/venv/bin/openadapt-flow" --version 2>&1)"
 
   mkdir -p "$root/bundles" "$root/jobs/inbox"
   printf 'bundle\n' > "$root/bundles/keepme.txt"
