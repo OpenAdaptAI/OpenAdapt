@@ -588,16 +588,42 @@ def test_strict_treats_a_plaintext_copy_inside_a_set_as_plaintext(
     from openadapt_flow import __main__ as cli
 
     sealed, plain = _sealed_and_plain(tmp_path)
-    nested = sealed / "nested"
-    shutil.copytree(plain, nested)
     monkeypatch.setenv(at_rest.MODE_ENV, "strict")
-    with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
-        cli._unsealed_output_check(
-            argparse.Namespace(func=cli._cmd_certify, bundle=str(nested))
-        )
     cli._unsealed_output_check(
         argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed))
     )
+    sealed_set._OPENED.clear()  # a new process: the set is opened afresh
+    nested = sealed / "nested"
+    shutil.copytree(plain, nested)
+    for target in (nested, sealed):  # planted plaintext taints the whole set
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(
+                argparse.Namespace(func=cli._cmd_certify, bundle=str(target))
+            )
+
+
+def test_strict_refuses_plaintext_crops_and_broken_links_inside_a_set(
+    default_mode: Path, tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow import __main__ as cli
+
+    sealed, _plain = _sealed_and_plain(tmp_path)
+    crops = sealed / "t" / "templates"
+    crops.mkdir(parents=True)
+    (crops / "x.png").write_bytes(b"plaintext crop")
+    monkeypatch.setenv(at_rest.MODE_ENV, "strict")
+    monkeypatch.setattr(crypto, "resolve_read_key", lambda key: None)  # no key
+    with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+        cli._unsealed_output_check(
+            argparse.Namespace(func=cli._cmd_certify, bundle=str(sealed / "t"))
+        )
+    if os.name == "posix":
+        broken = tmp_path / "broken"
+        broken.symlink_to(tmp_path / "missing", target_is_directory=True)
+        with pytest.raises(at_rest.AtRestRefused, match="not encrypted"):
+            cli._unsealed_output_check(
+                argparse.Namespace(func=cli._cmd_certify, bundle=str(broken))
+            )
 
 
 def test_strict_seals_plaintext_input_with_seal(
