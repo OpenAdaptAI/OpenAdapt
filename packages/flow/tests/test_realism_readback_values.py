@@ -16,25 +16,29 @@ from hypothesis import strategies as st
 from openadapt_flow.runtime.effects.onscreen import value_matches
 from openadapt_flow.runtime.effects.readback_values import compare_value
 
-_AUDIT = "REALISM_AUDIT identity-3: non-exact read-back matches a substring"
+
+def test_a_value_inside_its_label_is_ambiguous_not_a_match() -> None:
+    """Control: since #1744 a value inside other text never confirms."""
+
+    assert compare_value("250", "250", exact=False) == "match"
+    assert compare_value("Amount: 250", "250", exact=False) == "ambiguous"
 
 
-def test_a_value_inside_its_label_still_confirms() -> None:
-    """Control: the case the substring match exists for."""
-
-    assert compare_value("Amount: 250", "250", exact=False) == "match"
-
-
-@pytest.mark.xfail(strict=True, reason=_AUDIT)
 @settings(max_examples=200, deadline=None)
-@given(expected=st.integers(1, 99_999), observed=st.integers(1, 9_999_999))
-def test_a_different_number_never_confirms(expected: int, observed: int) -> None:
-    assume(expected != observed and str(expected) in str(observed))
+@given(
+    expected=st.integers(1, 99_999),
+    prefix=st.integers(0, 99),
+    suffix=st.text("0123456789", max_size=2),
+)
+def test_a_different_number_never_confirms(
+    expected: int, prefix: int, suffix: str
+) -> None:
+    observed = int(f"{prefix or ''}{expected}{suffix}")
+    assume(observed != expected)
     for shown in (f"{observed}", f"${observed:,}.00", f"Qty {observed}"):
         assert compare_value(shown, str(expected), exact=False) != "match", shown
 
 
-@pytest.mark.xfail(strict=True, reason=_AUDIT)
 @pytest.mark.parametrize(
     ("shown", "expected", "kind"),
     [
@@ -49,9 +53,6 @@ def test_neighbouring_values_do_not_confirm(shown: str, expected: str, kind) -> 
     assert compare_value(shown, expected, kind=kind, exact=False) != "match"
 
 
-@pytest.mark.xfail(
-    strict=True, reason="REALISM_AUDIT identity-4: fuzzy text match ignores the end"
-)
 @pytest.mark.parametrize(
     ("shown", "expected"),
     [
