@@ -844,3 +844,47 @@ def test_act_structural_second_edge_of_a_double_click_is_checked_too() -> None:
     with pytest.raises(MacOSBackendError, match="disappeared"):
         target.act_structural(SAVE_LOCATOR, handle, double=True)
     assert len(_clicks(client)) == 1  # the second press never happened
+
+
+class _TreeAXClient(FakeMacAXClient):
+    """Walks the window and reads each element's ancestry, like the live client."""
+
+    def walk(self, pid, window_title, *, limit):
+        self.calls.append(("walk", pid, window_title, limit))
+        static = MacElement(
+            ax_path="0/2",
+            accessible_id=None,
+            role="text",
+            name="Note",
+            app_pid=9001,
+            window_title="oa-trial.txt",
+            bounds=(30.0, 40.0, 40.0, 10.0),
+        )
+        return [
+            (BODY_ELEMENT, True, True),
+            (SAVE_ELEMENT, True, False),
+            (static, True, False),
+        ], False
+
+    def ancestry(self, element):
+        return [("AXGroup", None, None), ("AXWindow", "oa-trial.txt", None)]
+
+
+def test_authoring_tree_lists_controls_with_their_element_identity() -> None:
+    ax = _TreeAXClient()
+    target = backend(ax_client=ax)
+
+    tree = target.authoring_tree()
+
+    assert tree is not None and tree["truncated"] is False
+    assert [node["role"] for node in tree["tree"]] == ["text_input", "button"]
+    assert not any(node.get("offscreen") for node in tree["tree"])
+    save = tree["tree"][1]
+    assert save["backend_pixels"] == {"x": 400, "y": 40, "w": 80, "h": 40}
+    assert save["identity"] == target.element_identity_at(440, 60)
+    assert save["identity"]["window"] == "oa-trial.txt"
+    assert tree["window"]["process_name"] == "TextEdit"
+
+
+def test_authoring_tree_without_a_walking_client_is_none() -> None:
+    assert backend().authoring_tree() is None

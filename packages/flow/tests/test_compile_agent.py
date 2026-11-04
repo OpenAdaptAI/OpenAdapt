@@ -491,7 +491,7 @@ def test_a_ref_is_stale_when_its_row_changed() -> None:
 
 
 @pytest.mark.parametrize("backend", ["windows", "macos", "linux", "rdp", "citrix"])
-def test_a_non_web_backend_is_refused_before_anything_runs(
+def test_a_non_web_backend_without_a_deployment_is_refused(
     backend: str, tmp_path: Path, capsys
 ) -> None:
     from openadapt_flow.__main__ import build_parser
@@ -503,8 +503,8 @@ def test_a_non_web_backend_is_refused_before_anything_runs(
         ["compile-agent", "Save {note}", "--backend", backend, "--url", "http://a"]
     )
     assert cmd_compile_agent(args) == 2
-    assert f"the {backend!r} backend" in capsys.readouterr().err
-    with pytest.raises(UnsupportedTarget, match="web apps only"):
+    assert "--config deploy.yaml" in capsys.readouterr().err
+    with pytest.raises(UnsupportedTarget, match="deployment file"):
         FirstRunCompiler(
             "Save {note}",
             params=["note"],
@@ -516,7 +516,7 @@ def test_a_non_web_backend_is_refused_before_anything_runs(
         )
 
 
-def test_a_deployment_naming_another_backend_is_refused(tmp_path: Path, capsys) -> None:
+def test_a_url_with_a_non_web_deployment_is_refused(tmp_path: Path, capsys) -> None:
     from openadapt_flow.__main__ import build_parser
     from openadapt_flow.compile_agent.cli import cmd_compile_agent
 
@@ -526,7 +526,79 @@ def test_a_deployment_naming_another_backend_is_refused(tmp_path: Path, capsys) 
         ["compile-agent", "Save {note}", "--url", "http://a", "--config", str(config)]
     )
     assert cmd_compile_agent(args) == 2
-    assert "'citrix' backend" in capsys.readouterr().err
+    assert "the 'citrix' app comes from --config" in capsys.readouterr().err
+
+
+def test_a_non_web_deployment_runs_the_surface_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent import cli, pipeline
+
+    seen: dict[str, Any] = {}
+
+    def fake_compile_first_run(prompt: str, **kwargs: Any) -> Any:
+        seen.update(kwargs)
+        return pipeline.CompileResult(
+            status="unsupported", dir=tmp_path, task_key="t", detail="stub"
+        )
+
+    monkeypatch.setattr(pipeline, "compile_first_run", fake_compile_first_run)
+    steps = tmp_path / "steps.json"
+    steps.write_text('{"steps": [{"click": "Save"}]}')
+    config = tmp_path / "deployment.yaml"
+    config.write_text("backend:\n  kind: macos\n  macos_app: Calculator\n")
+    args = build_parser().parse_args(
+        [
+            "compile-agent",
+            "Save {note}",
+            "--config",
+            str(config),
+            "--verify",
+            str(tmp_path / "verify.yaml"),
+            "--expect",
+            "id=1",
+            "--on-screen",
+            "MRN P1",
+            "--param",
+            "note=x",
+            "--agent",
+            str(steps),
+        ]
+    )
+    cli.cmd_compile_agent(args, interactive=lambda: False)
+    assert seen["url"] is None
+    assert seen["surface_config"] == str(config)
+    assert seen["agent"].drives_surfaces is True
+
+
+def test_a_surface_task_spec_keeps_no_credentials(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent import FirstRunCompiler
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text(
+        "backend:\n  kind: windows\n  agent_url: https://10.0.0.5:5000\n"
+        "  agent_token: s3cret-token\n"
+    )
+    verify = tmp_path / "verify.yaml"
+    verify.write_text(
+        "verifier:\n  kind: rest\n  base_url: http://127.0.0.1:1\n"
+        "  records_path: /records\n  records_key: records\n"
+    )
+    compiler = FirstRunCompiler(
+        "Save {note}",
+        params=["note"],
+        surface_config=config,
+        verify=verify,
+        expect={"patient_id": "p1"},
+        on_screen=["MRN P1"],
+        cache_dir=tmp_path / "cache",
+    )
+    spec = compiler.save_spec()
+    assert "s3cret-token" not in spec.read_text()
+    again = FirstRunCompiler.load(compiler.dir)
+    assert again.surface.agent_token == "s3cret-token"  # re-read from the file
+    assert again.backend_kind == "windows"
 
 
 def test_a_non_http_url_is_refused(capsys) -> None:
