@@ -52,3 +52,38 @@ and the provisional/final check) tell correct saves from planted faults?
 - Verdict per case, with the receipt's `read_evidence`.
 - Added time: seconds the separate session spent per item, and per item when
   one session settles a batch of final reads.
+
+## Addendum (before any run): the same cases behind a network chaos proxy
+
+Added at the coordinator's request, before the first live run. Every case
+above runs twice: once direct, once through this chain on the zen lane, for
+both the acting session and the verifier's session:
+
+    runner -> chaos shim (HTTP, zen) -> Toxiproxy (TCP, zen) -> app
+
+| Setting | Value | Where |
+|---|---|---|
+| Latency on every request | 1100 ms +/- 700 ms (400 to 1800 ms), upstream | Toxiproxy `latency` toxic |
+| Gateway errors | each request: 1 in 100 gets HTTP 502, 1 in 100 gets HTTP 504 (about 1 in 50 in all), seeded random | chaos shim |
+| Lagging search/list view | for 3 s after the acting session's save (a POST to the app), a GET of a declared search or list path returns the response the shim last served for that URL before the save (a stale index) | chaos shim |
+
+Toxiproxy works on TCP, so it can't send an HTTP status or replay a stale
+page; the shim (stdlib Python, in this folder) does both.
+
+The read-back's `index_lag_s` per app is set from calibration saves made in
+the sandbox before the cases run (three saves on records that aren't case
+records; the longest time until the list view showed the save, times 1.5,
+rounded up to whole seconds). It is never tuned on case results.
+
+Predictions under chaos:
+
+- No fault case ends CONFIRMED (VERIFIED). Unchanged from above.
+- Correct saves still CONFIRMED, except false stops: a 502/504 that hits the
+  verifier's sign-in or read makes a read INDETERMINATE, so some correct
+  saves will stop. Expected rate: a few percent of correct cases. Each one is
+  reported with its cause.
+- The stale list view never produces a CONFIRMED for a fault, and a correct
+  save is still CONFIRMED when `index_lag_s` covers the lag.
+- An acting-side failure caused by chaos (the save itself got a 502) is a
+  harness event, reported, and the case is rerun once on a fresh record.
+  Verifier verdicts are never rerun.
