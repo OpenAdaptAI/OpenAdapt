@@ -339,7 +339,7 @@ def test_the_public_api_is_stable() -> None:
     ]
     budget = inspect.signature(capture_database).parameters["read_row_budget"]
     assert budget.kind is inspect.Parameter.KEYWORD_ONLY
-    assert budget.default == 100_000
+    assert budget.default == 1_000_000
     assert list(WriteResult.__dataclass_fields__)[:5] == [
         "outcome",
         "scope",

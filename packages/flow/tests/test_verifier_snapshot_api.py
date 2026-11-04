@@ -234,7 +234,7 @@ def test_the_snapshot_api_stays_public() -> None:
     ]
     budget = inspect.signature(capture_database).parameters["read_row_budget"]
     assert budget.kind is inspect.Parameter.KEYWORD_ONLY
-    assert budget.default == 100_000
+    assert budget.default == 1_000_000
     for name in (
         "verified",
         "status",

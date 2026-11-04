@@ -66,7 +66,7 @@ import re
 import secrets
 import struct
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Context, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -75,7 +75,10 @@ Dialect = Literal["sqlite", "mysql", "postgresql"]
 TableMode = Literal["compare", "append_only", "skip"]
 
 #: Maximum data rows per snapshot, including auxiliary audit reads.
-DEFAULT_READ_ROW_BUDGET = 100_000
+DEFAULT_READ_ROW_BUDGET = 1_000_000
+
+#: Stored content encoding for server-digested append-only rows.
+_MYSQL_ROW_DIGEST = "mysql-json-sha256/v1"
 
 #: Columns per JSON object call: SQLite caps a function at 127 arguments.
 _CHUNK = 50
@@ -344,6 +347,9 @@ class Table:
     #: two runs' snapshots can tell they hold the same row (a removal one of
     #: them saw) without values. Empty otherwise.
     links: dict[str, str] = field(default_factory=dict)
+    #: Empty for legacy full-row MACs; persisted so old baselines keep their
+    #: original read and encoding after an engine upgrade.
+    row_hash_format: str = ""
 
 
 @dataclass
@@ -391,6 +397,11 @@ class Snapshot:
                     "rows": t.rows,
                     "non_transactional": t.non_transactional,
                     **({"links": t.links} if t.links else {}),
+                    **(
+                        {"row_hash_format": t.row_hash_format}
+                        if t.row_hash_format
+                        else {}
+                    ),
                 }
                 for name, t in self.tables.items()
             },
@@ -421,6 +432,7 @@ class Snapshot:
                     rows={k: list(v) for k, v in (t.get("rows") or {}).items()},
                     non_transactional=bool(t.get("non_transactional")),
                     links={str(k): str(v) for k, v in (t.get("links") or {}).items()},
+                    row_hash_format=str(t.get("row_hash_format", "")),
                 )
                 for name, t in data["tables"].items()
             },
@@ -828,6 +840,77 @@ def _read_rows(
                 row.update(_row_part(name, chunk))
         out.append(_plain_numbers(s.dialect, d, row))
     return out
+
+
+def _read_append_only_mysql(
+    s: _Session,
+    name: str,
+    d: _Def,
+    table: Table,
+    old: Optional[Table],
+    key: bytes,
+    skip: Sequence[str],
+    limit: int,
+) -> int:
+    """Read keys and content digests for every row; bodies only for new keys.
+
+    The baseline's keyed row set is the cursor, rather than MAX(id): an
+    explicit insertion into an old id gap is still a new row. SHA-256 runs
+    over the same exact JSON projections as the full read, inside the same
+    consistent transaction. Every old key and contents MAC is still checked.
+    """
+    assert d.generated_key is not None and d.primary_key == [d.generated_key]
+    key_def = replace(d, columns=list(d.primary_key))
+    key_json = _row_json("mysql", key_def)[0]
+    ignored = set(skip)
+    columns = replace(d, columns=[c for c in d.columns if c not in ignored])
+    chunks = _row_json("mysql", columns)
+    selects = [f"CAST({key_json} AS BINARY) AS frame_key"]
+    selects += [
+        f"SHA2(CAST({part} AS BINARY), 256) AS frame_digest{i}"
+        for i, part in enumerate(chunks)
+    ]
+    records = s.rows(
+        f"SELECT {', '.join(selects)} FROM {_quote('mysql', name)}", limit=limit
+    )
+    if len(records) >= limit:
+        return len(records)  # the caller refuses before fetching any bodies
+    fresh: list[int] = []
+    for values in records:
+        row = _plain_numbers("mysql", key_def, _row_part(name, values[0]))
+        hashes = []
+        for value in values[1:]:
+            text = value.decode("ascii") if isinstance(value, bytes) else value
+            if (
+                not isinstance(text, str)
+                or re.fullmatch(r"[a-fA-F0-9]{64}", text) is None
+            ):
+                raise SnapshotError(
+                    "an append-only row's server digest could not be read"
+                )
+            hashes.append(text.lower())
+        k = row_key_hash(key, key_text(d.primary_key, row), name)
+        body = json.dumps([_MYSQL_ROW_DIGEST, name, hashes], separators=(",", ":"))
+        table.rows[k] = [_mac(key, body), ""]
+        if old is not None and k not in old.rows:
+            value = row[d.generated_key]
+            ident = int(value)
+            if Decimal(str(value)) != ident:
+                raise SnapshotError(
+                    "an append-only generated key is not a whole number"
+                )
+            fresh.append(ident)
+    # No baseline: every row is historical; its body need not cross the wire.
+    # With a baseline: only keys not in its cursor need values. Chunking the
+    # integer keys bounds each SELECT without relying on monotonic ids.
+    for start in range(0, len(fresh), 128):
+        ids = ", ".join(str(v) for v in fresh[start : start + 128])
+        where = f"WHERE {_quote('mysql', d.generated_key)} IN ({ids})"
+        for row in _read_rows(s, name, d, where, limit=limit):
+            k = row_key_hash(key, key_text(d.primary_key, row), name)
+            table.values[k] = dict(row)
+    table.row_hash_format = _MYSQL_ROW_DIGEST
+    return len(records)
 
 
 def _float32_text(value: Decimal) -> Decimal:
@@ -1769,6 +1852,21 @@ def _snapshot(
             table.cell_columns = list(d.columns)
         skip = [*ignore.get(t, ()), *ignore.get("*", ())]
         seen_keys: dict[str, int] = {}
+        if old is not None and old.row_hash_format not in ("", _MYSQL_ROW_DIGEST):
+            raise SnapshotError("the baseline uses an unknown row hash format")
+        if (
+            dialect == "mysql"
+            and mode == "append_only"
+            and d.generated_key is not None
+            and (old is None or old.row_hash_format == _MYSQL_ROW_DIGEST)
+        ):
+            read_count += _read_append_only_mysql(
+                s, t, d, table, old, key, skip, read_row_budget - read_count + 1
+            )
+            if read_count > read_row_budget:
+                raise SnapshotTooLarge(read_row_budget)
+            snap.tables[t] = table
+            continue
         if d.fixed is not None:
             read = d.fixed
         elif not table.count:
@@ -1827,6 +1925,8 @@ def unread_reasons(
         return []
     if old.schema != new.schema or old.columns != new.columns:
         return ["definition changed"]
+    if old.row_hash_format != new.row_hash_format:
+        return ["row hash format changed"]
     reasons = []
     if old.mode == "append_only" and any(
         k not in new.rows or new.rows[k][0] != v[0] for k, v in old.rows.items()
@@ -1900,7 +2000,11 @@ def settled_state(a: Snapshot, b: Snapshot) -> bool:
         return False
     for name, x in a.tables.items():
         y = b.tables[name]
-        if (x.mode, x.schema) != (y.mode, y.schema):
+        if (x.mode, x.schema, x.row_hash_format) != (
+            y.mode,
+            y.schema,
+            y.row_hash_format,
+        ):
             return False
         if x.mode == "append_only":
             if any(y.rows.get(k) != v for k, v in x.rows.items()):
@@ -1924,7 +2028,7 @@ def same_state(a: Snapshot, b: Snapshot) -> bool:
     if set(a.tables) != set(b.tables):
         return False
     return all(
-        (x.mode, x.schema, x.count, x.counter, x.max_auto, x.rows)
-        == (y.mode, y.schema, y.count, y.counter, y.max_auto, y.rows)
+        (x.mode, x.schema, x.row_hash_format, x.count, x.counter, x.max_auto, x.rows)
+        == (y.mode, y.schema, y.row_hash_format, y.count, y.counter, y.max_auto, y.rows)
         for x, y in ((a.tables[n], b.tables[n]) for n in a.tables)
     )
