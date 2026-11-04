@@ -158,3 +158,46 @@ def test_param_mode_keeps_a_digit_token_similar_to_the_example(recorded, observe
     hashed = verify_template_identity(tmpl, observed, **kwargs)
     assert plain.status != "verified"
     assert hashed.status != "verified"
+
+
+@pytest.mark.parametrize(
+    "recorded,observed",
+    [
+        # Review round 3, blocker 1: a copy of the recorded value the recorded
+        # band did not show stands in for the record's own differing value.
+        (f"Smith John 15 47 {LABEL}", f"Smith John 16 47 {LABEL} 15 patients found"),
+        ("Smith John 03/04/1980 Active", "Smith John 03/05/1980 Active 03/04/1980"),
+        ("Smith John 15 Active", "Smith John 16 15 Active"),
+        # Review round 3: a 3-letter name replaced by a 2-letter one.
+        ("Nguyen Eva 47 Recall Due", "Nguyen Bo 47 Recall Due"),
+        ("Nguyen Eva 47 Patient Chart Balance", "Nguyen Bo 47 Patient Chart Balance"),
+        ("Okafor Ann 05/14/1988 Active", "Okafor Bo 05/14/1988 Active"),
+        ("Hall Ali 03/04/1980 Active", "Hall Bo 03/04/1980 Active"),
+    ],
+)
+def test_review_round_3_wrong_records_refuse(recorded: str, observed: str) -> None:
+    plain, hashed = _statuses(recorded, observed)
+    assert plain != "verified", (recorded, observed)
+    assert hashed != "verified", (recorded, observed)
+
+
+@pytest.mark.parametrize(
+    "recorded,observed",
+    [
+        # Review round 3, blocker 2: a word that folds to a digit value
+        # ("Bo" ~ "80", "Li" ~ "11") must not take the exact copy's slot.
+        ("Price Bo 80 03/04/1980", "Price Bo 80 03/04/1980"),
+        ("Lee Li 11 03/04/1980 Active", "Lee Li 11 03/04/1980 Active"),
+    ],
+)
+def test_a_word_folding_to_a_value_never_turns_a_reread_into_a_mismatch(
+    recorded: str, observed: str
+) -> None:
+    plain, hashed = _statuses(recorded, observed)
+    assert plain != "mismatch", recorded
+    assert hashed != "mismatch", recorded
+
+
+def test_an_exact_digit_copy_is_taken_before_a_folded_word() -> None:
+    match = I.band_match("Smith John 25 47 Active", "Smith John 2S 25 47 Active")
+    assert match.contradicted_chars == 0

@@ -1100,8 +1100,22 @@ def _match_tokens(
     # ("100" "512" vs "100512", or "15" "47" vs "1547"): one id split by OCR
     # and two values read as one look the same, so the band abstains.
     digit_glued: set[int] = set()
+    # Digit tokens take a raw-equal copy first: a word that only folds to
+    # the value ("Bo" ~ "80", "Li" ~ "11") must not take the slot the exact
+    # copy fills.
+    for i, token in enumerate(exp):
+        if not _has_digit(token):
+            continue
+        for j, o in enumerate(obs):
+            if o == token and j not in digit_used:
+                mark(i, token, o)
+                explained[j] = True
+                digit_used.add(j)
+                break
     for i, ec in enumerate(exp_c):
         digit = _has_digit(exp[i])
+        if digit and matched[i]:
+            continue
         for j, oc in enumerate(obs_c):
             if ec != oc or (digit and j in digit_used):
                 continue
@@ -1227,8 +1241,11 @@ def _contradicted(
     exp_c = [ocr_canonical(t) for t in exp]
     obs_c = [ocr_canonical(t) for t in obs]
     contradicted = [False] * len(exp)
+    # A 2-letter observed name ("Eva" -> "Bo") replaces a recorded name as
+    # surely as a longer one; shorter recorded tokens are counted in
+    # band_match.
     unexplained_alpha = any(
-        not explained[j] and len(o) >= MIN_BLOCK and _alpha_dominated(o)
+        not explained[j] and len(o) >= 2 and _alpha_dominated(o)
         for j, o in enumerate(obs)
     )
     obs_suffix_unexplained = any(
@@ -1305,6 +1322,17 @@ def _digit_token_absent(exp: list[str], matched: list[bool]) -> bool:
     band lacks identifying evidence (the OCR tier abstains); replaced by
     another digit token, it is a contradiction (:func:`_contradicted`)."""
     return any(not m and _has_digit(t) for t, m in zip(exp, matched))
+
+
+def _extra_digit_token(exp: list[str], obs: list[str], explained: list[bool]) -> bool:
+    """Whether the live band shows a digit-bearing token nothing recorded
+    explains while the recorded band shows one. A recorded id can match a
+    copy of its value elsewhere in the live band ("15 patients found")
+    while the record's own differing id sits unexplained, so the band
+    abstains."""
+    return any(_has_digit(t) for t in exp) and any(
+        not explained[j] and _has_digit(o) for j, o in enumerate(obs)
+    )
 
 
 def band_match(
@@ -1457,12 +1485,16 @@ def band_match(
     # verify_target_identity reads a positive charge here as ABSTAIN (OCR
     # cannot certify), not verify and not mismatch.
     glyph_ambiguous_id_chars = glyph_id_chars
-    evidence_short = identity_evidence_shortfall(
-        [identity_kind(t) for t in exp],
-        matched,
-        raw_matched,
-        [_has_lookalike(t) for t in exp],
-    ) or _digit_token_absent(exp, matched)
+    evidence_short = (
+        identity_evidence_shortfall(
+            [identity_kind(t) for t in exp],
+            matched,
+            raw_matched,
+            [_has_lookalike(t) for t in exp],
+        )
+        or _digit_token_absent(exp, matched)
+        or _extra_digit_token(exp, obs, explained)
+    )
     return BandMatch(
         matched_chars / total_chars,
         max(uncovered_runs, default=0),

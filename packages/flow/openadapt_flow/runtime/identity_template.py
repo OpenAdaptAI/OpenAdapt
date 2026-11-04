@@ -442,6 +442,17 @@ def _match_tokens_template(
     # observed copy of its own (parity with identity._match_tokens).
     digit_used: set[int] = set()
     for i, t in enumerate(toks):
+        if not t.digit:
+            continue
+        for j in range(no):
+            if t.r == obs_r[j] and j not in digit_used:
+                mark(i, obs_r[j], obs[j])
+                explained[j] = True
+                digit_used.add(j)
+                break
+    for i, t in enumerate(toks):
+        if t.digit and matched[i]:
+            continue
         for j in range(no):
             if t.c != obs_c[j] or (t.digit and j in digit_used):
                 continue
@@ -532,7 +543,7 @@ def _contradicted_template(
     toks = tmpl.tokens
     contradicted = [False] * len(toks)
     unexplained_alpha = any(
-        not explained[j] and len(o) >= _id.MIN_BLOCK and _id._alpha_dominated(o)
+        not explained[j] and len(o) >= 2 and _id._alpha_dominated(o)
         for j, o in enumerate(obs)
     )
     unexplained_ident = any(
@@ -648,14 +659,21 @@ def _band_match_template(tmpl: IdentityTemplate, observed_text: str) -> _id.Band
         if not explained[j] and _id._name_shaped(raw_tok, obs[j])
     )
 
-    evidence_short = _id.identity_evidence_shortfall(
-        [_template_identity_kind(t, canon) for t in toks],
-        matched,
-        raw_matched,
-        # No plaintext to inspect: every token counts as look-alike, the
-        # conservative side of identity_evidence_shortfall's rule.
-        [True] * len(toks),
-    ) or any(not m and t.digit for t, m in zip(toks, matched))
+    evidence_short = (
+        _id.identity_evidence_shortfall(
+            [_template_identity_kind(t, canon) for t in toks],
+            matched,
+            raw_matched,
+            # No plaintext to inspect: every token counts as look-alike, the
+            # conservative side of identity_evidence_shortfall's rule.
+            [True] * len(toks),
+        )
+        or any(not m and t.digit for t, m in zip(toks, matched))
+        or (
+            any(t.digit for t in toks)
+            and any(not explained[j] and _id._has_digit(o) for j, o in enumerate(obs))
+        )
+    )
 
     return _id.BandMatch(
         matched_chars / total_chars if total_chars else 0.0,
