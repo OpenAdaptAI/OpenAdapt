@@ -1493,6 +1493,10 @@ def fill_json(
         except (KeyError, IndexError, ValueError, TypeError):
             return "", [], f"{field.name}: not in the recorded body"
         raw = str(params[field.param])
+        if not raw:
+            # A page often leaves a blank field out of the body altogether,
+            # so the recorded shape can't be assumed for it.
+            return "", [], f"{field.name}: a blank value may change the body's shape"
         value: Any = raw
         if isinstance(leaf, bool) or leaf is None:
             return "", [], f"{field.name}: the recorded value isn't text or a number"

@@ -361,6 +361,16 @@ def test_a_number_field_takes_only_a_number(spa, tmp_path):
     assert not app.posts
 
 
+def test_a_blank_value_keeps_a_json_save_on_the_gui(spa, tmp_path):
+    app, page = spa
+    result = WebFormActuator(PlaywrightSessionTransport(page)).actuate(
+        _binding(tmp_path), {"first": "", "last": "Park", "age": "41"}
+    )
+    assert result.status is ActuationStatus.UNAVAILABLE
+    assert "blank value" in result.reason
+    assert not app.posts
+
+
 def test_a_graphql_error_halts_and_is_not_retried(spa, tmp_path):
     app, page = spa
     app.answer = b'{"errors": [{"message": "name taken"}], "data": {"groups": null}}'

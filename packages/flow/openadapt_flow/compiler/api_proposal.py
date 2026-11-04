@@ -1183,7 +1183,15 @@ def _propose_json(
     action, url_problems = _url_template(post["url"], by_value)
     if url_problems:
         return refuse(url_problems[0])
-    sender = post.get("frame_url") or ""
+    # The page the person saved from. A single-page app may have moved to the
+    # new record's address by the time the request is logged, so the save
+    # step's own event says where it was.
+    save_i = _event_index(save)
+    sender = str(
+        (events[save_i].get("url_before") if save_i is not None else None)
+        or post.get("frame_url")
+        or ""
+    )
     page_lines = [
         ln
         for ln in lines
@@ -1245,6 +1253,8 @@ def _propose_json(
         if ln["method"] not in ("GET", "HEAD", "OPTIONS")
         and ln is not post
         and not _graphql_read(ln)
+        # Sent while the page loaded, before any recorded step.
+        and float(ln["t"]) >= 0
         and page_t < float(ln["t"]) < float(post["t"])
     ]
     if others:
@@ -1262,11 +1272,24 @@ def _propose_json(
             if i is not None and i + 1 < len(events)
             else float("inf")
         )
-        if "text_present" in kinds or "text_absent" in kinds:
-            if any(ln["method"] == "GET" and lo < float(ln["t"]) <= hi for ln in lines):
-                return refuse(
-                    f"{step.id} checks text a request returned; a JSON save can't carry it"
-                )
+        texts = [
+            p.text
+            for p in step.expect
+            if getattr(p.kind, "value", p.kind) in ("text_present", "text_absent")
+            and p.text
+        ]
+        reads = [
+            ln
+            for ln in lines
+            if lo < float(ln["t"]) <= hi
+            and (ln["method"] == "GET" or _graphql_read(ln))
+        ]
+        if any(t in (ln.get("response_text") or "") for t in texts for ln in reads):
+            # The server answered the check (a duplicate search, a lookup):
+            # the API step would skip it, so the save stays on the GUI.
+            return refuse(
+                f"{step.id} checks text a request returned; a JSON save can't carry it"
+            )
         screen_only.append(f"{step.id}: " + ", ".join(sorted(str(k) for k in kinds)))
 
     typed: dict[str, str] = {}
