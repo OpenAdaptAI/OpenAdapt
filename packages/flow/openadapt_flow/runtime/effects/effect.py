@@ -206,9 +206,13 @@ class ValueExpr(BaseModel):
     #: what was entered (OpenEMR's New Patient form saves street and city in
     #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
     #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
-    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). The check stays exact:
-    #: it expects the stored form, not any casing.
-    stored: Optional[Literal["upper", "lower"]] = None
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). ``capitalize_words``
+    #: puts the first letter of each space-separated word in capitals and
+    #: drops extra spaces, as OpenEMR's "C" fields do (``capitalizeMe``:
+    #: " ada  lovelace" is stored "Ada Lovelace"). A closed set, declared per
+    #: field: the check stays exact, so it expects the stored form, not any
+    #: casing, and a different value is still refuted.
+    stored: Optional[Literal["upper", "lower", "capitalize_words"]] = None
     #: A declared value kind (:func:`kind_form`): the expected value and the
     #: stored one are compared in canonical form, so formatting alone never
     #: refutes, and a different value always does. Never inferred.
@@ -315,6 +319,12 @@ class ValueExpr(BaseModel):
             value = value.upper()
         elif value is not None and self.stored == "lower":
             value = value.lower()
+        elif value is not None and self.stored == "capitalize_words":
+            # Split on the space character only, as the form does; the rest
+            # of each word keeps its case ("McDonald" stays "McDonald").
+            value = " ".join(
+                word[0].upper() + word[1:] for word in value.split(" ") if word
+            )
         return value
 
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
