@@ -29,15 +29,22 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from openenv.core.env_server.interfaces import Environment
+from openenv.core.env_server.mcp_types import (
+    CallToolAction,
+    CallToolObservation,
+    ListToolsAction,
+    ListToolsObservation,
+    Tool,
+)
 from openenv.core.env_server.types import (
     Action,
     EnvironmentMetadata,
     Observation,
     State,
 )
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from openadapt_flow.rl_env import CONTRACT_VERSION
+from openadapt_flow.rl_env import CONTRACT_VERSION, typed
 from openadapt_flow.rl_env.reward import EpisodeJudge, Judgement, render_verify_config
 from openadapt_flow.rl_env.tasks import (
     PUBLIC_SPLIT,
@@ -84,7 +91,8 @@ _ELEMENTS_JS = """
     }
     out.push({tag: el.tagName.toLowerCase(), type: el.type || null,
               selector, label: label.slice(0, 80),
-              x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2)});
+              x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2),
+              w: Math.round(r.width), h: Math.round(r.height)});
     if (out.length >= limit) break;
   }
   return out;
@@ -100,7 +108,10 @@ class WebAction(Action):
     selector and the viewport centre that reach them.
     """
 
-    kind: ActionKind
+    kind: Optional[ActionKind] = None
+    #: An ``openadapt_types.Action`` in place of the fields below; node ids
+    #: refer to the last observation's ``computer_state``.
+    computer_action: Optional[dict[str, Any]] = None
     selector: Optional[str] = None
     x: Optional[int] = None
     y: Optional[int] = None
@@ -118,6 +129,12 @@ class WebAction(Action):
         description="done: did the task's change land in the record?",
     )
 
+    @model_validator(mode="after")
+    def _one_form(self) -> "WebAction":
+        if (self.kind is None) == (self.computer_action is None):
+            raise ValueError("give exactly one of kind or computer_action")
+        return self
+
 
 class WebObservation(Observation):
     contract: str = CONTRACT_VERSION
@@ -130,6 +147,10 @@ class WebObservation(Observation):
     step: int = 0
     max_steps: int = 0
     last_action_error: Optional[str] = None
+    #: ``openadapt_types.ComputerState`` of the page (nodes, URL, viewport).
+    computer_state: dict[str, Any] = Field(default_factory=dict)
+    #: ``openadapt_types.ActionResult`` of the last action.
+    action_result: Optional[dict[str, Any]] = None
     #: Set on the final observation only.
     verdict: Optional[str] = None
 
@@ -319,6 +340,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._page: Any = None
         self._judgement: Optional[Judgement] = None
         self._worker: Optional[ThreadPoolExecutor] = None
+        self._last_elements: list[dict[str, Any]] = []
         self._driver_pid: Optional[int] = None
         self._records_url: Optional[str] = None
         self._attempted = False
@@ -540,6 +562,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         self._judge = None
         self._judgement = None
         self._attempted = False
+        self._last_ms = 0
         self._state = WebState(env_name=self.env.manifest.name, done=True)
         app_url = self._ensure_app()
         self._reset_app(task)
@@ -568,20 +591,73 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
         )
         return self._observe(reward=None, done=False)
 
-    def _step(
-        self, action: WebAction, timeout_s: Optional[float] = None, **_: Any
-    ) -> WebObservation:
+    def _step(self, action: Any, timeout_s: Optional[float] = None, **_: Any) -> Any:
+        if isinstance(action, ListToolsAction):
+            return ListToolsObservation(tools=[Tool(**tool) for tool in typed.TOOLS])
+        if isinstance(action, CallToolAction):
+            return self._call_tool(action)
         if self._task is None or self._page is None:
             raise RuntimeError("call reset() before step()")
         if self._state.done:
             return self._observe(reward=0.0, done=True, error="episode is over")
+        if action.computer_action is not None:
+            try:
+                native = typed.native_action(
+                    action.computer_action,
+                    self._last_elements,
+                    (VIEWPORT["width"], VIEWPORT["height"]),
+                )
+            except ValueError as exc:
+                # An action this environment can't take still spends a step.
+                self._state.step_count += 1
+                if self._state.step_count >= self.env.manifest.agent.max_steps:
+                    return self._finish(None, error=str(exc))
+                return self._observe(reward=0.0, done=False, error=str(exc))
+            action = WebAction(**native)
         self._state.step_count += 1
         if action.kind == "done":
             return self._finish(action.claim)
+        started = time.monotonic()
         error = self._act(action)
+        self._last_ms = int(1000 * (time.monotonic() - started))
         if self._state.step_count >= self.env.manifest.agent.max_steps:
             return self._finish(None, error=error)
         return self._observe(reward=0.0, done=False, error=error)
+
+    def _call_tool(self, action: CallToolAction) -> CallToolObservation:
+        """Run one MCP tool call as a step; the observation rides in the result."""
+        from openenv.core.env_server.mcp_types import ToolError, ToolErrorType
+
+        name = action.tool_name
+        if name not in typed.TOOL_NAMES:
+            return CallToolObservation(
+                tool_name=name,
+                error=ToolError(
+                    error_type=ToolErrorType.TOOL_NOT_FOUND, message=f"no tool {name!r}"
+                ),
+            )
+        if name == "observe":
+            if self._task is None:
+                raise RuntimeError("call reset() before step()")
+            obs = self._observe(reward=0.0, done=self._state.done)
+        else:
+            try:
+                web = WebAction(kind=name, **action.arguments)
+            except Exception as exc:  # noqa: BLE001 - bad arguments are the agent's
+                return CallToolObservation(
+                    tool_name=name,
+                    error=ToolError(
+                        error_type=ToolErrorType.INVALID_ARGS, message=str(exc)
+                    ),
+                )
+            obs = self._step(web)
+        return CallToolObservation(
+            tool_name=name,
+            result=obs.model_dump(exclude={"done", "reward", "metadata"}),
+            done=obs.done,
+            reward=obs.reward,
+            metadata=obs.metadata,
+        )
 
     def _close(self) -> None:
         for closer in (
@@ -770,6 +846,7 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             url = _redact(page.url)
             title = page.title()
             text, elements = self._page_content()
+            self._last_elements = elements
             if self.screenshots:
                 shot = base64.b64encode(page.screenshot(type="png")).decode("ascii")
         except Exception as exc:  # noqa: BLE001 - a page mid-navigation
@@ -788,4 +865,8 @@ class OpenAdaptWebEnvironment(Environment[WebAction, WebObservation, WebState]):
             max_steps=self.env.manifest.agent.max_steps,
             last_action_error=error,
             verdict=verdict,
+            computer_state=typed.computer_state(
+                url, elements, (VIEWPORT["width"], VIEWPORT["height"])
+            ),
+            action_result=typed.action_result(error, getattr(self, "_last_ms", 0)),
         )
