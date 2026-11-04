@@ -16,7 +16,7 @@ reasons under [What went wrong](#what-went-wrong).
 ## Setup
 
 - **Tasks:** the seven MockMed variants in
-  `openadapt_flow.integrations.harness2.tasks`: `plain`, `lookalike`, `sort`,
+  `benchmark.harness.harness2.tasks`: `plain`, `lookalike`, `sort`,
   `typelabel`, `timeout`, `missing`, `slow`. Every task asks for a Triage
   encounter for Jane Sample (born 1980-01-01) with a fixed note.
 - **Agent:** `ModelGuiAgent` on `gpt-4.1-nano`, reading the DOM text and

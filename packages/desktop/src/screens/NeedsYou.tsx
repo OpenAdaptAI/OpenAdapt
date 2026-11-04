@@ -4,7 +4,7 @@
 // where the run stopped, and offers only the choices the evidence allows. A
 // retry is offered only when the run proved nothing was written; a possible
 // save first needs a person to look at the record.
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import { attentionCopy } from "../lib/attention";
 import {
@@ -121,7 +121,7 @@ function AttentionCard({
   const [screen, setScreen] = useState<AttentionScreenshot | null>(null);
   const [recordChecked, setRecordChecked] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setScreen(null);
     setRecordChecked(false);
     if (item.source !== "item") return;

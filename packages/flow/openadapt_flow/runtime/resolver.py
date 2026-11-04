@@ -927,7 +927,10 @@ def resolve(
             except StructuralResolutionRefused:
                 # Ambiguity is a safety refusal, not a miss. Falling through
                 # to pixels could choose one of the same indistinguishable
-                # candidates and silently defeat the uniqueness contract.
+                # candidates and silently defeat the uniqueness contract. A
+                # unique candidate that is covered or off-viewport
+                # (StructuralElementNotActionable, a subclass) must not fall
+                # through either: a pixel click would land on the cover.
                 raise
             except Exception:
                 handle = None

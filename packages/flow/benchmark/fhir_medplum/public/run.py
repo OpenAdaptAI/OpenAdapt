@@ -92,6 +92,18 @@ class Bench:
             self.practitioners[key] = self._practitioner(key, p)
         return bot_ref
 
+    def renew_record_token(self) -> None:
+        """Give the verifier a live read token before each of its reads.
+
+        Medplum's tokens last an hour. Set once in ``setup``, the token
+        expired under long runs: the write leaderboard's verifier then read
+        ``HTTP 401`` and judged 163 of 222 runs on nothing
+        (``leaderboard_rescore/README.md``). ``client_token`` renews after
+        30 minutes, so a token taken here outlives one case.
+        """
+
+        os.environ["BENCH_RECORD_TOKEN"] = self.fx.client_token("record-check")
+
     def _practitioner(self, key: str, p: dict[str, str]) -> str:
         token = self.actors.token("setup")
         query = urllib.parse.urlencode({"identifier": f"{PRACTITIONER_ID}|{key}"})
@@ -341,6 +353,7 @@ class Bench:
         time.sleep(2.5)
         before = self.snapshot()
         contract = load_contract(CONTRACTS[kind])
+        self.renew_record_token()
         try:
             baseline = capture_baseline(contract, params)
         except Unreadable as exc:
@@ -384,6 +397,7 @@ class Bench:
         row["cost_usd"] = float(claim.pop("cost_usd", 0.0) or 0.0)
         row["claim"] = claim
         t1 = time.monotonic()
+        self.renew_record_token()
         if baseline is not None:
             # The same write judged twice: as the contract says, and with the
             # agent's own corrections refused (the verifier before they were

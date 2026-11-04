@@ -75,7 +75,7 @@ TOKEN_NAME = re.compile(
     re.I,
 )
 SECRET_NAME = re.compile(
-    r"pass(word|wd|phrase)?\b|passwd|clearpass|pwd|secret|private[_-]?key|^pin$|^otp$",
+    r"pass(word|wd|phrase)?\b|passwd|pwd|secret|private[_-]?key|^pin$|^otp$",
     re.I,
 )
 SECRET = "<secret>"

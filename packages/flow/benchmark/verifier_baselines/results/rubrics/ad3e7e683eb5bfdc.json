@@ -1,0 +1,97 @@
+{
+ "task": "You are a clinic staff member using Medplum, the clinic's electronic health record, in a web browser. The screen is 1280x800 pixels and you are already signed in. Medplum stores its records on a FHIR R4 server; this web app is how you read and change them. Use only this app, and change nothing the task doesn't ask for.\n\nWhen you have finished, or if you can't finish, stop acting and end your reply with one final line in exactly one of these two forms:\nRESULT: DONE <the record's id, such as Patient/0193..., or the URL of its page>\nRESULT: NOT DONE <the reason, in one line>\nWrite RESULT: DONE only if the record now exists exactly as the task asks (created by you, or already there).\n\nThe task:\nMake sure this appointment is booked, exactly once, as an Appointment. If it is already booked, don't book another: report the existing record.\nPatient: Tomasz Wren (born 1966-01-30). Find their Patient record first.\nPractitioner: Dr Ama Osei (a Practitioner on the server).\nStart: 2026-11-17T14:00:00Z\nEnd: 2026-11-17T14:30:00Z\nStatus booked, with two participants (the patient and the practitioner), each with status accepted.\nWrite only status, start, end and participant.",
+ "rubric": {
+  "items": [
+   {
+    "criterion": "Use the Medplum web app as the specified platform",
+    "description": "Perform all actions within the Medplum EHR web app as instructed. Full credit if Medplum is used, OR if the app is inaccessible (errors, downtime) and this is clearly reported. Partial credit if an alternative platform is used only after Medplum proves inaccessible and this is reported. No credit if Medplum is ignored without attempting it.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Locate the Patient record: Tomasz Wren (DOB 1966-01-30)",
+    "description": "Find the exact Patient resource matching the given name and date of birth. Full credit if the correct patient is found OR if after reasonable search the patient does not exist and this is clearly reported. Partial credit for selecting a near match (same name but mismatched DOB) when the correct record exists, or for insufficient search effort.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Locate the Practitioner record: Dr Ama Osei",
+    "description": "Find the exact Practitioner resource for Dr Ama Osei. Full credit if the correct practitioner is found OR if after reasonable search no such record exists and this is clearly reported. Partial credit for picking a different practitioner when the correct one exists, or for insufficient search effort.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Determine existing appointment state for the specified slot",
+    "description": "Search for any Appointment(s) for Tomasz Wren with Dr Ama Osei at 2026-11-17T14:00:00Z to 2026-11-17T14:30:00Z. Full credit if the agent clearly determines whether a matching appointment exists (including checking status and participant statuses) OR reports platform search limitations. Partial credit if search is attempted but incomplete (e.g., fails to filter by participant or exact time) leading to ambiguity.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Do not create a new appointment when a fully matching one already exists",
+    "condition": "Only applies if a fully matching appointment already exists (same patient and practitioner, start 2026-11-17T14:00:00Z, end 14:30:00Z, status 'booked', both participants with status 'accepted')",
+    "description": "Full credit if no new record is created and the existing appointment is reported. Partial credit if a duplicate is created but the existing one is also identified and reported. No credit if a duplicate is created without acknowledging the existing matching record.",
+    "max_points": 4,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Update the existing appointment to meet requirements (no new creation)",
+    "condition": "Only applies if an appointment exists for the same patient and time window but does not meet one or more required fields (status, participants, or exact times)",
+    "description": "Full credit if the agent updates that existing appointment so it has status 'booked', start 2026-11-17T14:00:00Z, end 14:30:00Z, and exactly two participants (patient and practitioner) each with status 'accepted', without creating a new appointment. Full credit also if the platform/permissions do not allow updating and the agent clearly reports this limitation after a reasonable attempt. Partial credit if the correct appointment is identified but a new one is created instead of updating the existing (violating 'exactly once'). No credit if neither updated nor correctly handled.",
+    "max_points": 4,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Create exactly one Appointment when none exists",
+    "condition": "Only applies if no appointment exists for this patient\u2013practitioner pair at the specified time window",
+    "description": "Full credit if exactly one Appointment resource is created and saved with the required details. Full credit also if platform capabilities, permissions, or missing required entities (e.g., practitioner or patient not found) prevent creation and the agent clearly reports this after a reasonable attempt. Partial credit if creation is attempted but with minor errors (e.g., wrong participant status) that are then corrected, or if platform prevents saving and the agent clearly reports this. No credit if no attempt is made despite apparent permission, or if multiple new appointments are created.",
+    "max_points": 4,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Final appointment fields are exactly correct",
+    "condition": "Only applies if an appointment matching the specified patient\u2013practitioner pair at the target time exists (pre-existing or created/updated during the attempt)",
+    "description": "Evaluate the final state (existing and reported, updated, or newly created): status must be 'booked'; start must be 2026-11-17T14:00:00Z; end must be 2026-11-17T14:30:00Z; participants must be exactly two: the specified Patient and Practitioner; each participant must have status 'accepted'. Full credit if all fields match exactly. Partial credit for minor technical deviations (e.g., timezone display discrepancies while underlying instant is correct) or if one participant status is incorrect but the rest is correct. If no such appointment exists due to platform limitations or missing entities (and this was clearly reported elsewhere), do not penalize here.",
+    "max_points": 4,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Ensure no additional duplicates when pre-existing duplicates are present",
+    "condition": "Only applies if multiple matching appointments already existed before the agent\u2019s actions",
+    "description": "There should be no new Appointment(s) added when duplicates were already present. Full credit if the agent avoids creating any additional duplicates and clearly reports the pre-existing duplicate situation. No credit if additional duplicates are created. This criterion does not apply when no pre-existing duplicates existed (to avoid double-penalization with other criteria).",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Report only the required fields: status, start, end and participant",
+    "condition": "Only applies if appointment details are presented (i.e., an appointment exists and is being reported)",
+    "description": "The output that presents the appointment details should include only the four fields specified. Full credit if only those fields are shown. Partial credit if extra fields are included but the four required fields are present and correct. If no appointment is being reported because of platform/entity limitations (and this is clearly stated), do not penalize here.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Provide the final RESULT line with correct format and content",
+    "description": "End the reply with exactly one line: 'RESULT: DONE <resource id or URL>' if the final state meets all requirements (existing, updated, or newly created), or 'RESULT: NOT DONE <single-line reason>' if completion was not possible. Full credit if the format and content are correct and unambiguous. Partial credit for minor formatting errors that do not impede interpretation. No credit if the RESULT line is missing or misleading.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Scope adherence: only necessary changes using the Medplum app",
+    "description": "Make only the changes required to achieve the task (create/update the single Appointment as needed) and avoid altering unrelated records. Full credit if no unrelated resources are modified or created. Partial credit if incidental unrelated changes are made but clearly reversible and documented. No credit if substantial unrelated changes occur.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   }
+  ]
+ }
+}

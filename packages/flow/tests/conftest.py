@@ -44,6 +44,18 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _teach_authorization_env(monkeypatch: pytest.MonkeyPatch):
+    """Lets tests/_teach_authorization_support.py pin an approver root for one test."""
+
+    from tests import _teach_authorization_support as support
+
+    support._MONKEYPATCH[:] = [monkeypatch]
+    yield
+    support._MONKEYPATCH.clear()
+    support._AUTHORIZERS.clear()
+
+
+@pytest.fixture(autouse=True)
 def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep each test's monotonic run authority independent and disposable."""
 

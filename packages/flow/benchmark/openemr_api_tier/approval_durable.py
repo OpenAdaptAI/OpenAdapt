@@ -157,7 +157,7 @@ def run_one(
 ) -> dict[str, Any]:
     from openadapt_flow.approval_mode.gate import ApprovalGate
     from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
-    from openadapt_flow.benchmark.openemr_local import OpenEMRPatientOracle
+    from benchmark.harness.openemr_local import OpenEMRPatientOracle
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
     from openadapt_flow.runtime.durable.checkpoint import CheckpointStore

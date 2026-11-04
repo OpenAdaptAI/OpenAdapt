@@ -1,0 +1,21 @@
+# Read both ledger surfaces (disbursements and fees). The rows this episode
+# adds for the task's loan must be exactly one disbursement with the task's
+# product, amount and memo: a dropped memo, a second booking, a stray fee or a
+# lost fraud hold on that loan all refute it.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: rest
+  base_url: ${APP_URL}
+  records_path: /api/db
+effects:
+  - kind: exact_new_set
+    match:
+      loan_id: {param: loan_id}
+    expected_count: 1
+    new_records:
+      - loan_id: {param: loan_id}
+        product: {param: product}
+        amount: {param: amount}
+        memo: {param: memo}
+        surface: {literal: disbursements}
