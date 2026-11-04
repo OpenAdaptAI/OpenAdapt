@@ -28,9 +28,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from openadapt_flow.bench import _percentile
 from benchmark.harness import agent_baseline
 from benchmark.harness.verify import verify_encounter_saved
+from openadapt_flow.bench import _percentile
 
 N_COMPILED = 100
 N_AGENT = 20
