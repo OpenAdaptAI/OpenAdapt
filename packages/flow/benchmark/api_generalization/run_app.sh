@@ -17,7 +17,7 @@ load1() { sysctl -n vm.loadavg | awk '{print $2}'; }
 
 "$H" up --app "$APP"
 [ -d "$REC" ] || "$H" record --app "$APP" --out "$REC" | tee "$OUT/record.json"
-rm -rf "$STATE/$APP/bundle"
+rm -rf "${STATE:?}/${APP:?}/bundle" "${STATE:?}/${APP:?}/matrix" "${STATE:?}/${APP:?}/timing"
 "$H" compile --app "$APP" --recording "$REC" --out "$STATE/$APP/bundle" > "$OUT/compile.log" 2>&1
 cp "$STATE/$APP/bundle/apigen-compile.json" "$OUT/compile.json"
 "$H" matrix --app "$APP" --bundle "$STATE/$APP/bundle" --out "$STATE/$APP/matrix" --tag "$(date +%H%M)" \
