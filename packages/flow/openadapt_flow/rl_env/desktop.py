@@ -368,14 +368,14 @@ def _rdp_backend(spec: RdpSpec, guest: Any) -> Any:
                 username=guest.desktop_user,
                 ignore_certificate=True,
             ),
-            SessionProfile(
+            lambda: password,
+            profile=SessionProfile(
                 width=spec.width,
                 height=spec.height,
                 color_depth=spec.color_depth,
                 lossless=False,
                 avc444=spec.avc444,
             ),
-            password=lambda: password,
         )
     return FreeRDPBackend(transport, max_frame_age_s=5.0)
 
