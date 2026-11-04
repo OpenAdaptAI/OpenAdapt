@@ -174,6 +174,25 @@ def write_release(
     (out / "PUBLIC_MANIFEST.json").write_text(
         json.dumps(public, indent=1, sort_keys=True) + "\n"
     )
+    # The OpenEnv packs manifest (openadapt.rl-env-packs/v1), one entry per split.
+    packs_doc = {
+        "schema_version": "openadapt.rl-env-packs/v1",
+        "built_with": "openadapt_flow.taskgen (generate, validate, splits)",
+        "packs": [
+            {
+                "pack": f"{name}/tasks.jsonl",
+                "env": str(rules.get("env", "openadapt-taskgen")),
+                "split": name,
+                "tasks": info["tasks"],
+                "sha256": info["tasks_sha256"],
+                "cases": f"{name}/validation",
+                "exclusive": False,
+                "version": str(rules.get("version", "2026.11.0")),
+            }
+            for name, info in sorted(manifest["splits"].items())
+        ],
+    }
+    (out / "PACKS.json").write_text(json.dumps(packs_doc, indent=2) + "\n")
     return manifest
 
 
