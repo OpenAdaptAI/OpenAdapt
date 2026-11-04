@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from benchmark.fhir_medplum.readpath.facts import generic_facts
 
 HERE = Path(__file__).resolve().parent
 SRC = HERE.parent / "fhir_medplum" / "readpath"
@@ -123,7 +124,14 @@ def main() -> None:
     (OUT / "search_parameters.json").write_text(
         json.dumps(params_bundle, indent=1) + "\n"
     )
-    (OUT / "facts.json").write_text((SRC / "probe.json").read_text())
+    (OUT / "facts.json").write_text(
+        json.dumps(
+            generic_facts(json.loads((SRC / "probe.json").read_text())),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
     teach = {
         "resource_type": "Patient",
         "deployment": {

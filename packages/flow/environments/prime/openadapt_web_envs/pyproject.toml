@@ -1,0 +1,14 @@
+[project]
+name = "openadapt-web-envs"
+version = "0.1.0"
+description = "OpenAdapt's record-checked web tasks as a verifiers v1 taskset over their OpenEnv servers."
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["verifiers>=0.3,<0.4", "openenv>=0.11,<0.12", "httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openadapt_web_envs"]

@@ -42,6 +42,9 @@ BANNER = (100, 100, 300, 24)
 PATIENT = (100, 150, 200, 24)
 NOTE_BOX = (100, 200, 320, 40)
 ENCOUNTER = (100, 260, 200, 24)
+# Each label sits left of its field, outside the box the read-back reads.
+PATIENT_LABEL = (20, 150, 70, 24)
+NOTE_LABEL = (20, 200, 70, 24)
 REF_PATTERN = r"(?<![A-Za-z0-9])(E\d{1,6})(?![A-Za-z0-9])"
 
 
@@ -125,10 +128,13 @@ class FaultApp:
         if self.screen == "form":
             if self.banner:
                 out.append(line(self.banner + self.extra_banner, BANNER))
-            out.append(line(f"Note: {NOTE}", NOTE_BOX))  # what was typed
+            out.append(line("Note:", NOTE_LABEL))
+            out.append(line(NOTE, NOTE_BOX))  # what was typed
         elif self.screen == "record" and self.record is not None:
-            out.append(line(f"Patient: {self.record['patient_id']}", PATIENT))
-            out.append(line(f"Note: {self.record.get('note') or ''}", NOTE_BOX))
+            out.append(line("Patient:", PATIENT_LABEL))
+            out.append(line(self.record["patient_id"], PATIENT))
+            out.append(line("Note:", NOTE_LABEL))
+            out.append(line(self.record.get("note") or "", NOTE_BOX))
             out.append(line(f"Encounter E{self.record['id']}", ENCOUNTER))
         return out
 

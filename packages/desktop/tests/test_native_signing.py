@@ -239,6 +239,11 @@ def test_one_signpath_request_deep_signs_the_msi_and_signs_the_nsis_setup() -> N
     assert msi is not None and msi.get("path") == "*.msi"
     nested = msi.find("sp:pe-file-set/sp:for-each/sp:authenticode-sign", namespace)
     assert nested is not None, "the MSI's program files must be signed too"
+    # The program files sit under the MSI's install directory, and SignPath's
+    # "*" does not cross a directory separator: a root-only "*.exe" matches
+    # nothing and fails the signing request.
+    includes = msi.findall("sp:pe-file-set/sp:include", namespace)
+    assert includes and all(i.get("path", "").startswith("**/") for i in includes)
     assert msi.find("sp:authenticode-sign", namespace) is not None
     nsis = root.find("sp:zip-file/sp:pe-file", namespace)
     assert nsis is not None and nsis.get("path") == "*-setup.exe"

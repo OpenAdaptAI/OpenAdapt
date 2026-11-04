@@ -830,7 +830,13 @@ def _serve_window_routes(routes: dict):
     return server, calls
 
 
-_OWNED = {"title": "Session notice", "hwnd": 0x200, "owner_hwnd": 0x100, "pid": 10}
+_OWNED = {
+    "title": "Session notice",
+    "hwnd": 0x200,
+    "owner_hwnd": 0x100,
+    "pid": 10,
+    "region": [200, 200, 300, 200],
+}
 
 
 def test_owned_window_over_uses_the_verified_steps_window() -> None:
@@ -866,6 +872,13 @@ def test_owned_window_over_uses_the_verified_steps_window() -> None:
         {**_OWNED, "hwnd": 0x100},  # the captured window itself
         {**_OWNED, "extra": 1},
         {**_OWNED, "hwnd": True},
+        # The covering frame is part of the answer; without it, doubt.
+        {k: v for k, v in _OWNED.items() if k != "region"},
+        {**_OWNED, "region": None},
+        {**_OWNED, "region": [200, 200, 300]},
+        {**_OWNED, "region": [200, 200, 0, 200]},
+        {**_OWNED, "region": [200, 200, True, 200]},
+        {**_OWNED, "region": [200, 200, 30.5, 200]},
     ],
 )
 def test_owned_window_over_is_none_outside_the_contract(answer) -> None:
