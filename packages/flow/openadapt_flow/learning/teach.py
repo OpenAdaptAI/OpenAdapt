@@ -774,16 +774,16 @@ class TeachResult(BaseModel):
     def summary(self) -> str:
         """A short operator-facing verdict (what it learned / why it refused)."""
         verdict = "LEARNED" if self.promoted else "REFUSED"
+        from openadapt_flow import safe_errors
+
+        skill = safe_errors.label(self.skill_id, private=self.private)
+        lines = [f"{verdict}: {self.outcome.action} (skill {skill})"]
         if self.private:
-            lines = [
-                f"{verdict}: {self.outcome.action}",
-                "  reason: withheld because the input is sealed or strict mode is on",
-            ]
+            lines.append(
+                "  reason: withheld because the input is sealed or strict mode is on"
+            )
         else:
-            lines = [
-                f"{verdict}: {self.outcome.action} (skill {self.skill_id!r})",
-                f"  reason: {self.outcome.reason}",
-            ]
+            lines.append(f"  reason: {self.outcome.reason}")
         if self.outcome.clusters and not self.private:
             lines.append(f"  clusters: {self.outcome.clusters}")
         if self.outcome.action != _NOT_ATTEMPTED:

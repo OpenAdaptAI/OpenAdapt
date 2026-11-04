@@ -6,10 +6,15 @@ would write private content to stdout, stderr and any log that captures them
 (docs/phi_at_rest.md). Every refusal the CLI prints goes through
 :func:`message`, which drops those quoted values, and a failure caused by
 sealed or strict-mode input prints :func:`withheld` instead of its text.
+
+Success output follows the same rule: a name read from sealed or strict-mode
+input (a workflow name, a skill id) is shown only as :func:`label` gives it,
+a short hash that tells two runs apart without quoting the name.
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 # Pydantic renders ``[type=..., input_value=<repr>, input_type=...]`` on one
@@ -42,3 +47,12 @@ def withheld(error: BaseException) -> str:
         f"the input was refused ({type(root_cause(error)).__name__}). The "
         "details are withheld because the input is sealed or strict mode is on."
     )
+
+
+def label(name: object, *, private: bool) -> str:
+    """``name`` for a summary line: quoted, or for private input only a short
+    hash of it."""
+    if not private:
+        return repr(name)
+    digest = hashlib.sha256(str(name).encode("utf-8")).hexdigest()[:12]
+    return f"withheld, sha256 {digest}"

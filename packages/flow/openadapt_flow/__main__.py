@@ -7912,9 +7912,12 @@ def _cmd_push(args: argparse.Namespace) -> int:
     if result.get("workflow_id"):
         version = result.get("version")
         version_number = version.get("version") if isinstance(version, dict) else None
-        detail = (
-            f"name={result.get('workflow_name')!r}, kind={kind}, status={server_status}"
+        from openadapt_flow import safe_errors
+
+        name = safe_errors.label(
+            result.get("workflow_name"), private=_private_input(args)
         )
+        detail = f"name={name}, kind={kind}, status={server_status}"
         if version_number is not None:
             detail += f", version={version_number}"
         print(f"Pushed. workflow_id={result['workflow_id']} ({detail}).")

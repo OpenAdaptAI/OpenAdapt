@@ -972,3 +972,91 @@ def test_a_plaintext_copy_of_a_sealed_bundle_never_loads_as_encrypted(
     loaded = Workflow.load(copy)
     assert loaded.encrypted is False
     assert loaded.manifest is not None and loaded.manifest.encrypted is False
+
+
+def _named_teach_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path, Path]:
+    """Plain teach inputs whose workflow name (the default skill id) is the
+    private marker."""
+    import tests.test_teach_cli as cli
+
+    original = cli._base_workflow
+
+    def named() -> Workflow:
+        workflow = original()
+        workflow.name = _MARKER
+        return workflow
+
+    monkeypatch.setattr(cli, "_base_workflow", named)
+    base = cli._base_bundle(tmp_path / "in")
+    cli._halt_run(base, tmp_path / "in" / "run")
+    fix = cli._dismiss_recording(tmp_path / "in" / "fix")
+    assert Workflow.load(base).name == _MARKER
+    return tmp_path / "in" / "run", fix, base
+
+
+def test_strict_teach_success_never_prints_a_name_from_its_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, base = _named_teach_inputs(tmp_path, monkeypatch)
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    out = tmp_path / "taught"
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(base)]
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    assert main([*args, "--out", str(out)]) == 0
+    learned = capfd.readouterr()
+    # A second teach reads the library back and refuses with no_change.
+    assert main([*args, "--out", str(out)]) == 1
+    again = capfd.readouterr()
+    for text in (learned.out, learned.err, again.out, again.err, caplog.text):
+        assert _MARKER not in text
+    assert "LEARNED" in learned.out and "no_change" in again.out
+    assert "(skill withheld, sha256 " in learned.out
+    for root in (out, out.parent / f"{out.name}.skills", fix / "_teach_compiled"):
+        _marker_absent(root)
+
+
+def test_teach_success_on_plain_input_names_its_skill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """The control: outside strict mode a plaintext run's summary names it."""
+    run, fix, base = _named_teach_inputs(tmp_path, monkeypatch)
+    out = tmp_path / "taught"
+    capsys.readouterr()
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(base)]
+    assert main([*args, "--out", str(out)]) == 0
+    assert f"(skill {_MARKER!r})" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("strict", [True, False], ids=["strict", "plain"])
+def test_push_success_names_the_workflow_only_for_plain_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog, strict: bool
+) -> None:
+    from openadapt_flow import hosted
+
+    if strict:
+        monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    pushed = {
+        "workflow_id": "wf_1",
+        "workflow_name": _MARKER,
+        "kind": "bundle",
+        "status": "active",
+    }
+    monkeypatch.setattr(hosted, "push", lambda *a, **kw: pushed)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    push = ["push", str(bundle), "--kind", "bundle", "--host", "https://h.test"]
+    assert main([*push, "--token", "tok"]) == 0
+    captured = capfd.readouterr()
+    assert "Pushed. workflow_id=wf_1" in captured.out
+    if strict:
+        for text in (captured.out, captured.err, caplog.text):
+            assert _MARKER not in text
+        assert "name=withheld, sha256 " in captured.out
+    else:
+        assert f"name={_MARKER!r}" in captured.out
