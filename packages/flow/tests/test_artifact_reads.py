@@ -1290,3 +1290,27 @@ def test_a_path_whose_header_cannot_be_checked_is_private(tmp_path: Path) -> Non
         assert _private_input(argparse.Namespace(example=[str(locked / "inner")]))
     finally:
         locked.chmod(0o700)
+
+
+@pytest.mark.parametrize(
+    ("winerror", "private"), [(123, False), (161, False), (None, True), (5, True)]
+)
+def test_a_name_windows_cannot_hold_is_public(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, winerror, private: bool
+) -> None:
+    """A URL argument on Windows (a colon in a name) cannot name a local
+    path, so it is public; any other error checking the header is private."""
+    import argparse
+    import errno
+
+    from openadapt_flow.__main__ import _private_input
+
+    def stat(path, *args, **kwargs):
+        exc = OSError(errno.EINVAL, "The filename syntax is incorrect")
+        if winerror is not None:
+            exc.winerror = winerror  # type: ignore[attr-defined]
+        raise exc
+
+    monkeypatch.setattr(os, "stat", stat)
+    args = argparse.Namespace(effects_base_url="http://127.0.0.1:8080")
+    assert _private_input(args) is private

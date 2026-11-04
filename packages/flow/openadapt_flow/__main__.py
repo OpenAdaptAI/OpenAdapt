@@ -13435,6 +13435,9 @@ def _sealed_root_named(text: str) -> Optional[Path]:
 
     # The path cannot exist, so nothing sealed can be read through it.
     no_such_path = (errno.ENOENT, errno.ENOTDIR, errno.ENAMETOOLONG)
+    # Windows rejects a name it cannot hold, such as "http:" with a colon
+    # (ERROR_INVALID_NAME, ERROR_BAD_PATHNAME): no such path can exist either.
+    invalid_name = (123, 161)
     try:
         full = os.path.abspath(text)
     except ValueError:  # an embedded NUL: no such path
@@ -13446,7 +13449,8 @@ def _sealed_root_named(text: str) -> Optional[Path]:
         except ValueError:
             return None
         except OSError as exc:
-            if exc.errno not in no_such_path:
+            invalid = getattr(exc, "winerror", None) in invalid_name
+            if exc.errno not in no_such_path and not invalid:
                 raise _UnclassifiedArgument(
                     "a path whose sealed header cannot be checked"
                 ) from exc
