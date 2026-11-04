@@ -136,7 +136,7 @@ class AgentSpec(_Strict):
     #: the oracle uses, reset routes, and anything else that would let the
     #: agent read or rewrite the answer.
     blocked_paths: list[str] = Field(default_factory=list)
-    #: The requests that carry the task's write (``"POST /api/encounter"``).
+    #: The requests that carry the task's write (``"POST /api/items"``).
     #: An infeasible task pays a failure report only if the agent's browser
     #: sent one whose body holds every value in the task's ``params``.
     write_requests: list[str] = Field(default_factory=list)

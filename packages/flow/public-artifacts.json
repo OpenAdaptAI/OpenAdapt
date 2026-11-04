@@ -615,6 +615,8 @@
     "schemas/sanitization-ingest-v1.json",
     "schemas/sanitized-artifact-approval-v1.json",
     "schemas/sanitized-artifact-manifest-v1.json",
+    "scripts/generality.toml",
+    "scripts/generality_baseline.json",
     "source-policy.public.json",
     "tests/golden/tutorial_run.json"
   ]

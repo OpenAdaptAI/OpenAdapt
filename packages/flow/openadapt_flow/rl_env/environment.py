@@ -227,7 +227,7 @@ def _norm(value: str) -> str:
 def _scalars(body: str) -> set[str]:
     """Every scalar value in a JSON or form body, as text.
 
-    A form field holding JSON (as Frappe sends ``doc=...``) is read through.
+    A form field holding JSON (such as ``doc=...``) is read through.
     """
     from urllib.parse import parse_qsl
 

@@ -1,0 +1,280 @@
+{
+  "__main__.py": {
+    "mockmed": 43,
+    "textedit": 1
+  },
+  "api.py": {
+    "mockmed": 1
+  },
+  "backend.py": {
+    "mockmed-records": 1
+  },
+  "backends/factory.py": {
+    "textedit": 1
+  },
+  "backends/parallels_vm.py": {
+    "open-dental": 1
+  },
+  "backends/playwright_backend.py": {
+    "openemr": 1
+  },
+  "backends/win_agent/server.py": {
+    "notepad": 1
+  },
+  "cli_undo.py": {
+    "mockmed": 2
+  },
+  "cli_variants.py": {
+    "mockmed": 2
+  },
+  "compile_agent/code_action.py": {
+    "openemr": 1,
+    "token_main": 1
+  },
+  "compiler/binding_admission.py": {
+    "mockmed": 3,
+    "mockmed-records": 1,
+    "mockmed-write": 2
+  },
+  "compiler/compile.py": {
+    "mockmed": 3,
+    "mockmed-records": 1,
+    "openemr": 1
+  },
+  "compiler/effect_mining.py": {
+    "mockmed": 1,
+    "mockmed-records": 1
+  },
+  "compiler/fixup_passes.py": {
+    "openemr": 1
+  },
+  "compiler/local_edit.py": {
+    "mockmed": 1
+  },
+  "demo_driver.py": {
+    "mockloan": 2
+  },
+  "deployment.py": {
+    "mockmed": 2,
+    "mockmed-records": 2,
+    "openemr": 2,
+    "textedit": 1
+  },
+  "eligibility/__init__.py": {
+    "stedi": 6
+  },
+  "eligibility/client.py": {
+    "stedi": 28
+  },
+  "eligibility/payer_routes.yaml": {
+    "stedi": 5
+  },
+  "eligibility/waterfall.py": {
+    "stedi": 9
+  },
+  "ensure_record.py": {
+    "medplum": 3
+  },
+  "execute/app.py": {
+    "mockmed": 4
+  },
+  "execute/dispatch.py": {
+    "mockmed": 10
+  },
+  "execute/registry.py": {
+    "mockmed": 19
+  },
+  "execute/service.py": {
+    "mockmed": 4
+  },
+  "execution_profiles.py": {
+    "mockmed": 1
+  },
+  "fault_gate.py": {
+    "mockmed-records": 1,
+    "openemr": 1
+  },
+  "generate/demo_analysis.py": {
+    "redmine": 1
+  },
+  "generate/ensure_contract.py": {
+    "medplum": 2
+  },
+  "generate/verify_contract.py": {
+    "dolibarr": 1,
+    "espocrm": 2,
+    "redmine": 2
+  },
+  "ir.py": {
+    "token_main": 1
+  },
+  "jit/authority.py": {
+    "textedit": 2
+  },
+  "jit/compile_agent.py": {
+    "textedit": 1
+  },
+  "jit/recorded.py": {
+    "mockmed": 1
+  },
+  "jit/signature.py": {
+    "mockmed": 1
+  },
+  "mockloan/__init__.py": {
+    "mockloan": 2,
+    "mockmed": 2
+  },
+  "mockloan/fault_server.py": {
+    "mockloan": 6,
+    "mockmed-records": 2
+  },
+  "mockloan/server.py": {
+    "mockloan": 4
+  },
+  "mockloan/static/app.js": {
+    "mockloan": 3,
+    "mockmed": 1
+  },
+  "mockloan/static/index.html": {
+    "mockloan": 2
+  },
+  "mockloan/static/styles.css": {
+    "mockloan": 1,
+    "mockmed": 1
+  },
+  "operator_profile.py": {
+    "openemr": 1
+  },
+  "policy_packs.py": {
+    "mockmed": 1
+  },
+  "qualification_dev_signer.py": {
+    "mockmed": 1
+  },
+  "qualification_oracle_gate.py": {
+    "mockmed": 8,
+    "mockmed-records": 2,
+    "mockmed-write": 1
+  },
+  "qualification_proposal.py": {
+    "mockmed": 1
+  },
+  "qualification_web_session.py": {
+    "openemr": 1,
+    "openimis": 1
+  },
+  "qualify/config.py": {
+    "openemr": 1
+  },
+  "record_check_binding.py": {
+    "openimis": 1
+  },
+  "record_check_identity.py": {
+    "openemr": 1
+  },
+  "record_check_proof.py": {
+    "mockmed": 12,
+    "mockmed-records": 1,
+    "mockmed-write": 1
+  },
+  "record_check_synthesis.py": {
+    "mockmed": 1
+  },
+  "registry.py": {
+    "openemr": 2
+  },
+  "report_redaction.py": {
+    "csrf_token_form": 2,
+    "token_main": 1
+  },
+  "reward/bundle.py": {
+    "mockmed": 3
+  },
+  "reward/models.py": {
+    "mockmed-records": 1
+  },
+  "reward/seed.py": {
+    "mockmed": 34
+  },
+  "risk.py": {
+    "openemr": 1,
+    "openimis": 1
+  },
+  "rollback_state.py": {
+    "openemr": 1
+  },
+  "runtime/actuators/web_form.py": {
+    "openemr": 2
+  },
+  "runtime/effects/__init__.py": {
+    "frappe": 1,
+    "mockmed": 1,
+    "mockmed-records": 1,
+    "openemr": 1
+  },
+  "runtime/effects/_common.py": {
+    "openemr": 1
+  },
+  "runtime/effects/auth.py": {
+    "frappe": 1
+  },
+  "runtime/effects/compensation.py": {
+    "mockmed-write": 2
+  },
+  "runtime/effects/db_snapshot.py": {
+    "dolibarr": 1,
+    "dolibarr-table": 1
+  },
+  "runtime/effects/effect.py": {
+    "mockmed": 2,
+    "openemr": 5,
+    "redmine": 1
+  },
+  "runtime/effects/fhir.py": {
+    "epic": 1,
+    "mockmed": 2,
+    "openemr": 8,
+    "openemr-fhir-path": 2
+  },
+  "runtime/effects/frame.py": {
+    "openemr": 7,
+    "patient_data": 1,
+    "pnotes": 1,
+    "uuid_registry": 1
+  },
+  "runtime/effects/fresh_session.py": {
+    "mockmed": 1
+  },
+  "runtime/effects/rest.py": {
+    "mockmed": 1,
+    "mockmed-records": 2,
+    "openemr": 1
+  },
+  "runtime/effects/sql.py": {
+    "frappe": 7,
+    "frappe-table": 1,
+    "openemr": 1
+  },
+  "runtime/identity.py": {
+    "mockmed": 1
+  },
+  "runtime/replayer.py": {
+    "mockmed": 1
+  },
+  "submit_binding.py": {
+    "openimis": 1
+  },
+  "validation/dense_surface.py": {
+    "mockmed": 1,
+    "openemr": 2
+  },
+  "verifier.py": {
+    "openemr": 1
+  },
+  "vision/hashing.py": {
+    "mockmed": 1
+  },
+  "volatility.py": {
+    "openemr": 3
+  }
+}
