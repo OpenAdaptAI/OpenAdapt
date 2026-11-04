@@ -41,7 +41,7 @@ from typing import Any, Optional
 GUEST_DIR = r"C:\oa\pack"
 DATA_DIR = r"C:\oa\pack\data"
 #: Values that reach a PowerShell script from a task file.
-_SAFE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+_SAFE = re.compile(r"[a-z][a-z0-9_]{0,31}")
 APPS_DIR = (
     Path(__file__).resolve().parents[2]
     / "environments"
@@ -52,53 +52,68 @@ APPS_DIR = (
 APP_FILES = ("pack_db.py", "patient_chart.ps1", "claims_desk.ps1")
 PACK_DB_SHA256 = hashlib.sha256((APPS_DIR / "pack_db.py").read_bytes()).hexdigest()
 APP_TASK = "OAEnvApp"
-# Every process in the desktop session except the session's own shell and
-# the in-guest agent. Explorer stays (it is the desktop); the rest is
-# whatever an app or an agent started.
+# Processes of the desktop account that stay across a reset: its shell. The
+# in-guest agent stays too (matched by its command line). Everything else the
+# account runs in its desktop session (the app, a save still writing, any
+# window the last episode opened) is stopped. System processes in that
+# session (winlogon, csrss, dwm, fontdrvhost) are owned by other accounts and
+# never touched.
 _KEEP = (
-    "explorer.exe",
-    "sihost.exe",
-    "ctfmon.exe",
-    "dwm.exe",
-    "svchost.exe",
-    "taskhostw.exe",
-    "runtimebroker.exe",
-    "searchhost.exe",
-    "startmenuexperiencehost.exe",
-    "shellexperiencehost.exe",
-    "textinputhost.exe",
-    "conhost.exe",
-    "rdpclip.exe",
-    "smartscreen.exe",
-    "securityhealthsystray.exe",
-    "widgets.exe",
-    "widgetservice.exe",
-    "lockapp.exe",
-    "useroobebroker.exe",
-    "applicationframehost.exe",
-    "systemsettings.exe",
-    "dllhost.exe",
-    "backgroundtaskhost.exe",
-    "crossdeviceresume.exe",
-    "phoneexperiencehost.exe",
-    "msedgewebview2.exe",
-    "onedrive.exe",
-    "wsmprovhost.exe",
+    "explorer",
+    "sihost",
+    "ctfmon",
+    "svchost",
+    "taskhostw",
+    "runtimebroker",
+    "searchhost",
+    "startmenuexperiencehost",
+    "shellexperiencehost",
+    "textinputhost",
+    "rdpclip",
+    "securityhealthsystray",
+    "widgets",
+    "widgetservice",
+    "lockapp",
+    "applicationframehost",
+    "dllhost",
+    "backgroundtaskhost",
+    "crossdeviceresume",
+    "phoneexperiencehost",
+    "msedgewebview2",
+    "onedrive",
+    "useroobebroker",
+    "smartscreen",
 )
-_STOP_DESKTOP_PROCESSES = (
-    "$keep = @(" + ",".join(f"'{n}'" for n in _KEEP) + ")\n"
-    "$session = (Get-Process -Name explorer -ErrorAction SilentlyContinue | "
-    "Select-Object -First 1).SessionId\n"
-    "if ($null -ne $session) {\n"
-    "  Get-CimInstance Win32_Process | Where-Object { $_.SessionId -eq $session -and "
-    "$keep -notcontains $_.Name.ToLower() -and $_.CommandLine -notlike '*win_agent_server.py*' } | "
-    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n"
-    "}\n"
-    # A save launched from session 0 or still exiting.
-    "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
-    "Where-Object { $_.CommandLine -like '*pack_db.py*' } | "
-    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n"
-    "Start-Sleep -Milliseconds 300\n"
+
+
+def _stop_desktop_processes(user: str) -> str:
+    """PowerShell that stops the desktop account's own processes but its shell."""
+    short = _ps_quote(user.split("\\")[-1])
+    return (
+        "$keep = @(" + ",".join(f"'{n}'" for n in _KEEP) + ")\n"
+        f"$line = (query session '{short}' 2>$null | Select-Object -Skip 1 | Select-Object -First 1)\n"
+        "if ($line -and $line -match '\\s(\\d+)\\s+(Active|Disc)') {\n"
+        "  $sid = [int]$Matches[1]\n"
+        "  $agent = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "
+        "'*win_agent_server.py*' } | ForEach-Object { $_.ProcessId })\n"
+        "  Get-Process -IncludeUserName | Where-Object { $_.SessionId -eq $sid -and $_.UserName "
+        f"-and $_.UserName.Split('\\')[-1] -eq '{short}' -and $keep -notcontains "
+        "$_.ProcessName.ToLower() -and $agent -notcontains $_.Id } | "
+        "ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }\n"
+        "}\n"
+        # A save launched from another session, or still exiting.
+        "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+        "Where-Object { $_.CommandLine -like '*pack_db.py*' } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n"
+        "Start-Sleep -Milliseconds 300\n"
+    )
+
+
+# Every oracle-side script starts here: no profile scripts (run_ps passes
+# -NoProfile) and only the system's own modules, so nothing the desktop
+# account can write is loaded into the elevated WinRM shell.
+_PREAMBLE = (
+    '$env:PSModulePath = "$env:windir\\system32\\WindowsPowerShell\\v1.0\\Modules"\n'
 )
 AGENT_TASK = "OAEnvAgent"
 # One WinRM command line holds about 8 KB once PowerShell encodes it.
@@ -135,7 +150,7 @@ def _ps_quote(value: str) -> str:
 
 
 def _safe(name: str, value: str) -> str:
-    if not _SAFE.match(value):
+    if not isinstance(value, str) or not _SAFE.fullmatch(value):
         raise GuestError(f"{name} {value!r} is not a plain identifier")
     return value
 
@@ -170,7 +185,14 @@ class WindowsGuest:
         self.host = host or _env("OPENADAPT_WINENV_HOST", "OAFLOW_WINLAB_HOST")
         self.user = user or _env("OPENADAPT_WINENV_USER", "OAFLOW_WINLAB_USER")
         secret = password or _env("OPENADAPT_WINENV_PASSWORD", "OAFLOW_WINLAB_PASSWORD")
-        self._secret = secret
+        # The account signed in to the desktop (apps, agent, RDP). A separate
+        # standard account is safest; by default it is the WinRM account.
+        self.desktop_user = os.environ.get("OPENADAPT_WINENV_DESKTOP_USER") or self.user
+        self._desktop_secret = (
+            os.environ.get("OPENADAPT_WINENV_DESKTOP_PASSWORD")
+            if self.desktop_user != self.user
+            else secret
+        )
         self._session = winrm.Session(
             f"http://{self.host}:{port}/wsman",
             auth=(self.user, secret),
@@ -182,16 +204,35 @@ class WindowsGuest:
         )
 
     def rdp_password(self) -> str:
-        """The account's password, for the RDP surface's sign-in only."""
-        return self._secret
+        """The desktop account's password, for the RDP surface's sign-in only."""
+        if not self._desktop_secret:
+            raise GuestError(
+                "set OPENADAPT_WINENV_DESKTOP_PASSWORD for the RDP surface"
+            )
+        return self._desktop_secret
 
     # -- primitives ---------------------------------------------------------
     def run_ps(self, script: str, *, check: bool = True) -> GuestResult:
-        raw = self._session.run_ps(script)
+        """Run ``script`` in PowerShell without profile scripts or user modules."""
+        encoded = base64.b64encode((_PREAMBLE + script).encode("utf-16-le")).decode(
+            "ascii"
+        )
+        raw = self._session.run_cmd(
+            "powershell.exe",
+            [
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-EncodedCommand",
+                encoded,
+            ],
+        )
+        stderr = raw.std_err.decode("utf-8", "replace")
+        if stderr.startswith("#< CLIXML"):
+            stderr = re.sub(r"<[^>]+>", " ", stderr)
         result = GuestResult(
-            raw.status_code,
-            raw.std_out.decode("utf-8", "replace"),
-            raw.std_err.decode("utf-8", "replace"),
+            raw.status_code, raw.std_out.decode("utf-8", "replace"), stderr
         )
         if check and result.status != 0:
             raise GuestError(
@@ -236,7 +277,7 @@ class WindowsGuest:
         task = name.replace("'", "")
         return f"""
 $action = New-ScheduledTaskAction -Execute '{_ps_quote(exe)}'{argument}
-$principal = New-ScheduledTaskPrincipal -UserId '{_ps_quote(self.user)}' -LogonType Interactive
+$principal = New-ScheduledTaskPrincipal -UserId '{_ps_quote(self.desktop_user)}' -LogonType Interactive
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 12)
 Register-ScheduledTask -TaskName '{task}' -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName '{task}'
@@ -250,7 +291,7 @@ Start-ScheduledTask -TaskName '{task}'
         """
         self.run_ps(
             f"""
-$line = (query session '{_ps_quote(self.user)}' 2>$null | Select-Object -Skip 1 | Select-Object -First 1)
+$line = (query session '{_ps_quote(self.desktop_user.split(chr(92))[-1])}' 2>$null | Select-Object -Skip 1 | Select-Object -First 1)
 if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
   $action = New-ScheduledTaskAction -Execute 'tscon.exe' -Argument "$($Matches[1]) /dest:console"
   Register-ScheduledTask -TaskName OAEnvConsole -Action $action -User SYSTEM -RunLevel Highest -Force | Out-Null
@@ -273,9 +314,11 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         ``pack_db.py``, which the oracle runs. A write probe started on the
         desktop proves it: if the probe's file appears, deploy refuses.
         """
-        user = _ps_quote(self.user)
+        user = _ps_quote(self.desktop_user)
         self.run_ps(
             f"New-Item -ItemType Directory -Force '{DATA_DIR}' | Out-Null\n"
+            # /remove:g drops an explicit grant an earlier setup left behind.
+            f"icacls '{GUEST_DIR}' /remove:g '{user}' | Out-Null\n"
             f"icacls '{GUEST_DIR}' /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' "
             "'*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null\n"
             "if ($LASTEXITCODE) { throw 'icacls on the pack directory failed' }\n"
@@ -288,20 +331,36 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             f"Set-Content -Encoding ascii -Path '{GUEST_DIR}\\python.txt' "
             f"-Value '{_ps_quote(self.python)}'"
         )
+        # The probe writes into data (the positive control: it ran, as the
+        # desktop account) and tries the code directory, which must refuse.
         probe = rf"{GUEST_DIR}\write-probe.txt"
-        self.run_ps(f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}'")
+        control = rf"{DATA_DIR}\write-probe.txt"
+        self.run_ps(
+            f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}','{control}'"
+        )
         self.run_ps(
             self._interactive_script(
                 "powershell.exe",
-                f"-NoProfile -WindowStyle Hidden -Command Set-Content -Path '{probe}' -Value probe",
+                f"-NoProfile -WindowStyle Hidden -Command Set-Content -Path '{control}' "
+                f"-Value probe; Set-Content -Path '{probe}' -Value probe",
                 "OAEnvProbe",
             )
-            + "Start-Sleep -Seconds 4\n"
+            + f"$deadline = (Get-Date).AddSeconds(30)\n"
+            f"while (-not (Test-Path '{control}') -and (Get-Date) -lt $deadline) "
+            "{ Start-Sleep -Milliseconds 500 }\n"
+            "Start-Sleep -Seconds 1\n"
             "Unregister-ScheduledTask -TaskName OAEnvProbe -Confirm:$false\n"
         )
-        wrote = self.run_ps(f"Test-Path '{probe}'").stdout.strip()
-        if wrote != "False":
-            self.run_ps(f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}'")
+        ran = self.run_ps(f"Test-Path '{control}'").stdout.strip() == "True"
+        wrote = self.run_ps(f"Test-Path '{probe}'").stdout.strip() != "False"
+        self.run_ps(
+            f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}','{control}'"
+        )
+        if not ran:
+            raise GuestError(
+                "the desktop write probe did not run (is the desktop account signed in?)"
+            )
+        if wrote:
             raise GuestError(
                 "the desktop session can write the pack's code directory (is UAC "
                 "off, or the desktop session elevated?); refusing a guest where an "
@@ -310,8 +369,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
 
     def _db(self, *args: str) -> Any:
         quoted = " ".join(f"'{_ps_quote(a)}'" for a in args)
+        # -I: no user site-packages or .pth files, nothing from the
+        # environment the desktop account controls.
         out = self.run_ps(
-            f"& '{_ps_quote(self.python)}' '{GUEST_DIR}\\pack_db.py' {quoted}"
+            f"& '{_ps_quote(self.python)}' -I '{GUEST_DIR}\\pack_db.py' {quoted}"
         )
         return last_json(out.stdout)
 
@@ -346,8 +407,8 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             # The desktop account's processes other than the agent and the
             # shell: the app, a save still writing, and anything the last
             # episode opened.
-            + _STOP_DESKTOP_PROCESSES
-            + f"$seed = & '{_ps_quote(self.python)}' '{GUEST_DIR}\\pack_db.py' seed '{app}' "
+            + _stop_desktop_processes(self.desktop_user)
+            + f"$seed = & '{_ps_quote(self.python)}' -I '{GUEST_DIR}\\pack_db.py' seed '{app}' "
             f"--fault '{fault}' --variant '{variant}'\n"
             f"Set-Content -Encoding utf8 -Path '{DATA_DIR}\\{app}_ui.json' "
             f"-Value '{_ps_quote(ui_json)}'\n"
@@ -361,6 +422,8 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             "Write-Output ($r | ConvertTo-Json -Compress)\n"
         )
         result = last_json(self.run_ps(script).stdout)
+        if not isinstance(result, dict) or not result.get("digest"):
+            raise GuestError("the guest did not restore the database")
         if result.get("pack_db_sha256") != PACK_DB_SHA256:
             raise GuestError("the guest's pack_db.py differs from this server's copy")
         return result

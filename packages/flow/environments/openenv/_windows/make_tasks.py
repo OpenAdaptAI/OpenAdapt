@@ -173,7 +173,8 @@ def _cd_task(
     instruction = (
         f"In Claims Desk, open claim {claim_no} ({member}, member {member_id}, service "
         f"{service_date}, billed {billed}) and record one decision: {decision}, allowed "
-        f'amount {amount}, note "{note}". Other claims have similar numbers and members. '
+        f'amount {amount} (typed exactly as written), note "{note}". Other claims have '
+        "similar numbers and members. "
         "The claim shows how many decisions are on file and the last one. Finish with "
         "done: claim success only if that claim now holds exactly this decision once, "
         "otherwise claim failure."

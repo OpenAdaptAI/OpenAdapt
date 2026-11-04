@@ -343,7 +343,7 @@ def _rdp_backend(spec: RdpSpec, guest: Any) -> Any:
     if spec.transport == "aardwolf":
         transport = AardwolfTransport.from_credentials(
             guest.host,
-            guest.user,
+            guest.desktop_user,
             password,
             width=spec.width,
             height=spec.height,
@@ -356,7 +356,9 @@ def _rdp_backend(spec: RdpSpec, guest: Any) -> Any:
         )
 
         transport = XFreeRDPTransport(
-            RdpTarget(host=guest.host, username=guest.user, ignore_certificate=True),
+            RdpTarget(
+                host=guest.host, username=guest.desktop_user, ignore_certificate=True
+            ),
             SessionProfile(
                 width=spec.width,
                 height=spec.height,

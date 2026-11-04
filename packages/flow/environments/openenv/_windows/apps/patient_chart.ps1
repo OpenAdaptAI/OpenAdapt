@@ -40,7 +40,7 @@ function Invoke-Db {
     param([string[]]$DbArgs)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $Python
-    $psi.Arguments = (@("`"$DbCli`"") + $DbArgs) -join ' '
+    $psi.Arguments = (@("-I", "`"$DbCli`"") + $DbArgs) -join ' '
     $psi.RedirectStandardOutput = $true
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true

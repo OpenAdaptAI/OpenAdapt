@@ -200,6 +200,7 @@ class SimEndpoint:
 class SimGuest:
     host = "sim-guest"
     user = "lab"
+    desktop_user = "lab"
 
     def rdp_password(self) -> str:
         return "unused"
@@ -412,7 +413,7 @@ def test_guest_scripts_take_only_plain_identifiers_and_escape_quotes() -> None:
     from openadapt_flow.rl_env import windows_guest as wg
 
     assert wg._safe("fault", "wrong_row") == "wrong_row"
-    for bad in ("x'; Remove-Item C:\\", "drop\u2019", "", "A"):
+    for bad in ("x'; Remove-Item C:\\", "drop\u2019", "", "A", "ok\n"):
         with pytest.raises(wg.GuestError):
             wg._safe("fault", bad)
     assert wg._ps_quote("it's \u2018x\u2019") == "it''s \u2018\u2018x\u2019\u2019"
@@ -420,3 +421,15 @@ def test_guest_scripts_take_only_plain_identifiers_and_escape_quotes() -> None:
         wg.PACK_DB_SHA256
         == __import__("hashlib").sha256(desktop.PACK_DB.read_bytes()).hexdigest()
     )
+
+
+def test_reset_stops_only_the_desktop_accounts_own_processes() -> None:
+    from openadapt_flow.rl_env import windows_guest as wg
+
+    script = wg._stop_desktop_processes("LAB\\desk")
+    # Scoped to the account's own session and its own processes; the agent
+    # and the shell are kept.
+    assert "query session 'desk'" in script
+    assert "-IncludeUserName" in script and "-eq 'desk'" in script
+    assert "win_agent_server.py" in script and "'explorer'" in script
+    assert "winlogon" not in script and "csrss" not in script
