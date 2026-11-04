@@ -755,6 +755,7 @@ OutcomeLiteral = Literal[
     "refused",
     "rejected_policy",
     "wrong_effect",
+    "escalated_after_effect",
     "reconciliation_required",
     "failed_platform",
 ]
