@@ -612,6 +612,9 @@ def run_worklist_pool(
     workers share a session.
     """
 
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.hold_back_in_strict("a worklist pool report")
     refusal = policy.refusal()
     if refusal is None and len(workers) != policy.workers:
         refusal = f"{policy.workers} workers requested but {len(workers)} configured"

@@ -437,6 +437,9 @@ def execute_variant_set(
     outcome ``DRY_RUN``; nothing is executed.
     """
 
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.hold_back_in_strict("a variant report")
     parent = Path(parent_dir)
     root = Path(run_dir)
     started = _now()

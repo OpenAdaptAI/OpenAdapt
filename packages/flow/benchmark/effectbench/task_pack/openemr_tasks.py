@@ -18,7 +18,7 @@ oracle before any of these becomes release-eligible.
 
 The SQL each oracle runs (``oracle.config["query"]`` + ``["query_params"]``) is
 what the multi-baseline runner materializes into a
-:class:`~openadapt_flow.benchmark.effectbench.SqlRecordVerifier` (read-only role;
+:class:`~benchmark.harness.effectbench.SqlRecordVerifier` (read-only role;
 values bound through DB-API params, never interpolated). Column names become
 record keys, so the same typed ``Effect`` the MockMed anchor uses judges these
 rows unchanged.
@@ -36,15 +36,15 @@ from benchmark.effectbench.task_pack._authoring import (
     param,
     record_written_effect,
 )
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     DivergenceCategory as DC,
 )
-from openadapt_flow.benchmark.effectbench import (
+from benchmark.harness.effectbench import (
     Effect,
     Substrate,
     TaskSpec,
 )
-from openadapt_flow.benchmark.effectbench.schema import OracleChannel
+from benchmark.harness.effectbench.schema import OracleChannel
 
 ENVIRONMENT = "openemr_local"
 
