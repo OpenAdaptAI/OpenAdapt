@@ -146,7 +146,7 @@ def _pc_task(
         {"kind": "type", "text": mrn},
         {"kind": "press", "text": "enter"},
         {"kind": "wait", "seconds": 2},
-        {"kind": "click", "target": "patientGrid", "at": [80, 52]},
+        {"kind": "click", "target": "patientGrid", "at": [0.11, 0.226]},
         {"kind": "wait", "seconds": 2},
         {"kind": "click", "target": "noteBox"},
         {"kind": "type", "text": note},
@@ -156,7 +156,7 @@ def _pc_task(
     if fault == "drop_first":
         # Re-open the chart: the count did not move, so save again.
         solution += [
-            {"kind": "click", "target": "patientGrid", "at": [80, 52]},
+            {"kind": "click", "target": "patientGrid", "at": [0.11, 0.226]},
             {"kind": "wait", "seconds": 2},
             {"kind": "click", "target": "noteBox"},
             {"kind": "type", "text": note},
@@ -208,7 +208,7 @@ def _cd_task(
         {"kind": "type", "text": claim_no},
         {"kind": "press", "text": "enter"},
         {"kind": "wait", "seconds": 2},
-        {"kind": "click", "target": "claimsGrid", "at": [80, 49]},
+        {"kind": "click", "target": "claimsGrid", "at": [0.05, 0.196]},
         {"kind": "wait", "seconds": 2},
         {"kind": "click", "target": f"status{decision}"},
         {"kind": "click", "target": "amountBox"},
@@ -221,7 +221,7 @@ def _cd_task(
     if fault == "drop_first":
         # Re-open the claim: no new decision on file, so record it again.
         solution += [
-            {"kind": "click", "target": "claimsGrid", "at": [80, 49]},
+            {"kind": "click", "target": "claimsGrid", "at": [0.05, 0.196]},
             {"kind": "wait", "seconds": 2},
             {"kind": "click", "target": f"status{decision}"},
             {"kind": "click", "target": "amountBox"},

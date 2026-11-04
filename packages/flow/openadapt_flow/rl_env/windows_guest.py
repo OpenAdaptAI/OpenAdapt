@@ -459,8 +459,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         # desktop account) and tries the code directory, which must refuse.
         probe = rf"{GUEST_DIR}\write-probe.txt"
         control = rf"{DATA_DIR}\write-probe.txt"
+        # Over SSH a missing file would make this read as a failed script.
         self.run_ps(
-            f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}','{control}'"
+            f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}','{control}'",
+            check=False,
         )
         self.run_ps(
             self._interactive_script(
@@ -477,8 +479,10 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         )
         ran = self.run_ps(f"Test-Path '{control}'").stdout.strip() == "True"
         wrote = self.run_ps(f"Test-Path '{probe}'").stdout.strip() != "False"
+        # Over SSH a missing file would make this read as a failed script.
         self.run_ps(
-            f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}','{control}'"
+            f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}','{control}'",
+            check=False,
         )
         if not ran:
             raise GuestError(

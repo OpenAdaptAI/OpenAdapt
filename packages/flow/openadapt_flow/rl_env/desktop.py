@@ -294,9 +294,10 @@ class DesktopAction(Action):
     #: element list carries the ids); on the pixels-only surface only in a
     #: reference run.
     target: Optional[str] = None
-    #: With ``target``: offset from the element's top-left corner (a grid's
-    #: first row, say) instead of its centre.
-    at: Optional[list[int]] = None
+    #: With ``target``: a point inside the element as fractions of its width
+    #: and height from its top-left corner (a grid's first row, say) instead
+    #: of its centre. Fractions hold at any display scale.
+    at: Optional[list[float]] = None
     text: Optional[str] = Field(
         default=None, description="type: text; press: key or chord"
     )
@@ -596,9 +597,11 @@ class OpenAdaptDesktopEnvironment(
         if action.at:
             if handle.region is None:
                 raise ValueError(f"element {action.target!r} has no bounds")
-            return int(handle.region[0] + action.at[0]), int(
-                handle.region[1] + action.at[1]
-            )
+            fx, fy = action.at
+            if not (0.0 <= fx <= 1.0 and 0.0 <= fy <= 1.0):
+                raise ValueError("at is a pair of fractions in [0, 1]")
+            x, y, w, h = handle.region
+            return int(x + fx * w), int(y + fy * h)
         return int(handle.point[0]), int(handle.point[1])
 
     def _act(self, action: DesktopAction) -> Optional[str]:

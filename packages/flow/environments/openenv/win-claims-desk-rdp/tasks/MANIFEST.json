@@ -5,13 +5,13 @@
     "feasible": 12,
     "file": "claims_desk.heldout.jsonl",
     "location": "private (OpenAdaptAI/openadapt-corpus)",
-    "sha256": "0527fa83a339f25db388fd614a3678be02db39de864b988654735a01ca2ebcff",
+    "sha256": "1fc8e5d32a60015208ffd7cb2a1b2b424ebad06af97f1fe751846df3370e1501",
     "tasks": 24
   },
   "public": {
     "feasible": 12,
     "file": "public.jsonl",
-    "sha256": "3fe11ee0dbef0051bfbec0902058782ab9f49152de7e4e8b4832f1aad36f3a1a",
+    "sha256": "4f8d3ba8aaf9f260bb51024c33b5cb970f3c0e8a1178487bcf3f10d5c35534a1",
     "tasks": 24
   },
   "schema": "openadapt.rl-env-task-manifest/v1",
