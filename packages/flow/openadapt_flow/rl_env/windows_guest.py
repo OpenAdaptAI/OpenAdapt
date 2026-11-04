@@ -118,17 +118,23 @@ _STOP_PACK_PROCESSES = (
     "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n"
     "Start-Sleep -Milliseconds 300\n"
 )
-# Run over SSH: read the script from stdin and run it as one block; exit 1
-# when its last statement failed (as ``powershell -Command`` does).
-_SSH_BOOTSTRAP = base64.b64encode(
+# Over SSH: UTF-8 output, no progress records, and exit 1 when the script's
+# last statement failed (as ``powershell -Command`` does).
+_SSH_PRELUDE = (
+    "$ProgressPreference='SilentlyContinue'\n"
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8\n"
+)
+_SSH_EPILOGUE = "\nif (-not $?) { exit 1 }\n"
+# Room left on a cmd.exe command line for an encoded script.
+_CMD_LINE_ROOM = 7800
+# Reads "<length>\n<script>" from stdin, exactly <length> UTF-16 units, and
+# runs the script.
+_SSH_READER = base64.b64encode(
     (
-        "$ProgressPreference='SilentlyContinue'; "
         "[Console]::InputEncoding=[Text.Encoding]::UTF8; "
-        "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
-        "$global:OAEnvLastOk=$true; "
-        '$s=[Console]::In.ReadToEnd() + "`n`$global:OAEnvLastOk=`$?"; '
-        "& ([scriptblock]::Create($s)); "
-        "if (-not $global:OAEnvLastOk) { exit 1 }"
+        "$n=[int][Console]::In.ReadLine(); $b=New-Object char[] $n; $r=0; "
+        "while ($r -lt $n) { $k=[Console]::In.Read($b,$r,$n-$r); if ($k -le 0) { break }; $r+=$k }; "
+        "& ([scriptblock]::Create(-join $b))"
     ).encode("utf-16-le")
 ).decode("ascii")
 
@@ -266,17 +272,32 @@ class WindowsGuest:
     def run_ps(self, script: str, *, check: bool = True) -> GuestResult:
         """Run ``script`` in PowerShell without profile scripts or user modules."""
         if self._session is None:
-            # Over SSH the script goes on stdin: neither its length nor what
-            # it holds (an agent token) is on a command line.
-            proc = subprocess.run(
-                [
-                    *self._ssh_base(),
-                    f"powershell -NoProfile -NonInteractive -EncodedCommand {_SSH_BOOTSTRAP}",
-                ],
-                input=(_PREAMBLE + script).encode("utf-8"),
-                capture_output=True,
-                timeout=600,
-            )
+            body = _SSH_PRELUDE + _PREAMBLE + script + _SSH_EPILOGUE
+            encoded = base64.b64encode(body.encode("utf-16-le")).decode("ascii")
+            if len(encoded) < _CMD_LINE_ROOM:
+                # Short: one command line, no stdin at all.
+                remote, stdin = (
+                    f"powershell -NoProfile -NonInteractive -EncodedCommand {encoded}",
+                    b"",
+                )
+            else:
+                # Long (cmd.exe caps a command line at 8191 characters): the
+                # script goes on stdin after its length, so the reader stops
+                # at the last character and never waits for end-of-input,
+                # which Windows OpenSSH does not always deliver.
+                units = len(body.encode("utf-16-le")) // 2
+                remote = f"powershell -NoProfile -NonInteractive -EncodedCommand {_SSH_READER}"
+                stdin = f"{units}\n{body}".encode("utf-8")
+            try:
+                proc = subprocess.run(
+                    [*self._ssh_base(), remote],
+                    input=stdin,
+                    capture_output=True,
+                    timeout=180,
+                )
+            except subprocess.TimeoutExpired:
+                # The exception's text would repeat the command line.
+                raise GuestError(f"ssh to {self.host} timed out") from None
             status, stdout, stderr = (
                 proc.returncode,
                 proc.stdout.decode("utf-8", "replace"),
