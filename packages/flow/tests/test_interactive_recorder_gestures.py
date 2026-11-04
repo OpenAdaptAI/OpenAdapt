@@ -196,8 +196,17 @@ def _record_native_select(
 ) -> Path:
     def drive(page, pump) -> None:
         page.wait_for_selector("#sel", state="visible", timeout=20000)
+        kept = pump.__self__.events_kept
         page.locator("#sel").click()
         _settle(pump)
+        # On a slow runner the click may not be kept yet: pump until it is,
+        # so the type-ahead changes never share its batch (which the recorder
+        # refuses, by design).
+        for _ in range(200):
+            if pump.__self__.events_kept > kept:
+                break
+            pump()
+        assert pump.__self__.events_kept > kept, "the select click was never kept"
         # Real key events, so the browser's own change event is trusted, as
         # a person's selection is, at a person's pace: a change that arrives
         # before the click's frame is kept is refused, by design.
