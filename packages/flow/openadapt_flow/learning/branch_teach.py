@@ -89,6 +89,7 @@ from openadapt_flow.learning.teach import (
     _spec_from_recording,
     _texts_seen_before_halt,
     _was_delivered,
+    check_out_is_new,
     check_provenance,
     load_base_program,
     load_halt_report,
@@ -544,6 +545,13 @@ def teach_branch(
             "teach-branch needs at least two resolved halts. For one, use "
             "`openadapt-flow teach`"
         )
+    inputs: dict[str, Path | str] = {"base bundle": bundle}
+    for i, ex in enumerate(examples):
+        inputs[f"halted run {i + 1}"] = ex.run_dir
+        inputs[f"fix {i + 1}"] = ex.fix
+    for i, negative in enumerate(negatives):
+        inputs[f"normal run {i + 1}"] = negative
+    check_out_is_new(out, library=library_dir, **inputs)
     base, program = load_base_program(bundle)
     loaded = [_load_example(ex, base, program, Path(bundle)) for ex in examples]
     n_neg = len(negatives)

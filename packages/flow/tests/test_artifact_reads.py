@@ -601,6 +601,88 @@ def test_teach_refuses_a_plaintext_library_for_sealed_input(
     assert not out.exists()
 
 
+_MARKER = "PRIVATE-MARKER-4f1c"
+
+
+@pytest.mark.parametrize("stale", ["state", "workflow"])
+def test_teach_refusal_on_a_sealed_run_never_prints_its_contents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, stale: str
+) -> None:
+    """A provenance refusal names the halt by its state id, never by a step
+    intent or workflow name read from the encrypted halt report."""
+    from tests.test_teach_cli import _base_bundle, _dismiss_recording, _halt_run
+
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    base = _base_bundle(plain)
+    _halt_run(base, plain / "run")
+    fix = _dismiss_recording(plain / "fix")
+    report = json.loads((plain / "run" / "report.json").read_text())
+    if stale == "state":
+        report["halt"]["state_id"] = "s::gone"
+        report["halt"]["intent"] = _MARKER
+    else:
+        report["workflow_name"] = _MARKER
+    (plain / "run" / "report.json").write_text(json.dumps(report))
+    run = _seal_dir(plain / "run", tmp_path / "run", "run")
+    for path in (plain / "run").rglob("*"):
+        if path.is_file():
+            path.unlink()
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    out = tmp_path / "taught"
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(base)]
+    capfd.readouterr()
+    assert main([*args, "--out", str(out)]) == 2
+    printed = capfd.readouterr()
+    assert _MARKER not in printed.out + printed.err
+    assert "teach cannot run" in printed.out
+    assert repr(report["halt"]["state_id"]) in printed.out
+    assert not out.exists()
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert _MARKER.encode() not in path.read_bytes(), path
+
+
+@pytest.mark.parametrize("alias", ["same path", "symlink", "inside"])
+def test_teach_never_writes_over_the_sealed_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys, alias: str
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, bundle = _teach_inputs(tmp_path)
+    if alias == "same path":
+        out = bundle
+    elif alias == "symlink":
+        out = tmp_path / "alias"
+        out.symlink_to(bundle, target_is_directory=True)
+    else:
+        out = bundle / "taught"
+    before = {p: _files(p) for p in (run, fix, bundle)}
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(bundle)]
+    capsys.readouterr()
+    assert main([*args, "--out", str(out)]) == 2
+    printed = capsys.readouterr().out
+    assert "teach cannot run" in printed and "overlaps the base bundle" in printed
+    assert {p: _files(p) for p in (run, fix, bundle)} == before
+    assert not (out.parent / f"{out.name}.skills").exists()
+    assert not (fix / "_teach_compiled").exists()
+    assert Workflow.load(bundle, key=KEY).name
+
+
+@pytest.mark.parametrize("which", ["run", "fix"])
+def test_teach_refuses_an_out_that_is_another_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys, which: str
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, bundle = _teach_inputs(tmp_path)
+    out = {"run": run, "fix": fix}[which]
+    before = {p: _files(p) for p in (run, fix, bundle)}
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(bundle)]
+    assert main([*args, "--out", str(out)]) == 2
+    assert "overlaps the" in capsys.readouterr().out
+    assert {p: _files(p) for p in (run, fix, bundle)} == before
+
+
 # -- push of a sealed source --------------------------------------------------
 
 

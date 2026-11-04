@@ -188,22 +188,35 @@ def check_provenance(
     *,
     run_dir: Path | str,
     bundle_dir: Path | str,
+    private: bool = False,
 ) -> None:
     """Require that the halted run came from the bundle passed as ``--bundle``.
 
     A mismatched pair can't be taught: the correction would be spliced into a
     program that never ran, and the learn loop would only report a generic
     refusal. Raises :class:`TeachError` before anything is written.
+
+    With ``private`` (sealed input or strict mode) the message names the halt
+    by its state id only, never a workflow name or step intent read from the
+    encrypted report.
     """
+    halt = report.halt
+    assert halt is not None  # guaranteed by load_halt_report
+    if private:
+        stale = (
+            f"the run at {run_dir} (halt {halt.state_id!r}) did not stop in a "
+            f"program --bundle {bundle_dir} holds. Pass the bundle whose replay "
+            "stopped."
+        )
     if report.workflow_name != base_workflow.name:
+        if private:
+            raise TeachError(stale)
         raise TeachError(
             f"the run at {run_dir} came from the workflow "
             f"{report.workflow_name!r}, but --bundle {bundle_dir} is the "
             f"workflow {base_workflow.name!r}. Pass the bundle whose replay "
             "stopped."
         )
-    halt = report.halt
-    assert halt is not None  # guaranteed by load_halt_report
     graphs = [program, *base_workflow.subflows.values()]
     if any(halt.state_id in graph.states for graph in graphs):
         return
@@ -215,6 +228,8 @@ def check_provenance(
         for state in graph.states.values()
     ):
         return
+    if private:
+        raise TeachError(stale)
     raise TeachError(
         f"the step where the run at {run_dir} stopped ({halt.intent!r}) is not "
         f"in --bundle {bundle_dir}. Pass the bundle whose replay stopped."
@@ -488,8 +503,12 @@ def _plan_correction(
     *,
     run_dir: Path,
     recorded: dict[str, Step],
+    private: bool = False,
 ) -> _Plan:
     """Build the ``(correction, baseline)`` traces, or a refusal reason.
+
+    With ``private`` a refusal names the halted step by its state id, never
+    by the intent read from the encrypted report.
 
     Places the fix where the obstruction appeared. ``tail`` is the halted step
     and the remainder of the program.
@@ -514,6 +533,7 @@ def _plan_correction(
         )
     halt = report.halt
     assert halt is not None
+    step = f"halt {halt.state_id!r}" if private else repr(halt.intent)
     halted = _halted_result(report)
     delivered = _was_delivered(halted)
     halted_step = _halted_step(program, report)
@@ -540,7 +560,7 @@ def _plan_correction(
         if halted_step is None:
             return _Plan(
                 refusal=(
-                    f"the run stopped after {halt.intent!r} acted, and teach "
+                    f"the run stopped after {step} acted, and teach "
                     "can't find that step in --bundle, so it can't place the "
                     "fix after it"
                 )
@@ -548,7 +568,7 @@ def _plan_correction(
         if repeats_halted and _can_write(halted_step):
             return _Plan(
                 refusal=(
-                    f"the run stopped after {halt.intent!r} was delivered, and "
+                    f"the run stopped after {step} was delivered, and "
                     "that step can write to the record. The fix repeats it, "
                     "and nothing shows that the first delivery wrote nothing, "
                     "so the learned workflow could save twice. Check the "
@@ -558,7 +578,7 @@ def _plan_correction(
         if not repeats_halted and halted_step.effects:
             return _Plan(
                 refusal=(
-                    f"the run stopped after {halt.intent!r} was delivered, and "
+                    f"the run stopped after {step} was delivered, and "
                     "its write is checked against the system of record only "
                     "when its screen check passes. After the fix nothing would "
                     "check that write, so teach won't learn this fix"
@@ -904,6 +924,40 @@ def _check_sealed_out(out_bundle: Path) -> None:
         )
 
 
+def _overlap(a: Path, b: Path) -> bool:
+    """Is ``a`` the same path as ``b`` (through symlinks, or the same inode),
+    or inside it, or around it?"""
+    ra, rb = Path(os.path.realpath(a)), Path(os.path.realpath(b))
+    if ra == rb or ra.is_relative_to(rb) or rb.is_relative_to(ra):
+        return True
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def check_out_is_new(
+    out: Path | str, *, library: Optional[Path | str] = None, **inputs: Path | str
+) -> None:
+    """Refuse an ``--out`` (or its skill library) that is, holds or sits
+    inside an input: the base bundle, the halted run or the fix. Teach writes
+    the taught bundle there, so the base program would be overwritten. Checked
+    before anything is read or written; a symlink alias counts as the input."""
+    out_path = Path(out)
+    lib = (
+        Path(library)
+        if library is not None
+        else out_path.parent / f"{out_path.name}.skills"
+    )
+    for target, flag in ((out_path, "--out"), (lib, "the skill library")):
+        for name, path in inputs.items():
+            if _overlap(target, Path(path)):
+                raise TeachError(
+                    f"{flag} {target} is or overlaps the {name} input {path}. "
+                    "Pass a new directory: teach never writes over its inputs"
+                )
+
+
 def _write_taught_bundle(
     updated: Workflow,
     bundle: Path,
@@ -973,12 +1027,24 @@ def teach(
             fix, a run that did not come from ``bundle``, or a library at
             ``library_dir`` seeded from a different bundle).
     """
+    check_out_is_new(
+        out,
+        library=library_dir,
+        **{"halted run": run_dir, "fix": fix, "base bundle": bundle},
+    )
     seal = _seal_outputs(run_dir, fix, bundle)
     if seal:
         _check_sealed_out(Path(out))
     report = load_halt_report(run_dir)
     base_workflow, program = load_base_program(bundle)
-    check_provenance(report, base_workflow, program, run_dir=run_dir, bundle_dir=bundle)
+    check_provenance(
+        report,
+        base_workflow,
+        program,
+        run_dir=run_dir,
+        bundle_dir=bundle,
+        private=seal,
+    )
     sid = skill_id or report.workflow_name
 
     spec = _load_fix(fix)
@@ -987,7 +1053,7 @@ def teach(
     if spec is None:
         spec, recorded, carried = _spec_from_recording(Path(fix), report)
     plan = _plan_correction(
-        spec, program, report, run_dir=Path(run_dir), recorded=recorded
+        spec, program, report, run_dir=Path(run_dir), recorded=recorded, private=seal
     )
     if plan.refusal:
         # Refused before learning: nothing is written, not even a library.
