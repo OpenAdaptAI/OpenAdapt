@@ -1980,18 +1980,11 @@ def test_an_unreadable_audit_log_at_the_end_is_never_rolled_back(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _cleanup_result(dirty=None, record_changed=None):
-    from openadapt_flow.halt_cleanup import CleanupResult
-
-    result = CleanupResult()
-    result.dirty, result.record_changed = dirty, record_changed
-    return result
-
-
 def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
     tmp_path, monkeypatch
 ):
     from openadapt_flow import halt_cleanup
+    from openadapt_flow import rollback as rollback_module
     from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
     from openadapt_flow.rollback import screen_fresh_session
 
@@ -2010,15 +2003,14 @@ def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
         source="declared",
     )
     monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: start)
-    seen: list[Path] = []
-    results = [_cleanup_result(), _cleanup_result(dirty="the start screen isn't up")]
+    answers = [None, "it isn't there"]
+    checked: list[Any] = []
 
-    def run_cleanup(factory, wf, cleanup, *, bundle_dir, run_dir):
-        assert cleanup is start
-        seen.append(run_dir)
-        return results.pop(0)
+    def missing(backend, replayer, wf, predicate, *, bundle_dir):
+        checked.append(predicate)
+        return answers.pop(0)
 
-    monkeypatch.setattr(halt_cleanup, "run_cleanup", run_cleanup)
+    monkeypatch.setattr(rollback_module, "_start_screen_missing", missing)
     reset = screen_fresh_session(
         FakeBackend(), workflow, bundle_dir=tmp_path, run_dir=tmp_path
     )
@@ -2026,15 +2018,14 @@ def test_a_screen_backend_gets_a_fresh_session_from_the_start_screen_check(
     reset()  # back at the start screen
     with pytest.raises(CompensationRefused, match="run's start screen"):
         reset()
-    # Undo ids can't start with a dot: no collision with a compensation's dir.
-    assert [p.name for p in seen] == [".fresh-session-1", ".fresh-session-2"]
-    assert all(p.parent == tmp_path / "rollback" for p in seen)
+    assert checked == [start.start_state, start.start_state]
 
 
 def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch):
     # The run's start screen can show (a menu bar every screen has) while the
     # compensation's own first screen doesn't: nothing runs.
     from openadapt_flow import halt_cleanup
+    from openadapt_flow import rollback as rollback_module
     from openadapt_flow.ir import HaltCleanup, Predicate, PredicateKind
     from openadapt_flow.rollback import screen_fresh_session
 
@@ -2044,16 +2035,13 @@ def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch
         source="declared",
     )
     monkeypatch.setattr(halt_cleanup, "runnable_cleanup", lambda wf: start)
-    monkeypatch.setattr(halt_cleanup, "run_cleanup", lambda *a, **k: _cleanup_result())
     compensation_start = Predicate(kind=PredicateKind.TEXT_PRESENT, text="Patient")
     monkeypatch.setattr(halt_cleanup, "start_state_of", lambda wf: compensation_start)
-    checked: list[Any] = []
 
-    def check_start(factory, wf, cleanup, *, bundle_dir, run_dir):
-        checked.append(cleanup.start_state)
-        return "the start screen isn't showing"
+    def missing(backend, replayer, wf, predicate, *, bundle_dir):
+        return None if predicate is start.start_state else "it isn't there"
 
-    monkeypatch.setattr(halt_cleanup, "check_start", check_start)
+    monkeypatch.setattr(rollback_module, "_start_screen_missing", missing)
     reset = screen_fresh_session(
         FakeBackend(), _clinic_workflow(), bundle_dir=tmp_path, run_dir=tmp_path
     )
@@ -2061,11 +2049,74 @@ def test_a_screen_compensation_checks_its_own_start_screen(tmp_path, monkeypatch
     runner = ReplayerRunner(lambda: pytest.fail("nothing may run"), reset)
     with pytest.raises(CompensationRefused, match="compensation's start screen"):
         runner.run(undo, bundle_dir=tmp_path, run_dir=tmp_path, params={})
-    assert checked == [compensation_start]
     # A compensation with no anchored step can't be checked: refused too.
     monkeypatch.setattr(halt_cleanup, "start_state_of", lambda wf: None)
     with pytest.raises(CompensationRefused, match="no anchored step"):
         runner.run(undo, bundle_dir=tmp_path, run_dir=tmp_path, params={})
+
+
+class _StructuralScreen(FakeBackend):
+    """A desktop app whose start control is found by UI Automation: present,
+    missing, or there but covered by another window."""
+
+    def __init__(self, state: str) -> None:
+        super().__init__(viewport=(300, 200))
+        self.state = state
+
+    def locate_structural(self, locator):
+        from openadapt_flow.backend import StructuralElementNotActionable
+        from openadapt_flow.ir import StructuralHandle
+
+        if self.state == "covered":
+            raise StructuralElementNotActionable("another window covers it")
+        if self.state == "missing":
+            return None
+        return StructuralHandle(
+            point=(40, 20), region=(30, 15, 20, 10), target_fingerprint="f" * 64
+        )
+
+
+def _search_box_start() -> Any:
+    from openadapt_flow.ir import Anchor, Predicate, PredicateKind, StructuralLocator
+
+    return Predicate(
+        kind=PredicateKind.ANCHOR_RESOLVES,
+        anchor=Anchor(
+            template="templates/search.png",
+            region=(30, 15, 20, 10),
+            click_point=(40, 20),
+            structural=StructuralLocator(automation_id="searchBox"),
+        ),
+        intent="the start screen (click the search box)",
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "missing"),
+    [("present", None), ("missing", "isn't showing"), ("covered", "not usable")],
+)
+def test_the_desktop_start_check_finds_its_control_as_a_step_would(
+    tmp_path, state, missing
+):
+    # After the run the search box holds text, so its recorded crop no longer
+    # matches (the fake vision finds no template). The control is still the
+    # same one UI Automation finds; covered by another window it isn't usable.
+    from openadapt_flow.rollback import _start_screen_missing
+
+    backend = _StructuralScreen(state)
+    replayer = Replayer(backend, vision=FakeVision(), use_structural=True)
+    why = _start_screen_missing(
+        backend,
+        replayer,
+        _clinic_workflow(),
+        _search_box_start(),
+        bundle_dir=tmp_path,
+        timeout_s=0,
+    )
+    if missing is None:
+        assert why is None
+    else:
+        assert why is not None and missing in why
 
 
 def test_a_desktop_gui_undo_counts_only_with_a_qualified_cleanup(monkeypatch):
