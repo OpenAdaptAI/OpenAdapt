@@ -50,8 +50,10 @@ from __future__ import annotations
 
 import getpass
 import hashlib
+import hmac
 import json
 import re
+import secrets
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -445,6 +447,16 @@ def _normalized_bounds(
     return scaled
 
 
+def _window_key(raw: Any) -> Optional[tuple[int, int]]:
+    """A node's top-level window ``{hwnd, pid}`` as a tuple, or None."""
+    if not isinstance(raw, Mapping) or set(raw) != {"hwnd", "pid"}:
+        return None
+    values = (raw["hwnd"], raw["pid"])
+    if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in values):
+        return None
+    return values  # type: ignore[return-value]
+
+
 def _identity_of(raw: Mapping[str, Any]) -> Any:
     """A native node's element identity, or None when malformed or windowless."""
 
@@ -528,8 +540,14 @@ class AuthoringSession:
         self._identities: dict[str, Any] = {}
         #: Nodes whose identity another node in the same observation shares.
         self._ambiguous: set[str] = set()
+        #: The top-level window each native node was observed in, when the
+        #: backend names one (Windows: ``{hwnd, pid}``); re-read at the click.
+        self._windows: dict[str, Any] = {}
         #: The latest native tree was cut short (node cap, budget, deadline).
         self._tree_truncated = False
+        #: Salts the identity part of native node ids, so a node id can't be
+        #: matched offline against guessed window titles or names.
+        self._node_salt = secrets.token_bytes(16)
         self._last_target: Optional[_NodePixels] = None
         self._pause: Optional[_Pause] = None
         self._secret_pause_params: list[str] = []
@@ -622,6 +640,7 @@ class AuthoringSession:
         for stale in self._identities:
             self._nodes.pop(stale, None)
         self._identities.clear()
+        self._windows.clear()
         self._ambiguous.clear()
         tree: list[dict[str, Any]] = []
         digests: dict[str, list[str]] = {}
@@ -755,6 +774,21 @@ class AuthoringSession:
                 "observe again",
                 code="stale_node",
             )
+        if node_id in self._windows:
+            # Two windows of one app can share a title and their controls'
+            # identities: the window under the point must be the observed one.
+            read_window = getattr(self._backend, "window_root_at", None)
+            try:
+                window = read_window(*point) if callable(read_window) else None
+            except Exception:
+                window = None
+            recorded = self._windows[node_id]
+            if recorded is None or window is None or window != recorded:
+                raise AuthoringError(
+                    f"node {node_id!r} is not in the window it was observed in; "
+                    "observe again",
+                    code="stale_node",
+                )
 
     def type_text(self, text: str, param: Optional[str] = None) -> None:
         """Agent-driven type through :class:`Recorder` (actuates the backend).
@@ -986,6 +1020,7 @@ class AuthoringSession:
             target = _pixels_from_mapping(backend_pixels)
         elif node_id is not None:
             target = self._lookup_node(node_id)
+            self._require_same_element(node_id, target.center)
         else:
             raise AuthoringError(
                 "mark_field requires node_id or backend_pixels", code="invalid_mark"
@@ -1223,11 +1258,18 @@ class AuthoringSession:
         if backend_pixels is not None:
             target = _pixels_from_mapping(backend_pixels)
             if node_id is not None:
+                if node_id in self._identities:
+                    raise AuthoringError(
+                        f"node {node_id!r} is an observed control; name it "
+                        "without backend_pixels",
+                        code="invalid_pause",
+                    )
                 self._nodes[node_id] = target
             self._last_target = target
             return target
         if node_id is not None:
             target = self._lookup_node(node_id)
+            self._require_same_element(node_id, target.center)
             self._last_target = target
             return target
         if self._last_target is not None:
@@ -1501,7 +1543,12 @@ class AuthoringSession:
                 f"{bounds['w']:.4f}|{bounds['h']:.4f}"
             )
             if identity is not None:
-                seed += "|" + identity.digest()
+                seed += (
+                    "|"
+                    + hmac.new(
+                        self._node_salt, identity.digest().encode("utf-8"), "sha256"
+                    ).hexdigest()
+                )
             node_id = "n_" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
         node: dict[str, Any] = {
             "node_id": node_id,
@@ -1511,9 +1558,9 @@ class AuthoringSession:
             "bounds": bounds,
         }
         keys = ["control_type", "class_name", "automation_id", "name"]
-        if identity is not None and role == "combobox":
+        if identity is not None and role in ("combobox", "list_item"):
             # A native pop-up or combo box names itself after its selection,
-            # which is a field value.
+            # and a list row after its contents: field values.
             keys.remove("name")
         for key in keys:
             label = _safe_label(raw.get(key))
@@ -1523,6 +1570,8 @@ class AuthoringSession:
             self._nodes[node_id] = pixels
         if identity is not None:
             self._identities[node_id] = identity
+            if "window" in raw:
+                self._windows[node_id] = _window_key(raw.get("window"))
         else:
             self._identities.pop(node_id, None)
         self._ambiguous.discard(node_id)

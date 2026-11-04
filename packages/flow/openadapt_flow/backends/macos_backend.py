@@ -594,7 +594,7 @@ class QuartzMacAXClient:
         """Every element of the one window, in tree order, bounded by ``limit``.
 
         Each entry is ``(element, enabled, focused)`` from ``AXEnabled`` and
-        ``AXFocused``. ``truncated`` is True past ``limit`` nodes. An empty
+        ``AXFocused``; an element with no frame has ``bounds`` ``(0, 0, 0, 0)``. ``truncated`` is True past ``limit`` nodes. An empty
         list when the window can't be found.
         """
         from ApplicationServices import kAXChildrenAttribute
@@ -611,10 +611,24 @@ class QuartzMacAXClient:
             if visited > limit:
                 return out, True
             element = self._to_element(native, path, int(pid), window_title)
-            if element is not None:
-                enabled = self._attr(native, "AXEnabled")
-                focused = self._attr(native, "AXFocused")
-                out.append((element, enabled is not False, focused is True))
+            if element is None:
+                # No frame: it can't be clicked, but it may share another
+                # control's identity, so it is still listed (zero bounds).
+                element = MacElement(
+                    ax_path=path,
+                    accessible_id=self._accessible_id(native),
+                    role=self._role(native),
+                    name=self._name(native),
+                    app_pid=int(pid),
+                    window_title=window_title,
+                    bounds=(0, 0, 0, 0),
+                    text=None,
+                    supported_operations=(),
+                    native=native,
+                )
+            enabled = self._attr(native, "AXEnabled")
+            focused = self._attr(native, "AXFocused")
+            out.append((element, enabled is not False, focused is True))
             children = self._attr(native, kAXChildrenAttribute) or []
             for index in reversed(range(len(children))):
                 stack.append((children[index], f"{path}/{index}"))
@@ -1784,10 +1798,13 @@ class MacOSBackend(RemoteDisplayBackend):
                 if role is None:
                     continue
                 rect = self._in_window_pixel_rect(window, element.bounds)
+                if not (element.accessible_id or (element.role and element.name)):
+                    continue  # nothing to identify it by, so no twin either
                 identity = self._identity_of(element, window, visible=rect is not None)
-                if identity is None or not (
-                    element.accessible_id or (element.role and element.name)
-                ):
+                if identity is None:
+                    # It could be another control's twin: uniqueness can't
+                    # be shown, so no click by node from this tree.
+                    truncated = True
                     continue
                 if rect is None:
                     # Scrolled out of view: listed only for the uniqueness check.

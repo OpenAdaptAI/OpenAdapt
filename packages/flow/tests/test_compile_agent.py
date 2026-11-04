@@ -529,6 +529,21 @@ def test_a_url_with_a_non_web_deployment_is_refused(tmp_path: Path, capsys) -> N
     assert "the 'citrix' app comes from --config" in capsys.readouterr().err
 
 
+def test_a_deployment_naming_an_unknown_backend_is_refused(
+    tmp_path: Path, capsys
+) -> None:
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text("backend:\n  kind: vnc\n")
+    args = build_parser().parse_args(
+        ["compile-agent", "Save {note}", "--config", str(config)]
+    )
+    assert cmd_compile_agent(args) == 2
+    assert "names backend 'vnc'" in capsys.readouterr().err
+
+
 def test_a_non_web_deployment_runs_the_surface_pipeline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

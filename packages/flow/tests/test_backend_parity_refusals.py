@@ -293,6 +293,7 @@ def test_the_execute_worker_runs_a_desktop_bundle_under_its_deployment(
         seen.append(argv)
         params = argv[argv.index("--params-file") + 1]
         assert Path(params).read_text() == '{"note": "x"}'
+        assert Path(params).stat().st_mode & 0o777 == 0o600  # owner only
         return subprocess.CompletedProcess(argv, 1, b"", b"REFUSED: no verifier")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -321,6 +322,57 @@ def test_the_execute_worker_runs_a_desktop_bundle_under_its_deployment(
     assert authority == str(tmp_path / "authority.json")
     assert not (run_dir / "report.json").exists()
     assert not (run_dir.parent / "params.json").exists()  # inputs are removed
+
+
+def test_the_execute_worker_refuses_a_desktop_bundle_with_no_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Standard actuation off the web needs a qualification authority: with
+    none named, nothing starts, and the refusal says nothing ran."""
+
+    import subprocess
+
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text("backend:\n  kind: macos\n  macos_app: Calculator\n")
+
+    def never(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("the child must not start")
+
+    monkeypatch.setattr(subprocess, "run", never)
+    request = types.SimpleNamespace(
+        parameters={"note": "x"}, workflow_digest="sha256:" + "0" * 64
+    )
+    run_dir = tmp_path / "exec" / "run"
+    with pytest.raises(DispatchError, match="qualification authority") as caught:
+        live_replay(
+            _admission(_bundle(tmp_path, "macos"), deployment=str(deploy)),
+            request,  # type: ignore[arg-type]
+            run_dir,
+        )
+    assert caught.value.pre_effect is True
+    assert not (run_dir.parent / "params.json").exists()
+
+
+def test_a_deployment_that_fails_to_load_keeps_its_values_out_of_the_error(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.execute.dispatch import DispatchError, live_replay
+
+    deploy = tmp_path / "deploy.yaml"
+    deploy.write_text(
+        "backend:\n  kind: windows\n  agent_url: https://10.0.0.5:5000\n"
+        "  agent_token: [s3cret-token]\n"
+    )
+    with pytest.raises(DispatchError) as caught:
+        live_replay(
+            _admission(_bundle(tmp_path, "windows"), deployment=str(deploy)),
+            None,  # type: ignore[arg-type]
+            tmp_path / "run",
+        )
+    assert caught.value.pre_effect is True
+    assert "s3cret" not in str(caught.value) and "10.0.0.5" not in str(caught.value)
 
 
 def test_bench_refuses_a_desktop_bundle(tmp_path: Path, capsys) -> None:

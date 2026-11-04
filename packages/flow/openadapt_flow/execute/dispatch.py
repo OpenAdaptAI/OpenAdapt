@@ -227,14 +227,17 @@ def _surface_replay(
     """Run a non-web bundle through ``openadapt-flow run --config``.
 
     Refused before anything runs when no deployment file is named, when it
-    can't be loaded, or when its backend is not the surface the bundle was
-    recorded on. The child re-runs the whole admission gate, pinned to the
-    content digest of the bundle loaded here (as the web path does, the
+    can't be loaded, when its backend is not the surface the bundle was
+    recorded on, or when the admission names no
+    ``qualification_authority_file`` (Standard actuation needs one). The
+    child re-runs the whole admission gate under that authority, pinned to
+    the content digest of the bundle loaded here (as the web path does, the
     admission's ``workflow_digest`` is the request's, not re-derived from the
-    bundle), under the admission's ``qualification_authority_file``: the
-    child refuses Standard actuation without one. Its ``report.json`` is the only result read: a child that leaves
-    none, or does not finish in ``SURFACE_RUN_TIMEOUT_S``, may have written, so
-    that is an error after dispatch, never "nothing ran".
+    bundle). Its ``report.json`` is the only result read: a child that leaves
+    none, or does not finish in ``SURFACE_RUN_TIMEOUT_S``, may have written,
+    so that is an error after dispatch, never "nothing ran". Error text never
+    carries the deployment's or the child's own words, which can hold
+    credentials or entered values.
     """
 
     import os
@@ -257,7 +260,7 @@ def _surface_replay(
         kind = _normalize_kind(cfg.backend.kind)
     except Exception as exc:
         raise DispatchError(
-            f"deployment file could not be loaded: {type(exc).__name__}: {exc}",
+            f"deployment file could not be loaded: {type(exc).__name__}",
             pre_effect=True,
         ) from exc
     if kind != _normalize_kind(surface):
@@ -270,6 +273,13 @@ def _surface_replay(
     if not digest:
         raise DispatchError(
             "admitted bundle has no content digest to pin", pre_effect=True
+        )
+    if not authority:
+        raise DispatchError(
+            "Standard actuation off the web needs a signed qualification "
+            "authority; set the admission's `qualification_authority_file`. "
+            "Nothing was executed.",
+            pre_effect=True,
         )
     argv = [
         sys.executable,
@@ -288,13 +298,7 @@ def _surface_replay(
         "--approval-mode",
         "not_gated",
     ]
-    if authority:
-        argv += ["--qualification-authority-file", str(authority)]
-    params_file = None
-    if request.parameters:
-        params_file = run_dir.parent / "params.json"
-        params_file.write_text(json.dumps(request.parameters), encoding="utf-8")
-        argv += ["--params-file", str(params_file)]
+    argv += ["--qualification-authority-file", str(authority)]
     report_path = run_dir / "report.json"
     try:
         # Only this run's report may be read back.
@@ -303,7 +307,20 @@ def _surface_replay(
         raise DispatchError(
             "an earlier run report could not be cleared", pre_effect=True
         ) from exc
+    params_file = run_dir.parent / "params.json" if request.parameters else None
     try:
+        if params_file is not None:
+            try:
+                # Owner-only: the inputs may be PHI.
+                fd = os.open(params_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(json.dumps(request.parameters))
+            except OSError as exc:
+                raise DispatchError(
+                    f"the run's inputs could not be written: {type(exc).__name__}",
+                    pre_effect=True,
+                ) from exc
+            argv += ["--params-file", str(params_file)]
         try:
             proc = subprocess.run(  # nosec - fixed argv, this process's own env
                 argv,
@@ -329,11 +346,8 @@ def _surface_replay(
     try:
         report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        output = (proc.stdout or proc.stderr or b"").decode("utf-8", "replace")
-        tail = output.strip().splitlines()[-1:]
         raise DispatchError(
-            f"local replay (exit {proc.returncode}) left no readable run report"
-            + (f": {tail[0][:300]}" if tail else ""),
+            f"local replay (exit {proc.returncode}) left no readable run report",
             pre_effect=False,
         ) from exc
     return project_run_report(report, workflow_digest=request.workflow_digest)
