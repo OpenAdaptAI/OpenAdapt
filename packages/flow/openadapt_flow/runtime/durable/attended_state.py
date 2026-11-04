@@ -65,6 +65,11 @@ MARKER_FILENAME = ".attended_state.encrypted"
 MARKER_PAYLOAD = b'{"schema":"openadapt.flow.attended-state-encryption/v1"}\n'
 #: The marker schema that carries the run salt.
 MARKER_SCHEMA_V2 = "openadapt.flow.attended-state-encryption/v2"
+#: Created once, without replacement, when an older marker is upgraded. The
+#: first writer to create it picks the run salt, and every writer copies it
+#: into the marker. It is never removed: a writer that read the older marker
+#: before the upgrade must still find the salt that was picked.
+MARKER_UPGRADE_FILENAME = ".attended_state.encrypted.v2"
 #: Associated-data prefixes and the stored-row prefix for containers sealed
 #: under the run key. Older (per-container scrypt) forms keep the v1 values.
 FILE_AAD_PREFIX_V2 = b"openadapt-flow/attended-state/v2\0"
@@ -180,6 +185,11 @@ def _read_marker(root: Path) -> tuple[bool, Optional[bytes]]:
     data = marker.read_bytes()
     if data == MARKER_PAYLOAD:
         return True, None
+    return True, _marker_salt(data)
+
+
+def _marker_salt(data: bytes) -> bytes:
+    """The run salt in a salted marker payload, or raise."""
     try:
         obj = json.loads(data)
         if obj.get("schema") != MARKER_SCHEMA_V2:
@@ -189,7 +199,7 @@ def _read_marker(root: Path) -> tuple[bool, Optional[bytes]]:
         raise AttendedStateUnreadable("the attended-state marker is invalid") from exc
     if len(salt) != _crypto.SALT_LEN:
         raise AttendedStateUnreadable("the attended-state marker is invalid")
-    return True, salt
+    return salt
 
 
 def _marker_payload(salt: bytes) -> bytes:
@@ -377,20 +387,35 @@ def _ensure_encrypted(root: Path, key: str) -> bytes:
     older run is encrypted under it, then the marker is created holding it.
     A file whose ``.enc`` form already exists keeps that form: a concurrent
     writer may have just replaced it. An older marker without a salt is
-    replaced by one with a salt; its files keep their older containers."""
+    replaced by one with a salt, chosen once through the upgrade file even
+    when writers race; its files keep their older containers."""
     marker = root / MARKER_FILENAME
     present, salt = _read_marker(root)
     if present and salt is not None:
         return salt
     if present:
-        new_salt = _crypto.SetKey.new_salt()
+        # Two writers can both read the older marker. Each proposes a salt by
+        # creating the upgrade file without replacement; only the first
+        # succeeds, and every writer installs that one salt in the marker.
+        # A writer that picked its own salt and replaced the marker could
+        # otherwise strand files another writer had just sealed.
+        upgrade = root / MARKER_UPGRADE_FILENAME
+        if upgrade.is_symlink():
+            raise AttendedStateUnreadable("the attended-state marker is a symlink")
+        _link_new(upgrade, _marker_payload(_crypto.SetKey.new_salt()))
+        if upgrade.is_symlink() or not upgrade.is_file():
+            raise AttendedStateUnreadable("the attended-state marker is invalid")
+        payload = upgrade.read_bytes()
+        chosen = _marker_salt(payload)
         tmp = marker.with_name(f".{marker.name}.{secrets.token_hex(8)}.tmp")
-        _link_new(tmp, _marker_payload(new_salt))
+        _link_new(tmp, payload)
         os.replace(tmp, marker)
         present, salt = _read_marker(root)
-        if salt is None:
-            raise AttendedStateUnreadable("the attended-state marker is invalid")
-        return salt
+        if salt != chosen:
+            raise AttendedStateUnreadable(
+                "the attended-state marker changed while it was upgraded"
+            )
+        return chosen
     new_salt = _crypto.SetKey.new_salt()
     file_key = _run_keys(key, new_salt)[0]
     candidates = [root / name for name in CONVERTED_FILES]

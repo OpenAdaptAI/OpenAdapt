@@ -544,6 +544,92 @@ def test_conversion_that_loses_the_marker_race_reseals_under_the_run_salt(
     )
 
 
+def test_concurrent_upgrade_of_an_older_marker_keeps_one_salt(
+    tmp_path, counted_scrypt, monkeypatch
+):
+    """Two writers both read the older marker. The slower one finishes its
+    upgrade after the faster one has already sealed a file; both files must
+    still read, under the one salt the marker ends with."""
+    root = tmp_path / "run"
+    receipts = root / ".attended_program_receipts"
+    receipts.mkdir(parents=True)
+    marker = root / attended_state.MARKER_FILENAME
+    marker.write_bytes(attended_state.MARKER_PAYLOAD)
+    first = receipts / "first.json"
+    second = receipts / "second.json"
+
+    attended_state.write_bytes(root, first, b'{"writer":"a"}', SYNTHETIC_KEY, _write)
+    present, salt_after_first = attended_state._read_marker(root)
+    assert present and salt_after_first is not None
+
+    # The second writer read the older marker before the first one upgraded it.
+    original = attended_state._read_marker
+    stale = {"pending": True}
+
+    def read_marker(run_root):
+        if stale.pop("pending", False):
+            return True, None
+        return original(run_root)
+
+    monkeypatch.setattr(attended_state, "_read_marker", read_marker)
+    attended_state.write_bytes(root, second, b'{"writer":"b"}', SYNTHETIC_KEY, _write)
+    monkeypatch.setattr(attended_state, "_read_marker", original)
+
+    assert not stale
+    assert attended_state._read_marker(root) == (True, salt_after_first)
+    assert attended_state.read_bytes(root, first, SYNTHETIC_KEY) == b'{"writer":"a"}'
+    assert attended_state.read_bytes(root, second, SYNTHETIC_KEY) == (b'{"writer":"b"}')
+
+
+def test_racing_writers_on_an_older_marker_both_stay_readable(
+    tmp_path, counted_scrypt, monkeypatch
+):
+    """Two threads read the older marker at the same moment, then both upgrade
+    it and seal a file. Every file reads afterwards."""
+    import threading
+
+    root = tmp_path / "run"
+    receipts = root / ".attended_program_receipts"
+    receipts.mkdir(parents=True)
+    (root / attended_state.MARKER_FILENAME).write_bytes(attended_state.MARKER_PAYLOAD)
+    original = attended_state._read_marker
+    barrier = threading.Barrier(2, timeout=30)
+    seen: set[int] = set()
+
+    def read_marker(run_root):
+        result = original(run_root)
+        ident = threading.get_ident()
+        if ident not in seen:
+            seen.add(ident)
+            barrier.wait()
+        return result
+
+    monkeypatch.setattr(attended_state, "_read_marker", read_marker)
+    errors: list[BaseException] = []
+
+    def writer(name):
+        try:
+            attended_state.write_bytes(
+                root, receipts / f"{name}.json", name.encode(), SYNTHETIC_KEY, _write
+            )
+        except BaseException as exc:  # noqa: BLE001 - surfaced below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(n,)) for n in ("a", "b")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(60)
+    monkeypatch.setattr(attended_state, "_read_marker", original)
+
+    assert not errors
+    present, salt = attended_state._read_marker(root)
+    assert present and salt is not None
+    for name in ("a", "b"):
+        path = receipts / f"{name}.json"
+        assert attended_state.read_bytes(root, path, SYNTHETIC_KEY) == name.encode()
+
+
 def test_replayer_classifies_with_its_own_checkpoint_key(monkeypatch, tmp_path):
     """The outcome reader opens attended evidence with the key the run sealed
     it under, not only the environment's key."""
