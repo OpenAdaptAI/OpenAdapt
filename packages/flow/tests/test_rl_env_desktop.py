@@ -257,7 +257,7 @@ def test_every_environment_loads_with_24_public_tasks(name: str) -> None:
     env = load_desktop_environment(ROOT / name)
     assert len(env.split("public")) == 24
     assert env.splits() == ["public"]
-    assert env.manifest.guest_image == "buyer-supplied"
+    assert env.manifest.app.desktop.guest_image == "buyer-supplied"
     manifest = json.loads((ROOT / name / "tasks" / "MANIFEST.json").read_text())
     import hashlib
 
@@ -480,3 +480,39 @@ def test_guest_settings_fall_back_to_the_lab_profile(
     assert guest._ssh_base()[-1] == "lab@10.9.8.7"
     monkeypatch.setenv("OPENADAPT_WINENV_HOST", "10.1.1.1")
     assert wg.WindowsGuest().host == "10.1.1.1"
+
+
+def test_one_manifest_schema_with_a_desktop_kind() -> None:
+    from openadapt_flow.rl_env.tasks import AppSpec
+
+    desktop = {
+        "guest_app": "patient_chart",
+        "window_title": "Patient Chart",
+        "ready_automation_id": "searchBox",
+    }
+    assert (
+        AppSpec(
+            kind="desktop", surface="rdp_pixels", desktop=desktop
+        ).desktop.rdp.transport
+        == "xfreerdp"
+    )
+    for bad in (
+        {"kind": "desktop", "desktop": desktop},
+        {"kind": "desktop", "surface": "windows_uia"},
+        {
+            "kind": "desktop",
+            "surface": "windows_uia",
+            "desktop": desktop,
+            "url_default": "http://x",
+        },
+        {"kind": "external", "url_default": "http://x", "surface": "windows_uia"},
+    ):
+        with pytest.raises(ValueError):
+            AppSpec(**bad)
+
+
+def test_the_browser_environment_refuses_a_desktop_directory() -> None:
+    from openadapt_flow.rl_env.environment import OpenAdaptWebEnvironment
+
+    with pytest.raises(TaskError, match="desktop"):
+        OpenAdaptWebEnvironment(ROOT / "win-patient-chart")

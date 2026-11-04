@@ -35,14 +35,11 @@ import secrets
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import uuid
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Callable, Literal, Optional
 
-import yaml
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import (
     Action,
@@ -50,19 +47,19 @@ from openenv.core.env_server.types import (
     Observation,
     State,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
 from openadapt_flow.rl_env import CONTRACT_VERSION
+from openadapt_flow.rl_env.environment import _serve_records
 from openadapt_flow.rl_env.reward import EpisodeJudge, Judgement, render_verify_config
 from openadapt_flow.rl_env.tasks import (
-    EXTRA_TASKS_ENV,
-    MANIFEST_SCHEMA,
     PUBLIC_SPLIT,
-    AgentSpec,
-    Licence,
+    DesktopSpec,
+    EnvDirectory,
+    RdpSpec,
     Task,
     TaskError,
-    read_tasks,
+    load_environment,
 )
 
 DesktopActionKind = Literal[
@@ -128,97 +125,12 @@ PACK_DB = (
 )
 
 
-class _Strict(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class RdpSpec(_Strict):
-    width: int = 1280
-    height: int = 800
-    color_depth: Literal[16, 24, 32] = 32
-    #: ``aardwolf`` (pure Python, any host, RDP bitmap codecs) or ``xfreerdp``
-    #: (FreeRDP 3 under Xvfb, Linux; negotiates the server's H.264/AVC444).
-    transport: Literal["aardwolf", "xfreerdp"] = "aardwolf"
-    #: ``xfreerdp`` only: ask for H.264/AVC444, as on a production RDS host.
-    #: The server's policy decides what is actually negotiated.
-    avc444: bool = False
-
-
-class DesktopAppSpec(_Strict):
-    kind: Literal["desktop"]
-    surface: Literal["windows_uia", "rdp_pixels"]
-    #: The pack app in the guest (``C:\\oa\\pack\\<guest_app>.ps1``).
-    guest_app: str
-    window_title: str
-    #: An automation id that exists once the app is ready for input.
-    ready_automation_id: str
-    rdp: RdpSpec = RdpSpec()
-    #: Seconds the app may take to come up after a reset.
-    ready_timeout_s: float = 60.0
-
-
-class DesktopEnvManifest(_Strict):
-    schema_version: Literal["openadapt.rl-env-manifest/v1"]
-    name: str
-    title: str
-    description: str = ""
-    licence: Licence
-    app: DesktopAppSpec
-    agent: AgentSpec = AgentSpec()
-    verify: str = "verify.yaml"
-    tasks: str = "tasks/public.jsonl"
-    #: Where the Windows machine comes from; never shipped with the pack.
-    guest_image: str = "buyer-supplied"
-
-
-class DesktopEnvDirectory(_Strict):
-    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
-
-    directory: Path
-    manifest: DesktopEnvManifest
-    verify_text: str
-    tasks: list[Task]
-
-    def task(self, task_id: str) -> Task:
-        for task in self.tasks:
-            if task.id == task_id:
-                return task
-        raise TaskError(f"no task {task_id!r} in {self.manifest.name}")
-
-    def split(self, name: str) -> list[Task]:
-        return [task for task in self.tasks if task.split == name]
-
-    def splits(self) -> list[str]:
-        return sorted({task.split for task in self.tasks})
-
-
-def load_desktop_environment(directory: str | Path) -> DesktopEnvDirectory:
-    """Load a desktop ``env.yaml``; the same publication rule as the web loader."""
-    root = Path(directory).resolve()
-    try:
-        raw = yaml.safe_load((root / "env.yaml").read_text(encoding="utf-8"))
-        manifest = DesktopEnvManifest.model_validate(raw)
-    except (OSError, yaml.YAMLError) as exc:
-        raise TaskError(f"cannot read {root / 'env.yaml'}: {exc}") from exc
-    if manifest.schema_version != MANIFEST_SCHEMA:
-        raise TaskError(f"unsupported manifest {manifest.schema_version}")
-    verify_text = (root / manifest.verify).read_text(encoding="utf-8")
-    tasks = read_tasks(root / manifest.tasks, public_only=True)
-    extra = os.environ.get(EXTRA_TASKS_ENV)
-    if extra:
-        extra_path = Path(extra).resolve()
-        if extra_path.is_relative_to(root):
-            raise TaskError(
-                f"{EXTRA_TASKS_ENV} must point outside the environment directory"
-            )
-        known = {task.id for task in tasks}
-        for task in read_tasks(extra_path, public_only=False):
-            if task.id in known:
-                raise TaskError(f"extra task {task.id} repeats a public task id")
-            tasks.append(task)
-    return DesktopEnvDirectory(
-        directory=root, manifest=manifest, verify_text=verify_text, tasks=tasks
-    )
+def load_desktop_environment(directory: str | Path) -> EnvDirectory:
+    """Load an environment directory and check it is a desktop one."""
+    env = load_environment(directory)
+    if env.manifest.app.kind != "desktop":
+        raise TaskError(f"{env.manifest.name} is not a desktop environment")
+    return env
 
 
 def expected_digest(app: str, variant: str = "none") -> str:
@@ -237,51 +149,6 @@ def expected_digest(app: str, variant: str = "none") -> str:
             check=True,
         ).stdout
     return str(json.loads(out.strip().splitlines()[-1])["digest"])
-
-
-class RecordShim:
-    """Serves ``GET /api/db`` from the guest's database, on loopback only.
-
-    The oracle's read path: verify-run's REST verifier reads it, the agent
-    has no network action and never sees its address.
-    """
-
-    def __init__(self, read: Any) -> None:
-        shim = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802
-                if self.path.split("?")[0] != "/api/db":
-                    self.send_error(404)
-                    return
-                try:
-                    body = json.dumps(read()).encode()
-                except Exception as exc:  # noqa: BLE001 - an unread record fails closed
-                    shim.last_error = f"{type(exc).__name__}: {exc}"
-                    self.send_error(503)
-                    return
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
-            def log_message(self, *_: Any) -> None:
-                return
-
-        self.last_error: Optional[str] = None
-        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
-        self._thread.start()
-
-    @property
-    def url(self) -> str:
-        host, port = self._server.server_address[:2]
-        return f"http://{host}:{port}"
-
-    def close(self) -> None:
-        self._server.shutdown()
-        self._server.server_close()
 
 
 class DesktopAction(Action):
@@ -390,17 +257,21 @@ class OpenAdaptDesktopEnvironment(
 
     def __init__(self, env_dir: str | Path, *, guest: Any = None) -> None:
         super().__init__()
-        self.env = load_desktop_environment(env_dir)
-        self.spec = self.env.manifest.app
+        self.env: EnvDirectory = load_desktop_environment(env_dir)
+        app = self.env.manifest.app
+        assert app.surface is not None and app.desktop is not None
+        self.surface: str = app.surface
+        self.spec: DesktopSpec = app.desktop
         self.reference = os.environ.get(REFERENCE_ENV) == "1"
         self._guest = guest
         self._state = DesktopState(
-            env_name=self.env.manifest.name, surface=self.spec.surface
+            env_name=self.env.manifest.name, surface=self.surface
         )
         self._task: Optional[Task] = None
         self._judge: Optional[EpisodeJudge] = None
         self._judgement: Optional[Judgement] = None
-        self._shim: Optional[RecordShim] = None
+        self._records_url: Optional[str] = None
+        self._records_stop: Optional[Callable[[], None]] = None
         self._uia: Any = None  # the in-guest agent's backend (privileged)
         self._surface: Any = None  # what the agent acts through
         self._digests: dict[str, str] = {}
@@ -434,15 +305,20 @@ class OpenAdaptDesktopEnvironment(
             from openadapt_flow.rl_env.windows_guest import WindowsGuest
 
             self._guest = WindowsGuest()
-        if self._shim is None:
+        if self._records_url is None:
             self._guest.deploy()
             app = self.spec.guest_app
-            self._shim = RecordShim(lambda: self._guest.dump(app))
+            # The oracle's read path: the guest's database over WinRM or SSH,
+            # served on loopback as ${RECORDS_URL}/records (the agent has no
+            # network action and never sees the address).
+            self._records_url, self._records_stop = _serve_records(
+                lambda: self._guest.dump(app)["records"]
+            )
         return self._guest
 
     def _ensure_surface(self) -> None:
         guest = self._ensure_guest()
-        if self.spec.surface == "rdp_pixels" and self._surface is None:
+        if self.surface == "rdp_pixels" and self._surface is None:
             # Connect first: the session moves from the console to RDP, and
             # the in-guest agent must start inside that session.
             self._surface = _rdp_backend(self.spec.rdp, guest)
@@ -452,7 +328,7 @@ class OpenAdaptDesktopEnvironment(
         if self._uia is None:
             endpoint = guest.launch_agent(token=secrets.token_urlsafe(24))
             self._uia = endpoint.backend()
-        if self.spec.surface == "windows_uia":
+        if self.surface == "windows_uia":
             self._surface = self._uia
 
     def _wait_ready(self, timeout_s: float) -> None:
@@ -502,7 +378,7 @@ class OpenAdaptDesktopEnvironment(
         self._judge = None
         self._task, self._judgement = None, None
         self._state = DesktopState(
-            env_name=self.env.manifest.name, surface=self.spec.surface, done=True
+            env_name=self.env.manifest.name, surface=self.surface, done=True
         )
         started = time.monotonic()
         self._ensure_surface()
@@ -525,14 +401,18 @@ class OpenAdaptDesktopEnvironment(
             )
         self._wait_ready(self.spec.ready_timeout_s)
         reset_s = round(time.monotonic() - started, 2)
-        assert self._shim is not None
-        cfg = render_verify_config(self.env.verify_text, self._shim.url)
+        assert self._records_url is not None
+        cfg = render_verify_config(
+            task.verify_text or self.env.verify_text,
+            self._records_url,
+            self._records_url,
+        )
         episode = episode_id or uuid.uuid4().hex
         self._judge = EpisodeJudge(cfg, task.params, episode_id=episode)
         self._task = task
         self._state = DesktopState(
             env_name=self.env.manifest.name,
-            surface=self.spec.surface,
+            surface=self.surface,
             episode_id=episode,
             step_count=0,
             task_id=task.id,
@@ -565,19 +445,18 @@ class OpenAdaptDesktopEnvironment(
     def close(self) -> None:
         for closer in (
             lambda: self._judge and self._judge.close(),
-            lambda: self._shim and self._shim.close(),
+            lambda: self._records_stop and self._records_stop(),
             lambda: self._guest and self._guest.stop_app(),
             lambda: (
-                self.spec.surface == "rdp_pixels"
-                and self._surface
-                and self._surface.close()
+                self.surface == "rdp_pixels" and self._surface and self._surface.close()
             ),
         ):
             try:
                 closer()
             except Exception:  # noqa: BLE001 - best-effort teardown
                 pass
-        self._judge = self._shim = self._surface = self._uia = None
+        self._judge = self._surface = self._uia = None
+        self._records_url = self._records_stop = None
 
     # -- internals ----------------------------------------------------------
     def _point(self, action: DesktopAction) -> tuple[int, int]:
@@ -585,7 +464,7 @@ class OpenAdaptDesktopEnvironment(
             if action.x is None or action.y is None:
                 raise ValueError(f"{action.kind} needs x and y")
             return int(action.x), int(action.y)
-        if self.spec.surface == "rdp_pixels" and not self.reference:
+        if self.surface == "rdp_pixels" and not self.reference:
             raise ValueError("the pixels-only surface takes x and y, not element ids")
         from openadapt_flow.ir import StructuralLocator
 
@@ -678,7 +557,7 @@ class OpenAdaptDesktopEnvironment(
             png = self._surface.screenshot()
             shot = base64.b64encode(png).decode("ascii")
             width, height = self._surface.viewport
-            if self.spec.surface == "windows_uia":
+            if self.surface == "windows_uia":
                 tree = self._uia.window_tree(self.spec.window_title)
                 if tree is not None:
                     elements = [
@@ -700,7 +579,7 @@ class OpenAdaptDesktopEnvironment(
             done=done,
             reward=reward,
             metadata={"env": self.env.manifest.name, **(extra or {})},
-            surface=self.spec.surface,
+            surface=self.surface,
             task_id=self._task.id,
             instruction=self._task.instruction,
             width=int(width),
