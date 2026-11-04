@@ -172,6 +172,20 @@ sent as recorded. The typed values aren't kept in the bundle: their leaves
 hold an empty value of the recorded type, and a leaf recorded as a number
 takes the run's value as a number.
 
+The page is the one the person saved from (the save step's own address:
+a single-page app may already show the new record's address when the
+request is logged). When the app opened its form by changing its route
+rather than loading a document, every recorded step must be on that page,
+and the API step stands in for all of them. A save the app's script sends
+to the app's own API host, on another origin, goes only there, and only
+with the headers the app's script sent that host in the session.
+
+A GraphQL client that batches sends a list; a list holding one mutation is
+that mutation, and its answer is a list of one. GraphQL queries are POSTed
+too, but a request whose every operation is a query is a read. Writes sent
+while the page loaded, before the first recorded step, aren't caused by
+any step.
+
 Nothing is proposed when:
 
 - a typed value was blank, equals another input's, is in the body twice or
@@ -182,8 +196,9 @@ Nothing is proposed when:
   each save (a UUID, a date and time), which can't be sent again;
 - the body isn't a JSON object (a batch), was cut at capture, or the recorded
   save wasn't accepted (2xx);
-- the steps on the page also sent another write, or a step checks text a
-  request returned (a JSON save is repeated alone, with no pre-checks);
+- the steps on the page also sent another write, or a step checks text that
+  a request's response carries (a JSON save is repeated alone, with no
+  pre-checks); a step's other on-screen checks are listed as screen-only;
 - the recording doesn't say which headers the save carried (a capture from
   before `request_headers` existed).
 
@@ -195,6 +210,9 @@ last value of each such header the app's own script sent to its origin
 (`runtime/actuators/session_headers.py`). The API step sends those values. A
 header the app hasn't sent in this session keeps the save on the GUI. The
 values are in the approval digest and never shown.
+
+A run value that is blank keeps a JSON save on the GUI: a page often leaves
+a blank field out of the body, so the recorded shape can't be assumed.
 
 A JSON save succeeds on its recorded status. A GraphQL server answers 200
 with errors in the body, so a GraphQL save also needs a response with data
