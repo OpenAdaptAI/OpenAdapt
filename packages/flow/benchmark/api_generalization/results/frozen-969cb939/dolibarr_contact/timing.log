@@ -1,0 +1,40 @@
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r00-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 1, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 13.282, "wall_s": 18.253, "load1": 25.14, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r00-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 1, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 6.344, "wall_s": 11.703, "load1": 25.58, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r01-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 2, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 2.677, "wall_s": 5.993, "load1": 23.77, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r01-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 2, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 4.381, "wall_s": 7.667, "load1": 21.47, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r02-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 3, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 3.728, "wall_s": 6.786, "load1": 20.55, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r02-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 3, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 2.309, "wall_s": 5.368, "load1": 19.31, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r03-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 4, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 3.78, "wall_s": 7.142, "load1": 18.7, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r03-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 4, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 7.99, "wall_s": 13.176, "load1": 18.24, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r04-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 5, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 8.394, "wall_s": 13.692, "load1": 20.2, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r04-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 5, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 4.578, "wall_s": 8.764, "load1": 19.74, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r05-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 6, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 2.532, "wall_s": 5.823, "load1": 18.56, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r05-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 6, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 5.08, "wall_s": 8.394, "load1": 17.48, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r06-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 7, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 4.137, "wall_s": 7.632, "load1": 16.72, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r06-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 7, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 3.301, "wall_s": 6.902, "load1": 16.26, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r07-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 8, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 2.78, "wall_s": 6.164, "load1": 15.52, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r07-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 8, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 9.604, "wall_s": 15.727, "load1": 18.11, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r08-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 9, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 7.447, "wall_s": 12.071, "load1": 19.48, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r08-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 9, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 2.777, "wall_s": 6.312, "load1": 19.12, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r09-api/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 10, "arm": "api", "correct": true, "save_actuation": "api", "engine_s": 4.184, "wall_s": 7.732, "load1": 18.0, "error": null}
+WARNING: writing a run directory in plaintext at /Users/abrichr/oa/scratch/api-generalization/dolibarr_contact/timing/r09-gui/engine: it can't be encrypted yet and can hold patient data. Set OPENADAPT_FLOW_AT_REST=strict to refuse instead.
+{"rep": 10, "arm": "gui", "correct": false, "save_actuation": "dom", "engine_s": 5.621, "wall_s": 9.42, "load1": 20.72, "error": null}

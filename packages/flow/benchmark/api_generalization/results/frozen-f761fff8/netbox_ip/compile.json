@@ -1,0 +1,29 @@
+{
+ "app": "netbox_ip",
+ "workflow": "add-ip-address",
+ "steps": 7,
+ "params": [
+  "address",
+  "description",
+  "dns_name"
+ ],
+ "optional_params": [
+  "description",
+  "dns_name"
+ ],
+ "compile_proposal": {
+  "proposed": false,
+  "step": null,
+  "reasons": [
+   "field 'comments' of the save is not a recorded value, a form default or a session value"
+  ]
+ },
+ "proposed": false,
+ "reasons": [
+  "field 'comments' of the save is not a recorded value, a form default or a session value"
+ ],
+ "compile_s": 157.8,
+ "frozen": "f761fff8e669c0d6e851ad8a27ed75d562003b96",
+ "head": "f761fff8e669c0d6e851ad8a27ed75d562003b96",
+ "engine_diff_vs_frozen": ""
+}

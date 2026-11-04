@@ -1,0 +1,1 @@
+{"mode": "pass", "path_regex": "^/newticket$", "body_exclude": "(^|&)preview="}

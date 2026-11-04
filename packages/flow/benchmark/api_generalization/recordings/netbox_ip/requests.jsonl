@@ -1,0 +1,112 @@
+{"t": 1792434139.387, "method": "GET", "path": "/", "fault": "pass", "status": 302, "ms": 1958}
+{"t": 1792434141.347, "method": "GET", "path": "/login/", "fault": "pass", "status": 200, "ms": 16}
+{"t": 1792434141.401, "method": "GET", "path": "/static/logo_netbox_bright_teal.svg", "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792434141.4, "method": "GET", "path": "/static/setmode.js", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434141.401, "method": "GET", "path": "/static/logo_netbox_dark_teal.svg", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434141.399, "method": "GET", "path": "/static/netbox-external.css", "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792434141.401, "method": "GET", "path": "/static/netbox.js", "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792434141.399, "method": "GET", "path": "/static/netbox.css", "fault": "pass", "status": 200, "ms": 11}
+{"t": 1792434141.428, "method": "GET", "path": "/static/Inter-SemiBold-UMRILHOG.woff2", "fault": "pass", "status": 200, "ms": 53}
+{"t": 1792434141.443, "method": "GET", "path": "/static/Inter-Regular-373XMOLM.woff2", "fault": "pass", "status": 200, "ms": 40}
+{"t": 1792434141.431, "method": "GET", "path": "/static/Inter-Medium-JV63DMR7.woff2", "fault": "pass", "status": 200, "ms": 52}
+{"t": 1792434141.492, "method": "GET", "path": "/login/", "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792434141.605, "method": "POST", "path": "/login/", "fault": "pass", "status": 302, "ms": 148}
+{"t": 1792434141.754, "method": "GET", "path": "/", "fault": "pass", "status": 200, "ms": 34}
+{"t": 1792434141.807, "method": "GET", "path": "/static/materialdesignicons-webfont-7OXPFKOV.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792434141.808, "method": "GET", "path": "/static/Inter-Italic-RW2ZALTO.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792434141.808, "method": "GET", "path": "/static/Inter-MediumItalic-P7H6BBYU.woff2", "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792434141.811, "method": "GET", "path": "/core/changelog/", "fault": "pass", "status": 200, "ms": 20}
+{"t": 1792434141.828, "method": "GET", "path": "/ipam/ip-addresses/add/", "fault": "pass", "status": 200, "ms": 49}
+{"t": 1792434141.906, "method": "GET", "path": "/static/Inter-Bold-6AVOS7AV.woff2", "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792434148.835, "method": "POST", "path": "/ipam/ip-addresses/add/", "fault": "pass", "status": 302, "ms": 29}
+{"t": 1792434148.865, "method": "GET", "path": "/ipam/ip-addresses/1/", "fault": "pass", "status": 200, "ms": 44}
+{"t": 1792434148.926, "method": "GET", "path": "/ipam/services/", "fault": "pass", "status": 200, "ms": 24}
+{"t": 1792435693.633, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 302, "ms": 4}
+{"t": 1792435693.638, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435693.675, "method": "GET", "path": "/static/setmode.js", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435693.676, "method": "GET", "path": "/static/logo_netbox_bright_teal.svg", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435693.674, "method": "GET", "path": "/static/netbox-external.css", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435693.676, "method": "GET", "path": "/static/netbox.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435693.676, "method": "GET", "path": "/static/logo_netbox_dark_teal.svg", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435693.674, "method": "GET", "path": "/static/netbox.css", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435693.699, "method": "GET", "path": "/static/Inter-Medium-JV63DMR7.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435693.699, "method": "GET", "path": "/static/Inter-SemiBold-UMRILHOG.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435693.711, "method": "GET", "path": "/static/Inter-Regular-373XMOLM.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435693.724, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435693.834, "method": "POST", "path": "/login/", "save": false, "fault": "pass", "status": 302, "ms": 154}
+{"t": 1792435693.99, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 262}
+{"t": 1792435694.269, "method": "GET", "path": "/static/Inter-Italic-RW2ZALTO.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435694.269, "method": "GET", "path": "/static/Inter-MediumItalic-P7H6BBYU.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435694.269, "method": "GET", "path": "/static/materialdesignicons-webfont-7OXPFKOV.woff2", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435694.272, "method": "GET", "path": "/core/changelog/", "save": false, "fault": "pass", "status": 200, "ms": 35}
+{"t": 1792435694.291, "method": "GET", "path": "/ipam/ip-addresses/add/", "save": false, "fault": "pass", "status": 200, "ms": 1949}
+{"t": 1792435696.272, "method": "GET", "path": "/static/Inter-Bold-6AVOS7AV.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435700.252, "method": "POST", "path": "/ipam/ip-addresses/add/", "save": true, "fault": "pass", "status": 302, "ms": 1723}
+{"t": 1792435701.976, "method": "GET", "path": "/ipam/ip-addresses/2/", "save": false, "fault": "pass", "status": 200, "ms": 198}
+{"t": 1792435702.187, "method": "GET", "path": "/ipam/services/", "save": false, "fault": "pass", "status": 200, "ms": 28}
+{"t": 1792435704.726, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 302, "ms": 3}
+{"t": 1792435704.73, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435704.771, "method": "GET", "path": "/static/logo_netbox_dark_teal.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435704.771, "method": "GET", "path": "/static/logo_netbox_bright_teal.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435704.771, "method": "GET", "path": "/static/setmode.js", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435704.771, "method": "GET", "path": "/static/netbox.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435704.77, "method": "GET", "path": "/static/netbox-external.css", "save": false, "fault": "pass", "status": 200, "ms": 7}
+{"t": 1792435704.77, "method": "GET", "path": "/static/netbox.css", "save": false, "fault": "pass", "status": 200, "ms": 8}
+{"t": 1792435704.794, "method": "GET", "path": "/static/Inter-SemiBold-UMRILHOG.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435704.794, "method": "GET", "path": "/static/Inter-Medium-JV63DMR7.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435704.806, "method": "GET", "path": "/static/Inter-Regular-373XMOLM.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435704.804, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435704.9, "method": "POST", "path": "/login/", "save": false, "fault": "pass", "status": 302, "ms": 148}
+{"t": 1792435705.049, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 54}
+{"t": 1792435705.121, "method": "GET", "path": "/static/Inter-Italic-RW2ZALTO.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435705.122, "method": "GET", "path": "/static/Inter-MediumItalic-P7H6BBYU.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435705.121, "method": "GET", "path": "/static/materialdesignicons-webfont-7OXPFKOV.woff2", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435705.124, "method": "GET", "path": "/core/changelog/", "save": false, "fault": "pass", "status": 200, "ms": 27}
+{"t": 1792435706.175, "method": "GET", "path": "/ipam/ip-addresses/add/", "save": false, "fault": "pass", "status": 200, "ms": 34}
+{"t": 1792435706.239, "method": "GET", "path": "/static/Inter-Bold-6AVOS7AV.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435709.621, "method": "POST", "path": "/ipam/ip-addresses/add/", "save": true, "fault": "pass", "status": 302, "ms": 20}
+{"t": 1792435709.643, "method": "GET", "path": "/ipam/ip-addresses/3/", "save": false, "fault": "pass", "status": 200, "ms": 31}
+{"t": 1792435709.686, "method": "GET", "path": "/ipam/services/", "save": false, "fault": "pass", "status": 200, "ms": 21}
+{"t": 1792435713.149, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 302, "ms": 3}
+{"t": 1792435713.153, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435713.186, "method": "GET", "path": "/static/setmode.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435713.185, "method": "GET", "path": "/static/netbox-external.css", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435713.188, "method": "GET", "path": "/static/logo_netbox_bright_teal.svg", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435713.187, "method": "GET", "path": "/static/logo_netbox_dark_teal.svg", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435713.186, "method": "GET", "path": "/static/netbox.css", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435713.187, "method": "GET", "path": "/static/netbox.js", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435713.209, "method": "GET", "path": "/static/Inter-Medium-JV63DMR7.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435713.209, "method": "GET", "path": "/static/Inter-SemiBold-UMRILHOG.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435713.22, "method": "GET", "path": "/static/Inter-Regular-373XMOLM.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435713.217, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435713.314, "method": "POST", "path": "/login/", "save": false, "fault": "pass", "status": 302, "ms": 146}
+{"t": 1792435713.462, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 29}
+{"t": 1792435713.509, "method": "GET", "path": "/static/Inter-MediumItalic-P7H6BBYU.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435713.509, "method": "GET", "path": "/static/Inter-Italic-RW2ZALTO.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435713.508, "method": "GET", "path": "/static/materialdesignicons-webfont-7OXPFKOV.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435713.512, "method": "GET", "path": "/core/changelog/", "save": false, "fault": "pass", "status": 200, "ms": 18}
+{"t": 1792435713.528, "method": "GET", "path": "/ipam/ip-addresses/add/", "save": false, "fault": "pass", "status": 200, "ms": 26}
+{"t": 1792435713.581, "method": "GET", "path": "/static/Inter-Bold-6AVOS7AV.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435717.129, "method": "POST", "path": "/ipam/ip-addresses/add/", "save": true, "fault": "pass", "status": 302, "ms": 4}
+{"t": 1792435717.135, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435724.139, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 302, "ms": 3}
+{"t": 1792435724.144, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435724.178, "method": "GET", "path": "/static/logo_netbox_dark_teal.svg", "save": false, "fault": "pass", "status": 200, "ms": 1}
+{"t": 1792435724.178, "method": "GET", "path": "/static/setmode.js", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435724.178, "method": "GET", "path": "/static/logo_netbox_bright_teal.svg", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435724.177, "method": "GET", "path": "/static/netbox-external.css", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435724.178, "method": "GET", "path": "/static/netbox.js", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435724.177, "method": "GET", "path": "/static/netbox.css", "save": false, "fault": "pass", "status": 200, "ms": 6}
+{"t": 1792435724.2, "method": "GET", "path": "/static/Inter-SemiBold-UMRILHOG.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435724.2, "method": "GET", "path": "/static/Inter-Medium-JV63DMR7.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435724.212, "method": "GET", "path": "/static/Inter-Regular-373XMOLM.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435724.209, "method": "GET", "path": "/login/", "save": false, "fault": "pass", "status": 200, "ms": 5}
+{"t": 1792435724.306, "method": "POST", "path": "/login/", "save": false, "fault": "pass", "status": 302, "ms": 147}
+{"t": 1792435724.454, "method": "GET", "path": "/", "save": false, "fault": "pass", "status": 200, "ms": 60}
+{"t": 1792435724.532, "method": "GET", "path": "/static/Inter-Italic-RW2ZALTO.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435724.532, "method": "GET", "path": "/static/Inter-MediumItalic-P7H6BBYU.woff2", "save": false, "fault": "pass", "status": 200, "ms": 3}
+{"t": 1792435724.532, "method": "GET", "path": "/static/materialdesignicons-webfont-7OXPFKOV.woff2", "save": false, "fault": "pass", "status": 200, "ms": 4}
+{"t": 1792435724.536, "method": "GET", "path": "/core/changelog/", "save": false, "fault": "pass", "status": 200, "ms": 23}
+{"t": 1792435724.551, "method": "GET", "path": "/ipam/ip-addresses/add/", "save": false, "fault": "pass", "status": 200, "ms": 47}
+{"t": 1792435724.626, "method": "GET", "path": "/static/Inter-Bold-6AVOS7AV.woff2", "save": false, "fault": "pass", "status": 200, "ms": 2}
+{"t": 1792435728.391, "method": "POST", "path": "/ipam/ip-addresses/add/", "save": true, "fault": "pass", "status": 200, "ms": 27}
