@@ -524,7 +524,7 @@ def _judge_versions(
     window that isn't the agent's own refutes it; one that can't be read or
     attributed leaves it not checked."""
 
-    from openadapt_flow.runtime.effects.versions import judge_versions
+    from openadapt_flow.runtime.effects.versions import VersionVerdict, judge_versions
 
     spec = cfg.frame.versions if cfg.frame is not None else None
     if spec is None:
@@ -588,14 +588,27 @@ def _judge_versions(
             )
             targets.append((text, existed, changed))
     stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
-    result = judge_versions(
-        spec,
-        stored if isinstance(stored, Mapping) else {},
-        _read_versions(cfg, params),
-        targets,
-        _mac_key(salt),
-        params,
-    )
+    writes = (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS)
+    if spec.target_surface is not None and not any(
+        e.kind in writes and surface_of(e) == spec.target_surface for e in effects
+    ):
+        # A surface no write effect reads (a typo in a hand-written
+        # contract) would leave no target, and no target holds.
+        result = VersionVerdict(
+            "not_checked",
+            "unknown_surface",
+            reason="frame.versions.target_surface names a surface no write "
+            "effect reads, so no target's versions can be judged",
+        )
+    else:
+        result = judge_versions(
+            spec,
+            stored if isinstance(stored, Mapping) else {},
+            _read_versions(cfg, params),
+            targets,
+            _mac_key(salt),
+            params,
+        )
     frame.versions = result
     if result.status == "refuted":
         frame.status = "refuted"

@@ -58,6 +58,7 @@ PROBLEMS = (
     "duplicate_version",
     "no_new_version",
     "history_changed",
+    "unknown_surface",
 )
 
 _WHOLE = re.compile(r"^(0|[1-9][0-9]*)$")

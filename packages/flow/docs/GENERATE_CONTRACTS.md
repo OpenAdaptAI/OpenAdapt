@@ -347,7 +347,8 @@ saves. Only the main record is a target (`target_surface`). A target
 the read before the write doesn't show as new is treated as existing, and
 with no version before the write it stops as `missing` (a record saved
 before the trail began, or outside the app). With neither, the update has no
-version check, and `report.json` shows `versions: null`. If the app stops
+version check: `report.json` shows `versions: null`, and `QUESTIONS.md`
+says so under the kind. If the app stops
 writing the trail (an agenda setting turned off), the agent's own save has
 no new version, and the verifier stops the write rather than pass it.
 

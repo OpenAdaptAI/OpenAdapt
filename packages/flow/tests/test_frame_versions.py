@@ -345,3 +345,16 @@ def test_r2_i2_a_target_field_the_write_changes_is_not_a_new_record(
     )
     assert result["receipt"]["outcome"] != "verified"
     assert _versions(result)["problem"] == "missing"
+
+
+@pytest.mark.parametrize("window", [_correct, _lost_update], ids=["correct", "lost"])
+def test_a_target_surface_no_effect_reads_is_not_checked(
+    tmp_path: Path, window: Callable[[sqlite3.Connection], None]
+) -> None:
+    # A misspelt surface would leave no target, and zero targets held: a
+    # lost update was verified.
+    result = _run(tmp_path, window, {"target_surface": "recrod"})
+    assert _versions(result)["status"] == "not_checked"
+    assert _versions(result)["problem"] == "unknown_surface"
+    assert result["receipt"]["checked"]["frame"] == "not_checked"
+    assert result["receipt"]["outcome"] != "verified"
