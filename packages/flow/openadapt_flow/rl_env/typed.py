@@ -30,21 +30,25 @@ def computer_state(
     for i, el in enumerate(elements):
         w, h = int(el.get("w", 0)), int(el.get("h", 0))
         nodes.append(
-            UINode(
-                node_id=f"n{i}",
-                role=str(el.get("type") or el.get("tag") or "generic"),
-                name=el.get("label") or None,
-                css_selector=el.get("selector"),
-                bbox=BoundingBox(
-                    x=max(0, int(el["x"] - w / 2)),
-                    y=max(0, int(el["y"] - h / 2)),
-                    width=w,
-                    height=h,
-                ),
-                is_editable=el.get("tag") in ("input", "textarea", "select"),
+            UINode.model_validate(
+                {
+                    "node_id": f"n{i}",
+                    "role": str(el.get("type") or el.get("tag") or "generic"),
+                    "name": el.get("label") or None,
+                    "css_selector": el.get("selector"),
+                    "bbox": BoundingBox(
+                        x=max(0, int(el["x"] - w / 2)),
+                        y=max(0, int(el["y"] - h / 2)),
+                        width=w,
+                        height=h,
+                    ),
+                    "is_editable": el.get("tag") in ("input", "textarea", "select"),
+                }
             )
         )
-    state = ComputerState(url=url, viewport=viewport, nodes=nodes)
+    state = ComputerState.model_validate(
+        {"url": url, "viewport": viewport, "nodes": nodes}
+    )
     return state.model_dump(mode="json", exclude_none=True)
 
 
@@ -105,8 +109,8 @@ def native_action(
 
 
 def action_result(error: Optional[str], duration_ms: int) -> dict[str, Any]:
-    return ActionResult(
-        success=error is None, error=error, duration_ms=duration_ms
+    return ActionResult.model_validate(
+        {"success": error is None, "error": error, "duration_ms": duration_ms}
     ).model_dump(mode="json", exclude_none=True)
 
 
