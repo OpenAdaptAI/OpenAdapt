@@ -353,17 +353,25 @@ class Sandbox:
                 plain.setdefault(str(name), []).append(str(col))
         return {k: v for k, v in plain.items() if k not in odd}
 
-    def holds(self, table: str, values: Mapping[str, Optional[str]]) -> bool:
+    def holds(
+        self,
+        table: str,
+        values: Mapping[str, Optional[str]],
+        exclude: Optional[Mapping[str, Optional[str]]] = None,
+    ) -> bool:
         """Whether a row of the table already holds every one of ``values``
         (compared by the store, so its collation decides, as its unique
-        index would)."""
+        index would). ``exclude`` is the primary key of a row left out: the
+        row the plant itself writes, whose own value never collides."""
 
         t = self._table(table)
         where = " AND ".join(f"{self.q(c)} = %s" for c in values)
-        got = self._exec(
-            f"SELECT 1 FROM {self.t(table)} WHERE {where} LIMIT 1",
-            [_db_value(t, c, v) for c, v in values.items()],
-        )
+        args = [_db_value(t, c, v) for c, v in values.items()]
+        if exclude:
+            own = " AND ".join(f"{self.q(c)} = %s" for c in exclude)
+            where += f" AND NOT ({own})"
+            args += [_db_value(t, c, v) for c, v in exclude.items()]
+        got = self._exec(f"SELECT 1 FROM {self.t(table)} WHERE {where} LIMIT 1", args)
         return bool(got)
 
     def distinct(self, table: str, column: str, limit: int = 5) -> list[str]:
@@ -685,13 +693,22 @@ def unique_free(
     value: Optional[str],
 ) -> bool:
     """Whether ``row`` with ``col`` set to ``value`` leaves every unique
-    index of the table (other than its primary key) free: no row already
-    holds the index's values. A NULL in an index never collides."""
+    index of the table (other than its primary key) free: no other row
+    already holds the index's values. ``row`` itself, found by its primary
+    key, is left out: the plant writes that row, so a value only it holds
+    (an update's old value) is free. Without a whole primary key no row is
+    left out. A NULL in an index never collides."""
 
     get = getattr(sb, "unique_indexes", None)
     if get is None or value is None:
         return True
     holds = getattr(sb, "holds", None)
+    key = {c: row.get(c) for c in t.primary_key}
+    own = key if key and all(v is not None for v in key.values()) else None
+
+    def is_own(r: Mapping[str, Optional[str]]) -> bool:
+        return own is not None and all(r.get(c) == v for c, v in own.items())
+
     for cols in get(t.name).values():
         if col not in cols:
             continue
@@ -699,10 +716,11 @@ def unique_free(
         if any(v is None for v in want.values()):
             continue
         if holds is not None:
-            if holds(t.name, want):
+            if holds(t.name, want, exclude=own):
                 return False
         elif any(
-            all(r.get(c) == v for c, v in want.items()) for r in sb.rows(t.name, 1000)
+            not is_own(r) and all(r.get(c) == v for c, v in want.items())
+            for r in sb.rows(t.name, 1000)
         ):
             return False
     return True

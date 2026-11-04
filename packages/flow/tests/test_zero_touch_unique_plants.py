@@ -102,7 +102,9 @@ def mysql() -> Iterator[dict[str, Any]]:
         shutil.rmtree(root, ignore_errors=True)
 
 
-def _sandbox_mysql(mysql: dict[str, Any], db: str) -> Any:
+def _sandbox_mysql(
+    mysql: dict[str, Any], db: str, tables: tuple[str, ...] = TABLES
+) -> Any:
     import pymysql
 
     c = pymysql.connect(
@@ -111,7 +113,7 @@ def _sandbox_mysql(mysql: dict[str, Any], db: str) -> Any:
     cur = c.cursor()
     cur.execute(f"CREATE DATABASE {db}")
     cur.execute(f"USE {db}")
-    for sql in TABLES:
+    for sql in tables:
         cur.execute(sql)
     c.close()
     read = {"sql_driver": "pymysql", "sql_connect_args": {"host": "127.0.0.1",
@@ -121,7 +123,11 @@ def _sandbox_mysql(mysql: dict[str, Any], db: str) -> Any:
     return sb
 
 
-def _sandbox_pg(pg: dict[str, Any], db: str) -> Any:  # noqa: F811
+def _sandbox_pg(
+    pg: dict[str, Any],
+    db: str,
+    tables: tuple[str, ...] = TABLES,  # noqa: F811
+) -> Any:
     psycopg2 = pytest.importorskip("psycopg2")
     admin = psycopg2.connect(
         host="127.0.0.1", port=pg["port"], user="admin", dbname="postgres"
@@ -131,7 +137,7 @@ def _sandbox_pg(pg: dict[str, Any], db: str) -> Any:  # noqa: F811
     admin.close()
     c = psycopg2.connect(host="127.0.0.1", port=pg["port"], user="admin", dbname=db)
     c.autocommit = True
-    for sql in TABLES:
+    for sql in tables:
         c.cursor().execute(sql)
     c.close()
     read = {"sql_driver": "psycopg2", "sql_connect_args": {"host": "127.0.0.1",
@@ -222,7 +228,9 @@ def test_a_unique_index_with_no_free_value_leaves_the_fault_unplantable() -> Non
         def unique_indexes(self, table: str) -> dict[str, list[str]]:
             return {"uk": ["flag", "k"]}
 
-        def holds(self, table: str, values: dict[str, Any]) -> bool:
+        def holds(
+            self, table: str, values: dict[str, Any], exclude: Any = None
+        ) -> bool:
             return True  # every combination is taken
 
         def rows(self, table: str, limit: int = 50) -> list[dict[str, Any]]:
@@ -234,6 +242,98 @@ def test_a_unique_index_with_no_free_value_leaves_the_fault_unplantable() -> Non
     assert (
         zt.plant_free(Full(), t, "flag", {"id": "1", "flag": "true", "k": "1"}) is None
     )
+
+
+# -- an update's own old value ---------------------------------------------------
+#
+# An update changes a unique column (state A -> B, on_hold true -> false). A
+# missed edit leaves the row's old value, which only the row being written
+# holds: a legal state the store takes. Counting the target row itself as a
+# collision turned that fault into an invalid plant (an ENUM value MySQL
+# refuses) or an unplantable one (a unique boolean has no third value).
+
+ENUM_TABLES = (
+    "CREATE TABLE ticket (id integer PRIMARY KEY, state ENUM('A','B') NOT NULL,"
+    " UNIQUE KEY uk_state (state))",
+    "INSERT INTO ticket VALUES (1, 'A')",
+)
+BOOL_TABLES = (
+    "CREATE TABLE ticket (id integer PRIMARY KEY, on_hold boolean NOT NULL)",
+    "CREATE UNIQUE INDEX uk_hold ON ticket (on_hold)",
+    "INSERT INTO ticket VALUES (1, true)",
+)
+
+
+def _check_the_old_value_is_planted(sb: Any, col: str, old: str, new: str) -> None:
+    write = [zt.Op("ticket", {"id": "1"}, {"id": "1", col: new})]
+    demo = type("D", (), {"values": {col: new}})()
+    cases = [c for c in zt.faults(sb.schema, sb, demo, write)
+             if c.name.endswith(f":ticket.{col}") and c.cls != "unrelated_edit"]  # fmt: skip
+    assert cases
+    for case in cases:
+        assert not case.unplantable, case.name
+        ops = [op for op in [*case.write, *case.late] if op.table == "ticket"]
+        assert ops and ops[-1].row is not None
+        assert ops[-1].row[col] == old, (case.name, ops[-1].row[col])
+        sb.put_many(case.write)  # the store takes the plant
+        if case.late:
+            sb.put_many(case.late)
+        assert sb.get("ticket", {"id": "1"})[col] == old
+    # Fail closed is kept: another row holding the value still collides.
+    t = sb.schema.tables["ticket"]
+    assert zt.unique_free(sb, t, col, {"id": "2", col: new}, old) is False
+
+
+def test_an_updates_old_enum_value_is_planted_on_mysql(mysql: dict[str, Any]) -> None:
+    sb = _sandbox_mysql(mysql, "zt_uq_my_enum", ENUM_TABLES)
+    try:
+        _check_the_old_value_is_planted(sb, "state", "A", "B")
+    finally:
+        sb.drop()
+
+
+def test_an_updates_old_boolean_is_planted_on_postgresql(pg: Any) -> None:  # noqa: F811
+    sb = _sandbox_pg(pg, "zt_uq_pg_bool", BOOL_TABLES)
+    try:
+        _check_the_old_value_is_planted(sb, "on_hold", "true", "false")
+    finally:
+        sb.drop()
+
+
+@pytest.mark.parametrize("with_holds", [True, False])
+def test_only_another_row_holding_the_value_collides(with_holds: bool) -> None:
+    """The target row (by primary key) is left out of the collision check,
+    by the store's lookup and by the row scan alike; any other row still
+    collides, and a row with no whole key leaves nothing out."""
+
+    from openadapt_flow.generate.sql_store import Column, Table
+
+    t = Table("ticket", [Column("id", "int", False, None),
+                         Column("state", "text", False, None)], ["id"])  # fmt: skip
+    stored = [{"id": "1", "state": "A"}, {"id": "2", "state": "C"}]
+
+    class Store:
+        def unique_indexes(self, table: str) -> dict[str, list[str]]:
+            return {"uk": ["state"]}
+
+        def rows(self, table: str, limit: int = 50) -> list[dict[str, Any]]:
+            return stored
+
+    class Holding(Store):
+        def holds(
+            self, table: str, values: dict[str, Any], exclude: Any = None
+        ) -> bool:
+            return any(
+                all(r[c] == v for c, v in values.items())
+                and not (exclude and all(r[c] == v for c, v in exclude.items()))
+                for r in stored
+            )
+
+    sb = Holding() if with_holds else Store()
+    assert zt.unique_free(sb, t, "state", {"id": "1", "state": "B"}, "A")
+    assert not zt.unique_free(sb, t, "state", {"id": "1", "state": "B"}, "C")
+    assert not zt.unique_free(sb, t, "state", {"id": "3", "state": "B"}, "A")
+    assert not zt.unique_free(sb, t, "state", {"id": None, "state": "B"}, "A")
 
 
 # -- the dry read's sample values ------------------------------------------------
