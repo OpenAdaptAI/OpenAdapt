@@ -34,8 +34,9 @@ import yaml
 
 from openadapt_flow.generate import verify_contract as vc
 from openadapt_flow.taskgen import families as F
+from openadapt_flow.taskgen import secret as S
 from openadapt_flow.taskgen.kinds import KINDS, contract_kind
-from openadapt_flow.taskgen.profile import Profile, load_profile
+from openadapt_flow.taskgen.profile import PROFILE_DIR, Profile, load_profile
 
 TASK_SCHEMA = "openadapt.taskgen-task/v1"
 
@@ -109,17 +110,6 @@ def finish_contract(
     return doc
 
 
-def task_name(prof: Profile, draft: F.Draft, seed: int) -> str:
-    """The descriptive name, kept in the private validation plan only."""
-    form = "pos" if draft.positive else "adv"
-    return f"{prof.app}-v{prof.version}-{draft.kind}-{draft.family}-{form}-{seed}"
-
-
-def task_id(name: str, prefix: str) -> str:
-    """An opaque id: an agent can't read the family from it."""
-    return f"{prefix}-{hashlib.sha256(name.encode()).hexdigest()[:12]}"
-
-
 def write_pack(
     prof: Profile,
     manifest: Path,
@@ -129,25 +119,41 @@ def write_pack(
     seed: int,
     kinds: tuple[str, ...] = KINDS,
     families: Optional[tuple[str, ...]] = None,
-    split: str = "unassigned",
+    split: str = "public",
 ) -> list[dict[str, Any]]:
+    """Write a pack. A ``public`` pack uses public seeds and only the bundled
+    profiles and families; any other split needs the private salt
+    (:mod:`openadapt_flow.taskgen.secret`), which seeds its tasks and ids."""
+
+    salt = S.load_salt(split)
+    if salt is None and (prof.path is None or prof.path.parent != PROFILE_DIR):
+        raise S.SaltMissing(
+            f"{prof.name} is not a bundled profile: only private splits use it"
+        )
+    if salt is None and F.REGISTERED:
+        raise S.SaltMissing(
+            "registered (private) families can't go into a public split"
+        )
     (out / "contracts").mkdir(parents=True, exist_ok=True)
     (out / "validation").mkdir(parents=True, exist_ok=True)
     tasks: list[dict[str, Any]] = []
     n = seed
     for kind in kinds:
-        for family in F.APPLIES[kind]:
+        for family in F.applies(kind):
             if families and family not in families:
                 continue
             for positive in F.positive_forms(family):
-                for _ in range(per_cell):
+                for i in range(per_cell):
                     n += 1
+                    form = "pos" if positive else "adv"
+                    name = f"{prof.app}-v{prof.version}-{kind}-{family}-{form}-{n}"
                     try:
-                        draft = F.build(prof, kind, family, positive, n)
+                        draft = F.build(
+                            prof, kind, family, positive, S.seed(salt, name, n)
+                        )
                     except F.NotApplicable:
                         break
-                    name = task_name(prof, draft, n)
-                    tid = task_id(name, f"{prof.app}-v{prof.version}")
+                    tid = S.task_id(salt, name, f"{prof.app}-v{prof.version}")
                     ck = contract_kind(prof, kind)
                     src = contract_file(manifest, ck, draft.write.values)
                     doc = yaml.safe_load(src.read_text(encoding="utf-8"))
@@ -196,6 +202,7 @@ def write_pack(
                         "schema_version": TASK_SCHEMA,
                         "id": tid,
                         "name": name,
+                        "seeded": "public" if salt is None else "salt",
                         "app": prof.app,
                         "schema": prof.version,
                         "kind": kind,
@@ -229,6 +236,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--seed", type=int, default=1000)
     ap.add_argument("--kind", action="append")
     ap.add_argument("--family", action="append")
+    ap.add_argument(
+        "--split",
+        default="public",
+        help="public (public seeds) or a private split name (needs TASKGEN_SALT_FILE)",
+    )
     args = ap.parse_args(argv)
     prof = load_profile(args.profile)
     tasks = write_pack(
@@ -239,6 +251,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         seed=args.seed,
         kinds=tuple(args.kind) if args.kind else KINDS,
         families=tuple(args.family) if args.family else None,
+        split=args.split,
     )
     print(f"{len(tasks)} tasks -> {args.out / 'tasks.jsonl'}")
     return 0

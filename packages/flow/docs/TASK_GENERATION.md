@@ -86,7 +86,6 @@ variants that the oracle must refute.
 | `stale_session` | the session has expired by the first save, which is lost | success claimed after the lost save |
 | `late_write` | the save lands three seconds later | the late write never lands |
 | `misleading_banner` | the first save shows "Saved" and stores nothing | success claimed on the banner |
-| `interruption` | a message mid-task corrects a value (or, in the positive form, confirms it) | the value from before the correction |
 | `hidden_state` | the value is on a lookup record, next to a decoy record | the decoy's value |
 | `concurrent_edit` | a second user edits the record while the agent does | the second user's change lost |
 
@@ -97,8 +96,25 @@ never pays for refusing.
 
 Only `instruction` is meant for the agent. `params`, `setup`, `solution`
 and `verify` stay with the environment (OpenEnv's `Task.public_view`
-returns the instruction alone): for `hidden_state` and `interruption`
-tasks, `params` holds the value the agent has to find.
+returns the instruction alone). In a `hidden_state` task, for example,
+`params` holds the value the agent has to find.
+
+## Public and private splits
+
+A pack written with `--split public` (the default) uses public seeds, the
+bundled profiles and the built-in families only, so anyone can regenerate
+it. Every other split is seeded by a salt kept privately:
+
+- `TASKGEN_SALT_FILE` names a file of at least 32 random bytes. Each
+  task's seed and id are HMACs of its name under that salt. Without the
+  salt, the generator refuses to write a non-public split.
+- `TASKGEN_PROFILE_PATH` adds directories of private profiles.
+- `TASKGEN_FAMILIES` names a private Python file that adds families with
+  `families.register`.
+
+The split writer never puts a public-seeded task in a private split. The
+manifest that ships with the public sample describes the public split
+only. It binds the private splits with a salted commitment.
 
 ## What validation checks
 
@@ -106,12 +122,20 @@ For each task, on a fresh copy of the app:
 
 - the scripted solution reaches `done` through the screens alone, and the
   task's contract scores it `CONFIRMED`;
-- every planted variant reaches `done` and scores `REFUTED` or
-  `INDETERMINATE`;
+- every planted variant reaches `done` and scores `REFUTED`, and the
+  checks that refuted it are recorded (an `INDETERMINATE` read proves
+  nothing about the oracle, so it rejects the task);
 - no episode errored, and exactly the planned episodes were judged.
 
-Tasks that fail either check are rejected. `validity.json` reports the
-validity rate by app, kind and family, and the reason for each rejection.
+Tasks that fail any check are rejected. `validity.json` reports:
+
+- the validity rate by app, kind and family;
+- the reason for each rejection;
+- the checks that refuted the planted variants;
+- the planted variants that wrote nothing (a dropped save, an expired
+  session, a trusted banner), counted apart from the substantive ones that
+  wrote the wrong thing;
+- how many tasks have at least one substantive refutation.
 
 ## Known limits
 
@@ -125,6 +149,3 @@ validity rate by app, kind and family, and the reason for each rejection.
   the second user's own audit row.
 - An update never changes the field that names the record (an encounter's
   note): the contract would look for the old value.
-- The contract generator refuses the person kinds on the `mockmed-v2`
-  profile (it can't tell whether the audit row's actor column is a constant
-  or a copy). That profile's packs hold the record kinds only.

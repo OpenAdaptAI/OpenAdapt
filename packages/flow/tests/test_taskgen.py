@@ -107,9 +107,18 @@ def test_lookalike_differs_by_a_swap() -> None:
 
 
 def _task(tid: str, app: str, kind: str, family: str, schema: int = 1) -> dict:
+    seeded = (
+        "public" if app == "a" and schema == 1 and family != "interruption" else "salt"
+    )
     return {
         "id": tid,
-        "_meta": {"app": app, "kind": kind, "family": family, "schema": schema},
+        "_meta": {
+            "app": app,
+            "kind": kind,
+            "family": family,
+            "schema": schema,
+            "seeded": seeded,
+        },
     }
 
 
@@ -118,6 +127,10 @@ def test_splits_hold_out_by_app_mechanism_and_schema() -> None:
     tasks += [_task(f"m{i}", "a", "update", "interruption") for i in range(5)]
     tasks += [_task(f"b{i}", "b", "create", "control") for i in range(5)]
     tasks += [_task(f"s{i}", "a", "create", "control", schema=2) for i in range(5)]
+    salted = [_task(f"p{i}", "a", "update", "control") for i in range(8)]
+    for t in salted:
+        t["_meta"]["seeded"] = "salt"
+    tasks += salted
     rules = {
         "public": {
             "app": "a",
@@ -138,7 +151,9 @@ def test_splits_hold_out_by_app_mechanism_and_schema() -> None:
     assert {t["id"][0] for t in s["heldout_app"]} == {"b"}
     assert {t["id"][0] for t in s["heldout_mechanism"]} == {"m"}
     assert {t["id"][0] for t in s["heldout_schema"]} == {"s"}
-    assert len(s["private_train"]) == 20
+    # Public-seeded leftovers never join a private split.
+    assert {t["id"][0] for t in s["private_train"]} == {"p"}
+    assert len(s["public_unused"]) == 20
     ids = [t["id"] for v in s.values() for t in v]
     assert len(ids) == len(set(ids)) == len(tasks)
     assert not matches(_task("x", "a", "create", "interruption"), rules["public"])
@@ -289,3 +304,50 @@ def test_public_sample_matches_its_manifest() -> None:
         assert task["split"] == "public"
         assert not any(t.startswith("family:") for t in task["tags"])
         assert task["solution"][-1]["kind"] == "done"
+
+
+def test_private_splits_need_the_salt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without the private salt only the public split can be written, and a
+    salted task shares neither its seed nor its id with any public guess."""
+
+    from openadapt_flow.taskgen import secret
+    from openadapt_flow.taskgen.generate import write_pack
+
+    monkeypatch.delenv(secret.SALT_ENV, raising=False)
+    prof = load_profile(PROFILES[0])
+    with pytest.raises(secret.SaltMissing):
+        write_pack(
+            prof,
+            tmp_path / "m.yaml",
+            tmp_path / "out",
+            per_cell=1,
+            seed=1,
+            split="heldout",
+        )
+    salt_file = tmp_path / "salt"
+    salt_file.write_bytes(b"x" * 40)
+    monkeypatch.setenv(secret.SALT_ENV, str(salt_file))
+    salt = secret.load_salt("heldout")
+    name = "app-v1-create-control-adv-1001"
+    assert secret.seed(salt, name, 1001) != 1001
+    assert secret.task_id(salt, name, "app") != secret.task_id(None, name, "app")
+    assert secret.load_salt("public") is None
+
+
+def test_public_split_refuses_unbundled_profiles(tmp_path: Path) -> None:
+    from openadapt_flow.taskgen import secret
+    from openadapt_flow.taskgen.generate import write_pack
+
+    src = PROFILE_DIR / f"{PROFILES[0]}.yaml"
+    copy = tmp_path / "other.yaml"
+    copy.write_text(src.read_text())
+    with pytest.raises(secret.SaltMissing):
+        write_pack(
+            load_profile(copy),
+            tmp_path / "m.yaml",
+            tmp_path / "out",
+            per_cell=1,
+            seed=1,
+        )

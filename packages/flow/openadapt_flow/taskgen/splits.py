@@ -7,10 +7,10 @@ with the private packs) name each split by what it holds out:
 
 .. code-block:: yaml
 
-    public: {app: mockmed, schema: 1, exclude_families: [concurrent_edit, interruption], size: 100, seed: 1}
+    public: {app: clinic, schema: 1, size: 100, seed: 1}
     heldout:
-      app: {app: mockloan}
-      mechanism: {families: [concurrent_edit, interruption]}
+      app: {app: lender}
+      mechanism: {families: [a_private_family]}
       schema: {schema: 2}
     rest: private_train
 
@@ -18,8 +18,11 @@ A task lands in the first held-out split it matches, else in ``public`` when
 it matches the public rule and the stratified sample picks it, else in
 ``rest``. Every split gets ``<split>.jsonl`` with its contracts beside it, and
 ``MANIFEST.json`` lists every split's task count and SHA-256, and every
-public task's own digest. The public copy of the manifest names the private
-splits by digest only.
+public task's own digest. ``PUBLIC_MANIFEST.json``, the copy that ships with
+the public sample, describes the public split only. It commits to the
+private manifest with a salted hash (``private_commitment``), so a guessed
+private task can't be checked against it. The nonce stays in the private
+``MANIFEST.json``. Public tasks also lose their ``fault`` field.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ import argparse
 import hashlib
 import json
 import random
+import secrets
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -54,11 +58,14 @@ def _tags(task: Mapping[str, Any]) -> dict[str, str]:
         "schema": f"v{m['schema']}",
         "kind": str(m["kind"]),
         "family": str(m["family"]),
+        "seeded": str(m.get("seeded", "public")),
     }
 
 
 def matches(task: Mapping[str, Any], rule: Mapping[str, Any]) -> bool:
     tags = _tags(task)
+    if "seeded" in rule and tags["seeded"] != rule["seeded"]:
+        return False
     if "app" in rule and tags["app"] != rule["app"]:
         return False
     if "schema" in rule and tags["schema"] != f"v{rule['schema']}":
@@ -76,15 +83,19 @@ def assign(
     out: dict[str, list[dict[str, Any]]] = defaultdict(list)
     candidates: list[dict[str, Any]] = []
     for t in tasks:
+        if _tags(t)["seeded"] == "public" and not matches(t, rules["public"]):
+            raise ValueError(
+                f"{t['id']} has public seeds but doesn't match the public rule"
+            )
+        if _tags(t)["seeded"] == "public":
+            candidates.append(t)
+            continue
         for name, rule in (rules.get("heldout") or {}).items():
             if matches(t, rule):
                 out[f"heldout_{name}"].append(t)
                 break
         else:
-            if matches(t, rules["public"]):
-                candidates.append(t)
-            else:
-                out[rules.get("rest", "private_train")].append(t)
+            out[rules.get("rest", "private_train")].append(t)
     # Stratified: round-robin over kind x family cells, seeded.
     pub = rules["public"]
     cells: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
@@ -102,9 +113,9 @@ def assign(
                 picked.append(cells[key].pop())
     ids = {t["id"] for t in picked}
     out["public"] = sorted(picked, key=lambda t: t["id"])
-    out[rules.get("rest", "private_train")] += [
-        t for t in candidates if t["id"] not in ids
-    ]
+    # Public-seeded tasks the sample didn't pick are regenerable from public
+    # code, so they never join a private split.
+    out["public_unused"] += [t for t in candidates if t["id"] not in ids]
     return {k: sorted(v, key=lambda t: t["id"]) for k, v in out.items()}
 
 
@@ -142,6 +153,8 @@ def write_release(
         for t in tasks:
             t = {k: v for k, v in t.items() if k != "_meta"}
             t = {**t, "split": name}
+            if name == "public":
+                t.pop("fault", None)  # the family stays private
             # A multi-app task has one contract per app.
             paths = (
                 [t["verify"]]
@@ -169,16 +182,25 @@ def write_release(
             "tasks_sha256": sha(body),
             "digests_sha256": sha((sdir / "digests.json").read_bytes()),
         }
+    nonce = secrets.token_hex(32)
+    private = {k: v for k, v in manifest["splits"].items() if k != "public"}
+    manifest["private_commitment_nonce"] = nonce
     (out / "MANIFEST.json").write_text(
         json.dumps(manifest, indent=1, sort_keys=True) + "\n"
     )
     public = {
         "schema_version": MANIFEST_SCHEMA,
-        "splits": manifest["splits"],
+        "splits": {k: v for k, v in manifest["splits"].items() if k == "public"},
         "public_tasks": json.loads((out / "public" / "digests.json").read_text())
         if "public" in splits
         else {},
-        "about": "Private splits are named by count and digest only; their tasks are kept privately.",
+        # sha256(nonce + the private splits' entries): binds them without
+        # letting anyone check a guess.
+        "private_commitment": sha(
+            (
+                nonce + json.dumps(private, sort_keys=True, separators=(",", ":"))
+            ).encode()
+        ),
     }
     (out / "PUBLIC_MANIFEST.json").write_text(
         json.dumps(public, indent=1, sort_keys=True) + "\n"

@@ -23,8 +23,10 @@ a different person). So the reward never pays for refusing.
 from __future__ import annotations
 
 import copy
+import importlib.util
+import os
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from openadapt_flow.taskgen import kinds as K
 from openadapt_flow.taskgen.profile import Profile
@@ -37,7 +39,6 @@ FAMILIES = (
     "late_write",
     "misleading_banner",
     "concurrent_edit",
-    "interruption",
     "hidden_state",
 )
 
@@ -50,7 +51,6 @@ APPLIES: dict[str, tuple[str, ...]] = {
         "stale_session",
         "late_write",
         "misleading_banner",
-        "interruption",
         "hidden_state",
     ),
     "update": FAMILIES,
@@ -82,6 +82,69 @@ APP_FAULTS: dict[str, tuple[str, ...]] = {
     "cancel": ("wrong_record", "drop_write"),
     "merge": ("wrong_record", "drop_write"),
 }
+
+
+#: A file of more families, kept privately (held-out mechanisms): a module
+#: that calls :func:`register` when it is imported.
+EXTRA_FAMILIES_ENV = "TASKGEN_FAMILIES"
+
+
+@dataclass
+class Ctx:
+    """What a registered family's hook reads and changes while a task is
+    built (see :func:`register`)."""
+
+    prof: Profile
+    kind: str
+    positive: bool
+    s: K.Sampler
+    w: K.World
+    pid: int
+    cid: Optional[int]
+    survivor: Optional[int]
+    person: dict[str, Any]
+    new: dict[str, Any]
+    write: K.Write
+    body: list[dict[str, Any]]
+    text: str
+    setup: dict[str, Any]
+    planted: list["Planted"]
+    open_steps: list[dict[str, Any]]
+    after: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class Family:
+    name: str
+    kinds: tuple[str, ...]
+    forms: tuple[bool, ...]
+    hook: Callable[[Ctx], None]
+
+
+REGISTERED: dict[str, Family] = {}
+_loaded: list[str] = []
+
+
+def register(family: Family) -> None:
+    """Add a family (from a private module named by ``TASKGEN_FAMILIES``)."""
+    REGISTERED[family.name] = family
+
+
+def _load_extra() -> None:
+    path = os.environ.get(EXTRA_FAMILIES_ENV)
+    if not path or path in _loaded:
+        return
+    spec = importlib.util.spec_from_file_location("taskgen_extra_families", path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"{EXTRA_FAMILIES_ENV}={path} is not a Python file")
+    spec.loader.exec_module(importlib.util.module_from_spec(spec))
+    _loaded.append(path)
+
+
+def applies(kind: str) -> tuple[str, ...]:
+    """The families a kind can carry: the built-in ones and any registered."""
+    _load_extra()
+    return APPLIES[kind] + tuple(n for n, f in REGISTERED.items() if kind in f.kinds)
 
 
 class NotApplicable(ValueError):
@@ -237,7 +300,7 @@ def who_text(prof: Profile, person: dict[str, Any], *, by_key: bool = True) -> s
 def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> Draft:
     """One task of ``kind`` carrying ``family`` (its positive form if asked)."""
 
-    if family not in APPLIES[kind]:
+    if family not in applies(kind):
         raise ValueError(f"{family} does not apply to {kind}")
     s = K.Sampler(prof, seed)
     P, C, L = (
@@ -447,42 +510,13 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
         planted.append(
             Planted("fault:late_write_lost", setup={"fault": "late_write_lost"})
         )
-    elif family == "interruption":
-        other = prof.other["user"]
-        changed = [k for k in new if k not in (C.cancel.get("reason_field"),)]
-        fname = changed[0]
-        ent = C if kind in ("create", "update_child") else P
-        if positive:
-            setup["interrupt"] = {
-                "after_requests": 2,
-                "from": other,
-                "text": f"Reminder: the {ent.field(fname).label.lower()} you were given is correct, go ahead.",
-            }
-        else:
-            stale_value = new[fname]
-            fresh = s.value(ent, fname, avoid=stale_value, person=person)
-            setup["interrupt"] = {
-                "after_requests": 2,
-                "from": other,
-                "text": f'Correction: use {ent.field(fname).label.lower()} "{fresh}", not "{stale_value}".',
-            }
-            new_fresh = dict(new)
-            new_fresh[fname] = fresh
-            stale_write = write
-            write = K.make_write(
-                prof, kind, w, pid, child_id=cid, new=new_fresh, survivor_id=survivor
-            )
-            body = write.actions
-            planted.append(
-                Planted(
-                    "trap:ignored_the_correction",
-                    solution=K.sign_in(prof)
-                    + open_steps
-                    + stale_write.actions
-                    + [_done()],
-                )
-            )
-        text += " Read any message that arrives while you work."
+    elif family in REGISTERED:
+        ctx = Ctx(
+            prof, kind, positive, s, w, pid, cid, survivor, person, new, write,
+            body, text, setup, planted, open_steps, after,
+        )  # fmt: skip
+        REGISTERED[family].hook(ctx)
+        write, body, text, after = ctx.write, ctx.body, ctx.text, ctx.after
     elif family == "concurrent_edit":
         attribution = True
         ent_name = prof.person if kind == "update" else prof.child
@@ -615,8 +649,6 @@ def build(prof: Profile, kind: str, family: str, positive: bool, seed: int) -> D
         planted.append(Planted(f"fault:{fault}", setup={"fault": fault}))
 
     solution = K.sign_in(prof) + open_steps + pre + body + after + [_done()]
-    if family == "late_write" or family == "misleading_banner":
-        pass
     tags = [
         f"kind:{kind}",
         f"family:{family}",
@@ -649,7 +681,10 @@ def _form_start(write: K.Write) -> int:
 
 def positive_forms(family: str) -> tuple[bool, ...]:
     """Families with a distinct positive form get both."""
-    return (False, True) if family in ("interruption", "concurrent_edit") else (False,)
+    _load_extra()
+    if family in REGISTERED:
+        return REGISTERED[family].forms
+    return (False, True) if family == "concurrent_edit" else (False,)
 
 
 def clone_setup(setup: dict[str, Any]) -> dict[str, Any]:

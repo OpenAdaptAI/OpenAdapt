@@ -9,6 +9,7 @@ else: no app name appears in the generator's code.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -17,6 +18,8 @@ import yaml
 
 PROFILE_SCHEMA = "openadapt.taskgen-profile/v1"
 PROFILE_DIR = Path(__file__).resolve().parent / "profiles"
+#: More profile directories, searched after the bundled one.
+PROFILE_PATH_ENV = "TASKGEN_PROFILE_PATH"
 FIELD_TYPES = ("text", "date", "choice", "ref", "number")
 OPS = ("create", "update", "cancel", "merge")
 
@@ -186,7 +189,13 @@ def load_profile(source: str | Path) -> Profile:
 
     path = Path(source)
     if not path.suffix:
-        path = PROFILE_DIR / f"{source}.yaml"
+        # By name: the bundled profiles, then each directory on
+        # TASKGEN_PROFILE_PATH (held-out profiles are kept privately).
+        dirs = [PROFILE_DIR] + [
+            Path(d) for d in os.environ.get(PROFILE_PATH_ENV, "").split(os.pathsep) if d
+        ]
+        found = [d / f"{source}.yaml" for d in dirs if (d / f"{source}.yaml").is_file()]
+        path = found[0] if found else PROFILE_DIR / f"{source}.yaml"
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:

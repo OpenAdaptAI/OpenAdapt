@@ -1,7 +1,0 @@
-# A clinic books a procedure, then the lender funds it: one write in each
-# app, for the same person, who has a different key in each.
-schema_version: openadapt.taskgen-flow/v1
-name: patient-financing
-steps:
-  - {profile: mockmed, kind: create, set: {type: Procedure}}
-  - {profile: mockloan, kind: create, set: {product: Medical}, copy: {memo: note}}

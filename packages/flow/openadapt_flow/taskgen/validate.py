@@ -38,7 +38,38 @@ import yaml
 from openadapt_flow.taskgen.contracts import READER_PASSWORD_ENV
 
 CONFIRMED = "CONFIRMED"
-NOT_CONFIRMED = ("REFUTED", "INDETERMINATE")
+#: The only verdict a planted variant may get: an INDETERMINATE read proves
+#: nothing about the oracle, so it rejects the task.
+REFUTED = "REFUTED"
+
+
+def refuted_by(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Which checks refuted an episode, from verify-run's evidence, and
+    whether the episode wrote anything at all (``nothing_written``: no
+    declared record appeared and the database frame saw no other change)."""
+
+    effects = (evidence.get("readback") or {}).get("effects") or []
+    frame = evidence.get("frame") or {}
+    checks = [
+        f"{e.get('kind')}#{i}:{e.get('observed_effect')}"
+        f"({e.get('observed_count')}/{e.get('expected_count')})"
+        for i, e in enumerate(effects)
+        if e.get("verdict") != CONFIRMED
+    ]
+    if frame.get("status") == "refuted":
+        what = sorted(set(frame.get("collateral_kinds") or []))
+        if frame.get("target_changed_by_other"):
+            what.append("target_changed_by_other")
+        checks.append("frame:" + ",".join(what or ["refuted"]))
+    versions = frame.get("versions") or {}
+    if versions.get("status") == "refuted":
+        checks.append(f"versions:{versions.get('problem')}")
+    nothing = all(
+        (e.get("observed_count") or 0) == 0
+        for e in effects
+        if e.get("kind") == "record_written"
+    ) and not frame.get("collateral_count")
+    return {"refuted_by": checks, "nothing_written": nothing}
 
 
 def load_contract(path: Path, dbname: Optional[str]) -> Any:
@@ -114,6 +145,7 @@ def judge_episode(
             )
             receipt = result["receipt"]
             out["verdict"] = str(receipt["effect_verdict"])
+            out.update(refuted_by(result.get("evidence") or {}))
             reasons = result.get("reasons") or receipt.get("reasons") or []
             if out["verdict"] != CONFIRMED:
                 out["reasons"] = [str(r)[:240] for r in reasons][:4] or [
@@ -251,6 +283,7 @@ def _flow_worker(args: tuple[int, str, str, list[str], str]) -> list[dict[str, A
             except Exception as exc:  # noqa: BLE001
                 ui = f"action_failed: {str(exc)[:200]}"
             verdicts = {}
+            checks: dict[str, Any] = {}
             for name, spec in task["apps"].items():
                 r = verify_run(
                     cfgs[name],
@@ -264,12 +297,17 @@ def _flow_worker(args: tuple[int, str, str, list[str], str]) -> list[dict[str, A
                     baseline_path=bases[name],
                 )
                 verdicts[name] = str(r["receipt"]["effect_verdict"])
+                checks[name] = refuted_by(r.get("evidence") or {})
             both = all(v == CONFIRMED for v in verdicts.values())
             return {
                 "verdict": CONFIRMED
                 if both
                 else ("REFUTED" if "REFUTED" in verdicts.values() else "INDETERMINATE"),
                 "per_app": verdicts,
+                "refuted_by": [
+                    f"{a}:{c}" for a, x in checks.items() for c in x["refuted_by"]
+                ],
+                "nothing_written": all(x["nothing_written"] for x in checks.values()),
                 "ui": ui,
             }
         finally:
@@ -359,6 +397,10 @@ def summarize(pack: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
         for e in planted:
             if e["verdict"] == CONFIRMED:
                 why.append(f"planted {e['episode']} was CONFIRMED")
+            elif e["verdict"] != REFUTED:
+                why.append(f"planted {e['episode']} was {e['verdict']}, not REFUTED")
+            elif not e.get("refuted_by"):
+                why.append(f"planted {e['episode']} REFUTED with no check named")
             elif e.get("ui") != "reached_done":
                 # A trap that never ran proves nothing about the oracle.
                 why.append(
@@ -386,6 +428,29 @@ def summarize(pack: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
         for e in rows
         if e["episode"] != "positive"
     )
+    planted_rows = [e for e in rows if e["episode"] != "positive"]
+    # A variant that wrote nothing (a dropped save, an expired session, a
+    # trusted banner) only shows the oracle sees a missing record; one that
+    # wrote the wrong thing shows it tells right from wrong.
+    by_class = Counter(
+        ("nothing_written" if e.get("nothing_written") else "substantive")
+        + ":"
+        + e["verdict"]
+        for e in planted_rows
+    )
+    checks_used = Counter(
+        c.split(":")[0].split("#")[0]
+        for e in planted_rows
+        for c in e.get("refuted_by") or []
+    )
+    with_substantive = sum(
+        any(
+            not e.get("nothing_written") and e["verdict"] == REFUTED
+            for e in by_task.get(t["id"], [])
+            if e["episode"] != "positive"
+        )
+        for t in tasks
+    )
     return {
         "pack": pack.name,
         "overall": rate([t["id"] for t in tasks]),
@@ -393,6 +458,9 @@ def summarize(pack: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "by_kind": {k: rate(v) for k, v in sorted(groups["kind"].items())},
         "by_family": {k: rate(v) for k, v in sorted(groups["family"].items())},
         "planted_verdicts": dict(sorted(planted_counts.items())),
+        "planted_by_class": dict(sorted(by_class.items())),
+        "refuting_checks": dict(sorted(checks_used.items())),
+        "tasks_with_a_substantive_refutation": with_substantive,
         "episodes": len(rows),
         "rejected": {k: v["why"] for k, v in verdicts.items() if not v["valid"]},
         "valid_ids": sorted(k for k, v in verdicts.items() if v["valid"]),

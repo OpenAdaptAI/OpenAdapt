@@ -1,8 +1,10 @@
 """Multi-app tasks: one write in each of two apps, linked by the same person.
 
-    python -m openadapt_flow.taskgen.multiapp flows/patient-financing.yaml \\
-        --manifests mockmed=work/mockmed/out/manifest.yaml \\
-        --manifests mockloan=work/mockloan/out/manifest.yaml --out packs/flow --count 30
+    python -m openadapt_flow.taskgen.multiapp FLOW.yaml \\
+        --manifests app_a=work/app_a/out/manifest.yaml \\
+        --manifests app_b=work/app_b/out/manifest.yaml --out packs/flow --count 30
+
+Multi-app tasks are a held-out split, so this needs the private salt.
 
 A flow (``openadapt.taskgen-flow/v1``, data) names two steps. Each step is
 an ordinary kind on one app's profile; the second step copies values from
@@ -32,7 +34,8 @@ import yaml
 from openadapt_flow.generate import verify_contract as vc
 from openadapt_flow.taskgen import families as F
 from openadapt_flow.taskgen import kinds as K
-from openadapt_flow.taskgen.generate import contract_file, task_id
+from openadapt_flow.taskgen import secret as S
+from openadapt_flow.taskgen.generate import contract_file
 from openadapt_flow.taskgen.kinds import contract_kind
 from openadapt_flow.taskgen.profile import load_profile
 
@@ -159,12 +162,14 @@ def write_flows(
         raise ValueError(f"{flow_path}: not an {FLOW_SCHEMA} document")
     (out / "contracts").mkdir(parents=True, exist_ok=True)
     (out / "validation").mkdir(parents=True, exist_ok=True)
+    # Multi-app tasks are a held-out split: their seeds come from the salt.
+    salt = S.load_salt("multi_app")
     tasks = []
     for i in range(count):
         n = seed + i
-        built = build_flow(flow, n)
         name = f"flow-{flow['name']}-{n}"
-        tid = task_id(name, f"flow-{flow['name']}")
+        built = build_flow(flow, S.seed(salt, name, n))
+        tid = S.task_id(salt, name, f"flow-{flow['name']}")
         apps: dict[str, Any] = {}
         for prof, world, write in zip(
             built["profiles"], built["worlds"], built["writes"]
@@ -188,7 +193,7 @@ def write_flows(
             }
         task = {
             "id": tid,
-            "split": "unassigned",
+            "split": "multi_app",
             "instruction": built["instruction"],
             "apps": apps,
             "feasible": True,
@@ -202,6 +207,7 @@ def write_flows(
                 {
                     "id": tid,
                     "name": name,
+                    "seeded": "salt",
                     "app": flow["name"],
                     "schema": 1,
                     "kind": "multi_app",
@@ -237,6 +243,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--count", type=int, default=30)
     ap.add_argument("--seed", type=int, default=40000)
+    # The flow file and its profiles are private (TASKGEN_PROFILE_PATH).
     args = ap.parse_args(argv)
     manifests = {}
     for m in args.manifests:
