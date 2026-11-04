@@ -93,8 +93,20 @@ def test_load_non_mapping_raises(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "kind,kwargs,expected",
     [
-        ("rest", {"base_url": "http://sor"}, "RestRecordVerifier"),
-        ("fhir", {"base_url": "http://sor/fhir"}, "FhirEffectVerifier"),
+        (
+            "rest",
+            {"base_url": "http://sor", "records_path": "/api/db"},
+            "RestRecordVerifier",
+        ),
+        (
+            "fhir",
+            {
+                "base_url": "http://sor/fhir",
+                "resource_type": "Observation",
+                "field_paths": {"value": "valueString"},
+            },
+            "FhirEffectVerifier",
+        ),
         ("document-hash", {"root": "/tmp/store"}, "DocumentHashVerifier"),
     ],
 )
@@ -109,7 +121,7 @@ def test_build_verifier_none_kind_is_none() -> None:
 
 def test_rest_requires_base_url() -> None:
     with pytest.raises(ValueError, match="base_url"):
-        build_effect_verifier(EffectsConfig(kind="rest"))
+        build_effect_verifier(EffectsConfig(kind="rest", records_path="/api/db"))
 
 
 def test_document_hash_requires_root() -> None:

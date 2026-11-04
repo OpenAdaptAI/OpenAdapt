@@ -278,7 +278,7 @@ def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
     staging: Path | None = None
     try:
         try:
-            key = crypto.require_key(None)
+            key = crypto.require_configured_key()
         except crypto.MissingKeyError as exc:
             raise BundleSealingError(str(exc)) from exc
 

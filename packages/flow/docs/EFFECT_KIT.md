@@ -1014,6 +1014,8 @@ Two kit-wide conventions:
   ```yaml
   effects:
     kind: rest
+    base_url: https://app.example
+    records_path: /api/records            # required: the app's own records read
     auth:
       bearer_env: SOR_BEARER_TOKEN        # or header+value_env, or basic_env
   ```
@@ -1094,6 +1096,7 @@ effects:
   kind: fhir
   base_url: https://fhir.example.org/r4
   resource_type: Observation
+  field_paths: {id: id, patient: subject.reference, note: valueString}
   smart_backend:
     client_id: my-registered-client
     scope: system/Observation.rs

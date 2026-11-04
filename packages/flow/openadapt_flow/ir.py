@@ -835,7 +835,7 @@ class WebFormWrite(BaseModel):
 
     - ``ambient``: the page sent it on its own. It came from a script of
       another document than the form, one that was loaded before the form
-      opened (for example OpenEMR's tab shell, which posts
+      opened (for example an app's tab shell that posts
       ``execute_background_services.php`` on a timer), and the form page's
       source doesn't name it. No replaced step caused it, so the API step
       neither sends nor waits for it; the live page goes on as it does under
@@ -886,7 +886,7 @@ class WebFormSpec(BaseModel):
     #: Page script the browser runs on this save that the API step can't
     #: evaluate by reading the form: the form's ``on*`` handlers, the ``on*``
     #: handlers of the fields it sends, a page script listening for submit,
-    #: and validate.js rule kinds such as OpenEMR's ``pastDate``. Before each
+    #: and validate.js rule kinds such as a ``pastDate`` rule. Before each
     #: save the runtime runs that script itself, in a scratch page of the live
     #: session with every write blocked, on the run's values, and sends only
     #: when the page would submit exactly the body the API step built. When
@@ -901,7 +901,7 @@ class WebFormSpec(BaseModel):
     submitter: Optional[str] = None
     submitter_requests: list[str] = Field(default_factory=list)
     #: The control the person clicked to confirm the save when it isn't the
-    #: submitter (for example OpenEMR's ``#confirmCreate`` in the duplicate
+    #: submitter (for example a ``#confirmCreate`` button in a duplicate
     #: check dialog). Running the page's script clicks it too, in whichever
     #: frame has it, and the page must then submit the form.
     confirm: Optional[str] = None
@@ -3689,6 +3689,13 @@ class Workflow(BaseModel):
             report = _bv.validate_workflow(wf)
             report.raise_if(categories=("structure",))
 
+        if not bundle_encrypted and wf.encrypted:
+            # The flag is authoritative only with an encrypted envelope on
+            # disk: a plaintext copy (for example a decrypted upload) that
+            # still says encrypted is plaintext, and loads as plaintext.
+            wf.encrypted = False
+            if wf.manifest is not None:
+                wf.manifest = wf.manifest.model_copy(update={"encrypted": False})
         return wf
 
     def stamp_certification(

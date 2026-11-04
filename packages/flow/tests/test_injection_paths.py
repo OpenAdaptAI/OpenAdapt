@@ -32,8 +32,8 @@ pytest.importorskip("playwright.sync_api")
 from openadapt_flow.compile_agent import FirstRunCompiler  # noqa: E402
 from openadapt_flow.compile_agent.agents import AgentLedger  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
-from openadapt_flow.mockmed.teach_scope import EncounterWrites  # noqa: E402
 from openadapt_flow.tutorial import _http_json  # noqa: E402
+from tests._teach_scope import EncounterWrites  # noqa: E402
 from tests.test_injection_suite import _Attacker, _intent, _untrusted_text  # noqa: E402
 
 NOTE = "Synthetic follow-up in two weeks"
@@ -470,7 +470,7 @@ def _guarded_run(
             "verify": str(_guard_verify(tmp_path, base)),
             "allow_text": ["Triage"],
             **(
-                {"write_adapter": "openadapt_flow.mockmed.teach_scope:EncounterWrites"}
+                {"write_adapter": "tests._teach_scope:EncounterWrites"}
                 if write_adapter
                 else {}
             ),

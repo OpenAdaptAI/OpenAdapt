@@ -119,6 +119,8 @@ _MAX_TEXT_CHARS = 65_536
 _MAX_UIA_NODES = 5_000
 _MAX_UIA_CANDIDATES = 16
 _MAX_UIA_DEPTH = 24
+#: Elements one ``/uia/tree`` observation returns at most.
+_MAX_TREE_NODES = 400
 # An Invoke that has not returned after this long (a click handler showing a
 # modal dialog, or an app that is not answering) is an uncertain delivery.
 _INVOKE_RETURN_S = 2.0
@@ -447,8 +449,29 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
 
         pyautogui.FAILSAFE = False
         if text:
+            foreground = _foreground_window_identity()
+            if foreground is None:
+                raise AgentRequestError(
+                    503,
+                    "input_focus_unavailable",
+                    "cannot bind keyboard input to a foreground window",
+                )
+
+            def require_foreground() -> None:
+                if _foreground_window_identity() != foreground:
+                    raise AgentRequestError(
+                        409,
+                        "input_focus_changed",
+                        "foreground window changed during typing; delivery may be partial",
+                    )
+
             if text.isascii():
-                pyautogui.write(text, interval=float(interval))
+                for index, char in enumerate(text):
+                    require_foreground()
+                    pyautogui.write(char, interval=0, _pause=False)
+                    require_foreground()
+                    if index + 1 < len(text):
+                        time.sleep(float(interval))
             else:
                 encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
                 ps = (
@@ -463,7 +486,9 @@ def _perform_input(payload: dict[str, Any]) -> dict[str, Any]:
                 if completed.returncode != 0:
                     raise RuntimeError("Set-Clipboard failed")
                 time.sleep(0.2)
+                require_foreground()
                 pyautogui.hotkey("ctrl", "v")
+                require_foreground()
         return _delivery_receipt("physical_type_text", native=False)
 
     if action == "press":
@@ -1159,6 +1184,62 @@ def _read_rows(container: object) -> tuple[list[dict[str, Any]], bool]:
     return rows, truncated
 
 
+def _window_tree(
+    auto: Any, window_name: str, max_nodes: int
+) -> tuple[list[dict[str, Any]], bool]:
+    """The elements of the top-level windows named ``window_name``.
+
+    Read-only, for an observation: role, name, automation id, bounds and
+    depth of each element with a known role or a name, depth first. Values are
+    not read: a text box's content shows on screen, and reading it here would
+    add a channel the pixels-only surface does not have.
+    """
+    try:
+        root = auto.GetRootControl()
+    except Exception as exc:  # noqa: BLE001
+        raise AgentRequestError(
+            503, "uia_unavailable", "UI Automation is unavailable"
+        ) from exc
+    nodes: list[dict[str, Any]] = []
+    visited = 0
+    truncated = False
+    for window in _children(root):
+        if (
+            " ".join(str(_control_value(window, "Name", "") or "").split())
+            != window_name
+        ):
+            continue
+        stack: list[tuple[Any, int]] = [(window, 0)]
+        while stack:
+            control, depth = stack.pop()
+            visited += 1
+            if visited > _MAX_UIA_NODES or len(nodes) >= max_nodes:
+                truncated = True
+                break
+            bounds = _bounds(control)
+            role = _role(control)
+            name = " ".join(str(_control_value(control, "Name", "") or "").split())
+            if bounds is not None and (role or name):
+                nodes.append(
+                    {
+                        "role": role
+                        or str(_control_value(control, "ControlTypeName", "")),
+                        "name": name[:_MAX_IDENTITY_TEXT] or None,
+                        "automation_id": str(
+                            _control_value(control, "AutomationId", "") or ""
+                        )
+                        or None,
+                        "bounds": bounds,
+                        "depth": depth,
+                    }
+                )
+            if depth < _MAX_UIA_DEPTH:
+                stack.extend((c, depth + 1) for c in reversed(_children(control)))
+        if truncated:
+            break
+    return nodes, truncated
+
+
 def _perform_uia_initialized(
     auto: Any, operation: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1251,6 +1332,30 @@ def _perform_uia_initialized(
             # a locator that matches others too could only ever be refused.
             locator = None
         return {"status": "ok", "locator": locator}
+
+    if operation == "tree":
+        data = _exact_object(
+            payload,
+            required=frozenset({"window_name"}),
+            optional=frozenset({"max_nodes"}),
+            label="uia tree",
+        )
+        window_name = data["window_name"]
+        if not isinstance(window_name, str) or not 1 <= len(window_name) <= 512:
+            raise AgentRequestError(
+                400, "invalid_schema", "window_name must be a bounded string"
+            )
+        max_nodes = data.get("max_nodes", _MAX_TREE_NODES)
+        if (
+            not isinstance(max_nodes, int)
+            or isinstance(max_nodes, bool)
+            or not 1 <= max_nodes <= _MAX_TREE_NODES
+        ):
+            raise AgentRequestError(
+                400, "invalid_schema", f"max_nodes must be 1..{_MAX_TREE_NODES}"
+            )
+        nodes, truncated = _window_tree(auto, window_name, max_nodes)
+        return {"status": "ok", "nodes": nodes, "truncated": truncated}
 
     if operation == "read":
         data = _exact_object(
@@ -2251,8 +2356,8 @@ def _running_image_digest(pid: int, path: str) -> Optional[str]:
     return _image_file_digest(path)
 
 
-def _foreground_process_id() -> Optional[int]:
-    """The process that owns the foreground window, without reading its title."""
+def _foreground_window_identity() -> Optional[tuple[int, int]]:
+    """Foreground window and owning process, without reading a window title."""
 
     if os.name != "nt":
         return None
@@ -2282,7 +2387,13 @@ def _foreground_process_id() -> Optional[int]:
             return None
     except Exception:  # noqa: BLE001 - unavailable means unverifiable
         return None
-    return int(pid.value)
+    return int(hwnd), int(pid.value)
+
+
+def _foreground_process_id() -> Optional[int]:
+    """The process that owns the foreground window, without reading its title."""
+    identity = _foreground_window_identity()
+    return identity[1] if identity is not None else None
 
 
 def _foreground_application_identity() -> Optional[str]:
@@ -2582,6 +2693,7 @@ def make_handler_class(
                 "/uia/find": ("uia", "find"),
                 "/uia/act": ("uia", "act"),
                 "/uia/read": ("uia", "read"),
+                "/uia/tree": ("uia", "tree"),
             }
             is_legacy = self.path == "/execute_windows" and config.allow_legacy_exec
             if self.path not in typed_routes and not is_legacy:

@@ -113,8 +113,15 @@
     },
     "RewardScoringPolicyV1": {
       "additionalProperties": false,
-      "description": "How each scoring class becomes a scalar.\n\nUncertain episodes and platform failures are fixed to ``unscored`` in\nthis version.  A contract cannot declare them to be zero.",
+      "description": "How each scoring class becomes a scalar.\n\nUncertain episodes and platform failures are fixed to ``unscored`` in\nthis version.  A contract cannot declare them to be zero.\n\n``escalated_after_effect_reward`` is the credit for an episode that did\nthe work and then asked a person instead of declaring it done.  It sets\nthe confidence a policy needs before it declares done rather than asks:\nwith verified reward ``v``, wrong-effect reward ``w`` and this value\n``x``, declaring done pays more in expectation only when the policy is\nmore than ``(x - w) / (v - w)`` sure the effect is right.  With the\ndefaults (1, -1, 0.5) that is 75%.  Zero gives no credit for asking; a\nvalue at or above the verified reward is refused, because asking would\nthen pay as much as finishing.",
       "properties": {
+        "escalated_after_effect_reward": {
+          "default": 0.5,
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "title": "Escalated After Effect Reward",
+          "type": "number"
+        },
         "halted_before_effect_reward": {
           "default": 0.0,
           "maximum": 0.0,

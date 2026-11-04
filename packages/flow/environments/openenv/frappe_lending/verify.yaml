@@ -1,0 +1,21 @@
+# The synthetic applicant's Loan Application rows, read by the fixture's direct
+# read-only SQL (served on a loopback port the agent cannot reach): exactly one
+# new application with the requested product, amount and repayment periods.
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
+verifier:
+  kind: rest
+  base_url: ${RECORDS_URL}
+  records_path: /records
+effects:
+  - kind: record_written
+    match:
+      applicant: {literal: OpenAdapt Synthetic Applicant}
+      applicant_type: {literal: Customer}
+      loan_product: {param: loan_product}
+      loan_amount: {param: loan_amount}
+      repayment_periods: {param: repayment_periods}
+      applicant_email_address: {param: email}
+      applicant_phone_number: {param: phone}
+    expected_count: 1
+    count_new_only: true

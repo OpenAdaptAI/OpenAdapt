@@ -2937,7 +2937,7 @@ class _CoveredHalt(tuple):
 
 #: How far the share of the band left uncovered may be from the share of the
 #: recorded text read: the dialog's left edge must be where the read stops.
-#: On the lab's Patient Notes notice the two are 0.79 and 0.81.
+#: On one lab app's session notice the two were 0.79 and 0.81.
 _CUT_TOLERANCE = 0.1
 
 
@@ -3148,8 +3148,14 @@ def _uncovered_band_matches(step: Step, observed: str, recorded: Optional[str]) 
         return False
     if not band[len(read) - 1].startswith(read[-1]):
         return False
+    whole = observed
+    if read[-1] != band[len(read) - 1]:
+        # The word the dialog cuts is checked above as a prefix of the
+        # recorded word; the template weighs whole words only, so a cut
+        # date or id ("1984-") is not read as a different value.
+        whole = " ".join(observed.split()[:-1])
     try:
-        match = _band_match_template(template, observed)
+        match = _band_match_template(template, whole)
     except Exception:  # noqa: BLE001 - an unreadable match is doubt
         return False
     return (

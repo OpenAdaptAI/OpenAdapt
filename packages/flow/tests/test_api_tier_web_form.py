@@ -599,7 +599,9 @@ def _run(tmp_path, wf, status, **kw):
         report = Replayer(
             backend,
             vision=FakeVision(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             web_form_actuator=actuator,
             poll_interval_s=0.01,
             **kw,
@@ -735,7 +737,9 @@ def test_an_uncertain_save_needs_reconciliation_and_is_never_redone(tmp_path):
         report = Replayer(
             backend,
             vision=FakeVision(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             web_form_actuator=actuator,
             poll_interval_s=0.01,
         ).run(_span_workflow(), bundle_dir=bundle, run_dir=tmp_path / "run")
