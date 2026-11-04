@@ -62,6 +62,8 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from openadapt_flow.runtime.effects.effect import ValueExpr
+
 __all__ = [
     "FinalCheck",
     "HistoryEntryReader",
@@ -95,8 +97,10 @@ def view_key(url: Optional[str]) -> Optional[str]:
         return None
     path = parts.path.rstrip("/") or "/"
     route = parts.fragment if parts.fragment[:1] in ("/", "!") else ""
-    return f"{parts.scheme}://{parts.netloc}".lower() + path + (
-        f"#{route}" if route else ""
+    return (
+        f"{parts.scheme}://{parts.netloc}".lower()
+        + path
+        + (f"#{route}" if route else "")
     )
 
 
@@ -257,6 +261,9 @@ class HistoryView(BaseModel):
     ready_selector: str
     row_selector: str
     entry: HistoryEntryReader
+    #: The record's identifier as the history shows it (a patient ID),
+    #: usually a run parameter. Defaults to the read-back's identity value.
+    record: Optional[ValueExpr] = None
     #: Regular expressions; every new entry about this record must match one.
     #: Learned from the demonstration's own history entries.
     explained: list[str] = Field(min_length=1, max_length=64)
@@ -266,10 +273,22 @@ class HistoryView(BaseModel):
     #: Env var holding the run's own account name, so entries by other
     #: users are excused. Needs ``entry.user``.
     acting_user_env: Optional[str] = None
+    #: Regular expressions for entries that record a read, not a change
+    #: (an audit log that logs every query): they are left out entirely.
+    ignored: list[str] = Field(default_factory=list, max_length=64)
+    #: Record values that tie an entry to no record (an audit log that writes
+    #: patient 0, or nothing, for bookkeeping). Such an entry is never taken
+    #: as a change to another record; it must still match ``explained``.
+    unattributed_records: list[str] = Field(default_factory=list, max_length=16)
+    #: A history view behind a filter form that submits by GET (and so can't
+    #: be opened by URL alone): the element to click after the page loads.
+    #: The form keeps its default filters. The read-only session still
+    #: refuses anything that isn't a read.
+    submit_selector: Optional[str] = None
 
     @model_validator(mode="after")
     def _shape(self) -> "HistoryView":
-        for pattern in self.explained:
+        for pattern in [*self.explained, *self.ignored]:
             try:
                 re.compile(pattern)
             except re.error as exc:
@@ -292,6 +311,7 @@ class HistoryView(BaseModel):
         if self.entry.user:
             fields["user"] = reader(self.entry.user)
         return {
+            "submit": self.submit_selector,
             "ready": self.ready_selector,
             "notFound": None,
             "empty": None,
@@ -334,10 +354,16 @@ def judge_history(
         return HistoryJudgement(
             False, False, "the history view could not be read before and after the save"
         )
-    remaining = Counter(_entry_key(r) for r in before)
+    skip = [re.compile(p) for p in view.ignored]
+
+    def kept(rows: list[dict[str, Optional[str]]]) -> list[tuple[str, str, str]]:
+        keys = [_entry_key(r) for r in rows]
+        return [k for k in keys if not any(p.search(k[1]) for p in skip)]
+
+    before_keys, after_keys = kept(before), kept(after)
+    remaining = Counter(before_keys)
     new: list[tuple[str, str, str]] = []
-    for row in after:
-        key = _entry_key(row)
+    for key in after_keys:
         if remaining[key] > 0:
             remaining[key] -= 1
         else:
@@ -350,7 +376,8 @@ def judge_history(
             continue
         mine.append(key)
     target = " ".join(record_id.split())
-    elsewhere = [k for k in mine if k[0] != target]
+    loose = {" ".join(v.split()) for v in view.unattributed_records}
+    elsewhere = [k for k in mine if k[0] != target and k[0] not in loose]
     detail = {
         "new_entries": len(new),
         "excused_other_users": others,

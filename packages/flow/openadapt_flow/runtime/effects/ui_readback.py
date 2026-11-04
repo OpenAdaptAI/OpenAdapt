@@ -785,9 +785,28 @@ class _PlaywrightSession:
         return self._read(target.record_url, waiting, payload, "record page")
 
     def read_view(self, url: str, payload: dict[str, Any]) -> RawPage:
-        """Read another view of the application (a history or audit list)."""
+        """Read another view of the application (a history or audit list),
+        submitting its GET filter form first when ``payload["submit"]`` names
+        the control."""
 
-        return self._read(url, payload["ready"], payload, "history view")
+        submit = payload.get("submit")
+        if not submit:
+            return self._read(url, payload["ready"], payload, "history view")
+        blocked_before = self._blocked
+        try:
+            self._load(url)
+            with self._page.expect_navigation(wait_until="domcontentloaded"):
+                self._page.click(submit)
+            self._loaded = None  # the form chose the URL; never reload it blind
+        except Exception as exc:  # noqa: BLE001 - unreadable view
+            return RawPage(
+                ok=False,
+                reason=f"the history view's form did not submit ({type(exc).__name__})",
+                blocked_requests=self._blocked - blocked_before,
+            )
+        return self._read_current(
+            payload["ready"], payload, "history view", None, blocked_before
+        )
 
     def _read(
         self, url: str, waiting: str, payload: dict[str, Any], what: str
@@ -795,6 +814,26 @@ class _PlaywrightSession:
         blocked_before = self._blocked
         try:
             fetched = self._load(url)
+        except Exception as exc:  # noqa: BLE001 - unreadable page
+            return RawPage(
+                ok=False,
+                reason=f"the {what} did not load or could not be read "
+                f"({type(exc).__name__})",
+                blocked_requests=self._blocked - blocked_before,
+            )
+        return self._read_current(waiting, payload, what, fetched, blocked_before)
+
+    def _read_current(
+        self,
+        waiting: str,
+        payload: dict[str, Any],
+        what: str,
+        fetched: Optional[bool],
+        blocked_before: Optional[int] = None,
+    ) -> RawPage:
+        if blocked_before is None:
+            blocked_before = self._blocked
+        try:
             self._page.wait_for_selector(waiting, state="attached")
             raw = self._page.evaluate(_READ_SCRIPT, payload)
             view_url = str(self._page.url)
@@ -1147,11 +1186,14 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         acting = (
             self._environ.get(view.acting_user_env) if view.acting_user_env else None
         )
+        record_id = (
+            view.record.resolve(self._params) if view.record is not None else None
+        )
         judged = judge_history(
             view,
             self._history_before,
             after,
-            record_id=target.identity_value,
+            record_id=record_id or target.identity_value,
             acting_user=acting,
         )
         detail = {"read": True, "ok": judged.ok, **judged.detail}

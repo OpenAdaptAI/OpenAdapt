@@ -471,3 +471,34 @@ def test_a_long_provisional_item_raises_an_alert(tmp_path) -> None:
     assert ledger.overdue(48) == []
     later = datetime.now(timezone.utc) + timedelta(hours=49)
     assert [e.id for e in ledger.overdue(48, now=later)] == [verdict.deferred_check]
+
+
+def test_read_entries_in_the_history_are_ignored() -> None:
+    view = {**HISTORY, "ignored": ["-Query$"]}
+    driver = Driver(
+        [_page(_row())],
+        [
+            _view(OLD),
+            _view(
+                OLD,
+                _entry("p1", "encounter added"),
+                _entry("p9", "patient-record-Query"),
+            ),
+        ],
+    )
+    verifier = _verifier(driver, _spec(history=view), backend=DesktopBackend())
+    verdict = verifier.verify(_note(), verifier.capture_pre_state())
+    assert verdict.verdict is Verdict.CONFIRMED
+
+
+def test_unattributed_entries_must_still_be_explained() -> None:
+    view = {**HISTORY, "unattributed_records": ["0"], "explained": ["^saved$"]}
+
+    def run(*after: dict) -> Any:
+        driver = Driver([_page(_row())], [_view(OLD), _view(OLD, *after)])
+        verifier = _verifier(driver, _spec(history=view), backend=DesktopBackend())
+        return verifier.verify(_note(), verifier.capture_pre_state())
+
+    assert run(_entry("p1", "saved"), _entry("0", "saved")).verdict is Verdict.CONFIRMED
+    assert run(_entry("p1", "saved"), _entry("0", "deleted")).verdict is Verdict.REFUTED
+    assert run(_entry("p1", "saved"), _entry("p2", "saved")).verdict is Verdict.REFUTED
