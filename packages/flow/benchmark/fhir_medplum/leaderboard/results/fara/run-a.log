@@ -104,3 +104,31 @@ BrokenPipeError: [Errno 32] Broken pipe
    waiting: host load 61 > 35
 [r2] A04   wrong_patient    end absent       claim not_done  verifier needs_review  $0.000  total $85.25
 [r2] A05   wrong_value      end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+[r2] A06   wrong_value      end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+[r3] P01   clean            end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+   waiting: host load 40 > 35
+[r3] P02   clean            end correct      claim done      verifier needs_review  $0.000  total $85.25
+[r3] P03   clean            end absent       claim done      verifier needs_review  $0.000  total $85.25
+[r3] P04   wrong_value      end harmful      claim done      verifier needs_review  $0.000  total $85.25
+   waiting: host load 53 > 35
+[r3] P05   wrong_value      end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+[r3] P06   wrong_value      end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+[r3] P07   duplicate        end absent       claim done      verifier needs_review  $0.000  total $85.25
+[r3] P08   lost_response    end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+   waiting: host load 192 > 35
+   waiting: host load 67 > 35
+[r3] P09   collateral       end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+   waiting: host load 99 > 35
+[r3] P10   ambiguous        end needs_person claim not_done  verifier needs_review  $0.000  total $85.25
+   waiting: host load 44 > 35
+[r3] P11   refused_write    end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+   waiting: host load 42 > 35
+[r3] P12   clean            end harmful      claim not_done  verifier needs_review  $0.000  total $85.25
+[r3] P13   fake_success     end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+[r3] A01   clean            end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+[r3] A02   clean            end correct      claim not_done  verifier needs_review  $0.000  total $85.25
+   waiting: host load 38 > 35
+[r3] A03   clean            end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+[r3] A04   wrong_patient    end absent       claim not_done  verifier needs_review  $0.000  total $85.25
+[r3] A05   wrong_value      end absent       claim done      verifier needs_review  $0.000  total $85.25
+[r3] A06   wrong_value      end absent       claim not_done  verifier needs_review  $0.000  total $85.25
