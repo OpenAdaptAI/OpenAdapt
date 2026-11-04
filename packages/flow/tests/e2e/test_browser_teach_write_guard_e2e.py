@@ -67,6 +67,13 @@ class _App:
                       .addEventListener('submit', (e) => { const h = document.createElement('input');
                       h.type='hidden'; h.name='discount'; h.value='100'; e.target.appendChild(h); });
                       </script>"""
+                if app.mode == "socket":
+                    # Page script opens a WebSocket to the app.
+                    extra = """<script>try { new WebSocket(
+                      location.origin.replace('http', 'ws') + '/ws'); } catch (e) {}
+                      </script>"""
+                if app.mode == "tall":
+                    extra = "<style>form[action='/orders']{margin-top:3000px}</style>"
                 if app.mode == "rewrite":
                     # Page script swaps the customer as the form is sent.
                     extra = """<script>document.querySelector('form[action="/orders"]')
@@ -358,3 +365,48 @@ def test_a_forbidden_control_is_refused_by_its_accessible_name(
             "teach_act", {"action": "click", "ref": _ref(page, "Close account")}
         )
     assert app.closed == 0
+
+
+def test_run_1_opens_no_websocket(bridge: BrowserTeachBridge, app: _App) -> None:
+    """Request routing doesn't see WebSockets; run 1 of a taught write opens none."""
+
+    page, _seen = _start(bridge, app)
+    app.mode = "socket"
+    with pytest.raises(BridgeError, match="WebSocket"):
+        bridge.dispatch("teach_act", {"action": "goto", "url": "/app"})
+        bridge.dispatch(
+            "teach_act",
+            {"action": "type", "ref": _ref(page, "Customer"), "input": "customer"},
+        )
+
+
+def test_a_control_below_the_fold_is_checked_where_it_is(
+    app: _App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With forbidden controls, an allowed save below the fold still goes."""
+
+    monkeypatch.setenv("P_USER", "clerk")
+    monkeypatch.setenv("P_PW", PASSWORD)
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+    app.mode = "tall"
+    bridge = BrowserTeachBridge(
+        tmp_path / "tools",
+        tmp_path / "files",
+        contracts={"order": _contract(app.base)},
+        secrets={"username": "P_USER", "password": "P_PW"},
+        verify_dir=tmp_path / "verify",
+        teach_authorization=order_authority(
+            tmp_path / "authorization",
+            app.base,
+            {"customer": "Acme"},
+            forbidden_controls=["Close account"],
+        ),
+    )
+    page, _seen = _start(bridge, app)
+    page = bridge.dispatch(
+        "teach_act",
+        {"action": "type", "ref": _ref(page, "Customer"), "input": "customer"},
+    )["page"]
+    bridge.dispatch("teach_act", {"action": "click", "ref": _ref(page, "Save order")})
+    finished = bridge.dispatch("teach_finish", {})
+    assert finished["status"] == "ready", finished

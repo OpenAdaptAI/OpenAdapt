@@ -88,7 +88,7 @@ needs a person at an interactive terminal who types `yes`.
 | JIT capture (`compile_agent(..., teach_authorization=TeachAuthority(...))`) | The capture's scope is bound from the statement; a `teach_scope` may only narrow it. The statement is kept beside the draft, and its digest is in the signed recorder block | Admission refuses (`teach_auth_not_recorded`) |
 | `compile-agent` (`--teach-authorization`, `FirstRunCompiler`, `compile_first_run`, `SkillCache`) | Run 1's scope is the statement's alone; the command's `--expect`, `--on-screen` and `--allow-text` don't widen it. For `SkillCache`, the statement names `SkillCache.task_id(prompt, params)` | Admission refuses |
 | Teach over MCP (`serve --teach --teach-authorization`; `teach_act` and `teach_run`) | Run 1 runs under the statement's scope, under its task id; the agent's declared inputs must be the statement's. `teach_run`'s scripts act through the same run 1, so every action and the save are checked against the same scope | Admission (`teach_admit`, `compile-agent admit`) refuses |
-| Browser teach writes (`serve --teach-browser --teach-authorization --config`, `teach_start` with a contract) | Run 1 starts only when the statement verifies for task `taught.<name>`, expires within 90 days, names the app's origin, the contract as its `record_kind` and a write adapter, takes run 1's inputs, allows the contract's row count, and has exactly the record fields the contract's `record_written` match checks as its identity and fields, with run 1's values (a contract with other checks is refused). During run 1 the adapter reads every write before it is sent (and counts them), only the statement's values may be typed, `press` takes no character keys, and the forbidden actions are watched. The tool keeps the verified copy and is signed with the local admission key in the config's `approvers.key_dir`; every call checks both again against the config's roster, with the statement's expiry | No write tool is taught, and a write tool without a statement that holds doesn't run. The read-only lane sends no write and needs none |
+| Browser teach writes (`serve --teach-browser --teach-authorization --config`, `teach_start` with a contract) | Run 1 starts only when the statement verifies for task `browser-tool.<name>` (a namespace of its own), expires within 90 days, names the app's origin, the contract as its `record_kind` and a write adapter, takes run 1's inputs, allows the contract's row count, and has exactly the record fields the contract's `record_written` match checks as its identity and fields, with run 1's values (a contract with other checks is refused). During run 1 the adapter reads every write before it is sent (and counts them), the browser reaches only the statement's origins and opens no WebSocket, only the statement's values may be typed, `press` takes no character keys, and the forbidden actions are watched. The tool keeps the verified copy and is signed with the local admission key in the config's `approvers.key_dir`; every later call checks the signature, the kept statement against the config's roster (purpose, task, expiry), the origin and the record kind. The statement's values, forbidden controls and actions bind run 1 only | No write tool is taught, and a write tool without a statement that holds doesn't run. The read-only lane sends no write and needs none |
 | Agent-demonstrated fix (`teach_repair`, `serve --teach-authorization`) | Before the click, the desk verifies a statement that covers `repair` and names the program's workflow name as its task; the repair store keeps it. Approval checks it again, for that workflow | The fix is proposed, and `RepairStore.approve` refuses it |
 | Self-repair of an agent-taught program (`admit_repair`) | The prior admission's authorization must cover `repair` and verify now; its statement is copied into the repaired bundle | The repair's admission (probe or full) refuses |
 | Airbag handoff (`agent_guard.handoff`) | Not bound: the guarded run 1 runs under the guard's task file, and the handoff can't attach a person's signature to it yet | Admission refuses its draft (`teach_auth_not_recorded`). Teach the task through `compile-agent` or `serve --teach` with an authorization instead |
@@ -139,19 +139,26 @@ Programs and tools made before teach authorizations carry none, so:
 - A statement may be used for any number of teach runs of its task until it
   expires; its nonce is not spent. Revoking the signer stops new admissions
   and repairs, not programs already admitted.
-- Forbidden controls are matched by their accessible name, read from
-  Chromium's accessibility tree over DevTools rather than by a script in the
-  page. That defeats a page script that tampers with how controls are
-  read, not a page that renames a control through ARIA: against a hostile
-  page, the write adapter and the read-back are what bind the save. A click
-  is checked against the control under it. Every key (Enter, Space, any
-  other key, typing) is checked when it arrives against the control with
-  focus, in any frame of the page, and Enter in a form field also against
-  the form's default button, which it would submit with. Key combinations
-  with a modifier are refused (they can activate a control by its access
-  key). A click with no position, a name that can't be read, focus in a
-  frame the browser's tree can't see, or a surface without a web page is
-  refused when the statement forbids any control.
+- Forbidden controls are matched by every name the target goes by: its
+  accessible name from Chromium's accessibility tree, the text of the hit
+  element and three ancestors (a control with no role, such as a
+  `<div onclick>`), and for a `<label>` the name of the control it is for.
+  These are read over DevTools, the text and the label in an isolated
+  world, so a page script that tampers with how controls are read doesn't
+  change them; a page that renames a control through ARIA or its text
+  does, and against a hostile page the write adapter and the read-back are
+  what bind the save. A click is checked against the control under it.
+  Every key (Enter, Space, any other key, typing) is checked when it
+  arrives against the control with focus, in any frame, and Enter in a
+  form field also against the button the browser would submit the form
+  with (`:default`, read in an isolated world). Key combinations with a
+  modifier are refused. A click with no position, a name that can't be
+  read, focus in a frame the tree can't see, or a surface without a web
+  page is refused when the statement forbids any control. In browser
+  teach, a page could still move focus between the check and the key.
+- A browser-teach tool taught again can be rolled back by an agent that can
+  write the tools folder: it can put back the older signed program and its
+  statement, which run until that statement expires.
 - A server that teaches browser writes signs each tool with the admission
   key in the config's `approvers.key_dir`, so it reads that key. Run it as
   a user the agent can't act as (Desktop's engine, or a service account);

@@ -273,10 +273,11 @@ class OrderWrites:
             }
         except UnicodeDecodeError:
             return None
+        # Every posted field, so an undeclared one (an order id) is refused.
         return WriteClaim(
             record={"customer": form.get("customer", "").strip()},
             fields={
-                "product": form.get("product", ""),
+                **{k: v for k, v in form.items() if k != "customer"},
                 "units": form.get("units", "").strip(),
             },
         )

@@ -451,10 +451,40 @@ def test_a_key_in_a_frame_or_a_form_is_checked_where_it_lands(
     )
     chromium.focus("input")
     guard.check_key(Op("press", key="Enter"), chromium)  # Save is the default
+    # The browser's own default button, not a re-implementation of it.
+    for html in (
+        # A button in a shadow root isn't the form's.
+        "<script>customElements.define('x-b', class extends HTMLElement {"
+        "constructor(){super(); this.attachShadow({mode:'open'}).innerHTML="
+        "'<button>Save</button>';}});</script>"
+        "<form><input aria-label=Note><x-b></x-b><button>Delete encounter</button>"
+        "</form>",
+        # Nor is one in a frame inside it.
+        '<form><input aria-label=Note><iframe srcdoc="<button>Save</button>">'
+        "</iframe><button>Delete encounter</button></form>",
+        # An unknown type is a submit button.
+        "<form><input aria-label=Note><button type=foo>Delete encounter</button>"
+        "<button>Save</button></form>",
+    ):
+        chromium.set_content(html)
+        chromium.focus("input")
+        assert _violation(guard.check_key, Op("press", key="Enter"), chromium) == (
+            "control_forbidden"
+        ), html
     # A key chord can activate a control by its access key.
     assert _violation(
         guard.check_key, Op("hotkey", key="d", modifiers=("Alt",)), chromium
     ) == ("control_forbidden")
+    # A control with no role, and a label for a forbidden control.
+    chromium.set_content(
+        '<div id=d onclick="this.dataset.x=1">Delete encounter</div>'
+        "<label id=l for=c>Confirm</label>"
+        "<input type=checkbox id=c aria-label='Delete encounter'>"
+    )
+    for selector in ("#d", "#l"):
+        assert _violation(
+            guard.check_ops, [_at(chromium, selector)], page=chromium
+        ) == ("control_forbidden"), selector
     # aria-labelledby: the accessible name, not the visible text.
     chromium.set_content(
         '<button aria-labelledby="l">Open</button><span id="l">Delete encounter</span>'

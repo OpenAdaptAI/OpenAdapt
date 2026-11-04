@@ -909,7 +909,7 @@ def render(verification: Verification) -> str:
         "",
         f"Statement      sha256 {verification.sha256}",
     ]
-    if st.task.task_id.startswith("taught."):
+    if st.task.task_id.startswith("browser-tool."):
         # A browser-teach write tool: what the person signs here goes further.
         lines[-1:-1] = [
             "This teaches a reusable write tool. These values bind its first run",

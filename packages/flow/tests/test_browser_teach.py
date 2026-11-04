@@ -575,7 +575,7 @@ def test_the_record_key_is_pinned_even_when_signed_as_a_field() -> None:
     from openadapt_flow.teach_scope import TeachScope
 
     scope = TeachScope(
-        task_id="taught.add_order",
+        task_id="browser-tool.add_order",
         origins=(APP,),
         record={"product": "Desk lamp"},
         fields={"customer": "Acme Ltd", "units": "3"},
@@ -632,7 +632,7 @@ def test_coverage_maps_literal_matches_and_refuses_other_checks() -> None:
         )
 
     scope = TeachScope(
-        task_id="taught.add_order",
+        task_id="browser-tool.add_order",
         origins=(APP,),
         record={"customer": "Acme Ltd"},
         fields={"product": "Desk lamp"},

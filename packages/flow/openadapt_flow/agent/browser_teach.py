@@ -258,16 +258,19 @@ def _check_forbidden(
     """
 
     from openadapt_flow.teach_scope import (
-        control_label_at,
+        control_labels_at,
         key_target_labels,
         normalize_structured,
     )
 
     labels: Optional[list[str]]
     if action in ("click", "select"):
+        if el is not None:
+            # Measured where it will be clicked: in view.
+            el.scroll_into_view_if_needed()
         box = el.bounding_box() if el is not None else None
-        label = (
-            control_label_at(
+        labels = (
+            control_labels_at(
                 page,
                 int(box["x"] + box["width"] / 2),
                 int(box["y"] + box["height"] / 2),
@@ -275,7 +278,6 @@ def _check_forbidden(
             if box
             else None
         )
-        labels = None if label is None else [label]
     elif action == "press":
         if el is not None:
             el.focus()
@@ -818,6 +820,21 @@ class _Browser:
         #: Writes run 1's write adapter attributed (record writes).
         self.claimed = 0
         if scope is not None:
+            # Playwright's request routing doesn't see WebSockets: a page could
+            # write over one where the adapter never reads it. Run 1 of a
+            # taught write opens none.
+            if not hasattr(self.context, "route_web_socket"):
+                raise BridgeError(
+                    "this Playwright can't stop WebSockets (1.48 or newer is "
+                    "needed), so a taught write can't be held to its statement"
+                )
+
+            def _refuse_socket(ws: Any) -> None:
+                # Never connected to the server (no connect_to_server): the
+                # page's frames go nowhere. Run 1 then ends at its next step.
+                self.blocked.append(f"a WebSocket to {_origin(ws.url)}")
+
+            self.context.route_web_socket("**/*", _refuse_socket)
             forbidden = scope.forbidden_actions
             if "new_window" in forbidden:
                 self.context.on(
@@ -1294,6 +1311,9 @@ class BrowserTeachBridge:
                     program.get("name", "")
                 ):
                     raise ValueError("not a browser tool program")
+                if program["name"] != path.parent.name:
+                    # A tool is its folder: another folder can't stand in for it.
+                    raise ValueError("its name is not its folder's")
             except (OSError, ValueError) as exc:
                 print(f"openadapt-agent: skipped {path}: {exc}", file=sys.stderr)
                 continue
@@ -2053,7 +2073,7 @@ class BrowserTeachBridge:
     def write_task_id(name: str) -> str:
         """The task a teach authorization names for the write tool ``name``."""
 
-        return f"taught.{name}"
+        return f"browser-tool.{name}"
 
     def _trust(self) -> tuple[Path, Optional[str], Any]:
         """The roster's key directory, root and heads for taught writes.
@@ -2094,7 +2114,7 @@ class BrowserTeachBridge:
         Returns ``(verification, statement path, teach scope)``. Refuses
         (:class:`BridgeError`) unless the statement verifies against the
         approver roster now, for purpose ``teach`` and task
-        ``taught.<name>``, has not expired, names this app's origin, names the
+        ``browser-tool.<name>``, has not expired, names this app's origin, names the
         contract as its ``record_kind``, names a write adapter, takes exactly
         this run's inputs, and its identity and fields are exactly the record
         fields the contract checks, with this run's values.
@@ -2225,6 +2245,7 @@ class BrowserTeachBridge:
             program.get("signed_as") != PROGRAM_SIGNATURE_DOMAIN
             or not _record_signed(program, key_dir)
             or program.get("task_id") != self.write_task_id(name)
+            or not (self.tools_dir / name / PROGRAM_FILE).is_file()
         ):
             return "this write tool's program changed after it was taught"
         kept = self.tools_dir / name / ta.KEPT_DIR / ta.STATEMENT_FILE

@@ -231,7 +231,7 @@ def order_spec(
     if write_adapter is not None:
         writes["write_adapter"] = write_adapter
     return {
-        "task": {"task_id": f"taught.{name}", "summary": "Add one order"},
+        "task": {"task_id": f"browser-tool.{name}", "summary": "Add one order"},
         "purposes": ["teach"],
         "origins": [str(origin_of(base_url))],
         "inputs": {k: {"value": v} for k, v in values.items()},
