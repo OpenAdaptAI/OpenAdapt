@@ -339,6 +339,7 @@ A test fails when a command has no file or this list is out of date.
 
 **Record and build a program:**
 
+- `browser-accessibility`: On Linux, make Chrome, Chromium, Edge and Brave start with their page readable to accessibility tools, so `record` can read what you click in your everyday browser. It writes launcher entries in your own `~/.local/share/applications` only; `--disable` removes them. On Windows and macOS, `record` does this by itself.
 - `compile-agent`: With `admit TASK_DIR`, a person confirms and admits a waiting draft, such as one an agent taught over MCP (`openadapt-agent serve --teach`).
 - `compile`
 - `compose`

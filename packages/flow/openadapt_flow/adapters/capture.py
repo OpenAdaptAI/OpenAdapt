@@ -757,14 +757,88 @@ def _window_identity_int(value: Any) -> Optional[int]:
     return None
 
 
-def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
-    """Map a Capture Windows UIA observation to Flow's locator contract.
+def _windows_role(element: dict[str, Any]) -> Optional[str]:
+    control_type = element.get("control_type")
+    if not isinstance(control_type, str):
+        return None
+    return _WINDOWS_CONTROL_TYPE_TO_ROLE.get(control_type)
 
+
+def _macos_role(element: dict[str, Any]) -> Optional[str]:
+    from openadapt_flow.backends.macos_backend import _MAC_ROLE_MAP
+
+    role = element.get("role")
+    # Only roles the macOS resolver maps to a neutral role are actionable
+    # targets; an unmapped container role is never compiled into a locator.
+    return _MAC_ROLE_MAP.get(role) if isinstance(role, str) else None
+
+
+def _linux_role(element: dict[str, Any]) -> Optional[str]:
+    from openadapt_flow.backends.linux_backend import _ROLE_MAP
+
+    role = element.get("role")
+    return _ROLE_MAP.get(role) if isinstance(role, str) else None
+
+
+#: Capture accessibility provider -> the role mapping of the Flow backend that
+#: replays it, so a recorded locator uses the roles that backend resolves.
+_PROVIDER_ROLE = {
+    "windows_uia": _windows_role,
+    "macos_ax": _macos_role,
+    "linux_atspi": _linux_role,
+}
+
+
+def _observed_process(action: "Action") -> Optional[dict[str, Any]]:
+    """The process and window an action went to, from its observation."""
+
+    observation = getattr(action, "structural_observation", None)
+    if observation is None:
+        return None
+    if hasattr(observation, "model_dump"):
+        try:
+            observation = observation.model_dump(mode="json", exclude_none=True)
+        except Exception:
+            return None
+    if not isinstance(observation, dict):
+        return None
+    process = observation.get("process")
+    if not isinstance(process, dict) or not process.get("process_name"):
+        return None
+    out: dict[str, Any] = {"name": str(process["process_name"])}
+    if isinstance(process.get("process_id"), int):
+        out["pid"] = process["process_id"]
+    element = observation.get("element")
+    if isinstance(element, dict) and isinstance(element.get("role"), str):
+        out["element_role"] = element["role"]
+        out["element_named"] = bool((element.get("name") or "").strip())
+    window = observation.get("window")
+    bounds = window.get("bounds") if isinstance(window, dict) else None
+    if isinstance(bounds, dict):
+        try:
+            left, top = float(bounds["left"]), float(bounds["top"])
+            right, bottom = float(bounds["right"]), float(bounds["bottom"])
+        except (KeyError, TypeError, ValueError):
+            pass
+        else:
+            if right > left and bottom > top:
+                out["window_bounds"] = [
+                    round(left),
+                    round(top),
+                    round(right - left),
+                    round(bottom - top),
+                ]
+    return out
+
+
+def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
+    """Map a Capture accessibility observation to Flow's locator contract.
+
+    Windows UIA, macOS AX and Linux AT-SPI observations each map through the
+    role table of the Flow backend that replays them (``_PROVIDER_ROLE``).
     Unknown or malformed observation versions stay optional instead of being
-    guessed into a target. Capture's friendly-class ``role`` is intentionally
-    ignored: Flow's Windows resolver expects lowercase ARIA-style roles, which
-    are derived from the native UIA ``control_type`` through the same mapping
-    used by :class:`~openadapt_flow.backends.windows_backend.WindowsBackend`.
+    guessed into a target. On Windows, Capture's friendly-class ``role`` is
+    ignored: the resolver expects the role derived from ``control_type``.
     """
 
     observation = getattr(action, "structural_observation", None)
@@ -777,9 +851,10 @@ def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
             return None
     if not isinstance(observation, dict):
         return None
+    provider = observation.get("provider")
     if (
         observation.get("schema_version") != _CAPTURE_STRUCTURAL_SCHEMA
-        or observation.get("provider") != "windows_uia"
+        or provider not in _PROVIDER_ROLE
         or observation.get("query_kind") != "point"
     ):
         return None
@@ -788,10 +863,10 @@ def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
     if not isinstance(raw_element, dict):
         return None
 
-    # Capture observes the exact element under the pointer. Common Windows
-    # controls expose a non-actionable Text child inside the actionable Button,
-    # Edit, or selection control. Use the nearest supported actionable node,
-    # matching WindowsBackend.structural_locator_at instead of compiling a
+    # Capture observes the exact element under the pointer. Common controls
+    # expose a non-actionable text child inside the actionable button, field,
+    # or selection control. Use the nearest supported actionable node,
+    # matching each backend's structural_locator_at instead of compiling a
     # child handle that the native actuator cannot safely invoke.
     raw_ancestry = observation.get("ancestry")
     candidates = [raw_element]
@@ -799,13 +874,9 @@ def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
         candidates.extend(item for item in raw_ancestry if isinstance(item, dict))
     selected: Optional[dict[str, Any]] = None
     role: Optional[str] = None
+    role_of = _PROVIDER_ROLE[provider]
     for candidate in candidates:
-        control_type = candidate.get("control_type")
-        candidate_role = (
-            _WINDOWS_CONTROL_TYPE_TO_ROLE.get(control_type)
-            if isinstance(control_type, str)
-            else None
-        )
+        candidate_role = role_of(candidate)
         automation_id = candidate.get("automation_id")
         name = candidate.get("name")
         if candidate_role is not None and (
@@ -844,6 +915,7 @@ def _flow_events(
     value_to_param: dict[str, str],
     *,
     include_structural: bool = True,
+    include_process: bool = False,
 ) -> list[dict[str, Any]]:
     """Convert capture ``Action``s into ordered flow event dicts.
 
@@ -859,7 +931,7 @@ def _flow_events(
     events: list[dict[str, Any]] = []
     # A run of typed characters, buffered so the compiler sees one ``type``
     # event per typed value (capture emits one key.type per key-release burst).
-    text_run: dict[str, Any] = {"chars": [], "ts": None}
+    text_run: dict[str, Any] = {"chars": [], "ts": None, "process": None}
 
     def flush_text() -> None:
         if not text_run["chars"]:
@@ -872,13 +944,17 @@ def _flow_events(
         }
         if text in value_to_param:
             line["param"] = value_to_param[text]
+        if include_process and text_run["process"] is not None:
+            line["observed_process"] = text_run["process"]
         events.append(line)
         text_run["chars"] = []
         text_run["ts"] = None
+        text_run["process"] = None
 
     for action in actions:
         atype = action.type
         ts = float(action.timestamp)
+        count_before = len(events)
 
         if atype in ("mouse.singleclick", "mouse.doubleclick"):
             flush_text()
@@ -980,6 +1056,11 @@ def _flow_events(
             )
         else:
             continue  # non-input auxiliary action; safely ignored
+        if include_process:
+            observed = _observed_process(action)
+            for event in events[count_before:]:
+                if observed is not None and event.get("kind") != "type":
+                    event.setdefault("observed_process", observed)
 
     flush_text()
     return events
@@ -1018,6 +1099,7 @@ def _convert_key_type(
         # but is still just text). Accumulated into the run buffer.
         if not text_run["chars"]:
             text_run["ts"] = ts
+            text_run["process"] = _observed_process(action)
         text_run["chars"].append(action.text)
         return
 
@@ -1049,6 +1131,7 @@ def convert_capture(
     params: Optional[dict[str, str]] = None,
     settle_s: float = 1.0,
     include_structural: bool = False,
+    include_process: bool = False,
 ) -> Path:
     """Convert an openadapt-capture session into a flow recording directory.
 
@@ -1090,6 +1173,11 @@ def convert_capture(
             remote-client canvas. Direct conversion defaults to ``False``
             because a capture directory alone does not prove which substrate
             was recorded.
+        include_process: Add ``observed_process`` (process name and id, the
+            observed element's role, and the window bounds) to each event, for
+            a recording that places actions on surfaces by process
+            (``multi_surface_record``). Off by default, so single-surface
+            recordings are unchanged.
 
     Returns:
         The recording directory path (compile-ready).
@@ -1186,6 +1274,7 @@ def convert_capture(
             scale,
             value_to_param,
             include_structural=include_structural,
+            include_process=include_process,
         )
         if not events:
             raise ValueError(

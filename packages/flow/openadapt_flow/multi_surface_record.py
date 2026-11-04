@@ -37,6 +37,7 @@ import io
 import json
 import re
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -223,7 +224,7 @@ def attribute_desktop_events(
     surfaces: Sequence[RecordSurface],
     origin: tuple[int, int],
     web_events: Sequence[tuple[float, str]] = (),
-) -> list[_Placed]:
+) -> list["_Placed"]:
     """Place each converted desktop event on the declared surface it went to.
 
     ``events`` are converted capture events (``t`` relative to
@@ -248,9 +249,9 @@ def attribute_desktop_events(
             if later is not None and later is not candidates[0]:
                 candidates.append(later)
             candidates = [w for w in candidates if w is not None and w.contains(*point)]
-        candidates = [w for w in candidates if w is not None]
+        present = [w for w in candidates if w is not None]
         matched: list[tuple[RecordSurface, WindowSample]] = []
-        for window in candidates:
+        for window in present:
             surface = _surface_of(window, surfaces)
             if surface is not None:
                 matched.append((surface, window))
@@ -279,6 +280,182 @@ def attribute_desktop_events(
             "that window (--surface NAME=KIND:WINDOW) and record again"
         )
     return placed
+
+
+#: Remote-desktop clients, by process name (lower case, without ``.exe``).
+#: Their window is a remote session: replayed in its own pixels.
+REMOTE_CLIENTS = {
+    "rdp": frozenset(
+        {
+            "mstsc",
+            "msrdc",
+            "microsoft remote desktop",
+            "windows app",
+            "xfreerdp",
+            "xfreerdp3",
+            "wlfreerdp",
+            "sdl-freerdp",
+            "remmina",
+            "rdesktop",
+        }
+    ),
+    "citrix": frozenset({"wfica32", "wfica", "cdviewer", "citrix viewer"}),
+}
+
+#: Chromium-family browsers, whose page is read through the OS accessibility
+#: tree (benchmark/multi_surface_record/results/chrome-accessibility-probe-*).
+CHROMIUM_BROWSERS = frozenset(
+    {
+        "chrome",
+        "google chrome",
+        "google chrome for testing",
+        "chromium",
+        "chromium-browser",
+        "msedge",
+        "microsoft edge",
+        "brave",
+        "brave browser",
+    }
+)
+
+#: The one-line fix for a Linux Chrome whose page is not readable.
+LINUX_BROWSER_FIX = "openadapt-flow browser-accessibility --enable, then restart Chrome"
+
+
+def process_key(name: str) -> str:
+    key = name.strip().lower()
+    return key[:-4] if key.endswith(".exe") else key
+
+
+def surface_kind(process_name: str, os_kind: str) -> str:
+    """A surface's kind from the process that owns its window."""
+
+    key = process_key(process_name)
+    for kind, clients in REMOTE_CLIENTS.items():
+        if key in clients:
+            return kind
+    return os_kind
+
+
+def is_browser(process_name: str) -> bool:
+    return process_key(process_name) in CHROMIUM_BROWSERS
+
+
+def _slug(name: str, taken: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "_", process_key(name)).strip("_")[:28] or "app"
+    if not base[0].isalpha():
+        base = "app_" + base
+    slug, n = base, 2
+    while slug in taken or slug == PRIMARY_WEB_ID:
+        slug, n = f"{base}_{n}", n + 1
+    taken.add(slug)
+    return slug
+
+
+def own_process_names() -> frozenset[str]:
+    """This recorder and the terminal it runs in: never part of the task."""
+
+    try:
+        import psutil
+
+        proc = psutil.Process()
+        names = {proc.name()}
+        for parent in proc.parents():
+            names.add(parent.name())
+    except Exception:
+        return frozenset()
+    return frozenset(process_key(n) for n in names if n)
+
+
+def discover_surfaces(
+    events: Sequence[dict[str, Any]],
+    *,
+    started_at: float,
+    timeline: Sequence[WindowSample],
+    origin: tuple[int, int],
+    os_kind: str,
+    web_events: Sequence[tuple[float, str]] = (),
+    own_processes: frozenset[str] = frozenset(),
+) -> tuple[list[RecordSurface], list["_Placed"]]:
+    """Place each desktop action on a surface found from the process it went to.
+
+    Every application the person acted in becomes one surface, named after
+    it; a remote-desktop client's window becomes an ``rdp`` or ``citrix``
+    surface. Nothing is guessed: an action whose process cannot be read, a
+    readable action in the terminal running the recorder before the end, or
+    a click in a Chromium page whose accessibility is off refuses the
+    recording with a reason.
+    """
+
+    surfaces: dict[str, RecordSurface] = {}
+    taken: set[str] = set()
+    placed: list[_Placed] = []
+    last: Optional[tuple[str, Optional[WindowSample]]] = None
+    own_tail: list[int] = []
+    for event in events:
+        t = started_at + float(event.get("t", 0.0))
+        kind = str(event.get("kind"))
+        where = f"step {event.get('i')} ({kind} at +{float(event.get('t', 0.0)):.1f}s)"
+        observed = event.get("observed_process")
+        active = _window_at(timeline, t)
+        if isinstance(observed, dict) and observed.get("name"):
+            name = str(observed["name"])
+        elif (
+            last is not None
+            and active is not None
+            and last[1] is not None
+            and active.window_id == last[1].window_id
+        ):
+            # A keystroke with no accessibility reading, in the same window
+            # as the action before it.
+            name = last[0]
+        else:
+            raise MultiSurfaceRecordError(
+                f"{where}: the application it went to could not be read, so "
+                "it cannot be placed on a surface"
+            )
+        key = process_key(name)
+        if key in own_processes:
+            own_tail.append(len(placed))
+            continue
+        if own_tail:
+            raise MultiSurfaceRecordError(
+                f"{where}: an earlier action went to the terminal running "
+                "record. Keep the terminal for stopping only"
+            )
+        family = _family(kind)
+        if any(
+            abs(wt - t) <= WEB_DUPLICATE_WINDOW_S and _family(wk) == family
+            for wt, wk in web_events
+        ) and is_browser(name):
+            continue  # the browser recorder has this action
+        if (
+            is_browser(name)
+            and os_kind == "linux"
+            and kind in _POINTER_KINDS
+            and isinstance(observed, dict)
+            and observed.get("element_role") == "frame"
+        ):
+            raise MultiSurfaceRecordError(
+                f"{where}: the click went to a Chrome page whose accessibility "
+                f"is off, so its target cannot be read. Run {LINUX_BROWSER_FIX}"
+            )
+        surface = surfaces.get(key)
+        if surface is None:
+            surface = surfaces[key] = RecordSurface(
+                _slug(name, taken), surface_kind(name, os_kind)
+            )
+            surface.matchers.append(name)
+        window = active
+        bounds = observed.get("window_bounds") if isinstance(observed, dict) else None
+        if isinstance(bounds, list) and len(bounds) == 4:
+            left, top, width, height = (int(v) for v in bounds)
+            window = WindowSample(t, "", left, top, width, height, "")
+        placed.append(
+            _Placed(t, surface.id, "desktop", int(event["i"]), dict(event), window)
+        )
+        last = (name, active)
+    return list(surfaces.values()), placed
 
 
 def _load_events(recording: Path) -> list[dict[str, Any]]:
@@ -340,16 +517,20 @@ def merge_surface_recordings(
     origin: tuple[int, int] = (0, 0),
     web_dir: Optional[Path] = None,
     web_clock: Sequence[float] = (),
+    os_kind: Optional[str] = None,
+    own_processes: frozenset[str] = frozenset(),
 ) -> Path:
     """Write one multi-surface recording from a browser and a desktop stream.
 
     With ``web_dir`` the browser is the primary surface (``main``) and must
     take the first action. Without it the first declared surface is the
-    primary and must take the first action.
+    primary and must take the first action. With no declared ``surfaces``
+    they are found from the processes the actions went to
+    (:func:`discover_surfaces`, needs ``os_kind``), and the surface of the
+    first action is the primary.
     """
 
     out_dir = Path(out_dir)
-    kinds = {s.id: s.kind for s in surfaces}
     web_events = _load_events(web_dir) if web_dir is not None else []
     if web_dir is not None and len(web_clock) != len(web_events):
         raise MultiSurfaceRecordError(
@@ -358,14 +539,29 @@ def merge_surface_recordings(
         )
     desktop_events = _load_events(desktop_dir) if desktop_dir is not None else []
     web_kinds = [(float(t), str(e.get("kind"))) for t, e in zip(web_clock, web_events)]
-    placed = attribute_desktop_events(
-        desktop_events,
-        started_at=desktop_started_at,
-        timeline=timeline,
-        surfaces=surfaces,
-        origin=origin,
-        web_events=web_kinds,
-    )
+    automatic = not surfaces
+    if automatic:
+        if os_kind is None:
+            raise ValueError("automatic surfaces need os_kind")
+        surfaces, placed = discover_surfaces(
+            desktop_events,
+            started_at=desktop_started_at,
+            timeline=timeline,
+            origin=origin,
+            os_kind=os_kind,
+            web_events=web_kinds,
+            own_processes=own_processes,
+        )
+    else:
+        placed = attribute_desktop_events(
+            desktop_events,
+            started_at=desktop_started_at,
+            timeline=timeline,
+            surfaces=surfaces,
+            origin=origin,
+            web_events=web_kinds,
+        )
+    kinds = {s.id: s.kind for s in surfaces}
     if web_dir is not None:
         active_page = PRIMARY_WEB_ID
         for i, (t, event) in enumerate(zip(web_clock, web_events)):
@@ -380,6 +576,10 @@ def merge_surface_recordings(
     # next to the action that made them).
     placed.sort(key=lambda p: p.t)
 
+    if automatic and web_dir is None:
+        # The surface the person started in leads.
+        first_surface = placed[0].surface
+        surfaces = sorted(surfaces, key=lambda s: s.id != first_surface)
     primary = PRIMARY_WEB_ID if web_dir is not None else surfaces[0].id
     first = placed[0]
     if web_dir is not None and first.source != "web":
@@ -442,14 +642,19 @@ def merge_surface_recordings(
                 f"step {item.index} of the {item.source} stream has no frame "
                 "pair; nothing would anchor it"
             )
-        event = {k: v for k, v in item.event.items() if k not in ("i", "t")}
+        event = {
+            k: v
+            for k, v in item.event.items()
+            if k not in ("i", "t", "observed_process")
+        }
         if item.source == "desktop":
             kind = kinds[item.surface]
             event["surface"] = item.surface
-            if kind not in DESKTOP_PIXEL_KINDS:
-                # UI Automation evidence describes a Windows desktop control;
-                # other kinds carry none.
+            if kind in ("rdp", "citrix"):
+                # The local accessibility tree of a remote-desktop client
+                # describes only its canvas, never a control in the session.
                 event.pop("structural", None)
+            if kind not in DESKTOP_PIXEL_KINDS:
                 assert item.window is not None
                 box = (
                     item.window.left - origin[0],
@@ -522,15 +727,27 @@ def merge_surface_recordings(
         if surface.id != primary:
             listed.append({"id": surface.id, "kind": surface.kind})
     meta["surfaces"] = listed
+    steps = {s.id: 0 for s in surfaces}
+    for item in placed:
+        if item.surface in steps:
+            steps[item.surface] += 1
+    listed_surfaces = []
+    for s in surfaces:
+        entry: dict[str, Any] = {
+            "id": s.id,
+            "kind": s.kind,
+            "pixel_space": "desktop" if s.kind in DESKTOP_PIXEL_KINDS else "window",
+            "steps": steps.get(s.id, 0),
+        }
+        if automatic and s.matchers:
+            # The application's name (never a window title): what replay
+            # binds a macOS or Linux surface to.
+            entry["app"] = s.matchers[0]
+            entry["browser"] = is_browser(s.matchers[0])
+        listed_surfaces.append(entry)
     meta["multi_surface_record"] = {
-        "surfaces": [
-            {
-                "id": s.id,
-                "kind": s.kind,
-                "pixel_space": "desktop" if s.kind in DESKTOP_PIXEL_KINDS else "window",
-            }
-            for s in surfaces
-        ]
+        "automatic": automatic,
+        "surfaces": listed_surfaces,
     }
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
     return out_dir
@@ -578,7 +795,16 @@ def record_multi_surface(
         cap_dir.mkdir()
         web_dir = work / "web" if url else None
         clock: list[float] = []
-        if announce:
+        automatic = not surfaces
+        if announce and automatic:
+            print(
+                "Recording. Work as you normally do, in any windows: each\n"
+                "  application you use becomes a surface, and each change of\n"
+                "  window becomes a checked step. When you stop, you see the\n"
+                "  list before anything is kept.\n"
+                "  Press Ctrl-C here to finish."
+            )
+        elif announce:
             names = ", ".join(f"{s.id} ({s.kind})" for s in surfaces)
             start = "the browser that opens" if url else surfaces[0].id
             print(
@@ -588,7 +814,14 @@ def record_multi_surface(
                 "  any other window stops the recording with a reason.\n"
                 "  Press Ctrl-C here to finish."
             )
-        with recorder_factory(task_description, str(cap_dir)) as recorder:
+        from openadapt_flow.browser_accessibility import (
+            readable_browsers_while_recording,
+        )
+
+        with (
+            readable_browsers_while_recording(),
+            recorder_factory(task_description, str(cap_dir)) as recorder,
+        ):
             wait_ready = getattr(recorder, "wait_for_ready", None)
             if callable(wait_ready):
                 wait_ready(timeout=60.0)
@@ -597,6 +830,7 @@ def record_multi_surface(
                     from openadapt_flow.interactive_recorder import record_interactive
 
                     web_recorder = record_interactive
+                assert web_dir is not None
                 web_recorder(
                     url,
                     web_dir,
@@ -645,7 +879,9 @@ def record_multi_surface(
                 cap_dir,
                 desktop_dir,
                 params=params or {},
-                include_structural=any(s.kind == "windows" for s in surfaces),
+                include_structural=automatic
+                or any(s.kind == "windows" for s in surfaces),
+                include_process=automatic,
             )
         return merge_surface_recordings(
             out_dir,
@@ -656,9 +892,33 @@ def record_multi_surface(
             origin=origin,
             web_dir=web_dir,
             web_clock=clock,
+            os_kind=host_surface_kind() if automatic else None,
+            own_processes=own_process_names() if automatic else frozenset(),
         )
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def host_surface_kind() -> str:
+    """The native surface kind of this computer."""
+
+    if sys.platform == "win32":
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "linux"
+
+
+def review_lines(recording: Path) -> list[str]:
+    """What a recording used, one line per surface, for the person to check."""
+
+    meta = _load_meta(recording)
+    lines = []
+    for entry in (meta.get("multi_surface_record") or {}).get("surfaces", []):
+        label = entry.get("app") or entry["id"]
+        what = "browser page" if entry.get("browser") else entry["kind"]
+        lines.append(f"  {label}: {entry.get('steps', 0)} step(s), {what}")
+    return lines
 
 
 def _has_actions(cap_dir: Path, load_capture: Callable[[Path], Any]) -> bool:

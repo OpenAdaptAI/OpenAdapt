@@ -1587,7 +1587,7 @@ def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> Non
 
 
 def _cmd_record_capture(args: argparse.Namespace) -> int:
-    if getattr(args, "surface", None):
+    if getattr(args, "surface", None) or _records_automatically(args):
         return _cmd_record_surfaces(args)
     # The interactive (web) recorder installs in-page DOM listeners against a
     # headed Playwright page. The DESKTOP recorder (--backend windows) captures
@@ -1813,22 +1813,73 @@ def _recording_privacy_notices(recording_dir: Path) -> list[str]:
     return notices
 
 
+def _cmd_browser_accessibility(args: argparse.Namespace) -> int:
+    from openadapt_flow import browser_accessibility as ba
+
+    if not sys.platform.startswith("linux"):
+        print(
+            "Nothing to do here: on Windows and macOS, record makes the "
+            "browser's page readable by itself while it records."
+        )
+        return 0
+    if args.enable:
+        lines = ba.enable_linux()
+        for line in lines or ["no Chromium-family browser launcher found"]:
+            print(line)
+        print(
+            "Restart the browser for this to take effect. Undo with "
+            "'openadapt-flow browser-accessibility --disable'."
+        )
+    elif args.disable:
+        for line in ba.disable_linux() or ["nothing to remove"]:
+            print(line)
+    else:
+        for line in ba.linux_status():
+            print(line)
+    return 0
+
+
+def _records_automatically(args: argparse.Namespace) -> bool:
+    """``record`` with no target: follow the person across windows."""
+
+    if getattr(args, "backend", None) or getattr(args, "url", None):
+        return False
+    if getattr(args, "profile", None) in ("standard", "regulated"):
+        return False  # a production posture names its surface
+    target_flags = (
+        "window",
+        "window_title",
+        "rdp_window",
+        "rdp_window_title",
+        "rdp_readiness_text",
+        "browser_cdp_endpoint",
+        "browser_page_url",
+        "capture_network",
+    ) + tuple(attr for attr, _ in _RECORD_TARGET_FLAGS)
+    return not any(getattr(args, attr, None) for attr in target_flags)
+
+
 def _cmd_record_surfaces(args: argparse.Namespace) -> int:
-    """``record --surface``: one recording across declared windows."""
+    """``record`` across windows: found automatically, or ``--surface``."""
 
     from openadapt_flow.multi_surface_record import (
         MultiSurfaceRecordError,
+        host_surface_kind,
         parse_record_surfaces,
         record_multi_surface,
+        review_lines,
     )
 
     url = getattr(args, "url", None)
+    declared = [f for f in (getattr(args, "surface", None) or []) if f != "auto"]
     try:
-        surfaces = parse_record_surfaces(args.surface, web_primary=bool(url))
+        surfaces = (
+            parse_record_surfaces(declared, web_primary=bool(url)) if declared else []
+        )
     except MultiSurfaceRecordError as exc:
         raise SystemExit(f"record: {exc}. Nothing was recorded.") from exc
     backend = getattr(args, "backend", None)
-    lead = "web" if url else surfaces[0].kind
+    lead = "web" if url else (surfaces[0].kind if surfaces else host_surface_kind())
     if backend is not None and backend != lead:
         raise SystemExit(
             f"record --surface: the recording starts on {lead} "
@@ -1858,7 +1909,9 @@ def _cmd_record_surfaces(args: argparse.Namespace) -> int:
         )
     # A capture session runs for every cross-window recording, and Flow
     # cannot encrypt it yet: the desktop recording policy applies.
-    _recording_encryption_key(args, surfaces[0].kind)
+    _recording_encryption_key(
+        args, surfaces[0].kind if surfaces else host_surface_kind()
+    )
     desktop_params: dict[str, str] = {}
     web_params: list[str] = []
     for entry in args.param or ():
@@ -1892,11 +1945,27 @@ def _cmd_record_surfaces(args: argparse.Namespace) -> int:
         raise SystemExit(f"record: {exc}. Nothing was kept.") from exc
     from openadapt_flow.cli_hints import command
 
+    print("This recording used:")
+    for line in review_lines(out):
+        print(line)
+    if sys.stdin.isatty():
+        answer = input("Keep it? [Y/n] ").strip().lower()
+        if answer in ("n", "no"):
+            import shutil
+
+            shutil.rmtree(out, ignore_errors=True)
+            print("Deleted. Nothing was kept.")
+            return 1
     print(f"Recording written to {out}")
+    import json as _json
+
+    listed = _json.loads((Path(out) / "meta.json").read_text())["surfaces"]
+    lead_flag = "--url <app>" if url else f"--backend {listed[0]['kind']} <target>"
     binds = " ".join(
-        f"--surface {s.id}={s.kind}:<target>" for s in surfaces if s.id != surfaces[0].id or url
+        f"--surface {s['id']}={s['kind']}:<target>"
+        for s in listed[1:]
+        if s["kind"] != "web"
     )
-    lead_flag = "--url <app>" if url else f"--backend {surfaces[0].kind} <target>"
     print(
         f"Compile it:  {command('compile')} {out} --out <bundle> --name <workflow>\n"
         f"Then replay: {command('replay')} <bundle> {lead_flag} {binds}"
@@ -9166,6 +9235,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_demo)
 
     p = sub.add_parser(
+        "browser-accessibility",
+        help=(
+            "Linux: start Chrome, Chromium, Edge and Brave with their page "
+            "readable to accessibility tools, so record can read clicks in "
+            "your everyday browser. Writes your own launcher entries only"
+        ),
+    )
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--enable", action="store_true", help="Add the setting")
+    mode.add_argument(
+        "--disable", action="store_true", help="Remove what --enable added"
+    )
+    p.set_defaults(func=_cmd_browser_accessibility)
+
+    p = sub.add_parser(
         "record",
         help=(
             "Record YOUR workflow interactively: a headed browser "
@@ -9357,8 +9441,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="NAME=KIND:WINDOW",
         help=(
-            "Record a workflow that crosses windows in one session: declare "
-            "each desktop or remote window the person works in (repeatable). "
+            "With no --backend or --url, record follows you across windows "
+            "on its own. Use --surface to name the windows yourself instead, "
+            "or --surface auto with --url to add automatic windows to a "
+            "browser recording. Declare each desktop or remote window the "
+            "person works in (repeatable). "
             "KIND is windows, macos, linux, rdp or citrix; WINDOW is part of "
             "that window's title (on macOS, the app name). Repeat a NAME to "
             "add another window to it, such as its dialog. With --url the "

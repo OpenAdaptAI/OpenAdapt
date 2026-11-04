@@ -78,7 +78,9 @@ def _desktop(tmp_path: Path, events: list[dict]) -> Path:
 
 
 def _read(out: Path) -> list[dict]:
-    return [json.loads(line) for line in (out / "events.jsonl").read_text().splitlines()]
+    return [
+        json.loads(line) for line in (out / "events.jsonl").read_text().splitlines()
+    ]
 
 
 def test_parse_requires_a_kind_and_a_window() -> None:
@@ -244,7 +246,11 @@ def test_two_desktop_apps_and_an_rdp_window_without_a_browser(tmp_path: Path) ->
     out = merge_surface_recordings(
         tmp_path / "rec",
         surfaces=parse_record_surfaces(
-            ["billing=windows:Billing", "rdp_1=rdp:Remote Desktop", "notes=windows:Notes"],
+            [
+                "billing=windows:Billing",
+                "rdp_1=rdp:Remote Desktop",
+                "notes=windows:Notes",
+            ],
             web_primary=False,
         ),
         desktop_dir=desktop,
@@ -342,3 +348,198 @@ def test_record_runs_the_browser_inside_one_capture_session(
     ]
     # The raw capture session (every window's pixels) is not kept.
     assert sorted(p.name for p in tmp_path.iterdir()) == ["rec", "src"]
+
+
+# -- automatic surfaces (record with no target) -------------------------------
+
+
+def _proc(name, bounds=None, role="AXButton", named=True):
+    out = {"name": name, "element_role": role, "element_named": named}
+    if bounds:
+        out["window_bounds"] = list(bounds)
+    return out
+
+
+def test_automatic_surfaces_follow_the_applications_used(tmp_path: Path) -> None:
+    timeline = window_timeline(
+        [
+            _window(T0 + 0.0, "Referral desk - Google Chrome", 0, 0, 1280, 800, "1"),
+            _window(T0 + 2.0, "Chart", 100, 50, 600, 400, "2"),
+            _window(T0 + 4.0, "Remote Desktop", 200, 100, 800, 600, "3"),
+            _window(T0 + 6.0, "Referral desk - Google Chrome", 0, 0, 1280, 800, "1"),
+        ]
+    )
+    desktop = _desktop(
+        tmp_path,
+        [
+            {
+                "kind": "click",
+                "x": 10,
+                "y": 10,
+                "t": 1.0,
+                "observed_process": _proc("Google Chrome", (0, 0, 1280, 800)),
+            },
+            {
+                "kind": "click",
+                "x": 300,
+                "y": 250,
+                "t": 3.0,
+                "observed_process": _proc("Chart", (100, 50, 600, 400)),
+            },
+            # A keystroke with no reading, in the same window.
+            {"kind": "type", "text": "note", "t": 3.5},
+            {
+                "kind": "click",
+                "x": 400,
+                "y": 300,
+                "t": 5.0,
+                "observed_process": _proc("mstsc.exe", (200, 100, 800, 600)),
+            },
+            {
+                "kind": "click",
+                "x": 20,
+                "y": 20,
+                "t": 7.0,
+                "observed_process": _proc("Google Chrome", (0, 0, 1280, 800)),
+            },
+            # The Ctrl-C that stops the recording, in its own terminal.
+            {
+                "kind": "hotkey",
+                "modifiers": ["ctrl"],
+                "key": "c",
+                "t": 8.0,
+                "observed_process": _proc("Terminal"),
+            },
+        ],
+    )
+    out = merge_surface_recordings(
+        tmp_path / "rec",
+        surfaces=[],
+        desktop_dir=desktop,
+        desktop_started_at=T0,
+        timeline=timeline,
+        os_kind="macos",
+        own_processes=frozenset({"terminal", "python3.12"}),
+    )
+    events = _read(out)
+    assert [(e["kind"], e.get("surface")) for e in events] == [
+        ("click", "google_chrome"),
+        ("switch_surface", "chart"),
+        ("click", "chart"),
+        ("type", "chart"),
+        ("switch_surface", "mstsc"),
+        ("click", "mstsc"),
+        ("switch_surface", "google_chrome"),
+        ("click", "google_chrome"),
+    ]
+    assert all("observed_process" not in e for e in events)
+    meta = json.loads((out / "meta.json").read_text())
+    assert meta["surfaces"] == [
+        {"id": "google_chrome", "kind": "macos"},
+        {"id": "chart", "kind": "macos"},
+        {"id": "mstsc", "kind": "rdp"},
+    ]
+    listed = {s["id"]: s for s in meta["multi_surface_record"]["surfaces"]}
+    assert listed["google_chrome"]["browser"] is True
+    assert listed["chart"]["app"] == "Chart" and listed["chart"]["steps"] == 2
+    # Window-pixel kinds are cropped to the window the reading named.
+    assert (events[2]["x"], events[2]["y"]) == (200, 200)
+
+
+def test_automatic_refuses_an_unreadable_action(tmp_path: Path) -> None:
+    desktop = _desktop(tmp_path, [{"kind": "click", "x": 10, "y": 10, "t": 1.0}])
+    with pytest.raises(MultiSurfaceRecordError, match="could not be read"):
+        merge_surface_recordings(
+            tmp_path / "rec",
+            surfaces=[],
+            desktop_dir=desktop,
+            desktop_started_at=T0,
+            timeline=TIMELINE,
+            os_kind="linux",
+        )
+
+
+def test_automatic_refuses_work_in_the_recorders_own_terminal(tmp_path: Path) -> None:
+    desktop = _desktop(
+        tmp_path,
+        [
+            {
+                "kind": "click",
+                "x": 300,
+                "y": 250,
+                "t": 1.0,
+                "observed_process": _proc("gnome-terminal-server"),
+            },
+            {
+                "kind": "click",
+                "x": 300,
+                "y": 250,
+                "t": 4.0,
+                "observed_process": _proc("chart", (100, 50, 600, 400)),
+            },
+        ],
+    )
+    with pytest.raises(MultiSurfaceRecordError, match="terminal running record"):
+        merge_surface_recordings(
+            tmp_path / "rec",
+            surfaces=[],
+            desktop_dir=desktop,
+            desktop_started_at=T0,
+            timeline=TIMELINE,
+            os_kind="linux",
+            own_processes=frozenset({"gnome-terminal-server"}),
+        )
+
+
+def test_automatic_refuses_an_unreadable_linux_chrome_page(tmp_path: Path) -> None:
+    desktop = _desktop(
+        tmp_path,
+        [
+            {
+                "kind": "click",
+                "x": 30,
+                "y": 30,
+                "t": 1.0,
+                "observed_process": _proc(
+                    "chrome", (0, 0, 1280, 800), role="frame", named=True
+                ),
+            }
+        ],
+    )
+    with pytest.raises(MultiSurfaceRecordError, match="browser-accessibility --enable"):
+        merge_surface_recordings(
+            tmp_path / "rec",
+            surfaces=[],
+            desktop_dir=desktop,
+            desktop_started_at=T0,
+            timeline=TIMELINE,
+            os_kind="linux",
+        )
+
+
+def test_linux_launcher_setting_is_added_and_undone(tmp_path: Path) -> None:
+    from openadapt_flow import browser_accessibility as ba
+
+    system = tmp_path / "system"
+    system.mkdir()
+    (system / "google-chrome.desktop").write_text(
+        "[Desktop Entry]\nName=Google Chrome\nExec=/usr/bin/google-chrome-stable %U\n"
+        "[Desktop Action new-window]\nExec=/usr/bin/google-chrome-stable\n"
+    )
+    user = tmp_path / "user"
+    user.mkdir()
+    (user / "chromium.desktop").write_text("[Desktop Entry]\nExec=mine\n")
+    (system / "chromium.desktop").write_text("[Desktop Entry]\nExec=chromium %U\n")
+    changes = ba.enable_linux(system_dirs=(system,), user_dir=user)
+    text = (user / "google-chrome.desktop").read_text()
+    assert text.count(ba.LINUX_FLAG) == 2
+    assert (
+        "Exec=/usr/bin/google-chrome-stable --force-renderer-accessibility %U" in text
+    )
+    # The person's own override is left alone.
+    assert (user / "chromium.desktop").read_text() == "[Desktop Entry]\nExec=mine\n"
+    assert any("left" in c for c in changes)
+    assert (system / "google-chrome.desktop").read_text().count(ba.LINUX_FLAG) == 0
+    ba.disable_linux(user_dir=user)
+    assert not (user / "google-chrome.desktop").exists()
+    assert (user / "chromium.desktop").exists()
