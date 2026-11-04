@@ -8,7 +8,6 @@ import pytest
 
 from openadapt_flow.guard import GuardTask
 from openadapt_flow.jit.adapters import Op
-from openadapt_flow.mockmed.teach_scope import EncounterWrites, encounter_scope
 from openadapt_flow.teach_scope import (
     ScopeViolation,
     TeachGuard,
@@ -17,6 +16,7 @@ from openadapt_flow.teach_scope import (
     origin_of,
     provenance_for,
 )
+from tests._teach_scope import EncounterWrites, encounter_scope
 
 BASE = "http://127.0.0.1:8765"
 
@@ -349,9 +349,9 @@ def test_a_scope_with_no_origin_lets_a_browser_reach_nothing() -> None:
 def test_write_adapters_load_by_name() -> None:
     from openadapt_flow.teach_scope import load_write_adapter
 
-    adapter = load_write_adapter("openadapt_flow.mockmed.teach_scope:EncounterWrites")
+    adapter = load_write_adapter("tests._teach_scope:EncounterWrites")
     assert isinstance(adapter, EncounterWrites)
     with pytest.raises(ValueError, match="module:attr"):
-        load_write_adapter("openadapt_flow.mockmed.teach_scope")
+        load_write_adapter("tests._teach_scope")
     with pytest.raises(ValueError, match="not a write adapter"):
-        load_write_adapter("openadapt_flow.mockmed.teach_scope:encounter_scope")
+        load_write_adapter("tests._teach_scope:encounter_scope")

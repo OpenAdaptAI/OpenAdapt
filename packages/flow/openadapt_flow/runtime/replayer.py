@@ -1634,14 +1634,35 @@ class Replayer:
         before they are written, and durable checkpoints use the same key.
         No plaintext of the bundle or of the live screen reaches the disk.
         """
+        from openadapt_flow import at_rest
+
         bundle_path = Path(bundle_dir)
-        if (
-            not (
-                _sealed.is_sealed(bundle_path)
-                or _sealed.active_writer(bundle_path) is not None
+        bundle_sealed = (
+            _sealed.is_sealed(bundle_path)
+            or _sealed.active_writer(bundle_path) is not None
+        )
+        # A sealed bundle always runs into a sealed run directory, whatever
+        # the mode or opt-out: encrypted input never yields plaintext output.
+        # Strict mode seals the run of a plaintext bundle too. Otherwise the
+        # plaintext run directory is named on stderr and in the ledger
+        # (docs/phi_at_rest.md).
+        seal_run = at_rest.strict() or bundle_sealed
+        if save_healed_to is not None and seal_run:
+            # The healed copy is written as a plaintext bundle: hold it back
+            # before anything runs rather than decrypt a sealed bundle to disk.
+            raise at_rest.AtRestRefused(
+                f"Not writing a healed bundle at {save_healed_to}: it would be a "
+                "plaintext copy of an encrypted run. Nothing was executed."
             )
-            or _sealed.active_writer(Path(run_dir)) is not None
-        ):
+        if not seal_run or _sealed.active_writer(Path(run_dir)) is not None:
+            if _sealed.active_writer(Path(run_dir)) is None:
+                if not at_rest.plaintext_allowed("a run directory"):
+                    at_rest.unsealed_write("a run directory", run_dir)
+                if self.checkpoint_key is None:
+                    # Durable checkpoints can still be encrypted here.
+                    from openadapt_flow import crypto as _crypto
+
+                    self.checkpoint_key = _crypto.resolve_key(None)
             return self._run_unsealed(
                 workflow,
                 params=params,
@@ -1672,9 +1693,9 @@ class Replayer:
             # Refuse before anything is actuated or written: these stores
             # keep their own plaintext state files in the run directory.
             raise _sealed.SealedSetError(
-                f"a sealed bundle cannot run with {unsupported} yet, because "
-                "that state is written to the run directory in plaintext. "
-                "Nothing was executed."
+                f"a sealed run keeps {unsupported} outside the sealed set, so "
+                "it is held back. Nothing was executed. Run a plaintext bundle "
+                "outside OPENADAPT_FLOW_AT_REST=strict to use it (recorded)."
             )
         if self.checkpoint_key is None:
             # A sealed bundle's run keeps its durable state under the same key.
@@ -13369,8 +13390,13 @@ class Replayer:
         last = report.results[-1]
         last.ok = False
         last.safety_halt = True
-        last.failure_category = "safety_halt"
-        last.error = f"after an earlier save, {late} — run aborted"
+        # Keep an earlier halt's reason and category (for example a reconcile
+        # or a refuted record check): add the late refusal, don't replace it.
+        last.failure_category = last.failure_category or "safety_halt"
+        if not last.error:
+            last.error = f"after an earlier save, {late} — run aborted"
+        elif late not in last.error:
+            last.error = f"{last.error}; also after an earlier save, {late}"
         report.success = False
 
     def _act_closing_surface(

@@ -102,14 +102,16 @@ def _doc(db: Path, **database: Any) -> dict[str, Any]:
     }
 
 
-def _run(tmp_path: Path, after: Callable[[sqlite3.Connection], Any]) -> dict:
+def _run(
+    tmp_path: Path, after: Callable[[sqlite3.Connection], Any], **database: Any
+) -> dict:
     tmp_path.mkdir(parents=True, exist_ok=True)
     db = tmp_path / "app.sqlite"
     con = sqlite3.connect(db)
     con.executescript(SCHEMA)
     con.commit()
     con.close()
-    cfg = parse_verify_config(_doc(db))
+    cfg = parse_verify_config(_doc(db, **database))
     capture_baseline(cfg, NEW, tmp_path / "baseline.json")
     con = sqlite3.connect(db)
     con.execute(
@@ -288,3 +290,63 @@ def test_the_openemr_profile_names_its_no_record_value() -> None:
     """Record 0 names no chart in OpenEMR's data, not in the engine."""
     profile = load_profile("openemr")
     assert profile.no_record_values == ["0"]
+
+
+def test_a_rule_never_judges_a_row_whose_columns_have_no_cell_macs(
+    tmp_path: Path,
+) -> None:
+    # #1793 item 1: over max_rows a table keeps cell MACs only for its
+    # reference columns. A uuid backfill beside a clinical edit in the same
+    # row used to show only the uuid, and the backfill rule excused the row.
+    # users has two rows: over max_rows=1, its cells are only its references.
+    backfill = (
+        "UPDATE users SET uuid = 'uu-2', last_updated = '2026-10-29' WHERE id = 2"
+    )
+    hidden = (
+        "UPDATE users SET uuid = 'uu-2', last_updated = '2026-10-29', "
+        "authorized = 0 WHERE id = 2"
+    )
+    assert _frame(_run(tmp_path / "small-backfill", _x(backfill))) == "held"
+    assert _frame(_run(tmp_path / "small-hidden", _x(hidden))) == "refuted"
+    assert _frame(_run(tmp_path / "over-hidden", _x(hidden), max_rows=1)) == "refuted"
+
+
+def test_the_rollback_diff_keeps_a_row_whose_columns_have_no_cell_macs(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.rollback import _excuser
+    from openadapt_flow.rollback_state import DatabaseReader, changes, diff_states
+
+    db = tmp_path / "app.sqlite"
+    con = sqlite3.connect(db)
+    con.executescript(SCHEMA)
+    con.commit()
+    con.close()
+
+    def moved(max_rows: int, sql: str) -> list[str]:
+        con = sqlite3.connect(db)
+        con.execute("UPDATE history_data SET uuid = NULL, tobacco = '' WHERE id = 1")
+        con.commit()
+        reader = DatabaseReader(
+            dialect="sqlite",
+            read_config={"sqlite_database": str(db)},
+            profile="openemr",
+            actor_names=("bot",),
+            max_rows=max_rows,
+        )
+        before = reader.read()
+        con.execute(sql)
+        con.commit()
+        con.close()
+        after = reader.read(before=before)
+        diff = diff_states(before, after, excuse=_excuser(reader, after))
+        return [c[0] for c in changes(diff)]
+
+    backfill = "UPDATE history_data SET uuid = 'h-1' WHERE id = 1"
+    hidden = "UPDATE history_data SET uuid = 'h-1', tobacco = 'daily' WHERE id = 1"
+    # Every column hashed: the backfill alone is the app's, the edit isn't.
+    assert moved(2000, backfill) == []
+    assert moved(2000, hidden) == ["history_data"]
+    # Over max_rows: no rule judges the row, backfill or not.
+    assert moved(0, hidden) == ["history_data"]
+    assert moved(0, backfill) == ["history_data"]

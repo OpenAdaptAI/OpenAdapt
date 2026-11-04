@@ -21,12 +21,12 @@ pytest.importorskip("mcp")
 from mcp import ClientSession  # noqa: E402
 from mcp.shared.memory import create_client_server_memory_streams  # noqa: E402
 
+from benchmark.harness.guard_demo import FakeAgent, verify_yaml  # noqa: E402
 from openadapt_flow import verifier  # noqa: E402
 from openadapt_flow.agent.bridge import BridgeError  # noqa: E402
 from openadapt_flow.agent.cli import main as agent_main  # noqa: E402
 from openadapt_flow.agent.mcp import build_server  # noqa: E402
 from openadapt_flow.agent.verify_tools import VerifyBridge  # noqa: E402
-from openadapt_flow.guard_demo import FakeAgent, verify_yaml  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve as fault_serve  # noqa: E402
 
 NOTE = "Follow-up in two weeks"

@@ -59,7 +59,7 @@ from openadapt_flow.learning import (
     promoted_workflow,
     resolution_demonstration,
 )
-from openadapt_flow.learning.synth_stream import StructuralDiffInducer
+from openadapt_flow.learning.induce import StructuralDiffInducer
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.runtime.replayer import Replayer

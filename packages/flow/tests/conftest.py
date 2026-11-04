@@ -72,3 +72,10 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     # The uncertain-write ledger: per test, never ~/.openadapt/ledger.
     monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / ".write-ledger"))
     monkeypatch.delenv("OPENADAPT_FRAME_SECRET_FILE", raising=False)
+    # Encryption at rest is the default (openadapt_flow.at_rest). The suite
+    # keeps the plaintext behaviour its fixtures assert, under the recorded
+    # opt-out, and keeps the local key and the ledger out of the real home.
+    # tests/test_at_rest_default.py covers the default and strict modes.
+    monkeypatch.setenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", "test suite: synthetic data")
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST_HOME", str(tmp_path / ".at-rest-home"))
+    monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
