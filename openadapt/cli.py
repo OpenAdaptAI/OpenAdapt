@@ -1350,23 +1350,12 @@ def verify_ledger() -> None:
 @verify_ledger.command("list")
 @_LEDGER_OPTION
 def verify_ledger_list(ledger_dir: Optional[str]) -> None:
-    """Show held and open writes: key, state, when it began, outcome.
-
-    Also each provisional CONFIRMED whose recheck is still owed, with its due
-    time, so a recheck isn't lost when the server that holds it restarts.
-    """
+    """Show held and open writes: key, state, when it began, outcome."""
     ledger = _write_ledger(ledger_dir)
     rows = ledger.unresolved()
-    owed = ledger.rechecks_owed()
-    if not rows and not owed:
-        click.echo("No held or open writes. No rechecks owed.")
+    if not rows:
+        click.echo("No held or open writes.")
         return
-    for key, attempt in owed:
-        click.echo(
-            f"{key}  recheck-owed  began {attempt.begun.get('at')}  "
-            f"due {attempt.recheck_owed}  by {attempt.begun.get('actor_kind')}:"
-            f"{attempt.begun.get('actor_id')}"
-        )
     for key, attempt in rows:
         outcome = (attempt.resolved or {}).get("outcome", "-")
         state = "review" if attempt.review else ledger.state(attempt)
