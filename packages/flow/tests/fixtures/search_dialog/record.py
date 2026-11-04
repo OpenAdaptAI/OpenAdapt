@@ -51,7 +51,7 @@ def record(name: str, statement: str, typed: str, comment: str = "") -> None:
     url = (HERE / "app.html").as_uri() + "?s=" + quote(statement)
     if comment:
         url += "&c=1"
-    backend, close = PlaywrightBackend.launch(url)
+    backend, close = PlaywrightBackend.launch(url, headless=True)
     try:
         page = backend.page
 
