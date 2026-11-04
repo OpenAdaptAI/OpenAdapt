@@ -5810,6 +5810,23 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
     import os
     import stat
 
+    def _recheck_ledger_identity(path: Path, initial: os.stat_result) -> None:
+        try:
+            final = os.lstat(path)
+        except OSError as exc:
+            raise ValueError(
+                "qualification attempt ledger could not be inspected"
+            ) from exc
+        if (
+            stat.S_ISLNK(final.st_mode)
+            or not stat.S_ISDIR(final.st_mode)
+            or final.st_dev != initial.st_dev
+            or final.st_ino != initial.st_ino
+        ):
+            raise ValueError(
+                "qualification attempt ledger changed while it was inspected"
+            )
+
     def private_directory(path: Path, *, migrate_owned_root: bool = False) -> Path:
         """Open a private directory without trusting a pathname after inspection."""
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -5821,6 +5838,16 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
             ) from exc
         if stat.S_ISLNK(initial.st_mode) or not stat.S_ISDIR(initial.st_mode):
             raise ValueError("qualification attempt ledger is not a private directory")
+        if os.name == "nt":
+            # Windows cannot open a directory as a file descriptor. Hold a
+            # handle that refuses a reparse point, blocks a rename or a
+            # junction swap until the marker is written, and proves the
+            # directory sits in this user's profile.
+            from openadapt_flow._windows_directory import hold_private_directory
+
+            held_directories.append(hold_private_directory(path))
+            _recheck_ledger_identity(path, initial)
+            return path
         flags = os.O_RDONLY
         if hasattr(os, "O_DIRECTORY"):
             flags |= os.O_DIRECTORY
@@ -5856,21 +5883,7 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
                     )
         finally:
             os.close(descriptor)
-        try:
-            final = os.lstat(path)
-        except OSError as exc:
-            raise ValueError(
-                "qualification attempt ledger could not be inspected"
-            ) from exc
-        if (
-            stat.S_ISLNK(final.st_mode)
-            or not stat.S_ISDIR(final.st_mode)
-            or final.st_dev != initial.st_dev
-            or final.st_ino != initial.st_ino
-        ):
-            raise ValueError(
-                "qualification attempt ledger changed while it was inspected"
-            )
+        _recheck_ledger_identity(path, initial)
         return path
 
     case = args._qualification_case_execution["case"]
@@ -5904,60 +5917,77 @@ def _claim_qualification_case_attempt(args: argparse.Namespace) -> bool:
         json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     state_root = Path(os.environ.get("OPENADAPT_HOME", Path.home() / ".openadapt"))
+    held_directories: list = []
     try:
-        ledger_dir = private_directory(
-            private_directory(state_root, migrate_owned_root=True)
-            / "qualification-attempts"
-        )
-    except ValueError:
-        print(
-            "run REFUSED: qualification attempt ledger is not available safely. "
-            "Nothing was executed."
-        )
-        return False
-    marker = ledger_dir / f"{attempt_key}.json"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(marker, flags, 0o600)
-    except FileExistsError:
-        print(
-            "run REFUSED: this qualification case attempt already started in this "
-            "local qualification ledger; "
-            "reconcile its retained run evidence before another attempt. "
-            "Nothing was executed."
-        )
-        return False
-    except OSError:
-        print(
-            "run REFUSED: qualification case attempt could not be claimed safely. "
-            "Nothing was executed."
-        )
-        return False
-    try:
-        os.write(descriptor, canonical)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    try:
-        directory_flags = os.O_RDONLY
-        if hasattr(os, "O_DIRECTORY"):
-            directory_flags |= os.O_DIRECTORY
-        if hasattr(os, "O_NOFOLLOW"):
-            directory_flags |= os.O_NOFOLLOW
-        directory = os.open(ledger_dir, directory_flags)
         try:
-            os.fsync(directory)
+            root = private_directory(state_root, migrate_owned_root=True)
+            if held_directories:
+                # Open the ledger under the held root's resolved path, so a
+                # junction above the root swapped now cannot move it.
+                root = Path(held_directories[-1].final_path)
+            ledger_dir = private_directory(root / "qualification-attempts")
+        except ValueError:
+            print(
+                "run REFUSED: qualification attempt ledger is not available safely. "
+                "Nothing was executed."
+            )
+            return False
+        # On Windows the marker goes under the held ledger's resolved path,
+        # so a junction higher up that is swapped after the check cannot
+        # redirect it.
+        marker = (
+            Path(held_directories[-1].final_path) if held_directories else ledger_dir
+        ) / f"{attempt_key}.json"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(marker, flags, 0o600)
+        except FileExistsError:
+            print(
+                "run REFUSED: this qualification case attempt already started in this "
+                "local qualification ledger; "
+                "reconcile its retained run evidence before another attempt. "
+                "Nothing was executed."
+            )
+            return False
+        except OSError:
+            print(
+                "run REFUSED: qualification case attempt could not be claimed safely. "
+                "Nothing was executed."
+            )
+            return False
+        try:
+            os.write(descriptor, canonical)
+            os.fsync(descriptor)
         finally:
-            os.close(directory)
-    except OSError:
-        print(
-            "run REFUSED: qualification attempt ledger could not be persisted safely. "
-            "Nothing was executed."
-        )
-        return False
-    return True
+            os.close(descriptor)
+        try:
+            # Windows cannot open a directory to flush it; the marker's own
+            # bytes were flushed above, and NTFS journals the new entry.
+            if os.name != "nt":
+                directory_flags = os.O_RDONLY
+                if hasattr(os, "O_DIRECTORY"):
+                    directory_flags |= os.O_DIRECTORY
+                if hasattr(os, "O_NOFOLLOW"):
+                    directory_flags |= os.O_NOFOLLOW
+                directory = os.open(ledger_dir, directory_flags)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+        except OSError:
+            print(
+                "run REFUSED: qualification attempt ledger could not be persisted safely. "
+                "Nothing was executed."
+            )
+            return False
+        return True
+
+    finally:
+        # Close the Windows directory handles only after the marker exists.
+        for held in reversed(held_directories):
+            held.close()
 
 
 def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
