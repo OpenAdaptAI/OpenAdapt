@@ -557,13 +557,21 @@ def _judge_versions(
             return index(rows) if isinstance(rows, list) else None
         return index(before.records) if before.reachable else None
 
+    def writes_a_target(effect: Effect) -> bool:
+        """A write effect whose records can be targets. A guard ("nothing
+        here", ``record_written`` with ``expected_count`` 0) never is."""
+
+        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+            return False
+        return not (
+            effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0
+        )
+
     ignored = set(cfg.frame.ignore_fields)  # type: ignore[union-attr]
     targets: list[tuple[Optional[str], bool, bool]] = []
     for effect, verdict in zip(effects, verdicts):
-        if effect.kind not in (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS):
+        if not writes_a_target(effect):
             continue
-        if effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count == 0:
-            continue  # a guard: "nothing here"
         if not verdict.confirmed:
             continue
         if (
@@ -588,17 +596,17 @@ def _judge_versions(
             )
             targets.append((text, existed, changed))
     stored = (before.detail or {}).get(FRAME_VERSIONS_DETAIL)
-    writes = (EffectKind.RECORD_WRITTEN, EffectKind.FIELD_EQUALS)
     if spec.target_surface is not None and not any(
-        e.kind in writes and surface_of(e) == spec.target_surface for e in effects
+        writes_a_target(e) and surface_of(e) == spec.target_surface for e in effects
     ):
-        # A surface no write effect reads (a typo in a hand-written
-        # contract) would leave no target, and no target holds.
+        # A surface no write target is read from (a typo in a hand-written
+        # contract, or a surface only a guard reads) would leave no target,
+        # and no target holds.
         result = VersionVerdict(
             "not_checked",
             "unknown_surface",
             reason="frame.versions.target_surface names a surface no write "
-            "effect reads, so no target's versions can be judged",
+            "target is read from, so no target's versions can be judged",
         )
     else:
         result = judge_versions(
