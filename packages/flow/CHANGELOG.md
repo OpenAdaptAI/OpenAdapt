@@ -19,7 +19,37 @@
 
 ### Changed
 
-- The wheel no longer ships the benchmark harnesses. `openadapt_flow.benchmark` and `openadapt_flow.instrument` moved to `packages/flow/benchmark/harness/` in the source tree (import `benchmark.harness`); `openadapt-flow benchmark` runs from a source checkout and says so from a wheel. The engine audit for application-specific code is in `docs/GENERALITY_AUDIT.md`. Code that imported `openadapt_flow.benchmark` or `openadapt_flow.instrument` from an installed wheel imports `benchmark.harness` from a source checkout instead.
+- A headed browser launch no longer hangs before the browser opens. Flow's first-launch check held its guard while calling a function that takes the same guard, so every first headed launch with auto-install on (including `record --url`) waited forever.
+- The OpenEMR contracts (`benchmark/lifecycle_proof/verify.yaml`, `benchmark/openemr_local/verify.yaml`) now declare how the New Patient form stores what was typed: street and city in capitals, names with each word capitalized. Without it the exact record check refuted 19 of 20 correct saves on the stand-in suites (#1811). A contract value's `stored` form gains `capitalize_words` (OpenEMR's "C" fields); the set stays closed and the check stays exact.
+
+## v2.6.0 (2026-11-04)
+
+Flow adds signed teach authorizations, encrypted local artifacts, durable
+rollback, and more ways to train and evaluate agents. Verification still
+refuses a write when the record or its outcome cannot be established.
+
+### Upgrade notes
+
+- A differing record identifier now counts as a contradiction, even when most
+  of the identity band matches. Runs may refuse some same-record pairs they
+  accepted before. Check the stopped record before retrying.
+- Agent-taught drafts now need a signed teach authorization in every admission
+  mode. The authorization also covers self-repair and approval of an agent's
+  fix. Browser teach no longer teaches or runs write tools. See
+  [Teach authorization](docs/TEACH_AUTHORIZATION.md).
+- Benchmark harnesses and test-only helpers are no longer shipped in the wheel.
+  Replace imports from `openadapt_flow.benchmark` and
+  `openadapt_flow.instrument` with `benchmark.harness` from a source checkout.
+  The `harness2` extra is removed; `openadapt-flow benchmark` needs a checkout.
+- REST verifiers require the app's record path, record key and delete path;
+  FHIR verifiers require its resource type and field map. API-save admission
+  and idempotency-key detection use explicit app configuration. Contracts that
+  pin an app profile must adopt its updated digest before using the revised
+  bookkeeping rules. Existing verifier identities and contract digests stay
+  unchanged when their configuration is unchanged.
+- Re-record macOS bundles whose record identity was captured from a table cell.
+  Identity now uses the whole row; a table with no accessible row falls back
+  to its recorded identity band.
 
 ### Features
 
