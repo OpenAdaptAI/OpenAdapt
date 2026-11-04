@@ -73,9 +73,9 @@ narrated sentence that names the parameter settles a tie between several, if
 every run agrees with it ([NARRATION.md](NARRATION.md#teach-branch)).
 
 The result goes through the same learning loop as any repair (induction,
-regression gate, held-out check) and is written as a repair candidate. It is
-not active. Activation follows the repair lifecycle: qualification runs,
-approval and a canary (see [REPAIR_LIFECYCLE.md](REPAIR_LIFECYCLE.md)).
+regression gate, and a structural held-out check) and is
+written as a repair candidate. It is not active. Activation follows the
+repair lifecycle: qualification runs, approval and a canary (see [REPAIR_LIFECYCLE.md](REPAIR_LIFECYCLE.md)).
 
 ## Shadow mining: many real runs, watched in the background
 

@@ -42,6 +42,7 @@ import json
 import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Literal, Optional, Protocol, runtime_checkable
 
@@ -55,6 +56,116 @@ from pydantic import (
     model_validator,
 )
 from pydantic_core import to_jsonable_python
+
+ValueKind = Literal["phone", "date", "email"]
+
+
+def kind_form(
+    kind: Optional[str], value: Any, date_order: Optional[str] = None
+) -> Optional[str]:
+    """``value`` in the canonical form of a declared value kind, or None when
+    it can't be read as one (which then matches nothing). The one normalizer
+    is :mod:`openadapt_flow.runtime.effects.readback_values`, shared with the
+    on-screen read-back:
+
+    - ``phone``: the digits, with an extension kept apart; a value with
+      anything but digits, ``( ) + - . /``, spaces and one trailing extension
+      isn't a phone number;
+    - ``date``: ISO ``YYYY-MM-DD`` (a stored date-time keeps its date; nothing
+      else may follow); a numeric date needs ``date_order``, or it is
+      ambiguous;
+    - ``email``: one address, case folded.
+    """
+
+    from openadapt_flow.runtime.effects.readback_values import normalize_value
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if kind is None:
+        return text
+    return normalize_value(text, kind, date_order=date_order)  # type: ignore[arg-type]
+
+
+#: A plain decimal number as text: an optional minus, digits without a
+#: leading zero, an optional fraction and exponent. No spaces, ``+``,
+#: underscores, ``NaN`` or ``Infinity``: anything else is text.
+_PLAIN_NUMBER = re.compile(
+    r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE](?P<exp>[+-]?[0-9]+))?"
+)
+#: The largest exponent a plain number may have: Decimal's default context
+#: range, so every comparison of two plain numbers is exact and can't raise.
+_MAX_EXPONENT = 999_999
+
+
+def plain_number(text: str) -> Optional[Decimal]:
+    """``text`` as an exact :class:`~decimal.Decimal` when it is a plain
+    decimal number (``2``, ``2.00``, ``-0.25``, ``1e+21``), else None.
+
+    Raises ``ValueError`` for a plain number whose exponent is beyond
+    +/-999999 (``1e9999999``): it can't be compared exactly, and saying so
+    is better than reading it as text.
+    """
+
+    if not isinstance(text, str):
+        return None
+    shape = _PLAIN_NUMBER.fullmatch(text)
+    if shape is None:
+        return None
+    exponent = shape.group("exp")
+    if exponent is not None and abs(int(exponent)) > _MAX_EXPONENT:
+        raise ValueError(f"number {text[:40]!r} has an exponent beyond +/-999999")
+    return Decimal(text)
+
+
+def stored_number(value: Any) -> Optional[Decimal]:
+    """A stored value the store typed as a number, as an exact Decimal.
+
+    An ``int``, ``float`` or ``Decimal`` from the driver or the JSON body
+    (a float by its shortest text, so ``0.1`` is ``Decimal("0.1")``). A
+    bool, any text, and a non-finite float are not numbers: None.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        return None
+    number = Decimal(str(value)) if isinstance(value, float) else Decimal(value)
+    return number if number.is_finite() else None
+
+
+def number_matches(stored: Any, want: Any, *, text_numbers: bool) -> Optional[bool]:
+    """Compare ``stored`` and ``want`` by exact numeric value, when both are
+    numbers; None when the rule doesn't apply (compare as text instead).
+
+    ``stored`` is a number only when the store typed it as one
+    (:func:`stored_number`): a SQL numeric column, a JSON number. ``want``
+    is a number when it is a :attr:`ValueExpr.number`, or, with
+    ``text_numbers`` (a SQL read, whose column types are the store's), any
+    plain decimal text. So a stored ``2`` equals ``2.0`` and ``"2.00"`` in a
+    SQL numeric column, while a text column, and a JSON string, stay exact.
+    """
+
+    have = stored_number(stored)
+    if have is None:
+        return None
+    if isinstance(want, ValueExpr):
+        if want.kind is not None or want.literal is None:
+            return None
+        if not (want.number or text_numbers):
+            return None
+        text = want.literal
+    elif text_numbers and isinstance(want, str):
+        text = want
+    else:
+        return None
+    try:
+        expected = plain_number(text)
+    except ValueError:
+        # A number beyond any stored number's range (a parameter like this
+        # is refused at bind): it equals no stored number.
+        return False
+    if expected is None:
+        return None
+    return have == expected
 
 
 class ValueExpr(BaseModel):
@@ -91,17 +202,66 @@ class ValueExpr(BaseModel):
     #: reads the entered value back as its code. A value the map doesn't name
     #: resolves to nothing, so the check matches nothing and fails closed.
     map: Optional[dict[str, str]] = None
+    #: For a ``param`` the system of record stores transformed: how it stores
+    #: what was entered (OpenEMR's New Patient form saves street and city in
+    #: capitals). Applied after :attr:`map`, with full Unicode case mapping,
+    #: as the browser's ``toUpperCase()`` does for OpenEMR's "U" fields
+    #: ("Peña" is stored "PEÑA", "Straße" "STRASSE"). The check stays exact:
+    #: it expects the stored form, not any casing.
+    stored: Optional[Literal["upper", "lower"]] = None
+    #: A declared value kind (:func:`kind_form`): the expected value and the
+    #: stored one are compared in canonical form, so formatting alone never
+    #: refutes, and a different value always does. Never inferred.
+    kind: Optional[ValueKind] = None
+    #: ``kind: date`` only: how a numeric date entered for this value reads.
+    date_order: Optional[Literal["mdy", "dmy"]] = None
+    #: ``True`` for a null value: a parameter the run set to ``None`` binds to
+    #: this. It matches a stored null (SQL ``NULL``; for REST, an absent or
+    #: null field) and nothing else: never ``""``, never the text ``"None"``.
+    null: Optional[Literal[True]] = None
+    #: ``True`` when the system of record leaves this field out of a record
+    #: whose value is null (Redmine's issue JSON omits ``assigned_to`` when
+    #: no one is assigned). Then a null value matches a missing field too.
+    #: Without it a missing field matches nothing: a misspelled or
+    #: unprojected field must not pass for null. Declared per field, never
+    #: assumed for a store.
+    absent_is_null: Optional[Literal[True]] = None
+    #: ``True`` when the value is a number: a parameter the run passed as a
+    #: JSON number binds to this. A number compares with a stored number by
+    #: exact decimal value (``2.0`` equals a stored ``2``), never with text
+    #: (:func:`number_matches`).
+    number: Optional[Literal[True]] = None
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> "ValueExpr":
         """Require one unambiguous source for every contract value."""
 
-        if (self.literal is None) == (self.param is None):
-            raise ValueError("exactly one of literal or param must be set")
+        sources = sum(
+            1 for value in (self.literal, self.param, self.null) if value is not None
+        )
+        if sources != 1:
+            raise ValueError("exactly one of literal, param or null must be set")
+        if self.null and (self.map is not None or self.stored is not None):
+            raise ValueError("a null value takes no map or stored form")
+        if self.absent_is_null and self.literal is not None:
+            raise ValueError("absent_is_null applies to a parameter or a null")
         if self.param == "":
             raise ValueError("effect parameter name must not be empty")
         if self.map is not None and (self.param is None or not self.map):
             raise ValueError("a value map needs a parameter and at least one entry")
+        if self.stored is not None and self.param is None:
+            raise ValueError("a stored form applies to a parameter")
+        if self.date_order is not None and self.kind != "date":
+            raise ValueError("date_order applies to kind: date")
+        if self.number and (
+            self.kind is not None
+            or self.map is not None
+            or self.stored is not None
+            or (self.literal is not None and plain_number(self.literal) is None)
+        ):
+            raise ValueError("a number is a plain decimal, with no kind, map or form")
+        if self.number and self.literal is None:
+            raise ValueError("number applies to a literal; a parameter's type sets it")
         return self
 
     @model_serializer(mode="wrap")
@@ -109,8 +269,18 @@ class ValueExpr(BaseModel):
         # A value without a map serializes exactly as before, so existing
         # effect contract hashes and bundle digests are unchanged.
         data = handler(self)
-        if isinstance(data, dict) and data.get("map") is None:
-            data.pop("map", None)
+        if isinstance(data, dict):
+            for key in (
+                "map",
+                "stored",
+                "kind",
+                "date_order",
+                "null",
+                "absent_is_null",
+                "number",
+            ):
+                if data.get(key) is None:
+                    data.pop(key, None)
         return data
 
     def resolve(self, params: Mapping[str, object]) -> Optional[str]:
@@ -119,24 +289,90 @@ class ValueExpr(BaseModel):
         A ``param`` reference reads ``params[param]`` (``None`` when the run did
         not supply it -- fail-safe: an unresolved selector matches nothing, so
         the effect REFUTEs / HALTs rather than silently confirming the wrong
-        record). A pure literal returns its literal unchanged.
+        record). A parameter the run set to ``None`` has no text either and
+        also gives ``None``; only :meth:`resolved` binds it, as a null value.
+        A pure literal returns its literal unchanged.
         """
         if self.param is not None:
-            if self.param not in params:
+            if self.param not in params or params[self.param] is None:
                 return None
             # Keep the authorized JSON scalar typed until this exact
             # string-only effect-verifier boundary.
             from openadapt_flow.runtime.authorization import runtime_param_text
 
             entered = runtime_param_text(params[self.param])  # type: ignore[arg-type]
-            if self.map is not None:
-                return self.map.get(entered)
-            return entered
+            return self.stored_form(entered)
         return self.literal
 
+    def stored_form(self, entered: str) -> Optional[str]:
+        """What the system of record stores for ``entered``: its code under
+        :attr:`map` (None when the map doesn't name it), then :attr:`stored`."""
+
+        value: Optional[str] = entered
+        if self.map is not None:
+            value = self.map.get(entered)
+        if value is not None and self.stored == "upper":
+            value = value.upper()
+        elif value is not None and self.stored == "lower":
+            value = value.lower()
+        return value
+
     def resolved(self, params: Mapping[str, object]) -> "ValueExpr":
-        """Return a pure-literal copy of this expression bound to ``params``."""
-        return ValueExpr(literal=self.resolve(params))
+        """Return a pure-literal copy of this expression bound to ``params``.
+
+        A parameter the run set to ``None`` binds to a null value
+        (``null: true``), which matches only a stored null.
+        A parameter passed as a JSON number (not a bool) with no kind, map or
+        stored form binds as a number (:attr:`number`).
+        """
+        if self.null or (
+            self.param is not None
+            and self.param in params
+            and params[self.param] is None
+        ):
+            return ValueExpr(
+                null=True,
+                kind=self.kind,
+                date_order=self.date_order,
+                absent_is_null=self.absent_is_null,
+            )
+        literal = self.resolve(params)
+        raw = params.get(self.param) if self.param is not None else None
+        if self.param is not None and literal is not None:
+            try:
+                plain_number(literal)
+            except ValueError as exc:
+                raise ValueError(f"parameter {self.param!r}: {exc}") from None
+        number = (
+            self.number
+            if self.param is None
+            else (
+                True
+                if isinstance(raw, (int, float))
+                and not isinstance(raw, bool)
+                and self.kind is None
+                and self.map is None
+                and self.stored is None
+                and literal is not None
+                and plain_number(literal) is not None
+                else None
+            )
+        )
+        return ValueExpr(
+            literal=literal, kind=self.kind, date_order=self.date_order, number=number
+        )
+
+    def matches(self, stored: Any) -> bool:
+        """Does a stored value equal this (resolved) value? In canonical form
+        when a kind is declared, as text otherwise. A null value equals only
+        a stored ``None``."""
+
+        if self.null:
+            return stored is None
+        if self.kind is None:
+            return str(stored) == str(self)
+        want = kind_form(self.kind, self.literal, self.date_order)
+        return want is not None and kind_form(self.kind, stored) == want
 
     # -- transparent str-compatibility (back-compat with the v1 plain-string
     #    form): a literal ValueExpr compares, hashes, stringifies, and reprs
@@ -144,6 +380,10 @@ class ValueExpr(BaseModel):
     #    that treat ``effect.value`` / ``effect.match[k]`` as a string are
     #    unaffected. ---------------------------------------------------------
     def __str__(self) -> str:
+        # Display only: every comparison checks :attr:`null` first, so the
+        # text "null" never equals a null value.
+        if self.null:
+            return "null"
         if self.literal is not None:
             return self.literal
         if self.param is not None:
@@ -154,6 +394,8 @@ class ValueExpr(BaseModel):
         # Mirror ``repr(str)`` for a literal so codegen review comments
         # (``idempotency_key={eff.idempotency_key!r}``) and ``dict`` reprs of a
         # ``match`` selector render as they did when values were plain strings.
+        if self.null:
+            return "None"
         if self.param is None:
             return repr(self.literal)
         return repr("{" + self.param + "}")
@@ -164,10 +406,13 @@ class ValueExpr(BaseModel):
                 self.literal == other.literal
                 and self.param == other.param
                 and self.map == other.map
+                and self.null == other.null
+                and self.absent_is_null == other.absent_is_null
+                and self.number == other.number
             )
         if isinstance(other, str):
             # A literal expression equals the bare string it stands for.
-            return self.param is None and self.literal == other
+            return self.param is None and not self.null and self.literal == other
         return NotImplemented
 
     def __hash__(self) -> int:
@@ -176,6 +421,8 @@ class ValueExpr(BaseModel):
         # hash/eq invariant given ``__eq__`` treats them as equal). Existing
         # code that keys a set/dict on ``match`` values mixing plain strings
         # and literal expressions then behaves unchanged.
+        if self.null:
+            return hash(("__null__", bool(self.absent_is_null)))
         if self.param is None:
             return hash(self.literal)
         return hash(("__param__", self.param, tuple(sorted((self.map or {}).items()))))
@@ -291,8 +538,9 @@ class ReadbackField(BaseModel):
     source: Literal["ocr", "structure"] = "ocr"
     #: How the read and the expected value are compared
     #: (:mod:`openadapt_flow.runtime.effects.readback_values`): ``text``,
-    #: ``code`` (case and separators ignored), ``date`` or ``currency``.
-    value_kind: Literal["text", "code", "date", "currency"] = "text"
+    #: ``code`` (case and separators ignored), ``date``, ``currency`` or
+    #: ``number``.
+    value_kind: Literal["text", "code", "date", "currency", "number"] = "text"
     #: ``date`` only: the order of a numeric date such as ``03/04/2026``.
     #: Unset, a numeric date that reads two ways is ambiguous.
     date_order: Optional[Literal["dmy", "mdy"]] = None
@@ -578,6 +826,12 @@ def _resolve_readback(
 # contract cannot claim stronger evidence than the compiler would emit.
 MIN_RENAV_ACTIONS = 2
 
+#: The record field read as an at-most-once key when nothing names another:
+#: :attr:`Effect.key_field`'s default, and the field the effect miner reads
+#: unless its caller names another (or ``None`` for no key). The miner sets a
+#: key only when the observed record carries a value there.
+DEFAULT_IDEMPOTENCY_KEY_FIELD = "key"
+
 
 class Effect(BaseModel):
     """A typed system-of-record effect (RFC ``Effect``, concrete runtime form).
@@ -649,9 +903,26 @@ class Effect(BaseModel):
     #: identity) so the key is PER-RUN, not the frozen demonstration literal
     #: that would collide across unrelated runs (P0-3).
     idempotency_key: Optional[ValueExpr] = None
-    #: Which record field carries the idempotency key (substrate-specific;
-    #: the MockMed system-of-record uses ``"key"``).
-    key_field: str = "key"
+    #: Which record field carries the idempotency key. The contract names it
+    #: beside ``idempotency_key``; the effect miner sets it from the field its
+    #: caller names (:data:`DEFAULT_IDEMPOTENCY_KEY_FIELD` unless told).
+    key_field: str = DEFAULT_IDEMPOTENCY_KEY_FIELD
+    #: ``record_written`` only: a duplicate (idempotency) key made of several
+    #: fields, such as OpenEMR's ``{lname, fname, DOB}``. Field -> value, each
+    #: a :class:`ValueExpr` like :attr:`match`. The count reads only records
+    #: whose key fields all match, and the check also REFUTES when more than
+    #: one record in the read set carries the key, counting records that
+    #: existed before the action as well as new ones (so ``count_new_only``
+    #: cannot hide a second chart for the same person). Those other records
+    #: are compared loosely (case, spacing, a date read back as a datetime),
+    #: the save's own record exactly. The read must therefore cover the key:
+    #: filtered by key fields only, or complete (no row limit, or a paged
+    #: read with a total). A one-field composite key is allowed and differs
+    #: from :attr:`idempotency_key` in counting pre-existing records.
+    #: ``expected_count`` must be 0 or 1. Use either this or
+    #: :attr:`idempotency_key`, not both. Bound into the contract hash and
+    #: serialized only when set, so existing digests hold.
+    composite_key: dict[str, ValueExpr] = Field(default_factory=dict)
     #: Cross-cutting duplicate-write / idempotency guard (kit). When True, a
     #: ``record_written`` count considers ONLY records that are NEW relative to
     #: the pre-action snapshot (by :func:`stable_id`): with the default
@@ -740,7 +1011,7 @@ class Effect(BaseModel):
             return ValueExpr(literal=v)
         return v
 
-    @field_validator("match", mode="before")
+    @field_validator("match", "composite_key", mode="before")
     @classmethod
     def _coerce_match(cls, v: Any) -> Any:
         if isinstance(v, dict):
@@ -801,7 +1072,45 @@ class Effect(BaseModel):
         data: dict[str, Any] = handler(self)
         if not self.forbid_collateral_change:
             data.pop("forbid_collateral_change", None)
+        if not self.composite_key:
+            data.pop("composite_key", None)
         return data
+
+    @model_validator(mode="after")
+    def _composite_key_shape(self) -> "Effect":
+        """A composite duplicate key is a ``record_written`` guard that
+        replaces the single-field key; refuse a contract that mixes them."""
+        if not self.composite_key:
+            return self
+        if self.kind is not EffectKind.RECORD_WRITTEN:
+            raise ValueError("composite_key applies only to record_written effects")
+        if self.idempotency_key is not None:
+            raise ValueError(
+                "give the duplicate key as idempotency_key (one field) or "
+                "composite_key (several fields), not both"
+            )
+        if any(not name.strip() for name in self.composite_key):
+            raise ValueError("composite_key field names must not be blank")
+        if self.expected_count > 1:
+            # Every one of the expected records would carry the key, so the
+            # duplicate rule would refute each correct save.
+            raise ValueError(
+                "composite_key identifies one record; it cannot be combined "
+                f"with expected_count {self.expected_count}"
+            )
+        return self
+
+    def key_selector(self) -> dict[str, ValueExpr]:
+        """The duplicate key as a ``field -> value`` selector.
+
+        ``{key_field: idempotency_key}`` for the single-field form, the
+        :attr:`composite_key` for the several-field form, empty without a key.
+        """
+        if self.composite_key:
+            return dict(self.composite_key)
+        if self.idempotency_key is not None:
+            return {self.key_field: self.idempotency_key}
+        return {}
 
     @model_validator(mode="after")
     def _exact_new_set_shape(self) -> "Effect":
@@ -879,6 +1188,9 @@ class Effect(BaseModel):
                     else self.idempotency_key.resolved(params)
                 ),
                 "readback": _resolve_readback(self.readback, params),
+                "composite_key": {
+                    k: v.resolved(params) for k, v in self.composite_key.items()
+                },
             },
         )
         resolved._contract_hash_override = self.resolved_contract_hash(
@@ -953,10 +1265,27 @@ class Effect(BaseModel):
                 for selector in self.new_records
             ]
             payload["identity_field"] = self.identity_field
+        if self.composite_key:
+            payload["composite_key"] = {
+                k: value(v) for k, v in sorted(self.composite_key.items())
+            }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         return f"sha256:{digest}"
+
+    def absent_is_null_fields(self) -> list[str]:
+        """The record fields this effect declares ``absent_is_null`` on."""
+
+        pairs = [
+            *self.match.items(),
+            *((k, v) for selector in self.new_records for k, v in selector.items()),
+        ]
+        if self.value is not None:
+            pairs.append((self.field or "", self.value))
+        return sorted(
+            {k for k, v in pairs if isinstance(v, ValueExpr) and v.absent_is_null}
+        )
 
     def referenced_params(self) -> set[str]:
         """Return the parameter names that determine this effect contract."""
@@ -964,6 +1293,7 @@ class Effect(BaseModel):
         expressions = [
             *self.match.values(),
             *(expr for selector in self.new_records for expr in selector.values()),
+            *self.composite_key.values(),
             self.value,
             self.idempotency_key,
         ]
@@ -1023,6 +1353,11 @@ class Effect(BaseModel):
                 for selector in self.new_records
             ]
             payload["identity_field"] = self.identity_field
+        # Bound ONLY when set, so every single-key contract keeps its digest.
+        if self.composite_key:
+            payload["composite_key"] = {
+                k: str(v) for k, v in sorted(self.composite_key.items())
+            }
         # A value that reads an entered label back as a stored code binds its
         # map: a changed map is a different contract. Included only when a
         # value has one, so every other contract keeps its exact digest.
@@ -1034,12 +1369,52 @@ class Effect(BaseModel):
             expr = getattr(self, name)
             if isinstance(expr, ValueExpr) and expr.map is not None:
                 maps[name] = dict(sorted(expr.map.items()))
+        for key, expr in sorted(self.composite_key.items()):
+            if isinstance(expr, ValueExpr) and expr.map is not None:
+                maps[f"composite_key.{key}"] = dict(sorted(expr.map.items()))
         for index, selector in enumerate(self.new_records):
             for key, expr in sorted(selector.items()):
                 if isinstance(expr, ValueExpr) and expr.map is not None:
                     maps[f"new_records.{index}.{key}"] = dict(sorted(expr.map.items()))
         if maps:
             payload["value_maps"] = maps
+        # A field the store may leave out when null is a different contract.
+        # Bound only when set, so every other contract keeps its digest.
+        absent = sorted(
+            path
+            for path, expr in [
+                *((f"match.{k}", v) for k, v in self.match.items()),
+                ("value", self.value),
+                *(
+                    (f"new_records.{i}.{k}", v)
+                    for i, selector in enumerate(self.new_records)
+                    for k, v in selector.items()
+                ),
+            ]
+            if isinstance(expr, ValueExpr) and expr.absent_is_null
+        )
+        if absent:
+            payload["absent_is_null"] = absent
+        # A number compares by value, text by text: a value marked as a
+        # number is a different contract. Bound only when set, so every
+        # other contract keeps its exact digest.
+        numbers = sorted(
+            path
+            for path, expr in [
+                *((f"match.{k}", v) for k, v in self.match.items()),
+                ("value", self.value),
+                ("idempotency_key", self.idempotency_key),
+                *((f"composite_key.{k}", v) for k, v in self.composite_key.items()),
+                *(
+                    (f"new_records.{i}.{k}", v)
+                    for i, selector in enumerate(self.new_records)
+                    for k, v in selector.items()
+                ),
+            ]
+            if isinstance(expr, ValueExpr) and expr.number
+        )
+        if numbers:
+            payload["value_numbers"] = numbers
         return payload
 
     def _semantic_contract_sha256(self) -> str:
@@ -1202,15 +1577,68 @@ class EffectVerifier(Protocol):
 # -- shared matching helpers (used by every substrate) -----------------------
 
 
-def record_matches(record: dict[str, Any], selector: dict[str, str]) -> bool:
+def is_null_value(value: Any) -> bool:
+    """Whether ``value`` is a bound null (:attr:`ValueExpr.null`)."""
+
+    return isinstance(value, ValueExpr) and bool(value.null)
+
+
+def selector_value(value: Any) -> Any:
+    """A selector value for :func:`record_matches`: a value with a declared
+    kind, a null value, or a number stays an expression; any other becomes
+    text."""
+
+    if isinstance(value, ValueExpr) and (
+        value.kind is not None or value.null or value.number
+    ):
+        return value
+    return str(value)
+
+
+def record_matches(
+    record: dict[str, Any], selector: dict[str, Any], *, text_numbers: bool = False
+) -> bool:
     """Whether ``record`` satisfies every ``field == value`` in ``selector``.
 
     Comparison is on ``str()`` of both sides so a numeric id in JSON (``1``)
     matches a string selector (``"1"``) without the caller tracking types.
     An empty selector matches every record (used by absence checks).
+
+    A null value (:attr:`ValueExpr.null`) matches only a field that is
+    present and ``None``. A missing field matches it only when the contract
+    declares that field :attr:`ValueExpr.absent_is_null`; otherwise it may
+    be a misspelled or unprojected field and matches nothing. The record
+    check and the frame both call this, so they agree.
+    The text ``"None"`` or ``""`` never matches a null value, and a null
+    stored value never matches a text selector.
+
+    A stored number and an expected number compare by exact decimal value
+    instead (:func:`number_matches`; ``text_numbers`` for a SQL read), so a
+    whole-number float such as ``2.0`` equals a stored ``2``. Text compared
+    with text stays exact: ``"2.0"`` never equals ``"2"``.
     """
     for key, want in selector.items():
-        if str(record.get(key, None)) != str(want):
+        if is_null_value(want):
+            if key in record:
+                if record[key] is not None:
+                    return False
+            elif not want.absent_is_null:
+                return False
+            continue
+        stored = record.get(key, None)
+        if stored is None:
+            # A stored null (or a missing field) equals no text, not even
+            # "None", and no value of a declared kind or number.
+            return False
+        if isinstance(want, ValueExpr) and want.kind is not None:
+            if not want.matches(stored):
+                return False
+            continue
+        by_value = number_matches(stored, want, text_numbers=text_numbers)
+        if by_value is not None:
+            if not by_value:
+                return False
+        elif str(stored) != str(want):
             return False
     return True
 

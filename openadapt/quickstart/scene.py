@@ -14,11 +14,6 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from openadapt.quickstart.engine import BreakFacts
 
-#: Where the site publishes Seals from real OpenEMR runs. Every quickstart's
-#: finale links it, whatever the app.
-SEALS_URL = "https://openadapt.ai/seals"
-SEALS_LINE = f"See real Seals from OpenEMR runs: {SEALS_URL}"
-
 
 @dataclass(frozen=True)
 class Scene:
@@ -195,4 +190,4 @@ OPENEMR = Scene(
 SCENES = {"mockmed": MOCKMED, "openemr": OPENEMR}
 
 
-__all__ = ["MOCKMED", "OPENEMR", "SCENES", "SEALS_LINE", "SEALS_URL", "Scene"]
+__all__ = ["MOCKMED", "OPENEMR", "SCENES", "Scene"]

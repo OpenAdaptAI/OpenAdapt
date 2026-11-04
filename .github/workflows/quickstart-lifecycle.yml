@@ -6,8 +6,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: launcher-quickstart-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A pull request's newer push cancels its older run. Every other event (the
+  # merge queue, main, schedules, dispatches) gets a group of its own, so it
+  # is never cancelled or replaced.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -22,15 +25,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
 
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: .github/ci-tools/uv.lock
+
+      # build comes from the CI tools lock. The quickstart itself installs the
+      # wheel into a clean environment from PyPI, as a user would.
       - name: Build launcher wheel
         run: |
-          python -m pip install build
+          python scripts/ci/locked_install.py --lock .github/ci-tools:build
           python -m build --wheel --outdir lifecycle-dist
 
       - name: Run the public quickstart from a clean environment

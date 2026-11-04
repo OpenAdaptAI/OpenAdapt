@@ -13,15 +13,17 @@ from openadapt_flow.ir import ParamKind, ParamSpec
 #: Fields whose confidence is below this need a person to confirm them.
 DEFAULT_CONFIRM_THRESHOLD = 0.9
 
-_DATE_FORMATS = (
-    "%Y-%m-%d",
-    "%m/%d/%Y",
-    "%m-%d-%Y",
+#: Dates whose month is spelled out: never ambiguous.
+_NAMED_MONTH_FORMATS = (
     "%d %b %Y",
+    "%d %B %Y",
     "%b %d, %Y",
     "%B %d, %Y",
-    "%Y/%m/%d",
+    "%b %d %Y",
+    "%B %d %Y",
 )
+#: A source's declared order for numeric dates such as 03/04/1970.
+DATE_ORDERS = ("MM/DD/YYYY", "DD/MM/YYYY")
 _TRUE = {"yes", "y", "true", "1", "x", "checked"}
 _FALSE = {"no", "n", "false", "0", "unchecked"}
 _SEP = r"\s*(?:[:#=]|-\s)\s*"
@@ -40,6 +42,10 @@ class ExtractedField:
     label: Optional[str] = None
     error: Optional[str] = None
     confirmed: bool = False
+    #: The text as the document wrote it, when it differs from ``value``.
+    raw: Optional[str] = None
+    #: How ``raw`` became ``value`` (for example a date's conversion to ISO).
+    conversion: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +56,8 @@ class ExtractedField:
             "label": self.label,
             "error": self.error,
             "confirmed": self.confirmed,
+            "raw": self.raw,
+            "conversion": self.conversion,
         }
 
 
@@ -62,6 +70,8 @@ class IntakeResult:
     threshold: float = DEFAULT_CONFIRM_THRESHOLD
     mode: str = "local"
     notes: list[str] = field(default_factory=list)
+    #: Declared order of numeric dates, per parameter (``DATE_ORDERS``).
+    date_formats: dict[str, str] = field(default_factory=dict)
 
     def needs_confirmation(self) -> list[str]:
         """Names of fields a person must confirm or correct before running."""
@@ -86,10 +96,14 @@ class IntakeResult:
         candidate = f.value if value is None else value
         if candidate is None:
             raise ValueError(f"{name}: no value to confirm")
-        normalized, error = validate_value(self.specs[name], candidate)
+        normalized, error, conversion = convert_value(
+            self.specs[name], candidate, date_format=self.date_formats.get(name)
+        )
         if error:
             raise ValueError(f"{name}: {error}")
         f.value, f.error, f.confirmed, f.confidence = normalized, None, True, 1.0
+        f.raw = candidate.strip() if conversion else None
+        f.conversion = conversion
         return f
 
     def to_params(self) -> dict[str, str]:
@@ -109,20 +123,95 @@ class IntakeResult:
         }
 
 
-def validate_value(spec: ParamSpec, raw: str) -> tuple[Optional[str], Optional[str]]:
+def normalize_date(
+    raw: str, date_format: Optional[str] = None
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """A date as a canonical ISO date: ``(iso, error, conversion)``.
+
+    - An ISO date is checked and kept (no conversion).
+    - A date with the month spelled out converts.
+    - A numeric date (``03/04/1970``, ``03-04-1970``) converts when its order
+      is declared (``date_format``, one of ``DATE_ORDERS``), or can be told
+      from the date itself: one part over 12 is the day, and equal parts read
+      the same either way. Otherwise it is ambiguous and refused.
+    - ``YYYY/MM/DD`` converts.
+    - Anything else, or a date that doesn't exist (1970-02-30), is refused.
+    """
+
+    value = raw.strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        try:
+            return date.fromisoformat(value).isoformat(), None, None
+        except ValueError:
+            return None, f"not a valid date: {value!r}", None
+    numeric = re.fullmatch(r"(\d{1,2})([/-])(\d{1,2})\2(\d{4})", value)
+    if numeric:
+        a, b, year = int(numeric.group(1)), int(numeric.group(3)), int(numeric.group(4))
+        if date_format is not None:
+            if date_format not in DATE_ORDERS:
+                return None, f"unknown declared date format {date_format!r}", None
+            month_first, why = date_format == "MM/DD/YYYY", "declared"
+        elif a > 12 >= b:
+            month_first, why = False, f"{a} can only be the day"
+        elif b > 12 >= a:
+            month_first, why = True, f"{b} can only be the day"
+        elif a == b:
+            month_first, why = True, "day and month are equal"
+        else:
+            return (
+                None,
+                f"ambiguous date {value!r}: day and month can't be told apart; "
+                "declare the source's format (MM/DD/YYYY or DD/MM/YYYY)",
+                None,
+            )
+        month, day = (a, b) if month_first else (b, a)
+        try:
+            parsed = date(year, month, day)
+        except ValueError:
+            return None, f"not a valid date: {value!r}", None
+        order = "MM/DD/YYYY" if month_first else "DD/MM/YYYY"
+        return parsed.isoformat(), None, f"{order} to ISO ({why})"
+    ymd = re.fullmatch(r"(\d{4})/(\d{1,2})/(\d{1,2})", value)
+    if ymd:
+        try:
+            parsed = date(int(ymd.group(1)), int(ymd.group(2)), int(ymd.group(3)))
+        except ValueError:
+            return None, f"not a valid date: {value!r}", None
+        return parsed.isoformat(), None, "YYYY/MM/DD to ISO"
+    for fmt in _NAMED_MONTH_FORMATS:
+        try:
+            named: date = datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+        return named.isoformat(), None, "month name to ISO"
+    return None, f"not a recognized date: {value!r}", None
+
+
+def convert_value(
+    spec: ParamSpec, raw: str, *, date_format: Optional[str] = None
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Normalize ``raw`` for ``spec``: ``(value, error, conversion)``."""
+
+    if spec.type == ParamKind.DATE and raw.strip():
+        iso, error, conversion = normalize_date(raw, date_format)
+        if error:
+            return raw.strip(), error, None
+        return iso, None, conversion
+    value, error = validate_value(spec, raw)
+    return value, error, None
+
+
+def validate_value(
+    spec: ParamSpec, raw: str, *, date_format: Optional[str] = None
+) -> tuple[Optional[str], Optional[str]]:
     """Normalize ``raw`` for ``spec``. Returns ``(value, error)``."""
     value = raw.strip()
     if not value:
         return None, "empty value"
     kind = spec.type
     if kind == ParamKind.DATE:
-        for fmt in _DATE_FORMATS:
-            try:
-                parsed: date = datetime.strptime(value, fmt).date()
-            except ValueError:
-                continue
-            return parsed.isoformat(), None
-        return value, f"not a recognized date: {value!r}"
+        iso, error, _conversion = normalize_date(value, date_format)
+        return (value, error) if error else (iso, None)
     if kind == ParamKind.NUMBER:
         cleaned = value.replace(",", "")
         try:
@@ -184,9 +273,15 @@ def extract_fields(
     *,
     aliases: Optional[Mapping[str, list[str]]] = None,
     threshold: float = DEFAULT_CONFIRM_THRESHOLD,
+    date_formats: Optional[Mapping[str, str]] = None,
 ) -> IntakeResult:
-    """Local, deterministic extraction by label matching. No model call."""
+    """Local, deterministic extraction by label matching. No model call.
+
+    ``date_formats`` declares the order of numeric dates per parameter
+    (``DATE_ORDERS``); without it an ambiguous date needs a person.
+    """
     aliases = aliases or {}
+    formats = dict(date_formats or {})
     fields: dict[str, ExtractedField] = {}
     for name, spec in specs.items():
         hits: list[tuple[float, int, str, str]] = []
@@ -203,15 +298,25 @@ def extract_fields(
         best = max(h[0] for h in hits)
         top = [h for h in hits if h[0] == best]
         conf, line_no, label, raw = top[0]
-        value, error = validate_value(spec, raw)
-        distinct = {validate_value(spec, h[3])[0] for h in top}
+        fmt = formats.get(name)
+        value, error, conversion = convert_value(spec, raw, date_format=fmt)
+        distinct = {convert_value(spec, h[3], date_format=fmt)[0] for h in top}
         if len(distinct) > 1:
             conf = min(conf, 0.5)
             error = error or f"{len(distinct)} different values found"
         if error:
             conf = 0.0
-        fields[name] = ExtractedField(name, value, conf, line_no + 1, label, error)
-    return IntakeResult(fields, dict(specs), threshold, "local")
+        fields[name] = ExtractedField(
+            name,
+            value,
+            conf,
+            line_no + 1,
+            label,
+            error,
+            raw=raw.strip() if conversion else None,
+            conversion=conversion,
+        )
+    return IntakeResult(fields, dict(specs), threshold, "local", date_formats=formats)
 
 
 def build_agent_request(
@@ -294,7 +399,7 @@ def apply_agent_response(
         # default threshold unless the label matched exactly on that line.
         if not label or _match_label(text, label) is None:
             conf = min(conf, 0.7)
-        value, error = validate_value(spec, raw)
+        value, error, conversion = convert_value(spec, raw)
         fields[name] = ExtractedField(
             name,
             value,
@@ -302,5 +407,7 @@ def apply_agent_response(
             line,
             label or None,
             error,
+            raw=raw.strip() if conversion else None,
+            conversion=conversion,
         )
     return IntakeResult(fields, dict(specs), threshold, "agent")

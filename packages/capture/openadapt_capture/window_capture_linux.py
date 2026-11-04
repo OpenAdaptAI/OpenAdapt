@@ -209,6 +209,65 @@ class X11CompositeClient(AbstractContextManager["X11CompositeClient"]):
         values = _u32_values(payload) if value_format == 32 else []
         return values[0] if len(values) == 1 else 0
 
+    def window_pid(self, window_id: int) -> int | None:
+        """Return the ``_NET_WM_PID`` of one window, or ``None`` when absent."""
+        try:
+            pid = self._pid(window_id)
+        except Exception:
+            return None
+        return pid or None
+
+    def active_window(self) -> int | None:
+        """Return the EWMH ``_NET_ACTIVE_WINDOW`` client, or ``None``."""
+        value_format, payload = self._property(self._root, "_NET_ACTIVE_WINDOW", length=1)
+        values = _u32_values(payload) if value_format == 32 else []
+        return values[0] if len(values) == 1 and values[0] else None
+
+    def client_window_at(self, x: int, y: int) -> int | None:
+        """Return the client inside the topmost viewable root child at a point.
+
+        Root children are window-manager frames (or unmanaged windows) in
+        bottom-to-top stacking order. The EWMH client inside the topmost frame
+        that contains the point is returned in the same identifier space as
+        the resolver. An unmanaged window, such as an override-redirect popup,
+        is returned as itself, so it never compares equal to the target.
+        """
+        children = list(self._conn.core.QueryTree(self._root).reply().children)
+        frame = None
+        for child in reversed(children):
+            try:
+                attributes = self._conn.core.GetWindowAttributes(child).reply()
+                if int(attributes.map_state) != self._xproto.MapState.Viewable:
+                    continue
+                if int(attributes._class) != self._xproto.WindowClass.InputOutput:
+                    continue
+                geometry = self._conn.core.GetGeometry(child).reply()
+            except Exception:
+                continue
+            border = int(geometry.border_width)
+            left, top = int(geometry.x), int(geometry.y)
+            width = int(geometry.width) + 2 * border
+            height = int(geometry.height) + 2 * border
+            if left <= x < left + width and top <= y < top + height:
+                frame = int(child)
+                break
+        if frame is None:
+            return None
+        clients = set(self.window_ids())
+        pending = [(frame, 0)]
+        while pending:
+            window_id, depth = pending.pop(0)
+            if window_id in clients:
+                return window_id
+            if depth >= 3:
+                continue
+            try:
+                nested = self._conn.core.QueryTree(window_id).reply().children
+            except Exception:
+                continue
+            pending.extend((int(child), depth + 1) for child in nested)
+        return frame
+
     def window_record(self, window_id: int) -> X11WindowRecord | None:
         """Read one viewability, identity, and root-pixel geometry snapshot."""
         try:

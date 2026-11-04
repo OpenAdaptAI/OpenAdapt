@@ -104,6 +104,14 @@ def checked_line(checked: dict[str, Any]) -> str:
             f"fault coverage: {cover.get('killed')} of {cover.get('applicable')} "
             f"faults caught, admission policy {cover.get('policy')}"
         )
+        classes = cover.get("classes")
+        if isinstance(classes, dict):
+            short = sorted(k for k, v in classes.items() if v != "killed")
+            if short:
+                out.append(
+                    "fault classes not caught: "
+                    + ", ".join(f"{k} ({classes[k]})" for k in short)
+                )
     return "; ".join(out)
 
 

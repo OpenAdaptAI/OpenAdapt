@@ -379,7 +379,9 @@ def test_healthy_loop_confirms_each_record_zero_model_calls(dirs):
         report = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         ).run(looped, bundle_dir=bundle, run_dir=run_dir)
 
@@ -425,7 +427,9 @@ def test_poisoned_record_effect_refute_halts_no_silent_skip(dirs):
         report = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         ).run(looped, bundle_dir=bundle, run_dir=run_dir)
 
@@ -500,7 +504,9 @@ def test_committed_encounter_showcase_loop_replays_through_the_interpreter(tmp_p
         report = Replayer(
             backend,
             vision=_vision_confirms_saved(),
-            effect_verifier=RestRecordVerifier(url),
+            effect_verifier=RestRecordVerifier(
+                url, records_path="/api/db", records_key="records"
+            ),
             poll_interval_s=0.01,
         ).run(wf, bundle_dir=bundle, run_dir=run_dir)
 
@@ -544,10 +550,14 @@ def test_poisoned_record_identity_mismatch_halts_no_wrong_click(dirs):
 
     backend = FakeBackend()
     # Consequential identity-gated actions are checked once during ordinary
-    # replay and again against the freshly armed actuation target. Both reads
-    # for iteration 1 match; iteration 2 then names another entity and HALTs.
+    # replay and again against the freshly armed actuation target, and each
+    # verified read is followed by the candidate census's whole-frame read
+    # (runtime.identity_census). Every read for iteration 1 matches; iteration
+    # 2 then names another entity and HALTs.
     vision = _ScriptedIdentityVision(
         bands=[
+            "Jane Sample Knee pain referral High",
+            "Jane Sample Knee pain referral High",
             "Jane Sample Knee pain referral High",
             "Jane Sample Knee pain referral High",
             "Taylor Duplicate Knee pain referral High",

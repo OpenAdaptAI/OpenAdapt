@@ -28,3 +28,15 @@ and any suggested remediation when available.
 Credential exposure, keychain-boundary failures, unsafe protocol handling,
 sidecar command or path injection, installer provenance/signing mismatches, and
 release supply-chain findings are explicitly in scope.
+
+## Known limits
+
+- **The approver root on macOS.** macOS builds are ad-hoc signed without the
+  hardened runtime. A process running as the same user can run code inside
+  Desktop's engine, so the login Keychain doesn't keep the approver root
+  safe from it: such a process could replace the root and approve its own
+  saves. On a computer where agents run as the person's account, have an
+  administrator pin the root with `sudo openadapt-desktop approver-pin ROOT`.
+  Desktop then requires that root, and refuses a Keychain root that differs.
+  Windows and Linux use only the administrator's pin. See
+  [APPROVAL_MODES.md](../flow/docs/APPROVAL_MODES.md#the-approver-key).

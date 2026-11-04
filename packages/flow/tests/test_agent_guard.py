@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import pytest
 
+from benchmark.harness.guard_demo import NOTE, FakeAgent, person_approves, verify_yaml
 from openadapt_flow.agent_guard.cdp import CdpGuardPage
 from openadapt_flow.agent_guard.commit_guard import BLOCK_STATUS, CommitGuard
 from openadapt_flow.agent_guard.config import ConfigError, parse_config
@@ -24,7 +25,6 @@ from openadapt_flow.agent_guard.requests import (
     origin_of,
 )
 from openadapt_flow.guard import GuardedSave, GuardTask
-from openadapt_flow.guard_demo import NOTE, FakeAgent, person_approves, verify_yaml
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.verify_run import parse_verify_config
 
@@ -155,7 +155,7 @@ class FakePage:
         return self.agent.open_chart(self.patient)
 
     def screenshot(self) -> Optional[bytes]:
-        from openadapt_flow.guard_demo import tiny_png
+        from benchmark.harness.guard_demo import tiny_png
 
         return tiny_png()
 
@@ -318,7 +318,7 @@ def test_observe_only_never_blocks_and_still_reads_back(sor, tmp_path):
     assert guard.summary.would_block[-1]["code"] == "already_committed"
 
 
-def test_each_item_holds_the_save_until_a_person_approves(sor, tmp_path):
+def test_each_item_holds_the_save_until_a_person_approves(sor, tmp_path, approver):
     page = FakePage(FakeAgent(sor[0]), "p1")
     guard = _guard(sor, tmp_path, page, approval="each_item")
     page.save()
@@ -333,7 +333,9 @@ def test_each_item_holds_the_save_until_a_person_approves(sor, tmp_path):
     assert waiting is not None
     g = waiting[0]
     request = g._request
-    person_approves(str(g.dir), request.request_id, request.digest())
+    person_approves(
+        str(g.dir), request.request_id, request.digest(), signer=approver[1]
+    )
     guard.poll()
     assert page.sent == ["r1"]
     guard.poll()

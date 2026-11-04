@@ -182,6 +182,47 @@ See [Measured](#measured) for how often it works.
 The re-run is safe because self-repair handles only a halt before any
 effect. The item was never partly saved.
 
+## Outside a browser
+
+On a desktop, RDP or Citrix backend, each probe, each fault probe and the
+resumed run need the app freshly started. `repair.session` says how:
+
+```yaml
+# deploy.yaml
+backend:
+  kind: macos
+  app: Chart
+  window_title: Chart
+repair:
+  agent: mypkg.agents:make_agent
+  screen_access_by: ops-lead
+  session:
+    command: ["/Applications/Chart.app/Contents/MacOS/Chart", "--profile", "test"]
+    fault_commands:
+      other_patient: ["/Applications/Chart.app/Contents/MacOS/Chart", "--patient", "5512"]
+    ready_s: 2
+```
+
+Each command is an argv, run with no shell on the machine Flow runs on. It
+must keep running while the app is up, and the one window `backend:` binds
+to must belong to it or to a process of its group: Flow checks that, so a
+session never binds to the halted session or a copy that was already open.
+When the session ends, Flow ends the command's whole process group, then runs
+`close_command` if there is one; a non-zero exit is refused. An app that
+exits at once handed the launch to a running window and is refused. Fault
+commands are the fault probes, as `fault_urls` are in a browser. Two
+sessions can't run side by side, so self-repair closes the halted session
+before each probe.
+
+Flow has to see which process owns the bound window, so this works where the
+window is on the machine Flow runs on: macOS, and the local client window of
+RDP or Citrix. Windows over its agent, and FreeRDP, are refused for now.
+
+Without `repair.session`, repair is off for a desktop run: the stop waits
+for a person, and `--self-repair` is refused. When it is set, Flow starts the
+app for the run itself, so close any copy already open: two windows refuse
+the run.
+
 ## Approving the fix
 
 The request is a normal per-item approval request, so the existing surfaces
@@ -192,8 +233,12 @@ show it:
 - **Terminal.** `run --self-repair` prints the exact command when it asks:
 
   ```bash
-  openadapt-flow item-approval approve runs/item-17 --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated
+  openadapt-flow item-approval approve runs/item-17 --request-id <id> --request-sha256 <sha> --decided-by human --route desktop_run_it --unauthenticated --approver-key <approver-key.pem>
   ```
+
+  The person's registered approver key signs the answer, with its
+  passphrase in `OPENADAPT_JIT_KEY_PASSPHRASE` (see
+  [`APPROVAL_MODES.md`](APPROVAL_MODES.md#the-approver-key)).
 
 - **Reject in the store.** Rejecting the candidate with `RepairStore.reject`
   while the run waits ends the wait as a decline.
@@ -213,16 +258,22 @@ Four objects make up the API:
 
 ```python
 from openadapt_flow.repair.self_repair import (
-    AppSession, RepairProposal, ReplayTarget, ScreenAccess, SelfRepair,
+    AppSession,
+    RepairProposal,
+    ReplayTarget,
+    ScreenAccess,
+    SelfRepair,
 )
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 from openadapt_flow.runtime.effects import RestRecordVerifier
 
 URL = "http://127.0.0.1:8765/?fault=ok&idempotency=demo&drift=redesign#tasks"
 
+
 def open_session(fault):
     backend, close = PlaywrightBackend.launch(fault or URL)
     return AppSession(backend=backend, close=close)
+
 
 target = ReplayTarget(
     open_session,
@@ -276,15 +327,17 @@ contains:
 
 ```python
 class MyAgent:
-    dialect = "anthropic"        # any name in openadapt_flow.jit.dialects()
-    agent_id = "agent:my-repair" # recorded; can never approve its own fix
-    requires_model_key = True    # False only for an agent that calls no model
+    dialect = "anthropic"  # any name in openadapt_flow.jit.dialects()
+    agent_id = "agent:my-repair"  # recorded; can never approve its own fix
+    requires_model_key = True  # False only for an agent that calls no model
 
     def propose(self, request):
         # request.intent, request.recorded_label, request.recorded_crop_png,
         # request.live_png, request.viewport, request.previous_refusals,
         # request.model_key (the customer's key; never an OpenAdapt key)
-        action = ask_my_model(request)   # e.g. {"action": "left_click", "coordinate": [846, 457]}
+        action = ask_my_model(
+            request
+        )  # e.g. {"action": "left_click", "coordinate": [846, 457]}
         return RepairProposal(action=action, model_calls=1, cost_usd=0.004)
 ```
 
@@ -403,6 +456,56 @@ CLI, the Standard profile requires a signed qualification admission. So a CLI
 self-repair runs without a named profile or under Demo, and the record check
 still runs. The Python API can run the Standard profile contract directly, as
 the tutorial does.
+
+### A relabeled control: proof that only the label changed
+
+Self-repair never repairs a stop on a failed identity check, because a
+renamed control usually can't be told from a different control. One case can
+be told apart. When an app release renames a button, the ladder finds the same
+control on the structural rung, and the run stops because the control's
+structured identity (its id, kind, form and label) no longer matches.
+
+The recorded identity is a salted hash, but the bundle also keeps the recorded
+label in plaintext (the step's intent and OCR text).
+`openadapt_flow/repair/relabel.py` rebuilds the recorded identity from the
+observed one with only the label swapped back. If that matches the recorded
+hash, the id, kind and form are proven unchanged and only the label differs.
+It refuses everything else:
+
+- a step that received input, or any earlier save that did (a step that may
+  have written is never retried);
+- an identity check that failed outside the structured tier, or one that names
+  a record value rather than a control;
+- a target found below the structural rung;
+- an identity that doesn't match under any recorded label.
+
+The repair then follows the pinned-bundle path above:
+
+1. The candidate bundle changes only that step's identity hash, intent and
+   OCR text.
+2. It is re-qualified with the parent's own campaign on the test copy, which
+   now runs the new release. Each re-qualification names its case runs
+   afresh, because a process refuses a run's authorization id once it has
+   been used, and the parent may have been qualified in the same process.
+3. A person approves once, with the old and new label and the
+   re-qualification in front of them.
+4. The certified copy runs next:
+   - For a control that is not part of the record check, it is re-admitted
+     with signed lineage, and the pin accepts it through the chain.
+   - A save button's identity is part of the record check, so no lineage hop
+     may carry it (`fixed_contract_refusal`). The person's approval is then a
+     fresh admission of the certified copy, and the deployment pins its new
+     digest. `readmit` returns `fresh_admission` and never re-pins by itself.
+
+The stopped item never wrote, so it runs again on the re-admitted version as a
+retry; `problems_only` sends a retry to a person. Under a production
+qualification admission or a managed dispatch the repair stays refused, as for
+every other repair.
+
+On the local OpenEMR referral (proof-15's configuration), a relabeled save
+button stopped every item until a person re-taught the step. The lifecycle
+soak measures this path: see
+the lifecycle soak (`benchmark/lifecycle`).
 
 ## What is recorded
 
@@ -562,8 +665,9 @@ standard = StandardChanges(
     key_dir=Path("~/.openadapt/jit").expanduser(),
     test_record=test_record,
 )
-repair = SelfRepair(agent, target, store="repair-store",
-                    screen_access=access, standard_changes=standard)
+repair = SelfRepair(
+    agent, target, store="repair-store", screen_access=access, standard_changes=standard
+)
 ```
 
 `test_record_target` is a `ReplayTarget` whose sessions open the test record,
@@ -594,8 +698,12 @@ window. An item that halts for any other reason stays halted for a person.
 ```python
 from openadapt_flow.repair.preflight_queue import QueueItem, WorklistQueue
 
-queue = WorklistQueue("bundles/triage", test_record, "runs/worklist-2026-10-18",
-                      self_repair=lambda target: SelfRepair(agent, target, ...))
+queue = WorklistQueue(
+    "bundles/triage",
+    test_record,
+    "runs/worklist-2026-10-18",
+    self_repair=lambda target: SelfRepair(agent, target, ...),
+)
 result = queue.run([QueueItem(item_id, target_for(item_id)) for item_id in ids])
 print(result.status, [(i.item_id, i.status) for i in result.items])
 ```
@@ -719,14 +827,18 @@ same way.
 - One halted click per run is repaired, by one corrected click or a bridge of
   up to three actions, in a linear workflow with exactly one save. When the
   patched run halts at another step, the probe fails with that reason.
-- A bridge's new clicks need a DOM identity (a browser) and a readable,
-  non-saving label. A bridge acts on the halted page while it is captured;
+- A bridge's new clicks need a readable, non-saving label, and a record
+  identity the page shows under them. Elsewhere than a browser, a click with
+  no record identity is admitted only when a record check covers every save
+  ([REPAIR_ON_EVERY_BACKEND.md](REPAIR_ON_EVERY_BACKEND.md)), and only a
+  person approves that fix. That path is not yet qualified end to end. A bridge acts on the halted page while it is captured;
   each action is checked first, and the page is discarded afterwards.
 - The probe stops before every step the run gate classifies as a save, the
   same fail-closed classifier the approval gate uses. A step that writes but
   that the classifier misses would run during a probe.
-- The CLI supports browser runs that Flow launches. The Python API takes any
-  backend whose sessions you can open, but the DOM-based checks
+- The CLI repairs a browser run that Flow launches, or a desktop, RDP or
+  Citrix run whose `repair.session` says how to start the app (see
+  [Outside a browser](#outside-a-browser)). The DOM-based checks
   (`same_fields`, the structural locator) apply only in a browser. Elsewhere
   `same_fields` falls back to on-screen text.
 - An encrypted bundle is written back encrypted, but this path has no test.

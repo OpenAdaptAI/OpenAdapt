@@ -28,7 +28,7 @@ from openadapt.quickstart.openemr import (
     docker_problem,
     find_flow_checkout,
 )
-from openadapt.quickstart.scene import OPENEMR, SEALS_URL
+from openadapt.quickstart.scene import OPENEMR
 from openadapt.quickstart.story import NextSteps, Outcome, run_story
 from openadapt.quickstart.view import PlainView
 
@@ -437,9 +437,9 @@ def test_a_new_chart_in_act_three_is_never_called_a_clean_stop(root):
     assert "a new chart is in OpenEMR. Check it." in output
 
 
-def test_the_finale_links_the_published_seals(root):
+def test_the_finale_names_the_agent_tool(root):
+    # Since #1566 the finale ends on the person's own Seal, not a link.
     output, _ = _plain(FakeOpenEMR(root))
-    assert f"See real Seals from OpenEMR runs: {SEALS_URL}" in output
     assert "agent serve --bundles openadapt-quickstart/bundle" in output
 
 

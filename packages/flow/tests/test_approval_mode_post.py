@@ -372,7 +372,9 @@ def test_check_the_record_switches_off_with_uncertain_result():
     assert decision.reason == "reconciliation_required"
 
 
-def test_a_stop_that_wrote_nothing_is_a_counted_problem_without_switch_off():
+def test_a_stop_that_wrote_nothing_for_an_unnamed_cause_switches_off():
+    # A halt before any effect that isn't an input problem: the app no longer
+    # looks as the program was admitted for. A program problem, so off.
     report = _halted_report("HALTED_BEFORE_EFFECT")
     decision = decide_problems_only(
         report,
@@ -382,7 +384,7 @@ def test_a_stop_that_wrote_nothing_is_a_counted_problem_without_switch_off():
     )
     assert decision.kind is ItemDecisionKind.PROBLEM
     assert decision.counts_toward_problems
-    assert decision.switch_off is None
+    assert decision.switch_off is OffReason.SCREEN_CHANGED
 
 
 def test_gate_decision_wins_and_an_uncertain_earlier_save_still_switches_off():

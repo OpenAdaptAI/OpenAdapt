@@ -160,11 +160,15 @@ The agent can't see the screen unless the operator turns it on with
 | `scrubbed` | A `screen` tool that returns the pinned window with identifiers scrubbed. If scrubbing fails, it returns nothing. |
 | `unscrubbed` | A `screen` tool that returns the pinned window as it is. |
 
-`observe` returns no nodes on RDP, Citrix, or native Windows yet, so an agent
+`observe` returns no nodes on RDP, Citrix, or native Windows, so an agent
 driving one of them needs `scrubbed` or `unscrubbed` to see where to click.
 
 ## What has been tested
 
-The Windows and RDP/Citrix recording paths are covered by tests against a mock
-Windows agent server and stand-in client windows. They haven't been run
-against a real Windows, RDP, or Citrix session yet.
+Recording driven by an agent on Windows, RDP and Citrix is tested against a
+mock Windows agent server and stand-in client windows. On a real RDP session
+(the stock Remote Desktop client into Windows Server 2022), workflows were
+recorded with the scripted `Recorder` API and replayed
+([`benchmark/rdp_avc_real`](../benchmark/rdp_avc_real/README.md)).
+[BACKEND_PARITY.md](BACKEND_PARITY.md) lists the evidence
+for each surface.

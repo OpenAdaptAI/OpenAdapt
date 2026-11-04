@@ -1,0 +1,75 @@
+{
+ "resourceType": "CapabilityStatement",
+ "rest": [
+  {
+   "mode": "server",
+   "resource": [
+    {
+     "type": "Patient",
+     "interaction": [
+      {
+       "code": "search-type"
+      },
+      {
+       "code": "create"
+      }
+     ],
+     "searchParam": [
+      {
+       "name": "given",
+       "type": "string"
+      },
+      {
+       "name": "family",
+       "type": "string"
+      },
+      {
+       "name": "name",
+       "type": "string"
+      },
+      {
+       "name": "birthdate",
+       "type": "date"
+      },
+      {
+       "name": "gender",
+       "type": "token"
+      },
+      {
+       "name": "telecom",
+       "type": "token"
+      },
+      {
+       "name": "email",
+       "type": "token"
+      },
+      {
+       "name": "phone",
+       "type": "token"
+      },
+      {
+       "name": "address",
+       "type": "string"
+      },
+      {
+       "name": "address-city",
+       "type": "string"
+      },
+      {
+       "name": "address-state",
+       "type": "string"
+      },
+      {
+       "name": "address-postalcode",
+       "type": "string"
+      },
+      {
+       "name": "identifier",
+       "type": "token"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
