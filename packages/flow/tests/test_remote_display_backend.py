@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import time
+from typing import Any
 
 import pytest
 from PIL import Image
@@ -331,6 +333,56 @@ def test_delayed_remote_hover_paint_settles_before_final_frame() -> None:
     assert client.captures_after_move >= 7
     assert [call[0] for call in client.calls].count("move") == 1
     assert [call[0] for call in client.calls].count("mouse") == 2
+
+
+def _slow_capture_backend(*, changing: bool) -> tuple[RemoteDisplayBackend, Any]:
+    """A capture path slower than the settle timeout allows four frames for
+    (a loaded host, a VM): each capture takes 0.3 s against a 0.5 s timeout."""
+
+    class SlowClient(FakeClient):
+        captures = 0
+
+        def capture(self, window_id):
+            time.sleep(0.3)
+            self.captures += 1
+            if changing:
+                self.frame_color = (self.captures % 250, 1, 1)
+            return super().capture(window_id)
+
+    window = WindowInfo(
+        window_id=1,
+        owner="Parallels Desktop",
+        title="Windows 11",
+        pid=99,
+        bounds=(0.0, 0.0, 200.0, 100.0),
+        on_screen=True,
+    )
+    client = SlowClient(window=window, px=(200, 100))
+    backend = RemoteDisplayBackend(
+        client=client,
+        settle_s=0.0,
+        pointer_settle_stable_frames=4,
+        pointer_settle_timeout_s=0.5,
+    )
+    backend.screenshot()
+    return backend, client
+
+
+def test_a_still_screen_settles_when_each_capture_is_slow() -> None:
+    backend, client = _slow_capture_backend(changing=False)
+    backend.prepare_pointer_actuation(100, 50)
+    backend.acquire_actuation_frame()
+    backend.click(100, 50)
+    assert [call[0] for call in client.calls].count("mouse") == 2
+
+
+def test_a_changing_screen_still_refuses_when_each_capture_is_slow() -> None:
+    backend, client = _slow_capture_backend(changing=True)
+    with pytest.raises(RemoteDisplayError, match="did not settle"):
+        backend.prepare_pointer_actuation(100, 50)
+    # Bounded: at most twice the frames it needs, then it refuses.
+    assert client.captures <= 1 + 2 * 4 + 1
+    assert not any(call[0] == "mouse" for call in client.calls)
 
 
 def test_live_session_digest_change_invalidates_before_input() -> None:

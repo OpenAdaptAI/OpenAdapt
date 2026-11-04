@@ -660,9 +660,26 @@ class Recording:
                     guard=guard,
                     readback=readback,
                 )
+
+        def mark_identity(recording_dir: Path) -> None:
+            # No DOM names the record next to each control here: mark where
+            # the screen shows the record's identity, so every click checks
+            # it. Not found, nothing is marked and the gate refuses.
+            if mark_identity_band(recording_dir, owner.on_screen) is None:
+                if owner.on_warning is not None:
+                    owner.on_warning(
+                        "the record's identity (on_screen) was not found on the "
+                        "recorded screen; its clicks carry no identity band"
+                    )
+
         try:
             compiled = session.compile(
                 owner.bundle_dir,
+                before_compile=(
+                    mark_identity
+                    if owner.app.kind != "web" and owner.on_screen
+                    else None
+                ),
                 name=owner.task.task_id,
                 distill=True,
                 mine_effects=owner.app.record_reader is not None,
@@ -715,6 +732,10 @@ class CompiledAgent:
     #: one, the recording's scope is bound from it; ``teach_scope`` may only
     #: narrow it. Without one the draft can't be admitted.
     teach_authorization: Any = None
+    #: The record's identity as the screen shows it (a name, an MRN). On a
+    #: desktop or remote app it marks each click's identity band, as an
+    #: operator's ``record --identifier-region`` does.
+    on_screen: Sequence[str] = ()
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
     # -- layout --------------------------------------------------------------
@@ -850,6 +871,17 @@ class CompiledAgent:
             raise ValueError(
                 f"the teach scope is for task {scope.task_id!r}, not "
                 f"{self.task.task_id!r}"
+            )
+        if (
+            authorized is not None
+            and self.app.kind != "web"
+            and self.app.origin not in authorized.origins
+        ):
+            # No browser guard sees a desktop or remote app: the signed
+            # authorization must name the app this run is on.
+            raise ValueError(
+                f"the teach authorization does not name this app "
+                f"({self.app.origin}); it names {', '.join(authorized.origins)}"
             )
         # Every declared input is a value the scope declares, so the agent
         # can type it. Nothing else is typed.
@@ -1402,6 +1434,58 @@ def _stamp() -> str:
     )
 
 
+def _squash(text: str) -> str:
+    return "".join(str(text).split()).casefold()
+
+
+def mark_identity_band(
+    recording_dir: Path, on_screen: Sequence[str], *, pad: int = 6
+) -> Optional[list[int]]:
+    """Mark where a desktop or remote recording shows the record's identity.
+
+    Reads the frame before the first click (OCR), finds the lines that show
+    an ``on_screen`` text, and stamps their bounding box, padded, as the
+    recording's ``identifier_region`` in ``meta.json``: the band the compiler
+    gives every click, which each run checks before it acts. Returns the box,
+    or None when no ``on_screen`` text is on that frame (nothing is stamped).
+    """
+
+    import json
+
+    from openadapt_flow.vision import ocr
+
+    recording_dir = Path(recording_dir)
+    first = None
+    for line in (recording_dir / "events.jsonl").read_text().splitlines():
+        event = json.loads(line) if line.strip() else {}
+        if event.get("kind") == "click":
+            first = event
+            break
+    if first is None:
+        return None
+    frame = recording_dir / "frames" / f"{int(first['i']):04d}_before.png"
+    if not frame.is_file():
+        return None
+    wanted = [_squash(t) for t in on_screen if len(_squash(t)) >= 4]
+    boxes = []
+    for found in ocr(frame.read_bytes()):
+        text = _squash(found.text)
+        if len(text) >= 4 and any(text == w or text in w or w in text for w in wanted):
+            boxes.append(tuple(int(v) for v in found.region))
+    if not boxes:
+        return None
+    left = min(b[0] for b in boxes) - pad
+    top = min(b[1] for b in boxes) - pad
+    right = max(b[0] + b[2] for b in boxes) + pad
+    bottom = max(b[1] + b[3] for b in boxes) + pad
+    band = [max(0, left), max(0, top), right - max(0, left), bottom - max(0, top)]
+    meta_path = recording_dir / "meta.json"
+    meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
+    meta["identifier_region"] = band
+    meta_path.write_text(json.dumps(meta, indent=2))
+    return band
+
+
 def compile_agent(
     agent: Optional[ComputerUseAgent] = None,
     *,
@@ -1418,6 +1502,7 @@ def compile_agent(
     require_distinct_reviewer_and_admitter: bool = False,
     teach_scope: Optional[TeachScopeSource] = None,
     teach_authorization: Any = None,
+    on_screen: Sequence[str] = (),
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -1491,4 +1576,5 @@ def compile_agent(
         require_distinct_reviewer_and_admitter=require_distinct_reviewer_and_admitter,
         teach_scope=teach_scope,
         teach_authorization=teach_authorization,
+        on_screen=tuple(str(t) for t in on_screen if str(t).strip()),
     )

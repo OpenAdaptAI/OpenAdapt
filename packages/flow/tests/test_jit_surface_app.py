@@ -337,3 +337,74 @@ def test_the_cli_names_a_desktop_run_for_the_admission_match() -> None:
     )
     leaky = BackendConfig(kind="windows", agent_url="https://u:p@vm:5001")
     assert _surface_target_origin_or_none(leaky) is None
+
+
+def test_a_teach_authorization_must_name_the_desktop_app(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from tests._teach_authorization_support import authority
+
+    app = SurfaceApp({"kind": "macos", "macos_app": "Chart"}, record_reader=lambda: [])
+    task = TaskSignature("taught.chart_note", "Add {note}", {"note": str})
+
+    def jit(origins: list[str], folder: str) -> Any:
+        return compile_agent(
+            task=task,
+            app=app,
+            verifier=IndependentVerifier(),
+            policy="clinical-write",
+            cache_dir=tmp_path / folder,
+            teach_authorization=authority(
+                tmp_path / "keys",
+                tmp_path / folder / "statement",
+                task.task_id,
+                monkeypatch,
+                origins=origins,
+                record={"patient_id": "p1"},
+                fields={"note": "Recheck"},
+                inputs={"note": "Recheck"},
+            ),
+        )
+
+    other = jit(["macos://textedit"], "other")
+    with pytest.raises(ValueError, match=r"does not name this app \(macos://chart\)"):
+        other._teach_scope({"note": "Recheck"})
+    web = jit(["http://127.0.0.1:8765"], "web")
+    with pytest.raises(ValueError, match="does not name this app"):
+        web._teach_scope({"note": "Recheck"})
+    scope = jit(["macos://chart"], "named")._teach_scope({"note": "Recheck"})
+    assert scope is not None and scope.origins == ("macos://chart",)
+
+
+def test_the_identity_band_is_marked_from_the_recorded_screen(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import json
+
+    import openadapt_flow.vision as vision
+    from openadapt_flow.jit.compile_agent import mark_identity_band
+
+    class Line:
+        def __init__(self, text: str, region: tuple[int, int, int, int]) -> None:
+            self.text, self.region = text, region
+
+    lines = [
+        Line("MRN RC79284 Okafor, Philip", (52, 123, 600, 37)),
+        Line("born 1966-02-17", (660, 123, 170, 37)),
+        Line("New note", (127, 247, 121, 30)),
+    ]
+    monkeypatch.setattr(vision, "ocr", lambda png: lines)
+    rec = tmp_path / "recording"
+    (rec / "frames").mkdir(parents=True)
+    (rec / "frames" / "0000_before.png").write_bytes(b"png")
+    (rec / "events.jsonl").write_text(json.dumps({"i": 0, "kind": "click"}) + "\n")
+    (rec / "meta.json").write_text(json.dumps({"surface": "macos"}))
+
+    band = mark_identity_band(rec, ["MRN RC79284 Okafor, Philip born 1966-02-17"])
+    assert band == [46, 117, 790, 49]
+    assert json.loads((rec / "meta.json").read_text())["identifier_region"] == band
+
+    # Not on the screen: nothing is marked, so the run gate refuses the clicks.
+    (rec / "meta.json").write_text(json.dumps({"surface": "macos"}))
+    assert mark_identity_band(rec, ["MRN P9 Someone Else"]) is None
+    assert "identifier_region" not in json.loads((rec / "meta.json").read_text())

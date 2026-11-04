@@ -494,6 +494,7 @@ class FirstRunCompiler:
             if self.teach_authorization is not None
             else self.teach_scope,
             teach_authorization=self.teach_authorization,
+            on_screen=self.on_screen,
         )
 
     def teach_scope(self, params: Mapping[str, Any]) -> Any:
