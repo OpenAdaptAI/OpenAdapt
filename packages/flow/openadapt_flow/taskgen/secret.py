@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -32,17 +33,33 @@ class SaltMismatch(SaltMissing):
     """The salt does not match the private check file."""
 
 
-def _read_salt() -> bytes:
+def _salt_path() -> str:
     path = os.environ.get(SALT_ENV)
     if not path:
         raise SaltMissing(
             f"a private split needs the private salt: set {SALT_ENV}. Without it "
             "only the public split can be generated."
         )
-    salt = Path(path).read_bytes().strip()
+    return path
+
+
+def _read_salt_fd(fd: int, path: str) -> bytes:
+    chunks = []
+    while chunk := os.read(fd, 65536):
+        chunks.append(chunk)
+    salt = b"".join(chunks).strip()
     if len(salt) < 32:
         raise SaltMissing(f"{path}: the salt must be at least 32 bytes")
     return salt
+
+
+def _read_salt() -> bytes:
+    path = _salt_path()
+    fd = os.open(path, os.O_RDONLY)  # the salt is only ever opened read-only
+    try:
+        return _read_salt_fd(fd, path)
+    finally:
+        os.close(fd)
 
 
 def fingerprint(salt: bytes) -> str:
@@ -97,12 +114,58 @@ def load_salt(split: str) -> Optional[bytes]:
     return salt
 
 
-def write_check(path: Path) -> None:
-    """Write the check file for the salt in ``TASKGEN_SALT_FILE``. Only the
-    HMAC is written; the salt is never printed or copied."""
+class CheckExists(SaltMissing):
+    """The check file can't be written without risking the salt or a pin."""
 
-    doc = {"schema": CHECK_SCHEMA, "hmac_sha256": fingerprint(_read_salt())}
-    path.write_text(json.dumps(doc, indent=2) + "\n")
+
+def write_check(path: Path) -> None:
+    """Write a new check file for the salt in ``TASKGEN_SALT_FILE``.
+
+    Only the HMAC is written; the salt is never printed or copied. The write
+    never replaces anything: it refuses when ``path`` already exists (a file,
+    a hard link or a symlink, even a dangling one) or names the salt itself,
+    so the salt and any existing pin survive a mistake. A new pin needs a new
+    path. The file is written to an exclusively created temporary file and
+    then linked into place, which also fails if ``path`` appears meanwhile.
+    """
+
+    salt_path = _salt_path()
+    out = Path(path)
+    if os.path.lexists(out):
+        raise CheckExists(
+            f"{out} already exists: refusing to overwrite it. Choose a new path "
+            "for a new check file."
+        )
+    if os.path.realpath(out) == os.path.realpath(salt_path):
+        raise CheckExists(f"{out} is the salt file itself: refusing")
+    fd = os.open(salt_path, os.O_RDONLY)  # read-only: the salt is never written
+    try:
+        salt = _read_salt_fd(fd, salt_path)
+    finally:
+        os.close(fd)
+    doc = {"schema": CHECK_SCHEMA, "hmac_sha256": fingerprint(salt)}
+    data = (json.dumps(doc, indent=2) + "\n").encode()
+    tmp = out.with_name(f".{out.name}.{os.getpid()}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        tfd = os.open(tmp, flags, 0o600)
+    except FileExistsError as exc:
+        raise CheckExists(f"{tmp} exists: refusing to touch it") from exc
+    try:
+        try:
+            view = memoryview(data)
+            while view:
+                view = view[os.write(tfd, view) :]
+            os.fsync(tfd)
+        finally:
+            os.close(tfd)
+        # link() never replaces an existing file, unlike rename().
+        try:
+            os.link(tmp, out)
+        except FileExistsError as exc:
+            raise CheckExists(f"{out} appeared while writing: refusing") from exc
+    finally:
+        os.unlink(tmp)  # only the temporary file this call created
 
 
 def _mac(salt: bytes, label: str, name: str) -> bytes:
@@ -135,7 +198,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         help=f"where to write the check for the salt in {SALT_ENV}",
     )
     args = ap.parse_args(argv)
-    write_check(args.write_check)
+    try:
+        write_check(args.write_check)
+    except SaltMissing as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
     print(f"wrote {args.write_check}")
     return 0
 

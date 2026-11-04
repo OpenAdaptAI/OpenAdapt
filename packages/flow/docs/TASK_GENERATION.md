@@ -112,7 +112,10 @@ it. Every other split is seeded by a salt kept privately:
   fixed label under the salt, not the salt. The generator refuses a
   non-public split when this file is missing or doesn't match, so a wrong
   salt can't silently produce a different split. Write it once with
-  `python -m openadapt_flow.taskgen.secret --write-check PATH`.
+  `python -m openadapt_flow.taskgen.secret --write-check PATH`. The
+  command opens the salt read-only and never replaces anything: it
+  refuses when PATH exists (a file, a link to the salt, or a symlink),
+  so a new pin needs a new path.
 - `TASKGEN_PROFILE_PATH` adds directories of private profiles.
 - `TASKGEN_FAMILIES` names a private Python file that adds families with
   `families.register`.
