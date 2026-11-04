@@ -321,7 +321,9 @@ def guided_check(
 
     Returns the written ``check.json``, or None when the person skipped it.
     """
-    lines = (recording / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    from openadapt_flow import artifacts
+
+    lines = artifacts.read_text(recording / "events.jsonl").splitlines()
     events = [json.loads(line) for line in lines if line.strip()]
     echo(CHECK_PROMPT)
     echo("Recorded events:")

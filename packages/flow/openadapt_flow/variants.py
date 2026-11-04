@@ -257,14 +257,16 @@ class VariantSet(BaseModel):
 
     @classmethod
     def load(cls, parent_dir: Path | str) -> "VariantSet":
+        from openadapt_flow import artifacts
+
         parent = Path(parent_dir)
         path = parent / VARIANT_SET_FILENAME
-        if not path.is_file():
+        if not artifacts.is_file(path):
             raise VariantSetError(
                 f"{parent} is not a variant-set artifact (no {VARIANT_SET_FILENAME})"
             )
         try:
-            return cls.model_validate_json(path.read_text(encoding="utf-8"))
+            return cls.model_validate_json(artifacts.read_text(path))
         except ValueError as exc:
             raise VariantSetError(f"variant set at {path} is invalid: {exc}") from exc
 
@@ -272,7 +274,9 @@ class VariantSet(BaseModel):
 def is_variant_set_artifact(path: Path | str) -> bool:
     """True when ``path`` is a variant-set directory."""
 
-    return (Path(path) / VARIANT_SET_FILENAME).is_file()
+    from openadapt_flow import artifacts
+
+    return artifacts.is_file(Path(path) / VARIANT_SET_FILENAME)
 
 
 class VariantInput(BaseModel):
@@ -290,14 +294,16 @@ class VariantInput(BaseModel):
 def _admitted_spec(item: VariantInput, out_dir: Path) -> VariantSpec:
     """Build a variant spec, refusing anything that is not admitted as is."""
 
-    if not item.admission.is_file():
+    from openadapt_flow import artifacts
+
+    if not artifacts.is_file(item.admission):
         raise VariantSetError(
             f"variant {item.name!r} has no QualificationAdmissionEnvelope at "
             f"{item.admission}; each variant keeps its own admission"
         )
     try:
         envelope = QualificationAdmissionEnvelope.model_validate_json(
-            item.admission.read_text(encoding="utf-8")
+            artifacts.read_text(item.admission)
         )
     except Exception as exc:
         raise VariantSetError(
@@ -340,13 +346,14 @@ def _admitted_spec(item: VariantInput, out_dir: Path) -> VariantSpec:
 def _repair_candidate(bundle: Path) -> tuple[Optional[str], Optional[str]]:
     """Read the detached repair-candidate record a healed bundle carries."""
 
+    from openadapt_flow import artifacts
     from openadapt_flow.repair.registration import detached_candidate_path
 
     path = detached_candidate_path(bundle)
-    if not path.is_file():
+    if not artifacts.is_file(path):
         return None, None
     try:
-        record = json.loads(path.read_text(encoding="utf-8"))
+        record = json.loads(artifacts.read_text(path))
     except (OSError, ValueError) as exc:
         raise VariantSetError(
             f"repair candidate record at {path} is unreadable"
@@ -415,16 +422,17 @@ def add_variant(parent_dir: Path | str, item: VariantInput) -> VariantSet:
 def _check_lineage(bundle: Path, base: VariantSpec, spec: VariantSpec) -> None:
     """A promoted variant must carry the repair candidate that produced it."""
 
+    from openadapt_flow import artifacts
     from openadapt_flow.repair.registration import detached_candidate_path
 
     path = detached_candidate_path(bundle)
-    if not path.is_file():
+    if not artifacts.is_file(path):
         raise VariantSetError(
             f"--derived-from needs the repair candidate record the heal or teach "
             f"wrote ({path}); without it the lineage is unproven"
         )
     try:
-        record = json.loads(path.read_text(encoding="utf-8"))
+        record = json.loads(artifacts.read_text(path))
     except (OSError, ValueError) as exc:
         raise VariantSetError(
             f"repair candidate record at {path} is unreadable"

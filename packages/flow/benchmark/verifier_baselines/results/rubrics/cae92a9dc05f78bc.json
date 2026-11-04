@@ -1,0 +1,42 @@
+{
+ "task": "You are a clinic staff member using Medplum, the clinic's electronic health record, in a web browser. The screen is 1280x800 pixels and you are already signed in. Medplum stores its records on a FHIR R4 server; this web app is how you read and change them. Use only this app, and change nothing the task doesn't ask for.\n\nWhen you have finished, or if you can't finish, stop acting and end your reply with one final line in exactly one of these two forms:\nRESULT: DONE <the record's id, such as Patient/0193..., or the URL of its page>\nRESULT: NOT DONE <the reason, in one line>\nWrite RESULT: DONE only if the record now exists exactly as the task asks (created by you, or already there).\n\nThe task:\nMake sure this allergy is recorded for the patient, exactly once, as an AllergyIntolerance. If it is already recorded for them, don't add another: report the existing record.\nPatient: Rosa Delgado (born 1979-06-14). Find their Patient record first; another patient may have a similar name.\nAllergy: Allergy to penicillin (SNOMED CT 91936005, system http://snomed.info/sct)\nCriticality: high\nClinical status: active (http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical)\nVerification status: confirmed (http://terminology.hl7.org/CodeSystem/allergyintolerance-verification)",
+ "rubric": {
+  "items": [
+   {
+    "criterion": "Use only the Medplum web app and keep scope limited",
+    "description": "Complete the task entirely within the Medplum EHR web app, making no unrelated changes to other records. Full credit if the agent uses only Medplum and limits mutations to the AllergyIntolerance record needed to satisfy the task. Full credit also if Medplum is inaccessible or blocked (e.g., site down, login/session issue) and the agent clearly reports this limitation and makes no unrelated changes. Partial credit if the agent appears to use Medplum but performs minor unrelated edits. No credit if the agent relies on other platforms despite Medplum being accessible, or makes unrelated, irreversible changes.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Identify the correct Patient record (Rosa Delgado, DOB 1979-06-14)",
+    "description": "Locate and open the Patient record for Rosa Delgado born 1979-06-14, avoiding similarly named patients. Full credit if the correct patient is clearly identified using name and DOB. Full credit also if, after reasonable search attempts within Medplum, the patient cannot be found or access is blocked (e.g., permissions), and the agent clearly reports this blocker. Partial credit if the name matches but DOB is not verified when the UI allows verification. No credit if the wrong patient is selected when the correct record is available.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Check for existing penicillin AllergyIntolerance and avoid duplicates",
+    "description": "Before creating anything, search the patient's AllergyIntolerance records for penicillin. Full credit if the agent: (a) finds exactly one existing penicillin allergy and proceeds without adding a duplicate, OR (b) finds none and plans to create one, OR (c) finds multiple duplicates and refrains from adding another, clearly reporting the duplicates (no deletion required since not authorized). Full credit also if the AllergyIntolerance view/search is unavailable (e.g., due to permissions or loading errors) and the agent refrains from creating a new record to avoid duplicates and clearly reports the limitation. Partial credit if the agent looks for existing records but misses one and inadvertently duplicates. No credit if the agent adds a new record without attempting a check when checking was clearly possible.",
+    "max_points": 3,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Ensure the AllergyIntolerance exists (create or update) with exact required coding and statuses",
+    "description": "Make sure the patient's AllergyIntolerance for penicillin exists and has the exact required attributes: code SNOMED CT system http://snomed.info/sct, code 91936005; criticality high; clinicalStatus active using system http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical; verificationStatus confirmed using system http://terminology.hl7.org/CodeSystem/allergyintolerance-verification; and is linked to the correct Patient. Full credit if the agent creates a new record with these exact details when none exists, or updates an existing one so it matches, without creating a duplicate. Full credit also if Medplum cannot support entering the exact codes/statuses or saving the record (e.g., UI lacks fields or permissions block saving): the agent attempts the correct action, uses the closest available fields without fabricating data, and clearly reports the limitation. Partial credit for minor coding/value mistakes (e.g., correct concept but wrong system URI) or saving with one status missing when interface constraints are evident but reported. No credit if the saved record uses the wrong code/concept, wrong patient, or is not saved at all when saving is clearly possible.",
+    "max_points": 4,
+    "justification": "",
+    "earned_points": ""
+   },
+   {
+    "criterion": "Final verification and reporting of the single definitive allergy record",
+    "description": "Verify the end state: exactly one definitive penicillin AllergyIntolerance for the patient with the specified attributes, and report the record identifier or URL as confirmation. Full credit if the agent confirms a single correct record and provides its id/URL, OR if duplicates pre-existed, the agent does not add another and clearly reports the duplicate situation (since deletion wasn't authorized). Full credit also if platform limitations prevent verification or retrieval of the id/URL (e.g., site down, permissions, hidden id) and the agent clearly reports the limitation and refrains from unrelated changes. Partial credit if the correct state is achieved but the id/URL is not reported when it was available. No credit if the final state is ambiguous, unverified, or unreported when verification was feasible.",
+    "max_points": 2,
+    "justification": "",
+    "earned_points": ""
+   }
+  ]
+ }
+}

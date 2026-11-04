@@ -759,11 +759,13 @@ class Attributor:
         window: Optional[list[dict[str, Any]]],
         bookkeeping_inserts: set[str] = frozenset(),  # type: ignore[assignment]
         own_tables: set[str] = frozenset(),  # type: ignore[assignment]
+        no_record_values: set[str] = frozenset(),  # type: ignore[assignment]
     ) -> Optional[list[dict[str, Any]]]:
         """The run's own logged writes that no changed row accounts for (a
         write to a table the read keeps append-only, say), or None when
         there is no audit window to tell. As the frame does: an insert entry
-        that names no record (none, or patient 0) in a table the app profile
+        that names no record (none, or a profile ``no_record_values`` value)
+        in a table the app profile
         calls bookkeeping (``no_record_insert_tables``) is the app's own, and
         so is an entry for a table of the acting user's own rows the profile
         excuses (``own_rows``: UI settings, recent charts)."""
@@ -783,7 +785,7 @@ class Attributor:
             ):
                 continue
             if (
-                record in (None, "", "0", 0)
+                (record in (None, "") or str(record) in no_record_values)
                 and self._event(e) in set(self.spec.insert_events)
                 and table not in (None, "")
                 and any(_same_table(table, t) for t in bookkeeping_inserts)
@@ -829,14 +831,13 @@ class Attributor:
 
 
 def _same_table(entry_table: Any, table: Optional[str]) -> bool:
-    """Does an audit entry's table name this snapshot table? Case aside, an
-    unqualified name means the read's own schema (as the frame decides)."""
+    """Does an audit entry's table name this snapshot table? Exactly, case
+    aside. A snapshot keys the read's own schema's tables unqualified and
+    every other schema's as ``schema.table``, so an unqualified entry names
+    only the own schema's table, never a same-named one elsewhere (#1793)."""
     if table is None or entry_table in (None, ""):
         return False
-    named, mine = str(entry_table).lower(), table.lower()
-    if named == mine:
-        return True
-    return "." not in named and "." in mine and mine.rsplit(".", 1)[1] == named
+    return str(entry_table).lower() == table.lower()
 
 
 __all__ = [

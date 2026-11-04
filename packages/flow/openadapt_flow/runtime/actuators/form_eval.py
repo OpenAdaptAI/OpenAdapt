@@ -4,7 +4,7 @@ The ``web_form`` API step sends one request in place of the clicks that fill
 and submit a form. Most forms run script on the way: key and change
 handlers on the fields, an ``onsubmit`` validator, a click handler on the
 save button, a page listener for ``submit``, custom validate.js rules such
-as OpenEMR's ``pastDate``. The API step can't read what that script does,
+as a ``pastDate`` rule. The API step can't read what that script does,
 so it runs it, before each save, the way the person's steps would:
 
 1. open the form page in a scratch copy of the live session: a separate
@@ -14,8 +14,8 @@ so it runs it, before each save, the way the person's steps would:
 2. while the page loads, let only same-origin GET requests through (no
    other origin at all). Once it has loaded, block every request except the
    exact scripts and stylesheets the page loaded, the reads the person's
-   click made in the recording (``submitter_requests``, such as OpenEMR's
-   duplicate search) and the static ``.js``/``.css`` files of a recorded
+   click made in the recording (``submitter_requests``, such as a
+   duplicate-record search) and the static ``.js``/``.css`` files of a recorded
    read's own frame, so nothing the page does can write; a form submit or a
    blocked channel in any frame counts as the page sending;
 3. type the run's values into the fields the person typed or picked, with

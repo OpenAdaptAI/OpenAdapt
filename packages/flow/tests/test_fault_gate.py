@@ -58,7 +58,7 @@ def _rest_cfg(base: str = "http://127.0.0.1:1"):
 
 @pytest.fixture
 def rest_copy():
-    store = MemoryRestCopy(SEED, TARGET)
+    store = MemoryRestCopy(SEED, TARGET, records_path="/api/db", records_key="records")
     try:
         yield store
     finally:

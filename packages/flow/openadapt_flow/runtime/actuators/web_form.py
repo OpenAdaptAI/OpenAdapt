@@ -603,6 +603,11 @@ class PreparedSave:
     session_fields: frozenset[str] = frozenset()
     #: The span's ``step`` writes, sent in this order before the save.
     writes: tuple["PreparedWrite", ...] = ()
+    #: The checks before saving, as reads (address, required text, label).
+    #: When the span has step writes, :meth:`WebFormActuator.send` reads them
+    #: again after the last write and right before the save, as the GUI
+    #: checks its guard after those steps ran. Reads only: not in the digest.
+    rechecks: tuple[tuple[str, tuple[str, ...], str], ...] = ()
 
     def encoded(self) -> str:
         return up.urlencode(list(self.body))
@@ -848,26 +853,21 @@ class WebFormActuator:
                 )
                 if problem:
                     return unavailable(problem)
+            rechecks = []
             for check in spec.prechecks:
                 query = [(k, _fill(v, params)) for k, v in check.query]
                 qs = "&".join(
                     up.quote(k) + ("=" + up.quote(v) if v else "") for k, v in query
                 )
-                resp = self.transport.get(check.path + (f"?{qs}" if qs else ""))
-                missing = [t for t in check.require_text if t not in resp.text]
-                self.log.append(
-                    {
-                        "stage": "precheck",
-                        "path": check.path,
-                        "status": resp.status,
-                        "missing": missing,
-                    }
+                read = (
+                    check.path + (f"?{qs}" if qs else ""),
+                    tuple(check.require_text),
+                    check.from_step or check.path,
                 )
-                if resp.status != 200 or missing:
-                    return unavailable(
-                        f"the check before saving ({check.from_step or check.path}) did not pass: "
-                        f"missing {missing!r}"
-                    )
+                problem = self._precheck(read)
+                if problem:
+                    return unavailable(problem)
+                rechecks.append(read)
         except KeyError as exc:
             return unavailable(f"the run has no value for {exc}")
         except Exception as exc:  # noqa: BLE001 - only reads were sent
@@ -881,7 +881,28 @@ class WebFormActuator:
                 f.name for f in spec.fields if f.source == "session"
             ),
             writes=tuple(writes),
+            rechecks=tuple(rechecks),
         )
+
+    def _precheck(self, read: tuple[str, tuple[str, ...], str]) -> Optional[str]:
+        """Read one check before saving; why it fails, or None."""
+
+        url, require_text, label = read
+        resp = self.transport.get(url)
+        missing = [t for t in require_text if t not in resp.text]
+        self.log.append(
+            {
+                "stage": "precheck",
+                "path": up.urlsplit(url).path,
+                "status": resp.status,
+                "missing": missing,
+            }
+        )
+        if resp.status != 200 or missing:
+            return (
+                f"the check before saving ({label}) did not pass: missing {missing!r}"
+            )
+        return None
 
     def _run_page_script(
         self,
@@ -1005,6 +1026,27 @@ class WebFormActuator:
                     http_status=wresp.status,
                     request_summary=summary,
                 )
+        if prepared.writes:
+            # The step writes ran; the GUI checks its guard (for example the
+            # duplicate search's "No matches were found.") after them, right
+            # before the save. Read the checks again here, in that order.
+            sent = len(prepared.writes)
+            for read in prepared.rechecks:
+                try:
+                    problem = self._precheck(read)
+                except Exception as exc:  # noqa: BLE001 - a read; the save is not sent
+                    problem = f"the check before saving ({read[2]}) failed ({type(exc).__name__})"
+                if problem:
+                    return ApiActuationResult(
+                        status=ActuationStatus.HALT,
+                        substrate=self.substrate,
+                        halt_kind=ApiHaltKind.RESPONSE_REJECTED,
+                        reason=(
+                            f"after the {sent} step write(s) were accepted, {problem}; "
+                            "the save was not sent and nothing is retried"
+                        ),
+                        request_summary=summary,
+                    )
         try:
             resp = self.transport.post_form(
                 prepared.path, prepared.encoded(), referer=prepared.referer
