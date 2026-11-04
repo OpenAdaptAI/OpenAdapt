@@ -35,6 +35,13 @@ the protocol's order.
 
 **Effect on scoring:** none. Only the wall-clock time changes.
 
+The second process ran on the first process's stack (port 9820) instead of
+its own (9830), because the host's free disk was under the lane's 30 GiB
+gate for starting a stack. Each run empties and seeds the project first,
+so the stack carries nothing from one run to the next. Before the second
+process started, the stack's history was dumped for deviation 4's replay
+(`results/fara/frozen-9820.jsonl.gz`).
+
 ## 3. Signed-out runs rerun; the session is renewed (2026-11-03, about 00:00 EST)
 
 **What happened:** the harness signed the agent's user in once per process.
