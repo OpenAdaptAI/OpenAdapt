@@ -43,6 +43,15 @@ pytest -q                          # tests
   editing files yourself while a long suite runs also trips it — set
   `OPENADAPT_FLOW_ALLOW_DIRTY_TREE=1` for that case.
 
+### Local browser tests
+
+Local pytest runs force headless mode for synchronous and asynchronous
+Playwright launches, including persistent contexts. An explicit headed
+launch fails before starting a browser. To run a deliberate headed test on
+your own machine, mark it `@pytest.mark.headed` and set
+`OPENADAPT_ALLOW_HEADED=1`. Both are required. The guard also applies to
+session and module fixtures. CI keeps its configured launch options.
+
 ### CI execution lanes
 
 Every pull request and push to `main` runs the required safety, unit, browser

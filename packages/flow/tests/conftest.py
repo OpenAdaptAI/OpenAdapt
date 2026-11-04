@@ -72,3 +72,11 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     # The uncertain-write ledger: per test, never ~/.openadapt/ledger.
     monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / ".write-ledger"))
     monkeypatch.delenv("OPENADAPT_FRAME_SECRET_FILE", raising=False)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    # A package-local pyproject.toml cuts off ancestor conftest discovery.
+    if not config.pluginmanager.hasplugin("openadapt-headless"):
+        from tests import headless_guard
+
+        config.pluginmanager.register(headless_guard, "openadapt-headless")
