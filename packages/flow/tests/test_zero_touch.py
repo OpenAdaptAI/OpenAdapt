@@ -425,7 +425,8 @@ class _UniqueSandbox(_FakeSandbox):
 def _dup_case(copy_changes: dict[str, Any]) -> Any:
     row = {"id": "5", "fk_event": "46", "kind": "user", "fk_element": "2", "note": "a"}
     copy = {**row, "id": "1005", **copy_changes}
-    return zt.Case("duplicate:res", "duplicate", [], copy_of=("res", row, copy))
+    given = {"fk_event", "kind", "fk_element"}  # the task gave the index's values
+    return zt.Case("duplicate:res", "duplicate", [], copy_of=("res", row, copy, given))
 
 
 class _Mysql1062(Exception):
@@ -636,3 +637,144 @@ def test_s9_s10_a_new_rows_own_key_and_each_value_on_another_row_are_faulted() -
     names = {c.name for c in cases}
     assert "wrong_value:codes.code" in names  # S9
     assert "unrelated_edit:codes.label" in names  # S10
+
+
+# -- review round 3: R3-B1, R3-B2, S11, S12 -----------------------------------
+
+
+def test_r3b1_an_index_on_a_value_the_app_makes_never_proves_a_duplicate_impossible() -> (
+    None
+):
+    exc = _Mysql1062(1062, "Duplicate entry '46-user-2' for key 'uk_res'")
+    case = _dup_case({})
+    table, row, copy, _ = case.copy_of
+    case.copy_of = (table, row, copy, {"fk_event", "kind"})  # fk_element: the app's
+    assert zt.blocked_by_constraint(_UniqueSandbox({}), case, exc) is None
+    # N5: another table's index of the same name.
+    other = _Mysql1062(1062, "Duplicate entry 'x' for key 'other_table.uk_res'")
+    assert zt.blocked_by_constraint(_UniqueSandbox({}), _dup_case({}), other) is None
+
+
+def test_s11_an_uncertain_without_a_judged_read_is_not_stopped() -> None:
+    class R:
+        receipt = {"outcome": "reconciliation_required"}
+        evidence = {"frame": {"status": "not_checked"}}
+        observed = "present"
+
+    assert not zt.write_judged(R())
+    R.evidence = {"frame": {"status": "held"}}
+    assert zt.write_judged(R())
+    R.observed = "unknown"
+    assert not zt.write_judged(R())
+
+    class RC:
+        read_at = ""
+        frame = "not_checked"
+
+    assert not zt.recheck_judged(RC())
+    RC.read_at, RC.frame = "2026-11-03T20:00:00Z", "refuted"
+    assert zt.recheck_judged(RC())
+    out = zt.Outcome(
+        "x", "bookkeeping", False, "UNCERTAIN", False, ["a judgment"], False
+    )
+    assert not out.ok
+    for text in ("the database was still changing after the save",
+                 "no readable baseline, so what else changed can't be known",
+                 "the database could not be judged again"):  # fmt: skip
+        assert zt.read_failed([text])
+
+
+def _uq_sandbox(pg: Any, db: str) -> Any:  # noqa: F811
+    admin = psycopg2.connect(
+        host="127.0.0.1", port=pg["port"], user="admin", dbname="postgres"
+    )
+    admin.autocommit = True
+    admin.cursor().execute(f"CREATE DATABASE {db}")
+    admin.close()
+    c = psycopg2.connect(host="127.0.0.1", port=pg["port"], user="admin", dbname=db)
+    c.autocommit = True
+    c.cursor().execute(
+        "CREATE TABLE res (id integer PRIMARY KEY, code text NOT NULL, name text, tag text);"
+        "CREATE UNIQUE INDEX uk_code ON res (code);"
+        "CREATE UNIQUE INDEX uk_name ON res (name);"
+        "CREATE UNIQUE INDEX uk_partial ON res (tag) WHERE name IS NOT NULL;"
+        "CREATE UNIQUE INDEX uk_expr ON res (lower(tag));"
+        "INSERT INTO res VALUES (1, 'INV-1', 'Ann', 'a');"
+    )
+    c.close()
+    read = {"sql_driver": "psycopg2", "sql_connect_args": {"host": "127.0.0.1",
+            "port": pg["port"], "user": "admin", "dbname": db}}  # fmt: skip
+    sb = zt.Sandbox(read, read)
+    sb.create(zt.store.read_schema(zt.store.connector(read), "postgresql"), "admin")
+    return sb
+
+
+def test_r3b1_s12_on_postgresql(pg: Any) -> None:  # noqa: F811
+    sb = _uq_sandbox(pg, "uq_r3")
+    try:
+        # S12: partial and expression indexes are not taken as proof.
+        # (The sandbox's copies of the indexes get names of their own.)
+        assert sorted(sb.unique_indexes("res").values()) == [["code"], ["name"]]
+        # tag NULL: the expression index can't refuse the copy (a refusal by
+        # it would not count as proof, so this checks uk_name alone).
+        new = {"id": "2", "code": "INV-2", "name": "Bob", "tag": None}
+        write = [zt.Op("res", {"id": "2"}, new)]
+
+        def dup_of(values: dict[str, Any]) -> Any:
+            cases = zt.faults(sb.schema, sb, type("D", (), {"values": values})(), write)
+            return next(c for c in cases if c.cls == "duplicate")
+
+        # The task gives the name; the app makes the code: the copy gets a
+        # fresh code, keeps the name, and only uk_name refuses it.
+        case = dup_of({"name": "Bob"})
+        assert case.write[-1].row["code"] != "INV-2"
+        assert case.write[-1].row["name"] == "Bob"
+        with pytest.raises(Exception) as err:
+            sb.put_many(case.write)
+        blocked = zt.blocked_by_constraint(sb, case, err.value)
+        assert blocked and blocked.startswith("res.") and blocked.endswith("(name)")
+        # Neither is the task's: both are made fresh, nothing proves the
+        # duplicate impossible, and the store takes it.
+        case = dup_of({})
+        assert case.write[-1].row["name"] != "Bob"
+        sb.put_many(case.write)  # the store takes it: a normal duplicate
+    finally:
+        sb.drop()
+
+
+def test_r3b2_a_restore_that_fails_midway_changes_nothing(pg: Any) -> None:  # noqa: F811
+    sb = _uq_sandbox(pg, "uq_tx")
+    try:
+        before = sb.rows("res")
+        bad = [zt.Op("res", {"id": "1"}, {"id": "1", "code": "INV-9", "name": "Ann", "tag": "a"}),
+               zt.Op("res", {"id": "3"}, {"id": "3", "code": None, "name": "X", "tag": "x"})]  # fmt: skip
+        with pytest.raises(Exception):
+            sb.put_many(bad)  # the second row breaks NOT NULL
+        assert sb.rows("res") == before
+    finally:
+        sb.drop()
+
+
+def test_r3b2_a_broken_sandbox_stops_the_setup(
+    onboarded: dict[str, Any],
+    pg: Any,  # noqa: F811
+    monkeypatch: Any,  # noqa: F811
+) -> None:
+    def broken(*a: Any, **k: Any) -> Any:
+        raise zt.SandboxBroken("the sandbox could not be restored: injected")
+
+    monkeypatch.setattr(zt, "run_case", broken)
+    work = onboarded["out"].parent
+    read = yaml.safe_load((work / "read.yaml").read_text())
+    admin_read = {"sql_driver": "psycopg2", "sql_connect_args": {"host": "127.0.0.1",
+                  "port": pg["port"], "user": "admin", "dbname": "tracker_zt"}}  # fmt: skip
+    out = work / "out_broken"
+    (out / "contracts").mkdir(parents=True)  # a stale install must not survive
+    result = zt.onboard(read=read, admin=admin_read, reader="oa_reader",
+                        kinds_path=work / "kinds.yaml", demo_dir=work / "demos",
+                        holdout_dir=work / "holdout", out=out,
+                        actor_params={"bot_user_id": str(BOT)}, actor_id="ops-bot",
+                        log=lambda s: None)  # fmt: skip
+    assert result["admitted"] == [] and "injected" in result["stopped"]
+    assert not (out / "contracts").exists()
+    assert "setup stopped" in (out / "EXCEPTIONS.md").read_text()

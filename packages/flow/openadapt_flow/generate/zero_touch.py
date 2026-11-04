@@ -88,6 +88,12 @@ class ZeroTouchError(RuntimeError):
     """The setup can't run as asked (no sandbox, a bad config)."""
 
 
+class SandboxBroken(ZeroTouchError):
+    """The sandbox couldn't be put back after a case: it no longer mirrors
+    the app's store, so nothing validated in it can be admitted, and the
+    setup stops."""
+
+
 # -- the sandbox --------------------------------------------------------------------
 
 
@@ -313,29 +319,39 @@ class Sandbox:
         return cache[table]
 
     def _read_unique(self, table: str) -> dict[str, list[str]]:
+        """Plain unique indexes only: one that is partial, holds an
+        expression or indexes a prefix of a column is left out, so it can
+        never be taken as proof that a duplicate is impossible."""
+
         if self.dialect == "mysql":
             got = self._exec(
-                "SELECT INDEX_NAME, COLUMN_NAME FROM information_schema.STATISTICS "
-                "WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND NON_UNIQUE = 0 "
-                "AND INDEX_NAME <> 'PRIMARY' ORDER BY INDEX_NAME, SEQ_IN_INDEX",
+                "SELECT INDEX_NAME, COLUMN_NAME, SUB_PART FROM "
+                "information_schema.STATISTICS WHERE TABLE_SCHEMA = %s AND "
+                "TABLE_NAME = %s AND NON_UNIQUE = 0 AND INDEX_NAME <> 'PRIMARY' "
+                "ORDER BY INDEX_NAME, SEQ_IN_INDEX",
                 (self.name, table),
             )
         else:
             got = self._exec(
-                "SELECT i.relname, a.attname FROM pg_index x "
+                "SELECT i.relname, a.attname, NULL FROM pg_index x "
                 "JOIN pg_class c ON c.oid = x.indrelid "
                 "JOIN pg_namespace n ON n.oid = c.relnamespace "
                 "JOIN pg_class i ON i.oid = x.indexrelid "
                 "JOIN LATERAL unnest(x.indkey) WITH ORDINALITY k(attnum, ord) ON true "
-                "JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum "
+                "LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum "
                 "WHERE n.nspname = %s AND c.relname = %s AND x.indisunique "
-                "AND NOT x.indisprimary ORDER BY i.relname, k.ord",
+                "AND NOT x.indisprimary AND x.indpred IS NULL "
+                "AND x.indexprs IS NULL ORDER BY i.relname, k.ord",
                 (self.name, table),
             )
-        out: dict[str, list[str]] = {}
-        for name, col in got:
-            out.setdefault(str(name), []).append(str(col))
-        return out
+        plain: dict[str, list[str]] = {}
+        odd: set[str] = set()
+        for name, col, sub in got:
+            if col is None or sub is not None:
+                odd.add(str(name))
+            else:
+                plain.setdefault(str(name), []).append(str(col))
+        return {k: v for k, v in plain.items() if k not in odd}
 
     def distinct(self, table: str, column: str, limit: int = 5) -> list[str]:
         """Up to ``limit`` values the column holds, as text."""
@@ -357,18 +373,63 @@ class Sandbox:
         return int(got[0][0] or 0)
 
     def put_many(self, ops: Sequence["Op"]) -> None:
-        """Put each op's row, in two phases: every key is deleted first, then
-        every row inserted, so rows swapping a unique key don't collide on
-        the way. The last op for a key wins."""
+        """Put each op's row in one transaction: every key is deleted first,
+        then every row inserted, so rows swapping a unique key don't collide
+        on the way, and a failure leaves the sandbox as it was. The last op
+        for a key wins."""
 
+        self._guard()
         last: dict[tuple[str, str], Op] = {}
         for op in ops:
             last[(op.table, store.row_key(self._table(op.table), op.key))] = op
-        for op in last.values():
-            self.put(op.table, None, op.key)
-        for op in last.values():
-            if op.row is not None:
-                self.put(op.table, op.row, op.key)
+        if not last:
+            return
+        conn = self._connect()
+        try:
+            if self.dialect == "mysql":
+                conn.autocommit(False)  # pymysql: a method
+            else:
+                conn.autocommit = False
+            cur = conn.cursor()
+            self._no_key_checks(cur)
+            for op in last.values():
+                self._delete(cur, op.table, op.key)
+            for op in last.values():
+                if op.row is not None:
+                    self._insert(cur, op.table, op.row)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def _no_key_checks(self, cur: Any) -> None:
+        # A planted fault may break a foreign key on purpose (a row the
+        # write points to is gone): the store must take it.
+        if self.dialect == "mysql":
+            cur.execute("SET FOREIGN_KEY_CHECKS=0")
+            return
+        cur.execute("SAVEPOINT oa_role")
+        try:  # a superuser only; else a key-breaking fault fails closed
+            cur.execute("SET LOCAL session_replication_role = replica")
+            cur.execute("RELEASE SAVEPOINT oa_role")
+        except Exception:  # noqa: BLE001
+            cur.execute("ROLLBACK TO SAVEPOINT oa_role")
+
+    def _delete(self, cur: Any, table: str, key: Mapping[str, Optional[str]]) -> None:
+        where, args = self._where(self._table(table), key)
+        cur.execute(f"DELETE FROM {self.t(table)} WHERE {where}", tuple(args))
+
+    def _insert(self, cur: Any, table: str, row: Mapping[str, Optional[str]]) -> None:
+        t = self._table(table)
+        cols = [c for c in t.column_names if c in row]
+        over = "" if self.dialect == "mysql" else " OVERRIDING SYSTEM VALUE"
+        cur.execute(
+            f"INSERT INTO {self.t(table)} ({', '.join(self.q(c) for c in cols)})"
+            f"{over} VALUES ({', '.join(['%s'] * len(cols))})",
+            tuple(_db_value(t, c, row.get(c)) for c in cols),
+        )
 
     def put(
         self,
@@ -378,32 +439,7 @@ class Sandbox:
     ) -> None:
         """Make the row with ``key``'s primary key be ``row`` (None: absent)."""
 
-        self._guard()
-        t = self._table(table)
-        where, args = self._where(t, key)
-        conn = self._connect()
-        try:
-            cur = conn.cursor()
-            # A planted fault may break a foreign key on purpose (a row the
-            # write points to is gone): the store must take it.
-            if self.dialect == "mysql":
-                cur.execute("SET FOREIGN_KEY_CHECKS=0")
-            else:
-                try:  # a superuser only; else a key-breaking fault fails closed
-                    cur.execute("SET session_replication_role = replica")
-                except Exception:  # noqa: BLE001
-                    pass
-            cur.execute(f"DELETE FROM {self.t(table)} WHERE {where}", tuple(args))
-            if row is not None:
-                cols = [c for c in t.column_names if c in row]
-                over = "" if self.dialect == "mysql" else " OVERRIDING SYSTEM VALUE"
-                cur.execute(
-                    f"INSERT INTO {self.t(table)} ({', '.join(self.q(c) for c in cols)})"
-                    f"{over} VALUES ({', '.join(['%s'] * len(cols))})",
-                    tuple(_db_value(t, c, row.get(c)) for c in cols),
-                )
-        finally:
-            conn.close()
+        self.put_many([Op(table, dict(key), dict(row) if row is not None else None)])
 
 
 def _db_value(table: Table, column: str, text: Optional[str]) -> Any:
@@ -515,7 +551,7 @@ class Case:
     #: For a ``duplicate``: the table, and the row copied with the copy, so a
     #: refusal by a unique key can be checked against the schema.
     copy_of: Optional[
-        tuple[str, dict[str, Optional[str]], dict[str, Optional[str]]]
+        tuple[str, dict[str, Optional[str]], dict[str, Optional[str]], set[str]]
     ] = None
 
 
@@ -612,6 +648,22 @@ def unique_columns(sb: "Sandbox", table: str) -> set[str]:
     return {c for cols in get(table).values() for c in cols}
 
 
+def fresh_value(
+    sb: "Sandbox", t: Table, col: str, current: Optional[str]
+) -> Optional[str]:
+    """A value for a column of a unique index that no row holds: made by
+    :func:`mutate` (another row's value would collide), changed again until
+    the column doesn't hold it, a few times at most."""
+
+    taken = set(sb.distinct(t.name, col, 1000))
+    v = mutate(t, col, current)
+    for _ in range(5):
+        if v is None or v not in taken:
+            return v
+        v = mutate(t, col, v)
+    return None
+
+
 def edit_value(
     sb: "Sandbox", t: Table, col: str, current: Optional[str], written: Optional[str]
 ) -> Optional[str]:
@@ -620,7 +672,7 @@ def edit_value(
     that value would make the store refuse the edit; there, a planted value."""
 
     if col in unique_columns(sb, t.name):
-        return plant_value(sb, t, col, current)
+        return fresh_value(sb, t, col, current)
     return written
 
 
@@ -816,9 +868,18 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
                                 unplantable="no new key can be made for a copy"))  # fmt: skip
             else:
                 dup = _copy_row(t, op.row, key)
+                # A unique value the app makes (an invoice or ticket number)
+                # is made again for a second submit: plant a fresh one, so
+                # the copy is a duplicate the store accepts.
+                for col in unique_columns(sb, op.table) - set(key):
+                    if not _is_value(dup.get(col), values):
+                        v = fresh_value(sb, t, col, dup.get(col))
+                        if v is not None:
+                            dup[col] = v
+                given = {c for c, v in op.row.items() if _is_value(v, values)}
                 out.append(Case(f"duplicate:{op.table}", "duplicate",
                                 write + [Op(op.table, key, dup)],
-                                copy_of=(op.table, dict(op.row), dup)))  # fmt: skip
+                                copy_of=(op.table, dict(op.row), dup, given)))  # fmt: skip
             # The values land on an existing look-alike instead.
             for other in sb.rows(op.table, 20):
                 look = dict(op.row)
@@ -858,7 +919,7 @@ def faults(schema: Schema, sb: "Sandbox", demo: Demo, write: list[Op]) -> list[C
             continue
         row = _copy_row(t, sample[0], key)
         for col in unique_columns(sb, name) - set(key):
-            v = plant_value(sb, t, col, row.get(col))
+            v = fresh_value(sb, t, col, row.get(col))
             if v is not None:
                 row[col] = v  # a copied unique code would be refused
         out.append(Case(f"other_table:{name}", "other_table",
@@ -879,7 +940,33 @@ STOP_VERDICTS = ("REFUTED", "UNCERTAIN", "RECHECK_REFUTED", "RECHECK_UNCERTAIN")
 #: A case whose verdict came from a failed read is run this many times in
 #: all before it counts as not stopped.
 READ_ATTEMPTS = 3
-_READ_FAILURE = re.compile(r"could(?:n't| not) be read|can't be read|still moving")
+_READ_FAILURE = re.compile(
+    r"could(?:n't| not) be read|can't be read|still (?:moving|changing)"
+    r"|no readable baseline|could not be judged again"
+)
+
+
+def write_judged(r: Any) -> bool:
+    """``verify_write`` read the state it judged: a receipt was issued, the
+    frame was read, and the effect was observed (present, absent or
+    conflicting, not unknown)."""
+
+    frame = dict((getattr(r, "evidence", None) or {}).get("frame") or {})
+    return (
+        bool(getattr(r, "receipt", None))
+        and bool(frame)
+        and frame.get("status") != "not_checked"
+        and getattr(r, "observed", "unknown") != "unknown"
+    )
+
+
+def recheck_judged(rc: Any) -> bool:
+    """The recheck read the database and judged its frame."""
+
+    return bool(getattr(rc, "read_at", "")) and getattr(rc, "frame", "") in (
+        "held",
+        "refuted",
+    )
 
 
 def read_failed(reasons: Sequence[str]) -> bool:
@@ -898,6 +985,11 @@ class Outcome:
     outcome: str
     passed: bool
     reasons: list[str] = field(default_factory=list)
+    #: The verifier read the planted state and judged it (structured
+    #: evidence: a receipt, a frame read, an observed effect; at the
+    #: recheck, a read and a judged frame). False: an UNCERTAIN from a read
+    #: that failed, which is never a stopped fault.
+    judged: bool = True
 
     @property
     def ok(self) -> bool:
@@ -906,7 +998,7 @@ class Outcome:
 
         if self.correct:
             return self.passed
-        return not self.passed and self.outcome in STOP_VERDICTS
+        return not self.passed and self.outcome in STOP_VERDICTS and self.judged
 
 
 def _put_all(sb: Sandbox, ops: Sequence[Op]) -> None:
@@ -924,7 +1016,7 @@ def _unique_violation(exc: BaseException) -> Optional[str]:
     args = getattr(exc, "args", ())
     if args and args[0] == 1062:
         m = re.search(r"for key '([^']+)'", str(args[-1]))
-        return m.group(1).split(".")[-1] if m else ""
+        return m.group(1) if m else ""
     text = str(exc)
     if text.startswith("UNIQUE constraint failed"):
         return ""
@@ -936,22 +1028,29 @@ def blocked_by_constraint(
 ) -> Optional[str]:
     """The unique index that makes ``case``'s duplicate impossible, or None.
 
-    Only when the store refused the copy for a unique violation, the
-    violated index is one the schema declares unique on that table (not the
-    primary key), and every column of that index holds the same value in the
-    copy as in the row it copies: then no duplicate of that row can be
-    stored at all."""
+    Only when the store refused the copy for a unique violation; the
+    violated index is a plain unique index of that table the catalog
+    declares (not the primary key, not partial, no expression); every
+    column of it holds a value the task gave; and each holds the same value
+    in the copy as in the row it copies. Then the same task can't store a
+    second such row. An index on a value the app makes (a number it
+    assigns) proves nothing: that value is planted fresh, so the store takes
+    the copy."""
 
     if case.cls != "duplicate" or case.copy_of is None:
         return None
     name = _unique_violation(exc)
     if not name:
         return None
-    table, row, copy = case.copy_of
+    table, row, copy, given = case.copy_of
+    if "." in name:
+        owner, name = name.rsplit(".", 1)
+        if owner.split(".")[-1].strip('`"') != table:
+            return None
     cols = sb.unique_indexes(table).get(name)
     if not cols:
         return None
-    if all(row.get(c) == copy.get(c) for c in cols):
+    if all(c in given and row.get(c) == copy.get(c) for c in cols):
         return f"{table}.{name} ({', '.join(cols)})"
     return None
 
@@ -1001,6 +1100,7 @@ def run_case(
         outcome = str(getattr(r.outcome, "value", r.outcome))
         reasons = list(r.reasons)
         passed = outcome == "CONFIRMED"
+        judged = outcome != "UNCERTAIN" or write_judged(r)
         if passed and getattr(r, "recheck", None) is not None:
             _put_all(sb, case.late)
             rc = recheck(
@@ -1010,6 +1110,7 @@ def run_case(
             if rc_out != "CONFIRMED":
                 passed, outcome = False, f"RECHECK_{rc_out}"
                 reasons += list(rc.reasons)
+                judged = rc_out != "UNCERTAIN" or recheck_judged(rc)
         elif passed and case.late:
             # No recheck is scheduled, so the late change is never read: the
             # fault passes, which fails validation.
@@ -1017,7 +1118,9 @@ def run_case(
             reasons.append(
                 "the contract schedules no recheck, so a late write can't be seen"
             )
-        return Outcome(case.name, case.cls, case.correct, outcome, passed, reasons[:6])
+        return Outcome(
+            case.name, case.cls, case.correct, outcome, passed, reasons[:6], judged
+        )
     except Exception as exc:  # noqa: BLE001 - a case that can't run admits nothing
         blocked = blocked_by_constraint(sb, case, exc)
         if blocked:
@@ -1039,7 +1142,7 @@ def run_case(
                 [Op(table, key, row) for (table, _), (key, row) in saved.items()]
             )
         except Exception as exc:  # noqa: BLE001 - the sandbox is no longer known
-            raise ZeroTouchError(f"the sandbox could not be restored: {exc}") from exc
+            raise SandboxBroken(f"the sandbox could not be restored: {exc}") from exc
 
 
 # -- answers ----------------------------------------------------------------------
@@ -1144,7 +1247,10 @@ def run_verdict(
     for _ in range(READ_ATTEMPTS):
         res = run_case(sb, manifest, demo, case, actor_id, extra,
                        manifest.parent / "state")  # fmt: skip
-        if not (res.outcome in STOP_VERDICTS and read_failed(res.reasons)):
+        if not (
+            res.outcome in STOP_VERDICTS
+            and (not res.judged or read_failed(res.reasons))
+        ):
             return res
     res.reasons = [f"read failed {READ_ATTEMPTS} times"] + res.reasons
     res.outcome = "READ_FAILED"
@@ -1184,7 +1290,12 @@ def validate(
         try:
             cases += faults(sb.schema, sb, demo, write)
         finally:
-            sb.put_many([Op(op.table, op.key, row) for op, row in saved])
+            try:
+                sb.put_many([Op(op.table, op.key, row) for op, row in saved])
+            except Exception as exc:  # noqa: BLE001 - the sandbox is no longer known
+                raise SandboxBroken(
+                    f"the sandbox could not be restored: {exc}"
+                ) from exc
         for case in cases:
             res = run_verdict(sb, manifest, demo, case, actor_id, extra)
             log(f"{demo.name} {case.name}: {res.outcome} {'ok' if res.ok else 'FAIL'}"
@@ -1472,6 +1583,7 @@ def onboard(
     sb.create(schema, reader)
     sread = sb.read_config()
     work = out / "sandbox"
+    broken = ""
     try:
         report = gen.propose(read=sread, kinds=kinds, demo_dir=demo_dir, out=work / "q",
                              actor_params=actor_params, answers={})  # fmt: skip
@@ -1511,6 +1623,8 @@ def onboard(
                 modes: dict[str, set[str]] = {}
                 by_kind = validate(sb, work / tag / "manifest.yaml", holdout, actor_id,
                                    dict(actor_params), log, cases, modes)  # fmt: skip
+            except SandboxBroken:
+                raise  # the whole setup stops: see onboard
             except (gen.GenerateError, ZeroTouchError) as exc:
                 # The answers don't fit together, or the sandbox broke:
                 # nothing is admitted.
@@ -1537,9 +1651,29 @@ def onboard(
         answers, ledger = chosen["answers"], chosen["ledger"]
         summary, cases = chosen["summary"], chosen["cases"]
         validated = chosen["dir"]
+    except SandboxBroken as exc:
+        broken = str(exc)
     finally:
         if not keep_sandbox:
             sb.drop()
+    if broken:
+        # Nothing validated in a sandbox that stopped mirroring the store
+        # can be trusted: no contract is installed, and every kind says why.
+        import shutil
+
+        for d in (out / "contracts", out / ".contracts.staged"):
+            shutil.rmtree(d, ignore_errors=True)
+        why = f"setup stopped: {broken}"
+        summary = {k: {"admitted": False, "why": why, "correct_writes": 0,
+                       "false_stops": [], "faults": 0, "faults_stopped": 0,
+                       "faults_passed": [], "classes_not_planted": [],
+                       "by_class": {}} for k in kind_names}  # fmt: skip
+        result = {"minutes": round((time.time() - t0) / 60, 2), "person_decisions": 0,
+                  "answers": {}, "ledger": [], "admitted": [], "kinds": summary,
+                  "exceptions": len(summary), "stopped": broken}  # fmt: skip
+        (out / "ONBOARDING.json").write_text(json.dumps(result, indent=2, default=str))
+        (out / "EXCEPTIONS.md").write_text(exceptions_md(summary, {}))
+        return result
     # The production contracts: the same answers, against the app's own
     # store, staged beside the final folder. A kind is kept only when its
     # contracts are the validated ones, connections and windows aside.
