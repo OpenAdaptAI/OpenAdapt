@@ -8,6 +8,7 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -18,7 +19,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional, Sequence
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
@@ -608,6 +609,70 @@ _INSTALL_GUARD_BODY_JS = (
 # True when the element is fully transparent. Such a control is laid over its
 # own visible box on purpose, so the bind guard refusing it is not occlusion.
 _TRANSPARENT_JS = "el => Number(window.getComputedStyle(el).opacity || '1') === 0"
+
+#: Records, from the first moment the window sees it, which element each
+#: trusted pointer event of a click reached. Read back right after the click
+#: (:meth:`PlaywrightBackend.act_structural`): input that reached anything but
+#: the verified element (a toast or modal that appeared between the check and
+#: the click) is reported, never retried.
+_ARM_DISPATCH_WITNESS_JS = """(el, key) => {
+  const w = el.ownerDocument.defaultView;
+  const seen = [];
+  const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+  const f = e => {
+    if (!e.isTrusted) return;
+    const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+    seen.push({type: e.type, hit: path.includes(el) || el.contains(e.target)});
+  };
+  for (const t of types) w.addEventListener(t, f, true);
+  Object.defineProperty(w, key, {configurable: true, value: () => {
+    for (const t of types) w.removeEventListener(t, f, true);
+    delete w[key];
+    return seen;
+  }});
+}"""
+
+#: The whole interruption a dismiss control belongs to: its container's full
+#: text, accessible title and the page's title, so a class is matched on the
+#: whole dialog, never on its button word (openadapt_flow.interruptions).
+_INTERRUPTION_TEXT_JS = """(el, texts) => {
+  const DIALOG = '[role=dialog],[role=alertdialog],[role=alert],[role=status],' +
+                 '[aria-modal=true],dialog';
+  const visible = n => {
+    const r = n.getBoundingClientRect();
+    const cs = n.ownerDocument.defaultView.getComputedStyle(n);
+    return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' &&
+           cs.display !== 'none';
+  };
+  const floating = n => {
+    for (let a = n; a && a.nodeType === 1; a = a.parentElement) {
+      if (a.matches(DIALOG)) return a;
+      const pos = a.ownerDocument.defaultView.getComputedStyle(a).position;
+      if (pos === 'fixed' || pos === 'sticky') return a;
+    }
+    return null;
+  };
+  let box = null;
+  if (el) {
+    box = floating(el);
+  } else {
+    const all = [...document.querySelectorAll(DIALOG)].filter(visible)
+      .filter(n => texts.every(t => (n.innerText || '').includes(t)));
+    const outer = all.filter(n => !all.some(m => m !== n && m.contains(n)));
+    if (outer.length === 1) box = outer[0];
+  }
+  if (!box) return null;
+  let title = box.getAttribute('aria-label') || '';
+  const by = box.getAttribute('aria-labelledby');
+  if (!title && by) {
+    title = by.split(/\\s+/).map(i => {
+      const t = box.ownerDocument.getElementById(i);
+      return t ? t.innerText : '';
+    }).join(' ');
+  }
+  return {text: box.innerText || '', title: title.trim(),
+          window: box.ownerDocument.title || ''};
+}"""
 
 _BIND_STRUCTURAL_TARGET_JS = (
     "(el, args) => { const describe = "
@@ -2652,7 +2717,9 @@ class PlaywrightBackend:
 
     # -- the wire check (openadapt_flow.wire_check) --------------------------
 
-    def _arm_wire_check(self, submission: ExpectedSubmission) -> Optional[str]:
+    def _arm_wire_check(
+        self, submission: Optional[ExpectedSubmission], *, check: Any = None
+    ) -> Optional[str]:
         """Hold the save's request at the network to the checked form.
 
         Until it is disarmed, every write request from any page of this
@@ -2704,7 +2771,8 @@ class PlaywrightBackend:
         if workers:
             # A worker's WebSockets skip the page's guard and its routes.
             return "a worker runs on this page, and its WebSockets can't be held"
-        check = WireCheck(submission=submission)
+        if check is None:
+            check = WireCheck(submission=submission)
 
         def handler(route: Any) -> None:
             check.handle(route, proceed=route.fallback)
@@ -2966,6 +3034,91 @@ class PlaywrightBackend:
             pass
         self._form_wire = None
         return reasons
+
+    def _check_dispatch_witness(
+        self, scope: Any, witness: str, fingerprint: str, *, double: bool
+    ) -> None:
+        """Raise when the click's input reached anything but its target.
+
+        A toast or modal can appear between the last check and the click, so
+        the input lands on it. That is a possible unintended action: it is
+        reported as delivery uncertainty (the runtime reconciles, never
+        retries). When the page navigated away on the click, the witness is
+        gone with it; the pre-dispatch checks then stand alone, as before.
+        """
+
+        try:
+            seen = scope.evaluate(
+                "key => { const r = window[key]; return r ? r() : null; }", witness
+            )
+        except Exception:  # noqa: BLE001 - the document went away on the click
+            return
+        if seen is None:
+            return  # a new document: the click navigated
+        if not seen or not all(bool(e.get("hit")) for e in seen):
+            raise ActionDeliveryUncertain(
+                operation="dom_double_click" if double else "dom_click",
+                native=False,
+                target_fingerprint=fingerprint,
+                cause_type="InputLandedElsewhere",
+            )
+
+    def interruption_text(
+        self, locator: Optional[StructuralLocator], texts: Sequence[str]
+    ) -> Optional[dict[str, str]]:
+        """The whole interruption: ``{text, title, window}`` of the dialog,
+        banner or toast that holds ``locator``'s control, or, with no
+        locator, of the one visible dialog that shows every one of
+        ``texts``. None when there is no such single container."""
+
+        try:
+            if locator is None:
+                found = self.page.evaluate(
+                    f"texts => ({_INTERRUPTION_TEXT_JS})(null, texts)", list(texts)
+                )
+            else:
+                resolved = self._locator_with_scope(locator)
+                if resolved is None:
+                    return None
+                _scope, loc = resolved
+                if loc.count() != 1:
+                    return None
+                found = loc.evaluate(_INTERRUPTION_TEXT_JS, list(texts))
+        except Exception:  # noqa: BLE001 - unreadable means unproven
+            return None
+        if not isinstance(found, dict):
+            return None
+        return {k: str(found.get(k) or "") for k in ("text", "title", "window")}
+
+    @contextlib.contextmanager
+    def write_fence(self) -> Iterator["WriteFenceReport"]:
+        """Run the ``with`` body while nothing on the page can write.
+
+        The same hold as a checked save (:meth:`_arm_wire_check`), with no
+        submission allowed: every write request from any page of the context
+        is aborted before it leaves, and a WebSocket, worker or message sent
+        meanwhile is refused in the page. Each is reported. A fence that
+        can't go up sets ``refusal`` and the body must not act. Used around
+        the dismissal of an interruption
+        (:mod:`openadapt_flow.runtime.effect_watch`).
+        """
+
+        report = WriteFenceReport()
+        if self._form_wire is not None:
+            report.refusal = "a save is already held on this page"
+            yield report
+            return
+        refusal = self._arm_wire_check(None, check=WireCheck())
+        if refusal is not None:
+            report.refusal = refusal
+            yield report
+            return
+        try:
+            yield report
+            # Let anything the action queued reach the hold while it is up.
+            self.wait_form_submit_guard(WRITE_FENCE_TAIL_MS)
+        finally:
+            report.attempts.extend(self._disarm_wire_check())
 
     def wait_form_submit_guard(self, ms: int) -> None:
         """Let the page and the wire check run for ``ms`` milliseconds."""
@@ -3610,6 +3763,20 @@ class PlaywrightBackend:
             self._assert_qualification_environment_current()
             close_expected = self._take_page_close_expectation()
             open_before = not self._page_is_closed()
+            witness = "__oaflow_witness_" + uuid.uuid4().hex
+            try:
+                armed = guard.scope.evaluate(
+                    "([sel, key]) => { const el = document.querySelector(sel); "
+                    f"if (!el) return false; ({_ARM_DISPATCH_WITNESS_JS})(el, key); "
+                    "return true; }",
+                    [f"[{self._token_attribute(guard.token)}]", witness],
+                )
+                if armed is not True:
+                    raise RuntimeError("the guarded target is gone")
+            except Exception as exc:
+                raise StructuralResolutionRefused(
+                    "could not arm the check of where the click lands"
+                ) from exc
             try:
                 if double:
                     token_locator.dblclick(timeout=1000)
@@ -3632,6 +3799,7 @@ class PlaywrightBackend:
                         target_fingerprint=fingerprint,
                         cause_type=type(exc).__name__,
                     ) from exc
+            self._check_dispatch_witness(scope, witness, fingerprint, double=double)
         except ActionDeliveryUncertain:
             raise
         except StructuralResolutionRefused:
@@ -5272,6 +5440,26 @@ def _ws_guard_secrets(target: Any) -> tuple[str, str, str]:
     except Exception:  # noqa: BLE001 - a stand-in context; holding refuses
         pass
     return secrets
+
+
+#: How long a write fence stays up after its action, so a request the action
+#: queued just before the fence comes down is still caught.
+WRITE_FENCE_TAIL_MS = 500
+
+
+@dataclass
+class WriteFenceReport:
+    """What a write fence saw. ``refusal`` set means it never went up."""
+
+    refusal: Optional[str] = None
+    #: Each write the fence stopped, and how.
+    attempts: list[str] = field(default_factory=list)
+
+    @property
+    def held(self) -> bool:
+        """The fence was up for the whole action and nothing tried to write."""
+
+        return self.refusal is None and not self.attempts
 
 
 def _wire_reasons(check: WireCheck, notes: list[str]) -> list[str]:
