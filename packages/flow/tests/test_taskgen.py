@@ -303,7 +303,11 @@ def test_public_sample_matches_its_manifest() -> None:
         assert (env / task["verify"]).is_file()
         assert task["split"] == "public"
         assert not any(t.startswith("family:") for t in task["tags"])
+        assert "fault" not in task  # the family stays private
         assert task["solution"][-1]["kind"] == "done"
+    # Only the public split is described; the rest is a salted commitment.
+    assert set(manifest["splits"]) == {"public"}
+    assert manifest["private_commitment"].startswith("sha256:")
 
 
 def test_private_splits_need_the_salt(
