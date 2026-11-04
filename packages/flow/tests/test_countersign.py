@@ -443,15 +443,59 @@ def _countersigned(
     return out, block, kept
 
 
-def test_countersigning_leaves_the_receipt_and_its_seal_untouched(issuer, tsa):
+@pytest.mark.parametrize("signature_contains_mrn", [False, True])
+def test_countersigning_leaves_the_receipt_and_its_seal_untouched(
+    issuer, tsa, signature_contains_mrn
+):
+    if signature_contains_mrn:
+        # Synthetic seed chosen to put "mrn" in a valid base64 signature.
+        issuer = LocalCountersignIssuer(
+            Ed25519PrivateKey.from_private_bytes(
+                bytes.fromhex(
+                    "fd6077da65c531d6c10f284909885a3040a07f07495a60d71d01f19b8b0fe4c3"
+                )
+            ),
+            clock=_clock(T0),
+        )
     doc = _effect_doc(issuer)
-    out, _, _ = _countersigned(issuer, tsa, doc=doc, fields={"mrn": "004217"})
+    if signature_contains_mrn:
+        assert "mrn" in doc["receipt"]["seal_signature"]["signature"]
+    out, _, kept = _countersigned(issuer, tsa, doc=doc, fields={"mrn": "004217"})
     assert out["receipt"] == doc["receipt"] and out["evidence"] == doc["evidence"]
     keys = parse_key_registry([issuer.registry_entry()])
     assert verify_sealed_receipt(
         out["receipt"], keys
     ).ok  # the existing verifier, unchanged
-    assert "004217" not in json.dumps(out) and "mrn" not in json.dumps(out)
+    # Only the opaque label and salted digest may leave the local vault.
+    # Substrings of valid base64 signatures and timestamp tokens are random.
+    assert set(out) == set(doc) | {"extensions"}
+    assert set(out["extensions"]) == {EXTENSION_KEY}
+    extension = out["extensions"][EXTENSION_KEY]
+    assert set(extension) == {
+        "schema",
+        "statement",
+        "commitments",
+        "receipt_timestamp",
+        "countersignature",
+    }
+    assert len(kept) == 1
+    secret = kept[0]
+    assert extension["commitments"] == {
+        "schema": C.COMMITMENTS_SCHEMA,
+        "algorithm": "sha256-salted-256",
+        "fields": {
+            secret.label: C.field_commitment(
+                secret.label, "mrn", "004217", base64.b64decode(secret.salt)
+            )
+        },
+    }
+    checked = verify_countersigned(
+        out,
+        registry=[issuer.registry_entry()],
+        tsa_certificates=[tsa.certificate],
+        accept_non_flow=True,
+    )
+    assert checked.exit_code == 0, checked.problems
     with pytest.raises(CountersignError):
         countersign_document(out, tsa=tsa)
 
