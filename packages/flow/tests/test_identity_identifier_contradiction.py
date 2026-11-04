@@ -201,3 +201,24 @@ def test_a_word_folding_to_a_value_never_turns_a_reread_into_a_mismatch(
 def test_an_exact_digit_copy_is_taken_before_a_folded_word() -> None:
     match = I.band_match("Smith John 25 47 Active", "Smith John 2S 25 47 Active")
     assert match.contradicted_chars == 0
+
+
+@pytest.mark.parametrize(
+    "recorded,observed",
+    [
+        # Review round 4, blocker 1: a recorded word folding to the live
+        # record's differing id ("Bo" ~ "80", "Io" ~ "10") explained it.
+        ("Price Bo 81 Active", "Price Bo 80 Active 81 found"),
+        ("Smith Io 15 Active", "Smith Io 10 Active 15"),
+        # Review round 4, blocker 2: a name replaced by a 1-letter token, or
+        # a short name by a longer lowercase one.
+        ("Okafor Ann 05/14/1988 Active", "Okafor J 05/14/1988 Active"),
+        ("Price Al 02/16/1963 76 Active", "Price J. 02/16/1963 76 Active"),
+        ("nguyen al 74 03/04/1980 pending", "nguyen joan 74 03/04/1980 pending"),
+        ("Nguyen Eva 47 Recall Due", "Nguyen J 47 Recall Due"),
+    ],
+)
+def test_review_round_4_wrong_records_refuse(recorded: str, observed: str) -> None:
+    plain, hashed = _statuses(recorded, observed)
+    assert plain != "verified", (recorded, observed)
+    assert hashed != "verified", (recorded, observed)

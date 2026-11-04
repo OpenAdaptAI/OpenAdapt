@@ -1119,6 +1119,10 @@ def _match_tokens(
         for j, oc in enumerate(obs_c):
             if ec != oc or (digit and j in digit_used):
                 continue
+            if not digit and _has_digit(obs[j]):
+                # Only a recorded value explains a live value: a word that
+                # folds to one ("Bo" ~ "80") must not hide a differing id.
+                continue
             mark(i, exp[i], obs[j])
             explained[j] = True
             if digit:
@@ -1335,6 +1339,18 @@ def _extra_digit_token(exp: list[str], obs: list[str], explained: list[bool]) ->
     )
 
 
+def _name_token_replaced(
+    exp: list[str], obs: list[str], matched: list[bool], explained: list[bool]
+) -> bool:
+    """Whether a recorded alphabetic token is unmatched while the live band
+    shows an alphabetic token nothing recorded explains. A replaced name of
+    any length ("Ann" -> "J", "al" -> "joan") may be OCR noise or another
+    record, so the band abstains."""
+    return any(not m and _alpha_dominated(t) for t, m in zip(exp, matched)) and any(
+        not explained[j] and _alpha_dominated(o) for j, o in enumerate(obs)
+    )
+
+
 def band_match(
     expected_text: str,
     observed_text: str,
@@ -1494,6 +1510,7 @@ def band_match(
         )
         or _digit_token_absent(exp, matched)
         or _extra_digit_token(exp, obs, explained)
+        or _name_token_replaced(exp, obs, matched, explained)
     )
     return BandMatch(
         matched_chars / total_chars,

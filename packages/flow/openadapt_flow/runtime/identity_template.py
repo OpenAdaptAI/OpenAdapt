@@ -456,6 +456,8 @@ def _match_tokens_template(
         for j in range(no):
             if t.c != obs_c[j] or (t.digit and j in digit_used):
                 continue
+            if not t.digit and _id._has_digit(obs[j]):
+                continue
             mark(i, obs_r[j], obs[j])
             explained[j] = True
             if t.digit:
@@ -672,6 +674,12 @@ def _band_match_template(tmpl: IdentityTemplate, observed_text: str) -> _id.Band
         or (
             any(t.digit for t in toks)
             and any(not explained[j] and _id._has_digit(o) for j, o in enumerate(obs))
+        )
+        or (
+            any(not m and t.alpha for t, m in zip(toks, matched))
+            and any(
+                not explained[j] and _id._alpha_dominated(o) for j, o in enumerate(obs)
+            )
         )
     )
 
