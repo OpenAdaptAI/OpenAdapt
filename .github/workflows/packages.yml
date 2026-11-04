@@ -750,6 +750,92 @@ jobs:
           sys.exit(1 if not cases or skipped else 0)
           PY
 
+  # Native Linux on a real AT-SPI registry: an isolated Xvfb display, session
+  # D-Bus and GTK3 apps. qualify_linux_atspi.py drives LinuxBackend on its
+  # fixture (three clean, three ambiguous and three stale-target trials, each
+  # checked from file bytes); qualify_linux.py records a write workflow on a
+  # GTK3 chart app with SQLite, compiles it, runs it governed with the record
+  # check (clean, another patient, a look-alike) and repairs an update notice
+  # on its AT-SPI element identity. Both results are uploaded.
+  flow-linux-atspi:
+    name: flow native Linux (AT-SPI, Xvfb)
+    needs: scope
+    # Post-merge tier (main and nightly): a pull request's `ci` lane is Linux
+    # unit tests; this job starts real apps.
+    if: needs.scope.outputs.flow == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install X11, D-Bus, GTK3 and AT-SPI
+        timeout-minutes: 15
+        run: |
+          set -uo pipefail
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y \
+            at-spi2-core dbus-x11 gir1.2-atspi-2.0 gir1.2-gtk-3.0 libatk-adaptor \
+            libcairo2-dev libgirepository-2.0-dev openbox pkg-config xauth xvfb
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+          cache-suffix: flow-linux-atspi
+      - name: Install from the lock
+        run: >-
+          python ../../scripts/ci/locked_install.py --lock 'packages/flow[dev,linux]'
+          --editable packages/types --editable packages/flow
+      - name: Qualify LinuxBackend on the GTK3 fixture
+        timeout-minutes: 10
+        run: |
+          mkdir -p runs/linux-atspi
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
+            env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
+            python scripts/qualify_linux_atspi.py \
+            --output runs/linux-atspi/results.json
+      - name: Record, compile, run and repair on a GTK3 app with SQLite
+        timeout-minutes: 15
+        run: |
+          # xvfb-run outside dbus-run-session: the D-Bus-activated AT-SPI
+          # registry needs DISPLAY to synthesize input. openbox makes the
+          # app's window active, which physical input requires.
+          xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
+            bash -c 'openbox >/dev/null 2>&1 & sleep 1; exec "$@"' bash \
+            env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
+            python benchmark/repair_every_backend/qualify_linux.py \
+            --output runs/linux-atspi/record-compile-run.json
+      - name: Upload Linux AT-SPI qualification evidence
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-atspi-qualification
+          path: packages/flow/runs/linux-atspi/
+          if-no-files-found: error
+
   capture-linux:
     name: capture (linux, py${{ matrix.python-version }})
     needs: scope
@@ -1326,6 +1412,7 @@ jobs:
       - flow-critical
       - flow-agent-frameworks
       - flow-native-census
+      - flow-linux-atspi
       - capture-linux
       - capture-macos
       - capture-windows
@@ -1378,6 +1465,7 @@ jobs:
               "flow-critical": "flow",
               "flow-agent-frameworks": "flow",
               "flow-native-census": "flow",
+              "flow-linux-atspi": "flow",
               "capture-linux": "capture",
               "capture-macos": "capture",
               "capture-windows": "capture",
@@ -1397,7 +1485,12 @@ jobs:
           }
           # Post-merge tier only: skipped on a pull request and in the merge
           # queue; required on a push to main and on dispatch.
-          post_merge_only = {"capture-macos", "capture-windows", "flow-native-census"}
+          post_merge_only = {
+              "capture-macos",
+              "capture-windows",
+              "flow-native-census",
+              "flow-linux-atspi",
+          }
           # Skipped in the merge queue only: the pull request already passed
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}
