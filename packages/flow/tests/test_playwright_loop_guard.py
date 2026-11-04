@@ -11,22 +11,30 @@ import pytest
 
 FLOW_ROOT = Path(__file__).resolve().parent.parent
 
-# Three tests that run in order in one process, as a file does on one xdist
-# worker under --dist loadfile. The first leaves a started Playwright session
-# behind and keeps it referenced, which is what a pytest-timeout interruption
-# inside a Playwright call does (the kept traceback holds the dispatcher).
+# Four tests that run in order in one process, as a file does on one xdist
+# worker under --dist loadfile. The first opens a Playwright session and the
+# second is stopped by pytest-timeout while it is open, keeping it referenced
+# as the traceback pytest keeps does on CI.
 _LEAKING_FILE = """
 import asyncio
+import time
 
+import pytest
 from playwright.sync_api import sync_playwright
 
 LEAKED = []
 
 
-def test_1_interrupted_inside_playwright():
+def test_0_open_a_playwright_session():
     manager = sync_playwright()
     manager.start()
     LEAKED.append(manager)
+
+
+@pytest.mark.timeout(1)
+def test_1_times_out_inside_a_playwright_session():
+    assert LEAKED
+    time.sleep(30)
 
 
 def test_2_next_browser_test_starts_cleanly():
@@ -41,10 +49,33 @@ def test_3_stop_the_leaked_session():
     asyncio._set_running_loop(None)
 """
 
+# A healthy module-scoped session, as the e2e browser fixtures use: the
+# guard must leave its loop alone between tests.
+_SCOPED_FILE = """
+import pytest
+from playwright.sync_api import sync_playwright
 
-def _run_leaking_file(tmp_path: Path) -> subprocess.CompletedProcess[str]:
-    test_file = tmp_path / "test_leaks_a_playwright_loop.py"
-    test_file.write_text(_LEAKING_FILE, encoding="utf-8")
+
+@pytest.fixture(scope="module")
+def playwright():
+    with sync_playwright() as session:
+        yield session
+
+
+def test_1_uses_the_shared_session(playwright):
+    playwright.request.new_context().dispose()
+
+
+def test_2_still_uses_the_shared_session(playwright):
+    playwright.request.new_context().dispose()
+"""
+
+
+def _run_file(
+    tmp_path: Path, name: str, source: str
+) -> subprocess.CompletedProcess[str]:
+    test_file = tmp_path / name
+    test_file.write_text(source, encoding="utf-8")
     return subprocess.run(
         [
             sys.executable,
@@ -67,16 +98,38 @@ def _run_leaking_file(tmp_path: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="pytest-timeout interrupts by signal only on POSIX"
+)
 @pytest.mark.timeout(150)
-def test_a_leaked_playwright_loop_does_not_fail_the_next_browser_test(
+def test_a_timed_out_playwright_test_does_not_fail_the_next_browser_test(
     tmp_path: Path,
 ) -> None:
     pytest.importorskip("playwright.sync_api")
-    result = _run_leaking_file(tmp_path)
+    result = _run_file(tmp_path, "test_leaks_a_playwright_loop.py", _LEAKING_FILE)
     output = result.stdout + result.stderr
     assert "Sync API inside the asyncio loop" not in output, output
+    assert "from pytest-timeout" in output, output
+    assert "1 failed, 3 passed" in output, output
+    assert "::test_1_times_out_inside_a_playwright_session" in output, output
+
+
+@pytest.mark.timeout(150)
+def test_a_scoped_playwright_session_survives_between_tests(tmp_path: Path) -> None:
+    pytest.importorskip("playwright.sync_api")
+    result = _run_file(tmp_path, "test_scoped_playwright_session.py", _SCOPED_FILE)
+    output = result.stdout + result.stderr
+    assert "no running event loop" not in output, output
     assert result.returncode == 0, output
-    assert "3 passed" in output, output
+    assert "2 passed" in output, output
+
+
+def test_only_a_pytest_timeout_failure_counts() -> None:
+    from tests._playwright_loop_guard import is_pytest_timeout
+
+    assert is_pytest_timeout(Exception("Timeout (>1.0s) from pytest-timeout."))
+    assert not is_pytest_timeout(AssertionError("values differ"))
+    assert not is_pytest_timeout(None)
 
 
 def test_the_guard_clears_only_a_leaked_loop() -> None:

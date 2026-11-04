@@ -81,14 +81,22 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.delenv("OPENADAPT_FLOW_AT_REST", raising=False)
 
 
-@pytest.fixture(autouse=True)
-def _clear_leaked_playwright_loop():
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
     """Keep a timed-out Playwright test from failing every later browser test.
 
-    See :mod:`tests._playwright_loop_guard`.
+    Only after a pytest-timeout failure: a healthy scoped browser fixture
+    keeps the loop running between tests. See
+    :mod:`tests._playwright_loop_guard`.
     """
 
     yield
-    from tests._playwright_loop_guard import clear_leaked_running_loop
+    if call.when != "call" or call.excinfo is None:
+        return
+    from tests._playwright_loop_guard import (
+        clear_leaked_running_loop,
+        is_pytest_timeout,
+    )
 
-    clear_leaked_running_loop()
+    if is_pytest_timeout(call.excinfo.value):
+        clear_leaked_running_loop()
