@@ -149,7 +149,11 @@ def _note(value: str = "chest pain") -> Effect:
 
 def test_view_comparison_ignores_the_fragment_only() -> None:
     assert same_view(RECORD_URL + "#top", RECORD_URL) is True
-    assert same_view(RECORD_URL + "?tab=history", RECORD_URL) is False
+    # The same page with another query is the same view.
+    assert same_view(RECORD_URL + "?tab=history&saved=1", RECORD_URL) is True
+    assert same_view(BASE + "/chart/search?q=p1", RECORD_URL) is False
+    # A hash route is a different view in a single-page app.
+    assert same_view(BASE + "/app#/patients/p1", BASE + "/app#/save") is False
     assert same_view(None, RECORD_URL) is None
 
 

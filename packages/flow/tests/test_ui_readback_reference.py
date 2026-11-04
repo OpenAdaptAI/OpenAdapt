@@ -156,7 +156,7 @@ def _effect(**kw: Any) -> Effect:
 def test_reads_the_reference_from_the_run_url_and_opens_that_record() -> None:
     driver = RecordingDriver(_saved())
     verifier = _verifier(
-        driver, backend=RunSession(url=BASE + "/chart/patient/CLM-20431?saved=1")
+        driver, backend=RunSession(url=BASE + "/chart/patient/CLM-20431/saved")
     )
     verdict = verifier.verify(_effect(), verifier.capture_pre_state())
     assert verdict.verdict is Verdict.CONFIRMED
@@ -188,7 +188,7 @@ def test_reads_the_reference_from_the_run_screen() -> None:
 def test_a_bound_backend_is_used_after_build() -> None:
     driver = RecordingDriver(_saved())
     verifier = _verifier(driver)
-    verifier.bind_backend(RunSession(url=BASE + "/chart/patient/CLM-20431?saved=1"))
+    verifier.bind_backend(RunSession(url=BASE + "/chart/patient/CLM-20431/saved"))
     assert verifier.verify(_effect(), verifier.capture_pre_state()).confirmed
 
 

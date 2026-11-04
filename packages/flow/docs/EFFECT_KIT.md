@@ -680,7 +680,7 @@ established and the seconds the read took:
 |---|---|---|
 | `separate_session` | its own browser, a new empty context, its own sign-in | the session shares a context or never signed in |
 | `requery` | the record page's document came from the server, in a context with no client-side store (Web Storage, IndexedDB, CacheStorage, service worker) a client cache could answer from | a cached, revalidated (304) or service-worker page, or a reused profile |
-| `distinct_view` | the view isn't the page the save left on the acting session's screen | the read opens that same URL (fragment aside), even re-fetched |
+| `distinct_view` | the view isn't the page the save left on the acting session's screen | the read opens that same page (same path; a different query is the same page), even re-fetched |
 
 A read that fails a rule can still refute a save, but it can't confirm one:
 the verdict is INDETERMINATE and the run halts. Reading the page the save just

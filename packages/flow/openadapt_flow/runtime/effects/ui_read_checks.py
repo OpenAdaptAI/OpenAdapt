@@ -16,7 +16,9 @@ Independence (:func:`assess_independence`). A read counts toward
   session's screen. The URL the acting session showed right after the save is
   compared with the URL the read opened (scheme, host, path and query, minus
   the fragment). The same URL is the same view, so the read never counts, even
-  re-fetched: the page the save renders can echo what was posted.
+  re-fetched: the page the save renders can echo what was posted. A view is
+  the URL's path (plus a route-style fragment); the query doesn't make a
+  different view.
 
 A read that fails any rule can't confirm a save: a CONFIRMED becomes
 INDETERMINATE (the run halts for a person). A contradiction still refutes. A
@@ -77,10 +79,13 @@ __all__ = [
 
 
 def view_key(url: Optional[str]) -> Optional[str]:
-    """Scheme, host, path and query of ``url``; None when it isn't http(s).
+    """The view a URL names: scheme, host and path; None when it isn't http(s).
 
-    The fragment is dropped (it never reaches the server). The query is kept
-    in order: two URLs that differ in a parameter are different views.
+    The query is left out on purpose: ``card.php?socid=28`` and
+    ``card.php?id=0&socid=28`` render the same page, so two URLs that differ
+    only in their query are the same view. A fragment counts only when it is a
+    client-side route (``#/patients/7``, ``#!/claims``), as in a hash-routed
+    single-page app; ``#top`` doesn't.
     """
 
     if not isinstance(url, str) or not url:
@@ -88,9 +93,11 @@ def view_key(url: Optional[str]) -> Optional[str]:
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.netloc:
         return None
-    path = parts.path or "/"
-    query = f"?{parts.query}" if parts.query else ""
-    return f"{parts.scheme}://{parts.netloc}".lower() + path + query
+    path = parts.path.rstrip("/") or "/"
+    route = parts.fragment if parts.fragment[:1] in ("/", "!") else ""
+    return f"{parts.scheme}://{parts.netloc}".lower() + path + (
+        f"#{route}" if route else ""
+    )
 
 
 def same_view(a: Optional[str], b: Optional[str]) -> Optional[bool]:
