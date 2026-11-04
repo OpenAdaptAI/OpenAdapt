@@ -988,3 +988,166 @@ def test_agent_pointer_and_chord_steps_are_recorded(tmp_path: Path) -> None:
         for line in (rec / "events.jsonl").read_text().splitlines()
     ]
     assert kinds == ["double_click", "hotkey", "scroll"]
+
+
+# -- native trees: each node's element identity is checked before a click ----
+
+
+def _identity(name: str, *, process: Optional[str] = "PatientNotes.exe") -> dict:
+    return {
+        "source": "uia",
+        "role": "button",
+        "name": name,
+        "automation_id": f"btn{name}",
+        "ancestry": [["", "Patient Notes"]],
+        "window": "Patient Notes",
+        "process": process,
+    }
+
+
+class _NativeTreeBackend(ScriptedBackend):
+    """A native backend: tree nodes carry identity; identity is read at a point."""
+
+    def __init__(self, nodes: list[dict]) -> None:
+        super().__init__()
+        self.nodes = nodes
+        self.live: dict[tuple[int, int], Optional[dict]] = {}
+
+    def authoring_tree(self) -> dict[str, Any]:
+        return {
+            "tree": self.nodes,
+            "window": {"process_name": "PatientNotes.exe"},
+            "truncated": False,
+        }
+
+    def element_identity_at(self, x: int, y: int) -> Optional[dict]:
+        self.calls.append(("element_identity_at", x, y))
+        return self.live.get((x, y))
+
+
+def _native_node(name: str, x: int, **identity: Any) -> dict:
+    return {
+        "role": "button",
+        "control_type": "ButtonControl",
+        "automation_id": f"btn{name}",
+        "class_name": None,
+        "name": name,
+        "enabled": True,
+        "focused": False,
+        "backend_pixels": {"x": x, "y": 100, "w": 40, "h": 20},
+        "identity": _identity(name, **identity),
+    }
+
+
+def _native_session(tmp_path: Path, backend: _NativeTreeBackend) -> AuthoringSession:
+    return AuthoringSession(
+        backend,
+        tmp_path / "rec",
+        backend_kind="windows",
+        settle_interval_s=0.01,
+        settle_stable_frames=1,
+        settle_timeout_s=0.2,
+    )
+
+
+def test_native_node_click_checks_the_identity_under_it(tmp_path: Path) -> None:
+    backend = _NativeTreeBackend([_native_node("Save", 100)])
+    backend.live[(120, 110)] = _identity("Save")
+    session = _native_session(tmp_path, backend)
+    observed = session.observe()
+    assert observed["provider"] == "windows_uia"
+    (node,) = observed["tree"]
+    assert node["name"] == "Save" and "identity" not in node
+    assert "Patient Notes" not in json.dumps(observed)  # the window title
+    session.start_record()
+    session.click(node_id=node["node_id"])
+    session.stop_record()
+    assert ("click", 120, 110, False) in backend.calls
+
+
+@pytest.mark.parametrize(
+    "live",
+    [None, _identity("Delete"), _identity("Save", process=None)],
+    ids=["unreadable", "another_control", "unknown_process"],
+)
+def test_native_node_click_refuses_another_control(
+    tmp_path: Path, live: Optional[dict]
+) -> None:
+    backend = _NativeTreeBackend([_native_node("Save", 100)])
+    backend.live[(120, 110)] = live
+    session = _native_session(tmp_path, backend)
+    (node,) = session.observe()["tree"]
+    session.start_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.click(node_id=node["node_id"])
+    assert excinfo.value.code == "stale_node"
+    assert not [call for call in backend.calls if call[0] == "click"]
+
+
+def test_native_nodes_sharing_an_identity_are_not_clicked_by_ref(
+    tmp_path: Path,
+) -> None:
+    backend = _NativeTreeBackend([_native_node("Save", 100), _native_node("Save", 300)])
+    backend.live[(120, 110)] = _identity("Save")
+    session = _native_session(tmp_path, backend)
+    first, second = session.observe()["tree"]
+    assert first["node_id"] != second["node_id"]
+    session.start_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.click(node_id=first["node_id"])
+    assert excinfo.value.code == "ambiguous_node"
+    session.click(120, 110)  # by pixels it is still the agent's call
+    session.stop_record()
+
+
+def test_native_node_with_a_malformed_identity_is_not_listed(tmp_path: Path) -> None:
+    broken = _native_node("Save", 100)
+    broken["identity"] = {**broken["identity"], "window": "Another Window"}
+    backend = _NativeTreeBackend([broken])
+    assert _native_session(tmp_path, backend).observe()["tree"] == []
+
+
+def test_a_twin_scrolled_out_of_view_makes_a_node_ambiguous(tmp_path: Path) -> None:
+    hidden = {"role": "button", "offscreen": True, "identity": _identity("Save")}
+    backend = _NativeTreeBackend([_native_node("Save", 100), hidden])
+    backend.live[(120, 110)] = _identity("Save")
+    session = _native_session(tmp_path, backend)
+    (node,) = session.observe()["tree"]  # the hidden twin is never listed
+    session.start_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.click(node_id=node["node_id"])
+    assert excinfo.value.code == "ambiguous_node"
+
+
+def test_a_cut_short_native_tree_clicks_nothing_by_ref(tmp_path: Path) -> None:
+    class _Cut(_NativeTreeBackend):
+        def authoring_tree(self) -> dict[str, Any]:
+            return {**super().authoring_tree(), "truncated": True}
+
+    backend = _Cut([_native_node("Save", 100)])
+    backend.live[(120, 110)] = _identity("Save")
+    session = _native_session(tmp_path, backend)
+    (node,) = session.observe()["tree"]
+    session.start_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.click(node_id=node["node_id"])
+    assert excinfo.value.code == "tree_truncated"
+
+
+def test_a_node_from_an_earlier_observation_is_stale(tmp_path: Path) -> None:
+    backend = _NativeTreeBackend([_native_node("Save", 100)])
+    backend.live[(120, 110)] = _identity("Save")
+    session = _native_session(tmp_path, backend)
+    (old,) = session.observe()["tree"]
+    backend.nodes = [_native_node("Delete", 300)]
+    session.observe()
+    session.start_record()
+    with pytest.raises(AuthoringError) as excinfo:
+        session.click(node_id=old["node_id"])
+    assert excinfo.value.code == "stale_node"
+
+
+def test_a_native_combo_box_shows_no_name(tmp_path: Path) -> None:
+    combo = {**_native_node("Jane Roe", 100), "role": "combobox"}
+    (node,) = _native_session(tmp_path, _NativeTreeBackend([combo])).observe()["tree"]
+    assert node["role"] == "combobox" and "name" not in node
