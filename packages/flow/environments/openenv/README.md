@@ -88,7 +88,7 @@ loopback port.
 ## Run it
 
 ```bash
-pip install -e 'packages/flow[openenv]'
+pip install -e 'packages/flow[openenv]'   # Python 3.11+
 python -m openadapt_flow.rl_env.server packages/flow/environments/openenv/mockmed --port 8000
 python -m openadapt_flow.rl_env.validate packages/flow/environments/openenv/mockmed --out mockmed.json
 ```
