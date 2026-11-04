@@ -519,6 +519,15 @@ class CheckpointStore:
             return json.loads(path.read_text())  # type: ignore[no-any-return]
         return None
 
+    def _attended_key(self) -> Optional[str]:
+        """The key attended state is read with: this store's key, else the
+        one the attended store resolves by default."""
+        if self.key:
+            return self.key
+        from openadapt_flow import crypto as _crypto
+
+        return _crypto.resolve_key(None)
+
     @staticmethod
     def model_digest(model: Optional[BaseModel]) -> str:
         """Return one stable digest for an exact logical durable artifact."""
@@ -556,18 +565,23 @@ class CheckpointStore:
         except (OSError, ValueError):
             claim = None
 
+        from openadapt_flow.runtime.durable import attended_state as _state
+
         def file_digest(path: Path) -> Optional[str]:
-            if not path.is_file():
+            # Attended state may be encrypted (``<name>.enc``); the digest is
+            # over its plaintext, so it doesn't change when a file is sealed.
+            sealed = _state.enc_path(path).is_file()
+            key = self._attended_key() if sealed else None
+            data = _state.digest_bytes(self.run_dir, path, key)
+            if data is None:
                 return None
-            return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+            return "sha256:" + hashlib.sha256(data).hexdigest()
 
         receipts_dir = self.run_dir / ".attended_program_receipts"
-        receipts = []
-        if receipts_dir.is_dir():
-            receipts = [
-                {"name": path.name, "sha256": file_digest(path)}
-                for path in sorted(receipts_dir.glob("*.json"))
-            ]
+        receipts = [
+            {"name": name, "sha256": file_digest(receipts_dir / name)}
+            for name in sorted(_state.logical_names(receipts_dir))
+        ]
         payload = {
             "manifest": (
                 manifest.model_dump(mode="json") if manifest is not None else None
@@ -663,6 +677,7 @@ class CheckpointStore:
             self.run_dir / ".attended_decisions.lock",
             self.run_dir / ".attended_action.lease",
             self.run_dir / ".attended_program_receipts",
+            self.run_dir / ".attended_state.encrypted",
         )
         for path in candidates:
             if path.exists() or path.with_name(path.name + ENC_SUFFIX).exists():
