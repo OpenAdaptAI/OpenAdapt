@@ -29,6 +29,7 @@ from openadapt_flow.repair.cli import _run_campaign
 from openadapt_flow.repair.dialog_identity import enclosing_dialog_region
 from openadapt_flow.repair.lifecycle import ModelActuationError, RepairLifecycleError
 from openadapt_flow.runtime.replayer import Replayer
+from tests._teach_authorization_support import repair_authorization
 
 AGENT_ID = "mcp-client:test-agent"
 PERSON = Actor(kind="human", id="reviewer@example.org")
@@ -86,7 +87,12 @@ def taught(halted, tmp_path: Path):
         _agent_recording(tmp_path / "agent_recording"),
         tmp_path / "proposed",
         bundle=bundle,
-        provenance=_provenance(),
+        # A person signed that a calling agent may repair this workflow.
+        provenance=_provenance(
+            teach_authorization=repair_authorization(
+                tmp_path / "store", tmp_path / "keys"
+            )
+        ),
     )
     return bundle, run_dir, result
 
@@ -268,3 +274,64 @@ def test_allowed_screen_provenance_modes() -> None:
     )
     assert raw.screens_scrubbed is False
     assert _provenance(screens_shared=0, scrub_evidence=None).screens_shared == 0
+
+
+def _through_campaigns(store: RepairStore, candidate) -> str:
+    candidate = store.add_candidate(candidate)
+    store.review(candidate.candidate_id, PERSON)
+    for kind in ("replay", "fault"):
+        campaign = _run_campaign(store.load_candidate(candidate.candidate_id), kind)
+        assert campaign.passed, [c.detail for c in campaign.cases if not c.passed]
+        store.record_campaign(candidate.candidate_id, campaign, AUTOMATION)
+    return candidate.candidate_id
+
+
+def test_a_calling_agent_fix_without_a_teach_authorization_is_not_approved(
+    halted, tmp_path: Path
+) -> None:
+    bundle, run_dir = halted
+    result = teach_from_calling_agent(
+        run_dir,
+        _agent_recording(tmp_path / "agent_recording"),
+        tmp_path / "proposed",
+        bundle=bundle,
+        provenance=_provenance(),
+    )
+    store = RepairStore(tmp_path / "store")
+    candidate_id = _through_campaigns(store, result.candidate)
+    with pytest.raises(RepairLifecycleError, match="teach_auth_not_recorded"):
+        store.approve(candidate_id, PERSON, non_interactive=True)
+
+
+def test_a_calling_agent_fix_after_the_authorizer_was_removed_is_not_approved(
+    taught, tmp_path: Path
+) -> None:
+    from tests import _teach_authorization_support as support
+
+    _, _, result = taught
+    store = RepairStore(tmp_path / "store")
+    candidate_id = _through_campaigns(store, result.candidate)
+    keys = tmp_path / "keys"
+    support.roster_root(keys).remove(support.authorizer(keys))
+    with pytest.raises(RepairLifecycleError, match="teach_auth_unknown_signer"):
+        store.approve(candidate_id, PERSON, non_interactive=True)
+
+
+def test_a_teach_only_authorization_does_not_cover_a_repair(
+    halted, tmp_path: Path
+) -> None:
+    bundle, run_dir = halted
+    record = repair_authorization(
+        tmp_path / "store", tmp_path / "keys", purposes=("teach",)
+    )
+    result = teach_from_calling_agent(
+        run_dir,
+        _agent_recording(tmp_path / "agent_recording"),
+        tmp_path / "proposed",
+        bundle=bundle,
+        provenance=_provenance(teach_authorization=record),
+    )
+    store = RepairStore(tmp_path / "store")
+    candidate_id = _through_campaigns(store, result.candidate)
+    with pytest.raises(RepairLifecycleError, match="teach_auth_purpose"):
+        store.approve(candidate_id, PERSON, non_interactive=True)
