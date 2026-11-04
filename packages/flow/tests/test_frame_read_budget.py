@@ -21,7 +21,7 @@ from openadapt_flow.runtime.effects.db_snapshot import (
 from openadapt_flow.runtime.effects.frame import FrameDatabase
 from openadapt_flow.verifier import BaselineUnreadable, capture_database
 from openadapt_flow.verify_run import capture_baseline, parse_verify_config, verify_run
-from test_frame_database import NEW, _db, _doc, _run, _save
+from tests.test_frame_database import NEW, _db, _doc, _run, _save
 
 KEY = b"k" * 32
 
@@ -300,3 +300,26 @@ def test_the_default_budget_preserves_old_contract_digests_and_custom_budgets_ar
     )
     assert changed["read_row_budget"] == 42
     assert FrameDatabase(**changed).model_dump(mode="json") == changed
+
+
+def test_a_recheck_over_budget_cannot_confirm_the_earlier_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow import verifier
+    from tests.test_verifier_recheck import BOT, _db, _doc, _params, _save
+
+    monkeypatch.setattr(verifier, "USED_DIR", tmp_path / "used")
+    monkeypatch.setattr(verifier, "seconds_until", lambda due: 0.0)
+    monkeypatch.setenv("OPENADAPT_LEDGER_DIR", str(tmp_path / "ledger"))
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+    db = _db(tmp_path)
+    doc = _doc(db)
+    doc["frame"]["database"]["read_row_budget"] = 10
+    contract = verifier.Contract.from_dict(doc)
+    first = _save(contract, db, 2)
+    assert first.verified, first.reasons
+    with sqlite3.connect(db) as con:
+        con.executemany("INSERT INTO api_log (note) VALUES (?)", [("synthetic",)] * 20)
+    late = verifier.recheck(contract, first, params=_params(2), actor=BOT)
+    assert late.outcome == "UNCERTAIN"
+    assert "frame too large" in " ".join(late.reasons)

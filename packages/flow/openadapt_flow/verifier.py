@@ -67,13 +67,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, Optional, Union
 
-from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
 from openadapt_flow.runtime.effects.db_snapshot import (
     DEFAULT_READ_ROW_BUDGET,
     TableDiff,
     diff,
     take_snapshot,
 )
+from openadapt_flow.runtime.effects.db_snapshot import Snapshot as DatabaseSnapshot
 from openadapt_flow.runtime.effects.late_write import (
     EVIDENCE_KEY,
     LATER_WRITE_DISPUTED,

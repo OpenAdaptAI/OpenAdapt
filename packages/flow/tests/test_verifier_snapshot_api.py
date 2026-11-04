@@ -226,11 +226,15 @@ def test_the_snapshot_api_stays_public() -> None:
         "dialect",
         "allow_tables",
         "max_rows",
+        "read_row_budget",
         "key",
         "profile",
         "before",
         "actor_names",
     ]
+    budget = inspect.signature(capture_database).parameters["read_row_budget"]
+    assert budget.kind is inspect.Parameter.KEYWORD_ONLY
+    assert budget.default == 100_000
     for name in (
         "verified",
         "status",
