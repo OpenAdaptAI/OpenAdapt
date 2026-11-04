@@ -695,8 +695,13 @@ def _program_action_trace(
 
         if transition_evidence_root is None:
             raise ValueError("visual transition evidence has no local evidence root")
+        from openadapt_flow import sealed_set as _sealed
+
         root = transition_evidence_root.resolve()
         encrypted = root.joinpath(*PurePosixPath(ref + _state.ENC_SUFFIX).parts)
+        if _sealed.is_sealed_path(root):
+            # A sealed run directory's files are the sealed-set writer's.
+            return _verified_inventory_bytes(ref, expected_sha256)
         if not (encrypted.exists() or encrypted.is_symlink()):
             if (root / _state.MARKER_FILENAME).exists():
                 raise ValueError("attended evidence is plaintext where encrypted")

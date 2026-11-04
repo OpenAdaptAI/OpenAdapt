@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from openadapt_flow import crypto as _crypto
+from openadapt_flow import sealed_set as _sealed
 
 #: Suffix of an encrypted attended file (the checkpoint store uses the same).
 ENC_SUFFIX = ".enc"
@@ -154,7 +155,10 @@ def read_bytes(root: Path, path: Path, key: Optional[str]) -> bytes:
 
 def digest_bytes(root: Path, path: Path, key: Optional[str]) -> Optional[bytes]:
     """Plaintext for a state digest, or None when the file is missing. The
-    digest is the same before and after a file is encrypted."""
+    digest is the same before and after a file is encrypted. A sealed run
+    directory's files are the sealed-set writer's, read as they are."""
+    if _sealed.is_sealed_path(path):
+        return path.read_bytes() if path.is_file() else None
     enc = enc_path(path)
     if enc.is_file():
         return open_sealed(enc.read_bytes(), key, file_aad(root, path))
