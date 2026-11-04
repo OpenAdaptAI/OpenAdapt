@@ -2719,7 +2719,9 @@ def sample_values(
     out: dict[str, Any] = {}
     for d in [*plan.demos, *others]:
         for k, v in d.values.items():
-            if v is not None and k not in out:
+            # An empty list gives no item to read with: a later
+            # demonstration's items fill ``lines.0.qty`` and the rest.
+            if v is not None and v != [] and k not in out:
                 out[k] = v
     if variant.dispatch_value is not None and plan.dispatch:
         out[plan.dispatch] = variant.dispatch_value
