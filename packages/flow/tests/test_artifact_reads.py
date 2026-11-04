@@ -429,3 +429,19 @@ def test_variants_and_route_read_sealed_variants(
     assert json.loads(capsys.readouterr().out)["variant"] == "posting"
     for bundle, _ in children.values():
         _assert_ciphertext_only(bundle)
+
+
+def test_name_path_arguments_go_through_the_missing_key_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    children = _sealed_admitted(tmp_path, monkeypatch)
+    monkeypatch.delenv(crypto.ENV_KEY)
+    monkeypatch.delenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST", raising=False)
+    args = ["compose", "--out", str(tmp_path / "composed")]
+    for name, (bundle, _) in children.items():
+        args += ["--child", f"{name}={bundle}"]
+    args += ["--handoff", "intake.patient_id=posting.patient_id"]
+    assert main(args) == 2
+    err = capsys.readouterr().err
+    assert "OPENADAPT_BUNDLE_KEY" in err and "Nothing was read" in err
+    assert not (tmp_path / "composed").exists()

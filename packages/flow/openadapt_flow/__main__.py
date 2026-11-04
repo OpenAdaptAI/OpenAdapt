@@ -13339,10 +13339,20 @@ def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
             text = str(item)
             if "://" in text or "\n" in text or len(text) > 4096:
                 continue
-            path = Path(text)
-            root = path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
-            if root is not None and root not in found:
-                found.append(root)
+            # NAME=PATH arguments (--child, --admission, --variant) name a
+            # path after the first "="; check both readings.
+            candidates = [text]
+            if isinstance(item, str) and "=" in text:
+                candidates.append(text.split("=", 1)[1])
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                path = Path(candidate)
+                root = (
+                    path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
+                )
+                if root is not None and root not in found:
+                    found.append(root)
     return found
 
 
@@ -13372,6 +13382,12 @@ def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
         kind = sealed_set.header_kind(root)
         if not sealed_set.passphrase_for(kind):
             return sealed_set.missing_key_message(root, kind)
+        try:
+            # With no key configured the local key resolves; opening the set
+            # tells "sealed with a key that isn't set" apart before any work.
+            sealed_set.open_set(root)
+        except sealed_set.SealedSetKeyError as exc:
+            return str(exc)
     return None
 
 
