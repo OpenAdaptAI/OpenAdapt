@@ -156,6 +156,15 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
             for e in PendingLedger(ui_spec.final.ledger).entries()
             if e.state == "waiting"
         )
+        for ui_spec in ui_specs:
+            hours = ui_spec.final.alert_hours
+            if hours is None:
+                continue
+            for entry in PendingLedger(ui_spec.final.ledger).overdue(hours):
+                print(
+                    f"{entry.id}: ALERT provisional for over {hours:g} h "
+                    f"(saved {entry.created_at}; deadline {entry.deadline})"
+                )
         print(f"Settled {len(settled_ui)}; {waiting} still waiting.")
         return 0
     try:

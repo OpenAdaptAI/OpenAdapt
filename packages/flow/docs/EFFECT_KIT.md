@@ -679,7 +679,7 @@ established and the seconds the read took:
 | Rule | Holds when | Fails when |
 |---|---|---|
 | `separate_session` | its own browser, a new empty context, its own sign-in | the session shares a context or never signed in |
-| `requery` | the record page's document came from the server | a cached or service-worker page |
+| `requery` | the record page's document came from the server, in a context with no client-side store (Web Storage, IndexedDB, CacheStorage, service worker) a client cache could answer from | a cached, revalidated (304) or service-worker page, or a reused profile |
 | `distinct_view` | the view isn't the page the save left on the acting session's screen | the read opens that same URL (fragment aside), even re-fetched |
 
 A read that fails a rule can still refute a save, but it can't confirm one:
@@ -688,6 +688,12 @@ showed never counts. When no acting session is bound (the verifier called
 outside a run), `distinct_view` is recorded as `unknown` and doesn't block. An
 acting session with no URL (desktop, RDP, Citrix) is a different view by
 construction.
+
+Search and list views often read a replica or an index that lags the save.
+Set `index_lag_s` to the lag measured in the application's sandbox (never
+from evaluation data): the read polls with backoff for at least that long
+before a missing record counts. Once a read has shown the record, a later
+read that doesn't show it is INDETERMINATE, never "not saved".
 
 Cardinality comes from the view, not a separate rule: point `record_url` at
 a search or list view (search by the record's name and birth date, say), and a
@@ -741,6 +747,13 @@ late change has to land before the read that settles the save. Set it from the
 application's observed behavior. A rejected status at the provisional read is
 REFUTED at once. `openadapt-flow deferred status RUN` gives the run's settled
 outcome.
+
+The ledger is on disk, so the provisional state survives a restart or a
+laptop that slept. While an item's entry waits, a new run of the same item
+(same inputs) refuses before input: it is never sent twice. With
+`alert_hours`, `deferred settle` reports every entry still provisional after
+that long ("provisional for over 48 h") until it settles or its deadline
+passes.
 
 ```yaml
     final:

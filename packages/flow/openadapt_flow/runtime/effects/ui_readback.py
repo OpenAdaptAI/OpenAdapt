@@ -90,6 +90,9 @@ SUBSTRATE = "ui-readback"
 #: preflight and carries no body.
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
+#: Longest gap between reads while waiting for a lagging view.
+_MAX_POLL_S = 2.0
+
 #: Displayed values that end with one of these are treated as shortened.
 DEFAULT_TRUNCATION_MARKERS: tuple[str, ...] = ("…", "...")
 
@@ -233,6 +236,11 @@ class UiReadbackSpec(BaseModel):
         default_factory=lambda: list(DEFAULT_TRUNCATION_MARKERS)
     )
     navigation_timeout_s: float = 15.0
+    #: Seconds a search or list view may lag the save (a replica or a
+    #: full-text index), measured per application in its sandbox, never
+    #: from evaluation data. The read polls with backoff for at least this
+    #: long before a missing record counts.
+    index_lag_s: float = Field(default=0.0, ge=0.0, le=300.0)
     browser: Literal["chromium", "firefox", "webkit"] = "chromium"
     headless: bool = True
     #: Optional: the application's history, audit or activity view, read
@@ -482,6 +490,26 @@ _READ_SCRIPT = """
 }
 """
 
+#: True only when the page sees no client-side store a client cache could
+#: serve the record from: Web Storage, IndexedDB databases, CacheStorage
+#: caches, or a controlling service worker. A store the page can't inspect
+#: counts as empty only when the API doesn't exist in this browser.
+_EMPTY_CLIENT_STORE_SCRIPT = """
+async () => {
+  try {
+    if (window.localStorage.length || window.sessionStorage.length) return false;
+  } catch (e) {}
+  if (window.indexedDB && indexedDB.databases) {
+    if ((await indexedDB.databases()).length) return false;
+  }
+  if (window.caches) {
+    if ((await caches.keys()).length) return false;
+  }
+  if (navigator.serviceWorker && navigator.serviceWorker.controller) return false;
+  return true;
+}
+"""
+
 #: Installed in every document the session loads after sign-in, before the
 #: page's own scripts run. It refuses fetch, XHR, beacons, and form posts that
 #: are not reads, inside the page itself, so a write never reaches the network
@@ -637,10 +665,7 @@ class _PlaywrightSession:
             self._context.route("**/*", self._guard)
             self._page = self._context.new_page()
             self._page.goto(spec.sign_in.url, wait_until="domcontentloaded")
-            fresh = fresh and self._page.evaluate(
-                "() => { try { return window.localStorage.length === 0 && "
-                "window.sessionStorage.length === 0; } catch (e) { return true; } }"
-            )
+            fresh = fresh and self._page.evaluate(_EMPTY_CLIENT_STORE_SCRIPT)
             if not fresh:
                 raise ReadbackSessionError("the read-back context was not empty")
             self._page.fill(spec.sign_in.username_selector, self._username)
@@ -1004,6 +1029,8 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         any effect that judges against a baseline must refuse before input
         rather than halt after it.
         """
+        if self._waiting_entry() is not None:
+            return True  # refuse before input: this item is still provisional
         base = bool(effect.requires_baseline or effect.forbid_collateral_loss)
         if self._reference is None:
             return base
@@ -1147,6 +1174,44 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
             detail,
         )
 
+    def _params_digest(self, ledger: Any) -> str:
+        return ledger.key_digest(
+            json.dumps(
+                {k: str(v) for k, v in sorted(self._params.items())},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+
+    def _waiting_entry(self) -> Optional[str]:
+        """The id of a provisional entry for these same inputs, still waiting.
+
+        The ledger is on disk, so this holds across restarts: re-running the
+        worklist never sends an item again while its final read is owed.
+        """
+
+        final = self._target.spec.final
+        if final is None or not self._params:
+            return None
+        from openadapt_flow.runtime.effects.deferred_report import (
+            UI_READBACK_FORMAT,
+            PendingLedger,
+        )
+
+        try:
+            ledger = PendingLedger(final.ledger)
+            digest = self._params_digest(ledger)
+            for entry in ledger.entries():
+                if (
+                    entry.state == "waiting"
+                    and entry.report_format == UI_READBACK_FORMAT
+                    and entry.params_digest == digest
+                ):
+                    return entry.id
+        except (OSError, ValueError):
+            return "unreadable-ledger"  # can't rule it out: refuse
+        return None
+
     def _final_digest(self) -> str:
         spec = self._target.spec
         payload = spec.model_dump(mode="json", exclude={"sign_in"})
@@ -1210,6 +1275,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                     "identity": target.identity_value,
                 },
                 record_payload=record_digest_payload(page.records, exclude=exclude),
+                params_digest=self._params_digest(ledger) if self._params else None,
             )
         except (OSError, ValueError) as exc:
             return (
@@ -1478,6 +1544,18 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         return self._normalize(raw), "", facts
 
     def capture_pre_state(self, context: Any = None) -> EffectState:
+        waiting = self._waiting_entry()
+        if waiting is not None:
+            return EffectState(
+                substrate=self.substrate,
+                reachable=False,
+                records=[],
+                detail={
+                    **self._detail(None, None),
+                    "reason": "this item was saved earlier and is still provisional "
+                    f"({waiting}); it is not sent again before its final read",
+                },
+            )
         if self._target.spec.history is not None:
             rows, _failure, _facts = self._in_session(
                 self._read_history, budget_s=self._session_budget()
@@ -1554,6 +1632,7 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         CONFIRMED or ``expected.timeout_s`` passes, reloading between reads."""
 
         timeout_s = max(0.0, expected.timeout_s)
+        spec = self._target.spec
         target, failure = self._bound_target()
         if target is None:
             return EffectVerdict(
@@ -1568,14 +1647,33 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
         bound, has_url, acting_url = self._acting_view()
 
         def work(session: ReadbackSession) -> tuple[Any, ...]:
-            deadline = time.monotonic() + timeout_s
+            # Search and list views often read a replica or an index that
+            # lags the save. Poll with backoff for the lag the deployment
+            # measured in its sandbox before taking "not there" as the read.
+            deadline = time.monotonic() + max(timeout_s, spec.index_lag_s)
+            wait = self.poll_interval_s
+            found = False
             while True:
                 raw = session.read()
                 page = self._normalize(raw, target)
+                shows = page.readable and not page.not_found and bool(page.records)
+                if found and page.readable and not shows:
+                    # Once seen, a record never quietly becomes "not saved".
+                    verdict = EffectVerdict(
+                        verdict=Verdict.INDETERMINATE,
+                        kind=expected.kind,
+                        substrate=self.substrate,
+                        reason="the view showed the record, then stopped showing "
+                        "it (a lagging or inconsistent index); can't certify the "
+                        "save; HALT",
+                    )
+                    break
+                found = found or shows
                 verdict = self._judge(expected, before, page, target)
                 if verdict.confirmed or time.monotonic() >= deadline:
                     break
-                time.sleep(self.poll_interval_s)
+                time.sleep(wait)
+                wait = min(max(wait * 2, 0.05), _MAX_POLL_S)
             history = (
                 self._read_history(session)
                 if verdict.confirmed and self._target.spec.history is not None
@@ -1585,7 +1683,9 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
 
         started = time.monotonic()
         result, failure, facts = self._in_session(
-            work, budget_s=self._session_budget(timeout_s), target=target
+            work,
+            budget_s=self._session_budget(max(timeout_s, spec.index_lag_s)),
+            target=target,
         )
         if result is None:
             return EffectVerdict(

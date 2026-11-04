@@ -128,6 +128,9 @@ class PendingCheck(BaseModel):
     due_at: Optional[str] = None
     locator: Optional[dict[str, str]] = None
     record_mac: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    #: Keyed digest of the run's inputs, so a re-run of the same item is
+    #: refused while this entry waits.
+    params_digest: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 #: ``report_format`` of a waiting entry a UI read-back settles.
@@ -278,6 +281,7 @@ class PendingLedger:
         due_after_s: float,
         locator: Mapping[str, str],
         record_payload: str,
+        params_digest: Optional[str] = None,
         now: Optional[datetime] = None,
     ) -> PendingCheck:
         """Record a UI read-back's provisional confirmation as waiting for
@@ -298,6 +302,7 @@ class PendingLedger:
                 due_at=_iso(moment + timedelta(seconds=due_after_s)),
                 locator=dict(locator),
                 record_mac=self.key_digest(record_payload),
+                params_digest=params_digest,
             )
             self._write(entry)
         return entry
@@ -329,6 +334,20 @@ class PendingLedger:
                 )
             )
         return Settlement(entry_id, state, code, reason)
+
+    def overdue(
+        self, hours: float, *, now: Optional[datetime] = None
+    ) -> list[PendingCheck]:
+        """Entries still waiting ``hours`` after they were created: an SLA
+        alert ("provisional for 48 h"), not a settlement."""
+
+        moment = now or _now()
+        return [
+            e
+            for e in self.entries()
+            if e.state == "waiting"
+            and datetime.fromisoformat(e.created_at) + timedelta(hours=hours) <= moment
+        ]
 
     # -- the settle side --------------------------------------------------------------
     def settle(

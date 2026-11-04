@@ -2158,6 +2158,8 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
             for added in ("reference", "history", "final"):
                 if section.get(added) is None:
                     section.pop(added, None)
+            if not section.get("index_lag_s"):
+                section.pop("index_lag_s", None)
     payload = {
         "schema": "openadapt.effect-verifier-identity/v1",
         "implementation": (

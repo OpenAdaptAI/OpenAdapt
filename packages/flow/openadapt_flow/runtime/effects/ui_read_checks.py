@@ -409,6 +409,9 @@ class FinalCheck(BaseModel):
     #: Statuses that say it was turned down: reconcile.
     rejected_values: list[str] = Field(default_factory=list)
     describe: str = Field(default="the final read-back", max_length=120)
+    #: Hours after which a record still provisional is reported by
+    #: ``deferred settle`` (an SLA alert). None: no alert before the deadline.
+    alert_hours: Optional[float] = Field(default=None, gt=0, le=24 * 90)
 
     @model_validator(mode="after")
     def _shape(self) -> "FinalCheck":

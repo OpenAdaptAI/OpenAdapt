@@ -398,3 +398,72 @@ def test_evidence_without_a_ui_read_keeps_its_bytes() -> None:
     assert "read_evidence" not in evidence.model_dump(mode="json")
     with_read = evidence.model_copy(update={"read_evidence": {"independence": {}}})
     assert "read_evidence" in with_read.model_dump(mode="json")
+
+
+# -- traps: cached reads, lagging indexes, durable provisional state -------------------
+
+
+class _SharedContextDriver(Driver):
+    """A 'fresh' session that actually reuses a profile (client cache)."""
+
+    def open(self, target: Any, username: str, password: str) -> Any:
+        ctx = super().open(target, username, password)
+        self.sessions[-1].facts = SessionFacts(
+            own_browser=True, fresh_context=False, signed_in=True
+        )
+        return ctx
+
+
+def test_a_reused_profile_never_confirms_even_when_the_page_agrees() -> None:
+    verdict = _verifier(
+        _SharedContextDriver([_page(_row(), fetched=None)]), backend=DesktopBackend()
+    ).verify(_note(), EMPTY_BEFORE)
+    assert verdict.verdict is Verdict.INDETERMINATE
+
+
+def test_a_lagging_index_is_polled_for_its_measured_window() -> None:
+    empty = RawPage(ok=True, identity="p1", rows=[], fetched=True, view_url=RECORD_URL)
+    pages = [empty, empty, _page(_row())]
+    lagging = _verifier(
+        Driver(pages), _spec(index_lag_s=2.0), backend=DesktopBackend()
+    ).verify(_note(), EMPTY_BEFORE)
+    assert lagging.verdict is Verdict.CONFIRMED
+    # Without the measured window the first empty read is the answer, and an
+    # empty search is never taken as proof of anything.
+    impatient = _verifier(Driver(pages), backend=DesktopBackend()).verify(
+        _note(), EMPTY_BEFORE
+    )
+    assert impatient.verdict is not Verdict.CONFIRMED
+
+
+def test_found_then_gone_is_never_a_quiet_not_saved() -> None:
+    empty = RawPage(ok=True, identity="p1", rows=[], fetched=True, view_url=RECORD_URL)
+    pages = [_page(_row(note="stale")), empty]
+    verdict = _verifier(
+        Driver(pages), _spec(index_lag_s=2.0), backend=DesktopBackend()
+    ).verify(_note(), EMPTY_BEFORE)
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "stopped showing" in verdict.reason
+
+
+def test_a_provisional_item_is_not_sent_again_after_a_restart(tmp_path) -> None:
+    spec, verdict = _provisional(tmp_path)
+    # A new process (a restart, a re-run of the worklist) builds a new
+    # verifier for the same item: it refuses before input.
+    again = _verifier(Driver([_page(_row())]), spec, backend=DesktopBackend())
+    assert again.requires_readable_pre_state_for(_note()) is True
+    before = again.capture_pre_state()
+    assert before.reachable is False
+    assert "still provisional" in before.detail["reason"]
+    # Once the final read settles it, the item is free again.
+    _settle(spec, [_row(status="Approved")])
+    assert again._waiting_entry() is None
+    assert again.capture_pre_state().reachable is True
+
+
+def test_a_long_provisional_item_raises_an_alert(tmp_path) -> None:
+    spec, verdict = _provisional(tmp_path, alert_hours=48)
+    ledger = PendingLedger(spec.final.ledger)
+    assert ledger.overdue(48) == []
+    later = datetime.now(timezone.utc) + timedelta(hours=49)
+    assert [e.id for e in ledger.overdue(48, now=later)] == [verdict.deferred_check]
