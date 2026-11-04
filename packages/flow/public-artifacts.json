@@ -616,6 +616,7 @@
     "examples/legacy_records/answers.demo.json",
     "examples/legacy_records/answers.ledger.demo.json",
     "openadapt_flow/app_profiles/openemr.yaml",
+    "openadapt_flow/app_profiles/record_search/openemr.yaml",
     "openadapt_flow/console/static/console.css",
     "openadapt_flow/console/static/console.js",
     "openadapt_flow/console/static/index.html",
