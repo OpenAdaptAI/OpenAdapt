@@ -8,8 +8,9 @@ and the check stays exact.
 
 Two checks against a running OpenEMR, read through its own database:
 
-- every stored form an OpenEMR contract declares is the edit option the app's
-  layout gives that field, and every field the layout transforms declares one;
+- every field an OpenEMR contract checks declares the stored form the app's
+  layout gives it, and no other (a transformed field the contract doesn't
+  check isn't compared at all);
 - a patient saved through the real form, typed in mixed case with extra
   spaces, is confirmed by the declared contract, while a contract without
   the stored forms, or with a different value, is not.
@@ -109,7 +110,8 @@ def _layout_forms() -> dict[str, Optional[str]]:
             flags = json.loads(options) if options and options != "NULL" else []
         except json.JSONDecodeError:
             flags = list(options)
-        # The form applies "C" before "U" (options.inc.php).
+        # One transform per field: "C" when both are set, else "U"
+        # (options.inc.php: if C ... elseif U).
         form = next((EDIT_OPTION_FORMS[f] for f in ("C", "U") if f in flags), None)
         forms[field_id] = form
     return forms
@@ -233,6 +235,16 @@ def test_a_form_save_is_confirmed_only_in_its_stored_form() -> None:
             value=value,
         ).resolve(params)
         return judge_records(effect, before, [row], substrate="t").verdict.value
+
+    # The contract's own selector, transformed lname included, finds the row.
+    # A bare field names its parameter, as the contract loader reads it.
+    match = {
+        key: fields[key] if isinstance(fields[key], dict) else {"param": fields[key]}
+        for key in yaml.safe_load(CONTRACTS[0].read_text())["record"]["match"]
+    }
+    written = Effect(kind=EffectKind.RECORD_WRITTEN, match=match).resolve(typed)
+    got = judge_records(written, before, [row], substrate="t").verdict.value
+    assert got == "confirmed"
 
     for field in ("fname", "lname", "street", "city"):
         declared = fields[field]

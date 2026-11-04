@@ -169,10 +169,14 @@ fields:
 
 The transform is applied to the parameter, after any `map`, and the check
 stays exact: it expects that stored form and no other casing, and a
-different value is still refuted. A form the app doesn't apply makes a
-correct save fail to confirm, so a wrong declaration fails closed. A field
-without `stored` compares what was typed. `stored` is part of the contract
-hash.
+different value is still refuted. Declare only a transform the app
+applies on every save path: a wrong declaration refutes correct saves, and
+lets a value that differs only in that transform (case or spacing) confirm.
+OpenEMR applies its transforms when a field changes in the form, so a value
+set by a script or a replayed form post is stored as sent.
+`tests/test_stored_form_live_openemr.py` checks the declarations against
+the app's own layout. A field without `stored` compares what was typed.
+`stored` is part of the contract hash.
 
 ## Writes that land after the result
 

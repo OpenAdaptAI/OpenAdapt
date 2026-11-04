@@ -96,6 +96,10 @@ def test_capitalize_words_is_the_forms_capitalize_me() -> None:
     assert words.resolve({"fname": "ADA"}) == "ADA"
     assert words.resolve({"fname": "ßa"}) == "SSa"  # toUpperCase of one letter
     assert words.resolve({"fname": "   "}) == ""
+    # charAt(0) is one UTF-16 unit: a first letter outside the BMP stays as
+    # typed, so a wrong-case value is not confirmed (Adlam).
+    assert words.resolve({"fname": "\U0001e922\U0001e923"}) == "\U0001e922\U0001e923"
+    assert words.resolve({"fname": "\U0001e900\U0001e923"}) == "\U0001e900\U0001e923"
     with pytest.raises(ValueError):
         ValueExpr(literal="ada", stored="capitalize_words")
 

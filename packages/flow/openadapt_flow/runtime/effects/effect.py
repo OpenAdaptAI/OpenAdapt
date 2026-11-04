@@ -168,6 +168,18 @@ def number_matches(stored: Any, want: Any, *, text_numbers: bool) -> Optional[bo
     return have == expected
 
 
+def _capitalize_word(word: str) -> str:
+    """One word as OpenEMR's ``capitalizeMe`` stores it:
+    ``charAt(0).toUpperCase() + substring(1)``. Split on the space character
+    only, the rest keeps its case ("McDonald" stays "McDonald"). ``charAt``
+    takes one UTF-16 code unit, so a first letter outside the BMP (Adlam,
+    Osage, Deseret) is half a surrogate pair and stays as typed."""
+
+    if ord(word[0]) > 0xFFFF:
+        return word
+    return word[0].upper() + word[1:]
+
+
 class ValueExpr(BaseModel):
     """A single effect-contract value: either a static ``literal`` or a
     reference to a run ``param`` (P0-3 fix).
@@ -320,10 +332,8 @@ class ValueExpr(BaseModel):
         elif value is not None and self.stored == "lower":
             value = value.lower()
         elif value is not None and self.stored == "capitalize_words":
-            # Split on the space character only, as the form does; the rest
-            # of each word keeps its case ("McDonald" stays "McDonald").
             value = " ".join(
-                word[0].upper() + word[1:] for word in value.split(" ") if word
+                _capitalize_word(word) for word in value.split(" ") if word
             )
         return value
 
