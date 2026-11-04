@@ -18,7 +18,14 @@ import os
 from pathlib import Path
 from typing import Any
 
-from benchmark.api_generalization.common import AppBase, Case, ExecSqlVerifier, rec_click, rec_text
+from benchmark.api_generalization.common import (
+    AppBase,
+    Case,
+    ExecSqlVerifier,
+    dump_database,
+    rec_click,
+    rec_text,
+)
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind, ValueExpr
 
 SERVER, UI = 9673, 9674
@@ -35,6 +42,15 @@ def _fixture() -> Any:
     return MedplumFixture(state_dir=STATE, server_port=SERVER, app_port=UI, project="apigen-medplum")
 
 
+def mp_rows(query: str) -> list[dict[str, Any]]:
+    import csv
+    import io
+
+    out = _fixture().compose("exec", "-T", "postgres", "psql", "-U", "medplum", "-d", "medplum", "--csv",
+                             "-v", "ON_ERROR_STOP=1", "-c", query)
+    return list(csv.DictReader(io.StringIO(out)))
+
+
 def patients(_query: str = "") -> list[dict[str, Any]]:
     out = []
     for row in _fixture().patient_rows():
@@ -46,6 +62,9 @@ def patients(_query: str = "") -> list[dict[str, Any]]:
 
 
 class App(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('postgresql', mp_rows)
+
     name = "medplum_patient"
     workflow = "new-patient"
     upstream_port = UI

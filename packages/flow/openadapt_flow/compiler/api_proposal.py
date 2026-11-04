@@ -1536,6 +1536,7 @@ def admit_api_step(
     step_id: Optional[str] = None,
     now: Optional[datetime] = None,
     identity: Optional[dict[str, str]] = None,
+    footprint: Optional[dict[str, Any]] = None,
 ) -> tuple[Workflow, list[str]]:
     """Record a person's admission of the proposed API steps.
 
@@ -1547,9 +1548,22 @@ def admit_api_step(
     ...) to the parameter that carries it (:func:`web_form_identity`).
     Standard and Regulated runs need one: their run gate refuses a save
     whose API step names no right-record contract.
+
+    ``footprint`` is the side-effect comparison of GUI saves and API saves
+    on the same inputs (:func:`openadapt_flow.api_footprint.footprint_verdict`).
+    When given, an API step whose footprint differs from the GUI save's (a
+    table, row or field the GUI save writes and it doesn't, or the reverse)
+    isn't admitted: it stays on the GUI.
     """
 
     from openadapt_flow.runtime.effects.effect import is_agent_identity
+
+    if footprint is not None and footprint.get("equivalent") is not True:
+        reasons = "; ".join((footprint.get("differences") or ["no verdict"])[:3])
+        raise ApiProposalError(
+            "the API step's side effects differ from the GUI save's, so it stays on "
+            f"the GUI ({reasons})"
+        )
 
     who = (admitted_by or getpass.getuser() or "").strip()
     if not who:

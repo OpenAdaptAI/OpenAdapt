@@ -20,6 +20,7 @@ from benchmark.api_generalization.common import (
     AppBase,
     Case,
     ExecSqlVerifier,
+    dump_database,
     podman,
     rec_click,
     rec_text,
@@ -46,6 +47,9 @@ def wsql(query: str) -> list[dict[str, Any]]:
 
 
 class App(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('postgresql', wsql)
+
     name = "wikijs_group"
     workflow = "new-group"
     upstream_port = UPSTREAM

@@ -24,6 +24,14 @@ fi
 rm -rf "${STATE:?}/${APP:?}/bundle" "${STATE:?}/${APP:?}/matrix" "${STATE:?}/${APP:?}/timing"
 "$H" compile --app "$APP" --recording "$REC" --out "$STATE/$APP/bundle" > "$OUT/compile.log" 2>&1
 cp "$STATE/$APP/bundle/apigen-compile.json" "$OUT/compile.json"
+if grep -q '"proposed": true' "$OUT/compile.json"; then
+  # Side effects first: the API step keeps its admission only when the whole
+  # database changes the same way through it as through the GUI.
+  rm -rf "${STATE:?}/${APP:?}/footprint"
+  "$H" footprint --app "$APP" --bundle "$STATE/$APP/bundle" --out "$STATE/$APP/footprint" --reps 3 \
+    --tag "$(date +%H%M)" > "$OUT/footprint.log" 2>&1 || true
+  cp "$STATE/$APP/footprint/footprint.json" "$OUT/footprint.json" 2>/dev/null || true
+fi
 "$H" matrix --app "$APP" --bundle "$STATE/$APP/bundle" --out "$STATE/$APP/matrix" --tag "$(date +%H%M)" \
   > "$OUT/matrix.log" 2>&1 || true
 cp "$STATE/$APP/matrix/runs.csv" "$OUT/matrix.csv" 2>/dev/null || true

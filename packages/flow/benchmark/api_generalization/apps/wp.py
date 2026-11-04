@@ -12,7 +12,12 @@ import subprocess
 import time
 from typing import Any
 
-from benchmark.api_generalization.common import AppBase, mysql_rows, podman
+from benchmark.api_generalization.common import (
+    AppBase,
+    dump_database,
+    mysql_rows,
+    podman,
+)
 
 POD = "apigen-wp"
 DB_C = "apigen-wp-db"
@@ -30,6 +35,9 @@ def wpsql(query: str) -> list[dict[str, Any]]:
 
 
 class WordPressBase(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('mysql', wpsql)
+
     upstream_port = UPSTREAM
     proxy_port = PROXY
 

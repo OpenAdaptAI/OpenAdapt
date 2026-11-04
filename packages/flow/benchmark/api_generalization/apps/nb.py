@@ -12,7 +12,7 @@ import io
 import subprocess
 from typing import Any
 
-from benchmark.api_generalization.common import AppBase, podman
+from benchmark.api_generalization.common import AppBase, dump_database, podman
 
 POD = "apigen-nb"
 PG_C, REDIS_C, NB_C = "apigen-nb-pg", "apigen-nb-redis", "apigen-nb-app"
@@ -40,6 +40,9 @@ def nbsql(query: str) -> list[dict[str, Any]]:
 
 
 class NetBoxBase(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('postgresql', nbsql)
+
     upstream_port = UPSTREAM
     proxy_port = PROXY
 

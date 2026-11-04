@@ -14,6 +14,7 @@ from typing import Any
 from benchmark.api_generalization.common import (
     AppBase,
     ExecSqlVerifier,
+    dump_database,
     mysql_rows,
     podman,
     rec_click,
@@ -41,6 +42,9 @@ def esql(query: str) -> list[dict[str, Any]]:
 
 
 class App(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('mysql', esql)
+
     name = "espocrm_account"
     workflow = "new-account"
     upstream_port = UPSTREAM

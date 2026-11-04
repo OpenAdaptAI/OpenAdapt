@@ -9,7 +9,12 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from benchmark.api_generalization.common import AppBase, mysql_rows, podman
+from benchmark.api_generalization.common import (
+    AppBase,
+    dump_database,
+    mysql_rows,
+    podman,
+)
 
 POD = "apigen-doli"
 DB_C, APP_C = "apigen-doli-db", "apigen-doli-app"
@@ -25,6 +30,9 @@ def dsql(query: str) -> list[dict[str, Any]]:
 
 
 class DolibarrBase(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('mysql', dsql)
+
     upstream_port = UPSTREAM
     proxy_port = PROXY
 

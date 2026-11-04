@@ -12,6 +12,7 @@ from typing import Any
 from benchmark.api_generalization.common import (
     AppBase,
     ExecSqlVerifier,
+    dump_database,
     podman,
     rec_click,
     rec_select,
@@ -49,6 +50,9 @@ def sql(query: str, *, write: bool = False) -> list[dict[str, Any]]:
 
 
 class App(AppBase):
+    def dump(self) -> dict[str, list[dict[str, Any]]]:
+        return dump_database('sqlite', sql)
+
     name = "redmine"
     workflow = "new-issue"
     upstream_port = 9661
