@@ -17,13 +17,25 @@
 
 ## Unreleased
 
+### Changed
+
+- The wheel no longer ships the benchmark harnesses. `openadapt_flow.benchmark` and `openadapt_flow.instrument` moved to `packages/flow/benchmark/harness/` in the source tree (import `benchmark.harness`); `openadapt-flow benchmark` runs from a source checkout and says so from a wheel. The engine audit for application-specific code is in `docs/GENERALITY_AUDIT.md`. Code that imported `openadapt_flow.benchmark` or `openadapt_flow.instrument` from an installed wheel imports `benchmark.harness` from a source checkout instead.
+
 ### Features
+
+- Teach authorizations (`openadapt.teach-authorization/v1`). A person signs, with an approver key on the signed approver roster, what an agent may do when it teaches or repairs a program: the task, origins, inputs, the one write and forbidden actions and controls. `openadapt-flow teach-authorization create|sign|verify`; `--teach-authorization` on `compile-agent` and `openadapt-agent serve --teach`. Design and the upgrade notes: `docs/TEACH_AUTHORIZATION.md`.
+
+  **Breaking:** admission of every JIT draft now needs one (`teach_auth_not_recorded` otherwise), in every admission mode; so does a self-repair of an agent-taught program and the approval of a calling agent's fix. Drafts from the airbag handoff are refused, and browser teach (`serve --teach-browser`) no longer teaches or runs write tools.
 
 - `run --self-repair` (and repair by default) now works outside a browser. `repair.session` in `deploy.yaml` says how to start the app for each probe, fault probe and resumed run (an argv, no shell, kept running while the app is up; `fault_commands`, `close_command`, `ready_s`). The run's configured backend must bind to a window owned by that command's process group, so a session never binds to the halted session or a copy already open; Flow ends the group afterwards, and closes the halted session before each probe. This works where the bound window is on Flow's machine (macOS, and the local RDP or Citrix client window); Windows over its agent and FreeRDP are refused for now. Without `repair.session`, a desktop run refuses repair with that reason, as before.
 
 - Signed write receipts. A verifier verdict, with its scope (stores read, time window, strength) and a plain list of what it did not check, is signed as a COSE_Sign1 in the IETF SCITT shape and appended to a local transparency log. `openadapt-flow receipt verify FILE --issuer-key --log-key` checks one offline and prints the not-checked list every time; a receipt that claims more than its scope is neither issued nor accepted. `verify_write(..., write_receipt=True)`, `issue_write_receipt(result)` and `openadapt-flow shadow --receipts` issue them; `receipt anchor` puts the digest in Rekor. Extra: `openadapt-flow[receipts]`. Design: `docs/WRITE_RECEIPTS.md`.
 
 ### Fixes
+
+- A qualification case can run on `--backend windows`. `WindowsBackend` now answers the qualification environment observer from one `/context/identity` call: the foreground executable's name, the SHA-256 of that executable file, the live logon-session digest, and a digest of the machine id and exact OS build. Before, `qualify run-case` on Windows refused with "qualification backend cannot observe the complete environment". The digest is withheld when the file changed after the process started (an updater replacing a running program), and it describes the host executable for an app run by an interpreter, browser or shared runtime. Guarded input now also binds the digest and the environment, so a same-named program from another path cannot take the foreground between the check and the input. The agent's session digest now accepts a connected RDP or Citrix session, not only the console session, so the agent can run inside a remote user session. An agent without the new `context_environment_v1` fields still refuses ([#1696](https://github.com/OpenAdaptAI/OpenAdapt/issues/1696)).
+
+- A covered-band dismiss step takes its dialog box from the window the backend proved covers the band, before any pixel search, so a native message box that the accessibility tree doesn't label as a dialog can be dismissed. Without a proved window the step is refused as before.
 
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 

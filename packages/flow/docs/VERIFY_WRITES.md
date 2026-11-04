@@ -98,21 +98,10 @@ A verified result proves the system of record holds what was declared. It doesn'
 
 ## Teach a write as a tool
 
-`openadapt-agent serve --teach-browser --contracts ./contracts` lets your agent teach a browser write once, against a contract, and call it again as a `taught_<name>` tool. Each call makes the write and returns the same verified receipt or refusal.
-
-For a taught write, the contract also lists the requests the write may send:
-
-```yaml
-writes: ["POST /login", "POST /orders"]   # the sign-in and the save
-```
-
-The browser stops any other write before it is sent, while teaching and on every call. The tool sends exactly the writes it was taught, in order and with the same fields, and a call where the page tries anything else ends in `needs_review`, never `done`.
-
-Sign-in values stay with the server. They go only into a password field or another field of a sign-in form, never into an address, and no form of them (encoded or not) reaches the agent:
-
-```bash
-openadapt-agent serve --teach-browser --contracts ./contracts \
-  --sign-in username=PORTAL_USER --sign-in password=PORTAL_PASSWORD
-```
-
-The example app has a sign-in and a New Order form to try it on: `openadapt agent example-app`, with user `clerk` and password `portal-demo`.
+A write an agent teaches needs a person's signed teach authorization
+([TEACH_AUTHORIZATION.md](TEACH_AUTHORIZATION.md)). Browser teach
+(`openadapt-agent serve --teach-browser`) can't bind one, so it refuses a
+`teach_start` that names a write contract, and a write tool taught there
+earlier doesn't run. Teach the write with `openadapt-agent serve --teach
+--teach-authorization STATEMENT`: run 1 runs under the signed scope, and the
+program is admitted only with the signature. The read-only lane is unchanged.

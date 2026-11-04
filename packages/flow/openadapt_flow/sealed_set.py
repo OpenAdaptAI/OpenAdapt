@@ -175,6 +175,11 @@ BUNDLE_FILES: Final[tuple[FileKind, ...]] = (
         "a signed admission manifest, which can carry read-back values",
     ),
     FileKind("jit_draft.json", "phi", "draft state of a just-in-time program"),
+    FileKind(
+        "teach-authorization/*",
+        "phi",
+        "the person-signed teach authorization the program was taught under",
+    ),
     FileKind("admit.json", "phi", "authoring admission with the local login name"),
     FileKind("openadapt-card.json", "phi", "operator-written name, purpose and inputs"),
     FileKind(
