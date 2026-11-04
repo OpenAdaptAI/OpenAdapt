@@ -811,6 +811,17 @@ Values are compared after collapsing whitespace, because HTML rendering
 collapses it. `date_format` parses a displayed date into ISO 8601 and
 `casefold` compares case-insensitively; both apply to the expected value too.
 
+**Measured on real apps.** [`benchmark/ui_second_read/RESULTS.md`](../benchmark/ui_second_read/RESULTS.md)
+runs a pre-registered fault list on OpenEMR and Dolibarr with their API and
+database reads switched off, direct and behind a bad-VPN chaos proxy (latency,
+gateway errors, a lagging search view). No planted fault ended CONFIRMED.
+Correct saves confirmed 10 of 10 direct and 8 of 10 behind the proxy; the two
+OpenEMR stops were a timed-out read and an unreadable audit log. A collateral
+edit to another record passes without a history view, as expected, and was
+refuted with OpenEMR's audit log as the history view. A separate session costs
+1 to 2 s per item on Dolibarr and 13 to 15 s on OpenEMR with its audit log
+(direct); a batch settle reads five records in one session.
+
 **Measured.** [`benchmark/ui_readback/RESULTS.md`](../benchmark/ui_readback/RESULTS.md)
 runs the repository's fault list (`benchmark/effect_e2e` and
 `benchmark/fault_model`) with the same effect contracts read three ways: on the
