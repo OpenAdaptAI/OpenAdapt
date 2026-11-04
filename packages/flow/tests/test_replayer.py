@@ -4069,7 +4069,21 @@ def test_opaque_typing_never_retries_an_unconfirmed_delivery(
     backend = FakeBackend(
         text_value_supported=exact_readback, type_accept_results=[False, True]
     )
-    report = Replayer(backend, vision=vision).run(
+
+    class CountingDeliveryGuard:
+        before_calls = 0
+        acknowledgments = 0
+
+        def before_delivery(self):
+            self.before_calls += 1
+
+        def acknowledge_delivery(self):
+            self.acknowledgments += 1
+
+    guard = CountingDeliveryGuard()
+    replayer = Replayer(backend, vision=vision)
+    replayer._durable_continuation_guard = guard
+    report = replayer.run(
         _type_workflow(),
         params={"note": "hello world"},
         bundle_dir=bundle,
@@ -4080,6 +4094,9 @@ def test_opaque_typing_never_retries_an_unconfirmed_delivery(
     assert result.input_verified is False
     assert result.input_retried is False
     assert backend.actions == [("click", 110, 105, False), ("type", "hello world")]
+
+    assert guard.before_calls == guard.acknowledgments == len(backend.actions) == 2
+    assert replayer._active_delivery_acknowledgers == ()
 
 
 def test_unavailable_browser_context_does_not_authorize_a_typing_retry(bundle, run_dir):

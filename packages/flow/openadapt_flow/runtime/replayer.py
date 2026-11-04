@@ -17538,10 +17538,12 @@ class Replayer:
         """Did the just-typed ``text`` visibly land?
 
         Exact structural readback is authoritative when the backend exposes
-        it. Otherwise the complete whitespace-squashed value must match the
-        field's new OCR text (retried at 2x resolution), including short values.
+        it. Otherwise the complete lowercased, whitespace-squashed value must
+        match the field's new OCR text (retried at 2x resolution), including
+        short values.
         Whole unchanged context lines may be excluded. Pixel-only acceptance
-        is restricted to steps declared ``secret``: masked password dots may render no readable text. A dialog
+        is restricted to steps declared ``secret``: masked password dots may
+        render no readable text. A dialog
         painting over the region or an unreadable ordinary field must never
         count as "input landed".
 
@@ -17722,10 +17724,18 @@ class Replayer:
         )
         if not can_retry:
             result.input_verified = False
-            refusal = self._delivery_authorization_refusal(
-                workflow, params, step, result
+            # This is a halt, not a new delivery edge: recheck authority
+            # without consuming a durable fence or an approval permit.
+            refusal = self._fresh_actuation_authorization_refusal(
+                workflow, params, step
             )
             if refusal is not None:
+                result.safety_halt = True
+                result.failure_category = (
+                    "governed_refusal"
+                    if self.governed_authorization is not None
+                    else "safety_halt"
+                )
                 return refusal
             return (
                 f"Typed input could not be verified for step '{step.id}' "
