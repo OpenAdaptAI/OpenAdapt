@@ -538,8 +538,9 @@ class ReadbackField(BaseModel):
     source: Literal["ocr", "structure"] = "ocr"
     #: How the read and the expected value are compared
     #: (:mod:`openadapt_flow.runtime.effects.readback_values`): ``text``,
-    #: ``code`` (case and separators ignored), ``date`` or ``currency``.
-    value_kind: Literal["text", "code", "date", "currency"] = "text"
+    #: ``code`` (case and separators ignored), ``date``, ``currency`` or
+    #: ``number``.
+    value_kind: Literal["text", "code", "date", "currency", "number"] = "text"
     #: ``date`` only: the order of a numeric date such as ``03/04/2026``.
     #: Unset, a numeric date that reads two ways is ambiguous.
     date_order: Optional[Literal["dmy", "mdy"]] = None
