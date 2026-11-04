@@ -196,19 +196,29 @@ def _native_rules(a: dict[str, str]) -> dict[str, Any]:
 
 
 def _form(
-    html: str, action_path: str, page_path: Optional[str] = None
+    html: str,
+    action_path: str,
+    page_path: Optional[str] = None,
+    controls: Optional[Iterable[str]] = None,
 ) -> Optional[dict[str, Any]]:
     parser = _FormParser()
     parser.feed(html)
     leaf = up.urlsplit(action_path).path.rsplit("/", 1)[-1]
+    hits = []
     for form in parser.forms:
         action = up.urlsplit(form["action"]).path
         if not form["action"].strip() and page_path is not None:
             # No action: the browser posts to the page's own address.
             action = up.urlsplit(page_path).path
         if action == action_path or (leaf and action.rsplit("/", 1)[-1] == leaf):
-            return form
-    return None
+            hits.append(form)
+    if controls is not None and len(hits) > 1:
+        # Several forms post there (a page's own settings form with no
+        # action, say): the recorded one is the one with the recorded controls.
+        want = sorted(controls)
+        same = [f for f in hits if sorted(f["controls"]) == want]
+        return same[0] if len(same) == 1 else None
+    return hits[0] if hits else None
 
 
 def form_controls(
@@ -225,13 +235,16 @@ def form_controls(
 
 
 def form_parts(
-    html: str, action_path: str, page_path: Optional[str] = None
+    html: str,
+    action_path: str,
+    page_path: Optional[str] = None,
+    controls: Optional[Iterable[str]] = None,
 ) -> Optional[dict[str, Any]]:
     """The whole form that posts to ``action_path``: its named controls, its
     submit buttons (``buttons``, with the value each sends), its file inputs
     (``files``) and its ``enctype``."""
 
-    return _form(html, action_path, page_path)
+    return _form(html, action_path, page_path, controls)
 
 
 def forms_of(html: str) -> list[dict[str, Any]]:
@@ -990,7 +1003,12 @@ class WebFormActuator:
                 )
             action_path = up.urlsplit(save_path).path
             page_path = up.urlsplit(form_path).path
-            form = form_parts(page.text, spec.form_action or action_path, page_path)
+            form = form_parts(
+                page.text,
+                spec.form_action or action_path,
+                page_path,
+                spec.controls or None,
+            )
             if form is None:
                 return unavailable("the form page no longer has the recorded form")
             controls = form["controls"]

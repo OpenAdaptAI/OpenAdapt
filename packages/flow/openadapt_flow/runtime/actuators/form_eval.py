@@ -89,15 +89,20 @@ _INSTRUMENT_JS = """
 #: Finds the form, marks it for the locators, and adds the last submit
 #: listener (it records each submit that gets through, then stops it).
 _SETUP_JS = """
-({ actionPath, leaf, formAction }) => {
+({ actionPath, leaf, formAction, names }) => {
   const state = window.__openadaptFormEval;
   if (!state) return { unevaluable: 'the scratch page could not be instrumented' };
-  const form = formAction ? Array.from(document.forms).find((f) =>
+  // Several forms may post there (a settings form with no action posts to
+  // its own page): the form is the one that holds every field typed.
+  const holds = (f) => names.every((n) => f.elements.namedItem(n));
+  const pick = (all) => (all.length > 1 ? all.filter(holds) : all).length === 1
+    ? (all.length > 1 ? all.filter(holds) : all)[0] : null;
+  const form = formAction ? pick(Array.from(document.forms).filter((f) =>
     new URL(f.getAttribute('action') || location.href, location.href).pathname === formAction
-  ) : Array.from(document.forms).find((f) => {
+  )) : pick(Array.from(document.forms).filter((f) => {
     const p = new URL(f.getAttribute('action') || location.href, location.href).pathname;
     return p === actionPath || (leaf && p.split('/').pop() === leaf);
-  });
+  }));
   if (!form) return { unevaluable: 'the scratch page has no form that posts to the save' };
   form.setAttribute('data-openadapt-eval', '1');
   window.addEventListener('submit', (e) => {
@@ -381,6 +386,7 @@ def evaluate_form(
                 "actionPath": action_path,
                 "leaf": action_path.rsplit("/", 1)[-1],
                 "formAction": form_action,
+                "names": [name for name, _ in fields],
             },
         )
         if setup.get("unevaluable"):

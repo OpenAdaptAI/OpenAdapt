@@ -101,8 +101,9 @@ def cmd_record(a: argparse.Namespace, app: AppBase) -> None:
     start_proxy(app)
     values = app.recording_values()
     if a.tag:
-        # A fresh demonstration never collides with a record an earlier run made.
-        values[app.unique_param] = f"{values[app.unique_param]} {a.tag}"
+        # A fresh demonstration never collides with a record an earlier run
+        # made (made unique the app's own way, as each run's values are).
+        values = dict(app.unique(Case("recording", "normal", values, 1, {}), a.tag).params)
     before = app.rows()
     pw = sync_playwright().start()
     browser = pw.chromium.launch(headless=True)
