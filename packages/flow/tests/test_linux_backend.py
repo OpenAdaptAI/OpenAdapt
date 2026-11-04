@@ -956,3 +956,19 @@ def test_linux_authoring_tree_gives_each_control_its_element_identity() -> None:
     text = next(node for node in tree["tree"] if node["role"] == "text_input")
     assert "backend_pixels" not in hidden
     assert text["focused"] is True
+
+
+def test_linux_hidden_control_whose_identity_cant_be_read_cuts_the_tree_short() -> None:
+    """It could be another control's twin, so no node is unique for sure."""
+
+    class _Unreadable(_TreeLinuxClient):
+        def ancestry(self, window, element):
+            if element.bounds == (0, 0, 0, 0):
+                return None
+            return super().ancestry(window, element)
+
+    tree = LinuxBackend(
+        _Unreadable(), app="gedit", window_title="oa-trial.txt"
+    ).authoring_tree()
+    assert tree is not None and tree["truncated"] is True
+    assert not any(node.get("offscreen") for node in tree["tree"])

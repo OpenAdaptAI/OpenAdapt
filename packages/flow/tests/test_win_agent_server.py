@@ -2044,6 +2044,26 @@ def test_authoring_tree_lists_the_foreground_apps_controls_with_identity(
         agent.close()
 
 
+def test_authoring_tree_names_each_controls_top_level_window() -> None:
+    """The same window ``/window/root-at`` names for a point over the control:
+    a second window of the same app with the same title is another window."""
+    from openadapt_flow.backends.win_agent.server import _top_level_window
+
+    class _Pids(_FakeUser32):
+        def pid_of(self, hwnd):
+            return 77 if hwnd == 0x1000 else 0
+
+    user32 = _Pids()
+    button = _FakeControl("ButtonControl", automation_id="saveButton", name="Save")
+    button.NativeWindowHandle = user32.hwnd
+    assert _top_level_window(user32, button) == {"hwnd": user32.root, "pid": 77}
+    assert _top_level_window(None, button) is None  # no Win32: no window
+    windowless = _FakeControl("ButtonControl", automation_id="x", name="X")
+    assert _top_level_window(user32, windowless) is None
+    user32.root = 0x2000  # its root has no readable process
+    assert _top_level_window(user32, button) is None
+
+
 def test_authoring_tree_without_a_foreground_window_is_empty(monkeypatch) -> None:
     module = _fake_uia_module()
     module.GetForegroundControl = lambda: None

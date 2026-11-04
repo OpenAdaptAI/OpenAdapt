@@ -731,13 +731,35 @@ def _authoring_root(auto: Any) -> Optional[object]:
     return window
 
 
+def _top_level_window(user32: Any, control: object) -> Optional[dict[str, int]]:
+    """``{hwnd, pid}`` of the top-level window ``control`` is in, or None.
+
+    The same window ``/window/root-at`` names for a point over the control
+    (``GetAncestor(GA_ROOT)``): a click by node is refused when the window
+    under its point is another one, such as a second window of the same app
+    with the same title. None without Win32 or on any failure.
+    """
+    if user32 is None:
+        return None
+    try:
+        hwnd = _window_handle(control)
+        root = (user32.ancestor(hwnd, _GA_ROOT) or hwnd) if hwnd else 0
+        pid = user32.pid_of(root) if root else 0
+    except Exception:  # noqa: BLE001 - an unreadable window is no window
+        return None
+    if not root or not pid:
+        return None
+    return {"hwnd": int(root), "pid": int(pid)}
+
+
 def _authoring_tree(auto: Any) -> dict[str, Any]:
     """The foreground app's controls, each with its ``element-identity-at`` identity.
 
     Lists, in tree order, the controls of the roles in ``_AUTHORING_ROLES``
     that have an identity (an AutomationId, or a role and a name), at most
     ``_MAX_AUTHORING_NODES`` on screen and as many off screen. ``identity`` is
-    exactly what ``/uia/element-identity-at`` returns for that control. An
+    exactly what ``/uia/element-identity-at`` returns for that control, and
+    ``window`` its top-level window (:func:`_top_level_window`). An
     off-screen control (scrolled out of view) has ``offscreen: true`` and no
     pixels: it can't be clicked, but it counts when a caller checks that an
     identity is unique. Bounds are screen pixels ``{x, y, w, h}``.
@@ -747,6 +769,7 @@ def _authoring_tree(auto: Any) -> dict[str, Any]:
     root = _authoring_root(auto)
     if root is None:
         return {"status": "ok", "tree": [], "window": None, "truncated": False}
+    user32 = _user32_factory() if os.name == "nt" else None
     started = time.monotonic()
     nodes: list[dict[str, Any]] = []
     shown = hidden = 0
@@ -803,6 +826,7 @@ def _authoring_tree(auto: Any) -> dict[str, Any]:
                         ),
                         "offscreen": offscreen,
                         "identity": identity,
+                        "window": _top_level_window(user32, control),
                     }
                 )
         if depth < _MAX_UIA_DEPTH:

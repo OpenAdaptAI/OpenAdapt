@@ -886,5 +886,19 @@ def test_authoring_tree_lists_controls_with_their_element_identity() -> None:
     assert tree["window"]["process_name"] == "TextEdit"
 
 
+def test_a_control_whose_identity_cant_be_read_cuts_the_tree_short() -> None:
+    """It could be another control's twin, so no node is unique for sure."""
+
+    class _Unreadable(_TreeAXClient):
+        def ancestry(self, element):
+            if element.name == "Save":
+                return None
+            return super().ancestry(element)
+
+    tree = backend(ax_client=_Unreadable()).authoring_tree()
+    assert tree is not None and tree["truncated"] is True
+    assert [node["role"] for node in tree["tree"]] == ["text_input"]
+
+
 def test_authoring_tree_without_a_walking_client_is_none() -> None:
     assert backend().authoring_tree() is None
