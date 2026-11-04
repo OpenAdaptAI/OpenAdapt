@@ -1440,9 +1440,9 @@ def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
 
     Only ids and actor references; the version bodies stay out of evidence.
     The author is ``meta.author`` when the server returns it. When it
-    doesn't (Medplum 5.2), and the audit trail logged exactly one timed
-    create or update per version, the n-th logged write names the n-th
-    version. Otherwise ``author`` is None: unknown, never guessed.
+    doesn't (some servers omit it), and the audit trail logged exactly one
+    timed create or update per version, the n-th logged write names the
+    n-th version. Otherwise ``author`` is None: unknown, never guessed.
     """
 
     rows: list[tuple[str, str, Optional[str]]] = []
