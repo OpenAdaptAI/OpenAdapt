@@ -1,7 +1,9 @@
 {
  "app": "Calculator",
- "tree_seconds": 0.3,
+ "tree_seconds": 1.9,
  "nodes": 20,
+ "offscreen": 0,
+ "truncated": false,
  "identity_rereads_equal": 20,
  "roles": [
   "button"
@@ -31,5 +33,6 @@
   "calculator.fill"
  ],
  "window_title_on_payload": true,
- "note": "macOS Calculator (SwiftUI), read-only: the AX authoring tree and an identity re-read per node. Taken on commit 0dded5a1c, before offscreen nodes were listed; the AX walk itself is unchanged. No click: the desktop was in use."
+ "window_title_on_payload_where": "window.process_name only: the app name, which equals this window's title",
+ "note": "macOS Calculator (SwiftUI), read only, on commit 4d055fdb2: the AX authoring tree and an identity re-read per node. No click: the desktop was in use."
 }
