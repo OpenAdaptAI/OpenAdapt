@@ -215,6 +215,7 @@ def order_spec(
     record_kind: str = "order",
     write_adapter: Optional[str] = ORDER_ADAPTER,
     expected_rows: int = 1,
+    forbidden_controls: Sequence[str] = (),
 ) -> dict[str, Any]:
     """What a person signs to let an agent teach the order write ``name``."""
 
@@ -235,6 +236,7 @@ def order_spec(
         "origins": [str(origin_of(base_url))],
         "inputs": {k: {"value": v} for k, v in values.items()},
         "writes": writes,
+        "forbidden": {"controls": list(forbidden_controls)},
     }
 
 

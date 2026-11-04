@@ -178,6 +178,16 @@ def _origin(url: str) -> str:
     return f"{parts.scheme}://{parts.netloc}".lower()
 
 
+def _has_admission_key(key_dir: Path) -> bool:
+    """The local admission key pair exists (never created on the write lane)."""
+
+    from openadapt_flow.execute.keys import _KEY_NAME
+    from openadapt_flow.execute.keys import key_dir as keys_of
+
+    folder = keys_of(Path(key_dir))
+    return (folder / _KEY_NAME).is_file() and (folder / "ed25519.pub").is_file()
+
+
 def secrets_token() -> str:
     import secrets as _secrets
 
@@ -223,7 +233,7 @@ def _lane_limits(statement: Any, contract: Any) -> Optional[str]:
     if unknown:
         return "it forbids actions this lane can't check: " + ", ".join(sorted(unknown))
     counts = {
-        int(e.get("expected_count") or 1)
+        int(e["expected_count"] if e.get("expected_count") is not None else 1)
         for e in contract.config.model_dump(mode="json").get("effects") or []
     }
     if counts and counts != {statement.writes.expected_rows}:
@@ -232,6 +242,60 @@ def _lane_limits(statement: Any, contract: Any) -> Optional[str]:
             f"checks {', '.join(map(str, sorted(counts)))}"
         )
     return None
+
+
+def _check_forbidden(
+    page: Any, scope: Any, action: str, el: Any, key: Optional[str]
+) -> None:
+    """Refuse an action on (or a key reaching) a control the statement forbids.
+
+    The names come from Chromium's accessibility tree over DevTools, not
+    from the listing a page script built. A click or select is checked
+    against the control at the element's centre; a press focuses its
+    element first, then checks the control with focus and, for Enter, the
+    form's default button. Anything unreadable is refused. Raises
+    :class:`StepStopped`.
+    """
+
+    from openadapt_flow.teach_scope import (
+        control_label_at,
+        key_target_labels,
+        normalize_structured,
+    )
+
+    labels: Optional[list[str]]
+    if action in ("click", "select"):
+        box = el.bounding_box() if el is not None else None
+        label = (
+            control_label_at(
+                page,
+                int(box["x"] + box["width"] / 2),
+                int(box["y"] + box["height"] / 2),
+            )
+            if box
+            else None
+        )
+        labels = None if label is None else [label]
+    elif action == "press":
+        if el is not None:
+            el.focus()
+        labels = key_target_labels(
+            page, enter=str(key or "").lower() in ("enter", "numpadenter")
+        )
+    else:
+        return
+    if labels is None:
+        raise StepStopped(
+            "the control can't be read, and the signed teach authorization "
+            "forbids some controls; nothing was done"
+        )
+    if any(
+        label and normalize_structured(label) in scope.forbidden_controls
+        for label in labels
+    ):
+        raise StepStopped(
+            "the signed teach authorization forbids this control; nothing was done"
+        )
 
 
 def _contract_coverage(
@@ -787,6 +851,19 @@ class _Browser:
             and not carries_secret(request.url, self.secrets)
         ):
             self.blocked.append(f"leaving {self.origin} for {_origin(request.url)}")
+            route.abort()
+            return
+        if (
+            self.scope is not None
+            and request.method.upper() in READ_METHODS
+            and not self.scope.allows_origin(request.url)
+            and urlsplit(request.url).scheme in ("http", "https", "ws", "wss")
+        ):
+            # Run 1 reaches only the origins the statement names.
+            self.blocked.append(
+                f"{_origin(request.url)}, an origin the signed teach "
+                "authorization doesn't name"
+            )
             route.abort()
             return
         if (
@@ -1776,22 +1853,6 @@ class BrowserTeachBridge:
             key = str(args.get("key") or "")
             if not key:
                 raise BridgeError("press needs key")
-            if run.scope is not None and run.scope.forbidden_controls:
-                from openadapt_flow.teach_scope import (
-                    focused_control_label,
-                    normalize_structured,
-                )
-
-                # Read from the browser's accessibility tree, not the page.
-                focused = focused_control_label(page)
-                if focused is None or (
-                    normalize_structured(focused) in run.scope.forbidden_controls
-                ):
-                    raise BridgeError(
-                        "refused: the key would reach a control the signed teach "
-                        "authorization forbids (or one that can't be read); "
-                        "nothing was pressed"
-                    )
             if run.scope is not None and key not in SCOPED_KEYS:
                 raise BridgeError(
                     "refused: in a taught write, press takes only Enter, Tab, "
@@ -1880,6 +1941,8 @@ class BrowserTeachBridge:
             # The same resolution a compiled run uses, so what works here
             # works there.
             el = _resolve(page, target, 2000) if target is not None else None
+            if run.scope is not None and run.scope.forbidden_controls:
+                _check_forbidden(page, run.scope, action, el, step.get("key"))
             if action == "click":
                 el.click()
             elif action == "type":
@@ -2074,6 +2137,16 @@ class BrowserTeachBridge:
         problem = _lane_limits(statement, contract)
         if problem is not None:
             raise refuse("teach_auth_write_not_covered", problem)
+        try:
+            key_dir, _root, _heads = self._trust()
+        except ta.TeachAuthorizationError as exc:
+            raise refuse(exc.code, str(exc)) from None
+        if not _has_admission_key(key_dir):
+            raise refuse(
+                "teach_auth_no_admission_key",
+                "the approvers' key directory has no admission key to sign the "
+                "tool with (openadapt-flow jit keygen sets one up)",
+            )
         if _origin(url) not in statement.origins:
             raise refuse("teach_auth_write_not_covered", "it doesn't name this app")
         if statement.writes.record_kind != contract.name:
@@ -2110,7 +2183,7 @@ class BrowserTeachBridge:
 
         verification, statement = authorization
         key_dir, _root, _heads = self._trust()
-        if not (key_dir / "keys" / "ed25519.pub").is_file():
+        if not _has_admission_key(key_dir):
             # Never create a signing key here: it would be one nobody set up.
             raise BridgeError(
                 "the approvers' key directory has no admission key; set it up "

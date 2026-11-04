@@ -605,7 +605,7 @@ def control_label_at(page: Any, x: int, y: int) -> Optional[str]:
     nodes = tree.get("nodes") or []
     start = next((n for n in nodes if n.get("backendDOMNodeId") == backend), None)
     if start is None:
-        return ""
+        return None
     if _ax_value(start, "role") in _OPAQUE_ROLES:
         return None
     return _control_name(nodes, start)
@@ -615,38 +615,171 @@ def focused_control_label(page: Any) -> Optional[str]:
     """The accessible name of the control that has focus now.
 
     From Chromium's accessibility tree over DevTools, like
-    :func:`control_label_at`. ``""`` when nothing but the document has focus;
-    ``None`` when it can't be read or focus is inside a frame it can't see.
+    :func:`control_label_at`, in every frame of the page. ``""`` when
+    nothing but a document has focus; ``None`` when it can't be read, or
+    focus is in a frame the tree can't see into.
+    """
+
+    labels = key_target_labels(page, enter=False)
+    return None if labels is None else labels[0]
+
+
+_ENTER_KEYS = frozenset({"enter", "return", "numpadenter", "kp_enter"})
+
+
+def key_target_labels(page: Any, *, enter: bool) -> Optional[list[str]]:
+    """The names of every control a key could activate now, or ``None``.
+
+    The control with focus, found across the page's frames in Chromium's
+    accessibility tree; and, for ``enter``, the default button of the form
+    the focused field is in (HTML implicit submission sends the form with
+    it). ``None`` when any of it can't be read, so the guard refuses.
     """
 
     session = _cdp(page)
     if session is None:
         return None
     try:
-        tree = session.send("Accessibility.getFullAXTree", {})
-    except Exception:  # noqa: BLE001 - the probe failed: the focus is unknown
+        tree = session.send("Page.getFrameTree", {})["frameTree"]
+        frames: list[str] = []
+        queue = [tree]
+        while queue:
+            item = queue.pop(0)
+            frames.append(str(item["frame"]["id"]))
+            queue.extend(item.get("childFrames") or [])
+        found: Optional[tuple[list[Any], Mapping[str, Any]]] = None
+        for frame_id in frames:
+            nodes = session.send("Accessibility.getFullAXTree", {"frameId": frame_id})[
+                "nodes"
+            ]
+            for node in nodes:
+                focused = any(
+                    prop.get("name") == "focused"
+                    and (prop.get("value") or {}).get("value") is True
+                    for prop in node.get("properties") or []
+                )
+                if focused and _ax_value(node, "role") != "RootWebArea":
+                    found = (nodes, node)  # the last frame's wins: the deepest
+        if found is None:
+            return [""]
+        nodes, node = found
+        if _ax_value(node, "role") in _OPAQUE_ROLES:
+            return None  # focus is in a frame this session can't read
+        labels = [_control_name(nodes, node)]
+        if enter:
+            default = _default_button(session, node.get("backendDOMNodeId"))
+            if default is False:
+                return None
+            if default is not None:
+                labels.append(default)
+        return labels
+    except Exception:  # noqa: BLE001 - the probe failed: unknown, refused
         return None
     finally:
         try:
             session.detach()
         except Exception:  # noqa: BLE001 - already gone
             pass
-    nodes = tree.get("nodes") or []
-    focused = [
-        n
-        for n in nodes
-        if any(
-            p.get("name") == "focused" and (p.get("value") or {}).get("value") is True
-            for p in n.get("properties") or []
-        )
-    ]
-    inner = [n for n in focused if _ax_value(n, "role") != "RootWebArea"]
-    if not inner:
-        return ""
-    node = inner[-1]
-    if _ax_value(node, "role") in _OPAQUE_ROLES:
+
+
+def _attrs(node: Mapping[str, Any]) -> dict[str, str]:
+    raw = node.get("attributes") or []
+    return {str(raw[k]).lower(): str(raw[k + 1]) for k in range(0, len(raw) - 1, 2)}
+
+
+def _is_submit(node: Mapping[str, Any]) -> bool:
+    name = str(node.get("nodeName") or "").upper()
+    kind = _attrs(node).get("type", "").lower()
+    if name == "BUTTON":
+        return kind in ("", "submit")
+    return name == "INPUT" and kind in ("submit", "image")
+
+
+def _default_button(session: Any, backend: Any) -> "Optional[str] | bool":
+    """The accessible name of the default button Enter would submit with.
+
+    ``None`` when Enter submits nothing (no form, a text area, a button
+    itself); ``False`` when it can't be worked out.
+    """
+
+    if backend is None:
+        return False
+    root = session.send("DOM.getDocument", {"depth": -1, "pierce": True})["root"]
+    order: list[Mapping[str, Any]] = []
+    parent: dict[Any, Mapping[str, Any]] = {}
+    stack: list[Mapping[str, Any]] = [root]
+    while stack:
+        node = stack.pop()
+        order.append(node)
+        kids = [
+            *(node.get("children") or []),
+            *(node.get("shadowRoots") or []),
+            *([node["contentDocument"]] if node.get("contentDocument") else []),
+        ]
+        for kid in kids:
+            parent[kid.get("backendNodeId")] = node
+        stack.extend(reversed(kids))
+    focused = next((n for n in order if n.get("backendNodeId") == backend), None)
+    if focused is None:
+        return False
+    name = str(focused.get("nodeName") or "").upper()
+    if name in ("TEXTAREA", "BUTTON", "SELECT") or _is_submit(focused):
         return None
-    return _control_name(nodes, node)
+    form: Optional[Mapping[str, Any]] = None
+    form_id = _attrs(focused).get("form")
+    node: Optional[Mapping[str, Any]] = focused
+    while node is not None and form_id is None:
+        if str(node.get("nodeName") or "").upper() == "FORM":
+            form = node
+            break
+        if str(node.get("nodeName") or "") == "#document":
+            break
+        node = parent.get(node.get("backendNodeId"))
+    if form is None and form_id is None:
+        return None
+    if form is None:
+        form = next(
+            (
+                n
+                for n in order
+                if str(n.get("nodeName") or "").upper() == "FORM"
+                and _attrs(n).get("id") == form_id
+            ),
+            None,
+        )
+        if form is None:
+            return None
+    fid = _attrs(form).get("id")
+
+    def inside(n: Mapping[str, Any]) -> bool:
+        cur: Optional[Mapping[str, Any]] = n
+        while cur is not None:
+            if cur is form:
+                return True
+            cur = parent.get(cur.get("backendNodeId"))
+        return False
+
+    for n in order:
+        if not _is_submit(n):
+            continue
+        owner = _attrs(n).get("form")
+        if (owner is not None and fid and owner == fid) or (
+            owner is None and inside(n)
+        ):
+            tree = session.send(
+                "Accessibility.getPartialAXTree",
+                {"backendNodeId": n["backendNodeId"], "fetchRelatives": False},
+            )
+            ax = next(
+                (
+                    x
+                    for x in tree.get("nodes") or []
+                    if x.get("backendDOMNodeId") == n["backendNodeId"]
+                ),
+                None,
+            )
+            return False if ax is None else _ax_value(ax, "name").strip()[:300]
+    return None
 
 
 def link_target_at(page: Any, x: int, y: int) -> Optional[dict[str, str]]:
@@ -766,14 +899,29 @@ class TeachGuard:
             "type",
         ):
             return
-        label = focused_control_label(page) if page is not None else None
-        if label is None:
+        if op.kind == "hotkey" and op.modifiers:
+            # A modifier chord can activate a control by its access key,
+            # wherever focus is.
             self._raise(
                 "control_forbidden",
-                "the control with focus could not be read, and the "
+                "key combinations are refused while the authorization forbids "
+                "some controls",
+            )
+        key = (op.key or "").lower()
+        enter = key in _ENTER_KEYS or (
+            op.kind == "type" and ("\n" in (op.text or "") or "\r" in (op.text or ""))
+        )
+        labels = key_target_labels(page, enter=enter) if page is not None else None
+        if labels is None:
+            self._raise(
+                "control_forbidden",
+                "the control the key would reach could not be read, and the "
                 "authorization forbids some controls",
             )
-        if label and normalize_structured(label) in self.scope.forbidden_controls:
+        if any(
+            label and normalize_structured(label) in self.scope.forbidden_controls
+            for label in labels or []
+        ):
             self._raise(
                 "control_forbidden",
                 "the key would reach a control the authorization forbids",
@@ -795,6 +943,16 @@ class TeachGuard:
                 self._raise(
                     "forbidden_action",
                     f"the authorization forbids {op.kind.replace('_', ' ')}",
+                )
+            if (
+                op.kind in ("click", "double_click", "right_click")
+                and page is None
+                and self.scope.forbidden_controls
+            ):
+                self._raise(
+                    "control_forbidden",
+                    "there is no page to read the clicked control from, and the "
+                    "authorization forbids some controls",
                 )
             if (
                 op.kind in ("click", "double_click", "right_click")

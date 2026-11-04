@@ -329,3 +329,32 @@ def test_run_1_presses_no_character_keys(bridge: BrowserTeachBridge, app: _App) 
         bridge.dispatch(
             "teach_act", {"action": "press", "ref": _ref(page, "Customer"), "key": "M"}
         )
+
+
+def test_a_forbidden_control_is_refused_by_its_accessible_name(
+    app: _App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Read from the browser's accessibility tree, by click or by keyboard."""
+
+    monkeypatch.setenv("P_USER", "clerk")
+    monkeypatch.setenv("P_PW", PASSWORD)
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / "seal"))
+    bridge = BrowserTeachBridge(
+        tmp_path / "tools",
+        tmp_path / "files",
+        contracts={"order": _contract(app.base)},
+        secrets={"username": "P_USER", "password": "P_PW"},
+        verify_dir=tmp_path / "verify",
+        teach_authorization=order_authority(
+            tmp_path / "authorization",
+            app.base,
+            {"customer": "Acme"},
+            forbidden_controls=["Close account"],
+        ),
+    )
+    page, _seen = _start(bridge, app)
+    with pytest.raises(BridgeError, match="forbids this control"):
+        bridge.dispatch(
+            "teach_act", {"action": "click", "ref": _ref(page, "Close account")}
+        )
+    assert app.closed == 0

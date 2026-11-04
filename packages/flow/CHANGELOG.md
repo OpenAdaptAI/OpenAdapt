@@ -19,7 +19,7 @@
 
 ### Features
 
-- A teach authorization's forbidden controls are read from Chromium's accessibility tree, not by a script in the page, and every key (Enter, Space, any key, typing) is checked against the control that has focus when it arrives, so a forbidden control reached by Tab is refused like a click.
+- A teach authorization's forbidden controls are read from Chromium's accessibility tree, not by a script in the page. Every key (Enter, Space, any key, typing) is checked against the control that has focus when it arrives, in any frame, and Enter in a form field against the form's default button too, so a forbidden control reached by Tab or by implicit submission is refused like a click. Key chords are refused while controls are forbidden. Behaviour change: on surfaces without a web page, a statement that forbids any control now refuses clicks and keys.
 
 - Browser teach writes again, bound to a person's signed teach authorization (`serve --teach-browser --teach-authorization`). Run 1 of a write starts only when the statement covers it: the app's origin, the contract as its record kind, a write adapter, run 1's inputs, and exactly the record fields the contract checks, with run 1's values. During run 1 the write adapter reads every write before it is sent. A taught tool keeps the statement and is signed with the local admission key; every call checks the statement again (signature, roster, purpose, task, expiry). The example app ships its write adapter (`openadapt_flow.agent.example_app:OrderWrites`). Docs: `docs/TEACH_AUTHORIZATION.md`, `docs/VERIFY_WRITES.md`.
 

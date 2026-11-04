@@ -420,6 +420,54 @@ def test_a_key_that_reaches_a_forbidden_control_is_refused(tmp_path, person, chr
     )
 
 
+def test_a_key_in_a_frame_or_a_form_is_checked_where_it_lands(
+    tmp_path, person, chromium
+):
+    guard = _guard(tmp_path, person)
+    # Focus inside a frame.
+    chromium.set_content(
+        '<iframe srcdoc="<button>Delete encounter</button><button>Save</button>">'
+        "</iframe>"
+    )
+    frame = chromium.frame_locator("iframe")
+    frame.locator("button", has_text="Delete encounter").focus()
+    assert _violation(guard.check_key, Op("press", key="Enter"), chromium) == (
+        "control_forbidden"
+    )
+    frame.locator("button", has_text="Save").focus()
+    guard.check_key(Op("press", key="Enter"), chromium)
+    # Enter in a field sends the form with its default button.
+    chromium.set_content(
+        "<form><input aria-label=Note><button>Delete encounter</button>"
+        "<button>Save</button></form>"
+    )
+    chromium.focus("input")
+    guard.check_key(Op("type", text=NOTE), chromium)
+    for op in (Op("press", key="Enter"), Op("type", text=NOTE + "\n")):
+        assert _violation(guard.check_key, op, chromium) == "control_forbidden"
+    chromium.set_content(
+        "<form><input aria-label=Note><button>Save</button>"
+        "<button>Delete encounter</button></form>"
+    )
+    chromium.focus("input")
+    guard.check_key(Op("press", key="Enter"), chromium)  # Save is the default
+    # A key chord can activate a control by its access key.
+    assert _violation(
+        guard.check_key, Op("hotkey", key="d", modifiers=("Alt",)), chromium
+    ) == ("control_forbidden")
+    # aria-labelledby: the accessible name, not the visible text.
+    chromium.set_content(
+        '<button aria-labelledby="l">Open</button><span id="l">Delete encounter</span>'
+    )
+    assert _violation(guard.check_ops, [_at(chromium, "button")], page=chromium) == (
+        "control_forbidden"
+    )
+    # No page to read from.
+    assert _violation(guard.check_ops, [Op("click", x=1, y=1)], page=None) == (
+        "control_forbidden"
+    )
+
+
 def test_forbidden_actions(tmp_path, person):
     guard = _guard(tmp_path, person)
     assert _violation(guard.check_ops, [Op("drag", x=1, y=1, end_x=2, end_y=2)]) == (

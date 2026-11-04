@@ -141,12 +141,21 @@ Programs and tools made before teach authorizations carry none, so:
   and repairs, not programs already admitted.
 - Forbidden controls are matched by their accessible name, read from
   Chromium's accessibility tree over DevTools rather than by a script in the
-  page, so the page can't rename a control to the guard. A click is checked
-  against the control under it; every key (Enter, Space, any other key, and
-  typing) is checked against the control that has focus when the key
-  arrives, however focus got there. A click with no position, a name that
-  can't be read, focus inside a frame, or a surface other than a web page
-  is refused when the statement forbids any control.
+  page. That defeats a page script that tampers with how controls are
+  read, not a page that renames a control through ARIA: against a hostile
+  page, the write adapter and the read-back are what bind the save. A click
+  is checked against the control under it. Every key (Enter, Space, any
+  other key, typing) is checked when it arrives against the control with
+  focus, in any frame of the page, and Enter in a form field also against
+  the form's default button, which it would submit with. Key combinations
+  with a modifier are refused (they can activate a control by its access
+  key). A click with no position, a name that can't be read, focus in a
+  frame the browser's tree can't see, or a surface without a web page is
+  refused when the statement forbids any control.
+- A server that teaches browser writes signs each tool with the admission
+  key in the config's `approvers.key_dir`, so it reads that key. Run it as
+  a user the agent can't act as (Desktop's engine, or a service account);
+  an agent that can read the key can sign a tool program itself.
 - An agent-demonstrated fix is recognized by its provenance, a JSON file in
   the repair store that the store doesn't sign. A process that can write the
   store can strip it, and the approval then asks for no authorization.
