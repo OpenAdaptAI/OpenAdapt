@@ -1817,6 +1817,61 @@ def test_locator_at_keeps_a_unique_automation_id(monkeypatch) -> None:
     )
 
 
+def test_window_bounds_reports_the_visible_frame(monkeypatch) -> None:
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    desktop = _FakeDesktop()
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    pinned = _FakeDesktop.PINNED
+    assert _perform_uia("window-bounds", {"hwnd": pinned, "pid": 10}) == {
+        "status": "ok",
+        "window": {"hwnd": pinned, "pid": 10, "bounds": [0, 0, 800, 600]},
+    }
+    # Another process now owns the handle, or the window is hidden: no frame.
+    assert _perform_uia("window-bounds", {"hwnd": pinned, "pid": 11})["window"] is None
+    desktop.add(0x200, visible=False)
+    assert _perform_uia("window-bounds", {"hwnd": 0x200, "pid": 10})["window"] is None
+    with pytest.raises(AgentRequestError):
+        _perform_uia("window-bounds", {"hwnd": True, "pid": 10})
+
+
+@pytest.mark.parametrize(
+    "extra,bounded",
+    [
+        ({"rect": (200, 200, 500, 400)}, True),  # an owned dialog inside
+        ({"rect": (600, 200, 900, 400)}, False),  # reaches past the frame
+        ({"rect": (1920, 0, 2400, 400)}, False),  # on another monitor
+        ({"rect": (600, 200, 900, 400), "pid": 11}, True),  # another app
+        ({"rect": (600, 200, 900, 400), "visible": False}, True),
+        ({"rect": (600, 200, 900, 400), "cloaked": True}, True),
+        ({"rect": (600, 200, 900, 400), "cloaked": None}, False),
+    ],
+    ids=[
+        "dialog-inside",
+        "dialog-outside",
+        "other-monitor",
+        "other-process",
+        "hidden",
+        "cloaked",
+        "cloak-unknown",
+    ],
+)
+def test_window_bounds_covers_every_window_the_app_shows(
+    monkeypatch, extra, bounded
+) -> None:
+    import openadapt_flow.backends.win_agent.server as agent_server
+
+    desktop = _FakeDesktop()
+    desktop.add(0x300, owner=_FakeDesktop.PINNED, **extra)
+    monkeypatch.setattr(agent_server.os, "name", "nt")
+    monkeypatch.setattr(agent_server, "_user32_factory", lambda: desktop)
+    window = _perform_uia("window-bounds", {"hwnd": _FakeDesktop.PINNED, "pid": 10})[
+        "window"
+    ]
+    assert (window is not None) is bounded
+
+
 def test_uia_tree_lists_one_windows_elements_without_values(monkeypatch) -> None:
     box = _FakeControl(
         "EditControl",
