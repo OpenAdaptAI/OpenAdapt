@@ -456,7 +456,11 @@ def _match_tokens_template(
         for j in range(no):
             if t.c != obs_c[j] or (t.digit and j in digit_used):
                 continue
-            if not t.digit and _id._has_digit(obs[j]):
+            if (
+                not t.digit
+                and _id._has_digit(obs[j])
+                and not _id._alpha_dominated(obs[j])
+            ):
                 continue
             mark(i, obs_r[j], obs[j])
             explained[j] = True

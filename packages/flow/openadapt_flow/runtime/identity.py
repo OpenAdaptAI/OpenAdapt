@@ -1119,9 +1119,10 @@ def _match_tokens(
         for j, oc in enumerate(obs_c):
             if ec != oc or (digit and j in digit_used):
                 continue
-            if not digit and _has_digit(obs[j]):
+            if not digit and _has_digit(obs[j]) and not _alpha_dominated(obs[j]):
                 # Only a recorded value explains a live value: a word that
                 # folds to one ("Bo" ~ "80") must not hide a differing id.
+                # Digit noise inside a word ("5ample") is still the word.
                 continue
             mark(i, exp[i], obs[j])
             explained[j] = True
