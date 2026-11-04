@@ -111,7 +111,14 @@ run is refused before it starts: nothing after a stop could be proven.
    person still answers each compensation's card. A web run gets a fresh
    session: cookies and storage are cleared, and the browser goes back to the
    entry URL. When Flow is attached to the operator's own browser, it never
-   clears it, so only API-only compensations run there.
+   clears it, so only API-only compensations run there. On a desktop or
+   remote-display backend, Flow runs the bundle's qualified halt cleanup
+   (docs/HALT_CLEANUP.md), then checks both the run's start screen and the
+   compensation's own first screen on the same backend. If either doesn't
+   show, nothing runs and the rollback ends `RECONCILIATION_REQUIRED`. There,
+   a screen compensation counts as an undo under "Undo, or a person, before
+   every write" only when the bundle's halt cleanup has steps and is
+   qualified; otherwise each save goes to a person first.
 7. **Final read.** Flow compares the whole store with the read from before the
    run. Every row the run touched must be back as it was. A `void`
    compensation may leave the run's own record, by its id, in the tables it
@@ -337,10 +344,8 @@ profile as `app/version` (`profile_id`).
   table moved, but not which rows.
 - **No rollback in a workflow with a loop,** or when a step ran more than
   once. A compensation runs with the run's base parameters.
-- **Single web runs only, for now.** A desktop, RDP, worklist-pool or
-  durable (pausable) run with rollback on is refused before it starts. The
-  Standard and Regulated execution profiles require durable runs, so
-  rollback doesn't run under them yet.
+- **Single runs.** A worklist-pool or durable (pausable) run with rollback
+  on is refused before it starts.
 - **Database-numbered ids move on.** A delete compensation can't wind back
   an id counter (MySQL `AUTO_INCREMENT`, SQLite `AUTOINCREMENT`); each read
   accepts a counter that moved, with no row left behind, by no more than the

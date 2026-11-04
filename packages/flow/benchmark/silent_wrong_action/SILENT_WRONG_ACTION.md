@@ -66,7 +66,7 @@ run-to-run disagreement); N proves reproducibility.
 ## Reproduce
 
 ```
-.venv/bin/python -m openadapt_flow.benchmark.silent_wrong_action \
+.venv/bin/python -m benchmark.harness.silent_wrong_action \
     --out benchmark/silent_wrong_action --n 10
 ```
 

@@ -17,6 +17,10 @@
 
 ## Unreleased
 
+### Changed
+
+- The wheel no longer ships the benchmark harnesses. `openadapt_flow.benchmark` and `openadapt_flow.instrument` moved to `packages/flow/benchmark/harness/` in the source tree (import `benchmark.harness`); `openadapt-flow benchmark` runs from a source checkout and says so from a wheel. The engine audit for application-specific code is in `docs/GENERALITY_AUDIT.md`. Code that imported `openadapt_flow.benchmark` or `openadapt_flow.instrument` from an installed wheel imports `benchmark.harness` from a source checkout instead.
+
 ### Features
 
 - `run --self-repair` (and repair by default) now works outside a browser. `repair.session` in `deploy.yaml` says how to start the app for each probe, fault probe and resumed run (an argv, no shell, kept running while the app is up; `fault_commands`, `close_command`, `ready_s`). The run's configured backend must bind to a window owned by that command's process group, so a session never binds to the halted session or a copy already open; Flow ends the group afterwards, and closes the halted session before each probe. This works where the bound window is on Flow's machine (macOS, and the local RDP or Citrix client window); Windows over its agent and FreeRDP are refused for now. Without `repair.session`, a desktop run refuses repair with that reason, as before.
@@ -26,6 +30,8 @@
 ### Fixes
 
 - A person's approval of a desktop save is no longer voided by text that changes by itself outside the app, such as the taskbar clock ticking over a minute while the run waits. Off the browser, the approval's "form unchanged" check read every word on the screen. On Windows it now reads the app window the item's verified steps were in, in reading order, with the window's frame in the digest, so any change inside that window, or a moved window, still stops the save. When a window of the app reaches outside that frame, the whole screen is read. A resumed run names the window under the earlier steps' recorded points, so an approval given during a hold still holds when the form is unchanged. Elsewhere the whole screen is read as before ([#1697](https://github.com/OpenAdaptAI/OpenAdapt/issues/1697)).
+
+- A qualification case can run on `--backend windows`. `WindowsBackend` now answers the qualification environment observer from one `/context/identity` call: the foreground executable's name, the SHA-256 of that executable file, the live logon-session digest, and a digest of the machine id and exact OS build. Before, `qualify run-case` on Windows refused with "qualification backend cannot observe the complete environment". The digest is withheld when the file changed after the process started (an updater replacing a running program), and it describes the host executable for an app run by an interpreter, browser or shared runtime. Guarded input now also binds the digest and the environment, so a same-named program from another path cannot take the foreground between the check and the input. The agent's session digest now accepts a connected RDP or Citrix session, not only the console session, so the agent can run inside a remote user session. An agent without the new `context_environment_v1` fields still refuses ([#1696](https://github.com/OpenAdaptAI/OpenAdapt/issues/1696)).
 
 - A covered-band dismiss step takes its dialog box from the window the backend proved covers the band, before any pixel search, so a native message box that the accessibility tree doesn't label as a dialog can be dismissed. Without a proved window the step is refused as before.
 
