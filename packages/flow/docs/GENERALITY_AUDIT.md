@@ -6,9 +6,10 @@ Audited 2026-11-03 on `main` at `213f3d9fe`. Scope: everything under
 The rule: the engine has no code written for one application. What one
 application needs lives in data (`app_profiles/*.yaml`, generated contracts,
 deployment configs) or in test fixtures and benchmark harnesses outside the
-shipped package. The CI check that keeps it that way,
-`scripts/check_engine_generality.py`, lands in the pull request that follows
-this audit, together with the rule in [CONTRIBUTING.md](../CONTRIBUTING.md).
+shipped package. A CI check (`scripts/check_engine_generality.py`) keeps it
+that way; [CONTRIBUTING.md](../CONTRIBUTING.md) states the rule. It counts an
+app name inside an identifier too (`_openemr_base`, `isOpenEMR`); its baseline
+started at 425 hits and only shrinks.
 
 ## Method
 

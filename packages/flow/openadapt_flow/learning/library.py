@@ -145,9 +145,15 @@ class SkillLibrary:
         return self.root / _LIBRARY_FILE
 
     def _load(self) -> None:
-        if not artifacts.is_file(self.path):
-            return
-        raw = json.loads(artifacts.read_text(self.path))
+        if self._writer is not None:
+            # Read through the writer, which holds this library's own key.
+            if not self._writer.is_file(_LIBRARY_FILE):
+                return
+            raw = json.loads(self._writer.read_bytes(_LIBRARY_FILE).decode("utf-8"))
+        else:
+            if not artifacts.is_file(self.path):
+                return
+            raw = json.loads(artifacts.read_text(self.path))
         for sid, data in raw.get("skills", {}).items():
             self._skills[sid] = Skill.model_validate(data)
 

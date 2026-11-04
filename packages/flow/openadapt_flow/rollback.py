@@ -345,6 +345,12 @@ def _bookkeeping_inserts(reader: Any) -> set[str]:
     return set(profile.no_record_insert_tables()) if profile is not None else set()
 
 
+def _no_record_values(reader: Any) -> set[str]:
+    """Record-field values that name no record, from the app profile."""
+    profile = _profile_of(reader)
+    return set(profile.no_record_values) if profile is not None else set()
+
+
 def _own_row_tables(reader: Any) -> set[str]:
     """Tables of the acting user's own rows the reader's app profile excuses."""
     from openadapt_flow.app_profiles import table_name
@@ -584,7 +590,11 @@ def roll_back(
         if attributor is None:
             return None
         return attributor.unaccounted_writes(
-            rows, window, _bookkeeping_inserts(reader), _own_row_tables(reader)
+            rows,
+            window,
+            _bookkeeping_inserts(reader),
+            _own_row_tables(reader),
+            _no_record_values(reader),
         )
 
     record.after_stop_diff = landed.summary()

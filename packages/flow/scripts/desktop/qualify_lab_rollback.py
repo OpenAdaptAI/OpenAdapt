@@ -51,7 +51,6 @@ sys.path.insert(0, str(HERE))
 import winrm_lab  # noqa: E402
 
 GUEST = r"C:\oa"
-PY = r"C:\Program Files\Python312-arm64\python.exe"
 APP = rf"{GUEST}\patient_notes.ps1"
 DB = rf"{GUEST}\patients.db"
 SEARCH = "Neil"
@@ -108,17 +107,18 @@ def _fresh_app(
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
         check=False,
     )
-    lab.run_ps(f"& '{PY}' '{GUEST}\\pn_db.py' seed --drift none")
+    py = lab.resolve_app_python()
+    lab.run_ps(f"& '{py}' '{GUEST}\\pn_db.py' seed --drift none")
     if note:
         b64 = base64.b64encode(note.encode("utf-8")).decode("ascii")
-        lab.run_ps(f"& '{PY}' '{GUEST}\\pn_db.py' save 1 {b64}")
+        lab.run_ps(f"& '{py}' '{GUEST}\\pn_db.py' save 1 {b64}")
     lab.run_ps(
         f"Set-Content -Encoding ascii -Path '{GUEST}\\pn_env.json' "
         '-Value \'{"window": "maximized"}\''
     )
     lab.launch_interactive(
         f"powershell.exe -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File {APP} "
-        f'-Python "{PY}" -DbCli "{GUEST}\\pn_db.py"',
+        f'-Python "{py}" -DbCli "{GUEST}\\pn_db.py"',
         name="OAFlowApp",
     )
     time.sleep(settle_s)
@@ -366,14 +366,12 @@ def _review_selection_keys(workflow) -> list[dict[str, str]]:
 
 def _use_host(lab: winrm_lab.WinRMLab) -> str:
     """Point the guest paths at the lab host's profile; its env prefix."""
-    global PY, GUEST, APP, DB
+    global GUEST, APP, DB
     profile = getattr(lab, "profile", None)
     if profile is None:  # a lab module without host profiles: the ARM VM
         return "OAFLOW_WINLAB_"
     GUEST = profile.guest_dir
     APP, DB = rf"{GUEST}\patient_notes.ps1", rf"{GUEST}\patients.db"
-    # pn_db prints its JSON: the console python.exe beside pythonw.exe.
-    PY = lab.resolve_python().replace("pythonw.exe", "python.exe")
     return str(profile.prefix)
 
 

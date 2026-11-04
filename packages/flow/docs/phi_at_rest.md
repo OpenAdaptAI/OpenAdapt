@@ -319,7 +319,9 @@ they write inside a sealed set sealed. Each reads artifact files through one rea
   recording compiles into `_teach_compiled`, a sealed bundle inside the
   recording that the recording's index skips. A library or `--out` directory
   that already holds plaintext is refused, so nothing learned from encrypted
-  input lands beside plaintext.
+  input lands beside plaintext. An `--out` or library that is, contains, or
+  is inside any input (by real path or by inode, so a symlink alias counts)
+  is refused before anything is written.
 - `push` and `sanitize` of an encrypted recording or bundle, and every
   `push` in strict mode, write the sanitized review copy as a sealed set of
   kind `sanitized`, staged in a private (0700) directory beside it and removed
@@ -329,6 +331,14 @@ they write inside a sealed set sealed. Each reads artifact files through one rea
   and writes a reviewer's redactions back encrypted; `approve-sanitized`
   encrypts the approved archive; the upload decrypts that archive in memory and
   sends the exact approved bytes.
+
+Refusals never quote what they read. A validation error's quoted input value
+is dropped from every refusal the CLI prints. With sealed input or in strict
+mode, a `teach` or `push` refusal names only the error's type, unless its text
+was built only from the command line (the paths you passed, such as an `--out`
+that overlaps an input or a run that came from another bundle). An unexpected
+error prints its type instead of a traceback, and a success line names a skill
+or workflow only by a short hash.
 
 Without the key, each of these refuses before it reads anything and names the
 variable to set. Any other command given a sealed path refuses with a message

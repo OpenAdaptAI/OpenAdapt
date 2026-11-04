@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -129,6 +130,16 @@ _READ_CALLS = frozenset({"read_text", "read_bytes", "is_file", "exists", "open"}
 
 #: (module, function, source of the call) -> why a direct read is right.
 ALLOWED: dict[tuple[str, str, str], str] = {
+    (
+        "learning/library.py",
+        "_load",
+        "self._writer.is_file(_LIBRARY_FILE)",
+    ): "the sealed library's own writer, opened and hash-checked with its key",
+    (
+        "learning/library.py",
+        "_load",
+        "self._writer.read_bytes(_LIBRARY_FILE)",
+    ): "the sealed library's own writer, opened and hash-checked with its key",
     (
         "__main__.py",
         "_cmd_record",
@@ -558,15 +569,21 @@ def test_teach_reads_sealed_inputs_and_writes_sealed(
     before = {p: _files(p) for p in (run, bundle)}
     out = tmp_path / "taught"
     args = ["teach", str(run), "--fix", str(fix), "--bundle", str(bundle)]
+    name = Workflow.load(bundle).name
+    assert name not in str(tmp_path)
+    capsys.readouterr()
     assert main([*args, "--out", str(out)]) == 0
+    printed = capsys.readouterr().out
+    # The summary names no skill id (the workflow name) read from sealed input.
+    assert "LEARNED" in printed and name not in printed and "withheld" in printed
     _assert_taught_sealed(out, fix)
     assert {p: _files(p) for p in (run, bundle)} == before
     library = SkillLibrary(tmp_path / "taught.skills")
     assert library.sealed and library.skill_ids()
     # A second teach reads the sealed library back: the fix is learned already.
-    capsys.readouterr()
     assert main([*args, "--out", str(out)]) == 1
-    assert "no_change" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    assert "no_change" in printed and name not in printed
     _assert_taught_sealed(out, fix)
 
 
@@ -599,6 +616,96 @@ def test_teach_refuses_a_plaintext_library_for_sealed_input(
     assert main([*args, "--out", str(out), "--library", str(library)]) == 2
     assert "unencrypted skill library" in capsys.readouterr().out
     assert not out.exists()
+
+
+_MARKER = "PRIVATE-MARKER-4f1c"
+
+
+def _marker_absent(root: Path, *printed: str) -> None:
+    """The marker is in no printed text, log record or file under ``root``."""
+    for text in printed:
+        assert _MARKER not in text
+    for path in root.rglob("*"):
+        if path.is_file():
+            assert _MARKER.encode() not in path.read_bytes(), path
+
+
+@pytest.mark.parametrize("stale", ["state", "workflow"])
+def test_teach_refusal_on_a_sealed_run_never_prints_its_contents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog, stale: str
+) -> None:
+    """A provenance refusal names only the paths on the command line, never a
+    state id, step intent or workflow name read from the encrypted report."""
+    from tests.test_teach_cli import _base_bundle, _dismiss_recording, _halt_run
+
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    base = _base_bundle(plain)
+    _halt_run(base, plain / "run")
+    fix = _dismiss_recording(plain / "fix")
+    report = json.loads((plain / "run" / "report.json").read_text())
+    if stale == "state":
+        report["halt"]["state_id"] = "s::gone"
+        report["halt"]["intent"] = _MARKER
+    else:
+        report["workflow_name"] = _MARKER
+    (plain / "run" / "report.json").write_text(json.dumps(report))
+    run = _seal_dir(plain / "run", tmp_path / "run", "run")
+    for path in (plain / "run").rglob("*"):
+        if path.is_file():
+            path.unlink()
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    out = tmp_path / "taught"
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(base)]
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    assert main([*args, "--out", str(out)]) == 2
+    printed = capfd.readouterr()
+    _marker_absent(tmp_path, printed.out, printed.err, caplog.text)
+    assert "teach cannot run" in printed.out
+    assert "did not stop in a program --bundle" in printed.out
+    assert repr(report["halt"]["state_id"]) not in printed.out
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("alias", ["same path", "symlink", "inside"])
+def test_teach_never_writes_over_the_sealed_base(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys, alias: str
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, bundle = _teach_inputs(tmp_path)
+    if alias == "same path":
+        out = bundle
+    elif alias == "symlink":
+        out = tmp_path / "alias"
+        out.symlink_to(bundle, target_is_directory=True)
+    else:
+        out = bundle / "taught"
+    before = {p: _files(p) for p in (run, fix, bundle)}
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(bundle)]
+    capsys.readouterr()
+    assert main([*args, "--out", str(out)]) == 2
+    printed = capsys.readouterr().out
+    assert "teach cannot run" in printed and "overlaps the base bundle" in printed
+    assert {p: _files(p) for p in (run, fix, bundle)} == before
+    assert not (out.parent / f"{out.name}.skills").exists()
+    assert not (fix / "_teach_compiled").exists()
+    assert Workflow.load(bundle, key=KEY).name
+
+
+@pytest.mark.parametrize("which", ["run", "fix"])
+def test_teach_refuses_an_out_that_is_another_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys, which: str
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, bundle = _teach_inputs(tmp_path)
+    out = {"run": run, "fix": fix}[which]
+    before = {p: _files(p) for p in (run, fix, bundle)}
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(bundle)]
+    assert main([*args, "--out", str(out)]) == 2
+    assert "overlaps the" in capsys.readouterr().out
+    assert {p: _files(p) for p in (run, fix, bundle)} == before
 
 
 # -- push of a sealed source --------------------------------------------------
@@ -730,6 +837,128 @@ def test_push_in_strict_mode_seals_the_review_copy_of_a_plain_recording(
     _no_plaintext_under(tmp_path)
 
 
+def _bundle_with_a_bad_action(source: Path, out: Path, *, key=None) -> Path:
+    """A copy of ``source`` whose first action is the private marker."""
+    opened = sealed_set.open_set(source, KEY)
+    files = {rel: opened.read_bytes(rel) for rel in opened.files("")}
+    doc = json.loads(files["workflow.json"])
+    doc["steps"][0]["action"] = _MARKER
+    files["workflow.json"] = json.dumps(doc).encode()
+    if key is None:
+        for rel, data in files.items():
+            (out / rel).parent.mkdir(parents=True, exist_ok=True)
+            (out / rel).write_bytes(data)
+        return out
+    with sealed_set.writing(out, "bundle", key):
+        for rel, data in files.items():
+            sealed_set.write_bytes(out / rel, data)
+    return out
+
+
+@pytest.mark.parametrize("strict", [True, False], ids=["strict", "sealed input"])
+def test_push_refusal_on_a_sealed_bundle_never_prints_its_contents(
+    sealed: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    push_env,
+    capfd,
+    caplog,
+    strict: bool,
+) -> None:
+    from openadapt_flow import hosted
+
+    monkeypatch.setenv(hosted.AUTO_APPROVE_ENV, "false")
+    if strict:
+        monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    bad = _bundle_with_a_bad_action(sealed, tmp_path / "bad", key=KEY)
+    assert sealed_set.is_sealed(bad)
+    push = ["push", str(bad), "--kind", "bundle", "--host", "https://h.test"]
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    assert main([*push, "--token", "tok"]) == 1
+    captured = capfd.readouterr()
+    _marker_absent(tmp_path, captured.out, captured.err, caplog.text)
+    assert "push failed: the input was refused (ValidationError)" in captured.out
+    assert "withheld" in captured.out
+
+
+def test_push_refusal_on_a_plain_bundle_keeps_its_details(
+    sealed: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    push_env,
+    capsys,
+) -> None:
+    """Outside strict mode a plaintext input's refusal says what is wrong."""
+    from openadapt_flow import hosted
+
+    monkeypatch.setenv(hosted.AUTO_APPROVE_ENV, "false")
+    bad = _bundle_with_a_bad_action(sealed, tmp_path / "bad")
+    assert not sealed_set.is_sealed(bad)
+    push = ["push", str(bad), "--kind", "bundle", "--host", "https://h.test"]
+    assert main([*push, "--token", "tok"]) == 1
+    out = capsys.readouterr().out
+    assert "Cannot validate generated workflow.py" in out
+    assert "type=enum" in out and _MARKER not in out  # no quoted input value
+
+
+def test_refusal_text_never_quotes_a_validation_input() -> None:
+    from pydantic import ValidationError
+
+    from openadapt_flow import safe_errors
+
+    try:
+        Step.model_validate({"id": "s", "intent": "x", "action": _MARKER})
+    except ValidationError as exc:
+        error = exc
+    assert _MARKER in str(error)
+    wrapped = RuntimeError(f"Cannot validate: {error}")
+    for text in (safe_errors.message(error), safe_errors.message(wrapped)):
+        assert _MARKER not in text and "input_type=str" in text
+    assert "input_value withheld" in safe_errors.message(f"input_value={_MARKER}")
+
+
+def test_an_unexpected_failure_on_sealed_input_prints_no_traceback(
+    sealed: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog
+) -> None:
+    """An error no handler expects would print a traceback quoting what the
+    command read; with sealed input the CLI names its kind only."""
+    import openadapt_flow.__main__ as cli
+
+    def _cmd_visualize(args) -> int:
+        raise RuntimeError(f"read {_MARKER}")
+
+    _cmd_visualize.__module__ = "openadapt_flow.__main__"
+    monkeypatch.setattr(cli, "_cmd_visualize", _cmd_visualize)
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    out = tmp_path / "graph.json"
+    assert main(["visualize", str(sealed), "--format", "json", "--out", str(out)]) == 1
+    printed = capfd.readouterr()
+    _marker_absent(tmp_path, printed.out, printed.err, caplog.text)
+    assert "FAILED: the input was refused (RuntimeError)" in printed.err
+    # Plain input still raises, so its traceback stays available.
+    with pytest.raises(RuntimeError, match=_MARKER):
+        main(["visualize", str(_plain_bundle(tmp_path / "p")), "--out", str(out)])
+
+
+def test_a_sealed_library_reads_back_with_its_own_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.ir import lift_to_program
+    from openadapt_flow.learning.library import SkillLibrary
+
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    own_key = "library-only-test-passphrase-7d2e"
+    root = tmp_path / "own.skills"
+    graph = lift_to_program(Workflow.load(_plain_bundle(tmp_path)))
+    SkillLibrary(root, seal=True, key=own_key).create_skill("own", graph)
+    _assert_ciphertext_only(root)
+    assert SkillLibrary(root, key=own_key).skill_ids() == ["own"]
+    with pytest.raises((sealed_set.SealedSetError, crypto.CryptoError)):
+        SkillLibrary(root)  # the global key does not open it
+
+
 def test_a_plaintext_copy_of_a_sealed_bundle_never_loads_as_encrypted(
     sealed: Path, tmp_path: Path
 ) -> None:
@@ -745,3 +974,343 @@ def test_a_plaintext_copy_of_a_sealed_bundle_never_loads_as_encrypted(
     loaded = Workflow.load(copy)
     assert loaded.encrypted is False
     assert loaded.manifest is not None and loaded.manifest.encrypted is False
+
+
+def _named_teach_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path, Path]:
+    """Plain teach inputs whose workflow name (the default skill id) is the
+    private marker."""
+    import tests.test_teach_cli as cli
+
+    original = cli._base_workflow
+
+    def named() -> Workflow:
+        workflow = original()
+        workflow.name = _MARKER
+        return workflow
+
+    monkeypatch.setattr(cli, "_base_workflow", named)
+    base = cli._base_bundle(tmp_path / "in")
+    cli._halt_run(base, tmp_path / "in" / "run")
+    fix = cli._dismiss_recording(tmp_path / "in" / "fix")
+    assert Workflow.load(base).name == _MARKER
+    return tmp_path / "in" / "run", fix, base
+
+
+def test_strict_teach_success_never_prints_a_name_from_its_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog
+) -> None:
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, base = _named_teach_inputs(tmp_path, monkeypatch)
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    out = tmp_path / "taught"
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(base)]
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    assert main([*args, "--out", str(out)]) == 0
+    learned = capfd.readouterr()
+    # A second teach reads the library back and refuses with no_change.
+    assert main([*args, "--out", str(out)]) == 1
+    again = capfd.readouterr()
+    for text in (learned.out, learned.err, again.out, again.err, caplog.text):
+        assert _MARKER not in text
+    assert "LEARNED" in learned.out and "no_change" in again.out
+    assert "(skill withheld, sha256 " in learned.out
+    for root in (out, out.parent / f"{out.name}.skills", fix / "_teach_compiled"):
+        _marker_absent(root)
+
+
+def test_teach_success_on_plain_input_names_its_skill(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """The control: outside strict mode a plaintext run's summary names it."""
+    run, fix, base = _named_teach_inputs(tmp_path, monkeypatch)
+    out = tmp_path / "taught"
+    capsys.readouterr()
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(base)]
+    assert main([*args, "--out", str(out)]) == 0
+    assert f"(skill {_MARKER!r})" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("strict", [True, False], ids=["strict", "plain"])
+def test_push_success_names_the_workflow_only_for_plain_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog, strict: bool
+) -> None:
+    from openadapt_flow import hosted
+
+    if strict:
+        monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    pushed = {
+        "workflow_id": "wf_1",
+        "workflow_name": _MARKER,
+        "kind": "bundle",
+        "status": "active",
+    }
+    monkeypatch.setattr(hosted, "push", lambda *a, **kw: pushed)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    push = ["push", str(bundle), "--kind", "bundle", "--host", "https://h.test"]
+    assert main([*push, "--token", "tok"]) == 0
+    captured = capfd.readouterr()
+    assert "Pushed. workflow_id=wf_1" in captured.out
+    if strict:
+        for text in (captured.out, captured.err, caplog.text):
+            assert _MARKER not in text
+        assert "name=withheld, sha256 " in captured.out
+    else:
+        assert f"name={_MARKER!r}" in captured.out
+
+
+def test_strict_library_mismatch_refusal_never_prints_the_skill_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog
+) -> None:
+    """A skill library that already holds another program for the skill is
+    refused without naming the skill id teach read from the input."""
+    monkeypatch.setenv(crypto.ENV_KEY, KEY)
+    run, fix, base = _named_teach_inputs(tmp_path, monkeypatch)
+    from openadapt_flow.learning.library import SkillLibrary
+
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    args = ["teach", str(run), "--fix", str(fix), "--bundle", str(base)]
+    first = tmp_path / "first"
+    assert main([*args, "--out", str(first)]) == 0
+    # A sealed library that holds the taught program, not the base one, for
+    # the same skill id.
+    library = tmp_path / "library"
+    taught = Workflow.load(first, key=KEY)
+    SkillLibrary(library, seal=True).create_skill(_MARKER, taught.program)
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    second = tmp_path / "second"
+    assert main([*args, "--library", str(library), "--out", str(second)]) == 2
+    printed = capfd.readouterr()
+    for text in (printed.out, printed.err, caplog.text):
+        assert _MARKER not in text
+    assert "teach cannot run: the input was refused (TeachError)" in printed.out
+    assert not second.exists()
+
+
+@pytest.mark.parametrize("public", [False, True], ids=["read", "command line"])
+def test_strict_teach_refusal_prints_only_command_line_details(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog, public: bool
+) -> None:
+    """Strict teach prints a refusal's text only when the error says it was
+    built from the command line. (teach-branch is refused in strict mode and
+    for sealed input before it runs.)"""
+    from openadapt_flow.learning import teach
+    from openadapt_flow.learning.teach import TeachError
+
+    def refuse(*_args, **_kwargs):
+        raise TeachError(f"refused {_MARKER!r}", public=public)
+
+    monkeypatch.setattr(teach, "teach", refuse)
+    monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+    for name in ("run", "fix", "bundle"):
+        (tmp_path / name).mkdir()
+    run, fix, bundle = (str(tmp_path / n) for n in ("run", "fix", "bundle"))
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    out = str(tmp_path / "out")
+    args = ["teach", run, "--fix", fix, "--bundle", bundle, "--out", out]
+    assert main(args) == 2
+    printed = capfd.readouterr()
+    assert "teach cannot run" in printed.out
+    if public:
+        assert f"refused {_MARKER!r}" in printed.out
+    else:
+        for text in (printed.out, printed.err, caplog.text):
+            assert _MARKER not in text
+        assert "the input was refused (TeachError)" in printed.out
+
+
+@pytest.mark.parametrize("strict", [True, False], ids=["strict", "plain"])
+def test_push_failure_of_its_own_is_withheld_only_for_private_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog, strict: bool
+) -> None:
+    """A push error with no cause can still name a path inside the artifact,
+    so strict mode withholds it too."""
+    from openadapt_flow import hosted
+
+    if strict:
+        monkeypatch.setenv("OPENADAPT_FLOW_AT_REST", "strict")
+
+    def fail(*_args, **_kwargs):
+        raise hosted.HostedError(f"cannot read {_MARKER}/steps.json")
+
+    monkeypatch.setattr(hosted, "push", fail)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    push = ["push", str(bundle), "--kind", "bundle", "--host", "https://h.test"]
+    assert main([*push, "--token", "tok"]) == 1
+    captured = capfd.readouterr()
+    if strict:
+        for text in (captured.out, captured.err, caplog.text):
+            assert _MARKER not in text
+        assert "push failed: the input was refused (HostedError)" in captured.out
+    else:
+        assert f"push failed: cannot read {_MARKER}/steps.json" in captured.out
+
+
+def test_teach_branch_with_a_sealed_example_is_refused_before_it_runs(
+    sealed: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capfd, caplog
+) -> None:
+    """--example RUN FIX arrives as a list of pairs; a sealed RUN inside it
+    is still found, so teach-branch is refused before it reads anything."""
+    from openadapt_flow.learning import branch_teach
+
+    calls: list[object] = []
+
+    def refuse(*args, **kwargs):
+        calls.append(args)
+        raise branch_teach.TeachError(f"workflow {_MARKER!r} did not stop here")
+
+    monkeypatch.setattr(branch_teach, "teach_branch", refuse)
+    base = _plain_bundle(tmp_path / "base")
+    fix = tmp_path / "fix"
+    fix.mkdir()
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    examples = ["--example", str(sealed), str(fix)] * 2
+    out = str(tmp_path / "out")
+    args = ["teach-branch", *examples, "--bundle", str(base), "--out", out]
+    assert main(args) == 2
+    printed = capfd.readouterr()
+    for text in (printed.out, printed.err, caplog.text):
+        assert _MARKER not in text
+    assert "REFUSED" in printed.err and "does not read encrypted input" in printed.err
+    assert not calls
+
+
+def test_sealed_paths_are_found_at_any_depth_and_unknown_values_are_private(
+    sealed: Path, tmp_path: Path
+) -> None:
+    import argparse
+
+    from openadapt_flow.__main__ import _private_input, _sealed_paths_in
+
+    plain = str(tmp_path / "plain")
+    nested = argparse.Namespace(
+        example=[[plain, plain], (plain, {"fix": [str(sealed)]})], out=plain
+    )
+    assert _sealed_paths_in(nested) == [sealed]
+    assert _private_input(nested)
+    assert not _private_input(argparse.Namespace(example=[[plain, plain]]))
+    # A value that is neither a path, a scalar nor a container: fail closed.
+    assert _private_input(argparse.Namespace(example=[[plain, object()]]))
+    # Objects the code sets on the namespace do not make the run private.
+    assert not _private_input(argparse.Namespace(_handler=object(), out=plain))
+
+
+def _odd_spelling(sealed: Path, tmp_path: Path, spelling: str) -> str:
+    """Move ``sealed`` under a directory whose path is spelled oddly."""
+    import shutil
+
+    if spelling == "newline":
+        parent = tmp_path / "line\nbreak"
+        parent.mkdir()
+        shutil.move(str(sealed), str(parent / "sealed"))
+        return str(parent / "sealed")
+    parent = tmp_path / "url:"
+    parent.mkdir()
+    shutil.move(str(sealed), str(parent / "sealed"))
+    # "url://sealed" is the same local directory with a redundant slash.
+    return f"{tmp_path}/url://sealed"
+
+
+@pytest.mark.parametrize("spelling", ["newline", "url-slash"])
+def test_a_sealed_example_under_any_path_spelling_is_refused(
+    sealed: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd,
+    caplog,
+    spelling: str,
+) -> None:
+    """A newline or "://" in a path is still a local path: the sealed example
+    is found and teach-branch is refused before it reads anything."""
+    from openadapt_flow.learning import branch_teach
+
+    calls: list[object] = []
+
+    def refuse(*args, **kwargs):
+        calls.append(args)
+        raise branch_teach.TeachError(f"workflow {_MARKER!r} did not stop here")
+
+    monkeypatch.setattr(branch_teach, "teach_branch", refuse)
+    example = _odd_spelling(sealed, tmp_path, spelling)
+    base = _plain_bundle(tmp_path / "base")
+    fix = tmp_path / "fix"
+    fix.mkdir()
+    capfd.readouterr()
+    caplog.set_level("DEBUG")
+    out = tmp_path / "out"
+    args = ["teach-branch", "--example", example, str(fix), "--bundle", str(base)]
+    assert main([*args, "--out", str(out)]) == 2
+    printed = capfd.readouterr()
+    for text in (printed.out, printed.err, caplog.text):
+        assert _MARKER not in text
+    assert "REFUSED" in printed.err and "does not read encrypted input" in printed.err
+    assert not calls
+    assert not out.exists()
+
+
+def test_a_path_spelled_with_a_newline_or_url_slash_is_private(
+    sealed: Path, tmp_path: Path
+) -> None:
+    import argparse
+
+    from openadapt_flow.__main__ import _private_input, _sealed_paths_in
+
+    example = _odd_spelling(sealed, tmp_path, "url-slash")
+    assert _sealed_paths_in(argparse.Namespace(example=[[example, "x"]]))
+    # Text that is no local path stays public, whatever it looks like.
+    public = argparse.Namespace(
+        url="https://example.invalid/a", note="two\nlines", long="x" * 5000
+    )
+    assert not _private_input(public)
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0, reason="root reads any dir"
+)
+def test_a_path_whose_header_cannot_be_checked_is_private(tmp_path: Path) -> None:
+    import argparse
+
+    from openadapt_flow.__main__ import _private_input
+
+    locked = tmp_path / "locked"
+    (locked / "inner").mkdir(parents=True)
+    locked.chmod(0)
+    try:
+        assert _private_input(argparse.Namespace(example=[str(locked / "inner")]))
+    finally:
+        locked.chmod(0o700)
+
+
+@pytest.mark.parametrize(
+    ("winerror", "private"), [(123, False), (161, False), (None, True), (5, True)]
+)
+def test_a_name_windows_cannot_hold_is_public(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, winerror, private: bool
+) -> None:
+    """A URL argument on Windows (a colon in a name) cannot name a local
+    path, so it is public; any other error checking the header is private."""
+    import argparse
+    import errno
+
+    from openadapt_flow.__main__ import _private_input
+
+    def stat(path, *args, **kwargs):
+        exc = OSError(errno.EINVAL, "The filename syntax is incorrect")
+        if winerror is not None:
+            exc.winerror = winerror  # type: ignore[attr-defined]
+        raise exc
+
+    monkeypatch.setattr(os, "stat", stat)
+    args = argparse.Namespace(effects_base_url="http://127.0.0.1:8080")
+    assert _private_input(args) is private

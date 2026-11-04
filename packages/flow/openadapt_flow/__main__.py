@@ -420,6 +420,8 @@ def _deployment_sections(args: argparse.Namespace):
         effects = effects.model_copy(update={"kind": args.effects_kind})
     if getattr(args, "effects_base_url", None):
         effects = effects.model_copy(update={"base_url": args.effects_base_url})
+    if getattr(args, "effects_records_path", None):
+        effects = effects.model_copy(update={"records_path": args.effects_records_path})
     if getattr(args, "effects_root", None):
         effects = effects.model_copy(update={"root": args.effects_root})
 
@@ -7865,7 +7867,7 @@ def _cmd_push(args: argparse.Namespace) -> int:
         if args.json:
             _print_push_json(_push_json_failure())
             return 1
-        print(f"push failed: {e}")
+        print(f"push failed: {_refusal_text(args, e)}")
         return 1
     if args.json:
         try:
@@ -7894,9 +7896,12 @@ def _cmd_push(args: argparse.Namespace) -> int:
     if result.get("workflow_id"):
         version = result.get("version")
         version_number = version.get("version") if isinstance(version, dict) else None
-        detail = (
-            f"name={result.get('workflow_name')!r}, kind={kind}, status={server_status}"
+        from openadapt_flow import safe_errors
+
+        name = safe_errors.label(
+            result.get("workflow_name"), private=_private_input(args)
         )
+        detail = f"name={name}, kind={kind}, status={server_status}"
         if version_number is not None:
             detail += f", version={version_number}"
         print(f"Pushed. workflow_id={result['workflow_id']} ({detail}).")
@@ -8331,7 +8336,7 @@ def _cmd_teach(args: argparse.Namespace) -> int:
             library_dir=Path(args.library) if args.library else None,
         )
     except TeachError as e:
-        print(f"teach cannot run: {e}")
+        print(f"teach cannot run: {_refusal_text(args, e)}")
         return 2
 
     print(result.summary())
@@ -8366,7 +8371,7 @@ def _cmd_teach_branch(args: argparse.Namespace) -> int:
             library_dir=Path(args.library) if args.library else None,
         )
     except TeachError as e:
-        print(f"teach-branch cannot run: {e}")
+        print(f"teach-branch cannot run: {_refusal_text(args, e)}")
         return 2
     print(result.summary())
     return 0 if result.promoted else 1
@@ -8736,15 +8741,21 @@ def _add_deployment_flags(
         default=None,
         help=(
             "System-of-record EffectVerifier to wire so consequential writes "
-            "are verified against the real record (not the screen). The sql/"
-            "file kinds need their config fields (sql_query, root, ...) from "
-            "a --config deployment YAML"
+            "are verified against the real record (not the screen). rest "
+            "needs --effects-records-path; the fhir/sql/file kinds need their "
+            "config fields (resource_type and field_paths, sql_query, root, "
+            "...) from a --config deployment YAML"
         ),
     )
     p.add_argument(
         "--effects-base-url",
         default=None,
         help="Base URL for the rest / fhir effect verifier",
+    )
+    p.add_argument(
+        "--effects-records-path",
+        default=None,
+        help="Path whose GET returns the app's records (rest effect verifier)",
     )
     p.add_argument(
         "--effects-root",
@@ -13336,35 +13347,146 @@ def _unsealed_output_check(args: argparse.Namespace) -> None:
     at_rest.unsealed_write(artifact, target)
 
 
-def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
-    from openadapt_flow import sealed_set
+class _UnclassifiedArgument(ValueError):
+    """An argument value that is neither a path, a scalar nor a container."""
 
+
+def _sealed_paths_in(args: argparse.Namespace) -> list[Path]:
+    """The sealed roots named anywhere in the command's arguments.
+
+    Values are walked at any depth (lists, tuples, sets, mappings, nested
+    pairs such as teach-branch's ``--example RUN FIX``). A value that is not
+    a path, a known scalar or a container raises ``_UnclassifiedArgument``;
+    ``_private_input`` treats that as private.
+    """
     found: list[Path] = []
+    unclassified: list[str] = []
     for name, value in vars(args).items():
         if name == "func":
             continue
-        values = value if isinstance(value, (list, tuple)) else [value]
-        for item in values:
-            if not isinstance(item, (str, Path)) or not str(item):
-                continue
-            text = str(item)
-            if "://" in text or "\n" in text or len(text) > 4096:
-                continue
-            # NAME=PATH arguments (--child, --admission, --variant) name a
-            # path after the first "="; check both readings.
-            candidates = [text]
-            if isinstance(item, str) and "=" in text:
-                candidates.append(text.split("=", 1)[1])
-            for candidate in candidates:
-                if not candidate:
-                    continue
-                path = Path(candidate)
-                root = (
-                    path if sealed_set.is_sealed(path) else sealed_set.sealed_root(path)
-                )
-                if root is not None and root not in found:
-                    found.append(root)
+        # Attributes named "_..." are set by the code (handlers, run state),
+        # not typed by the user: their paths are still read, but an object
+        # among them does not make the run private.
+        internal = name.startswith("_")
+        _collect_sealed(value, name, found, [] if internal else unclassified)
+    if unclassified:
+        raise _UnclassifiedArgument(
+            f"cannot tell whether {unclassified[0]} names sealed input"
+        )
     return found
+
+
+def _collect_sealed(
+    value: object, name: str, found: list[Path], unclassified: list[str]
+) -> None:
+    import enum
+
+    from openadapt_flow import sealed_set
+
+    if value is None or isinstance(value, (bool, int, float, enum.Enum)):
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            _collect_sealed(key, name, found, unclassified)
+            _collect_sealed(item, name, found, unclassified)
+        return
+    if isinstance(value, (list, tuple, set, frozenset)):
+        for item in value:
+            _collect_sealed(item, name, found, unclassified)
+        return
+    if not isinstance(value, (str, Path)):
+        unclassified.append(f"--{name.replace('_', '-')}")
+        return
+    text = str(value)
+    if not text:
+        return
+    # Every string is checked against the filesystem, whatever it looks
+    # like: a newline, "://" or any length can spell a local path. NAME=PATH
+    # arguments (--child, --admission, --variant) name a path after the
+    # first "="; check both readings.
+    candidates = [text]
+    if isinstance(value, str) and "=" in text:
+        candidates.append(text.split("=", 1)[1])
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            root = _sealed_root_named(candidate)
+        except _UnclassifiedArgument:
+            unclassified.append(f"--{name.replace('_', '-')}")
+            continue
+        if root is None:
+            root = sealed_set.sealed_root(candidate)  # an active writer
+        if root is not None and root not in found:
+            found.append(root)
+
+
+def _sealed_root_named(text: str) -> Optional[Path]:
+    """The sealed set that ``text`` names or lies inside, if any.
+
+    Raises ``_UnclassifiedArgument`` when the filesystem cannot tell (a
+    header that cannot be checked for a reason other than not existing).
+    """
+    import errno
+    import os
+    import stat
+
+    from openadapt_flow import sealed_set
+
+    # The path cannot exist, so nothing sealed can be read through it.
+    no_such_path = (errno.ENOENT, errno.ENOTDIR, errno.ENAMETOOLONG)
+    # Windows rejects a name it cannot hold, such as "http:" with a colon
+    # (ERROR_INVALID_NAME, ERROR_BAD_PATHNAME): no such path can exist either.
+    invalid_name = (123, 161)
+    try:
+        full = os.path.abspath(text)
+    except ValueError:  # an embedded NUL: no such path
+        return None
+    current = full
+    while True:
+        try:
+            st = os.stat(os.path.join(current, sealed_set.HEADER))
+        except ValueError:
+            return None
+        except OSError as exc:
+            invalid = getattr(exc, "winerror", None) in invalid_name
+            if exc.errno not in no_such_path and not invalid:
+                raise _UnclassifiedArgument(
+                    "a path whose sealed header cannot be checked"
+                ) from exc
+        else:
+            if stat.S_ISREG(st.st_mode):
+                return Path(text) if current == full else Path(current)
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
+def _refusal_text(args: argparse.Namespace, error: BaseException) -> str:
+    """What a command prints when it refuses ``error``.
+
+    When the command read sealed input or strict mode is on, any part of the
+    message may quote decrypted content (a skill id, a workflow name, a
+    path inside the artifact), so only the kind of error is printed, unless
+    the error is marked ``public`` (built only from the command line).
+    Otherwise the message prints without quoted input values.
+    """
+    from openadapt_flow import safe_errors
+
+    if _private_input(args) and getattr(error, "public", False) is not True:
+        return safe_errors.withheld(error)
+    return safe_errors.message(error)
+
+
+def _private_input(args: argparse.Namespace) -> bool:
+    """Whether the command read sealed input or runs in strict mode."""
+    from openadapt_flow import at_rest, sealed_set
+
+    try:
+        return at_rest.strict() or bool(_sealed_paths_in(args))
+    except (sealed_set.SealedSetError, ValueError, OSError):
+        return True  # cannot tell: treat it as private
 
 
 def _sealed_input_refusal(args: argparse.Namespace) -> Optional[str]:
@@ -13447,21 +13569,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"REFUSED (deployment_config_changed): {exc}", file=sys.stderr)
             return 2
-    from openadapt_flow import sealed_set
+    from openadapt_flow import safe_errors, sealed_set
 
     try:
         refusal = _sealed_input_refusal(args)
-    except sealed_set.SealedSetError as exc:
+    except (sealed_set.SealedSetError, _UnclassifiedArgument) as exc:
         refusal = str(exc)
     if refusal is not None:
-        print(f"REFUSED: {refusal}", file=sys.stderr)
+        print(f"REFUSED: {safe_errors.message(refusal)}", file=sys.stderr)
         return 2
     from openadapt_flow import at_rest
 
     try:
         _unsealed_output_check(args)
     except (at_rest.AtRestRefused, ValueError) as exc:
-        print(f"REFUSED: {exc}", file=sys.stderr)
+        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     try:
         code = args.func(args)
@@ -13479,7 +13601,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # A sealed bundle or encrypted recording that is missing its key,
         # was changed after sealing, or holds an unknown file, or a write
         # strict mode refuses: fail closed.
-        print(f"REFUSED: {exc}", file=sys.stderr)
+        print(f"REFUSED: {safe_errors.message(exc)}", file=sys.stderr)
         return 2
     except BrowserSupportMissing as exc:
         # Missing optional browser support is a setup decision, not a crash.
@@ -13489,6 +13611,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
 
         if not isinstance(exc, KnownIdAdmissionHalt):
+            if _private_input(args):
+                # A traceback would quote what the command read from sealed
+                # input: name the kind of error only.
+                print(f"FAILED: {safe_errors.withheld(exc)}", file=sys.stderr)
+                return 1
             raise
         # The configured known-ID list may not be used: halt before any step
         # runs, with the named reason.

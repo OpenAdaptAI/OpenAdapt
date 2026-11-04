@@ -242,10 +242,12 @@ user, to the value every demonstration held, or to a copy of a column of the
 row a key points to (an invoice line's price from its product). A key, a
 link to a row the write added, the year, month, week or day of a date the
 task gives, and a generated token (a UUID) are recognized as such. A link
-and a column that holds the row's own key need two demonstrations; the own
-key must sit in the same text in every row (`INV-{key}`), never as a mere
-substring. Such a column is listed in the question, never checked or
-left open on its own. A date part must differ between the demonstrations: a constant
+needs two demonstrations. A column that is not a copy and, in two or more
+demonstrations, holds the row's own key in the same text (`INV-{key}`) is
+listed in the question as holding the row's own key, and is left unchecked
+only if the answer names it, like any column that varies. A copy is
+checked as a copy even when its values read as the own key (prices 15 and
+25 on rows 1 and 2). A date part must differ between the demonstrations: a constant
 that happens to equal the month of every demonstration's date is a
 constant. A copy is taken only through a declared key or a column named
 after its table, and only when the source differs between demonstrations:
