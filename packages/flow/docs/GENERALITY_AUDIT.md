@@ -9,7 +9,7 @@ deployment configs) or in test fixtures and benchmark harnesses outside the
 shipped package. A CI check (`scripts/check_engine_generality.py`) keeps it
 that way; [CONTRIBUTING.md](../CONTRIBUTING.md) states the rule. It counts an
 app name inside an identifier too (`_openemr_base`, `isOpenEMR`); its baseline
-started at 426 hits and only shrinks.
+started at 425 hits and only shrinks.
 
 ## Method
 

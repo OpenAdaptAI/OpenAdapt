@@ -99,7 +99,7 @@ def scan(
                 continue
             split = _CAMEL_BOUNDARY.sub(" ", line)
             for term, (pattern, is_name) in terms.items():
-                found = pattern.search(split if is_name else line)
+                found = pattern.search(line) or (is_name and pattern.search(split))
                 if found and not _allowed(rel, term, config):
                     hits.setdefault(rel, {}).setdefault(term, []).append(number)
     return hits

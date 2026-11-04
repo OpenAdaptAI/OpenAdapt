@@ -65,6 +65,9 @@ def test_a_name_inside_an_identifier_is_a_hit(check, tmp_path: Path) -> None:
             "f.py": "row = 'tabLoanApplication'\n",
             # A name only stops at a letter or digit beside it.
             "g.py": "reopenemrs = 1\n",
+            "h.py": "TextEdit = 1\nMockMedServer = 1\n",
+            # Ordinary words that only look like a name.
+            "i.py": "text_edit = 1\nmock_media = 1\n",
         },
     )
     assert check.scan(engine) == {
@@ -74,6 +77,7 @@ def test_a_name_inside_an_identifier_is_a_hit(check, tmp_path: Path) -> None:
         "d.py": {"stedi": [1]},
         "e.py": {"epic": [1]},
         "f.py": {"frappe-table": [1]},
+        "h.py": {"mockmed": [2], "textedit": [1]},
     }
 
 

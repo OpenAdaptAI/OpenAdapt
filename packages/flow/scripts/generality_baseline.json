@@ -290,8 +290,7 @@
   },
   "validation/dense_surface.py": {
     "mockmed": 1,
-    "openemr": 2,
-    "textedit": 1
+    "openemr": 2
   },
   "verifier.py": {
     "openemr": 1
