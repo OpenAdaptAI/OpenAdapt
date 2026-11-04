@@ -1019,6 +1019,10 @@ def _build_and_run_replayer(
 
         import contextlib
 
+        if sealed is not None:
+            # A crash during this rollback is continued by --roll-back, which
+            # needs the state bound to the run.
+            _bind_sealed_run(sealed, Path(run_dir))
         with sealed.lock() if sealed is not None else contextlib.nullcontext():
             report = rollback_plan.finish(
                 report,
@@ -4911,7 +4915,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 armed = sealed.load_armed() is not None
             except SealedStateError:
                 armed = True
-            if armed and _paused_for_a_person(run_dir):
+            if armed:
                 _bind_sealed_run(sealed, run_dir)
             if armed:
                 print(

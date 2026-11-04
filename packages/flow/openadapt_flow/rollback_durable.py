@@ -27,6 +27,7 @@ import base64
 import json
 import os
 import secrets
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -45,14 +46,14 @@ ROLLBACK_AAD = b"openadapt-flow/rollback"
 
 def _lock_exclusive(fd: int) -> None:
     """A non-blocking exclusive lock on ``fd``; OSError when it is held."""
-    try:
-        import fcntl
-    except ImportError:  # Windows
+    if sys.platform == "win32":
         import msvcrt
 
         msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-        return
-    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 class SealedStateError(RuntimeError):

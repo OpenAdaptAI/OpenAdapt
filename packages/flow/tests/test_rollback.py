@@ -2515,3 +2515,26 @@ def test_a_durable_pause_waits_for_a_person(tmp_path, monkeypatch):
     assert not cli._paused_for_a_person(tmp_path)
     seen[0] = SimpleNamespace(category="item_approval", status="rejected")
     assert not cli._paused_for_a_person(tmp_path)
+
+
+def test_the_sealed_state_is_bound_to_the_durable_run(tmp_path, monkeypatch):
+    # A terminal stop rolls back in the same process; if that crashes,
+    # --roll-back continues it only for state bound to the manifest's run id.
+    from types import SimpleNamespace
+
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow.rollback_durable import SealedRollback
+    from openadapt_flow.runtime.durable import checkpoint
+
+    db = tmp_path / "clinic.db"
+    _make_db(db)
+    sealed = SealedRollback(tmp_path / "run", _SEAL_KEY)
+    _arm(sealed, _clinic_reader(db))
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _SEAL_KEY)
+    monkeypatch.setattr(
+        checkpoint.CheckpointStore,
+        "read_manifest",
+        lambda self: SimpleNamespace(run_id="run-7"),
+    )
+    cli._bind_sealed_run(sealed, tmp_path / "run")
+    assert sealed.load_armed()["run_id"] == "run-7"
