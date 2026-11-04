@@ -142,14 +142,23 @@ def write_release(
         for t in tasks:
             t = {k: v for k, v in t.items() if k != "_meta"}
             t = {**t, "split": name}
-            src = source[t["id"]] / t["verify"]
-            shutil.copyfile(src, sdir / t["verify"])
+            # A multi-app task has one contract per app.
+            paths = (
+                [t["verify"]]
+                if "verify" in t
+                else [a["verify"] for a in t["apps"].values()]
+            )
+            contracts = {}
+            for rel in paths:
+                src = source[t["id"]] / rel
+                shutil.copyfile(src, sdir / rel)
+                contracts[rel] = sha(src.read_bytes())
             vplan = source[t["id"]] / "validation" / f"{t['id']}.json"
             (sdir / "validation").mkdir(exist_ok=True)
             shutil.copyfile(vplan, sdir / "validation" / vplan.name)
             line = canonical(t)
             lines.append(line)
-            digests[t["id"]] = {"task": sha(line), "contract": sha(src.read_bytes())}
+            digests[t["id"]] = {"task": sha(line), "contracts": contracts}
         body = b"\n".join(lines) + b"\n"
         (sdir / "tasks.jsonl").write_bytes(body)
         (sdir / "digests.json").write_text(

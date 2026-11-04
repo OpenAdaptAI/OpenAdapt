@@ -262,3 +262,30 @@ def test_workbench_guards_and_stale_form() -> None:
         assert err.value.code == 409
     finally:
         stop()
+
+
+def test_public_sample_matches_its_manifest() -> None:
+    """The committed public sample is the released one: every task's digest
+    matches the manifest, each names a contract that exists, and nothing
+    private (validation plans, the fault family in tags) ships with it."""
+
+    import hashlib
+
+    env = Path(__file__).resolve().parents[1] / "environments" / "taskgen-mockmed"
+    manifest = json.loads((env / "MANIFEST.json").read_text())
+    lines = (env / "tasks" / "public.jsonl").read_bytes().splitlines()
+    assert len(lines) == manifest["splits"]["public"]["tasks"] == 100
+    body = b"\n".join(lines) + b"\n"
+    assert (
+        "sha256:" + hashlib.sha256(body).hexdigest()
+        == manifest["splits"]["public"]["tasks_sha256"]
+    )
+    assert not (env / "validation").exists()
+    for raw in lines:
+        task = json.loads(raw)
+        digest = manifest["public_tasks"][task["id"]]
+        assert digest["task"] == "sha256:" + hashlib.sha256(raw).hexdigest()
+        assert (env / task["verify"]).is_file()
+        assert task["split"] == "public"
+        assert not any(t.startswith("family:") for t in task["tags"])
+        assert task["solution"][-1]["kind"] == "done"
