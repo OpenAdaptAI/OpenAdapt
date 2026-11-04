@@ -47,7 +47,7 @@ pytestmark = pytest.mark.skipif(
 
 def _record(tmp_path: Path) -> tuple[Path, Any]:
     from benchmark.openemr_local.qualify_hooks import fixture
-    from openadapt_flow.benchmark.openemr_local import SyntheticPatientSpec
+    from benchmark.harness.openemr_local import SyntheticPatientSpec
     from openadapt_flow.recorder import Recorder
     from scripts.openemr_local_demo import (
         FORM_FRAME_NAME,
