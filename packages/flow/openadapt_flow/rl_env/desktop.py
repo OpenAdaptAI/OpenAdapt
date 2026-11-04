@@ -22,8 +22,8 @@ is refused instead of run.
 
 The oracle reads the database through a read-only HTTP shim on the server's
 loopback interface, which reads the guest over WinRM. The agent has no
-network action, and its key input cannot open a shell (the Windows key and
-the task-manager chords are refused).
+network action; its keys are an allowlist with no Windows key, Alt or
+function keys; and the apps run full screen over the taskbar.
 """
 
 from __future__ import annotations
@@ -73,24 +73,51 @@ MAX_WAIT_S = 5.0
 #: element by automation id on the pixels-only surface, and lets reset plant
 #: a fault other than the task's. An agent's server never sets it.
 REFERENCE_ENV = "OPENADAPT_ENV_REFERENCE"
-#: Chords that would leave the app for a shell or a system screen.
-DENIED_KEYS = frozenset(
+#: Keys an agent may press, after normalization (``rdp_backend.normalize_chord``):
+#: editing and navigation keys, Shift with any of them, and Ctrl only with
+#: the editing shortcuts. The Windows key, Alt (window switching, the system
+#: menu) and the function keys are refused, so key input cannot leave the app.
+ALLOWED_KEYS = frozenset(
     {
-        "win",
-        "meta",
-        "super",
-        "cmd",
-        "lwin",
-        "rwin",
-        "ctrl+esc",
-        "ctrl+shift+esc",
-        "ctrl+alt+delete",
-        "ctrl+alt+del",
-        "win+r",
-        "win+e",
-        "win+x",
+        "enter",
+        "tab",
+        "escape",
+        "backspace",
+        "delete",
+        "space",
+        "home",
+        "end",
+        "pageup",
+        "pagedown",
+        "up",
+        "down",
+        "left",
+        "right",
     }
 )
+CTRL_KEYS = frozenset({"a", "c", "v", "x", "z", "y", "home", "end"})
+
+
+def allowed_chord(text: str) -> Optional[str]:
+    """The normalized chord when an agent may press it, else None."""
+    from openadapt_flow.backends.rdp_backend import normalize_chord
+
+    try:
+        parts = normalize_chord(text.strip().replace(" ", ""))
+    except ValueError:
+        return None
+    *mods, base = parts
+    if len(set(mods)) != len(mods) or not set(mods) <= {"ctrl", "shift"}:
+        return None
+    lowered = base.lower()
+    single = len(base) == 1 and base.isprintable()
+    if not (lowered in ALLOWED_KEYS or single):
+        return None
+    if "ctrl" in mods and lowered not in CTRL_KEYS:
+        return None
+    return "+".join([*mods, base])
+
+
 PACK_DB = (
     Path(__file__).resolve().parents[2]
     / "environments"
@@ -311,10 +338,8 @@ class DesktopState(State):
 def _rdp_backend(spec: RdpSpec, guest: Any) -> Any:
     from openadapt_flow.backends.rdp_backend import AardwolfTransport, FreeRDPBackend
 
-    password = (
-        os.environ.get("OPENADAPT_WINENV_PASSWORD")
-        or os.environ["OAFLOW_WINLAB_PASSWORD"]
-    )
+    password = guest.rdp_password()
+
     if spec.transport == "aardwolf":
         transport = AardwolfTransport.from_credentials(
             guest.host,
@@ -461,7 +486,13 @@ class OpenAdaptDesktopEnvironment(
             raise TaskError("planting another fault needs a reference run")
         if self._judge is not None:
             self._judge.close()
-        self._task, self._judgement = task, None
+        # Until this reset succeeds there is no episode: a failure below
+        # leaves nothing a step could act on or be judged against.
+        self._judge = None
+        self._task, self._judgement = None, None
+        self._state = DesktopState(
+            env_name=self.env.manifest.name, surface=self.spec.surface, done=True
+        )
         started = time.monotonic()
         self._ensure_surface()
         guest = self._guest
@@ -487,6 +518,7 @@ class OpenAdaptDesktopEnvironment(
         cfg = render_verify_config(self.env.verify_text, self._shim.url)
         episode = episode_id or uuid.uuid4().hex
         self._judge = EpisodeJudge(cfg, task.params, episode_id=episode)
+        self._task = task
         self._state = DesktopState(
             env_name=self.env.manifest.name,
             surface=self.spec.surface,
@@ -501,8 +533,10 @@ class OpenAdaptDesktopEnvironment(
     def step(
         self, action: DesktopAction, timeout_s: Optional[float] = None, **_: Any
     ) -> DesktopObservation:
-        if self._task is None or self._surface is None:
-            raise RuntimeError("call reset() before step()")
+        if self._task is None or self._judge is None or self._surface is None:
+            raise RuntimeError(
+                "call reset() before step(); the last reset did not finish"
+            )
         if self._state.done:
             return self._observe(reward=0.0, done=True, error="episode is over")
         self._state.step_count += 1
@@ -569,8 +603,8 @@ class OpenAdaptDesktopEnvironment(
             elif action.kind == "type":
                 surface.type_text(action.text or "")
             elif action.kind == "press":
-                key = (action.text or "enter").strip().lower().replace(" ", "")
-                if key in DENIED_KEYS or key.startswith(("win+", "meta+", "super+")):
+                key = allowed_chord(action.text or "enter")
+                if key is None:
                     return f"key {action.text!r} is not allowed in this environment"
                 surface.press(key)
             elif action.kind == "scroll":

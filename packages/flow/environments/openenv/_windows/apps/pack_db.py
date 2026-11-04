@@ -7,7 +7,7 @@ environment's oracle reads the same file through ``dump``, over a channel the
 agent never touches (WinRM from the host), so the reward comes from the
 database, never from the screen.
 
-Planted faults live in ``<app>_fault.json`` beside the database. The apps
+Planted faults live in ``<app>_fault.json`` beside the database (``data``). The apps
 never read that file and always report the save as done, so the screen says
 "saved" whatever the database holds:
 
@@ -43,7 +43,8 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 
-ROOT = os.environ.get("OA_PACK_DIR", r"C:\oa\pack")
+# The data directory (writable by the desktop account); the code beside it is not.
+ROOT = os.environ.get("OA_PACK_DIR", r"C:\oa\pack\data")
 APPS = ("patient_chart", "claims_desk")
 FAULTS = ("ok", "drop", "wrong_row", "duplicate", "truncate", "stale")
 

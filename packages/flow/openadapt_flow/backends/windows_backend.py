@@ -1289,6 +1289,12 @@ class WindowsBackend:
                 and len(bounds) == 4
                 and all(isinstance(v, int) and not isinstance(v, bool) for v in bounds)
                 and isinstance(node.get("depth"), int)
+                and not isinstance(node.get("depth"), bool)
+                and all(
+                    node.get(key) is None
+                    or (isinstance(node[key], str) and len(node[key]) <= 512)
+                    for key in ("role", "name", "automation_id")
+                )
             ):
                 return None
         return nodes, payload["truncated"]

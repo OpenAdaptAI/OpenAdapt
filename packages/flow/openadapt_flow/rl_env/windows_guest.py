@@ -4,7 +4,10 @@ The environment server drives one Windows machine (a buyer's VM built from
 their own Windows image, an Azure or AWS Windows template, or a lab VM). This
 module is its control plane, separate from the agent's surface:
 
-* deploy the pack's apps and its database CLI into ``C:\\oa\\pack``;
+* deploy the pack's apps and its database CLI into ``C:\\oa\\pack``, which
+  the desktop session can read but not change (its data, in ``data``, it
+  can); deploy checks that with a write probe from the desktop and refuses
+  a guest where the desktop session could rewrite the oracle's code;
 * reset an episode: stop the app, restore the pristine database, set the
   planted fault and the UI knobs, start the app on the signed-in desktop, all
   in one WinRM round trip;
@@ -25,14 +28,20 @@ import base64
 import hashlib
 import json
 import os
+import re
 import shutil
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-#: Where the pack lives in the guest. Fixed so the apps can name it.
+#: Where the pack lives in the guest. Fixed so the apps can name it. The
+#: code is read-only to the desktop session; ``DATA_DIR`` holds what the
+#: apps write (the databases, the fault and the UI knobs).
 GUEST_DIR = r"C:\oa\pack"
+DATA_DIR = r"C:\oa\pack\data"
+#: Values that reach a PowerShell script from a task file.
+_SAFE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 APPS_DIR = (
     Path(__file__).resolve().parents[2]
     / "environments"
@@ -41,7 +50,56 @@ APPS_DIR = (
     / "apps"
 )
 APP_FILES = ("pack_db.py", "patient_chart.ps1", "claims_desk.ps1")
+PACK_DB_SHA256 = hashlib.sha256((APPS_DIR / "pack_db.py").read_bytes()).hexdigest()
 APP_TASK = "OAEnvApp"
+# Every process in the desktop session except the session's own shell and
+# the in-guest agent. Explorer stays (it is the desktop); the rest is
+# whatever an app or an agent started.
+_KEEP = (
+    "explorer.exe",
+    "sihost.exe",
+    "ctfmon.exe",
+    "dwm.exe",
+    "svchost.exe",
+    "taskhostw.exe",
+    "runtimebroker.exe",
+    "searchhost.exe",
+    "startmenuexperiencehost.exe",
+    "shellexperiencehost.exe",
+    "textinputhost.exe",
+    "conhost.exe",
+    "rdpclip.exe",
+    "smartscreen.exe",
+    "securityhealthsystray.exe",
+    "widgets.exe",
+    "widgetservice.exe",
+    "lockapp.exe",
+    "useroobebroker.exe",
+    "applicationframehost.exe",
+    "systemsettings.exe",
+    "dllhost.exe",
+    "backgroundtaskhost.exe",
+    "crossdeviceresume.exe",
+    "phoneexperiencehost.exe",
+    "msedgewebview2.exe",
+    "onedrive.exe",
+    "wsmprovhost.exe",
+)
+_STOP_DESKTOP_PROCESSES = (
+    "$keep = @(" + ",".join(f"'{n}'" for n in _KEEP) + ")\n"
+    "$session = (Get-Process -Name explorer -ErrorAction SilentlyContinue | "
+    "Select-Object -First 1).SessionId\n"
+    "if ($null -ne $session) {\n"
+    "  Get-CimInstance Win32_Process | Where-Object { $_.SessionId -eq $session -and "
+    "$keep -notcontains $_.Name.ToLower() -and $_.CommandLine -notlike '*win_agent_server.py*' } | "
+    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n"
+    "}\n"
+    # A save launched from session 0 or still exiting.
+    "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+    "Where-Object { $_.CommandLine -like '*pack_db.py*' } | "
+    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n"
+    "Start-Sleep -Milliseconds 300\n"
+)
 AGENT_TASK = "OAEnvAgent"
 # One WinRM command line holds about 8 KB once PowerShell encodes it.
 _CHUNK = 2000
@@ -66,8 +124,20 @@ def _env(*names: str) -> str:
     raise GuestError(f"set {names[0]} (the Windows guest is not configured)")
 
 
+# PowerShell also ends a single-quoted string at these.
+_QUOTES = ("'", "\u2018", "\u2019", "\u201a", "\u201b")
+
+
 def _ps_quote(value: str) -> str:
-    return value.replace("'", "''")
+    for quote in _QUOTES:
+        value = value.replace(quote, quote * 2)
+    return value
+
+
+def _safe(name: str, value: str) -> str:
+    if not _SAFE.match(value):
+        raise GuestError(f"{name} {value!r} is not a plain identifier")
+    return value
 
 
 def last_json(text: str) -> Any:
@@ -100,6 +170,7 @@ class WindowsGuest:
         self.host = host or _env("OPENADAPT_WINENV_HOST", "OAFLOW_WINLAB_HOST")
         self.user = user or _env("OPENADAPT_WINENV_USER", "OAFLOW_WINLAB_USER")
         secret = password or _env("OPENADAPT_WINENV_PASSWORD", "OAFLOW_WINLAB_PASSWORD")
+        self._secret = secret
         self._session = winrm.Session(
             f"http://{self.host}:{port}/wsman",
             auth=(self.user, secret),
@@ -109,6 +180,10 @@ class WindowsGuest:
         self.python = python or os.environ.get(
             "OPENADAPT_WINENV_PYTHON", r"C:\Program Files\Python312-arm64\python.exe"
         )
+
+    def rdp_password(self) -> str:
+        """The account's password, for the RDP surface's sign-in only."""
+        return self._secret
 
     # -- primitives ---------------------------------------------------------
     def run_ps(self, script: str, *, check: bool = True) -> GuestResult:
@@ -189,13 +264,49 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
 
     # -- the pack -----------------------------------------------------------
     def deploy(self) -> None:
-        """Copy the apps and the database CLI in; build the pristine databases."""
+        """Copy the apps and the database CLI in, read-only to the desktop.
+
+        The WinRM account must be an administrator. The code directory grants
+        Administrators and SYSTEM full control and everyone else read and
+        execute; ``data`` adds modify for the desktop account. A desktop
+        process (the apps, or anything an agent opened) then cannot rewrite
+        ``pack_db.py``, which the oracle runs. A write probe started on the
+        desktop proves it: if the probe's file appears, deploy refuses.
+        """
+        user = _ps_quote(self.user)
+        self.run_ps(
+            f"New-Item -ItemType Directory -Force '{DATA_DIR}' | Out-Null\n"
+            f"icacls '{GUEST_DIR}' /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' "
+            "'*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' | Out-Null\n"
+            "if ($LASTEXITCODE) { throw 'icacls on the pack directory failed' }\n"
+            f"icacls '{DATA_DIR}' /grant:r '{user}:(OI)(CI)M' | Out-Null\n"
+            "if ($LASTEXITCODE) { throw 'icacls on the data directory failed' }\n"
+        )
         for name in APP_FILES:
             self.push_file(APPS_DIR / name, rf"{GUEST_DIR}\{name}")
         self.run_ps(
             f"Set-Content -Encoding ascii -Path '{GUEST_DIR}\\python.txt' "
             f"-Value '{_ps_quote(self.python)}'"
         )
+        probe = rf"{GUEST_DIR}\write-probe.txt"
+        self.run_ps(f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}'")
+        self.run_ps(
+            self._interactive_script(
+                "powershell.exe",
+                f"-NoProfile -WindowStyle Hidden -Command Set-Content -Path '{probe}' -Value probe",
+                "OAEnvProbe",
+            )
+            + "Start-Sleep -Seconds 4\n"
+            "Unregister-ScheduledTask -TaskName OAEnvProbe -Confirm:$false\n"
+        )
+        wrote = self.run_ps(f"Test-Path '{probe}'").stdout.strip()
+        if wrote != "False":
+            self.run_ps(f"Remove-Item -Force -ErrorAction SilentlyContinue '{probe}'")
+            raise GuestError(
+                "the desktop session can write the pack's code directory (is UAC "
+                "off, or the desktop session elevated?); refusing a guest where an "
+                "agent could rewrite the oracle"
+            )
 
     def _db(self, *args: str) -> Any:
         quoted = " ".join(f"'{_ps_quote(a)}'" for a in args)
@@ -224,24 +335,35 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
         the caller checks against the pristine one: an episode that starts
         from anything else is refused.
         """
+        app, fault, variant = (
+            _safe("app", app),
+            _safe("fault", fault),
+            _safe("variant", variant),
+        )
         ui_json = json.dumps({"window": "maximized", **(ui or {})})
         script = (
             f"Stop-ScheduledTask -TaskName '{APP_TASK}' -ErrorAction SilentlyContinue\n"
-            "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | "
-            "Where-Object { $_.CommandLine -like '*\\pack\\*.ps1*' } | "
-            "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n"
-            f"$seed = & '{_ps_quote(self.python)}' '{GUEST_DIR}\\pack_db.py' seed '{app}' "
-            f"--fault '{_ps_quote(fault)}' --variant '{_ps_quote(variant)}'\n"
-            f"Set-Content -Encoding utf8 -Path '{GUEST_DIR}\\{app}_ui.json' "
+            # The desktop account's processes other than the agent and the
+            # shell: the app, a save still writing, and anything the last
+            # episode opened.
+            + _STOP_DESKTOP_PROCESSES
+            + f"$seed = & '{_ps_quote(self.python)}' '{GUEST_DIR}\\pack_db.py' seed '{app}' "
+            f"--fault '{fault}' --variant '{variant}'\n"
+            f"Set-Content -Encoding utf8 -Path '{DATA_DIR}\\{app}_ui.json' "
             f"-Value '{_ps_quote(ui_json)}'\n"
+            f"$code = (Get-FileHash '{GUEST_DIR}\\pack_db.py' -Algorithm SHA256).Hash\n"
             + self._interactive_script(
                 "powershell.exe",
                 f"-STA -ExecutionPolicy Bypass -WindowStyle Hidden -File {GUEST_DIR}\\{app}.ps1",
                 APP_TASK,
             )
-            + "\nWrite-Output $seed\n"
+            + "\n$r = $seed | ConvertFrom-Json; $r | Add-Member pack_db_sha256 $code.ToLower()\n"
+            "Write-Output ($r | ConvertTo-Json -Compress)\n"
         )
-        return last_json(self.run_ps(script).stdout)
+        result = last_json(self.run_ps(script).stdout)
+        if result.get("pack_db_sha256") != PACK_DB_SHA256:
+            raise GuestError("the guest's pack_db.py differs from this server's copy")
+        return result
 
     def stop_app(self) -> None:
         self.run_ps(
