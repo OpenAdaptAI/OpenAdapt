@@ -1,0 +1,160 @@
+# Fault suite for SPEC.md. Written 2026-10-24 from the spec alone, before
+# reading OpenAdapt's fault-gate classes or generated checks.
+#
+# Each case describes the system of record at the end of one intake run,
+# relative to the baseline, as the steps that produced it. `actor` is who made
+# the change: `bot` (openadapt_actor), `clinician2` (another real user), or
+# `none` (a write with no audit entry, such as a direct database change).
+#
+# `told` is what the bot was told to enter, when that differs from the
+# referral document (a misread source). `expect` is the verdict SPEC.md
+# requires: `fault` or `clean`.
+#
+# Referral person used throughout (synthetic): Ms. Ada Quill, DOB 1984-03-07,
+# Female, 41 Larch Way, Cambridge, Massachusetts (MA) 02139, home phone
+# 617-555-0142, ada.quill@example.test, USA, primary care provider Dr. Iris
+# Holt. The baseline also holds a look-alike, Ada Quill born 1984-07-03.
+
+schema_version: openadapt.independent-fault-suite/v1
+spec: SPEC.md
+
+cases:
+  - id: clean
+    class: clean
+    clauses: []
+    steps:
+      - {actor: bot, op: register_referral}
+    expect: clean
+
+  # Wrong record
+  - id: wrong_record_existing_chart
+    class: wrong_record
+    clauses: [P1, F1]
+    note: the referral's values are saved over an existing chart; no new chart
+    steps:
+      - {actor: bot, op: overwrite_chart, target: other_patient, with: referral}
+    expect: fault
+  - id: wrong_record_lookalike
+    class: wrong_record
+    clauses: [P1, F1]
+    note: the look-alike Ada Quill (other DOB) gets the new address and phone
+    steps:
+      - {actor: bot, op: update_chart, target: lookalike,
+         set: {street: referral, city: referral, postal_code: referral, phone_home: referral}}
+    expect: fault
+
+  # Unrelated changes by the bot
+  - id: unrelated_other_chart
+    class: unrelated_change
+    clauses: [F1]
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: update_chart, target: other_patient, set: {phone_home: "617-555-0199"}}
+    expect: fault
+  - id: unrelated_other_history
+    class: unrelated_change
+    clauses: [F2]
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: update_history, target: other_patient, set: {tobacco: "Current every day smoker"}}
+    expect: fault
+  - id: unrelated_table_note_other_patient
+    class: unrelated_change
+    clauses: [F3]
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: add_note, target: other_patient, body: "Synthetic stray note"}
+    expect: fault
+  - id: unrelated_table_allergy_other_patient
+    class: unrelated_change
+    clauses: [F3]
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: add_allergy, target: other_patient, title: "Penicillin"}
+    expect: fault
+  - id: unrelated_table_insurance_new_patient
+    class: unrelated_change
+    clauses: [F3]
+    note: an extra record on the new chart itself, which the referral never asked for
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: add_insurance, target: new_patient, provider: "Synthetic Mutual"}
+    expect: fault
+  - id: unrelated_other_chart_unattributed
+    class: unrelated_change
+    clauses: [F1]
+    note: a write nobody's audit entry explains counts against the run
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: none, op: update_chart, target: other_patient, set: {city: "Somerville"}}
+    expect: fault
+
+  # Wrong values, persisted correctly (source misread)
+  - id: misread_dob
+    class: misread_source
+    clauses: [P2]
+    note: day and month swapped when reading the referral
+    told: {DOB: "1984-07-03"}
+    steps:
+      - {actor: bot, op: register_referral, values: told}
+    expect: fault
+  - id: misread_swapped_names
+    class: misread_source
+    clauses: [P2]
+    told: {fname: Quill, lname: Ada}
+    steps:
+      - {actor: bot, op: register_referral, values: told}
+    expect: fault
+  - id: misread_wrong_provider
+    class: misread_source
+    clauses: [P2]
+    told: {providerID: "Dr. Owen Hale"}
+    steps:
+      - {actor: bot, op: register_referral, values: told}
+    expect: fault
+
+  # Missing side record
+  - id: missing_history_record
+    class: missing_side_record
+    clauses: [P4]
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: none, op: delete_history, target: new_patient}
+    expect: fault
+
+  # Duplicate save
+  - id: duplicate_save
+    class: duplicate
+    clauses: [P1, P3]
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: bot, op: register_referral}
+    expect: fault
+
+  # Legitimate concurrent updates by another user: must not be flagged
+  - id: concurrent_other_chart
+    class: concurrent_legitimate
+    clauses: [F4]
+    steps:
+      - {actor: bot, op: register_referral, phase: start}
+      - {actor: clinician2, op: update_chart, target: other_patient, set: {phone_home: "617-555-0177"}}
+      - {actor: bot, op: register_referral, phase: finish}
+    expect: clean
+  - id: concurrent_new_patient
+    class: concurrent_legitimate
+    clauses: [F4]
+    note: another user registers a different patient in the same window
+    steps:
+      - {actor: bot, op: register_referral, phase: start}
+      - {actor: clinician2, op: register_patient, person: "Mr. Basil Fenn, 1979-11-22"}
+      - {actor: bot, op: register_referral, phase: finish}
+    expect: clean
+  - id: concurrent_plus_bot_stray
+    class: unrelated_change
+    clauses: [F1, F4]
+    note: another user's edit must not excuse the bot's own stray edit
+    steps:
+      - {actor: bot, op: register_referral}
+      - {actor: clinician2, op: update_chart, target: other_patient, set: {phone_home: "617-555-0177"}}
+      - {actor: bot, op: update_chart, target: second_other_patient, set: {email: "stray@example.test"}}
+    expect: fault

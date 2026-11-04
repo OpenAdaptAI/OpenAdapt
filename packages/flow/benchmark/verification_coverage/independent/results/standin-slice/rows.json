@@ -1,0 +1,655 @@
+[
+  {
+    "class": "clean",
+    "expect": "clean",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "held"
+      },
+      "outcome": "verified",
+      "score": "ok",
+      "verified": true
+    },
+    "id": "clean",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "ok",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "ok",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "false_alarm",
+      "verified": false
+    }
+  },
+  {
+    "class": "wrong_record",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "held"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "wrong_record_existing_chart",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "instruction"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "wrong_record",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "wrong_record_lookalike",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "instruction"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "unrelated_change",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "held"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "unrelated_other_chart",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "instruction"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "unrelated_change",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "held"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "unrelated_other_history",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "unrelated_change",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "held"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "unrelated_table_note_other_patient",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "unrelated_change",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "held"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "unrelated_table_allergy_other_patient",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "unrelated_change",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "held"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "id": "unrelated_table_insurance_new_patient",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "unrelated_change",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "held"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "unrelated_other_chart_unattributed",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "instruction"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "misread_source",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "refuted"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "misread_dob",
+    "presave": "hold",
+    "presave_held_fields": [
+      "DOB"
+    ],
+    "presave_score": "caught",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "misread_source",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "refuted"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "misread_swapped_names",
+    "presave": "hold",
+    "presave_held_fields": [
+      "fname",
+      "lname"
+    ],
+    "presave_score": "caught",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "misread_source",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "held"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "id": "misread_wrong_provider",
+    "presave": "hold",
+    "presave_held_fields": [
+      "provider"
+    ],
+    "presave_score": "caught",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "missing_side_record",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "held"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "id": "missing_history_record",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "verified",
+      "score": "missed",
+      "verified": true
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "duplicate",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "held",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "duplicate_save",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "held",
+        "source": "instruction"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  },
+  {
+    "class": "concurrent_legitimate",
+    "expect": "clean",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "held"
+      },
+      "outcome": "verified",
+      "score": "ok",
+      "verified": true
+    },
+    "id": "concurrent_other_chart",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "ok",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "instruction"
+      },
+      "outcome": "reconciliation_required",
+      "score": "false_alarm",
+      "verified": false
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "false_alarm",
+      "verified": false
+    }
+  },
+  {
+    "class": "concurrent_legitimate",
+    "expect": "clean",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "held",
+        "source": "held"
+      },
+      "outcome": "verified",
+      "score": "ok",
+      "verified": true
+    },
+    "id": "concurrent_new_patient",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "ok",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "instruction"
+      },
+      "outcome": "reconciliation_required",
+      "score": "false_alarm",
+      "verified": false
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "false_alarm",
+      "verified": false
+    }
+  },
+  {
+    "class": "unrelated_change",
+    "expect": "fault",
+    "framed": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "held"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "id": "concurrent_plus_bot_stray",
+    "presave": "agree",
+    "presave_held_fields": [],
+    "presave_score": "missed",
+    "shipped": {
+      "checked": {
+        "delta": "held",
+        "frame": "refuted",
+        "source": "instruction"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    },
+    "synthesized": {
+      "checked": {
+        "delta": "refuted",
+        "frame": "refuted",
+        "source": "not_checked"
+      },
+      "outcome": "reconciliation_required",
+      "score": "caught",
+      "verified": false
+    }
+  }
+]
