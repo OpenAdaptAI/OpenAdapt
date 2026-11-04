@@ -71,10 +71,12 @@ the episode if they differ.
 - **UI Automation**: input goes through the in-guest agent (`win_agent`) over
   TLS with a pinned certificate. Observations carry the screenshot and the
   window's elements (role, name, automation id, bounds), without field values.
-- **Remote Desktop**: input and frames go over an RDP session. The default
-  client (`aardwolf`) runs on any host. The `xfreerdp` client (FreeRDP 3 under
-  Xvfb, Linux; see [`rdp-client/Containerfile`](rdp-client/Containerfile))
-  requests H.264/AVC444 with `rdp.avc444: true`.
+- **Remote Desktop**: input and frames go over an RDP session. The client is
+  FreeRDP 3 under Xvfb, asking for H.264/AVC444 (`rdp.avc444: true`), as
+  against a production session host. It needs Linux; see
+  [`rdp-client/Containerfile`](rdp-client/Containerfile). On any other host,
+  `OPENADAPT_WINENV_RDP_TRANSPORT=aardwolf` uses a pure-Python client that
+  negotiates RDP's bitmap codecs instead.
 
 Actions are `click`, `double_click`, `right_click` and `scroll` at session
 coordinates, `type`, `press` and `done` with a claim. The Windows key and the

@@ -319,8 +319,28 @@ class WindowsGuest:
             "BatchMode=yes",
             "-o",
             "ConnectTimeout=15",
-            f"{self.user}@{self.host}",
+            "-p",
+            str(self._via("SSH", 22)[1]),
+            f"{self.user}@{self._via('SSH', 22)[0]}",
         ]
+
+    def _via(self, channel: str, port: int) -> tuple[str, int]:
+        """Where to connect for ``channel`` (``SSH``, ``AGENT``, ``RDP``).
+
+        ``OPENADAPT_WINENV_<CHANNEL>_VIA=host:port`` sends it through a relay
+        (a container that cannot reach the guest's network directly); the
+        guest's own address and the default port otherwise.
+        """
+        via = _setting(f"{channel}_VIA")
+        if not via:
+            return self.host, port
+        host, _, number = via.rpartition(":")
+        if not host or not number.isdigit():
+            raise GuestError(f"OPENADAPT_WINENV_{channel}_VIA must be host:port")
+        return host, int(number)
+
+    def rdp_address(self) -> tuple[str, int]:
+        return self._via("RDP", 3389)
 
     def push_file(self, local: Path, remote: str) -> None:
         """Copy ``local`` to ``remote`` in the guest unless it is already there."""
@@ -346,8 +366,11 @@ class WindowsGuest:
                     str(self._ssh_key),
                     "-o",
                     "BatchMode=yes",
+                    "-P",
+                    str(self._via("SSH", 22)[1]),
                     str(local),
-                    f"{self.user}@{self.host}:/" + remote.replace("\\", "/"),
+                    f"{self.user}@{self._via('SSH', 22)[0]}:/"
+                    + remote.replace("\\", "/"),
                 ],
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
@@ -594,7 +617,7 @@ if ($line -and $line -match '\\s(\\d+)\\s+Disc') {{
             )
         )
         endpoint = AgentEndpoint(
-            url=f"https://{self.host}:{port}",
+            url="https://{}:{}".format(*self._via("AGENT", port)),
             token=token,
             pin_fingerprint=bundle.fingerprint,
             require_tls=True,

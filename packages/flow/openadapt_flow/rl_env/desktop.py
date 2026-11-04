@@ -340,11 +340,16 @@ def _rdp_backend(spec: RdpSpec, guest: Any) -> Any:
 
     password = guest.rdp_password()
 
-    if spec.transport == "aardwolf":
+    transport_kind = os.environ.get("OPENADAPT_WINENV_RDP_TRANSPORT", spec.transport)
+    if transport_kind not in ("aardwolf", "xfreerdp"):
+        raise TaskError("OPENADAPT_WINENV_RDP_TRANSPORT is aardwolf or xfreerdp")
+    if transport_kind == "aardwolf":
+        host, port = guest.rdp_address()
         transport = AardwolfTransport.from_credentials(
-            guest.host,
+            host,
             guest.desktop_user,
             password,
+            port=port,
             width=spec.width,
             height=spec.height,
         )
@@ -357,7 +362,10 @@ def _rdp_backend(spec: RdpSpec, guest: Any) -> Any:
 
         transport = XFreeRDPTransport(
             RdpTarget(
-                host=guest.host, username=guest.desktop_user, ignore_certificate=True
+                host=guest.rdp_address()[0],
+                port=guest.rdp_address()[1],
+                username=guest.desktop_user,
+                ignore_certificate=True,
             ),
             SessionProfile(
                 width=spec.width,
