@@ -2,7 +2,10 @@
 
 The review's item 7 -- "cluster successful and failed traces, update the inferred
 state machine, test candidate revisions on held-out executions, and promote only
-verified versions" -- assembled as ORCHESTRATION over parts that already exist:
+verified versions" -- assembled as ORCHESTRATION over parts that already exist.
+The held-out test is STRUCTURAL coverage: a symbolic interpreter checks that a
+candidate's shape reproduces held-out traces. It executes nothing and checks no
+identity or effect, so it is not evidence of behavioural correctness:
 
 - the Phase-2 :class:`~openadapt_flow.ir.ProgramGraph` state machine (the thing
   learned), replayed for coverage by a symbolic ``$0`` interpreter

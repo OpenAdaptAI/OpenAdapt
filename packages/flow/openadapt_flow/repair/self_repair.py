@@ -1562,7 +1562,16 @@ class SelfRepair:
         files: dict[str, bytes] = {}
         if admission.basis != BASIS_RECORD_IDENTITY:
             identity_template, identifier_region, band_png = _dialog_band(
-                workflow, admission, screen, point, self.vision
+                workflow,
+                admission,
+                screen,
+                point,
+                self.vision,
+                proved_region=(
+                    _cover_region(self._covered.cover)
+                    if self._covered is not None
+                    else None
+                ),
             )
             identifier_crop = f"templates/identifiers/{step_id}.png"
             files[identifier_crop] = band_png
@@ -1622,6 +1631,13 @@ class SelfRepair:
                 "band; only that dialog may be dismissed"
             )
         rect = _cover_region(covered.cover)
+        if "region" in here and _cover_region(here) != rect:
+            # The dismiss step's dialog box is the proved region; a dialog
+            # that moved since the halt would leave it stale.
+            raise SelfRepairRefused(
+                "the covering dialog moved since the halt; its box can't be "
+                "used as the new step's identity"
+            )
         text = ""
         if rect is not None:
             x, y, w, h = rect
@@ -2687,6 +2703,14 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any]
             f"{step.id} stopped on the record check ({halted.identity.status}); a "
             "wrong-record halt is never repaired"
         )
+    refusal = halted.safety_refusal_evidence
+    if refusal is not None and refusal.code == "target_not_actionable":
+        # The target is on the page, but covered. A new target picked from
+        # the screen could be whatever covers it.
+        return (
+            f"{step.id} stopped because its target is covered or off screen; "
+            "a covered target is never retargeted"
+        )
     if step.action not in _POINTER_KINDS or step.anchor is None:
         return f"{step.id} is not a click on an on-screen target"
     # Only the ladder's own refusals count as "the screen changed": it found
@@ -3234,13 +3258,17 @@ def _dialog_band(
     screen: bytes,
     point: tuple[int, int],
     vision: Any,
+    *,
+    proved_region: Optional[tuple[int, int, int, int]] = None,
 ) -> tuple[Any, tuple[int, int, int, int], bytes]:
     """The dialog around a new click, as the step's identity band.
 
     Used for a click admitted on the record check: the band is a screen
     pre-check (the same dialog shows), never what makes the click safe. The
     dialog's box comes from the element's ancestry when the tree reads one,
-    otherwise from the drawn box around the click. Its text is hashed with
+    otherwise from the drawn box around the click. ``proved_region`` is a
+    box the backend already proved is the dialog's window (a covered band's
+    ``owned_window_over``); it is used first. Its text is hashed with
     the bundle's salt, as a recorded identity band is. Refuses when there is
     no dialog around the click or it has no readable text.
     """
@@ -3254,7 +3282,9 @@ def _dialog_band(
     )
 
     element = admission.element
-    region = element.dialog_region if element is not None else None
+    region = proved_region
+    if region is None and element is not None:
+        region = element.dialog_region
     if region is None:
         region = enclosing_dialog_region(screen, point)
     if region is None:

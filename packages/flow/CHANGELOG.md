@@ -17,6 +17,12 @@
 
 ## Unreleased
 
+### Changed
+
+- The wheel no longer ships the benchmark harnesses. `openadapt_flow.benchmark` and `openadapt_flow.instrument` moved to `packages/flow/benchmark/harness/` in the source tree (import `benchmark.harness`); `openadapt-flow benchmark` runs from a source checkout and says so from a wheel. The engine audit for application-specific code is in `docs/GENERALITY_AUDIT.md`. Code that imported `openadapt_flow.benchmark` or `openadapt_flow.instrument` from an installed wheel imports `benchmark.harness` from a source checkout instead.
+
+- The wheel no longer ships test fixtures and demo harnesses: the Harness² integration, the MockLoan app and its recorder, `guard_demo`, the MockMed teach-scope adapter, the synthetic drift stream (the `StructuralDiffInducer` it used now lives in `openadapt_flow.learning.induce`) and the task-ledger simulation moved to `benchmark/harness/` or beside their tests, the reward bundle helpers moved to `openadapt_flow.reward.bundle`, and the `harness2` extra is gone.
+
 ### Features
 
 - `run --self-repair` (and repair by default) now works outside a browser. `repair.session` in `deploy.yaml` says how to start the app for each probe, fault probe and resumed run (an argv, no shell, kept running while the app is up; `fault_commands`, `close_command`, `ready_s`). The run's configured backend must bind to a window owned by that command's process group, so a session never binds to the halted session or a copy already open; Flow ends the group afterwards, and closes the halted session before each probe. This works where the bound window is on Flow's machine (macOS, and the local RDP or Citrix client window); Windows over its agent and FreeRDP are refused for now. Without `repair.session`, a desktop run refuses repair with that reason, as before.
@@ -25,9 +31,9 @@
 
 ### Fixes
 
-- The wheel no longer ships the benchmark harnesses. `openadapt_flow.benchmark` and `openadapt_flow.instrument` moved to `packages/flow/benchmark/harness/` in the source tree (import `benchmark.harness`); `openadapt-flow benchmark` runs from a source checkout and says so from a wheel. The engine audit for application-specific code is in `docs/GENERALITY_AUDIT.md`.
+- A qualification case can run on `--backend windows`. `WindowsBackend` now answers the qualification environment observer from one `/context/identity` call: the foreground executable's name, the SHA-256 of that executable file, the live logon-session digest, and a digest of the machine id and exact OS build. Before, `qualify run-case` on Windows refused with "qualification backend cannot observe the complete environment". The digest is withheld when the file changed after the process started (an updater replacing a running program), and it describes the host executable for an app run by an interpreter, browser or shared runtime. Guarded input now also binds the digest and the environment, so a same-named program from another path cannot take the foreground between the check and the input. The agent's session digest now accepts a connected RDP or Citrix session, not only the console session, so the agent can run inside a remote user session. An agent without the new `context_environment_v1` fields still refuses ([#1696](https://github.com/OpenAdaptAI/OpenAdapt/issues/1696)).
 
-- The wheel no longer ships test fixtures and demo harnesses: the Harness² integration, the MockLoan app and its recorder, `guard_demo`, the MockMed teach-scope adapter, the synthetic drift stream (the `StructuralDiffInducer` it used now lives in `openadapt_flow.learning.induce`) and the task-ledger simulation moved to `benchmark/harness/` or beside their tests, the reward bundle helpers moved to `openadapt_flow.reward.bundle`, and the `harness2` extra is gone.
+- A covered-band dismiss step takes its dialog box from the window the backend proved covers the band, before any pixel search, so a native message box that the accessibility tree doesn't label as a dialog can be dismissed. Without a proved window the step is refused as before.
 
 - Self-repair on a covered identity band dismisses only the proved dialog: the covering window must span the band from where the read stops to its right edge at full height, the dismiss click must land in that same window, and only a dialog whose every word is a notice word (no question) may be dismissed ([#1724](https://github.com/OpenAdaptAI/OpenAdapt/issues/1724)).
 
@@ -119,7 +125,7 @@ A person's approval counts only when a registered approver key signed it, and th
 - Under `problems_only`, problems with an item's own input leave the switch on and send that item to a person; program and environment problems turn it off, and a person re-arms it with one signed tap ([#1517](https://github.com/OpenAdaptAI/OpenAdapt/pull/1517)).
 - Look-alike rows are counted on Windows, macOS, Linux and pixel-only surfaces, so a step that picks a row halts when it cannot tell the target from its twin ([#1504](https://github.com/OpenAdaptAI/OpenAdapt/pull/1504), [#1518](https://github.com/OpenAdaptAI/OpenAdapt/pull/1518), [#1557](https://github.com/OpenAdaptAI/OpenAdapt/pull/1557)).
 - `openadapt-agent serve --teach-browser` lets a coding agent turn a read-only browser task into a named tool it calls again with new values; `openadapt setup` registers it with Claude Code, Cursor, Codex and Gemini CLI ([#1502](https://github.com/OpenAdaptAI/OpenAdapt/pull/1502)).
-- `induce --held-out` scores each held-out item by running it and checking the record independently ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
+- `openadapt_flow.validation.behavioral_generalization` scores each held-out item by running it and checking the record independently. `induce --held-out` prints structural trace coverage ([#1527](https://github.com/OpenAdaptAI/OpenAdapt/pull/1527)).
 
 ### Fixes
 
