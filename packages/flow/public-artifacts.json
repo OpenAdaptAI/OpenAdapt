@@ -509,6 +509,7 @@
     "benchmark/undo_proposal/results/openemr-new-patient.json",
     "benchmark/undo_proposal/results/openimis-claim.json",
     "benchmark/undo_proposal/results/summary.json",
+    "benchmark/verification_coverage/independent/results/phase0/stored-form-3d8db5b31/faults-standin-production.rows.json",
     "benchmark/verifier_baselines/inputs/medplum_tasks.json",
     "benchmark/vision_hardening/corpus.json",
     "benchmark/vision_hardening/results.json",
