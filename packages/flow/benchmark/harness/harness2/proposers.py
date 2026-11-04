@@ -21,12 +21,12 @@ from typing import Optional
 
 from harness2.core.proposer import Proposer
 
-from openadapt_flow.integrations.harness2.agent import (
+from benchmark.harness.harness2.agent import (
     RULE_IDENTITY,
     RULE_SAVE_ONCE,
     RULE_TYPE_LABEL,
 )
-from openadapt_flow.integrations.harness2.llm import ChatModel
+from benchmark.harness.harness2.llm import ChatModel
 
 _CHOICE_HINT = "```choice"
 

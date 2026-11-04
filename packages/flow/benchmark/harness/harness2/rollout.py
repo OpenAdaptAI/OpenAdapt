@@ -27,14 +27,14 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from openadapt_flow.integrations.harness2.agent import AgentResult, GuiAgent, PageDriver
-from openadapt_flow.integrations.harness2.apps import AppTarget
-from openadapt_flow.integrations.harness2.scorer import (
+from benchmark.harness.harness2.agent import AgentResult, GuiAgent, PageDriver
+from benchmark.harness.harness2.apps import AppTarget
+from benchmark.harness.harness2.scorer import (
     EpisodeScore,
     Penalties,
     ReadBackScorer,
 )
-from openadapt_flow.integrations.harness2.tasks import GuiTask
+from benchmark.harness.harness2.tasks import GuiTask
 
 RUN_FILE = "run.json"
 STEPS_FILE = "steps.jsonl"
