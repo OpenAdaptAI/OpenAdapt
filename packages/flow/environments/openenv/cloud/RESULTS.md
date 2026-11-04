@@ -23,7 +23,7 @@ Each session holds its own app copy and Chromium browser, so sessions don't
 share state. With 100 at once, every episode still reached the maximum reward.
 That shows nothing leaked between them and nothing was dropped.
 
-Cost is in `SPEND.md` (under $0.25 for all attempts). Raw output is in
+Raw output is in
 `last-run.json`.
 
 Not tested: a model-driven run, other environments (OpenEMR and Frappe use one
