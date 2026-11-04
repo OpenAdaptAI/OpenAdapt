@@ -260,8 +260,13 @@ def test_an_unreadable_audit_never_reads_as_clean(tmp_path: Path) -> None:
     _wait(sh)
     client.sql("UPDATE patient SET phone = '7' WHERE id = 1")
     sh.stop()
-    assert _verdicts(sh) == [("sql", "CONFIRMED"), ("gap", "UNCERTAIN")]
-    assert "the audit couldn't be read" in " ".join(sh.episodes[1].reasons)
+    # Both gaps, before and after the action: an unread audit is never clean.
+    assert _verdicts(sh) == [
+        ("sql", "CONFIRMED"),
+        ("gap", "UNCERTAIN"),
+        ("gap", "UNCERTAIN"),
+    ]
+    assert "the audit couldn't be read" in " ".join(sh.episodes[2].reasons)
 
 
 def test_an_unreadable_database_is_uncertain_and_the_agent_goes_on(
@@ -525,3 +530,76 @@ def test_a_gap_is_never_clean_when_triggers_cant_be_seen(tmp_path: Path) -> None
     sh.stop()
     assert gap is not None and gap.verdict == "UNCERTAIN"
     assert "triggers" in gap.reasons[0]
+
+
+def test_a_slow_read_after_an_end_leaves_no_unwatched_stretch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The end's own read of the database is slow and quiet_s is 0: the
+    # check must still wait for that read, so a write right after the check
+    # is inside a watched gap.
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db)
+    sh.quiet_s = 0
+    real = sh._mark
+    slow = {"on": False}
+
+    def mark() -> Any:
+        if slow["on"]:
+            time.sleep(1.5)
+        return real()
+
+    monkeypatch.setattr(sh, "_mark", mark)
+    client = Client(db)
+    slow["on"] = True
+    _act(sh, client)
+    _wait(sh)
+    slow["on"] = False
+    client.sql("UPDATE patient SET phone = '42' WHERE id = 1")  # unannounced
+    _act(sh, client, {"first": "Bo", "last": "Reed", "email": "bo@example.test"})
+    sh.stop()
+    gaps = [e for e in sh.episodes if e.kind == "gap"]
+    assert [g.verdict for g in gaps] == ["REFUTED"]
+
+
+def test_a_missing_gap_start_is_a_hole_never_skipped(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db)
+    sh._gap_from = None  # as if a read were lost
+    _act(sh, Client(db))
+    sh.stop()
+    gaps = [e for e in sh.episodes if e.kind == "gap"]
+    assert gaps and gaps[0].verdict == "UNCERTAIN"
+    assert "the watch has a hole" in gaps[0].reasons[0]
+
+
+def test_an_unreadable_audit_is_uncertain_even_when_nothing_moved(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db, audit_sql="SELECT id FROM nope WHERE u = %(actor)s")
+    sh.stop()
+    assert [(e.kind, e.verdict) for e in sh.episodes] == [("gap", "UNCERTAIN")]
+
+
+def test_rows_added_to_an_allow_listed_table_between_actions_are_not_a_change(
+    tmp_path: Path,
+) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db, audit_sql=None)
+    con = sqlite3.connect(db)  # the app's own log, append-only in the contract
+    con.execute("INSERT INTO audit (user, tbl) VALUES ('front-desk', 'login')")
+    con.commit()
+    con.close()
+    sh.stop()
+    assert sh.episodes == [] and sh.gaps_clean == 1
+
+
+def test_a_begin_after_stop_is_refused(tmp_path: Path) -> None:
+    db = _db(tmp_path)
+    sh = _shadow(tmp_path, db)
+    sh._stop.set()
+    status, reply = sh.begin({"action": "create_patient", "values": VALUES})
+    sh._stop.clear()
+    sh.stop()
+    assert status == 409 and "stopping" in reply["refused"]

@@ -125,6 +125,7 @@ class DatabaseShadow(Shadow):
         self.gaps_clean = 0
         self.refusals: list[dict[str, Any]] = []
         self._enders: list[threading.Thread] = []
+        self._begins = 0  # /begin calls in progress
 
     # -- lifecycle -------------------------------------------------------------------
 
@@ -134,9 +135,15 @@ class DatabaseShadow(Shadow):
         return self
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop.set()  # a /begin from here on is refused
         self.server.shutdown()
         self.server.server_close()
+        deadline = time.time() + self.check_timeout_s
+        while time.time() < deadline:
+            with self._lock:
+                if not self._begins:
+                    break
+            time.sleep(0.05)
         with self._lock:
             still = [e for e in self.episodes if e.in_flight]
         for ep in still:
@@ -153,6 +160,8 @@ class DatabaseShadow(Shadow):
             start, self._gap_from = self._gap_from, None
         if start is not None:
             self._judge_gap(start, self._mark())
+        else:
+            self._hole("the stop")
         self._pool.shutdown(wait=False, cancel_futures=True)
 
     def _checker(self) -> None:
@@ -171,8 +180,10 @@ class DatabaseShadow(Shadow):
                         ep,
                         f"the agent announced no end within {self.max_action_s:.0f} s",
                     )
+                # Checks run only after an end's own read of the database
+                # (``_after_end``) or at the stop, never from here: a check
+                # before that read would leave a stretch no read covers.
                 if self.idle_s() >= self.quiet_s:
-                    self._check_due()
                     self.run_rechecks()
             except Exception as exc:  # noqa: BLE001
                 self._note_error(f"checker: {exc!r}")
@@ -207,6 +218,8 @@ class DatabaseShadow(Shadow):
             def do_POST(self) -> None:
                 try:
                     n = int(self.headers.get("Content-Length") or 0)
+                    if n < 0:
+                        raise ValueError("a negative Content-Length")
                     doc = json.loads(self.rfile.read(n) or b"{}")
                     if not isinstance(doc, dict):
                         raise ValueError("the body is not a JSON object")
@@ -247,6 +260,17 @@ class DatabaseShadow(Shadow):
         t0 = time.perf_counter()
         action = str(doc.get("action") or "")
         values = doc.get("values")
+        with self._lock:
+            if self._stop.is_set():
+                return 409, {"refused": "the shadow is stopping", "action": action}
+            self._begins += 1
+        try:
+            return self._begin(t0, action, values)
+        finally:
+            with self._lock:
+                self._begins -= 1
+
+    def _begin(self, t0: float, action: str, values: Any) -> tuple[int, dict[str, Any]]:
         if self.guard:
             why = self._guard_refusal(action, values)
             if why:
@@ -274,20 +298,37 @@ class DatabaseShadow(Shadow):
                 for e in earlier:
                     e.evidence["overlapped_by"] = ep.id
             gap_from, self._gap_from = self._gap_from, None
-        if ep.baseline is not None:
-            self._wait_baseline(ep)
-        # Read once more for the watch: what moved since the last action
-        # ended is a change no announced action covers. Read after the
-        # baseline, so nothing falls between the two windows.
-        mark = self._mark()
-        gap = self._judge_gap(gap_from, mark) if gap_from is not None else None
+        try:
+            if ep.baseline is not None:
+                self._wait_baseline(ep)
+            # Read once more for the watch: what moved since the last action
+            # ended is a change no announced action covers. Read after the
+            # baseline, so nothing falls between the two windows.
+            mark = self._mark()
+            if gap_from is not None:
+                gap = self._judge_gap(gap_from, mark)
+            elif earlier:
+                gap = None  # the earlier action's own window is still open
+            else:
+                gap = self._hole(f"action {ep.id}")
+            refused = (
+                ep.baseline is not None
+                and ep.baseline.done()
+                and not ep.baseline.cancelled()
+                and ep.baseline.exception() is not None
+            )
+        except Exception as exc:  # noqa: BLE001 - fail closed, never hang
+            self._note_error(f"begin {action}: {exc!r}")
+            self._end(ep, f"the shadow failed at begin: {exc!r}")
+            self._hole(f"action {ep.id}", why=f"the shadow failed: {exc!r}")
+            return 500, {"error": f"the shadow failed: {exc!r}", "action_id": ep.id}
         write.held_ms = (time.perf_counter() - t0) * 1000
         write.status = 200
         if self.guard:
             why = ""
             if earlier or ep.kind != "sql" or ep.baseline_note:
                 why = ep.baseline_note or "the action can't be checked"
-            elif ep.baseline is not None and ep.baseline.exception(timeout=0):
+            elif refused:
                 why = f"the database couldn't be read first: {ep.baseline.exception()}"
             elif gap is not None:
                 why = f"{gap.verdict} {GAP}: " + "; ".join(gap.reasons)
@@ -407,6 +448,7 @@ class DatabaseShadow(Shadow):
             and ep.verdict != CONFIRMED
             and result is not None
             and result.observed == "absent"
+            and result.checked.get("source") != "refuted"
         ):
             # The agent said it didn't finish, and nothing of it landed:
             # nothing landed wrong, and nothing is there to confirm.
@@ -487,15 +529,36 @@ class DatabaseShadow(Shadow):
                 try:
                     cur = conn.cursor()
                     sql = self.audit_sql
-                    if self._watch_cfg.frame.database.dialect == "sqlite":
+                    dialect = self._watch_cfg.frame.database.dialect
+                    if dialect == "sqlite":
                         sql = sql.replace("%(actor)s", ":actor")
+                    elif dialect == "mysql":
+                        cur.execute("START TRANSACTION READ ONLY")
+                    else:
+                        cur.execute("SET TRANSACTION READ ONLY")
                     cur.execute(sql, {"actor": self.actor_id})
                     mark.audit = {str(row[0]) for row in cur.fetchall()}
+                    conn.rollback()
                 finally:
                     conn.close()
             except Exception as exc:  # noqa: BLE001 - unreadable, never clean
                 mark.errors.append(f"the audit couldn't be read: {exc}")
         return mark
+
+    def _hole(self, before: str, *, why: str = "") -> Episode:
+        """A stretch no read of the watch began: never clean."""
+
+        with self._lock:
+            self.gaps_watched += 1
+            ep = self._new("gap", GAP)
+            ep.verdict = UNCERTAIN
+            ep.reasons = [
+                f"the watch has a hole {GAP} (before {before}): "
+                + (why or "no read began it")
+                + ", so a change there can't be ruled out"
+            ]
+            ep.checked, ep.checked_at = True, time.time()
+        return ep
 
     def _judge_gap(self, start: Mark, end: Mark) -> Optional[Episode]:
         """Judge what moved between two watch reads. Returns the finding,
@@ -528,12 +591,13 @@ class DatabaseShadow(Shadow):
         new: set[str] = set()
         if self.audit_sql:
             if start.audit is None or end.audit is None:
-                if moved or not verdict:
-                    verdict = verdict or (UNCERTAIN if moved else "")
-                    if moved:
-                        reasons.append(
-                            "the audit couldn't be read, so who changed it is unknown"
-                        )
+                # The audit also sees writes the diff can't (ignored
+                # columns, skipped tables): unread, the gap is never clean.
+                verdict = verdict or UNCERTAIN
+                reasons.append(
+                    "the audit couldn't be read, so a write by the agent's user "
+                    "can't be ruled out"
+                )
             else:
                 new = end.audit - start.audit
                 gone = start.audit - end.audit
