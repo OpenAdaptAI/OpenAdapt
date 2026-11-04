@@ -74,10 +74,32 @@ doesn't move a run toward confirming.
 Per-row verdicts: `results/rescore-<column>.json`; every false flag's reasons
 and every miss: `score.json`, `why`.
 
+## Fara-7B, first half (addendum)
+
+Registered in [PREREGISTRATION-FARA.md](PREREGISTRATION-FARA.md) before any
+re-score: 57 rows (P01 to A06) on stack 9820, all checked before Fara's live
+checks got a fresh token. The fidelity gate passes on the 4 rows the live
+verifier judged (4/4).
+
+| Column | Sensitivity | Specificity | Completion | Harm | False refusal |
+|---|---|---|---|---|---|
+| live | 15/15 | 1/2 | 0.018 | 0.000 | 0.018 |
+| main | 15/15 | 2/2 | 0.035 | 0.000 | 0.000 |
+| operations | 15/15 [0.80, 1.00] | 2/2 [0.34, 1.00] | 0.035 | 0.000 | 0.000 |
+| operations-v2 | 15/15 | 2/2 | 0.035 | 0.000 | 0.000 |
+
+Intervals are Wilson 95% over runs; the case bootstrap is degenerate at
+15/15 and 2/2. Median steps: 52 model calls. Fara said DONE on 17 of 57 runs,
+and 15 of those were wrong, so this half says more about sensitivity than
+about specificity. The one live false flag was the expired token. Five
+unlabelled runs (no DONE claim) are flagged because the agent wrote after the
+check; they count in neither metric. Per-row verdicts:
+`results/rescore-<column>-fara.json`; reasons: `results/score-fara.json`.
+
 ## Limits
 
 - One application (Medplum 5.2.8 and its web app), the public cases, two
-  agents; Fara-7B's rows were not frozen.
+  agents and Fara-7B's first half.
 - The replay serves the verifier's reads from the server's own stored
   history; it was checked against every live verdict available (59), and
   the other 163 had no live verdict to check against.
