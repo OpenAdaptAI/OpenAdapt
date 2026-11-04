@@ -96,12 +96,45 @@ class Licence(_Strict):
         return self
 
 
+class RdpSpec(_Strict):
+    """The pixels-only surface's Remote Desktop session."""
+
+    width: int = 1280
+    height: int = 800
+    color_depth: Literal[16, 24, 32] = 32
+    #: ``xfreerdp`` (FreeRDP 3 under Xvfb, Linux) or ``aardwolf`` (pure
+    #: Python, any host, RDP bitmap codecs).
+    transport: Literal["aardwolf", "xfreerdp"] = "xfreerdp"
+    #: ``xfreerdp`` only: ask for H.264/AVC444, as on a production RDS host.
+    avc444: bool = False
+
+
+class DesktopSpec(_Strict):
+    """A Windows app on a guest the user supplies (``kind: desktop``)."""
+
+    #: The pack app in the guest (``C:\\oa\\pack\\<guest_app>.ps1``).
+    guest_app: str
+    window_title: str
+    #: An automation id that exists once the app is ready for input.
+    ready_automation_id: str
+    ready_timeout_s: float = 60.0
+    rdp: RdpSpec = RdpSpec()
+    #: Where the Windows machine comes from; never shipped with the pack.
+    guest_image: Literal["buyer-supplied"] = "buyer-supplied"
+
+
 class AppSpec(_Strict):
     #: ``inprocess``: ``serve`` is ``module:function`` returning
     #: ``(url, store, stop)``; each environment instance runs its own copy.
     #: ``external``: the app already runs (a fixture stack); its URL comes
     #: from ``url_env`` or ``url_default``.
-    kind: Literal["inprocess", "external"]
+    #: ``desktop``: a Windows app on a guest the user supplies, served by
+    #: :mod:`openadapt_flow.rl_env.desktop` on ``surface``.
+    kind: Literal["inprocess", "external", "desktop"]
+    #: ``desktop`` only: ``windows_uia`` (screen and UI Automation elements)
+    #: or ``rdp_pixels`` (Remote Desktop pixels only).
+    surface: Optional[Literal["windows_uia", "rdp_pixels"]] = None
+    desktop: Optional[DesktopSpec] = None
     serve: Optional[str] = None
     url_env: Optional[str] = None
     url_default: Optional[str] = None
@@ -124,6 +157,19 @@ class AppSpec(_Strict):
             raise ValueError("an inprocess app needs serve: module:function")
         if self.kind == "external" and not (self.url_env or self.url_default):
             raise ValueError("an external app needs url_env or url_default")
+        if self.kind == "desktop":
+            if self.surface is None or self.desktop is None:
+                raise ValueError("a desktop app needs surface and desktop")
+            if (
+                self.serve
+                or self.url_env
+                or self.url_default
+                or self.reset
+                or self.prepare
+            ):
+                raise ValueError("a desktop app is served and reset by its guest")
+        elif self.surface is not None or self.desktop is not None:
+            raise ValueError("surface and desktop are for kind: desktop only")
         if len(self.reset) > 1 or (
             self.reset and next(iter(self.reset)) not in ("http_post", "python")
         ):
@@ -252,7 +298,13 @@ def load_environment(directory: str | Path) -> EnvDirectory:
             if task.id in known:
                 raise TaskError(f"extra task {task.id} repeats a public task id")
             tasks.append(task)
-    if any(not t.feasible for t in tasks) and not manifest.agent.write_requests:
+    # A desktop app logs each save it is asked for (rl_env.desktop reads it);
+    # a browser environment tells a try from its write requests.
+    if (
+        any(not t.feasible for t in tasks)
+        and not manifest.agent.write_requests
+        and manifest.app.kind != "desktop"
+    ):
         raise TaskError(
             f"{manifest.name} has infeasible tasks but no agent.write_requests, "
             "so a failure report could not be told from not trying"

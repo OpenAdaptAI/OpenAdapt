@@ -20,8 +20,20 @@ from openadapt_flow.rl_env.tasks import (
 
 ROOT = Path(__file__).resolve().parents[1]
 ENVS = ROOT / "environments" / "openenv"
+
+
+def _web(env_dir: Path) -> bool:
+    """Browser environments; desktop ones load through rl_env.desktop instead."""
+    import yaml
+
+    raw = yaml.safe_load((env_dir / "env.yaml").read_text())
+    return (raw.get("app") or {}).get("kind") != "desktop"
+
+
 SERVABLE = sorted(
-    p.parent.parent for p in ENVS.glob("*/tasks/public.jsonl") if p.read_text().strip()
+    p.parent.parent
+    for p in ENVS.glob("*/tasks/public.jsonl")
+    if p.read_text().strip() and _web(p.parent.parent)
 )
 
 
