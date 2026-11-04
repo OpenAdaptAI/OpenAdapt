@@ -718,11 +718,15 @@ def _program_action_trace(
             container = path.read_bytes()
         except (OSError, ValueError) as exc:
             raise ValueError("attended transition evidence is unreadable") from exc
-        payload = _state.open_sealed(
-            container,
-            _crypto.resolve_key(None),
-            _state.FILE_AAD_PREFIX + ref.encode("utf-8"),
-        )
+        try:
+            payload = _state.open_file(
+                root,
+                root.joinpath(*PurePosixPath(ref).parts),
+                container,
+                _crypto.resolve_key(None),
+            )
+        except _state.AttendedStateUnreadable as exc:
+            raise ValueError("attended transition evidence does not decrypt") from exc
         import hashlib
 
         if hashlib.sha256(payload).hexdigest() != expected_sha256:

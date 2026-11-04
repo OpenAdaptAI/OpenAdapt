@@ -147,7 +147,9 @@ def test_default_mode_attended_run_leaves_no_plaintext_attended_state(
     assert (run / attended_state.MARKER_FILENAME).is_file()
 
     rows = _journal_rows()
-    assert rows and all(row.startswith(attended_state.JOURNAL_MARKER) for row in rows)
+    assert rows and all(
+        row.startswith(attended_state.JOURNAL_MARKER_V2) for row in rows
+    )
     journal = _journal_bytes()
     assert all(marker not in journal for marker in markers)
 
@@ -218,7 +220,7 @@ def test_older_plaintext_attended_run_still_resumes(tmp_path, monkeypatch):
     assert (run / "attended_capability.json").is_file()
     assert (run / "attended_decisions.json").is_file()
     assert not any(
-        row.startswith(attended_state.JOURNAL_MARKER) for row in _journal_rows()
+        attended_state.is_sealed_journal_snapshot(row) for row in _journal_rows()
     )
 
     monkeypatch.delenv("OPENADAPT_FLOW_PLAINTEXT_AT_REST")
@@ -234,8 +236,8 @@ def test_older_plaintext_attended_run_still_resumes(tmp_path, monkeypatch):
         assert not (run / name).exists(), name
     assert (run / "attended_decisions.json.enc").is_file()
     rows = _journal_rows()
-    assert not rows[0].startswith(attended_state.JOURNAL_MARKER)
-    assert rows[-1].startswith(attended_state.JOURNAL_MARKER)
+    assert not attended_state.is_sealed_journal_snapshot(rows[0])
+    assert rows[-1].startswith(attended_state.JOURNAL_MARKER_V2)
     log = AttendedActionStore(run)._read_log()
     operators = [item.operator for item in log.decisions]
     assert operators[0] == "earlier operator" and operators[-1] == OPERATOR
@@ -275,3 +277,213 @@ def test_encrypted_file_moved_to_another_path_or_replaced_is_refused(
     capability_enc.write_bytes(original)
     (run / "attended_capability.json").unlink()
     assert AttendedActionStore(run).read() == capability
+
+
+# -- one key derivation per run, and no downgrade (real filesystem) ----------
+
+SYNTHETIC_KEY = "synthetic-attended-test-passphrase"
+
+
+def _write(path: Path, data: bytes) -> None:
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
+@pytest.fixture
+def counted_scrypt(monkeypatch):
+    """Count every scrypt run, with the per-run key cache cleared."""
+    attended_state._RUN_KEYS.clear()
+    attended_state._JOURNAL_SALTS.clear()
+    attended_state._CACHE.clear()
+    calls: list[int] = []
+    real = crypto._derive
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(crypto, "_derive", counting)
+    yield calls
+    attended_state._RUN_KEYS.clear()
+    attended_state._JOURNAL_SALTS.clear()
+    attended_state._CACHE.clear()
+
+
+def test_scrypt_runs_once_per_run_not_per_file_or_row(tmp_path, counted_scrypt):
+    root = tmp_path / "run"
+    receipts = root / ".attended_program_receipts"
+    receipts.mkdir(parents=True)
+    paths = [receipts / f"pause-{index}.json" for index in range(30)]
+    for index, path in enumerate(paths):
+        attended_state.write_bytes(
+            root, path, f'{{"n":{index}}}'.encode(), SYNTHETIC_KEY, _write
+        )
+    rows = [
+        attended_state.seal_journal_snapshot(
+            f'{{"seq":{seq}}}',
+            SYNTHETIC_KEY,
+            path_key="synthetic-run",
+            sequence=seq,
+            run_dir=root,
+        )
+        for seq in range(30)
+    ]
+    for _ in range(3):
+        for index, path in enumerate(paths):
+            assert attended_state.read_bytes(root, path, SYNTHETIC_KEY) == (
+                f'{{"n":{index}}}'.encode()
+            )
+            assert attended_state.digest_bytes(root, path, SYNTHETIC_KEY) == (
+                f'{{"n":{index}}}'.encode()
+            )
+        for seq, row in enumerate(rows):
+            assert row.startswith(attended_state.JOURNAL_MARKER_V2)
+            assert (
+                attended_state.open_journal_snapshot(
+                    row, SYNTHETIC_KEY, path_key="synthetic-run", sequence=seq
+                )
+                == f'{{"seq":{seq}}}'
+            )
+    assert len(counted_scrypt) == 1
+    for path in paths:
+        container = attended_state.enc_path(path).read_bytes()
+        assert container.startswith(crypto.SALTED_FILE_MAGIC)
+        assert crypto.is_encrypted(container)
+        assert not path.exists()
+
+
+def test_salted_file_is_bound_to_its_path(tmp_path, counted_scrypt):
+    root = tmp_path / "run"
+    receipts = root / ".attended_program_receipts"
+    receipts.mkdir(parents=True)
+    first, second = receipts / "a.json", receipts / "b.json"
+    attended_state.write_bytes(root, first, b'{"a":1}', SYNTHETIC_KEY, _write)
+    attended_state.write_bytes(root, second, b'{"b":2}', SYNTHETIC_KEY, _write)
+    shutil.copyfile(attended_state.enc_path(first), attended_state.enc_path(second))
+    with pytest.raises(attended_state.AttendedStateUnreadable):
+        attended_state.read_bytes(root, second, SYNTHETIC_KEY)
+    with pytest.raises(attended_state.AttendedStateUnreadable):
+        attended_state.read_bytes(root, first, "a-different-synthetic-key")
+
+
+def test_salted_journal_row_is_bound_to_path_and_sequence(counted_scrypt):
+    row = attended_state.seal_journal_snapshot(
+        '{"seq":1}', SYNTHETIC_KEY, path_key="synthetic-run", sequence=1
+    )
+    with pytest.raises(attended_state.AttendedStateUnreadable):
+        attended_state.open_journal_snapshot(
+            row, SYNTHETIC_KEY, path_key="synthetic-run", sequence=2
+        )
+    with pytest.raises(attended_state.AttendedStateUnreadable):
+        attended_state.open_journal_snapshot(
+            row, SYNTHETIC_KEY, path_key="other-run", sequence=1
+        )
+    with pytest.raises(attended_state.AttendedStateUnreadable):
+        attended_state.open_journal_snapshot(
+            row, None, path_key="synthetic-run", sequence=1
+        )
+
+
+def test_opt_out_write_does_not_downgrade_an_encrypted_run(tmp_path):
+    root = tmp_path / "run"
+    root.mkdir()
+    path = root / "attended_decisions.json"
+    attended_state.write_bytes(root, path, b'{"v":1}', SYNTHETIC_KEY, _write)
+    marker = root / attended_state.MARKER_FILENAME
+    assert marker.is_file()
+    with pytest.raises(attended_state.AttendedStateUnreadable, match="encrypted"):
+        attended_state.write_bytes(root, path, b'{"v":2}', None, _write)
+    other = root / "attended_capability.json"
+    with pytest.raises(attended_state.AttendedStateUnreadable, match="encrypted"):
+        attended_state.write_bytes(root, other, b'{"v":2}', None, _write)
+    assert marker.is_file()
+    assert attended_state.enc_path(path).is_file()
+    assert not path.exists() and not other.exists()
+    assert attended_state.read_bytes(root, path, SYNTHETIC_KEY) == b'{"v":1}'
+
+
+def test_plaintext_stand_in_is_refused_by_read_and_digest(tmp_path):
+    root = tmp_path / "run"
+    receipts = root / ".attended_program_receipts"
+    receipts.mkdir(parents=True)
+    path = receipts / "pause.json"
+    attended_state.write_bytes(root, path, b'{"v":1}', SYNTHETIC_KEY, _write)
+    attended_state.enc_path(path).unlink()
+    path.write_bytes(b'{"v":"forged"}')
+    with pytest.raises(attended_state.AttendedStateUnreadable):
+        attended_state.read_bytes(root, path, SYNTHETIC_KEY)
+    with pytest.raises(attended_state.AttendedStateUnreadable):
+        attended_state.digest_bytes(root, path, SYNTHETIC_KEY)
+    # A file the run never encrypts (the run claim) is still read as is.
+    claim = root / ".durable_run.claim"
+    claim.write_bytes(b"synthetic-claim")
+    assert attended_state.digest_bytes(root, claim, SYNTHETIC_KEY) == (
+        b"synthetic-claim"
+    )
+
+
+def test_older_containers_rows_and_marker_still_read(tmp_path, counted_scrypt):
+    """A run encrypted by the older per-container format still reads, and its
+    next write moves the marker to the salted format without rewriting the
+    older files."""
+    root = tmp_path / "run"
+    receipts = root / ".attended_program_receipts"
+    receipts.mkdir(parents=True)
+    old = receipts / "old.json"
+    attended_state.enc_path(old).write_bytes(
+        attended_state.seal(
+            b'{"old":true}', SYNTHETIC_KEY, attended_state.file_aad(root, old)
+        )
+    )
+    marker = root / attended_state.MARKER_FILENAME
+    marker.write_bytes(attended_state.MARKER_PAYLOAD)
+    old_row = attended_state.JOURNAL_MARKER + attended_state.seal(
+        b'{"seq":0}',
+        SYNTHETIC_KEY,
+        attended_state._journal_aad("synthetic-run", 0),
+    ).decode("utf-8")
+
+    assert attended_state.read_bytes(root, old, SYNTHETIC_KEY) == b'{"old":true}'
+    assert attended_state.is_sealed_journal_snapshot(old_row)
+    assert (
+        attended_state.open_journal_snapshot(
+            old_row, SYNTHETIC_KEY, path_key="synthetic-run", sequence=0
+        )
+        == '{"seq":0}'
+    )
+
+    new = receipts / "new.json"
+    attended_state.write_bytes(root, new, b'{"new":true}', SYNTHETIC_KEY, _write)
+    present, salt = attended_state._read_marker(root)
+    assert present and salt is not None
+    assert (
+        attended_state.enc_path(new).read_bytes().startswith(crypto.SALTED_FILE_MAGIC)
+    )
+    assert (
+        not attended_state.enc_path(old)
+        .read_bytes()
+        .startswith(crypto.SALTED_FILE_MAGIC)
+    )
+    assert attended_state.read_bytes(root, old, SYNTHETIC_KEY) == b'{"old":true}'
+    assert attended_state.read_bytes(root, new, SYNTHETIC_KEY) == b'{"new":true}'
+
+
+def test_older_plaintext_run_converts_under_one_salt(tmp_path, counted_scrypt):
+    root = tmp_path / "run"
+    receipts = root / ".attended_program_receipts"
+    receipts.mkdir(parents=True)
+    (root / "attended_decisions.json").write_bytes(b'{"decisions":[]}')
+    for index in range(10):
+        (receipts / f"p{index}.json").write_bytes(f'{{"p":{index}}}'.encode())
+    attended_state.write_bytes(
+        root, root / "attended_capability.json", b"{}", SYNTHETIC_KEY, _write
+    )
+    assert not (root / "attended_decisions.json").exists()
+    for index in range(10):
+        path = receipts / f"p{index}.json"
+        assert not path.exists()
+        assert attended_state.read_bytes(root, path, SYNTHETIC_KEY) == (
+            f'{{"p":{index}}}'.encode()
+        )
+    assert len(counted_scrypt) == 1

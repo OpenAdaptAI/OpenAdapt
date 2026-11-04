@@ -1060,13 +1060,13 @@ class DurableAuthority:
     ) -> tuple[Optional[str], str]:
         """Verify the full external hash chain and return its latest snapshot.
 
-        A snapshot stored encrypted (``attended_state.JOURNAL_MARKER``) is
+        A snapshot stored encrypted (``attended_state.is_sealed_journal_snapshot``) is
         decrypted under ``key``; an older plaintext row reads as it is.
         """
 
         from openadapt_flow.runtime.durable import attended_state as _state
 
-        snapshot_key = key  # ``key`` is reused below for the journal HMAC key
+        snapshot_key = key
 
         rows = connection.execute(
             "SELECT * FROM attended_journal WHERE path_key = ? ORDER BY sequence",
@@ -1081,7 +1081,7 @@ class DurableAuthority:
                     "the external attended-decision journal tail was restored"
                 )
             return None, JOURNAL_GENESIS_DIGEST
-        key = self._journal_key(create=False)
+        mac_key = self._journal_key(create=False)
         previous = JOURNAL_GENESIS_DIGEST
         latest_snapshot: Optional[str] = None
         for expected_sequence, row in enumerate(rows, start=1):
@@ -1127,7 +1127,7 @@ class DurableAuthority:
             record_mac = (
                 "hmac-sha256:"
                 + hmac.new(
-                    key,
+                    mac_key,
                     JOURNAL_MAC_DOMAIN + record_digest.encode("ascii"),
                     hashlib.sha256,
                 ).hexdigest()
@@ -1271,7 +1271,7 @@ class DurableAuthority:
 
         from openadapt_flow.runtime.durable import attended_state as _state
 
-        snapshot_key = key  # ``key`` is reused below for the journal HMAC key
+        snapshot_key = key
 
         # Parse before the transaction so invalid JSON never enters authority.
         self._validate_snapshot_extension(None, snapshot_json)
@@ -1309,11 +1309,11 @@ class DurableAuthority:
             record_digest = (
                 "sha256:" + hashlib.sha256(self._canonical(unsigned)).hexdigest()
             )
-            key = self._journal_key(create=True)
+            mac_key = self._journal_key(create=True)
             record_mac = (
                 "hmac-sha256:"
                 + hmac.new(
-                    key,
+                    mac_key,
                     JOURNAL_MAC_DOMAIN + record_digest.encode("ascii"),
                     hashlib.sha256,
                 ).hexdigest()
@@ -1337,6 +1337,7 @@ class DurableAuthority:
                         snapshot_key,
                         path_key=self.path_key,
                         sequence=sequence,
+                        run_dir=self.run_dir,
                     ),
                     record_digest,
                     record_mac,
