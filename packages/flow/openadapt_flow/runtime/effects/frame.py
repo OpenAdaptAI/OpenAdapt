@@ -74,6 +74,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.app_profiles import Owner, table_name
+from openadapt_flow.runtime.effects.db_snapshot import DEFAULT_READ_ROW_BUDGET
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
@@ -329,6 +330,10 @@ class FrameDatabase(BaseModel):
     #: Over this many rows a table keeps, per row, its key and contents MACs
     #: and cell MACs only for the columns attribution and side records read.
     max_rows: int = Field(default=2000, ge=1)
+    #: Maximum data rows per whole-database snapshot, including auxiliary
+    #: audit reads. Exceeding it makes the frame not checked, never truncated.
+    #: This bounds rows, not elapsed time or bytes in an individual cell.
+    read_row_budget: int = Field(default=DEFAULT_READ_ROW_BUDGET, ge=1)
     #: Schemas the read account must see; the snapshot refuses when one isn't
     #: visible, so a schema the app writes can't be left out. Every other
     #: visible schema is read too. On PostgreSQL a schema the account can't
@@ -380,6 +385,8 @@ class FrameDatabase(BaseModel):
             data.pop("recheck_after_s", None)
         if data.get("settle_attempts") == 1:
             data.pop("settle_attempts", None)
+        if data.get("read_row_budget") == DEFAULT_READ_ROW_BUDGET:
+            data.pop("read_row_budget", None)
         if not data.get("judged_by"):
             data.pop("judged_by", None)
         return data

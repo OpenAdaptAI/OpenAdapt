@@ -742,6 +742,7 @@ def _read_database(
             key=mac_key(salt),
             modes=database.modes(),  # type: ignore[arg-type]
             max_rows=database.max_rows,
+            read_row_budget=database.read_row_budget,
             before=before,
             extra_queries=_audit_sql(cfg),
             ignore=database.all_ignore_columns(),
@@ -801,6 +802,8 @@ class _DatabaseFrame:
     blind: bool = False
     #: The two reads after the save differed: the database was still moving.
     still_moving: bool = False
+    #: A baseline or post-save read exceeded the row budget.
+    too_large: bool = False
     #: The app profile's judgment of one row change (``AppProfile.excuse``).
     excuse: Any = None
     #: Every user's id by sign-in name (in memory only), to resolve an
@@ -876,6 +879,7 @@ def _database_frame(
         ROW,
         Snapshot,
         SnapshotError,
+        SnapshotTooLarge,
         cell_hash,
         key_text,
         mac_key,
@@ -900,11 +904,20 @@ def _database_frame(
     stored = (
         before.detail.get(FRAME_DB_DETAIL) if isinstance(before.detail, dict) else None
     )
+    limit_error = SnapshotTooLarge.__name__ + ":"
     if not isinstance(stored, dict):
+        error = (
+            before.detail.get(FRAME_DB_ERROR, "")
+            if isinstance(before.detail, dict)
+            else ""
+        )
+        unreachable.too_large = str(error).startswith(limit_error)
         return unreachable
     old = Snapshot.from_json(stored)
-    new = _read_database(cfg, salt, before=old)
+    errors: list[str] = []
+    new = _read_database(cfg, salt, before=old, errors=errors)
     if new is None:
+        unreachable.too_large = any(e.startswith(limit_error) for e in errors)
         return unreachable
     new_at = _now()
     # Read again a moment later: two reads in a row must match, or the app
@@ -918,8 +931,9 @@ def _database_frame(
     used = 0
     for used in range(1, attempts + 1):
         time.sleep(database.settle_s)
-        again = _read_database(cfg, salt, before=old)
+        again = _read_database(cfg, salt, before=old, errors=errors)
         if again is None:
+            unreachable.too_large = any(e.startswith(limit_error) for e in errors)
             return unreachable
         if settled_state(new, again):
             settled = True
@@ -1157,6 +1171,19 @@ def judge_run_frame(
     # (``database.judged_by``) is read by it no earlier than the settled
     # read a recheck compares with, so no change falls between the two.
     db = _database_frame(cfg, before, salt)
+    if db is not None and db.too_large:
+        from openadapt_flow.runtime.effects.db_snapshot import SnapshotTooLarge
+
+        assert spec.database is not None
+        return FrameVerdict(
+            status="not_checked",
+            reason=str(SnapshotTooLarge(spec.database.read_row_budget)),
+            database={
+                "read_status": "too_large",
+                "read_row_budget": spec.database.read_row_budget,
+            },
+            attribution=spec.attribution.kind if spec.attribution else "none",
+        )
     after: Any = None
     if not database_only:
         try:
@@ -1590,7 +1617,11 @@ def capture_baseline(
             detail[FRAME_DB_ERROR] = why[0] if why else "not read"
     audit_verifier = _audit_verifier(cfg, params)
     if audit_verifier is not None:
-        if entries is None:
+        if entries is None and (
+            cfg.frame is None or cfg.frame.database is None or snapshot is not None
+        ):
+            # A failed database read must not retry its audit query outside
+            # the snapshot's budget and consistent transaction.
             entries = _read_audit(audit_verifier)
         # Which entries existed, as keyed hashes: never what they say.
         detail[FRAME_AUDIT_DETAIL] = {
