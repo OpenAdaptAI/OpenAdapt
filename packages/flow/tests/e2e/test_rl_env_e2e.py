@@ -93,6 +93,92 @@ def test_reset_leaves_no_state_from_the_last_episode(env) -> None:
     assert [r["source"] for r in rows] == ["other"]
 
 
+def test_mcp_tools_and_typed_actions_reach_the_same_reward(env) -> None:
+    from openenv.core.env_server.mcp_types import CallToolAction, ListToolsAction
+
+    assert {t.name for t in env.step(ListToolsAction()).tools} >= {"click", "done"}
+    obs = env.reset(task_id="mockmed-01")
+    node = {n.get("css_selector"): n["node_id"] for n in obs.computer_state["nodes"]}
+    obs = env.step(
+        WebAction(
+            computer_action={"type": "click", "target": {"node_id": node["#signin"]}}
+        )
+    )
+    assert obs.action_result["success"] is True
+    task = env.env.task("mockmed-01")
+    for action in task.solution[3:]:
+        args = {k: v for k, v in action.items() if k != "kind"}
+        result = env.step(CallToolAction(tool_name=action["kind"], arguments=args))
+        assert result.error is None
+    assert (result.done, result.reward, result.result["verdict"]) == (
+        True,
+        1.0,
+        "CONFIRMED",
+    )
+
+
+def _typed(raw: dict) -> WebAction:
+    return WebAction(computer_action=raw)
+
+
+def test_invalid_typed_actions_spend_the_step_budget(env, monkeypatch) -> None:
+    monkeypatch.setattr(env.env.manifest.agent, "max_steps", 2)
+    env.reset(task_id="mockmed-01")
+    bad = _typed({"type": "open_app", "app_name": "x"})
+    first = env.step(bad)
+    assert (first.done, first.reward) == (False, 0.0)
+    assert "not available" in (first.last_action_error or "")
+    second = env.step(bad)
+    assert second.done is True and env.state.done is True
+    assert env.state.step_count == 2
+    third = env.step(bad)
+    assert third.done is True and third.last_action_error == "episode is over"
+    assert env.state.step_count == 2
+
+
+def test_an_invalid_typed_action_after_the_episode_ends_stays_done(env) -> None:
+    env.reset(task_id="mockmed-01")
+    assert env.step(WebAction(kind="done", claim="failure")).done is True
+    steps = env.state.step_count
+    for raw in (
+        {"type": "open_app", "app_name": "x"},
+        {"type": "click", "target": {"node_id": "n999"}},
+    ):
+        obs = env.step(_typed(raw))
+        assert obs.done is True and env.state.done is True
+        assert obs.reward == 0.0 and obs.last_action_error == "episode is over"
+    assert env.state.step_count == steps
+
+
+def test_a_double_click_is_refused_not_sent_as_one_click(env) -> None:
+    obs = env.reset(task_id="mockmed-01")
+    node = next(
+        n for n in obs.computer_state["nodes"] if n.get("css_selector") == "#signin"
+    )
+    selector = node["css_selector"]
+    # The browser lives on the environment's own thread.
+    env._on_worker(
+        lambda js, arg: env._page.evaluate(js, arg),
+        """(sel) => {
+          window.__clicks = 0; window.__dbl = 0;
+          const el = document.querySelector(sel);
+          el.addEventListener('click', () => { window.__clicks += 1; });
+          el.addEventListener('dblclick', () => { window.__dbl += 1; });
+        }""",
+        selector,
+    )
+    obs = env.step(
+        _typed({"type": "double_click", "target": {"node_id": node["node_id"]}})
+    )
+    assert obs.action_result["success"] is False
+    assert "not available" in (obs.last_action_error or "")
+    counts = env._on_worker(
+        lambda: env._page.evaluate("() => [window.__clicks, window.__dbl]")
+    )
+    assert counts == [0, 0]
+    assert obs.done is False
+
+
 def test_a_stuck_step_that_wakes_later_cannot_touch_the_next_episode(
     monkeypatch,
 ) -> None:

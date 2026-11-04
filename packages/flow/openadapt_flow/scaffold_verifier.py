@@ -43,6 +43,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow import artifacts as _artifacts
 from openadapt_flow import sealed_set as _sealed
 
 BUNDLE_MARKERS = ("workflow.json", "workflow.json.enc")
@@ -675,9 +676,9 @@ def _pending_decision(run_dir: Path) -> tuple[Optional[Path], Optional[str]]:
     encrypted_path = run_dir / (PENDING_FILENAME + ENC_SUFFIX)
     path = (
         plain_path
-        if plain_path.is_file()
+        if _artifacts.is_file(plain_path)
         else encrypted_path
-        if encrypted_path.is_file()
+        if _artifacts.is_file(encrypted_path)
         else None
     )
     if path is None:
@@ -707,13 +708,13 @@ def explain_run(run_dir: Path) -> str:
     from openadapt_flow.plain_outcome import plain_result
 
     report_path = run_dir / "report.json"
-    if not report_path.is_file():
+    if not _artifacts.is_file(report_path):
         raise SystemExit(
             f"explain: {run_dir} holds no report.json -- nothing to explain "
             "(is this a completed run directory?)"
         )
     try:
-        report = RunReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+        report = RunReport.model_validate_json(_artifacts.read_text(report_path))
     except (OSError, ValueError) as exc:
         raise SystemExit(
             f"explain: {report_path} could not be read as a run report: {exc}"
@@ -740,7 +741,7 @@ def explain_run(run_dir: Path) -> str:
             "Why this is safe: every declared effect was independently confirmed "
             "in a system of record before the run claimed success."
         )
-        if receipt.is_file():
+        if _artifacts.is_file(receipt):
             lines.append(f"Shareable receipt: {receipt}")
     elif outcome == "HALTED":
         lines.append(f"Why this is safe: {_halt_check_line(report)}.")
@@ -818,6 +819,6 @@ def explain_run(run_dir: Path) -> str:
                 f"record is checked, approve with {command('approve ' + quoted)}, "
                 f"then continue with {command('resume ' + quoted)}."
             )
-    if report_md.is_file():
+    if _artifacts.is_file(report_md):
         lines.append(f"Plain-language evidence: {report_md}")
     return "\n".join(lines)

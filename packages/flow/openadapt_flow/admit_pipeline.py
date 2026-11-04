@@ -391,13 +391,15 @@ def prepare_admission(
         induced = True
         guard_notes = list(result.guard_notes)
     workflow = workflow.model_copy(update={"name": name})
-    from openadapt_flow import sealed_set
+    from openadapt_flow import at_rest, sealed_set
 
-    sealed = any(sealed_set.is_sealed(path) for path in compiled)
+    sealed = any(sealed_set.is_sealed(path) for path in compiled) or at_rest.seal_new(
+        "an admitted bundle", bundle_dir
+    )
     if sealed:
         # Encrypted recordings or bundles admit into a sealed bundle: the
         # crops are merged in memory and never copied out as plaintext.
-        passphrase = sealed_set.passphrase_for("bundle") or sealed_set.recording_key()
+        passphrase = sealed_set.output_bundle_key()
         if not passphrase:
             raise AdmissionError(sealed_set.missing_key_message(compiled[0], "bundle"))
         templates: dict[str, bytes] = {}
