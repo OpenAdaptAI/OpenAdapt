@@ -2182,3 +2182,41 @@ def test_a_compensation_the_app_reports_done_but_never_wrote_is_not_a_rollback(
     assert conn.execute(
         "SELECT COUNT(*) FROM patients WHERE name = 'Ada Synthetic'"
     ).fetchone() == (1,)
+
+
+def test_an_audit_entry_names_exactly_one_snapshot_table():
+    # #1793 item 2: a snapshot keys the read's own schema's tables
+    # unqualified and any other schema's as schema.table. An unqualified
+    # entry (the own schema) never names another schema's same-named table.
+    from openadapt_flow.rollback_state import _same_table
+
+    assert _same_table("patient_data", "patient_data")
+    assert _same_table("PATIENT_DATA", "patient_data")
+    assert not _same_table("patient_data", "archive.patient_data")
+    assert _same_table("archive.patient_data", "archive.patient_data")
+    assert not _same_table("archive.patient_data", "patient_data")
+    assert not _same_table("", "patient_data")
+    assert not _same_table("patient_data", None)
+
+
+def test_another_schemas_row_is_never_credited_to_the_runs_entry():
+    from openadapt_flow.runtime.effects.frame import FrameAttribution
+
+    spec = FrameAttribution(
+        kind="audit_read",
+        actor_field="actor",
+        self=["bot"],
+        record_field="record",
+        record_key="pid",
+        event_field="event",
+        write_events=["insert", "update"],
+        insert_events=["insert"],
+        table_field="tbl",
+        read={"kind": "in_memory"},
+    )
+    attributor = Attributor.from_spec(spec, {})
+    window = [{"actor": "bot", "event": "update", "tbl": "patient_data", "record": "7"}]
+    own = ("patient_data", "k1", {"pid": 7, "x": 1}, {"pid": 7, "x": 2})
+    elsewhere = ("archive.patient_data", "k1", {"pid": 7, "x": 1}, {"pid": 7, "x": 2})
+    assert attributor.attribute(own, window) == "self"
+    assert attributor.attribute(elsewhere, window) != "self"
