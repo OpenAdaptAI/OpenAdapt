@@ -746,6 +746,92 @@ jobs:
           sys.exit(1 if not cases or skipped else 0)
           PY
 
+  # Native Linux: flow's record, compile and run against a real GTK3 app over
+  # AT-SPI, on an isolated Xvfb display and session D-Bus (it never opens a
+  # window on a workstation). scripts/qualify_linux_atspi.py runs three clean
+  # trials checked by exact file bytes, three ambiguous-target refusals and
+  # three stale-target refusals, and the job uploads its results.json. This
+  # replaces the linux-atspi-x11 job in packages/flow/.github/workflows/ci.yml,
+  # which the monorepo never runs. Post-merge tier, like capture's AT-SPI read:
+  # the apt install depends on an Ubuntu mirror.
+  flow-linux-atspi:
+    name: flow linux AT-SPI qualification (GTK3, Xvfb)
+    needs: scope
+    if: needs.scope.outputs.flow == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@18d369b23da25a81e9458561248e1aafff6a70fa # v10.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: packages/flow/uv.lock
+          cache-suffix: flow-linux-atspi
+      - name: Install isolated X11, D-Bus, GTK3, and AT-SPI
+        timeout-minutes: 15
+        run: |
+          set -uo pipefail
+          # Prefer the canonical archive over the runner's flaky Azure mirror.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y \
+            at-spi2-core \
+            dbus-x11 \
+            gir1.2-atspi-2.0 \
+            gir1.2-gtk-3.0 \
+            libatk-adaptor \
+            python3-gi \
+            python3-venv \
+            xauth \
+            xvfb
+      - name: Install Flow from the lock into a venv that sees the system gi
+        # PyGObject comes from apt (python3-gi), so the venv uses the system
+        # Python 3.12 with its site packages; everything else is locked.
+        run: |
+          /usr/bin/python3 -m venv --system-site-packages "$RUNNER_TEMP/linux-atspi-venv"
+          "$RUNNER_TEMP/linux-atspi-venv/bin/python" ../../scripts/ci/locked_install.py \
+            --lock packages/flow --editable packages/types --editable packages/flow
+          "$RUNNER_TEMP/linux-atspi-venv/bin/python" -c \
+            "import gi; gi.require_version('Atspi', '2.0'); gi.require_version('Gtk', '3.0'); from gi.repository import Atspi, Gtk; print(Atspi, Gtk)"
+      - name: Qualify GTK workflow on real AT-SPI
+        timeout-minutes: 10
+        run: |
+          mkdir -p runs/linux-atspi
+          dbus-run-session -- \
+            xvfb-run -a -s "-screen 0 1280x800x24" \
+            env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
+            "$RUNNER_TEMP/linux-atspi-venv/bin/python" \
+            scripts/qualify_linux_atspi.py \
+            --output runs/linux-atspi/results.json
+      - name: Upload Linux AT-SPI qualification evidence
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flow-linux-atspi-qualification
+          path: packages/flow/runs/linux-atspi/results.json
+          if-no-files-found: error
+
   capture-linux:
     name: capture (linux, py${{ matrix.python-version }})
     needs: scope
@@ -1322,6 +1408,7 @@ jobs:
       - flow-critical
       - flow-agent-frameworks
       - flow-native-census
+      - flow-linux-atspi
       - capture-linux
       - capture-macos
       - capture-windows
@@ -1374,6 +1461,7 @@ jobs:
               "flow-critical": "flow",
               "flow-agent-frameworks": "flow",
               "flow-native-census": "flow",
+              "flow-linux-atspi": "flow",
               "capture-linux": "capture",
               "capture-macos": "capture",
               "capture-windows": "capture",
@@ -1393,7 +1481,12 @@ jobs:
           }
           # Post-merge tier only: skipped on a pull request and in the merge
           # queue; required on a push to main and on dispatch.
-          post_merge_only = {"capture-macos", "capture-windows", "flow-native-census"}
+          post_merge_only = {
+              "capture-macos",
+              "capture-windows",
+              "flow-native-census",
+              "flow-linux-atspi",
+          }
           # Skipped in the merge queue only: the pull request already passed
           # it on its merge with main (packages-gate is required there).
           not_in_queue = {"flow-unit"}

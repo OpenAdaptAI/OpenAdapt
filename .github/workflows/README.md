@@ -68,7 +68,7 @@ job the change selects to run and pass, except on a tier where that job
 doesn't run:
 
 - Post-merge-only jobs (`capture-macos`, `capture-windows`,
-  `flow-native-census`) may be skipped on a pull request and in the queue,
+  `flow-native-census`, `flow-linux-atspi`) may be skipped on a pull request and in the queue,
   and must run and pass on main and on dispatch.
 - `flow-unit` may be skipped in the queue only.
 - `desktop-release-intent` runs on pull requests only.
@@ -102,6 +102,7 @@ App 15368 is GitHub Actions, the app the current checks are pinned to.
 | ci.yml | `smoke`, `ci` | yes | yes | no |
 | packages.yml | `flow-unit` | 4 xdist shards, fast lane (without `nightly_only.txt`) | no | 2 xdist shards |
 | packages.yml | `flow-native-census` | no | no | Windows and macOS |
+| packages.yml | `flow-linux-atspi` | no | no | ubuntu-24.04, GTK3 over AT-SPI in Xvfb |
 | packages.yml | `capture-linux` | Python 3.12 | Python 3.12 | Python 3.10 (ubuntu-22.04), 3.11, 3.12 |
 | packages.yml | `capture-macos`, `capture-windows` | no | no | yes |
 | packages.yml | `capture-contract`, `capture-core-record` | yes | yes | yes |

@@ -1474,7 +1474,7 @@
           "node_found": null,
           "ci_job": null,
           "junit_status": null,
-          "proves": "The required linux-atspi-x11 job drives the real GTK3 fixture through AT-SPI on an isolated Xvfb display and session D-Bus, emitting a per-trial JSON evidence artifact."
+          "proves": "The root flow-linux-atspi job (packages.yml, post-merge tier) drives the real GTK3 fixture through AT-SPI on an isolated Xvfb display and session D-Bus, emitting a per-trial JSON evidence artifact."
         },
         {
           "path": "docs/desktop/LINUX_NATIVE.md",

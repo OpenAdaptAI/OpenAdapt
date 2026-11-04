@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import yaml
+
 from scripts import install_playwright_browser
 from scripts.classify_ci_scope import code_changed
 
@@ -12,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / ".github/workflows/ci.yml"
 QUICKSTART = ROOT / ".github/workflows/quickstart-lifecycle.yml"
 VALIDATE_CLAIMS = ROOT / ".github/workflows/validate-claims.yml"
+# The monorepo runs root workflows only; this package's .github is not run.
+PACKAGES = ROOT.parents[1] / ".github/workflows/packages.yml"
 PIXEL_E2E = ROOT / "tests/e2e/test_citrix_pixel_e2e.py"
 DESKTOP_E2E = ROOT / "tests/e2e/test_parallels_desktop_e2e.py"
 
@@ -215,6 +219,58 @@ def test_required_linux_atspi_qualification_is_bounded() -> None:
     )
     assert "--output runs/linux-atspi/results.json" in linux_job
     assert "if-no-files-found: error" in linux_job
+
+
+def test_root_ci_runs_the_linux_atspi_qualification() -> None:
+    """Root CI, not this package's unused workflow, runs the GTK3 qualification.
+
+    The job must run the real record/compile/run script under its own Xvfb
+    display and session D-Bus, upload the result, and be required by
+    packages-gate on the post-merge tier whenever Flow changes.
+    """
+    workflow = PACKAGES.read_text(encoding="utf-8")
+    jobs = yaml.safe_load(workflow)["jobs"]
+    job = jobs["flow-linux-atspi"]
+
+    assert job["runs-on"] == "ubuntu-24.04"
+    assert job["timeout-minutes"] == 30
+    assert "needs.scope.outputs.flow == 'true'" in job["if"]
+    steps = {step.get("name"): step for step in job["steps"]}
+    step_limits = (
+        ("Install isolated X11, D-Bus, GTK3, and AT-SPI", 15),
+        ("Qualify GTK workflow on real AT-SPI", 10),
+        ("Upload Linux AT-SPI qualification evidence", 2),
+    )
+    for step_name, timeout_minutes in step_limits:
+        assert steps[step_name]["timeout-minutes"] == timeout_minutes
+    assert sum(timeout for _name, timeout in step_limits) <= job["timeout-minutes"]
+
+    install = steps["Install isolated X11, D-Bus, GTK3, and AT-SPI"]["run"]
+    for package in ("at-spi2-core", "gir1.2-atspi-2.0", "gir1.2-gtk-3.0", "xvfb"):
+        assert package in install
+    names = list(steps)
+    assert names.index("Install isolated X11, D-Bus, GTK3, and AT-SPI") < names.index(
+        "Qualify GTK workflow on real AT-SPI"
+    )
+
+    run = steps["Qualify GTK workflow on real AT-SPI"]["run"]
+    assert "dbus-run-session --" in run
+    assert "xvfb-run -a" in run
+    assert "scripts/qualify_linux_atspi.py" in run
+    assert "--output runs/linux-atspi/results.json" in run
+
+    upload = steps["Upload Linux AT-SPI qualification evidence"]
+    assert upload["if"] == "always()"
+    assert upload["with"]["path"] == "packages/flow/runs/linux-atspi/results.json"
+    assert upload["with"]["if-no-files-found"] == "error"
+
+    gate = jobs["packages-gate"]
+    assert "flow-linux-atspi" in gate["needs"]
+    gate_script = workflow[workflow.index("\n  packages-gate:") :]
+    assert '"flow-linux-atspi": "flow",' in gate_script
+    post_merge = gate_script[gate_script.index("post_merge_only = {") :]
+    post_merge = post_merge[: post_merge.index("}")]
+    assert '"flow-linux-atspi"' in post_merge
 
 
 def test_docs_only_classifier_skips_markdown_and_fails_closed() -> None:
