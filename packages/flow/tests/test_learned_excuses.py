@@ -1619,7 +1619,8 @@ class _App:
                 q = parse_qs(urlsplit(self.path).query)
                 if app.email_field in q:
                     con.execute(
-                        "UPDATE app_user SET email = ? WHERE id = 2", (q[app.email_field][0],)
+                        "UPDATE app_user SET email = ? WHERE id = 2",
+                        (q[app.email_field][0],),
                     )
 
             def do_GET(self) -> None:
@@ -1836,4 +1837,6 @@ def test_query_string_fields_count_as_sent(
         assert field_name in eps[-1]["sent_fields"]
     else:
         assert all(field_name in ep["sent_fields"] for ep in eps)
-    assert all(f"bot{i}@example.test" not in collector.path.read_text() for i in range(5))
+    assert all(
+        f"bot{i}@example.test" not in collector.path.read_text() for i in range(5)
+    )
