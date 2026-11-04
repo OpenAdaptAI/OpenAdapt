@@ -1561,8 +1561,8 @@ def admit_api_step(
     if footprint is not None and footprint.get("equivalent") is not True:
         reasons = "; ".join((footprint.get("differences") or ["no verdict"])[:3])
         raise ApiProposalError(
-            "the API step's side effects differ from the GUI save's, so it stays on "
-            f"the GUI ({reasons})"
+            "the API step isn't shown to have the GUI save's side effects, so it "
+            f"stays on the GUI ({reasons})"
         )
 
     who = (admitted_by or getpass.getuser() or "").strip()

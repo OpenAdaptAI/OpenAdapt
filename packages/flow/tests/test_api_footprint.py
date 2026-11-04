@@ -63,7 +63,7 @@ def test_one_gui_save_cant_tell_server_owned_columns_apart():
 
 
 def test_admission_refuses_an_api_step_with_another_footprint():
-    with pytest.raises(ApiProposalError, match="side effects differ"):
+    with pytest.raises(ApiProposalError, match="side effects"):
         admit_api_step(
             Workflow(name="w", steps=[]),
             admitted_by="a person",
