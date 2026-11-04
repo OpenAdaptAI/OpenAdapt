@@ -22,7 +22,7 @@ with your other secrets.
 
 | | Default | `OPENADAPT_FLOW_AT_REST=strict` |
 | --- | --- | --- |
-| Durable checkpoints | Encrypted | Encrypted |
+| Durable checkpoints and attended state | Encrypted | Encrypted |
 | Web recordings | Encrypted with a configured key; otherwise logged | Encrypted |
 | Bundles from `compile`, `induce`, `admit` | Encrypted from encrypted input; otherwise logged | Encrypted |
 | Run directories | Encrypted for a sealed bundle; otherwise logged | Encrypted |
@@ -189,6 +189,36 @@ step with them.
 
 The approved archive beside it (`<name>.approved.zip`) is one AES-256-GCM
 container under the same key.
+
+### Durable checkpoints and attended state
+
+In the default mode, under the configured or local key, the durable store
+writes its checkpoints, pauses and approvals as `<name>.enc` AES-256-GCM
+containers. The attended store does the same for the pause capability and its
+history, the decision log (operator and message), program and reconciliation
+receipts, and program-transition control frames. Each file's associated data
+names its run-relative path, so a file copied over another path does not
+decrypt, and once a run's attended state is encrypted a plaintext file in its
+place is refused. The external attended journal stores each decision-log
+snapshot encrypted and bound to its run and sequence; its hash chain and HMAC
+cover the plaintext. A run whose attended files are plaintext from an earlier
+version still resumes, and its first encrypted write converts them.
+The key is stretched with scrypt once per run, under a random salt kept in the
+run's `.attended_state.encrypted` marker, and each file and journal row gets
+its own nonce under keys derived from it, so the cost doesn't grow with the
+number of files or journal rows. Each file names the salt it was sealed
+under, and a file whose salt is not the one in the run's marker is refused, so
+a file copied in from another run under the same key does not read. If two
+processes convert the same run at once, the one that loses the race to write
+the marker reseals its files under the winner's salt. The replayer classifies
+a run's outcome with its own checkpoint key, so a run whose key was passed in
+code rather than through the environment still reads its sealed evidence.
+Once a run's attended state is encrypted,
+`OPENADAPT_FLOW_PLAINTEXT_AT_REST` does not turn it back to plaintext: a write
+with no key is refused. Containers written by the earlier per-file format
+still read.
+`tests/test_attended_at_rest.py` runs attended decisions under the same disk
+audit hook and checks that no attended file or journal row holds plaintext.
 
 ### Run directory of a sealed bundle
 

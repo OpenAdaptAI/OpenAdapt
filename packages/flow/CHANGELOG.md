@@ -83,6 +83,9 @@ refuses a write when the record or its outcome cannot be established.
 
 ### Fixes
 
+- Bookkeeping learning excludes fields the agent sent or read, including
+  bracketed form-field names and requests captured while verification runs.
+  Those fields cannot be proposed as excuses for unrelated database changes.
 - A versions check with an unknown `target_surface` reports `not_checked`
   with `unknown_surface`. A surface read only by a zero-count guard cannot
   supply a write target. Generated setup questions now show a missing version
