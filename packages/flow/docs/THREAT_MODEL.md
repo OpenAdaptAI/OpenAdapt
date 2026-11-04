@@ -91,6 +91,12 @@ query strings). A clean scoped capture records the same report under
 `teach_scope` in the draft's candidate, so the reviewer sees that nothing was
 blocked and the read-back verified.
 
+A scope written by the agent's harness is only as trustworthy as the
+harness. A teach authorization ([TEACH_AUTHORIZATION.md](TEACH_AUTHORIZATION.md))
+moves the declaration to a person: the scope is bound from a statement they
+sign with their approver key, and admission refuses an agent-taught draft
+without one.
+
 Every teach path passes a scope:
 
 | Path | Where the declaration comes from | What is enforced |
@@ -121,8 +127,9 @@ It does not stop:
 - **Drag and drop** of page text into a field. Not refused; the write adapter
   or read-back must catch the value.
 - **WebSocket traffic** and requests that bypass the browser's network stack
-  (DNS prefetch). For a hard boundary, also run under no-outbound mode or the
-  on-prem firewall ([ON_PREM.md](ON_PREM.md)).
+  (DNS prefetch). For a hard boundary, run under the on-prem firewall
+  ([ON_PREM.md](ON_PREM.md)); in strict no-outbound mode the browser starts
+  under a named containment ([OFFLINE_SEALS.md](OFFLINE_SEALS.md#child-processes)).
 - **An app that needs other typed text** (a search term, a sign-in) refuses
   until that text is declared as a constant. This is by design.
 

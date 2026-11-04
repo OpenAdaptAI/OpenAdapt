@@ -125,7 +125,11 @@ class VerifyBridge:
     def handles(self, name: str) -> bool:
         return name in VERIFY_TOOLS
 
-    def hold_needed(self, arguments: Mapping[str, Any]) -> None:
+    def hold_needed(
+        self, arguments: Mapping[str, Any], tool: str = "teach_act"
+    ) -> None:
+        """Always None: this bridge has no person holds. ``tool`` is ignored."""
+
         return None
 
     def list_tool_specs(self) -> list[ToolSpec]:

@@ -40,7 +40,6 @@ from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa
 from openadapt_flow.jit import TaskSignature, WebApp, compile_agent  # noqa: E402
 from openadapt_flow.jit.adapters import CaptureComputer, UnsupportedAction  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
-from openadapt_flow.mockmed.teach_scope import encounter_scope  # noqa: E402
 from openadapt_flow.runtime.effects import RestRecordVerifier  # noqa: E402
 from openadapt_flow.teach_scope import (  # noqa: E402
     ScopeViolation,
@@ -48,6 +47,7 @@ from openadapt_flow.teach_scope import (  # noqa: E402
     instruction_like,
 )
 from openadapt_flow.tutorial import _http_json, _records  # noqa: E402
+from tests._teach_scope import encounter_scope  # noqa: E402
 
 NOTE = "Synthetic follow-up in two weeks"
 SURFACES = ("note", "banner", "tooltip", "alt", "network")

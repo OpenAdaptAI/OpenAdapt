@@ -977,6 +977,9 @@ def execute_process_contract_v1(
 ) -> ProcessV1Result:
     """Run or resume one ProcessContract v1 without a planner."""
 
+    from openadapt_flow import at_rest as _at_rest
+
+    _at_rest.hold_back_in_strict("a code child's output")
     if contract.schema_version != "openadapt.process-contract/v1":
         raise ProcessV1Error("the v1 runtime requires ProcessContract v1")
     if len(receipt_private_key) != 32:

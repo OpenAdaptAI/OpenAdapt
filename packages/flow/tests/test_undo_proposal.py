@@ -891,7 +891,7 @@ def test_deployment_test_copy_resets_and_reads_every_record(tmp_path, mockmed):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
     from openadapt_flow.deployment import load_deployment
-    from openadapt_flow.reward.seed import write_bundle
+    from openadapt_flow.reward.bundle import write_bundle
     from openadapt_flow.undo_proposal import DeploymentUndoTestCopy
 
     write_bundle(
