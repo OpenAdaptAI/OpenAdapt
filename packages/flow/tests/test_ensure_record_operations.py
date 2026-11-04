@@ -91,10 +91,33 @@ def base(*matches: dict) -> Baseline:
     return Baseline(started=T0, matches={m["id"]: m for m in matches})
 
 
+def _iso(seconds: float) -> str:
+    return _t(seconds).isoformat().replace("+00:00", "Z")
+
+
+def last(changes: dict[str, Change], ref: str = "Patient/x") -> dict:
+    """The newest version ``_history`` shows: what a read-back returns."""
+
+    return changes[ref].bodies[-1]
+
+
 def written(ref: str, *steps: tuple, bodies: list, reads=(), prior=None) -> Change:
     """``steps`` are (seconds, action, actor); one version per create or update."""
 
     events = [(_t(s), a, frozenset({who})) for s, a, who in steps]
+    # As ``_history`` returns them: each version has its own id and time.
+    times = [s for s, _, _ in steps] or [1]
+    bodies = [
+        {
+            **body,
+            "meta": {
+                **(body.get("meta") or {}),
+                "versionId": str(i + 1),
+                "lastUpdated": _iso(times[min(i, len(times) - 1)] + 0.01 * i),
+            },
+        }
+        for i, body in enumerate(bodies)
+    ]
     return Change(
         ref=ref,
         actions={a for _, a, _ in events},
@@ -122,8 +145,8 @@ def stepped(*first: dict) -> dict[str, Change]:
 
 
 def test_a_record_saved_in_steps_counts_as_one_write_when_consistent():
-    x = patient("x")
     partial = [{"resourceType": "Patient", "id": "x"}, patient("x", birthDate=None)]
+    x = last(stepped(*partial))
     r = judge(contract(**CONSISTENT), PARAMS, base(), stepped(*partial), {"x": x}, x)
     assert (r.outcome, r.record_id) == ("created_verified", "x")
     assert r.evidence["corrected"] is True
@@ -153,8 +176,8 @@ def test_a_version_holding_any_other_value_still_refuses(first):
 
 def test_a_person_version_with_a_wrong_phone_passes_person_but_not_consistent():
     # ``person`` checks identity only; ``consistent`` checks every value.
-    x = patient("x")
     wrong = patient("x", telecom=[{"system": "phone", "value": "617-555-0199"}])
+    x = last(stepped(wrong))
     assert judge(contract(), PARAMS, base(), stepped(wrong), {"x": x}, x).outcome == (
         "created_verified"
     )
@@ -181,7 +204,7 @@ def test_a_person_version_with_a_wrong_phone_passes_person_but_not_consistent():
     ],
 )
 def test_either_is_never_stricter_than_person_and_accepts_steps(first, outcome):
-    x = patient("x")
+    x = last(stepped(first))
     either = {"correction": {"between": "either"}}
     r = judge(contract(**either), PARAMS, base(), stepped(first), {"x": x}, x)
     assert r.outcome == outcome, r.reasons
@@ -192,8 +215,8 @@ def test_either_is_never_stricter_than_person_and_accepts_steps(first, outcome):
 
 
 def test_consistent_still_needs_every_other_correction_condition():
-    x = patient("x")
     partial = {"resourceType": "Patient", "id": "x"}
+    x = last(stepped(partial))
     # Someone else read the record between the agent's writes.
     changes = stepped(partial)
     changes["Patient/x"].reads = [(_t(1.5), frozenset({OTHER}))]
@@ -639,8 +662,8 @@ def _pair_cases() -> list[
             ops,
             stepped(partial),
             base(),
-            {"x": x},
-            x,
+            {"x": last(stepped(partial))},
+            last(stepped(partial)),
             "created_verified",
         ),
         (

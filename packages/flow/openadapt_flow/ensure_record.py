@@ -1342,9 +1342,16 @@ def judge(
                 reasons.append(refused)
         if target in others or (changes[target].authors - selfs):
             reasons.append("someone else changed the created record")
+        if changes[target].versions is not None:
+            # Who wrote each version in the window, for the evidence: version
+            # ids and actor references only, never a value.
+            evidence["versions"] = version_trail(changes[target])
         if created is None or str(created.get("id")) != tid:
             reasons.append("the created record can't be read back")
         else:
+            unbound = read_back_unbound(changes[target], created)
+            if unbound:
+                reasons.append(unbound)
             wrong = wrong_fields(contract, created, params)
             if wrong:
                 reasons.append("wrong or missing: " + ", ".join(wrong))
@@ -1389,6 +1396,89 @@ def judge(
                 evidence,
             )
     return _review(reasons, evidence)
+
+
+def _version_meta(version: Mapping[str, Any]) -> tuple[Optional[datetime], str]:
+    meta = version.get("meta") or {}
+    if not isinstance(meta, Mapping):
+        return None, ""
+    vid = meta.get("versionId")
+    return _when(meta.get("lastUpdated")), str(vid) if vid not in (None, "") else ""
+
+
+def read_back_unbound(change: Change, created: Mapping[str, Any]) -> Optional[str]:
+    """Why the read-back can't be shown to be the last version written, or None.
+
+    With ``_history`` read, the record judged must be the newest version in
+    the window, by ``meta.versionId``: a version written after the window
+    (by anyone) or a stale read is not what the agent's writes left. Without
+    history (``versions`` None) there is nothing to bind to, and the other
+    checks decide as before.
+    """
+
+    if change.versions is None:
+        return None
+    if not change.bodies:
+        return "the created record's _history shows no version in the window"
+    timed = [_version_meta(body) for body in change.bodies]
+    if any(when is None or not vid for when, vid in timed):
+        return "a version in the window has no versionId or time to bind to"
+    newest = max(when for when, _ in timed if when is not None)
+    last = {vid for when, vid in timed if when == newest}
+    if len(last) != 1:
+        return "two versions share the newest time, so the last write can't be told"
+    _, got = _version_meta(created)
+    if not got:
+        return "the read-back carries no versionId to bind to"
+    if got not in last:
+        return "the read-back is not the last version written in the window"
+    return None
+
+
+def version_trail(change: Change) -> list[dict[str, Optional[str]]]:
+    """Each version in the window, oldest first: its id and who wrote it.
+
+    Only ids and actor references; the version bodies stay out of evidence.
+    The author is ``meta.author`` when the server returns it. When it
+    doesn't (Medplum 5.2), and the audit trail logged exactly one timed
+    create or update per version, the n-th logged write names the n-th
+    version. Otherwise ``author`` is None: unknown, never guessed.
+    """
+
+    rows: list[tuple[str, str, Optional[str]]] = []
+    for body in change.bodies:
+        when, vid = _version_meta(body)
+        meta = body.get("meta") or {}
+        who = (
+            (meta.get("author") or {}).get("reference")
+            if isinstance(meta, Mapping)
+            else None
+        )
+        rows.append(
+            (
+                when.isoformat() if when is not None else "",
+                vid,
+                _ref(who) if isinstance(who, str) and who else None,
+            )
+        )
+    rows.sort(key=lambda r: r[0])
+    writes = [
+        (when, who)
+        for when, action, who in change.events
+        if action in ("C", "U") and when is not None
+    ]
+    logged: list[Optional[str]] = [None] * len(rows)
+    if len(writes) == len(rows) and len(writes) == sum(
+        1 for _, a, _ in change.events if a in ("C", "U")
+    ):
+        logged = [
+            ", ".join(sorted(who)) if who else None
+            for _, who in sorted(writes, key=lambda w: w[0])
+        ]
+    return [
+        {"version": vid or None, "author": author or audit}
+        for (_, vid, author), audit in zip(rows, logged)
+    ]
 
 
 def correction_refused(
