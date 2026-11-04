@@ -1449,6 +1449,8 @@ def graphql_succeeded(text: str) -> bool:
         doc = json.loads(text)
     except ValueError:
         return False
+    if isinstance(doc, list) and len(doc) == 1:
+        doc = doc[0]  # the answer to a batch of one operation
     return (
         isinstance(doc, dict)
         and not doc.get("errors")

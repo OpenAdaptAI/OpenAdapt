@@ -26,8 +26,11 @@ import pytest
 from openadapt_flow import network_capture as nc
 from openadapt_flow.compiler.api_proposal import admit_api_step, propose_api_step
 from openadapt_flow.ir import ActionKind, Step, Workflow
-from openadapt_flow.runtime.actuators import ActuationStatus, ApiHaltKind
-from openadapt_flow.runtime.actuators import session_headers
+from openadapt_flow.runtime.actuators import (
+    ActuationStatus,
+    ApiHaltKind,
+    session_headers,
+)
 from openadapt_flow.runtime.actuators.web_form import (
     PlaywrightSessionTransport,
     WebFormActuator,
@@ -155,6 +158,25 @@ def test_a_graphql_mutation_binds_its_variables_only(tmp_path):
         "variables/b",
     }
     assert PARAMS_GQL == PARAMS
+
+
+def test_a_batch_of_one_graphql_mutation_is_that_mutation(tmp_path):
+    body = [
+        {
+            "operationName": None,
+            "variables": {"n": "Park", "a": "Ada", "b": 41},
+            "query": MUTATION,
+        }
+    ]
+    _, step, reasons = propose_api_step(_workflow(), _recording(tmp_path, body))
+    assert step is not None, reasons
+    spec = step.api_binding.web_form
+    assert spec.graphql
+    assert {f.name for f in spec.fields} == {
+        "0/variables/n",
+        "0/variables/a",
+        "0/variables/b",
+    }
 
 
 def test_a_save_to_the_apps_own_api_host_goes_only_there(tmp_path):

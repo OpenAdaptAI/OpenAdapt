@@ -1144,8 +1144,17 @@ def _propose_json(
         doc = json.loads(post["body"])
     except ValueError:
         return refuse("the save's body is not valid JSON")
-    if not isinstance(doc, dict):
+    # A GraphQL client may batch: a list holding one operation is that one.
+    batch_of_one = (
+        isinstance(doc, list)
+        and len(doc) == 1
+        and isinstance(doc[0], dict)
+        and isinstance(doc[0].get("query"), str)
+    )
+    if not isinstance(doc, dict) and not batch_of_one:
         return refuse("the save's JSON body is not an object (a batch of requests?)")
+    op: dict[str, Any] = doc[0] if batch_of_one else doc
+    query_path: tuple[str, ...] = ("0", "query") if batch_of_one else ("query",)
     if "request_headers" not in post:
         return refuse(
             "the recording doesn't say which headers the save carried; record it again"
@@ -1239,9 +1248,11 @@ def _propose_json(
                 typed[param] = params.get(param, "")
     leaves = _leaves(doc)
     graphql = (
-        isinstance(doc.get("query"), str)
-        and re.match(r"\s*(#[^\n]*\n\s*)*mutation\b", doc["query"]) is not None
+        isinstance(op.get("query"), str)
+        and re.match(r"\s*(#[^\n]*\n\s*)*mutation\b", op["query"]) is not None
     )
+    if batch_of_one and not graphql:
+        return refuse("the save's JSON body is not an object (a batch of requests?)")
     fields: list[WebFormField] = []
     bound: set[tuple[str, ...]] = set()
     for param, demo in sorted(typed.items()):
@@ -1255,8 +1266,8 @@ def _propose_json(
             )
         hits = [path for path, leaf in leaves if _same(leaf, demo)]
         if graphql and (
-            any(h[:1] == ("query",) for h in hits)
-            or (not hits and demo in doc["query"])
+            any(h[: len(query_path)] == query_path for h in hits)
+            or (not hits and demo in op["query"])
         ):
             return refuse(
                 "a typed value is inside the GraphQL operation text, not its variables"
