@@ -139,9 +139,9 @@ class RdpSpec(_Strict):
     #: ``aardwolf`` (pure Python, any host, RDP bitmap codecs) or ``xfreerdp``
     #: (FreeRDP 3 under Xvfb, Linux; negotiates the server's H.264/AVC444).
     transport: Literal["aardwolf", "xfreerdp"] = "aardwolf"
-    #: ``xfreerdp`` only: ask for H.264 (``avc444`` as on a production RDS
-    #: host). The server's policy decides what is actually negotiated.
-    gfx: Optional[Literal["avc444", "avc420"]] = None
+    #: ``xfreerdp`` only: ask for H.264/AVC444, as on a production RDS host.
+    #: The server's policy decides what is actually negotiated.
+    avc444: bool = False
 
 
 class DesktopAppSpec(_Strict):
@@ -364,7 +364,7 @@ def _rdp_backend(spec: RdpSpec, guest: Any) -> Any:
                 height=spec.height,
                 color_depth=spec.color_depth,
                 lossless=False,
-                gfx=spec.gfx,
+                avc444=spec.avc444,
             ),
             password=lambda: password,
         )

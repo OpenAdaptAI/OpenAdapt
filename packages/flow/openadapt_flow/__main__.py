@@ -883,6 +883,7 @@ def _build_and_run_replayer(
     api_steps_off_reason: Optional[str] = None,
     rollback_plan=None,
     fresh_session=None,
+    gui_undo_counts: Optional[bool] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow.
 
@@ -890,7 +891,10 @@ def _build_and_run_replayer(
     ``rollback_plan`` (``openadapt_flow.rollback``) reads the system of
     record before the run and, after a stop, runs the approved
     compensations and proves the store is back; ``fresh_session`` returns
-    the backend to a signed-out start for a GUI compensation.
+    the backend to a start for a GUI compensation. ``gui_undo_counts``
+    False: a GUI compensation runs after a stop, but doesn't count as an
+    undo for the undo-or-person rule (a desktop screen with no qualified
+    cleanup), so each save goes to a person first.
     """
     replayer = _configured_replayer(
         backend,
@@ -923,7 +927,10 @@ def _build_and_run_replayer(
     _refuse_rollback_durable(rollback_plan, durable)
     if rollback_plan is not None:
         _require_undo_or_person(
-            workflow, rollback_plan, approval_gate, api_only=fresh_session is None
+            workflow,
+            rollback_plan,
+            approval_gate,
+            api_only=fresh_session is None or gui_undo_counts is False,
         )
     before = rollback_plan.arm(dict(params)) if rollback_plan is not None else None
     if rollback_plan is not None and before is None:
@@ -1251,15 +1258,20 @@ def _replay_desktop(
     approval_gate=None,
     qualification_fault_driver=None,
     surface_cfgs=None,
+    rollback_plan=None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
     No Playwright browser, no bundled MockMed, no session video — those are
     web-only. ``--drift`` (a MockMed teaching aid) is refused. The backend is
     built from the resolved ``BackendConfig`` and the shared replayer wiring runs
-    exactly as it does for the web path.
+    exactly as it does for the web path. With ``rollback_plan``, a GUI
+    compensation starts from the run's start screen (the halt cleanup and its
+    start check, ``rollback.screen_fresh_session``); the whole-store reads
+    prove it either way.
     """
     from openadapt_flow.backends.factory import build_backend
+    from openadapt_flow.rollback import screen_fresh_session, screen_undo_counts
 
     if args.drift:
         raise SystemExit(
@@ -1304,6 +1316,17 @@ def _replay_desktop(
             qualification_fault_driver=qualification_fault_driver,
             surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
+            rollback_plan=rollback_plan,
+            fresh_session=(
+                screen_fresh_session(
+                    backend, workflow, bundle_dir=bundle, run_dir=run_dir
+                )
+                if rollback_plan is not None
+                else None
+            ),
+            gui_undo_counts=(
+                screen_undo_counts(workflow) if rollback_plan is not None else None
+            ),
         )
     finally:
         for owned in (backend, *surface_backends.values()):
@@ -2799,7 +2822,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             surface_cfgs=surface_cfgs,
         )
     if _normalize_kind(backend_cfg.kind) != "web":
-        _refuse_rollback_unwired(cfg, "a desktop or remote-display backend")
+        from openadapt_flow.rollback import plan_from_deployment
+
         return _replay_desktop(
             args,
             backend_cfg,
@@ -2830,6 +2854,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
             surface_cfgs=surface_cfgs,
+            rollback_plan=plan_from_deployment(cfg, effect_verifier),
         )
 
     headed = args.headed or cfg.backend.headed
@@ -12637,7 +12662,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv = admit_default_form(argv)
     # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
-    # any command runs, so no code path can open a connection off the machine.
+    # any command runs, so no Python socket in this process, and no child it
+    # starts uncontained, can open a connection off the machine. Native code and
+    # loopback relays are outside it (docs/OFFLINE_SEALS.md).
     from openadapt_flow import no_outbound
 
     no_outbound.enforce_from_env()

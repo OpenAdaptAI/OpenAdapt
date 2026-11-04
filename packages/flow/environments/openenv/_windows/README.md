@@ -71,7 +71,7 @@ the episode if they differ.
 - **Remote Desktop**: input and frames go over an RDP session. The default
   client (`aardwolf`) runs on any host. The `xfreerdp` client (FreeRDP 3 under
   Xvfb, Linux; see [`rdp-client/Containerfile`](rdp-client/Containerfile))
-  requests H.264/AVC444 with `rdp.gfx: avc444`.
+  requests H.264/AVC444 with `rdp.avc444: true`.
 
 Actions are `click`, `double_click`, `right_click` and `scroll` at session
 coordinates, `type`, `press` and `done` with a claim. The Windows key and the

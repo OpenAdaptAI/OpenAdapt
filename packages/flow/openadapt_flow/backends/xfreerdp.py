@@ -102,10 +102,10 @@ class SessionProfile:
         wallpaper, themes: Off removes pixels that vary between sessions.
         clipboard: Redirect the clipboard (needed for copy-based reads).
         keyboard_layout: FreeRDP ``/kbd:layout`` value, for example ``0x409``.
-        gfx: Ask for an H.264 graphics pipeline mode (``"avc444"`` or
-            ``"avc420"``). Needs ``lossless=False``; the server must allow it
-            (on Windows, the AVC444 group policy). None leaves the client's
-            default negotiation.
+        avc444: Ask for the H.264/AVC444 graphics pipeline (``/gfx:AVC444``),
+            the encoding production Windows hosts use. Needs ``lossless``
+            off and a FreeRDP built with H.264; the host decides whether
+            it is used (RdpCoreTS event 162).
     """
 
     width: int = 1280
@@ -120,11 +120,11 @@ class SessionProfile:
     themes: bool = False
     clipboard: bool = True
     keyboard_layout: str = "0x409"
-    gfx: Optional[Literal["avc444", "avc420"]] = None
+    avc444: bool = False
 
     def __post_init__(self) -> None:
-        if self.gfx is not None and self.lossless:
-            raise ValueError("an H.264 gfx mode is lossy; set lossless=False")
+        if self.avc444 and self.lossless:
+            raise ValueError("avc444 needs lossless=False")
         if self.scale not in _SCALES:
             raise ValueError(f"scale must be one of {_SCALES}")
         if not (100 <= self.desktop_scale <= 500):
@@ -143,22 +143,29 @@ class SessionProfile:
         ]
         if self.lossless:
             args += ["-gfx", "-rfx", "-nsc"]
-        elif self.gfx is not None:
-            args.append(f"/gfx:{self.gfx.upper()}")
+        elif self.avc444:
+            args.append("/gfx:AVC444:on")
         args.append("+fonts" if self.font_smoothing else "-fonts")
         args.append("+wallpaper" if self.wallpaper else "-wallpaper")
         args.append("+themes" if self.themes else "-themes")
         args.append("+clipboard" if self.clipboard else "-clipboard")
         return args
 
+    def to_dict(self) -> dict[str, Any]:
+        """The profile's fields, without ``avc444`` while it is off.
+
+        Profiles saved before the field existed keep their digest, and a
+        session file without AVC444 still loads in releases that predate it.
+        """
+        fields = asdict(self)
+        if not self.avc444:
+            del fields["avc444"]
+        return fields
+
     @property
     def sha256(self) -> str:
         """Digest of the profile, recorded with each run."""
-        fields = asdict(self)
-        if fields["gfx"] is None:
-            # Profiles from before the field keep their digest.
-            del fields["gfx"]
-        body = json.dumps(fields, sort_keys=True).encode("utf-8")
+        body = json.dumps(self.to_dict(), sort_keys=True).encode("utf-8")
         return hashlib.sha256(body).hexdigest()
 
 
@@ -200,7 +207,7 @@ def save_session(
     body = {
         "schema": SESSION_SCHEMA,
         "target": asdict(target),
-        "profile": asdict(profile),
+        "profile": profile.to_dict(),
         "profile_sha256": profile.sha256,
         "gateway": asdict(gateway) if gateway is not None else None,
     }
