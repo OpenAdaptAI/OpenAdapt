@@ -31,11 +31,14 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
+from openadapt_flow.runtime.checks.app_sources import (  # noqa: E402
+    RestPatientSource,
+    load_record_search,
+)
 from openadapt_flow.runtime.checks.duplicate_record import (  # noqa: E402
     FhirPatientSource,
     check_duplicate,
 )
-from openadapt_flow.runtime.checks.openemr_patient import RestPatientSource  # noqa: E402
 
 DOB = "1977-05-14"
 SCOPE = "openid api:oemr api:fhir user/patient.crus user/Patient.read user/Patient.rs"
@@ -262,12 +265,16 @@ def main() -> int:
         ),
         "rest_page5": lambda: RestPatientSource(
             fx.api_base_url,
+            load_record_search("openemr").rest,
+            path="/apis/default/api/patient",
             headers=auth,
             page_size=5,
             session=httpx.Client(verify=False, timeout=30),
         ),
         "rest_page500": lambda: RestPatientSource(
             fx.api_base_url,
+            load_record_search("openemr").rest,
+            path="/apis/default/api/patient",
             headers=auth,
             session=httpx.Client(verify=False, timeout=30),
         ),

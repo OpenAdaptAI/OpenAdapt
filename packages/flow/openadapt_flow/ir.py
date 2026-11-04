@@ -671,9 +671,9 @@ class Postcondition(BaseModel):
     #: ``mrn``, ``phone_home``, ``email``, ``street``). Unset: those names.
     candidate_record_fields: Optional[dict[str, str]] = None
     #: NO_DUPLICATE_CANDIDATE, record source: which channel to search.
-    #: ``fhir`` with an OpenEMR REST record check searches OpenEMR's FHIR API
-    #: on the same server; ``rest``, OpenEMR's REST API only. Unset: the
-    #: channel of the run's record check.
+    #: ``fhir`` with an app's REST record check searches the app's FHIR API
+    #: on the same server (``app_profiles/record_search``); ``rest``, the
+    #: app's REST API only. Unset: the channel of the run's record check.
     candidate_channel: Optional[Literal["fhir", "rest"]] = None
 
     #: TEXT_PRESENT: ``text`` must be read exactly once, as a whole line or

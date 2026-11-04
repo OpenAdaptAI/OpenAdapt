@@ -18990,7 +18990,7 @@ class Replayer:
             check_duplicate,
         )
 
-        # Which run parameter fills each field: OpenEMR's names by default,
+        # Which run parameter fills each field: RECORD_FIELDS by default,
         # ``pc.candidate_record_fields`` for any other program.
         mapped = getattr(pc, "candidate_record_fields", None) or {}
         names = {**RECORD_FIELDS, **dict(mapped)}

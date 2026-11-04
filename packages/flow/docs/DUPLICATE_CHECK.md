@@ -121,8 +121,10 @@ The channels:
 | Source | Scope | Used |
 |---|---|---|
 | `FhirPatientSource` | generic FHIR R4: `Patient` search with standard parameters, for any R4 server | whenever the run's effect verifier reads FHIR |
-| `RestPatientSource` | OpenEMR adapter: OpenEMR's standard REST `/api/patient` | only for a program pinned to the record check (below) |
-| `SqlPatientSource` | OpenEMR adapter, fallback: a read-only query on `patient_data` (MySQL or MariaDB `%s` parameters; `paramstyle="qmark"` for SQLite) | only when wired by hand |
+| `RestPatientSource` | an app's own REST patient search, as its `app_profiles/record_search/<app>.yaml` declares it (OpenEMR: `/api/patient`) | only for a program pinned to the record check (below) |
+| `SqlPatientSource` | fallback: a read-only query on the app's patient table, from the same file's `sql` section (OpenEMR: `patient_data`; MySQL or MariaDB `%s` parameters, `paramstyle="qmark"` for SQLite) | only when wired by hand |
+
+What each app's search looks like is data, not code: paths, query parameters, field names, the table and its columns, and where its FHIR API sits beside its REST API. `runtime/checks/app_sources.py` follows the file whose `rest_records_path_marker` the record check's path contains; none or two matches give no source.
 
 **One source for every path.** `Replayer` resolves the source itself, from
 its own effect verifier and the program's pin (`resolve_duplicate_source`).

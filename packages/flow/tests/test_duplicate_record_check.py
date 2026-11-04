@@ -19,6 +19,11 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from openadapt_flow.runtime.checks.app_sources import (
+    RestPatientSource,
+    SqlPatientSource,
+    load_record_search,
+)
 from openadapt_flow.runtime.checks.duplicate_record import (
     FhirPatientSource,
     PatientRecord,
@@ -26,10 +31,9 @@ from openadapt_flow.runtime.checks.duplicate_record import (
     check_duplicate,
     classify,
 )
-from openadapt_flow.runtime.checks.openemr_patient import (
-    RestPatientSource,
-    SqlPatientSource,
-)
+
+#: The test fakes speak OpenEMR's REST and table shapes.
+APP = load_record_search("openemr")
 
 WANT = {"fname": "Rosalind", "lname": "Jesswood", "DOB": "1990-04-09"}
 
@@ -243,9 +247,9 @@ def test_rest_full_page_without_next_link_fails_closed(serve) -> None:
         for i in range(5)
     ]
     server = serve(lambda p, q: (200, {"data": rows}))
-    source = RestPatientSource(server.url, path="/api/patient", page_size=5)
+    source = RestPatientSource(server.url, APP.rest, path="/api/patient", page_size=5)
     assert check_duplicate(source, WANT).decision == "unreadable"
-    source = RestPatientSource(server.url, path="/api/patient", page_size=50)
+    source = RestPatientSource(server.url, APP.rest, path="/api/patient", page_size=50)
     assert check_duplicate(source, WANT).decision == "none"
 
 
@@ -269,7 +273,7 @@ def test_sql_fallback(tmp_path: Path) -> None:
     )
     con.commit()
     con.close()
-    source = SqlPatientSource(lambda: sqlite3.connect(db), paramstyle="qmark")
+    source = SqlPatientSource(lambda: sqlite3.connect(db), APP.sql, paramstyle="qmark")
     result = check_duplicate(source, WANT)
     assert result.decision == "close" and result.channel == "sql"
     assert {c.record.record_id for c in result.candidates} == {"4", "5"}
@@ -449,7 +453,7 @@ def test_an_initial_does_not_match_another_letter() -> None:
 )
 def test_rest_error_bodies_are_unreadable(serve, body) -> None:
     server = serve(lambda p, q: (200, body))
-    source = RestPatientSource(server.url, path="/api/patient")
+    source = RestPatientSource(server.url, APP.rest, path="/api/patient")
     assert check_duplicate(source, WANT).decision == "unreadable"
 
 

@@ -561,7 +561,7 @@ class FhirPatientSource:
 
     Uses only standard R4 search parameters (``birthdate``, ``family``,
     ``given``, ``identifier``, ``phone``, ``email``), so it serves any R4
-    server, OpenEMR's included.
+    server.
 
     A page chain longer than :data:`MAX_PAGES`, a ``Bundle.total`` that does
     not equal the entries read, or an entry that is not a ``Patient`` makes
@@ -607,8 +607,8 @@ class FhirPatientSource:
     def search(self, params: dict[str, str]) -> list[PatientRecord]:
         url: Optional[str] = f"{self.base_url}/Patient"
         # An explicit page size, so a full page with no next link shows the
-        # server cut the answer short (OpenEMR's FHIR gives no next link,
-        # and a Bundle.total equal to the rows it returned).
+        # server cut the answer short (a server may give no next link and a
+        # Bundle.total equal to the rows it returned).
         query: Optional[dict[str, str]] = {**params, "_count": str(FHIR_PAGE_SIZE)}
         total: Optional[int] = None
         out: list[PatientRecord] = []
@@ -805,8 +805,9 @@ def source_for_verifier(
     """The patient search on the same channel as a run's record check.
 
     A FHIR verifier gives a generic FHIR R4 ``Patient`` search at its base URL
-    with its credentials. A REST record verifier goes to the app's adapter
-    (:mod:`openadapt_flow.runtime.checks.openemr_patient` is the only one),
+    with its credentials. A REST record verifier goes to the app adapter its
+    records path names (:mod:`openadapt_flow.runtime.checks.app_sources`,
+    driven by ``app_profiles/record_search/*.yaml``),
     which uses its REST channel only with ``allow_rest`` (a program pinned to
     the record check). Anything else, or a verifier missing the attributes
     these need, gives None. ``channel`` (the program's ``candidate_channel``)
@@ -837,7 +838,7 @@ def source_for_verifier(
             )
         if isinstance(verifier, RestRecordVerifier):
             # An app's REST record check: its adapter decides, if it has one.
-            from openadapt_flow.runtime.checks.openemr_patient import (
+            from openadapt_flow.runtime.checks.app_sources import (
                 source_for_rest_verifier,
             )
 
@@ -867,7 +868,7 @@ def resolve_duplicate_source(
     given, so qualification, a run, a resume and a proof that read the same
     system of record use the same check. With no pin, only a FHIR channel is
     used; a program pinned to the record check (``candidate_source:
-    record``) also accepts OpenEMR's REST channel. ``requested`` is ``AUTO``
+    record``) also accepts the app's own REST channel. ``requested`` is ``AUTO``
     or a source object (tests, embedding).
     """
 

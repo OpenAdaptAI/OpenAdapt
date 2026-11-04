@@ -24,13 +24,13 @@ from typing import Any
 import pytest
 
 from openadapt_flow.ir import Postcondition, PostconditionKind
+from openadapt_flow.runtime.checks.app_sources import RestPatientSource
 from openadapt_flow.runtime.checks.duplicate_record import (
     FhirPatientSource,
     PatientRecord,
     TableSource,
     resolve_duplicate_source,
 )
-from openadapt_flow.runtime.checks.openemr_patient import RestPatientSource
 from openadapt_flow.runtime.effects import DEFAULT_OBSERVATION_PATHS, FhirEffectVerifier
 from openadapt_flow.runtime.effects.rest import RestRecordVerifier
 
@@ -352,3 +352,28 @@ def test_the_channel_choice_serializes_only_when_set() -> None:
         candidate_channel="fhir",
     )
     assert pc.model_dump()["candidate_channel"] == "fhir"
+
+
+def test_every_app_record_search_file_loads_and_names_its_path() -> None:
+    """App knowledge is data: each record-search file parses, and a REST
+    record check whose path no file names gets no app source."""
+
+    from openadapt_flow.runtime.checks.app_sources import (
+        SEARCH_DIR,
+        load_record_search,
+        source_for_rest_verifier,
+    )
+
+    names = sorted(p.stem for p in SEARCH_DIR.glob("*.yaml"))
+    assert names
+    for name in names:
+        search = load_record_search(name)
+        assert search.name == name
+        assert search.rest_records_path_marker
+    unknown = RestRecordVerifier(
+        "https://x.test", records_path="/api/things", records_key="data"
+    )
+    assert source_for_rest_verifier(unknown, allow_rest=True) is None
+    assert source_for_rest_verifier(unknown, channel="fhir") is None
+    with pytest.raises(ValueError):
+        load_record_search("../openemr")
